@@ -178,6 +178,8 @@ from.
    Phantom
    BrainWeb
    Ellipse
+   localizer
    send
    record
+   Console
 

@@ -527,6 +527,7 @@
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#stream-a-scan-in-real-time-with-its-sound">Stream a scan in real time, with its sound</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#scan-from-the-command-line">Scan from the command line</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#prescribe-an-orientation">Prescribe an orientation</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#serve-a-scanner-console">Serve a scanner console</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#see-also">See also</a></li>
 </ul>
             </nav>
@@ -761,6 +762,54 @@ appears at the centre of the image as it would at the isocentre without a
 rotation, and the images carry the columns of <span class="math notranslate nohighlight">\(R\)</span> as their read, phase and
 slice directions.</p>
 </section>
+<section id="serve-a-scanner-console">
+<h2>Serve a scanner console<a class="headerlink" href="#serve-a-scanner-console" title="Link to this heading">#</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">pulserver</span> <span class="pre">console</span></code> answers a scanner console over a WebSocket: the design
+calls on the interpreter’s text blocks, an exam on a subject, and scans of the
+designs it generates, played on the subject’s phantom:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pulserver<span class="w"> </span>console<span class="w"> </span>--plugins<span class="w"> </span>sequences<span class="w"> </span>--limits<span class="w"> </span>limits.txt<span class="w"> </span>--store<span class="w"> </span>designs<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--recon<span class="w"> </span><span class="m">127</span>.0.0.1:9002<span class="w"> </span>--port<span class="w"> </span><span class="m">8765</span>
+</pre></div>
+</div>
+<p>Each request is a JSON object carrying <code class="docutils literal notranslate"><span class="pre">call</span></code> and an <code class="docutils literal notranslate"><span class="pre">id</span></code> that every reply to
+it repeats:</p>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p><code class="docutils literal notranslate"><span class="pre">call</span></code></p></th>
+<th class="head"><p>Fields</p></th>
+<th class="head"><p>Replies</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">plugins</span></code></p></td>
+<td><p></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">plugins</span></code>: the plugin names</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">list</span></code>, <code class="docutils literal notranslate"><span class="pre">validate</span></code>, <code class="docutils literal notranslate"><span class="pre">generate</span></code>, <code class="docutils literal notranslate"><span class="pre">import</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">plugin</span></code>, <code class="docutils literal notranslate"><span class="pre">block</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">status</span></code> and <code class="docutils literal notranslate"><span class="pre">reply</span></code>, as <code class="docutils literal notranslate"><span class="pre">pulserver</span> <span class="pre">design</span></code> answers; <code class="docutils literal notranslate"><span class="pre">design</span></code> for a generated or imported design</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">exam</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">subject</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">localizer</span></code>: the axial, coronal and sagittal images of the subject’s phantom, as base64 DICOM files</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">scan</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">design</span></code>, <code class="docutils literal notranslate"><span class="pre">rotation</span></code> (nine elements), <code class="docutils literal notranslate"><span class="pre">centre_mm</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">clock</span></code> and <code class="docutils literal notranslate"><span class="pre">duration</span></code> after each span played, <code class="docutils literal notranslate"><span class="pre">dicom</span></code> and <code class="docutils literal notranslate"><span class="pre">name</span></code> for each image the reconstruction returns, <code class="docutils literal notranslate"><span class="pre">text</span></code>, then <code class="docutils literal notranslate"><span class="pre">done</span></code> with the status</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">cancel</span></code></p></td>
+<td><p></p></td>
+<td><p>stops the scan in progress</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>A subject named <code class="docutils literal notranslate"><span class="pre">brainweb</span></code> is BrainWeb’s normal brain; any other is the vials.
+The localizer is drawn from the phantom’s proton density, so an exam can be
+planned before any scan. MaRGE is such a console when <code class="docutils literal notranslate"><span class="pre">MARGE_PULSERVER</span></code> holds
+the address, <code class="docutils literal notranslate"><span class="pre">ws://127.0.0.1:8765</span></code> here: its sequences are then the plugins,
+its subject names the phantom, and it opens each exam on the localizer.</p>
+</section>
 <section id="see-also">
 <h2>See also<a class="headerlink" href="#see-also" title="Link to this heading">#</a></h2>
 <ul class="simple">
@@ -826,6 +875,7 @@ slice directions.</p>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#stream-a-scan-in-real-time-with-its-sound">Stream a scan in real time, with its sound</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#scan-from-the-command-line">Scan from the command line</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#prescribe-an-orientation">Prescribe an orientation</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#serve-a-scanner-console">Serve a scanner console</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#see-also">See also</a></li>
 </ul>
   </nav></div>

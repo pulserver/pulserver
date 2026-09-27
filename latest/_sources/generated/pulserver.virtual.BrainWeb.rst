@@ -15,6 +15,7 @@
    :nosignatures:
 
    ~BrainWeb.isochromats
+   ~BrainWeb.proton_density
 
 
 

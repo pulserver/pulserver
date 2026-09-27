@@ -667,6 +667,36 @@
                     <span class="p">)</span>
                 <span class="p">)</span>
         <span class="k">return</span> <span class="n">signal</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="mi">2</span><span class="n">j</span> <span class="o">*</span> <span class="n">math</span><span class="o">.</span><span class="n">pi</span> <span class="o">*</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_position</span> <span class="o">@</span> <span class="n">k</span><span class="p">))</span></div>
+
+
+<div class="viewcode-block" id="Phantom.proton_density">
+<a class="viewcode-back" href="../../../generated/pulserver.virtual.Phantom.proton_density.html#pulserver.virtual.Phantom.proton_density">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">proton_density</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">points</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">normal</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>  <span class="c1"># noqa: ARG002 -- the discs need no averaging across the slab</span>
+        <span class="n">thickness</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Return the magnitude of the intensity of a slab ``thickness`` thick at each of ``(n, 3)`` physical points, in metres.</span>
+
+<span class="sd">        Each ellipse stands for a disc ``thickness`` thick about its plane, so a</span>
+<span class="sd">        slab through it at any orientation shows its section, and overlapping</span>
+<span class="sd">        ellipses add.</span>
+<span class="sd">        """</span>
+        <span class="n">own</span> <span class="o">=</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">points</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">_position</span><span class="p">)</span> <span class="o">@</span> <span class="bp">self</span><span class="o">.</span><span class="n">_rotation</span>
+        <span class="n">total</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">own</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">complex</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">ellipse</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">ellipses</span><span class="p">:</span>
+            <span class="n">cos</span><span class="p">,</span> <span class="n">sin</span> <span class="o">=</span> <span class="n">math</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="n">ellipse</span><span class="o">.</span><span class="n">angle</span><span class="p">),</span> <span class="n">math</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="n">ellipse</span><span class="o">.</span><span class="n">angle</span><span class="p">)</span>
+            <span class="n">dx</span> <span class="o">=</span> <span class="n">own</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">-</span> <span class="n">ellipse</span><span class="o">.</span><span class="n">centre</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="n">dy</span> <span class="o">=</span> <span class="n">own</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="n">ellipse</span><span class="o">.</span><span class="n">centre</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+            <span class="n">along</span> <span class="o">=</span> <span class="p">(</span><span class="n">cos</span> <span class="o">*</span> <span class="n">dx</span> <span class="o">+</span> <span class="n">sin</span> <span class="o">*</span> <span class="n">dy</span><span class="p">)</span> <span class="o">/</span> <span class="n">ellipse</span><span class="o">.</span><span class="n">semi_axes</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="n">across</span> <span class="o">=</span> <span class="p">(</span><span class="o">-</span><span class="n">sin</span> <span class="o">*</span> <span class="n">dx</span> <span class="o">+</span> <span class="n">cos</span> <span class="o">*</span> <span class="n">dy</span><span class="p">)</span> <span class="o">/</span> <span class="n">ellipse</span><span class="o">.</span><span class="n">semi_axes</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+            <span class="n">inside</span> <span class="o">=</span> <span class="p">(</span><span class="n">along</span><span class="o">**</span><span class="mi">2</span> <span class="o">+</span> <span class="n">across</span><span class="o">**</span><span class="mi">2</span> <span class="o">&lt;=</span> <span class="mf">1.0</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span>
+                <span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">own</span><span class="p">[:,</span> <span class="mi">2</span><span class="p">]</span> <span class="o">-</span> <span class="n">ellipse</span><span class="o">.</span><span class="n">centre</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span> <span class="o">&lt;=</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="n">thickness</span>
+            <span class="p">)</span>
+            <span class="n">total</span><span class="p">[</span><span class="n">inside</span><span class="p">]</span> <span class="o">+=</span> <span class="n">ellipse</span><span class="o">.</span><span class="n">intensity</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">total</span><span class="p">)</span></div>
 </div>
 
 

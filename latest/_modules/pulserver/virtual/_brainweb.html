@@ -554,6 +554,21 @@
             <span class="p">)</span>
         <span class="k">return</span> <span class="n">fractions</span>
 
+<div class="viewcode-block" id="BrainWeb.proton_density">
+<a class="viewcode-back" href="../../../generated/pulserver.virtual.BrainWeb.proton_density.html#pulserver.virtual.BrainWeb.proton_density">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">proton_density</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">points</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">normal</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">thickness</span><span class="p">:</span> <span class="nb">float</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Return the proton density of a slab ``thickness`` thick along ``normal`` at each of ``(n, 3)`` physical points, in metres.</span>
+
+<span class="sd">        The density is each tissue's times the fraction of the nearest voxel it</span>
+<span class="sd">        fills, averaged in 1 mm steps across the slab; zero outside the model.</span>
+<span class="sd">        """</span>
+        <span class="k">return</span> <span class="n">_slab_density</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">fractions</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">points</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">),</span> <span class="n">normal</span><span class="p">,</span> <span class="n">thickness</span>
+        <span class="p">)</span></div>
+
+
 <div class="viewcode-block" id="BrainWeb.isochromats">
 <a class="viewcode-back" href="../../../generated/pulserver.virtual.BrainWeb.isochromats.html#pulserver.virtual.BrainWeb.isochromats">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">isochromats</span><span class="p">(</span>
@@ -647,6 +662,25 @@
         <span class="p">)</span></div>
 </div>
 
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_slab_density</span><span class="p">(</span>
+    <span class="n">fractions</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">points</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">normal</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">thickness</span><span class="p">:</span> <span class="nb">float</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return the proton density at ``(n, 3)`` physical points, averaged over 1 mm steps across the slab."""</span>
+    <span class="n">densities</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">density</span> <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">density</span> <span class="ow">in</span> <span class="n">TISSUES</span><span class="o">.</span><span class="n">values</span><span class="p">()])</span>
+    <span class="n">first</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">_FIRST_VOXEL_MM</span><span class="p">[</span><span class="n">axis</span><span class="p">]</span> <span class="k">for</span> <span class="n">axis</span> <span class="ow">in</span> <span class="s2">"xyz"</span><span class="p">])</span>
+    <span class="n">size</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">fractions</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">2</span><span class="p">::</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
+    <span class="n">steps</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="nb">round</span><span class="p">(</span><span class="n">thickness</span> <span class="o">/</span> <span class="mf">1e-3</span><span class="p">))</span>
+    <span class="n">total</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">points</span><span class="p">))</span>
+    <span class="k">for</span> <span class="n">offset</span> <span class="ow">in</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">steps</span><span class="p">)</span> <span class="o">-</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="p">(</span><span class="n">steps</span> <span class="o">-</span> <span class="mi">1</span><span class="p">))</span> <span class="o">*</span> <span class="n">thickness</span> <span class="o">/</span> <span class="n">steps</span><span class="p">:</span>
+        <span class="n">shifted</span> <span class="o">=</span> <span class="n">points</span> <span class="o">+</span> <span class="n">offset</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">normal</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span>
+        <span class="n">mni</span> <span class="o">=</span> <span class="mf">1e3</span> <span class="o">*</span> <span class="n">shifted</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="o">-</span><span class="mf">1.0</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">])</span>
+        <span class="n">voxel</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">rint</span><span class="p">(</span><span class="n">mni</span> <span class="o">-</span> <span class="n">first</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">int</span><span class="p">)</span>
+        <span class="n">inside</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">all</span><span class="p">((</span><span class="n">voxel</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">voxel</span> <span class="o">&lt;</span> <span class="n">size</span><span class="p">),</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">z</span> <span class="o">=</span> <span class="n">voxel</span><span class="p">[</span><span class="n">inside</span><span class="p">]</span><span class="o">.</span><span class="n">T</span>
+        <span class="n">total</span><span class="p">[</span><span class="n">inside</span><span class="p">]</span> <span class="o">+=</span> <span class="n">fractions</span><span class="p">[</span><span class="n">z</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">x</span><span class="p">]</span> <span class="o">@</span> <span class="n">densities</span>
+    <span class="k">return</span> <span class="n">total</span> <span class="o">/</span> <span class="n">steps</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_cubes</span><span class="p">(</span><span class="n">fractions</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">step</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
