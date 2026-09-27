@@ -193,3 +193,45 @@ def test_the_gateway_answers_a_consoles_calls_over_a_websocket(tmp_path):
     assert exam["id"] == 2
     assert len(exam["localizer"]) == 3
     assert refused == {"id": 3, "error": "unknown call 'reboot'"}
+
+
+def test_the_console_command_serves_a_console_of_its_options(tmp_path, monkeypatch):
+    from pulserver import _cli
+    from pulserver.virtual import _console
+
+    limits = tmp_path / "limits.txt"
+    limits.write_text(format_limits(ANY_ORIENTATION))
+    served = {}
+
+    async def serve(console, host, port):
+        served.update(console=console, host=host, port=port)
+
+    monkeypatch.setattr(_console, "serve", serve)
+
+    status = _cli.main(
+        [
+            "console",
+            "--plugins",
+            str(PLUGINS),
+            "--limits",
+            str(limits),
+            "--store",
+            str(tmp_path / "designs"),
+            "--recon",
+            "recon.local:9020",
+            "--port",
+            "9876",
+            "--spacing",
+            "2",
+            "--coils",
+            "4",
+        ]
+    )
+
+    assert status == 0
+    assert (served["host"], served["port"]) == ("127.0.0.1", 9876)
+    console = served["console"]
+    assert console.recon == ("recon.local", 9020)
+    assert console.spacing == pytest.approx(2e-3)
+    assert console.coils == 4
+    assert console.field_t == ANY_ORIENTATION["B0"]
