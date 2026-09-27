@@ -47,6 +47,7 @@ scanner's centre frequency.
 | {obj}`~pulserver.virtual.Phantom` | Ellipses whose signals add, received by one coil or several of analytic sensitivity, placed in the physical frame by a rotation and a position; sampled as isochromats for the Bloch simulation. |
 | {obj}`~pulserver.virtual.BrainWeb` | BrainWeb's normal brain, downloaded on first use, placed head first and supine with its tissues' T1, T2 and proton density; sampled as isochromats for the Bloch simulation. |
 | {obj}`~pulserver.virtual.Ellipse` | An ellipse of uniform magnetization in a plane of constant z, of one chemical shift and one pair of relaxation times. |
+| {obj}`~pulserver.virtual.localizer` | The axial, coronal and sagittal images of a phantom's proton density through a point, as DICOM, drawn from its ground truth with no sequence played. |
 
 ## Reconstruction client
 
@@ -54,3 +55,4 @@ scanner's centre frequency.
 | --- | --- |
 | {obj}`~pulserver.virtual.send` | Send one series to a reconstruction proxy as the scanner's client sends it, each readout as it is acquired; return what comes back. |
 | {obj}`~pulserver.virtual.record` | Write one series to an ISMRMRD file as `send` sends it. |
+| {obj}`~pulserver.virtual.Console` | A scanner console's calls answered in process: the design calls on the interpreter's text blocks, an exam's localizer, and a scan of a stored design whose clock and DICOM images stream back; `pulserver console` serves them over a WebSocket. |

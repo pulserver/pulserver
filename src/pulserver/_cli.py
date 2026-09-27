@@ -7,6 +7,7 @@ import sys
 _USAGE = (
     "usage: pulserver design {list,validate,generate,import,prune,push,serve} ...\n"
     "       pulserver scan (--seq FILE | --plugin NAME --plugins DIR) --limits FILE ...\n"
+    "       pulserver console --plugins DIR --limits FILE --store DIR ...\n"
 )
 
 
@@ -21,6 +22,10 @@ def main(argv: list[str] | None = None) -> int:
         from .virtual._command import main as scan
 
         return scan(argv[1:])
+    if argv and argv[0] == "console":
+        from .virtual._console import main as console
+
+        return console(argv[1:])
     sys.stderr.write(_USAGE)
     return 2
 

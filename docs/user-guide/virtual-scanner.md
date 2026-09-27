@@ -214,6 +214,34 @@ appears at the centre of the image as it would at the isocentre without a
 rotation, and the images carry the columns of $R$ as their read, phase and
 slice directions.
 
+## Serve a scanner console
+
+`pulserver console` answers a scanner console over a WebSocket: the design
+calls on the interpreter's text blocks, an exam on a subject, and scans of the
+designs it generates, played on the subject's phantom:
+
+```bash
+pulserver console --plugins sequences --limits limits.txt --store designs \
+  --recon 127.0.0.1:9002 --port 8765
+```
+
+Each request is a JSON object carrying `call` and an `id` that every reply to
+it repeats:
+
+| `call` | Fields | Replies |
+| --- | --- | --- |
+| `plugins` | | `plugins`: the plugin names |
+| `list`, `validate`, `generate`, `import` | `plugin`, `block` | `status` and `reply`, as `pulserver design` answers; `design` for a generated or imported design |
+| `exam` | `subject` | `localizer`: the axial, coronal and sagittal images of the subject's phantom, as base64 DICOM files |
+| `scan` | `design`, `rotation` (nine elements), `centre_mm` | `clock` and `duration` after each span played, `dicom` and `name` for each image the reconstruction returns, `text`, then `done` with the status |
+| `cancel` | | stops the scan in progress |
+
+A subject named `brainweb` is BrainWeb's normal brain; any other is the vials.
+The localizer is drawn from the phantom's proton density, so an exam can be
+planned before any scan. MaRGE is such a console when `MARGE_PULSERVER` holds
+the address, `ws://127.0.0.1:8765` here: its sequences are then the plugins,
+its subject names the phantom, and it opens each exam on the localizer.
+
 ## See also
 
 * {doc}`../explanations/virtual-scanner` — the stand-ins and the signal model.

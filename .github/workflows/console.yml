@@ -1,0 +1,39 @@
+# The console of the virtual scanner with Gadgetron behind pulserver's proxy,
+# composed from docker/ and driven through one exam and one scan.
+name: Console
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - docker/**
+      - src/pulserver/virtual/_console.py
+      - src/pulserver/proxy/**
+      - .github/workflows/console.yml
+
+permissions:
+  contents: read
+
+jobs:
+  compose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Start the console, the proxy and Gadgetron
+        run: docker compose -f docker/compose.yaml up -d --build
+      - name: Scan through the console
+        run: |
+          pip install websockets pydicom numpy
+          python docker/smoke.py ws://127.0.0.1:8765
+      - name: Logs
+        if: always()
+        run: docker compose -f docker/compose.yaml logs --no-color
+      - name: Stop
+        if: always()
+        run: docker compose -f docker/compose.yaml down -v

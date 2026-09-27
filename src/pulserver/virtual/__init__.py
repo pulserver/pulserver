@@ -3,7 +3,9 @@
 from ._bloch import simulate
 from ._brainweb import BrainWeb
 from ._client import record, send
+from ._console import Console
 from ._export import export
+from ._localizer import localizer
 from ._phantom import Ellipse, Phantom
 from ._scanner import acquire, trajectory
 from ._stream import SAMPLE_RATE, Chunk, Scan
@@ -12,11 +14,13 @@ __all__ = [
     "SAMPLE_RATE",
     "BrainWeb",
     "Chunk",
+    "Console",
     "Ellipse",
     "Phantom",
     "Scan",
     "acquire",
     "export",
+    "localizer",
     "record",
     "send",
     "simulate",
