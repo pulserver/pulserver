@@ -100,6 +100,18 @@ class BrainWeb:
             )
         return fractions
 
+    def proton_density(
+        self, points: np.ndarray, *, normal: np.ndarray, thickness: float
+    ) -> np.ndarray:
+        """Return the proton density of a slab ``thickness`` thick along ``normal`` at each of ``(n, 3)`` physical points, in metres.
+
+        The density is each tissue's times the fraction of the nearest voxel it
+        fills, averaged in 1 mm steps across the slab; zero outside the model.
+        """
+        return _slab_density(
+            self.fractions, np.asarray(points, dtype=float), normal, thickness
+        )
+
     def isochromats(
         self,
         spacing: float = 1e-3,
@@ -189,6 +201,25 @@ class BrainWeb:
             receive=self._coils._received(own),
             threads=threads,
         )
+
+
+def _slab_density(
+    fractions: np.ndarray, points: np.ndarray, normal: np.ndarray, thickness: float
+) -> np.ndarray:
+    """Return the proton density at ``(n, 3)`` physical points, averaged over 1 mm steps across the slab."""
+    densities = np.array([density for _, _, density in TISSUES.values()])
+    first = np.array([_FIRST_VOXEL_MM[axis] for axis in "xyz"])
+    size = np.array(fractions.shape[2::-1])
+    steps = max(1, round(thickness / 1e-3))
+    total = np.zeros(len(points))
+    for offset in (np.arange(steps) - 0.5 * (steps - 1)) * thickness / steps:
+        shifted = points + offset * np.asarray(normal, dtype=float)
+        mni = 1e3 * shifted * np.array([-1.0, -1.0, 1.0])
+        voxel = np.rint(mni - first).astype(int)
+        inside = np.all((voxel >= 0) & (voxel < size), axis=1)
+        x, y, z = voxel[inside].T
+        total[inside] += fractions[z, y, x] @ densities
+    return total / steps
 
 
 def _cubes(fractions: np.ndarray, step: int) -> np.ndarray:

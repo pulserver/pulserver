@@ -203,6 +203,33 @@ class Phantom:
                 )
         return signal * np.exp(-2j * math.pi * (self._position @ k))
 
+    def proton_density(
+        self,
+        points: np.ndarray,
+        *,
+        normal: np.ndarray,  # noqa: ARG002 -- the discs need no averaging across the slab
+        thickness: float,
+    ) -> np.ndarray:
+        """Return the magnitude of the intensity of a slab ``thickness`` thick at each of ``(n, 3)`` physical points, in metres.
+
+        Each ellipse stands for a disc ``thickness`` thick about its plane, so a
+        slab through it at any orientation shows its section, and overlapping
+        ellipses add.
+        """
+        own = (np.asarray(points, dtype=float) - self._position) @ self._rotation
+        total = np.zeros(len(own), dtype=complex)
+        for ellipse in self.ellipses:
+            cos, sin = math.cos(ellipse.angle), math.sin(ellipse.angle)
+            dx = own[:, 0] - ellipse.centre[0]
+            dy = own[:, 1] - ellipse.centre[1]
+            along = (cos * dx + sin * dy) / ellipse.semi_axes[0]
+            across = (-sin * dx + cos * dy) / ellipse.semi_axes[1]
+            inside = (along**2 + across**2 <= 1.0) & (
+                np.abs(own[:, 2] - ellipse.centre[2]) <= 0.5 * thickness
+            )
+            total[inside] += ellipse.intensity
+        return np.abs(total)
+
 
 def _sampled(ellipse: Ellipse, spacing: float) -> np.ndarray:
     """Return the points of the grid of ``spacing`` inside ``ellipse``, ``(n, 3)`` along the phantom's axes."""
