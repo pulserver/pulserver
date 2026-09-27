@@ -1,10 +1,11 @@
 # Simulates, for every case directory named after the phantom, the design's
-# files and the file exported from its cache, and writes both signals there.
+# files, the file exported from its cache and that file in KomaMRI's RF
+# convention, and writes the three signals there.
 #
 # A case directory holds `design.txt`, the design's files in play order, one
-# per line, and `exported.seq`; it receives `design.sig` and `exported.sig`:
-# every ADC sample in play order, as little-endian complex128, without the
-# ADC's offsets applied.
+# per line, `exported.seq` and `komamri.seq`; it receives `design.sig`,
+# `exported.sig` and `komamri.sig`: every ADC sample in play order, as
+# little-endian complex128, without the ADC's offsets applied.
 using KomaMRICore, KomaMRIFiles
 
 """The phantom a file holds: the spin count, then x, y, z (m), ρ, T1, T2 (s) and Δw (rad/s)."""
@@ -75,7 +76,8 @@ function main(args)
     for case in args[2:end]
         design = readlines(joinpath(case, "design.txt"))
         exported = [joinpath(case, "exported.seq")]
-        for (name, files) in (("design", design), ("exported", exported))
+        komamri = [joinpath(case, "komamri.seq")]
+        for (name, files) in (("design", design), ("exported", exported), ("komamri", komamri))
             elapsed = @elapsed signal = simulate(
                 obj, played(files), sys; sim_params=params(), verbose=false
             )
