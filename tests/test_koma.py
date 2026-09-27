@@ -34,9 +34,16 @@ ENGINE_TOLERANCE = 1e-2
 #: Fraction of a sample's interval by which the two times ``_held`` gives the
 #: sample lie inside the interval's ends.
 HOLD_INSET = 1e-3
-NAMES = sorted(
-    p.stem for p in FIXTURES.glob("*.seq") if not p.stem.endswith("_b")
-) + sorted(SMALL)
+#: The cases ``PULSERVER_KOMA_CASES`` names, comma-separated; every one without it.
+NAMES = [
+    name
+    for name in sorted(
+        p.stem for p in FIXTURES.glob("*.seq") if not p.stem.endswith("_b")
+    )
+    + sorted(SMALL)
+    if not os.environ.get("PULSERVER_KOMA_CASES")
+    or name in os.environ["PULSERVER_KOMA_CASES"].split(",")
+]
 
 pytestmark = pytest.mark.skipif(
     PROJECT is None, reason="PULSERVER_KOMA_PROJECT names no Julia project"
@@ -262,7 +269,11 @@ def test_komamri_and_pypulseqpps_bloch_simulation_give_one_signal_of_the_cache(
     komamri, engine = simulated[name].komamri, simulated[name].engine
 
     assert engine.size == komamri.size
-    print(f"{name}: {_apart(engine, komamri):.1e} of KomaMRI's peak")
+    gain = np.vdot(komamri, engine) / np.vdot(komamri, komamri)
+    print(
+        f"{name}: {_apart(engine, komamri):.1e} of KomaMRI's peak; "
+        f"{_apart(engine, gain * komamri):.1e} after a gain of {gain:.3f}"
+    )
     np.testing.assert_allclose(
         engine, komamri, rtol=0, atol=ENGINE_TOLERANCE * np.abs(komamri).max()
     )
