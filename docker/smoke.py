@@ -70,6 +70,7 @@ def main() -> int:
         if "dicom" in m
     ]
     print(f"scan status {done['done']}, {len(images)} DICOM images")
+    socket.close()
     ok = len(exam["localizer"]) == 3 and images and images[0].pixel_array.max() > 0
     return 0 if ok and done["done"] == 0 else 1
 

@@ -29,7 +29,7 @@ jobs:
         run: docker compose -f docker/compose.yaml up -d --build
       - name: Scan through the console
         run: |
-          pip install websockets pydicom
+          pip install websockets pydicom numpy
           python docker/smoke.py ws://127.0.0.1:8765
       - name: Logs
         if: always()
