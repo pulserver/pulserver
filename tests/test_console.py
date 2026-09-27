@@ -20,6 +20,7 @@ from pulserver.host._blocks import format_limits
 from pulserver.protocol import FOV_OFFSET, FOV_ROTATION, PROTOCOL_BEGIN, PROTOCOL_END
 from pulserver.proxy import ReconProxy
 from pulserver.virtual._console import Console, _connection
+from pulserver.virtual._localizer import PLANES
 
 websockets = pytest.importorskip("websockets")
 
@@ -90,7 +91,7 @@ def test_an_exam_returns_its_subjects_three_plane_localizer_as_dicom(tmp_path):
         tuple(float(v) for v in d.ImageOrientationPatient) for d in datasets
     ]
     assert orientations == [
-        tuple(np.concatenate(directions)) for directions in virtual.PLANES.values()
+        tuple(np.concatenate(directions)) for directions in PLANES.values()
     ]
 
 

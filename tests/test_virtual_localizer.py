@@ -9,6 +9,7 @@ import pytest
 
 from pulserver import virtual
 from pulserver.virtual import _brainweb
+from pulserver.virtual._localizer import PLANES
 
 FOV, MATRIX, THICKNESS = 0.128, 64, 5e-3
 PIXEL = FOV / MATRIX
@@ -49,12 +50,12 @@ def _scan(phantom, centre):
     )
 
 
-@pytest.mark.parametrize("plane", list(virtual.PLANES))
+@pytest.mark.parametrize("plane", list(PLANES))
 def test_each_plane_carries_its_orientation_and_the_centre_of_its_first_pixel(plane):
     centre = (0.01, -0.02, 0.03)
-    read, phase = map(np.asarray, virtual.PLANES[plane])
+    read, phase = map(np.asarray, PLANES[plane])
 
-    dataset = _scan(_disc(), centre)[list(virtual.PLANES).index(plane)]
+    dataset = _scan(_disc(), centre)[list(PLANES).index(plane)]
 
     np.testing.assert_allclose(
         [float(v) for v in dataset.ImageOrientationPatient], [*read, *phase]
@@ -74,7 +75,7 @@ def test_each_plane_carries_its_orientation_and_the_centre_of_its_first_pixel(pl
 def test_the_planes_are_the_radiological_views_of_a_head_first_supine_subject():
     normals = {
         name: np.cross(*map(np.asarray, directions))
-        for name, directions in virtual.PLANES.items()
+        for name, directions in PLANES.items()
     }
 
     np.testing.assert_allclose(normals["axial"], [0.0, 0.0, 1.0])
@@ -85,10 +86,10 @@ def test_the_planes_are_the_radiological_views_of_a_head_first_supine_subject():
 def test_a_disc_shows_its_face_in_its_own_plane_and_its_section_across_it():
     centre = (0.03, -0.02, 0.0)
 
-    images = dict(zip(virtual.PLANES, _scan(_disc(centre), centre), strict=True))
+    images = dict(zip(PLANES, _scan(_disc(centre), centre), strict=True))
 
     for plane, dataset in images.items():
-        points = _points(centre, *virtual.PLANES[plane])
+        points = _points(centre, *PLANES[plane])
         radial = np.hypot(points[..., 0] - centre[0], points[..., 1] - centre[1])
         expected = np.where(
             (radial <= 0.01) & (np.abs(points[..., 2]) <= 0.5 * THICKNESS), 2.0, 0.0

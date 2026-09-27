@@ -36,10 +36,14 @@ def localizer(
 
     Each image is the phantom's proton density in a slab ``thickness`` thick
     through ``centre``, sampled at the centres of ``matrix`` by ``matrix``
-    pixels over ``fov``, as :meth:`proton_density` of the phantom gives it: the
+    pixels over ``fov``, as the phantom's ``proton_density`` gives it: the
     ground truth, with no sequence played. The images carry the geometry of
     the reconstructed ones, so a console plans on them as it plans on a
-    scanned localizer.
+    scanned localizer. Their read and phase directions along the physical
+    axes, which are the patient's LPS axes for a subject lying head first and
+    supine, are (1, 0, 0) and (0, 1, 0) for the axial plane, (1, 0, 0) and
+    (0, 0, -1) for the coronal one, and (0, 1, 0) and (0, 0, -1) for the
+    sagittal one: the radiological views.
 
     Parameters
     ----------

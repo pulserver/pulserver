@@ -5,13 +5,12 @@ from ._brainweb import BrainWeb
 from ._client import record, send
 from ._console import Console
 from ._export import export
-from ._localizer import PLANES, localizer
+from ._localizer import localizer
 from ._phantom import Ellipse, Phantom
 from ._scanner import acquire, trajectory
 from ._stream import SAMPLE_RATE, Chunk, Scan
 
 __all__ = [
-    "PLANES",
     "SAMPLE_RATE",
     "BrainWeb",
     "Chunk",
