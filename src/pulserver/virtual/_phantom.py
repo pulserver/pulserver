@@ -12,6 +12,8 @@ import numpy as np
 import pypulseqpp as pp
 from scipy.special import j1
 
+from ._coils import Coil
+
 
 @dataclass(frozen=True)
 class Ellipse:
@@ -108,6 +110,7 @@ class Phantom:
         *,
         field_t: float | None = None,
         off_resonance_hz: float = 0.0,
+        coil: Coil | None = None,
         threads: int = 0,
     ) -> pp.Isochromats:
         """Return the phantom sampled as isochromats, for :func:`~pulserver.virtual.simulate`.
@@ -119,7 +122,8 @@ class Phantom:
         ellipse's transform below the grid's Nyquist frequency. Overlapping
         ellipses are separate isochromats. The positions are placed in the
         physical frame as the phantom is, and the receive sensitivities are the
-        coils'.
+        phantom's coils', or ``coil``'s transmit and receive sensitivities
+        there.
 
         Parameters
         ----------
@@ -131,15 +135,22 @@ class Phantom:
         off_resonance_hz
             Frequency of every isochromat from the scanner's centre frequency,
             in Hz, beside its chemical shift.
+        coil
+            The scanner's coil the phantom is scanned with.
         threads
             Worker threads of the simulation; 0 for every core.
 
         Raises
         ------
         ValueError
-            If an ellipse has a complex intensity, or the phantom has a chemical
-            shift and ``field_t`` is not given.
+            If an ellipse has a complex intensity, the phantom has a chemical
+            shift and ``field_t`` is not given, or it has coils of its own and
+            ``coil`` is given.
         """
+        if coil is not None and self.coils > 1:
+            raise ValueError(
+                "a phantom received by coils of its own is not scanned with a coil"
+            )
         if field_t is None and any(self.shifts_ppm):
             raise ValueError("a phantom with a chemical shift is scanned at a field_t")
         per_ppm = 0.0 if field_t is None else 1e-6 * pp.Opts().gamma * field_t
@@ -157,13 +168,15 @@ class Phantom:
         density, t1, t2, frequency = np.repeat(
             np.array(tissues, dtype=float), [len(p) for p in points], axis=0
         ).T
+        positions = own @ self._rotation.T + self._position
         return pp.Isochromats(
-            own @ self._rotation.T + self._position,
+            positions,
             proton_density=density,
             t1=t1,
             t2=t2,
             off_resonance=frequency,
-            receive=self._received(own),
+            transmit=None if coil is None else coil.transmit(positions),
+            receive=self._received(own) if coil is None else coil.receive(positions),
             threads=threads,
         )
 

@@ -474,10 +474,35 @@ class Recorder
         out["loads"] = loads_;
         out["overwrites"] = overwrites_;
         out["unloaded"] = unloaded_;
+        out["rf_shims"] = rf_shims();
         return out;
     }
 
   private:
+    /* Each subsequence's RF shims, as the complex weight of each channel. */
+    py::list rf_shims() const
+    {
+        pulseg_collection_info info{};
+        pulseg_get_collection_info(coll_, &info);
+        py::list subsequences;
+        for (int s = 0; s < info.num_subsequences; ++s)
+        {
+            py::list shims;
+            for (int i = 0; i < pulseg_get_num_rf_shims(coll_, s); ++i)
+            {
+                pulseg_rf_shim_def shim{};
+                pulseg_get_rf_shim_def(coll_, &shim, s, i);
+                py::array_t<std::complex<double>> weights(shim.num_channels);
+                auto w = weights.mutable_unchecked<1>();
+                for (int c = 0; c < shim.num_channels; ++c)
+                    w(c) = std::polar<double>(shim.magnitudes[c], shim.phases[c]);
+                shims.append(weights);
+            }
+            subsequences.append(shims);
+        }
+        return subsequences;
+    }
+
     /* Keep what each axis of the block's wave reads from memory, counting
      * samples nothing was loaded into. */
     void read(const pulseg_wave_region *region)

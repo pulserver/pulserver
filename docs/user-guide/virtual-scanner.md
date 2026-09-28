@@ -172,7 +172,10 @@ line, is written to standard output, and the scan clock to standard error.
   (`pip install 'pulserver[brainweb]'`); its `--spacing` is a whole number of
   millimetres. Without `--phantom`, the phantom is seven vials of water around
   one of fat, with T1 from 0.3 s to 2.0 s and T2 from 0.04 s to 0.3 s.
-  `--spacing`, in mm, and `--coils` set its isochromats and its receive coils.
+  `--spacing`, in mm, and `--coils` set its isochromats and its receive coils;
+  `--coil` scans it with one of the scanner's coils instead, whose
+  sensitivities bartorch samples from BART's coil models, which the `coils`
+  extra installs (`pip install 'pulserver[coils]'`).
 - `--recon` streams the series to a reconstruction proxy, which looks the
   design up in its store: give that store as `--store`, or the proxy's design
   intake as `--push`. The images go to `images.h5` in `--output`, the DICOM
@@ -231,16 +234,19 @@ it repeats:
 | `call` | Fields | Replies |
 | --- | --- | --- |
 | `plugins` | | `plugins`: the plugin names |
+| `coils` | | `coils`: each coil's `name` and its `transmit` and `receive` channels |
 | `list`, `validate`, `generate`, `import` | `plugin`, `block` | `status` and `reply`, as `pulserver design` answers; `design` for a generated or imported design |
-| `exam` | `subject` | `localizer`: the axial, coronal and sagittal images of the subject's phantom, as base64 DICOM files |
+| `exam` | `subject`, `coil` | `localizer`: the axial, coronal and sagittal images of the subject's phantom, as base64 DICOM files |
 | `scan` | `design`, `rotation` (nine elements), `centre_mm`, `sound` | `clock` and `duration` after each span played, with the span's `sound` when asked, as base64 of 16-bit little-endian stereo samples at `rate` Hz; `dicom` and `name` for each image the reconstruction returns, `text`, then `done` with the status |
 | `cancel` | | stops the scan in progress |
 
 A subject named `brainweb` is BrainWeb's normal brain; any other is the vials.
-The localizer is drawn from the phantom's proton density, so an exam can be
-planned before any scan. MaRGE is such a console when `MARGE_PULSERVER` holds
-the address, `ws://127.0.0.1:8765` here: its sequences are then the plugins,
-its subject names the phantom, and it opens each exam on the localizer. The
+An exam is scanned in the coil it names, or in the one it had, `--coil` at
+first; a head coil needs the `coils` extra. The localizer is drawn from the
+phantom's proton density, so an exam can be planned before any scan. MaRGE is
+such a console when `MARGE_PULSERVER` holds the address, `ws://127.0.0.1:8765`
+here: its sequences are then the plugins, its subject names the phantom, its RF
+coil names the coil, and it opens each exam on the localizer. The
 browser build of MaRGE in [pulserver/MaRGE](https://github.com/pulserver/MaRGE)
 runs it in a browser tab, opened with `?console=ws://127.0.0.1:8765`, and plays
 each scan's sound as it streams.

@@ -109,6 +109,32 @@ def test_the_subject_brainweb_starts_an_exam_on_brainweb(tmp_path, monkeypatch):
     assert isinstance(console.phantom, virtual.BrainWeb)
 
 
+def test_a_console_lists_each_coil_an_exam_can_start_with_and_its_channels(tmp_path):
+    coils = _console(tmp_path).coils()
+
+    assert coils == [
+        {
+            "name": name,
+            "transmit": coil.transmit_channels,
+            "receive": coil.receive_channels,
+        }
+        for name, coil in virtual.COILS.items()
+    ]
+
+
+def test_an_exam_starts_in_the_coil_it_names_and_keeps_it_until_another_is_named(
+    tmp_path,
+):
+    console = _console(tmp_path)
+
+    console.exam("vials", "head48")
+    console.exam("vials")
+
+    assert console.coil is virtual.COILS["head48"]
+    with pytest.raises(ValueError, match="coils are"):
+        console.exam("vials", "knee")
+
+
 def test_a_scan_streams_its_clock_and_returns_the_reconstruction_as_dicom(
     tmp_path, proxy
 ):
@@ -208,9 +234,12 @@ def test_the_gateway_answers_a_consoles_calls_over_a_websocket(tmp_path):
         with connect(f"ws://127.0.0.1:{port}", max_size=None) as client:
             client.send(json.dumps({"id": 1, "call": "plugins"}))
             plugins = json.loads(client.recv(timeout=DEADLINE))
-            client.send(json.dumps({"id": 2, "call": "exam", "subject": "vials"}))
+            client.send(json.dumps({"id": 2, "call": "coils"}))
+            coils = json.loads(client.recv(timeout=DEADLINE))
+            request = {"id": 3, "call": "exam", "subject": "vials", "coil": "head32"}
+            client.send(json.dumps(request))
             exam = json.loads(client.recv(timeout=DEADLINE))
-            client.send(json.dumps({"id": 3, "call": "reboot"}))
+            client.send(json.dumps({"id": 4, "call": "reboot"}))
             refused = json.loads(client.recv(timeout=DEADLINE))
     finally:
         loop.call_soon_threadsafe(server["it"].close)
@@ -218,9 +247,11 @@ def test_the_gateway_answers_a_consoles_calls_over_a_websocket(tmp_path):
 
     assert plugins["id"] == 1
     assert "gre2d" in plugins["plugins"]
-    assert exam["id"] == 2
+    assert coils == {"id": 2, "coils": console.coils()}
+    assert exam["id"] == 3
     assert len(exam["localizer"]) == 3
-    assert refused == {"id": 3, "error": "unknown call 'reboot'"}
+    assert console.coil is virtual.COILS["head32"]
+    assert refused == {"id": 4, "error": "unknown call 'reboot'"}
 
 
 def test_the_console_command_serves_a_console_of_its_options(tmp_path, monkeypatch):
@@ -251,8 +282,8 @@ def test_the_console_command_serves_a_console_of_its_options(tmp_path, monkeypat
             "9876",
             "--spacing",
             "2",
-            "--coils",
-            "4",
+            "--coil",
+            "head8",
         ]
     )
 
@@ -261,5 +292,5 @@ def test_the_console_command_serves_a_console_of_its_options(tmp_path, monkeypat
     console = served["console"]
     assert console.recon == ("recon.local", 9020)
     assert console.spacing == pytest.approx(2e-3)
-    assert console.coils == 4
+    assert console.coil is virtual.COILS["head8"]
     assert console.field_t == ANY_ORIENTATION["B0"]

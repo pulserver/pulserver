@@ -31,9 +31,10 @@ class Console:
     """What a scanner console asks of pulserver, answered in this process.
 
     A console lists a plugin's protocol, validates and generates designs with
-    the text blocks the interpreter sends, starts an exam on a subject, and
-    scans a stored design on it with the virtual scanner. Images return as
-    DICOM from the reconstruction proxy at ``recon``.
+    the text blocks the interpreter sends, starts an exam on a subject with
+    one of the virtual scanner's :data:`~pulserver.virtual.COILS`, and scans
+    a stored design on it. Images return as DICOM from the reconstruction
+    proxy at ``recon``.
 
     Parameters
     ----------
@@ -51,8 +52,8 @@ class Console:
         Recon-side intake each design is pushed to.
     spacing
         Isochromat spacing of the phantom, in metres.
-    coils
-        Receive channels.
+    coil
+        Name of the coil an exam is started with unless it names another.
     speed
         Scan time elapsed per wall-clock second; as fast as possible without it.
     """
@@ -66,7 +67,7 @@ class Console:
         recon: tuple[str, int] | None = None,
         push: str | None = None,
         spacing: float = 1e-3,
-        coils: int = 1,
+        coil: str = "body",
         speed: float | None = None,
     ) -> None:
         from ..host._blocks import parse_limits
@@ -77,11 +78,11 @@ class Console:
         self.recon = recon
         self.push = push
         self.spacing = spacing
-        self.coils = coils
+        self.coil = _coil(coil)
         self.speed = speed
         self.field_t = float(parse_limits(limits)["B0"])
         self.subject = ""
-        self.phantom = _subject_phantom("", coils)
+        self.phantom = _subject_phantom("")
 
     def design(self, call: str, plugin: str | None = None, block: str = "") -> dict:
         """Answer a design call; a generated or imported design's id is ``design``."""
@@ -112,15 +113,36 @@ class Console:
         """Return the names of the plugins a console can list."""
         return sorted(path.stem for path in self.plugins.glob("*.py"))
 
-    def exam(self, subject: str) -> list[bytes]:
-        """Start an exam on the phantom ``subject`` names; return its three-plane localizer as DICOM files.
+    def coils(self) -> list[dict[str, Any]]:
+        """Return each coil an exam can be started with: its ``name`` and its ``transmit`` and ``receive`` channels."""
+        from . import COILS
 
-        ``brainweb`` names BrainWeb's normal brain; any other subject, the vials.
+        return [
+            {
+                "name": coil.name,
+                "transmit": coil.transmit_channels,
+                "receive": coil.receive_channels,
+            }
+            for coil in COILS.values()
+        ]
+
+    def exam(self, subject: str, coil: str | None = None) -> list[bytes]:
+        """Start an exam on the phantom ``subject`` names, in the coil ``coil`` names; return its three-plane localizer as DICOM files.
+
+        ``brainweb`` names BrainWeb's normal brain; any other subject, the
+        vials. Without ``coil``, the exam keeps the coil it had.
+
+        Raises
+        ------
+        ValueError
+            If ``coil`` names none of the virtual scanner's coils.
         """
         from ._localizer import localizer
 
+        if coil is not None:
+            self.coil = _coil(coil)
         self.subject = subject
-        self.phantom = _subject_phantom(subject, self.coils)
+        self.phantom = _subject_phantom(subject)
         return [
             _dicom_bytes(dataset)
             for dataset in localizer(
@@ -160,8 +182,11 @@ class Console:
         rotation = np.asarray(rotation, dtype=float).reshape(3, 3)
         scan = Scan(
             DesignStore(self.store).directory(design) / "sequence.seq",
-            self.phantom.isochromats(self.spacing, field_t=self.field_t),
+            self.phantom.isochromats(
+                self.spacing, field_t=self.field_t, coil=self.coil
+            ),
             rotation=rotation,
+            default_shim=self.coil.default_shim,
         )
         stopped = threading.Event()
 
@@ -194,7 +219,9 @@ class Console:
         for item in send(self.recon, design, played(), **series):
             if isinstance(item, ismrmrd.Image):
                 if convert is None:
-                    header = _header(design, self.coils, series["frequency_hz"], None)
+                    header = _header(
+                        design, self.coil.receive_channels, series["frequency_hz"], None
+                    )
                     convert = MrdDicomBuilder(ismrmrd.xsd.CreateFromDocument(header))
                 item = convert(item)
             if isinstance(item, DicomWithName) and item.dset is not None:
@@ -205,13 +232,23 @@ class Console:
         return 1 if stopped.is_set() else status
 
 
-def _subject_phantom(subject: str, coils: int) -> Any:
+def _subject_phantom(subject: str) -> Any:
     from . import BrainWeb
     from ._command import default_phantom
 
     if subject.strip().lower() == "brainweb":
-        return BrainWeb(coils=coils)
-    return default_phantom(coils)
+        return BrainWeb()
+    return default_phantom()
+
+
+def _coil(name: str) -> Any:
+    from . import COILS
+
+    if name not in COILS:
+        raise ValueError(
+            f"the virtual scanner's coils are {sorted(COILS)}, not {name!r}"
+        )
+    return COILS[name]
 
 
 def _dicom_bytes(dataset: Any) -> bytes:
@@ -239,6 +276,8 @@ async def _connection(console: Console, websocket: Any) -> None:
         try:
             if call == "plugins":
                 reply(ident, {"plugins": console.plugin_names()})
+            elif call == "coils":
+                reply(ident, {"coils": console.coils()})
             elif call in DESIGN_CALLS:
                 reply(
                     ident,
@@ -247,7 +286,11 @@ async def _connection(console: Console, websocket: Any) -> None:
                     ),
                 )
             elif call == "exam":
-                files = console.exam(str(request.get("subject", "")))
+                coil = request.get("coil")
+                files = console.exam(
+                    str(request.get("subject", "")),
+                    None if coil is None else str(coil),
+                )
                 reply(
                     ident,
                     {"localizer": [base64.b64encode(f).decode("ascii") for f in files]},
@@ -308,7 +351,9 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--spacing", type=float, default=1.0, help="isochromat spacing, in mm"
     )
-    parser.add_argument("--coils", type=int, default=1, help="receive channels")
+    parser.add_argument(
+        "--coil", default="body", help="coil an exam starts with unless it names one"
+    )
     parser.add_argument(
         "--speed",
         type=float,
@@ -331,7 +376,7 @@ def main(argv: list[str] | None = None) -> int:
         recon=recon,
         push=args.push,
         spacing=1e-3 * args.spacing,
-        coils=args.coils,
+        coil=args.coil,
         speed=args.speed,
     )
     with contextlib.suppress(KeyboardInterrupt):
