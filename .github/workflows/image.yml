@@ -1,8 +1,7 @@
 # pulserver's image, whose default command is the console of the virtual
 # scanner reconstructing in its own process: built, scanned through in the
-# head coils, which bartorch samples, and published from main. An exam on
-# BrainWeb then downloads it from BrainWeb's server, after publishing, so that
-# the server's availability does not hold the image back.
+# head coils, which bartorch samples, examined on the BrainWeb brain it
+# carries, which loads without a network, and published from main.
 name: Image
 
 on:
@@ -39,6 +38,12 @@ jobs:
           docker run -d --name console -p 127.0.0.1:8765:8765 pulserver
           pip install websockets pydicom numpy
           python docker/smoke.py ws://127.0.0.1:8765 head8/head32
+      - name: Load BrainWeb without a network
+        run: >-
+          docker run --rm --network none --entrypoint python pulserver -c
+          "from pulserver.virtual import BrainWeb; print(BrainWeb().fractions.shape)"
+      - name: Start an exam on BrainWeb
+        run: python docker/smoke.py ws://127.0.0.1:8765 body/head48 --subject brainweb --exam-only
       - name: Publish
         if: github.event_name == 'push'
         run: |
@@ -47,8 +52,6 @@ jobs:
             docker tag pulserver "ghcr.io/pulserver/pulserver:$tag"
             docker push "ghcr.io/pulserver/pulserver:$tag"
           done
-      - name: Start an exam on BrainWeb, downloaded from its server
-        run: python docker/smoke.py ws://127.0.0.1:8765 body/head48 --subject brainweb --exam-only
       - name: Logs
         if: always()
         run: docker logs console

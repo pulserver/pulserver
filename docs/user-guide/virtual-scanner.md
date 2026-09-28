@@ -241,7 +241,8 @@ and a client that sends no `Origin`, which a browser always sends, is served
 either way.
 
 pulserver's image runs such a console by default, with bartorch for the head
-coils and the `gre2d` plugin reconstructed by the built-in Cartesian FFT,
+coils, BrainWeb's normal brain, so that an exam on `brainweb` downloads
+nothing, and the `gre2d` plugin reconstructed by the built-in Cartesian FFT,
 `pulserver.recon.handlers.simplefft`. It serves the pages of
 `https://pulserver.github.io`, `http://localhost:8000` and
 `http://127.0.0.1:8000` on port 8765 of this computer:
