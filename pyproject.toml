@@ -22,7 +22,7 @@ classifiers = [
   "Programming Language :: Python :: 3.13",
 ]
 
-dependencies = ["pypulseqpp>=0.0.16", "numpy>=1.24", "ismrmrd>=1.14", "pydicom>=3.0"]
+dependencies = ["pypulseqpp>=0.0.17", "numpy>=1.24", "ismrmrd>=1.14", "pydicom>=3.0"]
 
 [project.optional-dependencies]
 brainweb = ["brainweb-dl>=0.4.6"]

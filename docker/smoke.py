@@ -71,12 +71,17 @@ def main() -> int:
     )
     generated, _ = call("generate", plugin="gre2d", block=block)
     print(generated["reply"].strip())
+    started = time.monotonic()
     done, messages = call(
         "scan",
         design=generated["design"],
         rotation=[1, 0, 0, 0, 1, 0, 0, 0, 1],
         centre_mm=[0.0, 0.0, 0.0],
     )
+    took = time.monotonic() - started
+    duration = max((m["duration"] for m in messages if "clock" in m), default=0.0)
+    preparing = sum("preparing" in m for m in messages)
+    print(f"scan of {duration:.1f} s took {took:.1f} s, {preparing} preparing messages")
     for message in messages:
         if "text" in message:
             print("text:", message["text"].strip())
@@ -88,6 +93,8 @@ def main() -> int:
     print(f"scan status {done['done']}, {len(images)} DICOM images")
     socket.close()
     ok = len(exam["localizer"]) == 3 and images and images[0].pixel_array.max() > 0
+    # The image's console plays a scan on the scanner's clock.
+    ok = ok and duration > 0.0 and took >= duration and preparing > 0
     return 0 if ok and done["done"] == 0 else 1
 
 

@@ -3,6 +3,7 @@
 import itertools
 import math
 import shutil
+import threading
 import time
 from pathlib import Path
 
@@ -113,6 +114,94 @@ def test_a_scan_played_at_a_speed_yields_each_span_once_its_clock_passes_it(
     for chunk in scan.chunks(0.05, speed=4.0, sound=False):
         assert time.monotonic() - started >= chunk.stop / 4.0
         assert chunk.sound.shape == (2, 0)
+
+
+#: Played at a third of a scanner's speed, a span of the gradient echo lasts
+#: long enough on the wall clock that a clock held back by the simulation
+#: lags by far more than a shared runner's sleeps overshoot, ``JITTER``.
+SPEED = 1.0 / 3.0
+JITTER = 0.25
+
+
+def _slowed(scan, seconds_per_sample, seconds_per_second=0.01, held=None):
+    """Make ``scan`` simulate each span in the time given per ADC sample, or per second of scan time without one.
+
+    The span that starts at block ``held``, if any, takes 2 s more.
+    """
+    simulate = scan._readouts
+
+    def slow(first, last):
+        samples = scan._adc_samples(first, last)
+        duration = scan._starts[last] - scan._starts[first]
+        time.sleep(
+            seconds_per_sample * samples if samples else seconds_per_second * duration
+        )
+        if first == held:
+            time.sleep(2.0)
+        return simulate(first, last)
+
+    scan._readouts = slow
+
+
+def _offsets(scan, preparing=None):
+    """Play ``scan`` at ``SPEED``; return how far after its end on the clock each span was released, in s of wall-clock time."""
+    return [
+        time.monotonic() - chunk.stop / SPEED
+        for chunk in scan.chunks(0.05, speed=SPEED, sound=False, preparing=preparing)
+    ]
+
+
+def test_a_scan_simulated_slower_than_it_plays_starts_its_clock_once_it_will_not_be_held(
+    converted,
+):
+    scan = virtual.Scan(converted / "gre_2d_3sl.seq", pp.Isochromats(POSITIONS))
+    total = sum(scan._adc_samples(*span) for span in scan._spans(0.05))
+    playing = scan.duration / SPEED
+    # Twice as long to simulate as to play, all of it in the readouts: a clock
+    # started at once would lag by the whole playing time.
+    _slowed(scan, 2.0 * playing / total)
+    reports = []
+    offsets = _offsets(scan, reports.append)
+
+    # No estimate before a span that acquires has been simulated.
+    assert reports[0] is None and all(left > 0.0 for left in reports if left)
+    assert max(offsets) - min(offsets) < JITTER < playing
+
+
+def test_a_span_simulated_after_its_time_holds_the_clock_and_the_rest_keep_its_pace(
+    converted,
+):
+    scan = virtual.Scan(converted / "gre_2d_3sl.seq", pp.Isochromats(POSITIONS))
+    spans = scan._spans(0.05)
+    total = sum(scan._adc_samples(*span) for span in spans)
+    _slowed(scan, 0.5 * scan.duration / total, held=spans[5][0])
+    offsets = _offsets(scan)
+
+    before, after = offsets[:5], offsets[5:]
+    assert max(before) - min(before) < JITTER
+    assert min(after) > max(before) + 2 * JITTER
+    assert max(after) - min(after) < JITTER
+
+
+def test_a_scan_closed_while_playing_stops_simulating(converted):
+    scan = virtual.Scan(converted / "gre_2d_3sl.seq", pp.Isochromats(POSITIONS))
+    _slowed(scan, 0.0, seconds_per_second=1.0)
+    chunks = scan.chunks(0.05, sound=False)
+    next(chunks)
+    chunks.close()
+    assert not any(t.name == "pulserver-scan" for t in threading.enumerate())
+
+
+def test_an_error_in_the_simulation_is_raised_where_the_spans_are_taken(converted):
+    scan = virtual.Scan(converted / "gre_2d_3sl.seq", pp.Isochromats(POSITIONS))
+
+    def failing(first, last):
+        raise RuntimeError("the engine refused a block")
+
+    scan._readouts = failing
+    for speed in (None, 1.0):
+        with pytest.raises(RuntimeError, match="refused a block"):
+            list(scan.chunks(0.05, speed=speed, sound=False))
 
 
 @pytest.mark.parametrize(

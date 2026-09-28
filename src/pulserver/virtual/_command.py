@@ -230,7 +230,15 @@ def _played(
     scan: Any, args: argparse.Namespace, audio: wave.Wave_write | None
 ) -> Iterator[np.ndarray]:
     """Yield the readouts of the scan as they are played, writing its sound and its clock."""
-    for chunk in scan.chunks(_SPAN, speed=args.speed, sound=audio is not None):
+
+    def preparing(left: float | None) -> None:
+        sys.stderr.write(
+            "preparing\n" if left is None else f"preparing, {left:.1f} s left\n"
+        )
+
+    for chunk in scan.chunks(
+        _SPAN, speed=args.speed, sound=audio is not None, preparing=preparing
+    ):
         if audio is not None:
             audio.writeframes(np.round(32767.0 * chunk.sound.T).astype("<i2").tobytes())
         sys.stderr.write(f"{chunk.stop:9.2f} s of {scan.duration:.2f} s\n")

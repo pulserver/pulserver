@@ -59,7 +59,8 @@ class Console:
     coil
         Name of the coil an exam is started with unless it names another.
     speed
-        Scan time elapsed per wall-clock second; as fast as possible without it.
+        Scan time elapsed per wall-clock second once the scan's simulation is
+        far enough ahead of its clock; as fast as it is simulated without it.
     """
 
     def __init__(
@@ -98,6 +99,11 @@ class Console:
         self.field_t = float(parse_limits(limits)["B0"])
         self.subject = ""
         self.phantom = _subject_phantom("")
+        # The exam's isochromats between its scans, and how many exams have
+        # started, so that a scan hands back only those of the exam in progress.
+        self._held = threading.Lock()
+        self._isochromats: Any = None
+        self._exams = 0
 
     def design(self, call: str, plugin: str | None = None, block: str = "") -> dict:
         """Answer a design call; a generated or imported design's id is ``design``."""
@@ -158,6 +164,9 @@ class Console:
             self.coil = _coil(coil)
         self.subject = subject
         self.phantom = _subject_phantom(subject)
+        with self._held:
+            self._exams += 1
+            self._isochromats = None
         return [
             _dicom_bytes(dataset)
             for dataset in localizer(
@@ -182,34 +191,78 @@ class Console:
         DICOM, ``{"dicom": base64, "name": file name}``, converting those it
         returns as MRD, and its texts as ``{"text": ...}``. With
         ``sound``, each clock also carries the span's sound as ``sound``,
-        base64 of 16-bit little-endian stereo samples at ``rate`` Hz. The
-        status is 1 when a text reports a refused or failed series, or when
-        the scan is cancelled.
-        """
-        import ismrmrd
-        import pypulseqpp as pp
+        base64 of 16-bit little-endian stereo samples at ``rate`` Hz. At a
+        speed, the scan is simulated ahead of its clock, and until the clock
+        starts ``emit`` receives ``{"preparing": s}`` about twice a second,
+        with the wall-clock time left before it does, or ``null`` before there
+        is an estimate. The status is 1 when a text reports a refused or
+        failed series, or when the scan is cancelled.
 
+        The exam's scans play on one set of isochromats, each from
+        equilibrium, which keeps the pulses the engine has computed; a scan
+        started while another plays has isochromats of its own.
+        """
+        if self.speed is not None:
+            emit({"preparing": None})
+        with self._held:
+            isochromats, self._isochromats = self._isochromats, None
+            exam = self._exams
+        if isochromats is None:
+            isochromats = self.phantom.isochromats(
+                self.spacing, field_t=self.field_t, coil=self.coil
+            )
+        else:
+            isochromats.reset()
+        try:
+            return self._scan(
+                design, isochromats, rotation, centre_mm, emit, cancelled, sound
+            )
+        finally:
+            with self._held:
+                if exam == self._exams:
+                    self._isochromats = isochromats
+
+    def _scan(
+        self,
+        design: str,
+        isochromats: Any,
+        rotation: np.ndarray,
+        centre_mm: Sequence[float],
+        emit: Callable[[dict], None],
+        cancelled: Callable[[], bool],
+        sound: bool,
+    ) -> int:
         from ..host import DesignStore
-        from ..recon._runtime.mrd2dicom import DicomWithName, MrdDicomBuilder
-        from . import SAMPLE_RATE, Scan, send
-        from ._client import _header, _series
+        from . import SAMPLE_RATE, Scan
 
         rotation = np.asarray(rotation, dtype=float).reshape(3, 3)
         scan = Scan(
             DesignStore(self.store).directory(design) / "sequence.seq",
-            self.phantom.isochromats(
-                self.spacing, field_t=self.field_t, coil=self.coil
-            ),
+            isochromats,
             rotation=rotation,
             default_shim=self.coil.default_shim,
         )
         stopped = threading.Event()
 
+        def preparing(left: float | None) -> None:
+            if cancelled():
+                raise _Cancelled
+            emit({"preparing": left})
+
         def played() -> Iterator[np.ndarray]:
-            for chunk in scan.chunks(0.1, speed=self.speed, sound=sound):
+            chunks = scan.chunks(
+                0.1, speed=self.speed, sound=sound, preparing=preparing
+            )
+            try:
+                with contextlib.closing(chunks):
+                    yield from spans(chunks)
+            except _Cancelled:
+                stopped.set()
+
+        def spans(chunks: Iterator[Any]) -> Iterator[np.ndarray]:
+            for chunk in chunks:
                 if cancelled():
-                    stopped.set()
-                    return
+                    raise _Cancelled
                 clock = {"clock": chunk.stop, "duration": scan.duration}
                 if sound:
                     samples = np.round(32767 * np.clip(chunk.sound.T, -1.0, 1.0))
@@ -220,8 +273,30 @@ class Console:
                 emit(clock)
                 yield from chunk.readouts
 
+        # Closed however the scan ends, which stops its simulation before the
+        # isochromats are handed on.
+        with contextlib.closing(played()) as readouts:
+            return self._acquire(design, readouts, rotation, centre_mm, emit, stopped)
+
+    def _acquire(
+        self,
+        design: str,
+        readouts: Iterator[np.ndarray],
+        rotation: np.ndarray,
+        centre_mm: Sequence[float],
+        emit: Callable[[dict], None],
+        stopped: threading.Event,
+    ) -> int:
+        """Send the readouts to the reconstruction, emitting what it returns; return its status."""
+        import ismrmrd
+        import pypulseqpp as pp
+
+        from ..recon._runtime.mrd2dicom import DicomWithName, MrdDicomBuilder
+        from . import send
+        from ._client import _header, _series
+
         if self.recon is None and self.local is None:
-            for _ in played():
+            for _ in readouts:
                 pass
             return 1 if stopped.is_set() else 0
         status = 0
@@ -248,12 +323,12 @@ class Console:
                 status = 1 if item.startswith("pulserver:") else status
 
         if self.local is None:
-            for item in send(self.recon, design, played(), **series):
+            for item in send(self.recon, design, readouts, **series):
                 returned(item)
         else:
             header, acquisitions = _series(
                 design,
-                played(),
+                readouts,
                 series["frequency_hz"],
                 series["position_mm"],
                 rotation,
@@ -311,6 +386,10 @@ class Console:
                 reply({"error": f"unknown call {call!r}"})
         except Exception as error:
             reply({"error": f"{type(error).__name__}: {error}"})
+
+
+class _Cancelled(Exception):
+    """A scan cancelled while its simulation is under way."""
 
 
 def _subject_phantom(subject: str) -> Any:
@@ -427,7 +506,8 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--speed",
         type=float,
-        help="scan time per second; as fast as possible without it",
+        help="scan time per second, once the simulation is far enough ahead; "
+        "as fast as it is simulated without it",
     )
     return parser
 

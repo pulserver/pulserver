@@ -204,6 +204,18 @@ times as fast as the scan, has passed its end, so that a reconstruction
 receives the readouts at the rate a scanner acquires them;
 {func}`~pulserver.virtual.send` sends each readout as it is released.
 
+The spans are simulated in a thread of their own, ahead of their release, and
+the clock starts once the simulation will stay ahead of it to the end of the
+scan. A span's simulation time is estimated from the spans simulated before it:
+per ADC sample for a span that acquires, since the readouts' coil sums dominate
+it, and per second of scan time for one that does not, such as a train of
+dummy excitations. Where the simulation runs faster than the scan, the clock
+starts once a span of each kind has been simulated; where it runs slower, as
+for a short-TR balanced SSFP on a head of many isochromats and coils, most of
+the scan is simulated before the clock starts and the rest while it runs. A
+span simulated after its end on the clock, where the estimate fell short,
+holds the clock until it is, and the spans after it keep the scanner's pace.
+
 The sound is MATLAB Pulseq's, from `pypulseqpp.gradient_sound`: the gradients
 along the physical axes, the x axis on the left channel, the y axis on the
 right and half of the z axis on both, smoothed by MATLAB's Gaussian window of
@@ -319,7 +331,9 @@ simulation of the cache on the same spins.
   checks turn it, under an axial, an oblique and a reflected prescription. A
   span played at a speed is released once the clock has passed it, and a
   series streamed readout by readout is reconstructed as the same series sent
-  whole.
+  whole. A scan simulated twice as slowly as it plays starts its clock late
+  enough that no span holds it; a span simulated after its time holds the
+  clock, and the spans after it keep its pace.
 - `pulserver scan` records the series the virtual scanner acquires of an
   imported file, sample for sample, and streams a generated design to a
   reconstruction proxy, whose image carries the prescribed centre and
