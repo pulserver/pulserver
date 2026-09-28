@@ -37,6 +37,14 @@ jobs:
           docker run -d --name console -p 127.0.0.1:8765:8765 pulserver
           pip install websockets pydicom numpy
           python docker/smoke.py ws://127.0.0.1:8765 head8
+      - name: Scan BrainWeb, downloaded on its first exam
+        run: python docker/smoke.py ws://127.0.0.1:8765 head8 brainweb
+      - name: BrainWeb's certificate chain, from the runner and from the image
+        if: always()
+        run: |
+          openssl s_client -showcerts -connect brainweb.bic.mni.mcgill.ca:443 -servername brainweb.bic.mni.mcgill.ca </dev/null 2>&1 | grep -E "^ *[0-9] s:|^ *i:|Verify return code|verify error" || true
+          curl -sSI http://brainweb.bic.mni.mcgill.ca/cgi/brainweb1/ | head -5 || true
+          docker run --rm --entrypoint python pulserver -c "import requests; print(requests.get('https://brainweb.bic.mni.mcgill.ca/cgi/brainweb1/', timeout=60).status_code)" || true
       - name: Logs
         if: always()
         run: docker logs console
