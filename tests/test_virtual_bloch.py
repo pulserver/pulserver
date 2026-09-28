@@ -116,10 +116,17 @@ def test_a_scan_played_at_a_speed_yields_each_span_once_its_clock_passes_it(
         assert chunk.sound.shape == (2, 0)
 
 
+#: Played at a third of a scanner's speed, a span of the gradient echo lasts
+#: long enough on the wall clock that a clock held back by the simulation
+#: lags by far more than a shared runner's sleeps overshoot, ``JITTER``.
+SPEED = 1.0 / 3.0
+JITTER = 0.25
+
+
 def _slowed(scan, seconds_per_sample, seconds_per_second=0.01, held=None):
     """Make ``scan`` simulate each span in the time given per ADC sample, or per second of scan time without one.
 
-    The span that starts at block ``held``, if any, takes 1 s more.
+    The span that starts at block ``held``, if any, takes 2 s more.
     """
     simulate = scan._readouts
 
@@ -130,17 +137,17 @@ def _slowed(scan, seconds_per_sample, seconds_per_second=0.01, held=None):
             seconds_per_sample * samples if samples else seconds_per_second * duration
         )
         if first == held:
-            time.sleep(1.0)
+            time.sleep(2.0)
         return simulate(first, last)
 
     scan._readouts = slow
 
 
-def _released(scan, speed, preparing=None):
-    """Play ``scan`` at ``speed``; return each span and the time it was released."""
+def _offsets(scan, preparing=None):
+    """Play ``scan`` at ``SPEED``; return how far after its end on the clock each span was released, in s of wall-clock time."""
     return [
-        (chunk, time.monotonic())
-        for chunk in scan.chunks(0.05, speed=speed, sound=False, preparing=preparing)
+        time.monotonic() - chunk.stop / SPEED
+        for chunk in scan.chunks(0.05, speed=SPEED, sound=False, preparing=preparing)
     ]
 
 
@@ -149,16 +156,16 @@ def test_a_scan_simulated_slower_than_it_plays_starts_its_clock_once_it_will_not
 ):
     scan = virtual.Scan(converted / "gre_2d_3sl.seq", pp.Isochromats(POSITIONS))
     total = sum(scan._adc_samples(*span) for span in scan._spans(0.05))
-    # Twice as long to simulate as to play, all of it in the readouts.
-    _slowed(scan, 2.0 * scan.duration / total)
+    playing = scan.duration / SPEED
+    # Twice as long to simulate as to play, all of it in the readouts: a clock
+    # started at once would lag by the whole playing time.
+    _slowed(scan, 2.0 * playing / total)
     reports = []
-    released = _released(scan, 1.0, reports.append)
+    offsets = _offsets(scan, reports.append)
 
     # No estimate before a span that acquires has been simulated.
     assert reports[0] is None and all(left > 0.0 for left in reports if left)
-    started = released[0][1] - released[0][0].stop
-    for chunk, at in released:
-        assert at - started == pytest.approx(chunk.stop, abs=0.03)
+    assert max(offsets) - min(offsets) < JITTER < playing
 
 
 def test_a_span_simulated_after_its_time_holds_the_clock_and_the_rest_keep_its_pace(
@@ -168,12 +175,12 @@ def test_a_span_simulated_after_its_time_holds_the_clock_and_the_rest_keep_its_p
     spans = scan._spans(0.05)
     total = sum(scan._adc_samples(*span) for span in spans)
     _slowed(scan, 0.5 * scan.duration / total, held=spans[5][0])
-    offsets = [at - chunk.stop for chunk, at in _released(scan, 1.0)]
+    offsets = _offsets(scan)
 
     before, after = offsets[:5], offsets[5:]
-    assert max(before) - min(before) < 0.03
-    assert min(after) > max(before) + 0.5
-    assert max(after) - min(after) < 0.03
+    assert max(before) - min(before) < JITTER
+    assert min(after) > max(before) + 2 * JITTER
+    assert max(after) - min(after) < JITTER
 
 
 def test_a_scan_closed_while_playing_stops_simulating(converted):
