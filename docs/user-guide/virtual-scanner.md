@@ -175,7 +175,10 @@ line, is written to standard output, and the scan clock to standard error.
   `--spacing`, in mm, and `--coils` set its isochromats and its receive coils;
   `--coil` scans it with one of the scanner's coils instead, whose
   sensitivities bartorch samples from BART's coil models, which the `coils`
-  extra installs (`pip install 'pulserver[coils]'`).
+  extra installs (`pip install 'pulserver[coils]'`). The sensitivities at
+  every isochromat are written to a temporary file mapped into memory; where
+  the temporary directory is a memory file system, set `TMPDIR` to one on
+  disk.
 - `--recon` streams the series to a reconstruction proxy, which looks the
   design up in its store: give that store as `--store`, or the proxy's design
   intake as `--push`. The images go to `images.h5` in `--output`, the DICOM

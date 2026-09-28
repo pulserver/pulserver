@@ -5,6 +5,7 @@ from __future__ import annotations
 __all__ = ["COILS", "Coil"]
 
 import functools
+import tempfile
 from dataclasses import dataclass
 
 import numpy as np
@@ -124,10 +125,16 @@ def _isocentre(maps: np.ndarray) -> np.ndarray:
 def _interpolated(
     maps: np.ndarray, points: np.ndarray, chunk: int = 1 << 16
 ) -> np.ndarray:
-    """Return ``maps`` ``(channels, z, y, x)`` interpolated trilinearly at ``(n, 3)`` physical points; the edge value beyond the grid."""
+    """Return ``maps`` ``(channels, z, y, x)`` interpolated trilinearly at ``(n, 3)`` physical points; the edge value beyond the grid.
+
+    The result is complex128, as :class:`pypulseqpp.Isochromats` takes it,
+    in a temporary file mapped into memory: its pages belong to the file,
+    which the operating system writes back rather than holding in the
+    process's memory. ``TMPDIR`` names where the file is made.
+    """
     points = np.asarray(points, dtype=float).reshape(-1, 3)
     table = maps.reshape(maps.shape[0], -1).T
-    out = np.empty((len(points), maps.shape[0]), dtype=np.complex64)
+    out = _mapped((len(points), maps.shape[0]))
     for start in range(0, len(points), chunk):
         part = points[start : start + chunk]
         corners, weights = [], []
@@ -147,3 +154,11 @@ def _interpolated(
                     total += weight.astype(np.float32)[:, None] * table[flat]
         out[start : start + chunk] = total
     return out
+
+
+def _mapped(shape: tuple[int, int]) -> np.ndarray:
+    """Return a complex128 array of ``shape`` in an unlinked temporary file, which is freed with the array."""
+    if 0 in shape:
+        return np.empty(shape, dtype=np.complex128)
+    with tempfile.TemporaryFile() as file:
+        return np.memmap(file, dtype=np.complex128, mode="w+", shape=shape)

@@ -86,6 +86,17 @@ def test_sensitivities_are_interpolated_linearly_and_held_beyond_the_grid(modell
     np.testing.assert_allclose(beyond, maps[:, -1, centre, centre], rtol=1e-6)
 
 
+def test_sensitivities_are_complex128_in_a_file_mapped_into_memory(modelled):
+    head8 = virtual.COILS["head8"]
+    points = np.array([[0.01, -0.03, 0.02], [0.05, 0.04, -0.06]])
+
+    for sensitivities in (head8.transmit(points), head8.receive(points)):
+        assert isinstance(sensitivities, np.memmap)
+        assert sensitivities.dtype == np.complex128
+        assert sensitivities.flags.c_contiguous
+    assert head8.receive(np.zeros((0, 3))).shape == (0, 8)
+
+
 def test_a_two_dimensional_model_is_constant_along_z(modelled):
     head8 = virtual.COILS["head8"]
 
