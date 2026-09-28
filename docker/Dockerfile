@@ -6,6 +6,10 @@
 #   docker run -d --restart unless-stopped --name pulserver \
 #     -p 127.0.0.1:8765:8765 ghcr.io/pulserver/pulserver
 #
+# Directories mounted at /console/user/plugins and /console/user/recon add
+# sequences and reconstructions to the image's; a file there takes the place
+# of the image's file of the same name.
+#
 # Any other pulserver command runs in its place, as compose.yaml runs the
 # reconstruction proxy and a console that forwards to it.
 
@@ -34,16 +38,18 @@ RUN for attempt in 1 2 3; do \
       rm -rf "$BRAINWEB_DIR"; [ "$attempt" = 3 ] && exit 1; sleep 30; \
     done
 
-# The console's sequence, its reconstruction, and the limits it designs under.
+# The console's sequence, its reconstruction, and the limits it designs under;
+# the user directories are searched first.
 COPY tests/plugins/gre2d.py /console/plugins/gre2d.py
 COPY docker/limits/limits.txt /console/limits.txt
-RUN mkdir /console/recon \
+RUN mkdir -p /console/recon /console/user/plugins /console/user/recon \
  && echo "from pulserver.recon.handlers.simplefft import PLUGIN" > /console/recon/gre2d.py
 
 EXPOSE 8765
 ENTRYPOINT ["pulserver"]
-CMD ["console", "--plugins=/console/plugins", "--limits=/console/limits.txt", \
-     "--store=/console/designs", "--recon-plugins=/console/recon", \
+CMD ["console", "--plugins=/console/user/plugins", "--plugins=/console/plugins", \
+     "--limits=/console/limits.txt", "--store=/console/designs", \
+     "--recon-plugins=/console/user/recon", "--recon-plugins=/console/recon", \
      "--host=0.0.0.0", "--port=8765", "--spacing=2", "--speed=1", \
      "--origin=https://pulserver.github.io", "--origin=http://localhost:8000", \
      "--origin=http://127.0.0.1:8000"]

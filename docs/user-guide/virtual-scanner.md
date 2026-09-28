@@ -236,8 +236,10 @@ pulserver console --plugins sequences --limits limits.txt --store designs \
   --recon 127.0.0.1:9002 --port 8765
 ```
 
-With `--recon-plugins DIR` in place of `--recon`, each scan is reconstructed in
-the console's own process by the plugins of `DIR`, checked and enriched as the
+`--plugins` and `--recon-plugins` may be repeated, the first directory holding a
+plugin supplying it. With `--recon-plugins DIR` in place of `--recon`, each scan
+is reconstructed in the console's own process by the plugins of `DIR`, checked
+and enriched as the
 proxy checks and enriches a series ({class}`~pulserver.proxy.LocalReconstruction`),
 and no proxy runs. `--origin` names an origin whose browser pages the console
 serves, and may be repeated; without it, pages from every origin are served,
@@ -255,6 +257,20 @@ the scanner's speed, `--speed=1`:
 ```bash
 docker run -d --restart unless-stopped --name pulserver \
   -p 127.0.0.1:8765:8765 ghcr.io/pulserver/pulserver
+```
+
+Directories mounted at `/console/user/plugins` and `/console/user/recon` add
+sequences and reconstructions to the image's. They are searched first, so a
+file there takes the place of the image's file of that name. A link must
+resolve inside the container, as a relative link within the mounted directory
+does. A file added or changed is used from the next call on:
+
+```bash
+docker run -d --restart unless-stopped --name pulserver \
+  -p 127.0.0.1:8765:8765 \
+  -v "$PWD/sequences:/console/user/plugins:ro" \
+  -v "$PWD/recon:/console/user/recon:ro" \
+  ghcr.io/pulserver/pulserver
 ```
 
 Each request is a JSON object carrying `call` and an `id` that every reply to

@@ -1,7 +1,8 @@
 # Reconstruction plugins
 
-A reconstruction plugin is a file in the reconstruction proxy's `--plugins`
-directory. It defines a {class}`~pulserver.recon.ReconPlugin` subclass and a
+A reconstruction plugin is a file in one of the reconstruction proxy's
+`--plugins` directories; a name is the plugin of the first directory holding
+`<name>.py`, and a symbolic link is a plugin named after the link. It defines a {class}`~pulserver.recon.ReconPlugin` subclass and a
 module-level `PLUGIN` instance of it. The proxy runs the plugin in a worker
 process, one per series, over an MRD stream whose header and acquisitions carry
 what the sequence states about its readouts (see

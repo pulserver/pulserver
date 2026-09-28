@@ -2,8 +2,8 @@
 # pulserver's proxy. The console generates each design into the shared store,
 # plays it on the subject's phantom and streams the series to the proxy, which
 # enriches it and forwards it to Gadgetron's Cartesian pipeline; the images
-# return to the console as DICOM. Plugins and limits are mounted from
-# PULSERVER_PLUGINS and PULSERVER_LIMITS.
+# return to the console as DICOM. Plugins, searched before the image's, and
+# limits are mounted from PULSERVER_PLUGINS and PULSERVER_LIMITS.
 services:
   gadgetron:
     image: ghcr.io/gadgetron/gadgetron/gadgetron_ubuntu_rt_nocuda:latest
@@ -32,6 +32,7 @@ services:
     command:
       - console
       - --plugins=/plugins
+      - --plugins=/console/plugins
       - --limits=/limits/limits.txt
       - --store=/designs
       - --recon=proxy:9020
