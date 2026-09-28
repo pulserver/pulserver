@@ -8,6 +8,7 @@ from ._enrich import (
     enrich_header,
 )
 from ._intake import DesignIntake
+from ._local import LocalReconstruction
 from ._proxy import ReconProxy, ReconServer
 
 __all__ = [
@@ -15,6 +16,7 @@ __all__ = [
     "Design",
     "DesignCache",
     "DesignIntake",
+    "LocalReconstruction",
     "ReconProxy",
     "ReconServer",
     "SequenceTable",

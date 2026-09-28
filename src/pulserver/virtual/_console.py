@@ -1,4 +1,4 @@
-"""A scanner console's gateway to pulserver: the design calls, the exam's localizer and the virtual scanner, over a WebSocket."""
+"""A scanner console's gateway to pulserver: the design calls, the exam's localizer and the virtual scanner, in process or over a WebSocket."""
 
 from __future__ import annotations
 
@@ -34,7 +34,8 @@ class Console:
     the text blocks the interpreter sends, starts an exam on a subject with
     one of the virtual scanner's :data:`~pulserver.virtual.COILS`, and scans
     a stored design on it. Images return as DICOM from the reconstruction
-    proxy at ``recon``.
+    proxy at ``recon``, or from the plugins of ``recon_plugins`` run in this
+    process as the proxy runs them; with neither, a scan returns no images.
 
     Parameters
     ----------
@@ -46,8 +47,11 @@ class Console:
     store
         Design store.
     recon
-        ``(host, port)`` of the reconstruction proxy; without it a scan returns
-        no images.
+        ``(host, port)`` of the reconstruction proxy.
+    recon_plugins
+        Directory of reconstruction plugin files, ``<plugin>.py``, which
+        reconstruct each scan in this process
+        (:class:`~pulserver.proxy.LocalReconstruction`).
     push
         Recon-side intake each design is pushed to.
     spacing
@@ -65,17 +69,28 @@ class Console:
         limits: str,
         store: Path | str,
         recon: tuple[str, int] | None = None,
+        recon_plugins: Path | str | None = None,
         push: str | None = None,
         spacing: float = 1e-3,
         coil: str = "body",
         speed: float | None = None,
     ) -> None:
         from ..host._blocks import parse_limits
+        from ..proxy import LocalReconstruction
 
+        if recon is not None and recon_plugins is not None:
+            raise ValueError(
+                "a console reconstructs through a proxy or in this process, not both"
+            )
         self.plugins = Path(plugins)
         self.limits = limits
         self.store = Path(store)
         self.recon = recon
+        self.local = (
+            None
+            if recon_plugins is None
+            else LocalReconstruction(self.store, recon_plugins)
+        )
         self.push = push
         self.spacing = spacing
         self.coil = _coil(coil)
@@ -164,8 +179,8 @@ class Console:
 
         ``emit`` receives the scan clock after each span played, as
         ``{"clock": s, "duration": s}``, then the reconstruction's images as
-        DICOM, ``{"dicom": base64, "name": file name}``, converting those the
-        proxy returns as MRD, and its texts as ``{"text": ...}``. With
+        DICOM, ``{"dicom": base64, "name": file name}``, converting those it
+        returns as MRD, and its texts as ``{"text": ...}``. With
         ``sound``, each clock also carries the span's sound as ``sound``,
         base64 of 16-bit little-endian stereo samples at ``rate`` Hz. The
         status is 1 when a text reports a refused or failed series, or when
@@ -177,7 +192,7 @@ class Console:
         from ..host import DesignStore
         from ..recon._runtime.mrd2dicom import DicomWithName, MrdDicomBuilder
         from . import SAMPLE_RATE, Scan, send
-        from ._client import _header
+        from ._client import _header, _series
 
         rotation = np.asarray(rotation, dtype=float).reshape(3, 3)
         scan = Scan(
@@ -205,7 +220,7 @@ class Console:
                 emit(clock)
                 yield from chunk.readouts
 
-        if self.recon is None:
+        if self.recon is None and self.local is None:
             for _ in played():
                 pass
             return 1 if stopped.is_set() else 0
@@ -216,7 +231,9 @@ class Console:
             "rotation": rotation,
         }
         convert = None
-        for item in send(self.recon, design, played(), **series):
+
+        def returned(item: Any) -> None:
+            nonlocal convert, status
             if isinstance(item, ismrmrd.Image):
                 if convert is None:
                     header = _header(
@@ -229,7 +246,71 @@ class Console:
             elif isinstance(item, str):
                 emit({"text": item})
                 status = 1 if item.startswith("pulserver:") else status
+
+        if self.local is None:
+            for item in send(self.recon, design, played(), **series):
+                returned(item)
+        else:
+            header, acquisitions = _series(
+                design,
+                played(),
+                series["frequency_hz"],
+                series["position_mm"],
+                rotation,
+                None,
+            )
+            self.local.run(
+                ismrmrd.xsd.CreateFromDocument(header), acquisitions, returned
+            )
         return 1 if stopped.is_set() else status
+
+    def answer(
+        self,
+        request: Mapping[str, Any],
+        reply: Callable[[dict], None],
+        cancelled: Callable[[], bool] = lambda: False,
+    ) -> None:
+        """Answer one request of a console, handing ``reply`` each message of the answer.
+
+        ``request`` carries its ``call`` and that call's fields, and the
+        messages are those ``pulserver console`` sends over its WebSocket,
+        without the request's ``id``: one for each call, except that a scan
+        sends its clock, images and texts before ``{"done": status}``. A call
+        that fails, or is not one of the console's, is answered with
+        ``{"error": text}``. A scan stops once ``cancelled`` returns true.
+        """
+        call = request.get("call")
+        try:
+            if call == "plugins":
+                reply({"plugins": self.plugin_names()})
+            elif call == "coils":
+                reply({"coils": self.coils()})
+            elif call in DESIGN_CALLS:
+                reply(
+                    self.design(call, request.get("plugin"), request.get("block", ""))
+                )
+            elif call == "exam":
+                coil = request.get("coil")
+                files = self.exam(
+                    str(request.get("subject", "")), None if coil is None else str(coil)
+                )
+                reply(
+                    {"localizer": [base64.b64encode(f).decode("ascii") for f in files]}
+                )
+            elif call == "scan":
+                status = self.scan(
+                    str(request["design"]),
+                    rotation=np.asarray(request.get("rotation", np.eye(3).ravel())),
+                    centre_mm=request.get("centre_mm", (0.0, 0.0, 0.0)),
+                    emit=reply,
+                    cancelled=cancelled,
+                    sound=bool(request.get("sound", False)),
+                )
+                reply({"done": status})
+            else:
+                reply({"error": f"unknown call {call!r}"})
+        except Exception as error:
+            reply({"error": f"{type(error).__name__}: {error}"})
 
 
 def _subject_phantom(subject: str) -> Any:
@@ -272,44 +353,10 @@ async def _connection(console: Console, websocket: Any) -> None:
         asyncio.run_coroutine_threadsafe(websocket.send(text), loop).result()
 
     def work(request: Mapping[str, Any]) -> None:
-        ident, call = request.get("id"), request.get("call")
-        try:
-            if call == "plugins":
-                reply(ident, {"plugins": console.plugin_names()})
-            elif call == "coils":
-                reply(ident, {"coils": console.coils()})
-            elif call in DESIGN_CALLS:
-                reply(
-                    ident,
-                    console.design(
-                        call, request.get("plugin"), request.get("block", "")
-                    ),
-                )
-            elif call == "exam":
-                coil = request.get("coil")
-                files = console.exam(
-                    str(request.get("subject", "")),
-                    None if coil is None else str(coil),
-                )
-                reply(
-                    ident,
-                    {"localizer": [base64.b64encode(f).decode("ascii") for f in files]},
-                )
-            elif call == "scan":
-                cancel.clear()
-                status = console.scan(
-                    str(request["design"]),
-                    rotation=np.asarray(request.get("rotation", np.eye(3).ravel())),
-                    centre_mm=request.get("centre_mm", (0.0, 0.0, 0.0)),
-                    emit=lambda message: reply(ident, message),
-                    cancelled=cancel.is_set,
-                    sound=bool(request.get("sound", False)),
-                )
-                reply(ident, {"done": status})
-            else:
-                reply(ident, {"error": f"unknown call {call!r}"})
-        except Exception as error:
-            reply(ident, {"error": f"{type(error).__name__}: {error}"})
+        ident = request.get("id")
+        if request.get("call") == "scan":
+            cancel.clear()
+        console.answer(request, lambda message: reply(ident, message), cancel.is_set)
 
     async for message in websocket:
         request = json.loads(message)
@@ -324,12 +371,23 @@ async def _connection(console: Console, websocket: Any) -> None:
             await future
 
 
-async def serve(console: Console, host: str, port: int) -> None:
-    """Serve ``console`` on a WebSocket at ``host``:``port`` until cancelled."""
+async def serve(
+    console: Console, host: str, port: int, origins: Sequence[str] | None = None
+) -> None:
+    """Serve ``console`` on a WebSocket at ``host``:``port`` until cancelled.
+
+    With ``origins``, a browser page is served only from one of those origins,
+    such as ``https://pulserver.github.io``; a client that sends no
+    ``Origin``, which a browser always sends, is served whatever they are.
+    """
     import websockets
 
     async with websockets.serve(
-        lambda websocket: _connection(console, websocket), host, port, max_size=None
+        lambda websocket: _connection(console, websocket),
+        host,
+        port,
+        max_size=None,
+        origins=None if origins is None else [*origins, None],
     ):
         await asyncio.Future()
 
@@ -344,10 +402,22 @@ def _parser() -> argparse.ArgumentParser:
         "--limits", type=Path, required=True, help="file holding a [Limits] block"
     )
     parser.add_argument("--store", type=Path, required=True, help="design store")
-    parser.add_argument("--recon", help="reconstruction proxy, HOST:PORT")
+    recon = parser.add_mutually_exclusive_group()
+    recon.add_argument("--recon", help="reconstruction proxy, HOST:PORT")
+    recon.add_argument(
+        "--recon-plugins",
+        type=Path,
+        help="reconstruction plugin directory, run in this process instead of a proxy",
+    )
     parser.add_argument("--push", help="recon-side intake each design is pushed to")
     parser.add_argument("--host", default="127.0.0.1", help="address to listen on")
     parser.add_argument("--port", type=int, default=8765, help="port to listen on")
+    parser.add_argument(
+        "--origin",
+        action="append",
+        dest="origins",
+        help="origin of the browser pages served, repeatable; every origin without it",
+    )
     parser.add_argument(
         "--spacing", type=float, default=1.0, help="isochromat spacing, in mm"
     )
@@ -374,11 +444,12 @@ def main(argv: list[str] | None = None) -> int:
         limits=args.limits.read_text(),
         store=args.store,
         recon=recon,
+        recon_plugins=args.recon_plugins,
         push=args.push,
         spacing=1e-3 * args.spacing,
         coil=args.coil,
         speed=args.speed,
     )
     with contextlib.suppress(KeyboardInterrupt):
-        asyncio.run(serve(console, args.host, args.port))
+        asyncio.run(serve(console, args.host, args.port, args.origins))
     return 0

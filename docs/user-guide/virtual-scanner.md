@@ -231,6 +231,25 @@ pulserver console --plugins sequences --limits limits.txt --store designs \
   --recon 127.0.0.1:9002 --port 8765
 ```
 
+With `--recon-plugins DIR` in place of `--recon`, each scan is reconstructed in
+the console's own process by the plugins of `DIR`, checked and enriched as the
+proxy checks and enriches a series ({class}`~pulserver.proxy.LocalReconstruction`),
+and no proxy runs. `--origin` names an origin whose browser pages the console
+serves, and may be repeated; without it, pages from every origin are served,
+and a client that sends no `Origin`, which a browser always sends, is served
+either way.
+
+pulserver's image runs such a console by default, with bartorch for the head
+coils and the `gre2d` plugin reconstructed by the built-in Cartesian FFT,
+`pulserver.recon.handlers.simplefft`. It serves the pages of
+`https://pulserver.github.io`, `http://localhost:8000` and
+`http://127.0.0.1:8000` on port 8765 of this computer:
+
+```bash
+docker run -d --restart unless-stopped --name pulserver \
+  -p 127.0.0.1:8765:8765 ghcr.io/pulserver/pulserver
+```
+
 Each request is a JSON object carrying `call` and an `id` that every reply to
 it repeats:
 
@@ -242,6 +261,11 @@ it repeats:
 | `exam` | `subject`, `coil` | `localizer`: the axial, coronal and sagittal images of the subject's phantom, as base64 DICOM files |
 | `scan` | `design`, `rotation` (nine elements), `centre_mm`, `sound` | `clock` and `duration` after each span played, with the span's `sound` when asked, as base64 of 16-bit little-endian stereo samples at `rate` Hz; `dicom` and `name` for each image the reconstruction returns, `text`, then `done` with the status |
 | `cancel` | | stops the scan in progress |
+
+{meth}`Console.answer <pulserver.virtual.Console.answer>` answers one request
+in process with the same replies, without the `id`, for a console that reaches
+pulserver by another route than a WebSocket, such as the messages of a Web
+Worker running pulserver beside a browser page.
 
 A subject named `brainweb` is BrainWeb's normal brain; any other is the vials.
 An exam is scanned in the coil it names, or in the one it had, `--coil` at

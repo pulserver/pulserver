@@ -2,10 +2,13 @@
 
 import asyncio
 import base64
+import contextlib
 import io
 import json
+import socket
 import sys
 import threading
+import time
 import types
 from pathlib import Path
 
@@ -162,6 +165,65 @@ def test_a_scan_streams_its_clock_and_returns_the_reconstruction_as_dicom(
     assert images[0].pixel_array.max() > 0
 
 
+def _images(messages):
+    return [
+        pydicom.dcmread(io.BytesIO(base64.b64decode(m["dicom"]))).pixel_array
+        for m in messages
+        if "dicom" in m
+    ]
+
+
+def test_a_scan_reconstructed_in_this_process_returns_the_images_a_proxy_returns(
+    tmp_path, proxy
+):
+    proxied = _console(tmp_path, recon=("127.0.0.1", proxy.port))
+    local = _console(tmp_path, recon_plugins=RECON_PLUGINS)
+    design = proxied.design("generate", "gre2d", _block(TE=5000, nx=32, ny=32))[
+        "design"
+    ]
+    returned = {}
+    for name, console in (("proxied", proxied), ("local", local)):
+        console.exam("vials")
+        messages = []
+        status = console.scan(
+            design, rotation=np.eye(3), centre_mm=(0.0, 0.0, 0.0), emit=messages.append
+        )
+        assert status == 0
+        returned[name] = _images(messages)
+
+    assert len(returned["local"]) == len(returned["proxied"]) == 1
+    np.testing.assert_array_equal(returned["local"][0], returned["proxied"][0])
+
+
+def test_a_console_reconstructs_through_a_proxy_or_in_process_not_both(tmp_path):
+    with pytest.raises(ValueError, match="not both"):
+        _console(tmp_path, recon=("127.0.0.1", 9), recon_plugins=RECON_PLUGINS)
+
+
+def test_a_request_answered_in_process_carries_what_the_websocket_carries(tmp_path):
+    console = _console(tmp_path, recon_plugins=RECON_PLUGINS)
+    answers = []
+
+    def answer(call, **fields):
+        messages = []
+        console.answer({"call": call, **fields}, messages.append)
+        answers.append(messages)
+        return messages
+
+    [generated] = answer(
+        "generate", plugin="gre2d", block=_block(TE=5000, nx=32, ny=32)
+    )
+    answer("exam", subject="vials")
+    scanned = answer("scan", design=generated["design"])
+    [refused] = answer("reboot")
+
+    assert [len(messages) for messages in answers[:2]] == [1, 1]
+    assert scanned[-1] == {"done": 0}
+    assert "clock" in scanned[0]
+    assert len(_images(scanned)) == 1
+    assert refused == {"error": "unknown call 'reboot'"}
+
+
 def test_a_cancelled_scan_stops_and_reports_it(tmp_path):
     console = _console(tmp_path)
     design = console.design("generate", "gre2d", _block(TE=5000, nx=32, ny=32))[
@@ -254,6 +316,53 @@ def test_the_gateway_answers_a_consoles_calls_over_a_websocket(tmp_path):
     assert refused == {"id": 4, "error": "unknown call 'reboot'"}
 
 
+def test_a_console_serves_the_pages_of_its_origins_and_clients_that_send_none(
+    tmp_path,
+):
+    from websockets.exceptions import InvalidStatus
+    from websockets.sync.client import connect
+
+    from pulserver.virtual._console import serve
+
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        port = probe.getsockname()[1]
+    loop = asyncio.new_event_loop()
+    task = loop.create_task(
+        serve(_console(tmp_path), "127.0.0.1", port, ["https://pulserver.github.io"])
+    )
+
+    def run():
+        with contextlib.suppress(asyncio.CancelledError):
+            loop.run_until_complete(task)
+
+    thread = threading.Thread(target=run, daemon=True)
+    thread.start()
+    address = f"ws://127.0.0.1:{port}"
+
+    def answers(**options):
+        deadline = time.monotonic() + DEADLINE
+        while True:
+            try:
+                with connect(address, open_timeout=DEADLINE, **options) as client:
+                    client.send(json.dumps({"id": 1, "call": "plugins"}))
+                    return "plugins" in json.loads(client.recv(timeout=DEADLINE))
+            except InvalidStatus as refused:
+                return refused.response.status_code
+            except OSError:
+                if time.monotonic() > deadline:
+                    raise
+                time.sleep(0.1)
+
+    try:
+        assert answers(origin="https://pulserver.github.io") is True
+        assert answers() is True
+        assert answers(origin="https://elsewhere.example") == 403
+    finally:
+        loop.call_soon_threadsafe(task.cancel)
+        thread.join(timeout=DEADLINE)
+
+
 def test_the_console_command_serves_a_console_of_its_options(tmp_path, monkeypatch):
     from pulserver import _cli
     from pulserver.virtual import _console
@@ -262,8 +371,8 @@ def test_the_console_command_serves_a_console_of_its_options(tmp_path, monkeypat
     limits.write_text(format_limits(ANY_ORIENTATION))
     served = {}
 
-    async def serve(console, host, port):
-        served.update(console=console, host=host, port=port)
+    async def serve(console, host, port, origins):
+        served.update(console=console, host=host, port=port, origins=origins)
 
     monkeypatch.setattr(_console, "serve", serve)
 
@@ -284,13 +393,51 @@ def test_the_console_command_serves_a_console_of_its_options(tmp_path, monkeypat
             "2",
             "--coil",
             "head8",
+            "--origin",
+            "https://pulserver.github.io",
         ]
     )
 
     assert status == 0
     assert (served["host"], served["port"]) == ("127.0.0.1", 9876)
+    assert served["origins"] == ["https://pulserver.github.io"]
     console = served["console"]
     assert console.recon == ("recon.local", 9020)
+    assert console.local is None
     assert console.spacing == pytest.approx(2e-3)
     assert console.coil is virtual.COILS["head8"]
     assert console.field_t == ANY_ORIENTATION["B0"]
+
+
+def test_the_console_command_reconstructs_in_process_with_recon_plugins(
+    tmp_path, monkeypatch
+):
+    from pulserver import _cli
+    from pulserver.virtual import _console
+
+    limits = tmp_path / "limits.txt"
+    limits.write_text(format_limits(ANY_ORIENTATION))
+    served = {}
+
+    async def serve(console, host, port, origins):
+        served["console"] = console
+
+    monkeypatch.setattr(_console, "serve", serve)
+    options = [
+        "console",
+        "--plugins",
+        str(PLUGINS),
+        "--limits",
+        str(limits),
+        "--store",
+        str(tmp_path / "designs"),
+        "--recon-plugins",
+        str(RECON_PLUGINS),
+    ]
+
+    assert _cli.main(options) == 0
+    console = served["console"]
+    assert console.recon is None
+    assert console.local.plugins == RECON_PLUGINS
+    with pytest.raises(SystemExit):
+        _cli.main([*options, "--recon", "recon.local:9020"])

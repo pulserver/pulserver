@@ -225,6 +225,8 @@ def _gadgetron2mrd(config: Any) -> Any:
 
 def deserialize_config(content: str, default_config: str = "default") -> Any:
     """Parse a config text as :func:`read_config_text` documents it."""
+    if not content.strip():
+        return {"parameters": {"config": default_config}}
     try:
         config_dict = json.loads(content)
         if isinstance(config_dict, dict):

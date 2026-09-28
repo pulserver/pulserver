@@ -1,0 +1,50 @@
+# pulserver's image, whose default command is the console of the virtual
+# scanner reconstructing in its own process: built and scanned through in the
+# 8-channel head coil, which bartorch samples, and published from main.
+name: Image
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - docker/**
+      - src/**
+      - tests/plugins/gre2d.py
+      - pyproject.toml
+      - CMakeLists.txt
+      - .dockerignore
+      - .github/workflows/image.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Build
+        run: docker build -f docker/Dockerfile -t pulserver .
+      - name: Scan through its console
+        run: |
+          docker run -d --name console -p 127.0.0.1:8765:8765 pulserver
+          pip install websockets pydicom numpy
+          python docker/smoke.py ws://127.0.0.1:8765 head8
+      - name: Logs
+        if: always()
+        run: docker logs console
+      - name: Publish
+        if: github.event_name == 'push'
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          for tag in latest "${{ github.sha }}"; do
+            docker tag pulserver "ghcr.io/pulserver/pulserver:$tag"
+            docker push "ghcr.io/pulserver/pulserver:$tag"
+          done
