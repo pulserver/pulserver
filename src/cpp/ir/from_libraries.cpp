@@ -325,6 +325,11 @@ void build_pulseq_file(pulseq_file &seq, const py::dict &libraries)
     seq.adc_library = rows<8>(libraries["adc"], seq.adc_library_size);
     seq.is_adc_library_parsed = 1;
 
+    seq.rf_definitions = integers(libraries["rf_definitions"], seq.rf_library_size);
+    seq.grad_definitions = integers(libraries["grad_definitions"], seq.grad_library_size);
+    seq.adc_definitions = integers(libraries["adc_definitions"], seq.adc_library_size);
+    seq.block_definitions = integers(libraries["block_definitions"], seq.num_blocks);
+
     build_extensions(seq, libraries);
     build_shapes(seq, libraries["shapes"].cast<py::list>());
 }
