@@ -1,6 +1,6 @@
 # pulserver's image, whose default command is the console of the virtual
 # scanner reconstructing in its own process: built and scanned through in the
-# 8-channel head coil, which bartorch samples, and published from main.
+# head coils, which bartorch samples, and published from main.
 name: Image
 
 on:
@@ -36,9 +36,9 @@ jobs:
         run: |
           docker run -d --name console -p 127.0.0.1:8765:8765 pulserver
           pip install websockets pydicom numpy
-          python docker/smoke.py ws://127.0.0.1:8765 head8
+          python docker/smoke.py ws://127.0.0.1:8765 head8/head32
       - name: Scan BrainWeb, downloaded on its first exam
-        run: python docker/smoke.py ws://127.0.0.1:8765 head8 brainweb
+        run: python docker/smoke.py ws://127.0.0.1:8765 body/head48 brainweb
       - name: BrainWeb's certificate chain, from the runner and from the image
         if: always()
         run: |

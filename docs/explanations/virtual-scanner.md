@@ -158,16 +158,18 @@ that rounding accrues is what separates the two.
 
 The coils of the signal model are the phantom's own. A scan on the Bloch
 simulation can take one of the scanner's {obj}`~pulserver.virtual.COILS`
-instead, fixed in the physical frame: a body coil, taken to be one channel of
-unit sensitivity each way; an 8-channel head coil that transmits and receives;
-and 32- and 48-channel head arrays that receive while the body coil transmits.
-The head coils' sensitivities are BART's coil models rather than
-electromagnetic simulations: the 8-channel coil is `HEAD_2D_8CH`, constant along
-$z$, and the arrays are the first 32 and 48 channels of `HEAD_3D_64CH`, each
-sampled by bartorch over a cube 25.6 cm wide about the isocentre and
-interpolated linearly between the samples. The receive sensitivities $s_c$
-have a root sum of squares of 1 at the isocentre. The transmit sensitivities
-$s^+_c$ are their complex conjugates, the quasi-static limit of reciprocity;
+instead, fixed in the physical frame, each a transmit coil and a receive coil,
+named `transmit/receive`: the body coil both ways, taken to be one channel of
+unit sensitivity each way; the body coil transmitting to a 48-channel receive
+head array, `body/head48`; and an 8-channel head coil for parallel transmission
+with a 32-channel receive head array, `head8/head32`. The head coils'
+sensitivities are BART's coil models rather than electromagnetic simulations:
+the 8-channel coil is `HEAD_2D_8CH`, constant along $z$, and the arrays are the
+first 48 and 32 channels of `HEAD_3D_64CH`, each sampled by bartorch over a cube
+25.6 cm wide about the isocentre and interpolated linearly between the samples.
+The receive sensitivities $s_c$ have a root sum of squares of 1 at the
+isocentre. The transmit sensitivities $s^+_c$ are the complex conjugates of the
+8-channel coil's receive sensitivities, the quasi-static limit of reciprocity;
 the models show none of the dielectric effects of a wavelength comparable to
 the head.
 

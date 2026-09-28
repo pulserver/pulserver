@@ -12,9 +12,10 @@ from ._phantom import Ellipse, Phantom
 from ._scanner import acquire, trajectory
 from ._stream import SAMPLE_RATE, Chunk, Scan
 
-#: The virtual scanner's coils, by name: a body coil, an 8-channel transmit and
-#: receive head coil for parallel transmission, and 32- and 48-channel receive
-#: head arrays transmitting on the body coil.
+#: The virtual scanner's coils, by name, ``transmit/receive``: the body coil
+#: both ways, the body coil transmitting to a 48-channel receive head array,
+#: and an 8-channel head coil for parallel transmission with a 32-channel
+#: receive head array.
 COILS = _coils.COILS
 
 __all__ = [

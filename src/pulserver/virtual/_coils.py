@@ -20,8 +20,9 @@ _SAMPLES = 32
 
 @dataclass(frozen=True)
 class Coil:
-    """An RF coil of the virtual scanner, fixed in the physical frame.
+    """The RF coils of an exam, fixed in the physical frame: the coil pulses are transmitted on and the coil the signal is received by.
 
+    ``name`` is ``transmit/receive``, or one coil's name where it does both.
     Each side is BART's coil model (``HEAD_2D_8CH`` or ``HEAD_3D_64CH``) and
     the number of its channels the coil takes, the first ones, as ``phantom
     -S`` selects them; a side without a model is one channel of unit
@@ -32,9 +33,9 @@ class Coil:
 
     Receive sensitivities are scaled to a root sum of squares of 1 at the
     isocentre. Transmit sensitivities are the complex conjugates of the
-    receive ones, the quasi-static limit of reciprocity, scaled so that the
-    :attr:`default_shim` plays a pulse at its nominal amplitude at the
-    isocentre.
+    receive sensitivities of the transmit side's model, the quasi-static limit
+    of reciprocity, scaled so that the :attr:`default_shim` plays a pulse at
+    its nominal amplitude at the isocentre.
     """
 
     name: str
@@ -80,9 +81,8 @@ COILS = {
     coil.name: coil
     for coil in (
         Coil("body"),
-        Coil("head8", ("HEAD_2D_8CH", 8), ("HEAD_2D_8CH", 8)),
-        Coil("head32", receive_model=("HEAD_3D_64CH", 32)),
-        Coil("head48", receive_model=("HEAD_3D_64CH", 48)),
+        Coil("body/head48", receive_model=("HEAD_3D_64CH", 48)),
+        Coil("head8/head32", ("HEAD_2D_8CH", 8), ("HEAD_3D_64CH", 32)),
     )
 }
 
