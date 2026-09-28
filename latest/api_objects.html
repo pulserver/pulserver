@@ -789,28 +789,31 @@ from.</p>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.proxy.ReconServer.html#pulserver.proxy.ReconServer" title="pulserver.proxy.ReconServer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ReconServer</span></code></a></p></td>
 <td><p>Reconstructs each series of an MRD stream as it is received.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.proxy.DesignCache.html#pulserver.proxy.DesignCache" title="pulserver.proxy.DesignCache"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DesignCache</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.proxy.LocalReconstruction.html#pulserver.proxy.LocalReconstruction" title="pulserver.proxy.LocalReconstruction"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LocalReconstruction</span></code></a></p></td>
+<td><p>Reconstructs series in this process, one at a time, as <a class="reference internal" href="generated/pulserver.proxy.ReconProxy.html#pulserver.proxy.ReconProxy" title="pulserver.proxy.ReconProxy"><code class="xref py py-class docutils literal notranslate"><span class="pre">ReconProxy</span></code></a>'s workers do.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.proxy.DesignCache.html#pulserver.proxy.DesignCache" title="pulserver.proxy.DesignCache"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DesignCache</span></code></a></p></td>
 <td><p>The designs of a store, the most recently read kept tabulated.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.proxy.Design.html#pulserver.proxy.Design" title="pulserver.proxy.Design"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Design</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.proxy.Design.html#pulserver.proxy.Design" title="pulserver.proxy.Design"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Design</span></code></a></p></td>
 <td><p>A stored design, as the reconstruction side reads it.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.proxy.DESIGN_PARAMETER.html#pulserver.proxy.DESIGN_PARAMETER" title="pulserver.proxy.DESIGN_PARAMETER"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DESIGN_PARAMETER</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.proxy.DESIGN_PARAMETER.html#pulserver.proxy.DESIGN_PARAMETER" title="pulserver.proxy.DESIGN_PARAMETER"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DESIGN_PARAMETER</span></code></a></p></td>
 <td><p>str(object='') -&gt; str str(bytes_or_buffer[, encoding[, errors]]) -&gt; str</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.proxy.DesignIntake.html#pulserver.proxy.DesignIntake" title="pulserver.proxy.DesignIntake"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DesignIntake</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.proxy.DesignIntake.html#pulserver.proxy.DesignIntake" title="pulserver.proxy.DesignIntake"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DesignIntake</span></code></a></p></td>
 <td><p>Receives stored designs over HTTP into the design store the proxy reads.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.proxy.SequenceTable.html#pulserver.proxy.SequenceTable" title="pulserver.proxy.SequenceTable"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SequenceTable</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.proxy.SequenceTable.html#pulserver.proxy.SequenceTable" title="pulserver.proxy.SequenceTable"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SequenceTable</span></code></a></p></td>
 <td><p>The readouts of a sequence chain as MRD describes them, in play order.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.proxy.TableSpace.html#pulserver.proxy.TableSpace" title="pulserver.proxy.TableSpace"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TableSpace</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.proxy.TableSpace.html#pulserver.proxy.TableSpace" title="pulserver.proxy.TableSpace"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TableSpace</span></code></a></p></td>
 <td><p>One encoding space of a <a class="reference internal" href="generated/pulserver.proxy.SequenceTable.html#pulserver.proxy.SequenceTable" title="pulserver.proxy.SequenceTable"><code class="xref py py-class docutils literal notranslate"><span class="pre">SequenceTable</span></code></a>.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.proxy.enrich_header.html#pulserver.proxy.enrich_header" title="pulserver.proxy.enrich_header"><code class="xref py py-obj docutils literal notranslate"><span class="pre">enrich_header</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.proxy.enrich_header.html#pulserver.proxy.enrich_header" title="pulserver.proxy.enrich_header"><code class="xref py py-obj docutils literal notranslate"><span class="pre">enrich_header</span></code></a></p></td>
 <td><p>Describe the table's encoding spaces and sequence parameters in an MRD header.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.proxy.enrich_acquisition.html#pulserver.proxy.enrich_acquisition" title="pulserver.proxy.enrich_acquisition"><code class="xref py py-obj docutils literal notranslate"><span class="pre">enrich_acquisition</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.proxy.enrich_acquisition.html#pulserver.proxy.enrich_acquisition" title="pulserver.proxy.enrich_acquisition"><code class="xref py py-obj docutils literal notranslate"><span class="pre">enrich_acquisition</span></code></a></p></td>
 <td><p>Stamp row <code class="docutils literal notranslate"><span class="pre">index</span></code> of the table on one acquisition, in place.</p></td>
 </tr>
 </tbody>

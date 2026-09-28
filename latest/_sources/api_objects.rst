@@ -138,6 +138,7 @@ from.
 
    ReconProxy
    ReconServer
+   LocalReconstruction
    DesignCache
    Design
    DESIGN_PARAMETER

@@ -14,6 +14,7 @@
    :toctree:
    :nosignatures:
 
+   ~Console.answer
    ~Console.coils
    ~Console.design
    ~Console.exam

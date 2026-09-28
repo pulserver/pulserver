@@ -450,7 +450,7 @@
                 <article class="bd-article">
                   
   <h1>Source code for pulserver.virtual._console</h1><div class="highlight"><pre>
-<span></span><span class="sd">"""A scanner console's gateway to pulserver: the design calls, the exam's localizer and the virtual scanner, over a WebSocket."""</span>
+<span></span><span class="sd">"""A scanner console's gateway to pulserver: the design calls, the exam's localizer and the virtual scanner, in process or over a WebSocket."""</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
@@ -488,7 +488,8 @@
 <span class="sd">    the text blocks the interpreter sends, starts an exam on a subject with</span>
 <span class="sd">    one of the virtual scanner's :data:`~pulserver.virtual.COILS`, and scans</span>
 <span class="sd">    a stored design on it. Images return as DICOM from the reconstruction</span>
-<span class="sd">    proxy at ``recon``.</span>
+<span class="sd">    proxy at ``recon``, or from the plugins of ``recon_plugins`` run in this</span>
+<span class="sd">    process as the proxy runs them; with neither, a scan returns no images.</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
@@ -500,8 +501,11 @@
 <span class="sd">    store</span>
 <span class="sd">        Design store.</span>
 <span class="sd">    recon</span>
-<span class="sd">        ``(host, port)`` of the reconstruction proxy; without it a scan returns</span>
-<span class="sd">        no images.</span>
+<span class="sd">        ``(host, port)`` of the reconstruction proxy.</span>
+<span class="sd">    recon_plugins</span>
+<span class="sd">        Directory of reconstruction plugin files, ``&lt;plugin&gt;.py``, which</span>
+<span class="sd">        reconstruct each scan in this process</span>
+<span class="sd">        (:class:`~pulserver.proxy.LocalReconstruction`).</span>
 <span class="sd">    push</span>
 <span class="sd">        Recon-side intake each design is pushed to.</span>
 <span class="sd">    spacing</span>
@@ -519,17 +523,28 @@
         <span class="n">limits</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
         <span class="n">store</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span><span class="p">,</span>
         <span class="n">recon</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">recon_plugins</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">push</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">spacing</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1e-3</span><span class="p">,</span>
         <span class="n">coil</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"body"</span><span class="p">,</span>
         <span class="n">speed</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="kn">from</span><span class="w"> </span><span class="nn">..host._blocks</span><span class="w"> </span><span class="kn">import</span> <span class="n">parse_limits</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">..proxy</span><span class="w"> </span><span class="kn">import</span> <span class="n">LocalReconstruction</span>
 
+        <span class="k">if</span> <span class="n">recon</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">recon_plugins</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">"a console reconstructs through a proxy or in this process, not both"</span>
+            <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">plugins</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">plugins</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">limits</span> <span class="o">=</span> <span class="n">limits</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">store</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">store</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">recon</span> <span class="o">=</span> <span class="n">recon</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">local</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="kc">None</span>
+            <span class="k">if</span> <span class="n">recon_plugins</span> <span class="ow">is</span> <span class="kc">None</span>
+            <span class="k">else</span> <span class="n">LocalReconstruction</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">store</span><span class="p">,</span> <span class="n">recon_plugins</span><span class="p">)</span>
+        <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">push</span> <span class="o">=</span> <span class="n">push</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">spacing</span> <span class="o">=</span> <span class="n">spacing</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">coil</span> <span class="o">=</span> <span class="n">_coil</span><span class="p">(</span><span class="n">coil</span><span class="p">)</span>
@@ -632,8 +647,8 @@
 
 <span class="sd">        ``emit`` receives the scan clock after each span played, as</span>
 <span class="sd">        ``{"clock": s, "duration": s}``, then the reconstruction's images as</span>
-<span class="sd">        DICOM, ``{"dicom": base64, "name": file name}``, converting those the</span>
-<span class="sd">        proxy returns as MRD, and its texts as ``{"text": ...}``. With</span>
+<span class="sd">        DICOM, ``{"dicom": base64, "name": file name}``, converting those it</span>
+<span class="sd">        returns as MRD, and its texts as ``{"text": ...}``. With</span>
 <span class="sd">        ``sound``, each clock also carries the span's sound as ``sound``,</span>
 <span class="sd">        base64 of 16-bit little-endian stereo samples at ``rate`` Hz. The</span>
 <span class="sd">        status is 1 when a text reports a refused or failed series, or when</span>
@@ -645,7 +660,7 @@
         <span class="kn">from</span><span class="w"> </span><span class="nn">..host</span><span class="w"> </span><span class="kn">import</span> <span class="n">DesignStore</span>
         <span class="kn">from</span><span class="w"> </span><span class="nn">..recon._runtime.mrd2dicom</span><span class="w"> </span><span class="kn">import</span> <span class="n">DicomWithName</span><span class="p">,</span> <span class="n">MrdDicomBuilder</span>
         <span class="kn">from</span><span class="w"> </span><span class="nn">.</span><span class="w"> </span><span class="kn">import</span> <span class="n">SAMPLE_RATE</span><span class="p">,</span> <span class="n">Scan</span><span class="p">,</span> <span class="n">send</span>
-        <span class="kn">from</span><span class="w"> </span><span class="nn">._client</span><span class="w"> </span><span class="kn">import</span> <span class="n">_header</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">._client</span><span class="w"> </span><span class="kn">import</span> <span class="n">_header</span><span class="p">,</span> <span class="n">_series</span>
 
         <span class="n">rotation</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">rotation</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
         <span class="n">scan</span> <span class="o">=</span> <span class="n">Scan</span><span class="p">(</span>
@@ -673,7 +688,7 @@
                 <span class="n">emit</span><span class="p">(</span><span class="n">clock</span><span class="p">)</span>
                 <span class="k">yield from</span> <span class="n">chunk</span><span class="o">.</span><span class="n">readouts</span>
 
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">recon</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">recon</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">local</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">played</span><span class="p">():</span>
                 <span class="k">pass</span>
             <span class="k">return</span> <span class="mi">1</span> <span class="k">if</span> <span class="n">stopped</span><span class="o">.</span><span class="n">is_set</span><span class="p">()</span> <span class="k">else</span> <span class="mi">0</span>
@@ -684,7 +699,9 @@
             <span class="s2">"rotation"</span><span class="p">:</span> <span class="n">rotation</span><span class="p">,</span>
         <span class="p">}</span>
         <span class="n">convert</span> <span class="o">=</span> <span class="kc">None</span>
-        <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">send</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">recon</span><span class="p">,</span> <span class="n">design</span><span class="p">,</span> <span class="n">played</span><span class="p">(),</span> <span class="o">**</span><span class="n">series</span><span class="p">):</span>
+
+        <span class="k">def</span><span class="w"> </span><span class="nf">returned</span><span class="p">(</span><span class="n">item</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">nonlocal</span> <span class="n">convert</span><span class="p">,</span> <span class="n">status</span>
             <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">item</span><span class="p">,</span> <span class="n">ismrmrd</span><span class="o">.</span><span class="n">Image</span><span class="p">):</span>
                 <span class="k">if</span> <span class="n">convert</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
                     <span class="n">header</span> <span class="o">=</span> <span class="n">_header</span><span class="p">(</span>
@@ -697,7 +714,74 @@
             <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">item</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
                 <span class="n">emit</span><span class="p">({</span><span class="s2">"text"</span><span class="p">:</span> <span class="n">item</span><span class="p">})</span>
                 <span class="n">status</span> <span class="o">=</span> <span class="mi">1</span> <span class="k">if</span> <span class="n">item</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">"pulserver:"</span><span class="p">)</span> <span class="k">else</span> <span class="n">status</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">local</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">send</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">recon</span><span class="p">,</span> <span class="n">design</span><span class="p">,</span> <span class="n">played</span><span class="p">(),</span> <span class="o">**</span><span class="n">series</span><span class="p">):</span>
+                <span class="n">returned</span><span class="p">(</span><span class="n">item</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">header</span><span class="p">,</span> <span class="n">acquisitions</span> <span class="o">=</span> <span class="n">_series</span><span class="p">(</span>
+                <span class="n">design</span><span class="p">,</span>
+                <span class="n">played</span><span class="p">(),</span>
+                <span class="n">series</span><span class="p">[</span><span class="s2">"frequency_hz"</span><span class="p">],</span>
+                <span class="n">series</span><span class="p">[</span><span class="s2">"position_mm"</span><span class="p">],</span>
+                <span class="n">rotation</span><span class="p">,</span>
+                <span class="kc">None</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">local</span><span class="o">.</span><span class="n">run</span><span class="p">(</span>
+                <span class="n">ismrmrd</span><span class="o">.</span><span class="n">xsd</span><span class="o">.</span><span class="n">CreateFromDocument</span><span class="p">(</span><span class="n">header</span><span class="p">),</span> <span class="n">acquisitions</span><span class="p">,</span> <span class="n">returned</span>
+            <span class="p">)</span>
         <span class="k">return</span> <span class="mi">1</span> <span class="k">if</span> <span class="n">stopped</span><span class="o">.</span><span class="n">is_set</span><span class="p">()</span> <span class="k">else</span> <span class="n">status</span></div>
+
+
+<div class="viewcode-block" id="Console.answer">
+<a class="viewcode-back" href="../../../generated/pulserver.virtual.Console.answer.html#pulserver.virtual.Console.answer">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">answer</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">request</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
+        <span class="n">reply</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="nb">dict</span><span class="p">],</span> <span class="kc">None</span><span class="p">],</span>
+        <span class="n">cancelled</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="nb">bool</span><span class="p">]</span> <span class="o">=</span> <span class="k">lambda</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Answer one request of a console, handing ``reply`` each message of the answer.</span>
+
+<span class="sd">        ``request`` carries its ``call`` and that call's fields, and the</span>
+<span class="sd">        messages are those ``pulserver console`` sends over its WebSocket,</span>
+<span class="sd">        without the request's ``id``: one for each call, except that a scan</span>
+<span class="sd">        sends its clock, images and texts before ``{"done": status}``. A call</span>
+<span class="sd">        that fails, or is not one of the console's, is answered with</span>
+<span class="sd">        ``{"error": text}``. A scan stops once ``cancelled`` returns true.</span>
+<span class="sd">        """</span>
+        <span class="n">call</span> <span class="o">=</span> <span class="n">request</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"call"</span><span class="p">)</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">call</span> <span class="o">==</span> <span class="s2">"plugins"</span><span class="p">:</span>
+                <span class="n">reply</span><span class="p">({</span><span class="s2">"plugins"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">plugin_names</span><span class="p">()})</span>
+            <span class="k">elif</span> <span class="n">call</span> <span class="o">==</span> <span class="s2">"coils"</span><span class="p">:</span>
+                <span class="n">reply</span><span class="p">({</span><span class="s2">"coils"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">coils</span><span class="p">()})</span>
+            <span class="k">elif</span> <span class="n">call</span> <span class="ow">in</span> <span class="n">DESIGN_CALLS</span><span class="p">:</span>
+                <span class="n">reply</span><span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">design</span><span class="p">(</span><span class="n">call</span><span class="p">,</span> <span class="n">request</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"plugin"</span><span class="p">),</span> <span class="n">request</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"block"</span><span class="p">,</span> <span class="s2">""</span><span class="p">))</span>
+                <span class="p">)</span>
+            <span class="k">elif</span> <span class="n">call</span> <span class="o">==</span> <span class="s2">"exam"</span><span class="p">:</span>
+                <span class="n">coil</span> <span class="o">=</span> <span class="n">request</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"coil"</span><span class="p">)</span>
+                <span class="n">files</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">exam</span><span class="p">(</span>
+                    <span class="nb">str</span><span class="p">(</span><span class="n">request</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"subject"</span><span class="p">,</span> <span class="s2">""</span><span class="p">)),</span> <span class="kc">None</span> <span class="k">if</span> <span class="n">coil</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="nb">str</span><span class="p">(</span><span class="n">coil</span><span class="p">)</span>
+                <span class="p">)</span>
+                <span class="n">reply</span><span class="p">(</span>
+                    <span class="p">{</span><span class="s2">"localizer"</span><span class="p">:</span> <span class="p">[</span><span class="n">base64</span><span class="o">.</span><span class="n">b64encode</span><span class="p">(</span><span class="n">f</span><span class="p">)</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="s2">"ascii"</span><span class="p">)</span> <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">files</span><span class="p">]}</span>
+                <span class="p">)</span>
+            <span class="k">elif</span> <span class="n">call</span> <span class="o">==</span> <span class="s2">"scan"</span><span class="p">:</span>
+                <span class="n">status</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">scan</span><span class="p">(</span>
+                    <span class="nb">str</span><span class="p">(</span><span class="n">request</span><span class="p">[</span><span class="s2">"design"</span><span class="p">]),</span>
+                    <span class="n">rotation</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">request</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"rotation"</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span><span class="o">.</span><span class="n">ravel</span><span class="p">())),</span>
+                    <span class="n">centre_mm</span><span class="o">=</span><span class="n">request</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"centre_mm"</span><span class="p">,</span> <span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)),</span>
+                    <span class="n">emit</span><span class="o">=</span><span class="n">reply</span><span class="p">,</span>
+                    <span class="n">cancelled</span><span class="o">=</span><span class="n">cancelled</span><span class="p">,</span>
+                    <span class="n">sound</span><span class="o">=</span><span class="nb">bool</span><span class="p">(</span><span class="n">request</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"sound"</span><span class="p">,</span> <span class="kc">False</span><span class="p">)),</span>
+                <span class="p">)</span>
+                <span class="n">reply</span><span class="p">({</span><span class="s2">"done"</span><span class="p">:</span> <span class="n">status</span><span class="p">})</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">reply</span><span class="p">({</span><span class="s2">"error"</span><span class="p">:</span> <span class="sa">f</span><span class="s2">"unknown call </span><span class="si">{</span><span class="n">call</span><span class="si">!r}</span><span class="s2">"</span><span class="p">})</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">error</span><span class="p">:</span>
+            <span class="n">reply</span><span class="p">({</span><span class="s2">"error"</span><span class="p">:</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">error</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">error</span><span class="si">}</span><span class="s2">"</span><span class="p">})</span></div>
 </div>
 
 
@@ -742,44 +826,10 @@
         <span class="n">asyncio</span><span class="o">.</span><span class="n">run_coroutine_threadsafe</span><span class="p">(</span><span class="n">websocket</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">text</span><span class="p">),</span> <span class="n">loop</span><span class="p">)</span><span class="o">.</span><span class="n">result</span><span class="p">()</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">work</span><span class="p">(</span><span class="n">request</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="n">ident</span><span class="p">,</span> <span class="n">call</span> <span class="o">=</span> <span class="n">request</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"id"</span><span class="p">),</span> <span class="n">request</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"call"</span><span class="p">)</span>
-        <span class="k">try</span><span class="p">:</span>
-            <span class="k">if</span> <span class="n">call</span> <span class="o">==</span> <span class="s2">"plugins"</span><span class="p">:</span>
-                <span class="n">reply</span><span class="p">(</span><span class="n">ident</span><span class="p">,</span> <span class="p">{</span><span class="s2">"plugins"</span><span class="p">:</span> <span class="n">console</span><span class="o">.</span><span class="n">plugin_names</span><span class="p">()})</span>
-            <span class="k">elif</span> <span class="n">call</span> <span class="o">==</span> <span class="s2">"coils"</span><span class="p">:</span>
-                <span class="n">reply</span><span class="p">(</span><span class="n">ident</span><span class="p">,</span> <span class="p">{</span><span class="s2">"coils"</span><span class="p">:</span> <span class="n">console</span><span class="o">.</span><span class="n">coils</span><span class="p">()})</span>
-            <span class="k">elif</span> <span class="n">call</span> <span class="ow">in</span> <span class="n">DESIGN_CALLS</span><span class="p">:</span>
-                <span class="n">reply</span><span class="p">(</span>
-                    <span class="n">ident</span><span class="p">,</span>
-                    <span class="n">console</span><span class="o">.</span><span class="n">design</span><span class="p">(</span>
-                        <span class="n">call</span><span class="p">,</span> <span class="n">request</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"plugin"</span><span class="p">),</span> <span class="n">request</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"block"</span><span class="p">,</span> <span class="s2">""</span><span class="p">)</span>
-                    <span class="p">),</span>
-                <span class="p">)</span>
-            <span class="k">elif</span> <span class="n">call</span> <span class="o">==</span> <span class="s2">"exam"</span><span class="p">:</span>
-                <span class="n">coil</span> <span class="o">=</span> <span class="n">request</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"coil"</span><span class="p">)</span>
-                <span class="n">files</span> <span class="o">=</span> <span class="n">console</span><span class="o">.</span><span class="n">exam</span><span class="p">(</span>
-                    <span class="nb">str</span><span class="p">(</span><span class="n">request</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"subject"</span><span class="p">,</span> <span class="s2">""</span><span class="p">)),</span>
-                    <span class="kc">None</span> <span class="k">if</span> <span class="n">coil</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="nb">str</span><span class="p">(</span><span class="n">coil</span><span class="p">),</span>
-                <span class="p">)</span>
-                <span class="n">reply</span><span class="p">(</span>
-                    <span class="n">ident</span><span class="p">,</span>
-                    <span class="p">{</span><span class="s2">"localizer"</span><span class="p">:</span> <span class="p">[</span><span class="n">base64</span><span class="o">.</span><span class="n">b64encode</span><span class="p">(</span><span class="n">f</span><span class="p">)</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="s2">"ascii"</span><span class="p">)</span> <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">files</span><span class="p">]},</span>
-                <span class="p">)</span>
-            <span class="k">elif</span> <span class="n">call</span> <span class="o">==</span> <span class="s2">"scan"</span><span class="p">:</span>
-                <span class="n">cancel</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
-                <span class="n">status</span> <span class="o">=</span> <span class="n">console</span><span class="o">.</span><span class="n">scan</span><span class="p">(</span>
-                    <span class="nb">str</span><span class="p">(</span><span class="n">request</span><span class="p">[</span><span class="s2">"design"</span><span class="p">]),</span>
-                    <span class="n">rotation</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">request</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"rotation"</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span><span class="o">.</span><span class="n">ravel</span><span class="p">())),</span>
-                    <span class="n">centre_mm</span><span class="o">=</span><span class="n">request</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"centre_mm"</span><span class="p">,</span> <span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)),</span>
-                    <span class="n">emit</span><span class="o">=</span><span class="k">lambda</span> <span class="n">message</span><span class="p">:</span> <span class="n">reply</span><span class="p">(</span><span class="n">ident</span><span class="p">,</span> <span class="n">message</span><span class="p">),</span>
-                    <span class="n">cancelled</span><span class="o">=</span><span class="n">cancel</span><span class="o">.</span><span class="n">is_set</span><span class="p">,</span>
-                    <span class="n">sound</span><span class="o">=</span><span class="nb">bool</span><span class="p">(</span><span class="n">request</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"sound"</span><span class="p">,</span> <span class="kc">False</span><span class="p">)),</span>
-                <span class="p">)</span>
-                <span class="n">reply</span><span class="p">(</span><span class="n">ident</span><span class="p">,</span> <span class="p">{</span><span class="s2">"done"</span><span class="p">:</span> <span class="n">status</span><span class="p">})</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="n">reply</span><span class="p">(</span><span class="n">ident</span><span class="p">,</span> <span class="p">{</span><span class="s2">"error"</span><span class="p">:</span> <span class="sa">f</span><span class="s2">"unknown call </span><span class="si">{</span><span class="n">call</span><span class="si">!r}</span><span class="s2">"</span><span class="p">})</span>
-        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">error</span><span class="p">:</span>
-            <span class="n">reply</span><span class="p">(</span><span class="n">ident</span><span class="p">,</span> <span class="p">{</span><span class="s2">"error"</span><span class="p">:</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">error</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">error</span><span class="si">}</span><span class="s2">"</span><span class="p">})</span>
+        <span class="n">ident</span> <span class="o">=</span> <span class="n">request</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"id"</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">request</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"call"</span><span class="p">)</span> <span class="o">==</span> <span class="s2">"scan"</span><span class="p">:</span>
+            <span class="n">cancel</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
+        <span class="n">console</span><span class="o">.</span><span class="n">answer</span><span class="p">(</span><span class="n">request</span><span class="p">,</span> <span class="k">lambda</span> <span class="n">message</span><span class="p">:</span> <span class="n">reply</span><span class="p">(</span><span class="n">ident</span><span class="p">,</span> <span class="n">message</span><span class="p">),</span> <span class="n">cancel</span><span class="o">.</span><span class="n">is_set</span><span class="p">)</span>
 
     <span class="k">async</span> <span class="k">for</span> <span class="n">message</span> <span class="ow">in</span> <span class="n">websocket</span><span class="p">:</span>
         <span class="n">request</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">message</span><span class="p">)</span>
@@ -794,12 +844,23 @@
             <span class="k">await</span> <span class="n">future</span>
 
 
-<span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">serve</span><span class="p">(</span><span class="n">console</span><span class="p">:</span> <span class="n">Console</span><span class="p">,</span> <span class="n">host</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">port</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""Serve ``console`` on a WebSocket at ``host``:``port`` until cancelled."""</span>
+<span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">serve</span><span class="p">(</span>
+    <span class="n">console</span><span class="p">:</span> <span class="n">Console</span><span class="p">,</span> <span class="n">host</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">port</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">origins</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Serve ``console`` on a WebSocket at ``host``:``port`` until cancelled.</span>
+
+<span class="sd">    With ``origins``, a browser page is served only from one of those origins,</span>
+<span class="sd">    such as ``https://pulserver.github.io``; a client that sends no</span>
+<span class="sd">    ``Origin``, which a browser always sends, is served whatever they are.</span>
+<span class="sd">    """</span>
     <span class="kn">import</span><span class="w"> </span><span class="nn">websockets</span>
 
     <span class="k">async</span> <span class="k">with</span> <span class="n">websockets</span><span class="o">.</span><span class="n">serve</span><span class="p">(</span>
-        <span class="k">lambda</span> <span class="n">websocket</span><span class="p">:</span> <span class="n">_connection</span><span class="p">(</span><span class="n">console</span><span class="p">,</span> <span class="n">websocket</span><span class="p">),</span> <span class="n">host</span><span class="p">,</span> <span class="n">port</span><span class="p">,</span> <span class="n">max_size</span><span class="o">=</span><span class="kc">None</span>
+        <span class="k">lambda</span> <span class="n">websocket</span><span class="p">:</span> <span class="n">_connection</span><span class="p">(</span><span class="n">console</span><span class="p">,</span> <span class="n">websocket</span><span class="p">),</span>
+        <span class="n">host</span><span class="p">,</span>
+        <span class="n">port</span><span class="p">,</span>
+        <span class="n">max_size</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">origins</span><span class="o">=</span><span class="kc">None</span> <span class="k">if</span> <span class="n">origins</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="p">[</span><span class="o">*</span><span class="n">origins</span><span class="p">,</span> <span class="kc">None</span><span class="p">],</span>
     <span class="p">):</span>
         <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">Future</span><span class="p">()</span>
 
@@ -814,10 +875,22 @@
         <span class="s2">"--limits"</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="n">Path</span><span class="p">,</span> <span class="n">required</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s2">"file holding a [Limits] block"</span>
     <span class="p">)</span>
     <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s2">"--store"</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="n">Path</span><span class="p">,</span> <span class="n">required</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s2">"design store"</span><span class="p">)</span>
-    <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s2">"--recon"</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s2">"reconstruction proxy, HOST:PORT"</span><span class="p">)</span>
+    <span class="n">recon</span> <span class="o">=</span> <span class="n">parser</span><span class="o">.</span><span class="n">add_mutually_exclusive_group</span><span class="p">()</span>
+    <span class="n">recon</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s2">"--recon"</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s2">"reconstruction proxy, HOST:PORT"</span><span class="p">)</span>
+    <span class="n">recon</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span>
+        <span class="s2">"--recon-plugins"</span><span class="p">,</span>
+        <span class="nb">type</span><span class="o">=</span><span class="n">Path</span><span class="p">,</span>
+        <span class="n">help</span><span class="o">=</span><span class="s2">"reconstruction plugin directory, run in this process instead of a proxy"</span><span class="p">,</span>
+    <span class="p">)</span>
     <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s2">"--push"</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s2">"recon-side intake each design is pushed to"</span><span class="p">)</span>
     <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s2">"--host"</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="s2">"127.0.0.1"</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s2">"address to listen on"</span><span class="p">)</span>
     <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s2">"--port"</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="nb">int</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="mi">8765</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s2">"port to listen on"</span><span class="p">)</span>
+    <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span>
+        <span class="s2">"--origin"</span><span class="p">,</span>
+        <span class="n">action</span><span class="o">=</span><span class="s2">"append"</span><span class="p">,</span>
+        <span class="n">dest</span><span class="o">=</span><span class="s2">"origins"</span><span class="p">,</span>
+        <span class="n">help</span><span class="o">=</span><span class="s2">"origin of the browser pages served, repeatable; every origin without it"</span><span class="p">,</span>
+    <span class="p">)</span>
     <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span>
         <span class="s2">"--spacing"</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="nb">float</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s2">"isochromat spacing, in mm"</span>
     <span class="p">)</span>
@@ -844,13 +917,14 @@
         <span class="n">limits</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">limits</span><span class="o">.</span><span class="n">read_text</span><span class="p">(),</span>
         <span class="n">store</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">store</span><span class="p">,</span>
         <span class="n">recon</span><span class="o">=</span><span class="n">recon</span><span class="p">,</span>
+        <span class="n">recon_plugins</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">recon_plugins</span><span class="p">,</span>
         <span class="n">push</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">push</span><span class="p">,</span>
         <span class="n">spacing</span><span class="o">=</span><span class="mf">1e-3</span> <span class="o">*</span> <span class="n">args</span><span class="o">.</span><span class="n">spacing</span><span class="p">,</span>
         <span class="n">coil</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">coil</span><span class="p">,</span>
         <span class="n">speed</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">speed</span><span class="p">,</span>
     <span class="p">)</span>
     <span class="k">with</span> <span class="n">contextlib</span><span class="o">.</span><span class="n">suppress</span><span class="p">(</span><span class="ne">KeyboardInterrupt</span><span class="p">):</span>
-        <span class="n">asyncio</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">serve</span><span class="p">(</span><span class="n">console</span><span class="p">,</span> <span class="n">args</span><span class="o">.</span><span class="n">host</span><span class="p">,</span> <span class="n">args</span><span class="o">.</span><span class="n">port</span><span class="p">))</span>
+        <span class="n">asyncio</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">serve</span><span class="p">(</span><span class="n">console</span><span class="p">,</span> <span class="n">args</span><span class="o">.</span><span class="n">host</span><span class="p">,</span> <span class="n">args</span><span class="o">.</span><span class="n">port</span><span class="p">,</span> <span class="n">args</span><span class="o">.</span><span class="n">origins</span><span class="p">))</span>
     <span class="k">return</span> <span class="mi">0</span>
 </pre></div>
 

@@ -517,7 +517,7 @@
             </div>
             <nav aria-label="Page">
                 <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#servers">Servers</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#reconstruction-of-a-series">Reconstruction of a series</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#designs">Designs</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#enrichment">Enrichment</a></li>
 </ul>
@@ -552,8 +552,8 @@ acquisition. The readouts arrive demodulated to the prescribed field-of-view
 centre by the playout, and are passed on as received. Routing, slots and the
 queue are described in <a class="reference internal" href="../explanations/reconstruction.html"><span class="doc">Raw-data enrichment and routing</span></a>, and the messages
 and fields of a series in <a class="reference internal" href="../user-guide/reconstruction-client.html"><span class="doc">Reconstruction clients</span></a>.</p>
-<section id="servers">
-<h2>Servers<a class="headerlink" href="#servers" title="Link to this heading">#</a></h2>
+<section id="reconstruction-of-a-series">
+<h2>Reconstruction of a series<a class="headerlink" href="#reconstruction-of-a-series" title="Link to this heading">#</a></h2>
 <div class="pst-scrollable-table-container"><table class="table">
 <thead>
 <tr class="row-odd"><th class="head"><p>Object</p></th>
@@ -566,6 +566,9 @@ and fields of a series in <a class="reference internal" href="../user-guide/reco
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="../generated/pulserver.proxy.ReconServer.html#pulserver.proxy.ReconServer" title="pulserver.proxy.ReconServer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ReconServer</span></code></a></p></td>
 <td><p>TCP MRD server reconstructing each series with the plugin its config names.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.proxy.LocalReconstruction.html#pulserver.proxy.LocalReconstruction" title="pulserver.proxy.LocalReconstruction"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LocalReconstruction</span></code></a></p></td>
+<td><p>Each series checked, enriched and reconstructed in the calling process, as the proxy’s workers do, for a host that starts no processes.</p></td>
 </tr>
 </tbody>
 </table>
@@ -670,7 +673,7 @@ and fields of a series in <a class="reference internal" href="../user-guide/reco
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#servers">Servers</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#reconstruction-of-a-series">Reconstruction of a series</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#designs">Designs</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#enrichment">Enrichment</a></li>
 </ul>

@@ -777,6 +777,22 @@ designs it generates, played on the subject’s phantom:</p>
 <span class="w">  </span>--recon<span class="w"> </span><span class="m">127</span>.0.0.1:9002<span class="w"> </span>--port<span class="w"> </span><span class="m">8765</span>
 </pre></div>
 </div>
+<p>With <code class="docutils literal notranslate"><span class="pre">--recon-plugins</span> <span class="pre">DIR</span></code> in place of <code class="docutils literal notranslate"><span class="pre">--recon</span></code>, each scan is reconstructed in
+the console’s own process by the plugins of <code class="docutils literal notranslate"><span class="pre">DIR</span></code>, checked and enriched as the
+proxy checks and enriches a series (<a class="reference internal" href="../generated/pulserver.proxy.LocalReconstruction.html#pulserver.proxy.LocalReconstruction" title="pulserver.proxy.LocalReconstruction"><code class="xref py py-class docutils literal notranslate"><span class="pre">LocalReconstruction</span></code></a>),
+and no proxy runs. <code class="docutils literal notranslate"><span class="pre">--origin</span></code> names an origin whose browser pages the console
+serves, and may be repeated; without it, pages from every origin are served,
+and a client that sends no <code class="docutils literal notranslate"><span class="pre">Origin</span></code>, which a browser always sends, is served
+either way.</p>
+<p>pulserver’s image runs such a console by default, with bartorch for the head
+coils and the <code class="docutils literal notranslate"><span class="pre">gre2d</span></code> plugin reconstructed by the built-in Cartesian FFT,
+<code class="docutils literal notranslate"><span class="pre">pulserver.recon.handlers.simplefft</span></code>. It serves the pages of
+<code class="docutils literal notranslate"><span class="pre">https://pulserver.github.io</span></code>, <code class="docutils literal notranslate"><span class="pre">http://localhost:8000</span></code> and
+<code class="docutils literal notranslate"><span class="pre">http://127.0.0.1:8000</span></code> on port 8765 of this computer:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>docker<span class="w"> </span>run<span class="w"> </span>-d<span class="w"> </span>--restart<span class="w"> </span>unless-stopped<span class="w"> </span>--name<span class="w"> </span>pulserver<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-p<span class="w"> </span><span class="m">127</span>.0.0.1:8765:8765<span class="w"> </span>ghcr.io/pulserver/pulserver
+</pre></div>
+</div>
 <p>Each request is a JSON object carrying <code class="docutils literal notranslate"><span class="pre">call</span></code> and an <code class="docutils literal notranslate"><span class="pre">id</span></code> that every reply to
 it repeats:</p>
 <div class="pst-scrollable-table-container"><table class="table">
@@ -814,6 +830,10 @@ it repeats:</p>
 </tbody>
 </table>
 </div>
+<p><a class="reference internal" href="../generated/pulserver.virtual.Console.answer.html#pulserver.virtual.Console.answer" title="pulserver.virtual.Console.answer"><code class="xref py py-meth docutils literal notranslate"><span class="pre">Console.answer</span></code></a> answers one request
+in process with the same replies, without the <code class="docutils literal notranslate"><span class="pre">id</span></code>, for a console that reaches
+pulserver by another route than a WebSocket, such as the messages of a Web
+Worker running pulserver beside a browser page.</p>
 <p>A subject named <code class="docutils literal notranslate"><span class="pre">brainweb</span></code> is BrainWeb’s normal brain; any other is the vials.
 An exam is scanned in the coil it names, or in the one it had, <code class="docutils literal notranslate"><span class="pre">--coil</span></code> at
 first; a head coil needs the <code class="docutils literal notranslate"><span class="pre">coils</span></code> extra. The localizer is drawn from the
