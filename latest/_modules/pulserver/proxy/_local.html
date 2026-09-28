@@ -460,6 +460,7 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span>
 
+<span class="kn">from</span><span class="w"> </span><span class="nn">.._plugins</span><span class="w"> </span><span class="kn">import</span> <span class="n">PluginPath</span><span class="p">,</span> <span class="n">directories</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..recon</span><span class="w"> </span><span class="kn">import</span> <span class="n">ReconContext</span><span class="p">,</span> <span class="n">load_plugin</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..recon._runtime.application</span><span class="w"> </span><span class="kn">import</span> <span class="n">run_application</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..recon._runtime.exam</span><span class="w"> </span><span class="kn">import</span> <span class="n">ExamCacheManager</span>
@@ -485,12 +486,13 @@
 <span class="sd">    store</span>
 <span class="sd">        Directory of designs, as the design calls write it; read only.</span>
 <span class="sd">    plugins</span>
-<span class="sd">        Directory of reconstruction plugin files, ``&lt;plugin&gt;.py``.</span>
+<span class="sd">        Directories of reconstruction plugin files, ``&lt;plugin&gt;.py``, in search</span>
+<span class="sd">        order.</span>
 <span class="sd">    """</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">store</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span><span class="p">,</span> <span class="n">plugins</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">store</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span><span class="p">,</span> <span class="n">plugins</span><span class="p">:</span> <span class="n">PluginPath</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">designs</span> <span class="o">=</span> <span class="n">DesignCache</span><span class="p">(</span><span class="n">store</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">plugins</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">plugins</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">plugins</span> <span class="o">=</span> <span class="n">directories</span><span class="p">(</span><span class="n">plugins</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">exams</span> <span class="o">=</span> <span class="n">ExamCacheManager</span><span class="p">()</span>
 
 <div class="viewcode-block" id="LocalReconstruction.run">

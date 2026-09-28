@@ -533,8 +533,9 @@
                   
   <section class="tex2jax_ignore mathjax_ignore" id="scanner-sequences">
 <h1>Scanner sequences<a class="headerlink" href="#scanner-sequences" title="Link to this heading">#</a></h1>
-<p>A scanner sequence is a plugin file in the <code class="docutils literal notranslate"><span class="pre">--plugins</span></code> directory of the design calls.
-It defines one <a class="reference internal" href="../generated/pulserver.design.ScannerSequence.html#pulserver.design.ScannerSequence" title="pulserver.design.ScannerSequence"><code class="xref py py-class docutils literal notranslate"><span class="pre">ScannerSequence</span></code></a> subclass, which binds
+<p>A scanner sequence is a plugin file in one of the <code class="docutils literal notranslate"><span class="pre">--plugins</span></code> directories of the
+design calls; a name is the plugin of the first directory holding <code class="docutils literal notranslate"><span class="pre">&lt;name&gt;.py</span></code>,
+and a symbolic link is a plugin named after the link. It defines one <a class="reference internal" href="../generated/pulserver.design.ScannerSequence.html#pulserver.design.ScannerSequence" title="pulserver.design.ScannerSequence"><code class="xref py py-class docutils literal notranslate"><span class="pre">ScannerSequence</span></code></a> subclass, which binds
 a pypulseqpp <a class="reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.sequences.SequenceApp.html#pypulseqpp.sequences.SequenceApp" title="(in pypulseqpp latest)"><code class="xref py py-class docutils literal notranslate"><span class="pre">SequenceApp</span></code></a> to the entries of the
 scanner protocol. A design call loads the file by its stem: <code class="docutils literal notranslate"><span class="pre">gre2d.py</span></code> is the
 plugin an interpreter host process names with <code class="docutils literal notranslate"><span class="pre">--plugin</span> <span class="pre">gre2d</span></code>.</p>

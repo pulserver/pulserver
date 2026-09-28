@@ -782,8 +782,10 @@ designs it generates, played on the subject’s phantom:</p>
 <span class="w">  </span>--recon<span class="w"> </span><span class="m">127</span>.0.0.1:9002<span class="w"> </span>--port<span class="w"> </span><span class="m">8765</span>
 </pre></div>
 </div>
-<p>With <code class="docutils literal notranslate"><span class="pre">--recon-plugins</span> <span class="pre">DIR</span></code> in place of <code class="docutils literal notranslate"><span class="pre">--recon</span></code>, each scan is reconstructed in
-the console’s own process by the plugins of <code class="docutils literal notranslate"><span class="pre">DIR</span></code>, checked and enriched as the
+<p><code class="docutils literal notranslate"><span class="pre">--plugins</span></code> and <code class="docutils literal notranslate"><span class="pre">--recon-plugins</span></code> may be repeated, the first directory holding a
+plugin supplying it. With <code class="docutils literal notranslate"><span class="pre">--recon-plugins</span> <span class="pre">DIR</span></code> in place of <code class="docutils literal notranslate"><span class="pre">--recon</span></code>, each scan
+is reconstructed in the console’s own process by the plugins of <code class="docutils literal notranslate"><span class="pre">DIR</span></code>, checked
+and enriched as the
 proxy checks and enriches a series (<a class="reference internal" href="../generated/pulserver.proxy.LocalReconstruction.html#pulserver.proxy.LocalReconstruction" title="pulserver.proxy.LocalReconstruction"><code class="xref py py-class docutils literal notranslate"><span class="pre">LocalReconstruction</span></code></a>),
 and no proxy runs. <code class="docutils literal notranslate"><span class="pre">--origin</span></code> names an origin whose browser pages the console
 serves, and may be repeated; without it, pages from every origin are served,
@@ -798,6 +800,18 @@ nothing, and the <code class="docutils literal notranslate"><span class="pre">gr
 the scanner’s speed, <code class="docutils literal notranslate"><span class="pre">--speed=1</span></code>:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>docker<span class="w"> </span>run<span class="w"> </span>-d<span class="w"> </span>--restart<span class="w"> </span>unless-stopped<span class="w"> </span>--name<span class="w"> </span>pulserver<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>-p<span class="w"> </span><span class="m">127</span>.0.0.1:8765:8765<span class="w"> </span>ghcr.io/pulserver/pulserver
+</pre></div>
+</div>
+<p>Directories mounted at <code class="docutils literal notranslate"><span class="pre">/console/user/plugins</span></code> and <code class="docutils literal notranslate"><span class="pre">/console/user/recon</span></code> add
+sequences and reconstructions to the image’s. They are searched first, so a
+file there takes the place of the image’s file of that name. A link must
+resolve inside the container, as a relative link within the mounted directory
+does. A file added or changed is used from the next call on:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>docker<span class="w"> </span>run<span class="w"> </span>-d<span class="w"> </span>--restart<span class="w"> </span>unless-stopped<span class="w"> </span>--name<span class="w"> </span>pulserver<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-p<span class="w"> </span><span class="m">127</span>.0.0.1:8765:8765<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-v<span class="w"> </span><span class="s2">"</span><span class="nv">$PWD</span><span class="s2">/sequences:/console/user/plugins:ro"</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-v<span class="w"> </span><span class="s2">"</span><span class="nv">$PWD</span><span class="s2">/recon:/console/user/recon:ro"</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>ghcr.io/pulserver/pulserver
 </pre></div>
 </div>
 <p>Each request is a JSON object carrying <code class="docutils literal notranslate"><span class="pre">call</span></code> and an <code class="docutils literal notranslate"><span class="pre">id</span></code> that every reply to

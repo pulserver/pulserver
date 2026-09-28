@@ -564,8 +564,9 @@ pulserver<span class="w"> </span>design<span class="w"> </span>prune<span class=
 </div>
 <p>Each call is answered from its arguments and standard input alone and writes
 its reply to standard output; <code class="docutils literal notranslate"><span class="pre">python</span> <span class="pre">-m</span> <span class="pre">pulserver.host</span></code> takes the same
-arguments. <code class="docutils literal notranslate"><span class="pre">--plugins</span></code> is the directory of scanner-sequence plugin files,
-<code class="docutils literal notranslate"><span class="pre">&lt;plugin&gt;.py</span></code>, and <code class="docutils literal notranslate"><span class="pre">--store</span></code> the design store, created when missing.</p>
+arguments. <code class="docutils literal notranslate"><span class="pre">--plugins</span></code> is a directory of scanner-sequence plugin files,
+<code class="docutils literal notranslate"><span class="pre">&lt;plugin&gt;.py</span></code>, and may be repeated: a plugin is the file of the first directory
+that holds it. <code class="docutils literal notranslate"><span class="pre">--store</span></code> is the design store, created when missing.</p>
 <div class="pst-scrollable-table-container"><table class="table">
 <thead>
 <tr class="row-odd"><th class="head"><p>Call</p></th>
@@ -783,7 +784,8 @@ can be written when they are installed and read without a call.</p>
 </div>
 <p>A call answered in its own process imports the design engine first, which
 takes most of its time. A warm server imports it once, designs, checks and
-converts a sequence of its own, and imports every plugin in <code class="docutils literal notranslate"><span class="pre">--plugins</span></code>. It then
+converts a sequence of its own, and imports every plugin of its <code class="docutils literal notranslate"><span class="pre">--plugins</span></code>
+directories. It then
 answers each call forwarded to its socket in a child process forked from it, so
 nothing a call does outlives the call, and a plugin that ends its process fails
 its own call only, with <code class="docutils literal notranslate"><span class="pre">ERROR</span> <span class="pre">the</span> <span class="pre">design</span> <span class="pre">call</span> <span class="pre">ended</span> <span class="pre">with</span> <span class="pre">exit</span> <span class="pre">status</span> <span class="pre">N</span></code>.
@@ -822,7 +824,7 @@ python<span class="w"> </span>-m<span class="w"> </span>pulserver.proxy<span cla
 <td><p>TCP port of the design intake, on the <code class="docutils literal notranslate"><span class="pre">--host</span></code> address; no intake when unset</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--plugins</span></code></p></td>
-<td><p>Directory of reconstruction plugin files, <code class="docutils literal notranslate"><span class="pre">&lt;plugin&gt;.py</span></code>; required unless <code class="docutils literal notranslate"><span class="pre">--forward</span></code> is given</p></td>
+<td><p>Directory of reconstruction plugin files, <code class="docutils literal notranslate"><span class="pre">&lt;plugin&gt;.py</span></code>, repeatable, searched in order; required unless <code class="docutils literal notranslate"><span class="pre">--forward</span></code> is given</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--queue</span></code></p></td>
 <td><p>Directory the series waiting for a slot are written to; a temporary directory, removed when the proxy stops, when unset</p></td>

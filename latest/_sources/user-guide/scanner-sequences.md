@@ -1,7 +1,8 @@
 # Scanner sequences
 
-A scanner sequence is a plugin file in the `--plugins` directory of the design calls.
-It defines one {class}`~pulserver.design.ScannerSequence` subclass, which binds
+A scanner sequence is a plugin file in one of the `--plugins` directories of the
+design calls; a name is the plugin of the first directory holding `<name>.py`,
+and a symbolic link is a plugin named after the link. It defines one {class}`~pulserver.design.ScannerSequence` subclass, which binds
 a pypulseqpp {class}`~pypulseqpp.sequences.SequenceApp` to the entries of the
 scanner protocol. A design call loads the file by its stem: `gre2d.py` is the
 plugin an interpreter host process names with `--plugin gre2d`.

@@ -543,13 +543,14 @@ process as the proxy runs them; with neither, a scan returns no images.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>plugins</strong> – Directory of the scanner-sequence plugins.</p></li>
+<li><p><strong>plugins</strong> – Directories of the scanner-sequence plugins, in search order: a name
+is the plugin of the first directory holding <code class="docutils literal notranslate"><span class="pre">&lt;name&gt;.py</span></code>.</p></li>
 <li><p><strong>limits</strong> – Text of the <code class="docutils literal notranslate"><span class="pre">[Limits]</span></code> block every design is made under; its <code class="docutils literal notranslate"><span class="pre">B0</span></code>
 is the virtual magnet’s field.</p></li>
 <li><p><strong>store</strong> – Design store.</p></li>
 <li><p><strong>recon</strong> – <code class="docutils literal notranslate"><span class="pre">(host,</span> <span class="pre">port)</span></code> of the reconstruction proxy.</p></li>
-<li><p><strong>recon_plugins</strong> – Directory of reconstruction plugin files, <code class="docutils literal notranslate"><span class="pre">&lt;plugin&gt;.py</span></code>, which
-reconstruct each scan in this process
+<li><p><strong>recon_plugins</strong> – Directories of reconstruction plugin files, <code class="docutils literal notranslate"><span class="pre">&lt;plugin&gt;.py</span></code>, in search
+order, which reconstruct each scan in this process
 (<a class="reference internal" href="pulserver.proxy.LocalReconstruction.html#pulserver.proxy.LocalReconstruction" title="pulserver.proxy.LocalReconstruction"><code class="xref py py-class docutils literal notranslate"><span class="pre">LocalReconstruction</span></code></a>).</p></li>
 <li><p><strong>push</strong> – Recon-side intake each design is pushed to.</p></li>
 <li><p><strong>spacing</strong> – Isochromat spacing of the phantom, in metres.</p></li>

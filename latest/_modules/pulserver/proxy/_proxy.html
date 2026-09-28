@@ -460,7 +460,6 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">itertools</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">re</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">shutil</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">socket</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">tempfile</span>
@@ -472,6 +471,7 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">ismrmrd</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">ismrmrd.xsd</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">xsd</span>
 
+<span class="kn">from</span><span class="w"> </span><span class="nn">.._plugins</span><span class="w"> </span><span class="kn">import</span> <span class="n">NAME</span><span class="p">,</span> <span class="n">PluginPath</span><span class="p">,</span> <span class="n">directories</span><span class="p">,</span> <span class="n">find</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..recon._runtime</span><span class="w"> </span><span class="kn">import</span> <span class="n">constants</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..recon._runtime.concurrency</span><span class="w"> </span><span class="kn">import</span> <span class="n">Slot</span><span class="p">,</span> <span class="n">Slots</span><span class="p">,</span> <span class="n">slot_devices</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..recon._runtime.connection</span><span class="w"> </span><span class="kn">import</span> <span class="n">Connection</span>
@@ -483,7 +483,6 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">._queue</span><span class="w"> </span><span class="kn">import</span> <span class="n">QueueFile</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">._workers</span><span class="w"> </span><span class="kn">import</span> <span class="n">WorkerPool</span>
 
-<span class="n">_PLUGIN_NAME</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="sa">r</span><span class="s2">"[A-Za-z0-9_\-]+"</span><span class="p">)</span>
 <span class="n">_log</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="s2">"pulserver.proxy"</span><span class="p">)</span>
 
 <span class="c1"># A worker spawns, imports its plugin and connects; past this it is not coming.</span>
@@ -634,8 +633,8 @@
 <span class="sd">    store</span>
 <span class="sd">        Directory of designs, as the design calls write it; read only.</span>
 <span class="sd">    plugins</span>
-<span class="sd">        Directory of reconstruction plugin files, ``&lt;plugin&gt;.py``; required</span>
-<span class="sd">        unless the proxy forwards.</span>
+<span class="sd">        Directories of reconstruction plugin files, ``&lt;plugin&gt;.py``, in search</span>
+<span class="sd">        order; required unless the proxy forwards.</span>
 <span class="sd">    slots</span>
 <span class="sd">        Series reconstructed at once; derived from memory and the GPUs when</span>
 <span class="sd">        ``None``.</span>
@@ -677,7 +676,7 @@
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">store</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span><span class="p">,</span>
-        <span class="n">plugins</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">plugins</span><span class="p">:</span> <span class="n">PluginPath</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">*</span><span class="p">,</span>
         <span class="n">slots</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">gpu_slots</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
@@ -743,7 +742,8 @@
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
 <span class="sd">    plugins</span>
-<span class="sd">        Directory of reconstruction plugin files, ``&lt;plugin&gt;.py``.</span>
+<span class="sd">        Directories of reconstruction plugin files, ``&lt;plugin&gt;.py``, in search</span>
+<span class="sd">        order.</span>
 <span class="sd">    slots</span>
 <span class="sd">        Series reconstructed at once; derived from memory and the GPUs when</span>
 <span class="sd">        ``None``.</span>
@@ -770,7 +770,7 @@
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
-        <span class="n">plugins</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">plugins</span><span class="p">:</span> <span class="n">PluginPath</span><span class="p">,</span>
         <span class="o">*</span><span class="p">,</span>
         <span class="n">slots</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">gpu_slots</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
@@ -806,7 +806,7 @@
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
-        <span class="n">plugins</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">plugins</span><span class="p">:</span> <span class="n">PluginPath</span><span class="p">,</span>
         <span class="n">slots</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">gpu_slots</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
         <span class="n">spares</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
@@ -820,7 +820,7 @@
             <span class="k">else</span> <span class="n">Path</span><span class="p">(</span><span class="n">queue</span><span class="p">)</span>
         <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">queue</span><span class="o">.</span><span class="n">mkdir</span><span class="p">(</span><span class="n">parents</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">plugins</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">plugins</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">plugins</span> <span class="o">=</span> <span class="n">directories</span><span class="p">(</span><span class="n">plugins</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">workers</span> <span class="o">=</span> <span class="n">WorkerPool</span><span class="p">(</span><span class="n">spares</span><span class="o">=</span><span class="n">spares</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">recon_timeout</span> <span class="o">=</span> <span class="n">recon_timeout</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_exam_root</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">tempfile</span><span class="o">.</span><span class="n">mkdtemp</span><span class="p">(</span><span class="n">prefix</span><span class="o">=</span><span class="s2">"pulserver-exams-"</span><span class="p">))</span>
@@ -1073,15 +1073,10 @@
 <span class="c1"># %% private module subroutines</span>
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_plugin_path</span><span class="p">(</span><span class="n">plugins</span><span class="p">:</span> <span class="n">Path</span><span class="p">,</span> <span class="n">plugin</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Path</span><span class="p">:</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_plugin_path</span><span class="p">(</span><span class="n">plugins</span><span class="p">:</span> <span class="n">PluginPath</span><span class="p">,</span> <span class="n">plugin</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Path</span><span class="p">:</span>
     <span class="k">if</span> <span class="ow">not</span> <span class="n">plugin</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"neither the design nor the config names a reconstruction"</span><span class="p">)</span>
-    <span class="k">if</span> <span class="ow">not</span> <span class="n">_PLUGIN_NAME</span><span class="o">.</span><span class="n">fullmatch</span><span class="p">(</span><span class="n">plugin</span><span class="p">):</span>
-        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"invalid plugin name </span><span class="si">{</span><span class="n">plugin</span><span class="si">!r}</span><span class="s2">"</span><span class="p">)</span>
-    <span class="n">path</span> <span class="o">=</span> <span class="n">plugins</span> <span class="o">/</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">plugin</span><span class="si">}</span><span class="s2">.py"</span>
-    <span class="k">if</span> <span class="ow">not</span> <span class="n">path</span><span class="o">.</span><span class="n">is_file</span><span class="p">():</span>
-        <span class="k">raise</span> <span class="ne">FileNotFoundError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"no plugin </span><span class="si">{</span><span class="n">plugin</span><span class="si">!r}</span><span class="s2"> in </span><span class="si">{</span><span class="n">plugins</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
-    <span class="k">return</span> <span class="n">path</span>
+    <span class="k">return</span> <span class="n">find</span><span class="p">(</span><span class="n">plugins</span><span class="p">,</span> <span class="n">plugin</span><span class="p">)</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_first</span><span class="p">(</span><span class="n">connection</span><span class="p">:</span> <span class="n">Connection</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
@@ -1141,7 +1136,7 @@
 <span class="sd">    config and read from ``parameters.config``.</span>
 <span class="sd">    """</span>
     <span class="n">text</span> <span class="o">=</span> <span class="n">config</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
-    <span class="k">if</span> <span class="n">_PLUGIN_NAME</span><span class="o">.</span><span class="n">fullmatch</span><span class="p">(</span><span class="n">text</span><span class="p">):</span>
+    <span class="k">if</span> <span class="n">NAME</span><span class="o">.</span><span class="n">fullmatch</span><span class="p">(</span><span class="n">text</span><span class="p">):</span>
         <span class="k">return</span> <span class="n">text</span>
     <span class="n">parsed</span> <span class="o">=</span> <span class="n">deserialize_config</span><span class="p">(</span><span class="n">text</span><span class="p">,</span> <span class="s2">""</span><span class="p">)</span>
     <span class="n">parameters</span> <span class="o">=</span> <span class="n">parsed</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"parameters"</span><span class="p">)</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">parsed</span><span class="p">,</span> <span class="nb">dict</span><span class="p">)</span> <span class="k">else</span> <span class="kc">None</span>

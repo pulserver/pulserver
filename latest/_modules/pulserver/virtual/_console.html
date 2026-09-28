@@ -467,6 +467,8 @@
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 
+<span class="kn">from</span><span class="w"> </span><span class="nn">.._plugins</span><span class="w"> </span><span class="kn">import</span> <span class="n">PluginPath</span><span class="p">,</span> <span class="n">directories</span><span class="p">,</span> <span class="n">names</span>
+
 <span class="c1">#: The design calls a console forwards, answered as ``pulserver design`` answers them.</span>
 <span class="n">DESIGN_CALLS</span> <span class="o">=</span> <span class="p">(</span><span class="s2">"list"</span><span class="p">,</span> <span class="s2">"validate"</span><span class="p">,</span> <span class="s2">"generate"</span><span class="p">,</span> <span class="s2">"import"</span><span class="p">)</span>
 
@@ -494,7 +496,8 @@
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
 <span class="sd">    plugins</span>
-<span class="sd">        Directory of the scanner-sequence plugins.</span>
+<span class="sd">        Directories of the scanner-sequence plugins, in search order: a name</span>
+<span class="sd">        is the plugin of the first directory holding ``&lt;name&gt;.py``.</span>
 <span class="sd">    limits</span>
 <span class="sd">        Text of the ``[Limits]`` block every design is made under; its ``B0``</span>
 <span class="sd">        is the virtual magnet's field.</span>
@@ -503,8 +506,8 @@
 <span class="sd">    recon</span>
 <span class="sd">        ``(host, port)`` of the reconstruction proxy.</span>
 <span class="sd">    recon_plugins</span>
-<span class="sd">        Directory of reconstruction plugin files, ``&lt;plugin&gt;.py``, which</span>
-<span class="sd">        reconstruct each scan in this process</span>
+<span class="sd">        Directories of reconstruction plugin files, ``&lt;plugin&gt;.py``, in search</span>
+<span class="sd">        order, which reconstruct each scan in this process</span>
 <span class="sd">        (:class:`~pulserver.proxy.LocalReconstruction`).</span>
 <span class="sd">    push</span>
 <span class="sd">        Recon-side intake each design is pushed to.</span>
@@ -520,11 +523,11 @@
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="o">*</span><span class="p">,</span>
-        <span class="n">plugins</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">plugins</span><span class="p">:</span> <span class="n">PluginPath</span><span class="p">,</span>
         <span class="n">limits</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
         <span class="n">store</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span><span class="p">,</span>
         <span class="n">recon</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">recon_plugins</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">recon_plugins</span><span class="p">:</span> <span class="n">PluginPath</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">push</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">spacing</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1e-3</span><span class="p">,</span>
         <span class="n">coil</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"body"</span><span class="p">,</span>
@@ -537,7 +540,7 @@
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
                 <span class="s2">"a console reconstructs through a proxy or in this process, not both"</span>
             <span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">plugins</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">plugins</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">plugins</span> <span class="o">=</span> <span class="n">directories</span><span class="p">(</span><span class="n">plugins</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">limits</span> <span class="o">=</span> <span class="n">limits</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">store</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">store</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">recon</span> <span class="o">=</span> <span class="n">recon</span>
@@ -571,7 +574,7 @@
             <span class="p">)</span>
         <span class="n">request</span> <span class="o">=</span> <span class="p">{</span>
             <span class="s2">"call"</span><span class="p">:</span> <span class="n">call</span><span class="p">,</span>
-            <span class="s2">"plugins"</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">plugins</span><span class="p">),</span>
+            <span class="s2">"plugins"</span><span class="p">:</span> <span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">directory</span><span class="p">)</span> <span class="k">for</span> <span class="n">directory</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">plugins</span><span class="p">],</span>
             <span class="s2">"plugin"</span><span class="p">:</span> <span class="n">plugin</span><span class="p">,</span>
             <span class="s2">"limits"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">limits</span><span class="p">,</span>
             <span class="s2">"store"</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">store</span><span class="p">),</span>
@@ -591,7 +594,7 @@
 <a class="viewcode-back" href="../../../generated/pulserver.virtual.Console.plugin_names.html#pulserver.virtual.Console.plugin_names">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">plugin_names</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">"""Return the names of the plugins a console can list."""</span>
-        <span class="k">return</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">path</span><span class="o">.</span><span class="n">stem</span> <span class="k">for</span> <span class="n">path</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">plugins</span><span class="o">.</span><span class="n">glob</span><span class="p">(</span><span class="s2">"*.py"</span><span class="p">))</span></div>
+        <span class="k">return</span> <span class="n">names</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">plugins</span><span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="Console.coils">
@@ -949,7 +952,13 @@
         <span class="n">prog</span><span class="o">=</span><span class="s2">"pulserver console"</span><span class="p">,</span>
         <span class="n">description</span><span class="o">=</span><span class="s2">"Serve a scanner console's calls to pulserver over a WebSocket."</span><span class="p">,</span>
     <span class="p">)</span>
-    <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s2">"--plugins"</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="n">Path</span><span class="p">,</span> <span class="n">required</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s2">"plugin directory"</span><span class="p">)</span>
+    <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span>
+        <span class="s2">"--plugins"</span><span class="p">,</span>
+        <span class="nb">type</span><span class="o">=</span><span class="n">Path</span><span class="p">,</span>
+        <span class="n">action</span><span class="o">=</span><span class="s2">"append"</span><span class="p">,</span>
+        <span class="n">required</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="n">help</span><span class="o">=</span><span class="s2">"plugin directory, repeatable; the first holding a plugin is used"</span><span class="p">,</span>
+    <span class="p">)</span>
     <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span>
         <span class="s2">"--limits"</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="n">Path</span><span class="p">,</span> <span class="n">required</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s2">"file holding a [Limits] block"</span>
     <span class="p">)</span>
@@ -959,7 +968,9 @@
     <span class="n">recon</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span>
         <span class="s2">"--recon-plugins"</span><span class="p">,</span>
         <span class="nb">type</span><span class="o">=</span><span class="n">Path</span><span class="p">,</span>
-        <span class="n">help</span><span class="o">=</span><span class="s2">"reconstruction plugin directory, run in this process instead of a proxy"</span><span class="p">,</span>
+        <span class="n">action</span><span class="o">=</span><span class="s2">"append"</span><span class="p">,</span>
+        <span class="n">help</span><span class="o">=</span><span class="s2">"reconstruction plugin directory, repeatable, run in this process "</span>
+        <span class="s2">"instead of a proxy"</span><span class="p">,</span>
     <span class="p">)</span>
     <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s2">"--push"</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s2">"recon-side intake each design is pushed to"</span><span class="p">)</span>
     <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s2">"--host"</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="s2">"127.0.0.1"</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s2">"address to listen on"</span><span class="p">)</span>
