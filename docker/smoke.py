@@ -1,11 +1,13 @@
 """Drive a console as a scanner console does: an exam, then one scan.
 
-Usage: ``python docker/smoke.py [ADDRESS [COIL [SUBJECT]]]``, the exam started
-on the subject named, the vials by default, in the coil named, or in the
-console's own. Exits 1 unless the localizer holds three planes and the scan
-returns at least one DICOM image with pixels.
+Usage: ``python docker/smoke.py [ADDRESS [COIL]] [--subject SUBJECT]
+[--exam-only]``, the exam started on the subject named, the vials by default,
+in the coil named, or in the console's own. Exits 1 unless the localizer holds
+three planes and, without ``--exam-only``, the scan returns at least one DICOM
+image with pixels.
 """
 
+import argparse
 import base64
 import io
 import json
@@ -16,9 +18,6 @@ import pydicom
 from websockets.exceptions import InvalidHandshake
 from websockets.sync.client import connect
 
-ADDRESS = sys.argv[1] if len(sys.argv) > 1 else "ws://127.0.0.1:8765"
-COIL = {"coil": sys.argv[2]} if len(sys.argv) > 2 else {}
-SUBJECT = sys.argv[3] if len(sys.argv) > 3 else "vials"
 PROTOCOL_BEGIN, PROTOCOL_END = "[NimPulseqGUI Protocol]", "[NimPulseqGUI Protocol End]"
 PRESCRIPTION = [f"fov_offset_{a}: 0.0" for a in "xyz"] + [
     f"fov_rotation_{i}{j}: {1.0 if i == j else 0.0}"
@@ -28,10 +27,16 @@ PRESCRIPTION = [f"fov_offset_{a}: 0.0" for a in "xyz"] + [
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("address", nargs="?", default="ws://127.0.0.1:8765")
+    parser.add_argument("coil", nargs="?")
+    parser.add_argument("--subject", default="vials")
+    parser.add_argument("--exam-only", action="store_true")
+    args = parser.parse_args()
     deadline = time.monotonic() + 600.0
     while True:
         try:
-            socket = connect(ADDRESS, max_size=None, open_timeout=10).__enter__()
+            socket = connect(args.address, max_size=None, open_timeout=10).__enter__()
             break
         # A published port may accept a connection before the console listens,
         # and then close it unanswered.
@@ -54,8 +59,12 @@ def main() -> int:
                 return reply, messages
             messages.append(reply)
 
-    exam, _ = call("exam", subject=SUBJECT, **COIL)
+    coil = {} if args.coil is None else {"coil": args.coil}
+    exam, _ = call("exam", subject=args.subject, **coil)
     print(f"localizer: {len(exam['localizer'])} planes")
+    if args.exam_only:
+        socket.close()
+        return 0 if len(exam["localizer"]) == 3 else 1
     block = (
         "\n".join([PROTOCOL_BEGIN, "nx: 32", "ny: 32", *PRESCRIPTION, PROTOCOL_END])
         + "\n"
