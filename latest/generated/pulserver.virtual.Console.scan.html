@@ -538,9 +538,15 @@
 DICOM, <code class="docutils literal notranslate"><span class="pre">{&quot;dicom&quot;:</span> <span class="pre">base64,</span> <span class="pre">&quot;name&quot;:</span> <span class="pre">file</span> <span class="pre">name}</span></code>, converting those it
 returns as MRD, and its texts as <code class="docutils literal notranslate"><span class="pre">{&quot;text&quot;:</span> <span class="pre">...}</span></code>. With
 <code class="docutils literal notranslate"><span class="pre">sound</span></code>, each clock also carries the span’s sound as <code class="docutils literal notranslate"><span class="pre">sound</span></code>,
-base64 of 16-bit little-endian stereo samples at <code class="docutils literal notranslate"><span class="pre">rate</span></code> Hz. The
-status is 1 when a text reports a refused or failed series, or when
-the scan is cancelled.</p>
+base64 of 16-bit little-endian stereo samples at <code class="docutils literal notranslate"><span class="pre">rate</span></code> Hz. At a
+speed, the scan is simulated ahead of its clock, and until the clock
+starts <code class="docutils literal notranslate"><span class="pre">emit</span></code> receives <code class="docutils literal notranslate"><span class="pre">{&quot;preparing&quot;:</span> <span class="pre">s}</span></code> about twice a second,
+with the wall-clock time left before it does, or <code class="docutils literal notranslate"><span class="pre">null</span></code> before there
+is an estimate. The status is 1 when a text reports a refused or
+failed series, or when the scan is cancelled.</p>
+<p>The exam’s scans play on one set of isochromats, each from
+equilibrium, which keeps the pulses the engine has computed; a scan
+started while another plays has isochromats of its own.</p>
 </dd></dl>
 
 </section>

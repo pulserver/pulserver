@@ -650,9 +650,12 @@ the client sends it on; the sound of its gradients can be written as it plays:</
     <span class="n">received</span> <span class="o">=</span> <span class="n">virtual</span><span class="o">.</span><span class="n">send</span><span class="p">((</span><span class="s2">"127.0.0.1"</span><span class="p">,</span> <span class="mi">9002</span><span class="p">),</span> <span class="n">design</span><span class="p">,</span> <span class="n">acquired</span><span class="p">())</span>
 </pre></div>
 </div>
-<p>At <code class="docutils literal notranslate"><span class="pre">speed=1.0</span></code> the scan lasts as long as it would on a scanner, or longer where
-the simulation takes longer than the blocks it plays; without <code class="docutils literal notranslate"><span class="pre">speed</span></code>, the
-spans come as fast as they are computed.</p>
+<p>The spans are simulated in a thread of their own, ahead of the clock. At
+<code class="docutils literal notranslate"><span class="pre">speed=1.0</span></code> the clock starts once the simulation, at the rate it has run so
+far, stays ahead of it to the end of the scan, which then lasts as long as it
+would on a scanner; <code class="docutils literal notranslate"><span class="pre">preparing</span></code>, when given, receives the time left before the
+clock starts. A span simulated after its end on the clock holds the clock until
+it is. Without <code class="docutils literal notranslate"><span class="pre">speed</span></code>, the spans come as fast as they are simulated.</p>
 </section>
 <section id="scan-from-the-command-line">
 <h2>Scan from the command line<a class="headerlink" href="#scan-from-the-command-line" title="Link to this heading">#</a></h2>
@@ -734,8 +737,9 @@ design up in its store: give that store as <code class="docutils literal notrans
 intake as <code class="docutils literal notranslate"><span class="pre">--push</span></code>. The images go to <code class="docutils literal notranslate"><span class="pre">images.h5</span></code> in <code class="docutils literal notranslate"><span class="pre">--output</span></code>, the DICOM
 datasets to the files they are named by, and a text beginning <code class="docutils literal notranslate"><span class="pre">pulserver:</span></code>
 ends the command with status 1.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">--speed</span></code> plays the scan that many times as fast as a scanner; without it,
-the scan runs as fast as the simulation.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--speed</span></code> plays the scan that many times as fast as a scanner, once the
+simulation is far enough ahead, writing the time left before it is to
+standard error; without it, the scan runs as fast as the simulation.</p></li>
 </ul>
 </section>
 <section id="prescribe-an-orientation">
@@ -790,7 +794,8 @@ coils, BrainWeb’s normal brain, so that an exam on <code class="docutils liter
 nothing, and the <code class="docutils literal notranslate"><span class="pre">gre2d</span></code> plugin reconstructed by the built-in Cartesian FFT,
 <code class="docutils literal notranslate"><span class="pre">pulserver.recon.handlers.simplefft</span></code>. It serves the pages of
 <code class="docutils literal notranslate"><span class="pre">https://pulserver.github.io</span></code>, <code class="docutils literal notranslate"><span class="pre">http://localhost:8000</span></code> and
-<code class="docutils literal notranslate"><span class="pre">http://127.0.0.1:8000</span></code> on port 8765 of this computer:</p>
+<code class="docutils literal notranslate"><span class="pre">http://127.0.0.1:8000</span></code> on port 8765 of this computer, and plays each scan at
+the scanner’s speed, <code class="docutils literal notranslate"><span class="pre">--speed=1</span></code>:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>docker<span class="w"> </span>run<span class="w"> </span>-d<span class="w"> </span>--restart<span class="w"> </span>unless-stopped<span class="w"> </span>--name<span class="w"> </span>pulserver<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>-p<span class="w"> </span><span class="m">127</span>.0.0.1:8765:8765<span class="w"> </span>ghcr.io/pulserver/pulserver
 </pre></div>
@@ -823,7 +828,7 @@ it repeats:</p>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">scan</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">design</span></code>, <code class="docutils literal notranslate"><span class="pre">rotation</span></code> (nine elements), <code class="docutils literal notranslate"><span class="pre">centre_mm</span></code>, <code class="docutils literal notranslate"><span class="pre">sound</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">clock</span></code> and <code class="docutils literal notranslate"><span class="pre">duration</span></code> after each span played, with the span’s <code class="docutils literal notranslate"><span class="pre">sound</span></code> when asked, as base64 of 16-bit little-endian stereo samples at <code class="docutils literal notranslate"><span class="pre">rate</span></code> Hz; <code class="docutils literal notranslate"><span class="pre">dicom</span></code> and <code class="docutils literal notranslate"><span class="pre">name</span></code> for each image the reconstruction returns, <code class="docutils literal notranslate"><span class="pre">text</span></code>, then <code class="docutils literal notranslate"><span class="pre">done</span></code> with the status</p></td>
+<td><p>at a speed, <code class="docutils literal notranslate"><span class="pre">preparing</span></code> about twice a second until the clock starts, the wall-clock time left in s or <code class="docutils literal notranslate"><span class="pre">null</span></code> before there is an estimate; <code class="docutils literal notranslate"><span class="pre">clock</span></code> and <code class="docutils literal notranslate"><span class="pre">duration</span></code> after each span played, with the span’s <code class="docutils literal notranslate"><span class="pre">sound</span></code> when asked, as base64 of 16-bit little-endian stereo samples at <code class="docutils literal notranslate"><span class="pre">rate</span></code> Hz; <code class="docutils literal notranslate"><span class="pre">dicom</span></code> and <code class="docutils literal notranslate"><span class="pre">name</span></code> for each image the reconstruction returns, <code class="docutils literal notranslate"><span class="pre">text</span></code>, then <code class="docutils literal notranslate"><span class="pre">done</span></code> with the status</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">cancel</span></code></p></td>
 <td><p></p></td>
@@ -838,7 +843,9 @@ pulserver by another route than a WebSocket, such as the messages of a Web
 Worker running pulserver beside a browser page.</p>
 <p>A subject named <code class="docutils literal notranslate"><span class="pre">brainweb</span></code> is BrainWeb’s normal brain; any other is the vials.
 An exam is scanned in the coil it names, or in the one it had, <code class="docutils literal notranslate"><span class="pre">--coil</span></code> at
-first; a head coil needs the <code class="docutils literal notranslate"><span class="pre">coils</span></code> extra. The localizer is drawn from the
+first; a head coil needs the <code class="docutils literal notranslate"><span class="pre">coils</span></code> extra. The exam’s scans play on one set of
+isochromats, each from equilibrium, so that a scan after the first neither
+builds them nor computes again the pulses an earlier scan played. The localizer is drawn from the
 phantom’s proton density, so an exam can be planned before any scan. MaRGE is
 such a console when <code class="docutils literal notranslate"><span class="pre">MARGE_PULSERVER</span></code> holds the address, <code class="docutils literal notranslate"><span class="pre">ws://127.0.0.1:8765</span></code>
 here: its sequences are then the plugins, its subject names the phantom, its RF
