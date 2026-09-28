@@ -130,10 +130,10 @@ def test_an_exam_starts_in_the_coil_it_names_and_keeps_it_until_another_is_named
 ):
     console = _console(tmp_path)
 
-    console.exam("vials", "head48")
+    console.exam("vials", "body/head48")
     console.exam("vials")
 
-    assert console.coil is virtual.COILS["head48"]
+    assert console.coil is virtual.COILS["body/head48"]
     with pytest.raises(ValueError, match="coils are"):
         console.exam("vials", "knee")
 
@@ -320,7 +320,12 @@ def test_the_gateway_answers_a_consoles_calls_over_a_websocket(tmp_path):
             plugins = json.loads(client.recv(timeout=DEADLINE))
             client.send(json.dumps({"id": 2, "call": "coils"}))
             coils = json.loads(client.recv(timeout=DEADLINE))
-            request = {"id": 3, "call": "exam", "subject": "vials", "coil": "head32"}
+            request = {
+                "id": 3,
+                "call": "exam",
+                "subject": "vials",
+                "coil": "body/head48",
+            }
             client.send(json.dumps(request))
             exam = json.loads(client.recv(timeout=DEADLINE))
             examined_in = console.coil
@@ -347,7 +352,7 @@ def test_the_gateway_answers_a_consoles_calls_over_a_websocket(tmp_path):
     assert coils == {"id": 2, "coils": console.coils()}
     assert exam["id"] == 3
     assert len(exam["localizer"]) == 3
-    assert examined_in is virtual.COILS["head32"]
+    assert examined_in is virtual.COILS["body/head48"]
     assert refused == {"id": 4, "error": "unknown call 'reboot'"}
     assert {message["id"] for message in scanned} == {7}
     assert "clock" in scanned[0]
@@ -430,7 +435,7 @@ def test_the_console_command_serves_a_console_of_its_options(tmp_path, monkeypat
             "--spacing",
             "2",
             "--coil",
-            "head8",
+            "head8/head32",
             "--origin",
             "https://pulserver.github.io",
         ]
@@ -443,7 +448,7 @@ def test_the_console_command_serves_a_console_of_its_options(tmp_path, monkeypat
     assert console.recon == ("recon.local", 9020)
     assert console.local is None
     assert console.spacing == pytest.approx(2e-3)
-    assert console.coil is virtual.COILS["head8"]
+    assert console.coil is virtual.COILS["head8/head32"]
     assert console.field_t == ANY_ORIENTATION["B0"]
 
 
