@@ -721,7 +721,8 @@ normal brain, downloaded on first use by the <code class="docutils literal notra
 millimetres. Without <code class="docutils literal notranslate"><span class="pre">--phantom</span></code>, the phantom is seven vials of water around
 one of fat, with T1 from 0.3 s to 2.0 s and T2 from 0.04 s to 0.3 s.
 <code class="docutils literal notranslate"><span class="pre">--spacing</span></code>, in mm, and <code class="docutils literal notranslate"><span class="pre">--coils</span></code> set its isochromats and its receive coils;
-<code class="docutils literal notranslate"><span class="pre">--coil</span></code> scans it with one of the scanner’s coils instead, whose
+<code class="docutils literal notranslate"><span class="pre">--coil</span></code> scans it with one of the scanner’s coils instead, <code class="docutils literal notranslate"><span class="pre">body</span></code>,
+<code class="docutils literal notranslate"><span class="pre">body/head48</span></code> or <code class="docutils literal notranslate"><span class="pre">head8/head32</span></code>, named <code class="docutils literal notranslate"><span class="pre">transmit/receive</span></code>, whose
 sensitivities bartorch samples from BART’s coil models, which the <code class="docutils literal notranslate"><span class="pre">coils</span></code>
 extra installs (<code class="docutils literal notranslate"><span class="pre">pip</span> <span class="pre">install</span> <span class="pre">'pulserver[coils]'</span></code>). The sensitivities at
 every isochromat are written to a temporary file mapped into memory; where

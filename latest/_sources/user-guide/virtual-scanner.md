@@ -173,7 +173,8 @@ line, is written to standard output, and the scan clock to standard error.
   millimetres. Without `--phantom`, the phantom is seven vials of water around
   one of fat, with T1 from 0.3 s to 2.0 s and T2 from 0.04 s to 0.3 s.
   `--spacing`, in mm, and `--coils` set its isochromats and its receive coils;
-  `--coil` scans it with one of the scanner's coils instead, whose
+  `--coil` scans it with one of the scanner's coils instead, `body`,
+  `body/head48` or `head8/head32`, named `transmit/receive`, whose
   sensitivities bartorch samples from BART's coil models, which the `coils`
   extra installs (`pip install 'pulserver[coils]'`). The sensitivities at
   every isochromat are written to a temporary file mapped into memory; where

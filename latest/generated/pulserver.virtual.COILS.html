@@ -531,13 +531,14 @@
 <h1>COILS<a class="headerlink" href="#coils" title="Link to this heading">#</a></h1>
 <dl class="py data">
 <dt class="sig sig-object py" id="pulserver.virtual.COILS">
-<span class="sig-prename descclassname"><span class="pre">pulserver.virtual.</span></span><span class="sig-name descname"><span class="pre">COILS</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">{'body':</span> <span class="pre">Coil(name='body',</span> <span class="pre">transmit_model=None,</span> <span class="pre">receive_model=None),</span> <span class="pre">'head32':</span> <span class="pre">Coil(name='head32',</span> <span class="pre">transmit_model=None,</span> <span class="pre">receive_model=('HEAD_3D_64CH',</span> <span class="pre">32)),</span> <span class="pre">'head48':</span> <span class="pre">Coil(name='head48',</span> <span class="pre">transmit_model=None,</span> <span class="pre">receive_model=('HEAD_3D_64CH',</span> <span class="pre">48)),</span> <span class="pre">'head8':</span> <span class="pre">Coil(name='head8',</span> <span class="pre">transmit_model=('HEAD_2D_8CH',</span> <span class="pre">8),</span> <span class="pre">receive_model=('HEAD_2D_8CH',</span> <span class="pre">8))}</span></span><a class="headerlink" href="#pulserver.virtual.COILS" title="Link to this definition">#</a></dt>
-<dd><p>a body coil, an 8-channel transmit and
-receive head coil for parallel transmission, and 32- and 48-channel receive
-head arrays transmitting on the body coil.</p>
+<span class="sig-prename descclassname"><span class="pre">pulserver.virtual.</span></span><span class="sig-name descname"><span class="pre">COILS</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">{'body':</span> <span class="pre">Coil(name='body',</span> <span class="pre">transmit_model=None,</span> <span class="pre">receive_model=None),</span> <span class="pre">'body/head48':</span> <span class="pre">Coil(name='body/head48',</span> <span class="pre">transmit_model=None,</span> <span class="pre">receive_model=('HEAD_3D_64CH',</span> <span class="pre">48)),</span> <span class="pre">'head8/head32':</span> <span class="pre">Coil(name='head8/head32',</span> <span class="pre">transmit_model=('HEAD_2D_8CH',</span> <span class="pre">8),</span> <span class="pre">receive_model=('HEAD_3D_64CH',</span> <span class="pre">32))}</span></span><a class="headerlink" href="#pulserver.virtual.COILS" title="Link to this definition">#</a></dt>
+<dd><p>the body coil
+both ways, the body coil transmitting to a 48-channel receive head array,
+and an 8-channel head coil for parallel transmission with a 32-channel
+receive head array.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Type<span class="colon">:</span></dt>
-<dd class="field-odd"><p>The virtual scanner’s coils, by name</p>
+<dd class="field-odd"><p>The virtual scanner’s coils, by name, <code class="docutils literal notranslate"><span class="pre">transmit/receive</span></code></p>
 </dd>
 </dl>
 </dd></dl>

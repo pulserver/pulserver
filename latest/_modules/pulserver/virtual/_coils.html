@@ -474,8 +474,9 @@
 <a class="viewcode-back" href="../../../generated/pulserver.virtual.Coil.html#pulserver.virtual.Coil">[docs]</a>
 <span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 <span class="k">class</span><span class="w"> </span><span class="nc">Coil</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""An RF coil of the virtual scanner, fixed in the physical frame.</span>
+<span class="w">    </span><span class="sd">"""The RF coils of an exam, fixed in the physical frame: the coil pulses are transmitted on and the coil the signal is received by.</span>
 
+<span class="sd">    ``name`` is ``transmit/receive``, or one coil's name where it does both.</span>
 <span class="sd">    Each side is BART's coil model (``HEAD_2D_8CH`` or ``HEAD_3D_64CH``) and</span>
 <span class="sd">    the number of its channels the coil takes, the first ones, as ``phantom</span>
 <span class="sd">    -S`` selects them; a side without a model is one channel of unit</span>
@@ -486,9 +487,9 @@
 
 <span class="sd">    Receive sensitivities are scaled to a root sum of squares of 1 at the</span>
 <span class="sd">    isocentre. Transmit sensitivities are the complex conjugates of the</span>
-<span class="sd">    receive ones, the quasi-static limit of reciprocity, scaled so that the</span>
-<span class="sd">    :attr:`default_shim` plays a pulse at its nominal amplitude at the</span>
-<span class="sd">    isocentre.</span>
+<span class="sd">    receive sensitivities of the transmit side's model, the quasi-static limit</span>
+<span class="sd">    of reciprocity, scaled so that the :attr:`default_shim` plays a pulse at</span>
+<span class="sd">    its nominal amplitude at the isocentre.</span>
 <span class="sd">    """</span>
 
     <span class="n">name</span><span class="p">:</span> <span class="nb">str</span>
@@ -541,9 +542,8 @@
     <span class="n">coil</span><span class="o">.</span><span class="n">name</span><span class="p">:</span> <span class="n">coil</span>
     <span class="k">for</span> <span class="n">coil</span> <span class="ow">in</span> <span class="p">(</span>
         <span class="n">Coil</span><span class="p">(</span><span class="s2">"body"</span><span class="p">),</span>
-        <span class="n">Coil</span><span class="p">(</span><span class="s2">"head8"</span><span class="p">,</span> <span class="p">(</span><span class="s2">"HEAD_2D_8CH"</span><span class="p">,</span> <span class="mi">8</span><span class="p">),</span> <span class="p">(</span><span class="s2">"HEAD_2D_8CH"</span><span class="p">,</span> <span class="mi">8</span><span class="p">)),</span>
-        <span class="n">Coil</span><span class="p">(</span><span class="s2">"head32"</span><span class="p">,</span> <span class="n">receive_model</span><span class="o">=</span><span class="p">(</span><span class="s2">"HEAD_3D_64CH"</span><span class="p">,</span> <span class="mi">32</span><span class="p">)),</span>
-        <span class="n">Coil</span><span class="p">(</span><span class="s2">"head48"</span><span class="p">,</span> <span class="n">receive_model</span><span class="o">=</span><span class="p">(</span><span class="s2">"HEAD_3D_64CH"</span><span class="p">,</span> <span class="mi">48</span><span class="p">)),</span>
+        <span class="n">Coil</span><span class="p">(</span><span class="s2">"body/head48"</span><span class="p">,</span> <span class="n">receive_model</span><span class="o">=</span><span class="p">(</span><span class="s2">"HEAD_3D_64CH"</span><span class="p">,</span> <span class="mi">48</span><span class="p">)),</span>
+        <span class="n">Coil</span><span class="p">(</span><span class="s2">"head8/head32"</span><span class="p">,</span> <span class="p">(</span><span class="s2">"HEAD_2D_8CH"</span><span class="p">,</span> <span class="mi">8</span><span class="p">),</span> <span class="p">(</span><span class="s2">"HEAD_3D_64CH"</span><span class="p">,</span> <span class="mi">32</span><span class="p">)),</span>
     <span class="p">)</span>
 <span class="p">}</span>
 
