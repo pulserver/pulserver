@@ -44,6 +44,6 @@ EXPOSE 8765
 ENTRYPOINT ["pulserver"]
 CMD ["console", "--plugins=/console/plugins", "--limits=/console/limits.txt", \
      "--store=/console/designs", "--recon-plugins=/console/recon", \
-     "--host=0.0.0.0", "--port=8765", "--spacing=2", \
+     "--host=0.0.0.0", "--port=8765", "--spacing=2", "--speed=1", \
      "--origin=https://pulserver.github.io", "--origin=http://localhost:8000", \
      "--origin=http://127.0.0.1:8000"]

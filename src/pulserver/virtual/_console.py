@@ -59,7 +59,8 @@ class Console:
     coil
         Name of the coil an exam is started with unless it names another.
     speed
-        Scan time elapsed per wall-clock second; as fast as possible without it.
+        Scan time elapsed per wall-clock second once the scan's simulation is
+        far enough ahead of its clock; as fast as it is simulated without it.
     """
 
     def __init__(
@@ -182,9 +183,12 @@ class Console:
         DICOM, ``{"dicom": base64, "name": file name}``, converting those it
         returns as MRD, and its texts as ``{"text": ...}``. With
         ``sound``, each clock also carries the span's sound as ``sound``,
-        base64 of 16-bit little-endian stereo samples at ``rate`` Hz. The
-        status is 1 when a text reports a refused or failed series, or when
-        the scan is cancelled.
+        base64 of 16-bit little-endian stereo samples at ``rate`` Hz. At a
+        speed, the scan is simulated ahead of its clock, and until the clock
+        starts ``emit`` receives ``{"preparing": s, "duration": s}`` about
+        twice a second, with the wall-clock time left before it does, or
+        ``null`` before there is an estimate. The status is 1 when a text
+        reports a refused or failed series, or when the scan is cancelled.
         """
         import ismrmrd
         import pypulseqpp as pp
@@ -205,20 +209,30 @@ class Console:
         )
         stopped = threading.Event()
 
+        def preparing(left: float | None) -> None:
+            if cancelled():
+                raise _Cancelled
+            emit({"preparing": left, "duration": scan.duration})
+
         def played() -> Iterator[np.ndarray]:
-            for chunk in scan.chunks(0.1, speed=self.speed, sound=sound):
-                if cancelled():
-                    stopped.set()
-                    return
-                clock = {"clock": chunk.stop, "duration": scan.duration}
-                if sound:
-                    samples = np.round(32767 * np.clip(chunk.sound.T, -1.0, 1.0))
-                    clock["sound"] = base64.b64encode(
-                        samples.astype("<i2").tobytes()
-                    ).decode()
-                    clock["rate"] = SAMPLE_RATE
-                emit(clock)
-                yield from chunk.readouts
+            chunks = scan.chunks(
+                0.1, speed=self.speed, sound=sound, preparing=preparing
+            )
+            try:
+                for chunk in chunks:
+                    if cancelled():
+                        raise _Cancelled
+                    clock = {"clock": chunk.stop, "duration": scan.duration}
+                    if sound:
+                        samples = np.round(32767 * np.clip(chunk.sound.T, -1.0, 1.0))
+                        clock["sound"] = base64.b64encode(
+                            samples.astype("<i2").tobytes()
+                        ).decode()
+                        clock["rate"] = SAMPLE_RATE
+                    emit(clock)
+                    yield from chunk.readouts
+            except _Cancelled:
+                stopped.set()
 
         if self.recon is None and self.local is None:
             for _ in played():
@@ -311,6 +325,10 @@ class Console:
                 reply({"error": f"unknown call {call!r}"})
         except Exception as error:
             reply({"error": f"{type(error).__name__}: {error}"})
+
+
+class _Cancelled(Exception):
+    """A scan cancelled while its simulation is under way."""
 
 
 def _subject_phantom(subject: str) -> Any:
@@ -427,7 +445,8 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--speed",
         type=float,
-        help="scan time per second; as fast as possible without it",
+        help="scan time per second, once the simulation is far enough ahead; "
+        "as fast as it is simulated without it",
     )
     return parser
 

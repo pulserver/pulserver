@@ -3,6 +3,7 @@
 import itertools
 import math
 import shutil
+import threading
 import time
 from pathlib import Path
 
@@ -113,6 +114,87 @@ def test_a_scan_played_at_a_speed_yields_each_span_once_its_clock_passes_it(
     for chunk in scan.chunks(0.05, speed=4.0, sound=False):
         assert time.monotonic() - started >= chunk.stop / 4.0
         assert chunk.sound.shape == (2, 0)
+
+
+def _slowed(scan, seconds_per_sample, seconds_per_second=0.01, held=None):
+    """Make ``scan`` simulate each span in the time given per ADC sample, or per second of scan time without one.
+
+    The span that starts at block ``held``, if any, takes 1 s more.
+    """
+    simulate = scan._readouts
+
+    def slow(first, last):
+        samples = scan._adc_samples(first, last)
+        duration = scan._starts[last] - scan._starts[first]
+        time.sleep(
+            seconds_per_sample * samples if samples else seconds_per_second * duration
+        )
+        if first == held:
+            time.sleep(1.0)
+        return simulate(first, last)
+
+    scan._readouts = slow
+
+
+def _released(scan, speed, preparing=None):
+    """Play ``scan`` at ``speed``; return each span and the time it was released."""
+    return [
+        (chunk, time.monotonic())
+        for chunk in scan.chunks(0.05, speed=speed, sound=False, preparing=preparing)
+    ]
+
+
+def test_a_scan_simulated_slower_than_it_plays_starts_its_clock_once_it_will_not_be_held(
+    converted,
+):
+    scan = virtual.Scan(converted / "gre_2d_3sl.seq", pp.Isochromats(POSITIONS))
+    total = sum(scan._adc_samples(*span) for span in scan._spans(0.05))
+    # Twice as long to simulate as to play, all of it in the readouts.
+    _slowed(scan, 2.0 * scan.duration / total)
+    reports = []
+    released = _released(scan, 1.0, reports.append)
+
+    # No estimate before a span that acquires has been simulated.
+    assert reports[0] is None and all(left > 0.0 for left in reports if left)
+    started = released[0][1] - released[0][0].stop
+    for chunk, at in released:
+        assert at - started == pytest.approx(chunk.stop, abs=0.03)
+
+
+def test_a_span_simulated_after_its_time_holds_the_clock_and_the_rest_keep_its_pace(
+    converted,
+):
+    scan = virtual.Scan(converted / "gre_2d_3sl.seq", pp.Isochromats(POSITIONS))
+    spans = scan._spans(0.05)
+    total = sum(scan._adc_samples(*span) for span in spans)
+    _slowed(scan, 0.5 * scan.duration / total, held=spans[5][0])
+    offsets = [at - chunk.stop for chunk, at in _released(scan, 1.0)]
+
+    before, after = offsets[:5], offsets[5:]
+    assert max(before) - min(before) < 0.03
+    assert min(after) > max(before) + 0.5
+    assert max(after) - min(after) < 0.03
+
+
+def test_a_scan_closed_while_playing_stops_simulating(converted):
+    scan = virtual.Scan(converted / "gre_2d_3sl.seq", pp.Isochromats(POSITIONS))
+    _slowed(scan, 0.0, seconds_per_second=1.0)
+    chunks = scan.chunks(0.05, sound=False)
+    next(chunks)
+    chunks.close()
+    assert not any(t.name == "pulserver-scan" for t in threading.enumerate())
+
+
+def test_an_error_in_the_simulation_is_raised_where_the_spans_are_taken(converted):
+    scan = virtual.Scan(converted / "gre_2d_3sl.seq", pp.Isochromats(POSITIONS))
+
+    def failing(first, last):
+        raise RuntimeError("the engine refused a block")
+
+    scan._readouts = failing
+    for speed in (None, 1.0):
+        with pytest.raises(RuntimeError, match="refused a block"):
+            list(scan.chunks(0.05, speed=speed, sound=False))
 
 
 @pytest.mark.parametrize(

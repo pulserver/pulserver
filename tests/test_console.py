@@ -293,6 +293,56 @@ def test_a_scan_asked_for_its_sound_streams_it_with_its_clock(tmp_path):
     assert np.abs(samples).max() > 0
 
 
+def test_a_scan_cancelled_while_it_prepares_stops_before_its_clock_starts(
+    tmp_path, monkeypatch
+):
+    simulate = virtual.Scan._readouts
+
+    def slow(self, first, last):
+        time.sleep(1.0)
+        return simulate(self, first, last)
+
+    # Four times as long to simulate as to play: the clock would wait about
+    # three quarters of the simulation.
+    monkeypatch.setattr(virtual.Scan, "_readouts", slow)
+    console = _console(tmp_path, speed=1.0)
+    design = console.design("generate", "gre2d", _block(TE=5000, nx=32, ny=32))[
+        "design"
+    ]
+    messages = []
+    started = time.monotonic()
+
+    status = console.scan(
+        design,
+        rotation=np.eye(3),
+        centre_mm=(0.0, 0.0, 0.0),
+        emit=messages.append,
+        cancelled=lambda: bool(messages),
+    )
+
+    assert status == 1
+    assert time.monotonic() - started < 10.0
+    assert messages and all("preparing" in m for m in messages)
+
+
+def test_a_scan_at_a_speed_reports_its_preparation_before_its_clock_starts(tmp_path):
+    console = _console(tmp_path, speed=50.0)
+    design = console.design("generate", "gre2d", _block(TE=5000, nx=32, ny=32))[
+        "design"
+    ]
+    messages = []
+
+    status = console.scan(
+        design, rotation=np.eye(3), centre_mm=(0.0, 0.0, 0.0), emit=messages.append
+    )
+
+    assert status == 0
+    preparing = [m for m in messages if "preparing" in m]
+    assert preparing and messages[: len(preparing)] == preparing
+    assert preparing[0]["preparing"] is None
+    assert {m["duration"] for m in messages} == {messages[-1]["duration"]}
+
+
 def test_the_gateway_answers_a_consoles_calls_over_a_websocket(tmp_path):
     console = _console(tmp_path)
     loop = asyncio.new_event_loop()

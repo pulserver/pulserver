@@ -119,9 +119,12 @@ with wave.open("scan.wav", "wb") as audio:
     received = virtual.send(("127.0.0.1", 9002), design, acquired())
 ```
 
-At `speed=1.0` the scan lasts as long as it would on a scanner, or longer where
-the simulation takes longer than the blocks it plays; without `speed`, the
-spans come as fast as they are computed.
+The spans are simulated in a thread of their own, ahead of the clock. At
+`speed=1.0` the clock starts once the simulation, at the rate it has run so
+far, stays ahead of it to the end of the scan, which then lasts as long as it
+would on a scanner; `preparing`, when given, receives the time left before the
+clock starts. A span simulated after its end on the clock holds the clock until
+it is. Without `speed`, the spans come as fast as they are simulated.
 
 ## Scan from the command line
 
@@ -185,8 +188,9 @@ line, is written to standard output, and the scan clock to standard error.
   intake as `--push`. The images go to `images.h5` in `--output`, the DICOM
   datasets to the files they are named by, and a text beginning `pulserver:`
   ends the command with status 1.
-- `--speed` plays the scan that many times as fast as a scanner; without it,
-  the scan runs as fast as the simulation.
+- `--speed` plays the scan that many times as fast as a scanner, once the
+  simulation is far enough ahead, writing the time left before it is to
+  standard error; without it, the scan runs as fast as the simulation.
 
 ## Prescribe an orientation
 
@@ -245,7 +249,8 @@ coils, BrainWeb's normal brain, so that an exam on `brainweb` downloads
 nothing, and the `gre2d` plugin reconstructed by the built-in Cartesian FFT,
 `pulserver.recon.handlers.simplefft`. It serves the pages of
 `https://pulserver.github.io`, `http://localhost:8000` and
-`http://127.0.0.1:8000` on port 8765 of this computer:
+`http://127.0.0.1:8000` on port 8765 of this computer, and plays each scan at
+the scanner's speed, `--speed=1`:
 
 ```bash
 docker run -d --restart unless-stopped --name pulserver \
@@ -261,7 +266,7 @@ it repeats:
 | `coils` | | `coils`: each coil's `name` and its `transmit` and `receive` channels |
 | `list`, `validate`, `generate`, `import` | `plugin`, `block` | `status` and `reply`, as `pulserver design` answers; `design` for a generated or imported design |
 | `exam` | `subject`, `coil` | `localizer`: the axial, coronal and sagittal images of the subject's phantom, as base64 DICOM files |
-| `scan` | `design`, `rotation` (nine elements), `centre_mm`, `sound` | `clock` and `duration` after each span played, with the span's `sound` when asked, as base64 of 16-bit little-endian stereo samples at `rate` Hz; `dicom` and `name` for each image the reconstruction returns, `text`, then `done` with the status |
+| `scan` | `design`, `rotation` (nine elements), `centre_mm`, `sound` | at a speed, `preparing` and `duration` about twice a second until the clock starts, `preparing` the wall-clock time left in s or `null` before there is an estimate; `clock` and `duration` after each span played, with the span's `sound` when asked, as base64 of 16-bit little-endian stereo samples at `rate` Hz; `dicom` and `name` for each image the reconstruction returns, `text`, then `done` with the status |
 | `cancel` | | stops the scan in progress |
 
 {meth}`Console.answer <pulserver.virtual.Console.answer>` answers one request
