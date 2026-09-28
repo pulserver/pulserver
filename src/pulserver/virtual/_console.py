@@ -15,6 +15,8 @@ from typing import Any
 
 import numpy as np
 
+from .._plugins import PluginPath, directories, names
+
 #: The design calls a console forwards, answered as ``pulserver design`` answers them.
 DESIGN_CALLS = ("list", "validate", "generate", "import")
 
@@ -40,7 +42,8 @@ class Console:
     Parameters
     ----------
     plugins
-        Directory of the scanner-sequence plugins.
+        Directories of the scanner-sequence plugins, in search order: a name
+        is the plugin of the first directory holding ``<name>.py``.
     limits
         Text of the ``[Limits]`` block every design is made under; its ``B0``
         is the virtual magnet's field.
@@ -49,8 +52,8 @@ class Console:
     recon
         ``(host, port)`` of the reconstruction proxy.
     recon_plugins
-        Directory of reconstruction plugin files, ``<plugin>.py``, which
-        reconstruct each scan in this process
+        Directories of reconstruction plugin files, ``<plugin>.py``, in search
+        order, which reconstruct each scan in this process
         (:class:`~pulserver.proxy.LocalReconstruction`).
     push
         Recon-side intake each design is pushed to.
@@ -66,11 +69,11 @@ class Console:
     def __init__(
         self,
         *,
-        plugins: Path | str,
+        plugins: PluginPath,
         limits: str,
         store: Path | str,
         recon: tuple[str, int] | None = None,
-        recon_plugins: Path | str | None = None,
+        recon_plugins: PluginPath | None = None,
         push: str | None = None,
         spacing: float = 1e-3,
         coil: str = "body",
@@ -83,7 +86,7 @@ class Console:
             raise ValueError(
                 "a console reconstructs through a proxy or in this process, not both"
             )
-        self.plugins = Path(plugins)
+        self.plugins = directories(plugins)
         self.limits = limits
         self.store = Path(store)
         self.recon = recon
@@ -115,7 +118,7 @@ class Console:
             )
         request = {
             "call": call,
-            "plugins": str(self.plugins),
+            "plugins": [str(directory) for directory in self.plugins],
             "plugin": plugin,
             "limits": self.limits,
             "store": str(self.store),
@@ -132,7 +135,7 @@ class Console:
 
     def plugin_names(self) -> list[str]:
         """Return the names of the plugins a console can list."""
-        return sorted(path.stem for path in self.plugins.glob("*.py"))
+        return names(self.plugins)
 
     def coils(self) -> list[dict[str, Any]]:
         """Return each coil an exam can be started with: its ``name`` and its ``transmit`` and ``receive`` channels."""
@@ -476,7 +479,13 @@ def _parser() -> argparse.ArgumentParser:
         prog="pulserver console",
         description="Serve a scanner console's calls to pulserver over a WebSocket.",
     )
-    parser.add_argument("--plugins", type=Path, required=True, help="plugin directory")
+    parser.add_argument(
+        "--plugins",
+        type=Path,
+        action="append",
+        required=True,
+        help="plugin directory, repeatable; the first holding a plugin is used",
+    )
     parser.add_argument(
         "--limits", type=Path, required=True, help="file holding a [Limits] block"
     )
@@ -486,7 +495,9 @@ def _parser() -> argparse.ArgumentParser:
     recon.add_argument(
         "--recon-plugins",
         type=Path,
-        help="reconstruction plugin directory, run in this process instead of a proxy",
+        action="append",
+        help="reconstruction plugin directory, repeatable, run in this process "
+        "instead of a proxy",
     )
     parser.add_argument("--push", help="recon-side intake each design is pushed to")
     parser.add_argument("--host", default="127.0.0.1", help="address to listen on")

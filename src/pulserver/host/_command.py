@@ -37,7 +37,11 @@ def _parser() -> argparse.ArgumentParser:
         sub = calls.add_parser(name, help=help_text, description=help_text)
         if plugin:
             sub.add_argument(
-                "--plugins", type=Path, required=True, help="directory of <plugin>.py"
+                "--plugins",
+                type=Path,
+                action="append",
+                required=True,
+                help="directory of <plugin>.py, repeatable; the first holding it is used",
             )
             sub.add_argument("--plugin", required=True, help="scanner-sequence plugin")
         if limits:
@@ -120,7 +124,11 @@ def _parser() -> argparse.ArgumentParser:
         "its socket until SIGTERM or SIGINT.",
     )
     serve.add_argument(
-        "--plugins", type=Path, required=True, help="directory of <plugin>.py to warm"
+        "--plugins",
+        type=Path,
+        action="append",
+        required=True,
+        help="directory of <plugin>.py to warm, repeatable",
     )
     serve.add_argument(
         "--socket", type=Path, required=True, help="Unix socket to listen on"
@@ -140,7 +148,7 @@ def request(args: argparse.Namespace, block: str) -> dict[str, Any]:
     """
     found: dict[str, Any] = {"call": args.call}
     if getattr(args, "plugin", None) is not None:
-        found["plugins"] = str(args.plugins.absolute())
+        found["plugins"] = [str(path.absolute()) for path in args.plugins]
         found["plugin"] = args.plugin
     if getattr(args, "limits", None) is not None:
         found["limits"] = args.limits.read_text()

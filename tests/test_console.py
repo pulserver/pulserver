@@ -548,11 +548,15 @@ def test_the_console_command_reconstructs_in_process_with_recon_plugins(
     options = [
         "console",
         "--plugins",
+        str(tmp_path / "sequences"),
+        "--plugins",
         str(PLUGINS),
         "--limits",
         str(limits),
         "--store",
         str(tmp_path / "designs"),
+        "--recon-plugins",
+        str(tmp_path / "recon"),
         "--recon-plugins",
         str(RECON_PLUGINS),
     ]
@@ -560,6 +564,29 @@ def test_the_console_command_reconstructs_in_process_with_recon_plugins(
     assert _cli.main(options) == 0
     console = served["console"]
     assert console.recon is None
-    assert console.local.plugins == RECON_PLUGINS
+    assert console.plugins == (tmp_path / "sequences", PLUGINS)
+    assert console.local.plugins == (tmp_path / "recon", RECON_PLUGINS)
     with pytest.raises(SystemExit):
         _cli.main([*options, "--recon", "recon.local:9020"])
+
+
+def test_a_console_lists_every_directorys_plugins_and_designs_from_the_first_holding_one(
+    tmp_path,
+):
+    own = tmp_path / "own"
+    own.mkdir()
+    (own / "gre2d.py").write_text((PLUGINS / "tiny.py").read_text())
+    (own / "alias.py").symlink_to(PLUGINS / "gre2d.py")
+    shipped = _console(tmp_path)
+    console = Console(
+        plugins=[own, PLUGINS],
+        limits=format_limits(ANY_ORIENTATION),
+        store=tmp_path / "designs",
+        spacing=2e-3,
+    )
+
+    generated = console.design("generate", "alias", _block(TE=5000, nx=32, ny=32))
+
+    assert console.plugin_names() == sorted({"alias", *shipped.plugin_names()})
+    assert console.design("list", "gre2d") == shipped.design("list", "tiny")
+    assert generated["status"] == 0

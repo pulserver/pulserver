@@ -8,6 +8,7 @@ from collections.abc import Callable, Iterable, Iterator
 from pathlib import Path
 from typing import Any
 
+from .._plugins import PluginPath, directories
 from ..recon import ReconContext, load_plugin
 from ..recon._runtime.application import run_application
 from ..recon._runtime.exam import ExamCacheManager
@@ -31,12 +32,13 @@ class LocalReconstruction:
     store
         Directory of designs, as the design calls write it; read only.
     plugins
-        Directory of reconstruction plugin files, ``<plugin>.py``.
+        Directories of reconstruction plugin files, ``<plugin>.py``, in search
+        order.
     """
 
-    def __init__(self, store: Path | str, plugins: Path | str) -> None:
+    def __init__(self, store: Path | str, plugins: PluginPath) -> None:
         self.designs = DesignCache(store)
-        self.plugins = Path(plugins)
+        self.plugins = directories(plugins)
         self.exams = ExamCacheManager()
 
     def run(

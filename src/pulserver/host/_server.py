@@ -13,6 +13,8 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
+from .._plugins import PluginPath, directories, names
+
 _log = logging.getLogger("pulserver.host")
 
 # How often the accept loop reaps children and looks for a stop request.
@@ -26,9 +28,10 @@ _REQUEST_LIMIT = 64 << 20
 def answer(request: Mapping[str, Any]) -> tuple[int, str]:
     """Answer a forwarded call as the command does in its own process.
 
-    ``request`` carries ``call`` and, as the call takes them, ``plugins``,
-    ``plugin``, ``limits`` (the text of a ``[Limits]`` block), ``store``,
-    ``push`` and ``input`` (the block the command reads from standard input).
+    ``request`` carries ``call`` and, as the call takes them, ``plugins``
+    (the plugin directories, in search order), ``plugin``, ``limits`` (the
+    text of a ``[Limits]`` block), ``store``, ``push`` and ``input`` (the
+    block the command reads from standard input).
     """
     from . import _service
     from ._blocks import parse_limits
@@ -36,7 +39,7 @@ def answer(request: Mapping[str, Any]) -> tuple[int, str]:
 
     inputs: dict[str, Any] = {}
     if request.get("plugin") is not None:
-        inputs["plugins"] = Path(request["plugins"])
+        inputs["plugins"] = directories(request["plugins"])
         inputs["plugin"] = str(request["plugin"])
     if request.get("limits") is not None:
         inputs["limits"] = parse_limits(str(request["limits"]))
@@ -53,8 +56,8 @@ class DesignServer:
     """Answers design calls on a Unix socket, each in a child forked from a warm parent.
 
     The parent imports the design engine, designs, checks and converts one
-    sequence of its own, and imports every plugin of ``plugins``; no plugin
-    code designs in it. A call is then answered in a child forked from it, which
+    sequence of its own, and imports every plugin the directories ``plugins``
+    hold; no plugin code designs in it. A call is then answered in a child forked from it, which
     inherits what the parent imported, answers as :func:`answer` does and
     exits: nothing a call does outlives its child. A child that ends without
     a reply, a crash of plugin code among them, is answered with an ``ERROR``
@@ -66,8 +69,8 @@ class DesignServer:
     decide who may call.
     """
 
-    def __init__(self, plugins: Path | str, socket_path: Path | str) -> None:
-        self.plugins = Path(plugins)
+    def __init__(self, plugins: PluginPath, socket_path: Path | str) -> None:
+        self.plugins = directories(plugins)
         self.socket_path = Path(socket_path)
         self._stopping = False
         self._children: dict[int, socket.socket] = {}
@@ -81,11 +84,11 @@ class DesignServer:
         from . import _service
 
         _warm_design()
-        for path in sorted(self.plugins.glob("*.py")):
+        for name in names(self.plugins):
             try:
-                _service.list_protocol(self.plugins, path.stem)
+                _service.list_protocol(self.plugins, name)
             except Exception as error:  # a plugin that fails to list stays cold
-                _log.info("warming %s stopped: %s", path.stem, error)
+                _log.info("warming %s stopped: %s", name, error)
 
     def serve(self) -> None:
         """Answer calls until :meth:`stop`, then end every running child."""
@@ -200,7 +203,7 @@ def _wait(pid: int, timeout: float) -> None:
     os.waitpid(pid, 0)
 
 
-def serve(plugins: Path | str, socket_path: Path | str) -> int:
+def serve(plugins: PluginPath, socket_path: Path | str) -> int:
     """Warm a server, then answer calls on ``socket_path`` until SIGTERM or SIGINT."""
     for name in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"):
         os.environ.setdefault(name, "1")

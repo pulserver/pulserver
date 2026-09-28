@@ -10,7 +10,6 @@ from __future__ import annotations
 import datetime
 import hashlib
 import inspect
-import re
 import shutil
 from collections.abc import Mapping
 from functools import lru_cache
@@ -19,7 +18,8 @@ from typing import Any
 
 import pypulseqpp as pp
 
-from .. import __version__, ir
+from .. import __version__, _plugins, ir
+from .._plugins import PluginPath
 from ..design import ScannerSequence, load_plugin
 from ..protocol import (
     Parameter,
@@ -36,7 +36,6 @@ from ._limits import design_system, split_limits
 from ._push import push as push_design
 from ._store import DesignStore, design_identity
 
-_PLUGIN_NAME = re.compile(r"[A-Za-z0-9_\-]+")
 # The file name the interpreter loads in a design.
 _ENTRY = "sequence.seq"
 
@@ -45,23 +44,21 @@ class CallError(Exception):
     """A design call that fails with an ``ERROR`` reply."""
 
 
-def plugin_path(plugins: Path | str, plugin: str) -> Path:
-    """Return the file of a scanner-sequence plugin, ``<plugins>/<plugin>.py``.
+def plugin_path(plugins: PluginPath, plugin: str) -> Path:
+    """Return the file of a scanner-sequence plugin, ``<plugin>.py`` of the first of ``plugins`` holding it.
 
     Raises
     ------
     CallError
-        If the name is not a plugin name or no such file exists.
+        If the name is not a plugin name or no directory holds it.
     """
-    if not _PLUGIN_NAME.fullmatch(plugin):
-        raise CallError(f"invalid plugin name {plugin!r}")
-    path = Path(plugins) / f"{plugin}.py"
-    if not path.is_file():
-        raise CallError(f"no plugin {plugin!r} in {plugins}")
-    return path
+    try:
+        return _plugins.find(plugins, plugin)
+    except (ValueError, FileNotFoundError) as error:
+        raise CallError(str(error)) from None
 
 
-def list_protocol(plugins: Path | str, plugin: str) -> str:
+def list_protocol(plugins: PluginPath, plugin: str) -> str:
     """Reply ``PROTOCOL`` and the plugin's listing block.
 
     The listing depends on the plugin file and the installed packages only.
@@ -71,7 +68,7 @@ def list_protocol(plugins: Path | str, plugin: str) -> str:
 
 
 def validate(
-    plugins: Path | str, plugin: str, limits: Mapping[str, Any], block: str
+    plugins: PluginPath, plugin: str, limits: Mapping[str, Any], block: str
 ) -> str:
     """Reply ``VALID <seconds>`` or ``INVALID``, an ``INFO`` line and the value block.
 
@@ -85,7 +82,7 @@ def validate(
 
 
 def generate(
-    plugins: Path | str,
+    plugins: PluginPath,
     plugin: str,
     limits: Mapping[str, Any],
     block: str,

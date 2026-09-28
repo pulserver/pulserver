@@ -28,8 +28,10 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument(
         "--plugins",
         type=Path,
+        action="append",
         default=None,
-        help="directory of <plugin>.py; required unless --forward is given",
+        help="directory of <plugin>.py, repeatable, the first holding it used; "
+        "required unless --forward is given",
     )
     parser.add_argument(
         "--slots",

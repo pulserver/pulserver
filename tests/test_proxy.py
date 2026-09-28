@@ -646,7 +646,16 @@ def test_a_forwarded_series_returns_the_image_a_local_worker_returns(
     )
 
 
-def _in_process(root, series, *, data=flat, readouts=None, design=None, config=""):
+def _in_process(
+    root,
+    series,
+    *,
+    data=flat,
+    readouts=None,
+    design=None,
+    config="",
+    plugins=RECON_PLUGINS,
+):
     """Reconstruct one series with :class:`LocalReconstruction`; return whether it was, and what it sent."""
     header = ismrmrd.xsd.CreateFromDocument(header_xml(series, design=design))
     count = len(series.table) if readouts is None else readouts
@@ -655,7 +664,7 @@ def _in_process(root, series, *, data=flat, readouts=None, design=None, config="
         for index in range(count)
     )
     received = []
-    done = LocalReconstruction(root, RECON_PLUGINS).run(
+    done = LocalReconstruction(root, plugins).run(
         header, acquisitions, received.append, config
     )
     return done, received
@@ -677,6 +686,22 @@ def test_a_series_reconstructed_in_this_process_returns_the_image_a_worker_retur
     assert len(images(received)) == len(images(reconstructed)) == 1
     np.testing.assert_array_equal(
         images(received)[0].data, images(reconstructed)[0].data
+    )
+
+
+def test_in_this_process_a_reconstruction_is_found_in_any_of_the_plugin_directories(
+    bucket, tmp_path
+):
+    root, series = bucket
+
+    alone, received_alone = _in_process(root, series["bound"])
+    searched, received = _in_process(
+        root, series["bound"], plugins=[tmp_path / "absent", RECON_PLUGINS]
+    )
+
+    assert alone and searched
+    np.testing.assert_array_equal(
+        images(received)[0].data, images(received_alone)[0].data
     )
 
 

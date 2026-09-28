@@ -8,7 +8,6 @@ import contextlib
 import itertools
 import logging
 import os
-import re
 import shutil
 import socket
 import tempfile
@@ -20,6 +19,7 @@ from typing import Any
 import ismrmrd
 import ismrmrd.xsd as xsd
 
+from .._plugins import NAME, PluginPath, directories, find
 from ..recon._runtime import constants
 from ..recon._runtime.concurrency import Slot, Slots, slot_devices
 from ..recon._runtime.connection import Connection
@@ -31,7 +31,6 @@ from ._enrich import enrich_acquisition, enrich_header
 from ._queue import QueueFile
 from ._workers import WorkerPool
 
-_PLUGIN_NAME = re.compile(r"[A-Za-z0-9_\-]+")
 _log = logging.getLogger("pulserver.proxy")
 
 # A worker spawns, imports its plugin and connects; past this it is not coming.
@@ -180,8 +179,8 @@ class ReconProxy(_Listener):
     store
         Directory of designs, as the design calls write it; read only.
     plugins
-        Directory of reconstruction plugin files, ``<plugin>.py``; required
-        unless the proxy forwards.
+        Directories of reconstruction plugin files, ``<plugin>.py``, in search
+        order; required unless the proxy forwards.
     slots
         Series reconstructed at once; derived from memory and the GPUs when
         ``None``.
@@ -223,7 +222,7 @@ class ReconProxy(_Listener):
     def __init__(
         self,
         store: Path | str,
-        plugins: Path | str | None = None,
+        plugins: PluginPath | None = None,
         *,
         slots: int | None = None,
         gpu_slots: int = 1,
@@ -283,7 +282,8 @@ class ReconServer(_Listener):
     Parameters
     ----------
     plugins
-        Directory of reconstruction plugin files, ``<plugin>.py``.
+        Directories of reconstruction plugin files, ``<plugin>.py``, in search
+        order.
     slots
         Series reconstructed at once; derived from memory and the GPUs when
         ``None``.
@@ -310,7 +310,7 @@ class ReconServer(_Listener):
 
     def __init__(
         self,
-        plugins: Path | str,
+        plugins: PluginPath,
         *,
         slots: int | None = None,
         gpu_slots: int = 1,
@@ -342,7 +342,7 @@ class _Workers:
 
     def __init__(
         self,
-        plugins: Path | str,
+        plugins: PluginPath,
         slots: int | None,
         gpu_slots: int,
         spares: int,
@@ -356,7 +356,7 @@ class _Workers:
             else Path(queue)
         )
         self.queue.mkdir(parents=True, exist_ok=True)
-        self.plugins = Path(plugins)
+        self.plugins = directories(plugins)
         self.workers = WorkerPool(spares=spares)
         self.recon_timeout = recon_timeout
         self._exam_root = Path(tempfile.mkdtemp(prefix="pulserver-exams-"))
@@ -609,15 +609,10 @@ class _RemoteChannel:
 # %% private module subroutines
 
 
-def _plugin_path(plugins: Path, plugin: str) -> Path:
+def _plugin_path(plugins: PluginPath, plugin: str) -> Path:
     if not plugin:
         raise ValueError("neither the design nor the config names a reconstruction")
-    if not _PLUGIN_NAME.fullmatch(plugin):
-        raise ValueError(f"invalid plugin name {plugin!r}")
-    path = plugins / f"{plugin}.py"
-    if not path.is_file():
-        raise FileNotFoundError(f"no plugin {plugin!r} in {plugins}")
-    return path
+    return find(plugins, plugin)
 
 
 def _first(connection: Connection) -> Any:
@@ -677,7 +672,7 @@ def _config_plugin(config: str) -> str:
     config and read from ``parameters.config``.
     """
     text = config.strip()
-    if _PLUGIN_NAME.fullmatch(text):
+    if NAME.fullmatch(text):
         return text
     parsed = deserialize_config(text, "")
     parameters = parsed.get("parameters") if isinstance(parsed, dict) else None

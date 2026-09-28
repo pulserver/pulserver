@@ -490,6 +490,28 @@ def test_the_command_names_an_unknown_plugin(limits_file):
     )
 
 
+def test_the_command_takes_a_plugin_from_the_first_of_its_directories_holding_it(
+    tmp_path,
+):
+    own = tmp_path / "own"
+    own.mkdir()
+    (own / "gre2d.py").write_text((PLUGINS / "tiny.py").read_text())
+    searched = ("--plugins", str(own), "--plugins", str(PLUGINS))
+
+    shadowed = _command("list", *searched, "--plugin", "gre2d")
+    shipped = _command("list", *searched, "--plugin", "gre2d_raw")
+
+    assert (
+        shadowed.stdout
+        == _command("list", "--plugins", str(PLUGINS), "--plugin", "tiny").stdout
+    )
+    assert (
+        shipped.stdout
+        == _command("list", "--plugins", str(PLUGINS), "--plugin", "gre2d_raw").stdout
+    )
+    assert shadowed.returncode == shipped.returncode == 0
+
+
 def test_the_top_level_command_names_its_commands():
     bare = subprocess.run(
         [sys.executable, "-m", "pulserver._cli"],
