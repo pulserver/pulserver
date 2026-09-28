@@ -266,7 +266,7 @@ it repeats:
 | `coils` | | `coils`: each coil's `name` and its `transmit` and `receive` channels |
 | `list`, `validate`, `generate`, `import` | `plugin`, `block` | `status` and `reply`, as `pulserver design` answers; `design` for a generated or imported design |
 | `exam` | `subject`, `coil` | `localizer`: the axial, coronal and sagittal images of the subject's phantom, as base64 DICOM files |
-| `scan` | `design`, `rotation` (nine elements), `centre_mm`, `sound` | at a speed, `preparing` and `duration` about twice a second until the clock starts, `preparing` the wall-clock time left in s or `null` before there is an estimate; `clock` and `duration` after each span played, with the span's `sound` when asked, as base64 of 16-bit little-endian stereo samples at `rate` Hz; `dicom` and `name` for each image the reconstruction returns, `text`, then `done` with the status |
+| `scan` | `design`, `rotation` (nine elements), `centre_mm`, `sound` | at a speed, `preparing` about twice a second until the clock starts, the wall-clock time left in s or `null` before there is an estimate; `clock` and `duration` after each span played, with the span's `sound` when asked, as base64 of 16-bit little-endian stereo samples at `rate` Hz; `dicom` and `name` for each image the reconstruction returns, `text`, then `done` with the status |
 | `cancel` | | stops the scan in progress |
 
 {meth}`Console.answer <pulserver.virtual.Console.answer>` answers one request
@@ -276,7 +276,9 @@ Worker running pulserver beside a browser page.
 
 A subject named `brainweb` is BrainWeb's normal brain; any other is the vials.
 An exam is scanned in the coil it names, or in the one it had, `--coil` at
-first; a head coil needs the `coils` extra. The localizer is drawn from the
+first; a head coil needs the `coils` extra. The exam's scans play on one set of
+isochromats, each from equilibrium, so that a scan after the first neither
+builds them nor computes again the pulses an earlier scan played. The localizer is drawn from the
 phantom's proton density, so an exam can be planned before any scan. MaRGE is
 such a console when `MARGE_PULSERVER` holds the address, `ws://127.0.0.1:8765`
 here: its sequences are then the plugins, its subject names the phantom, its RF

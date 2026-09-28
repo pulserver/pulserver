@@ -195,6 +195,36 @@ def test_a_scan_reconstructed_in_this_process_returns_the_images_a_proxy_returns
     np.testing.assert_array_equal(returned["local"][0], returned["proxied"][0])
 
 
+def test_an_exams_scans_play_on_its_isochromats_each_from_equilibrium(tmp_path):
+    console = _console(tmp_path, recon_plugins=RECON_PLUGINS)
+    design = console.design("generate", "gre2d", _block(TE=5000, nx=32, ny=32))[
+        "design"
+    ]
+    built = []
+
+    def scanned():
+        messages = []
+        status = console.scan(
+            design, rotation=np.eye(3), centre_mm=(0.0, 0.0, 0.0), emit=messages.append
+        )
+        assert status == 0
+        return _images(messages)[0]
+
+    def exam():
+        console.exam("vials")
+        build = console.phantom.isochromats
+        console.phantom.isochromats = lambda *a, **k: built.append(1) or build(*a, **k)
+
+    exam()
+    first, second = scanned(), scanned()
+    exam()
+    third = scanned()
+
+    assert len(built) == 2
+    np.testing.assert_array_equal(second, first)
+    np.testing.assert_array_equal(third, first)
+
+
 def test_a_console_reconstructs_through_a_proxy_or_in_process_not_both(tmp_path):
     with pytest.raises(ValueError, match="not both"):
         _console(tmp_path, recon=("127.0.0.1", 9), recon_plugins=RECON_PLUGINS)
@@ -339,8 +369,7 @@ def test_a_scan_at_a_speed_reports_its_preparation_before_its_clock_starts(tmp_p
     assert status == 0
     preparing = [m for m in messages if "preparing" in m]
     assert preparing and messages[: len(preparing)] == preparing
-    assert preparing[0]["preparing"] is None
-    assert {m["duration"] for m in messages} == {messages[-1]["duration"]}
+    assert preparing[0] == {"preparing": None}
 
 
 def test_the_gateway_answers_a_consoles_calls_over_a_websocket(tmp_path):
