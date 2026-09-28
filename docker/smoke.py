@@ -1,7 +1,8 @@
-"""Drive the composed console as a scanner console does: an exam, then one scan through Gadgetron.
+"""Drive a console as a scanner console does: an exam, then one scan.
 
-Exits 1 unless the localizer holds three planes and the scan returns at least
-one DICOM image with pixels.
+Usage: ``python docker/smoke.py [ADDRESS [COIL]]``, the exam started in the
+coil named, or in the console's own. Exits 1 unless the localizer holds three
+planes and the scan returns at least one DICOM image with pixels.
 """
 
 import base64
@@ -11,9 +12,11 @@ import sys
 import time
 
 import pydicom
+from websockets.exceptions import InvalidHandshake
 from websockets.sync.client import connect
 
 ADDRESS = sys.argv[1] if len(sys.argv) > 1 else "ws://127.0.0.1:8765"
+COIL = {"coil": sys.argv[2]} if len(sys.argv) > 2 else {}
 PROTOCOL_BEGIN, PROTOCOL_END = "[NimPulseqGUI Protocol]", "[NimPulseqGUI Protocol End]"
 PRESCRIPTION = [f"fov_offset_{a}: 0.0" for a in "xyz"] + [
     f"fov_rotation_{i}{j}: {1.0 if i == j else 0.0}"
@@ -28,7 +31,9 @@ def main() -> int:
         try:
             socket = connect(ADDRESS, max_size=None, open_timeout=10).__enter__()
             break
-        except OSError:
+        # A published port may accept a connection before the console listens,
+        # and then close it unanswered.
+        except (OSError, InvalidHandshake):
             if time.monotonic() > deadline:
                 raise
             time.sleep(5.0)
@@ -47,7 +52,7 @@ def main() -> int:
                 return reply, messages
             messages.append(reply)
 
-    exam, _ = call("exam", subject="vials")
+    exam, _ = call("exam", subject="vials", **COIL)
     print(f"localizer: {len(exam['localizer'])} planes")
     block = (
         "\n".join([PROTOCOL_BEGIN, "nx: 32", "ny: 32", *PRESCRIPTION, PROTOCOL_END])

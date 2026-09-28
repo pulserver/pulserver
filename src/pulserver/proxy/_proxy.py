@@ -432,14 +432,7 @@ class _Workers:
                 )
 
     def _plugin_path(self, plugin: str) -> Path:
-        if not plugin:
-            raise ValueError("neither the design nor the config names a reconstruction")
-        if not _PLUGIN_NAME.fullmatch(plugin):
-            raise ValueError(f"invalid plugin name {plugin!r}")
-        path = self.plugins / f"{plugin}.py"
-        if not path.is_file():
-            raise FileNotFoundError(f"no plugin {plugin!r} in {self.plugins}")
-        return path
+        return _plugin_path(self.plugins, plugin)
 
 
 class _Remote:
@@ -614,6 +607,17 @@ class _RemoteChannel:
 
 
 # %% private module subroutines
+
+
+def _plugin_path(plugins: Path, plugin: str) -> Path:
+    if not plugin:
+        raise ValueError("neither the design nor the config names a reconstruction")
+    if not _PLUGIN_NAME.fullmatch(plugin):
+        raise ValueError(f"invalid plugin name {plugin!r}")
+    path = plugins / f"{plugin}.py"
+    if not path.is_file():
+        raise FileNotFoundError(f"no plugin {plugin!r} in {plugins}")
+    return path
 
 
 def _first(connection: Connection) -> Any:

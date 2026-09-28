@@ -29,12 +29,13 @@ centre by the playout, and are passed on as received. Routing, slots and the
 queue are described in {doc}`../explanations/reconstruction`, and the messages
 and fields of a series in {doc}`../user-guide/reconstruction-client`.
 
-## Servers
+## Reconstruction of a series
 
 | Object | Description |
 | --- | --- |
 | {obj}`~pulserver.proxy.ReconProxy` | TCP MRD server enriching each series and routing it to a reconstruction worker or server. |
 | {obj}`~pulserver.proxy.ReconServer` | TCP MRD server reconstructing each series with the plugin its config names. |
+| {obj}`~pulserver.proxy.LocalReconstruction` | Each series checked, enriched and reconstructed in the calling process, as the proxy's workers do, for a host that starts no processes. |
 
 ## Designs
 

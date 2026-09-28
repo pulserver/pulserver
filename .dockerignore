@@ -1,0 +1,11 @@
+# The image is built from the sources alone; its version is pretended.
+.git
+**/__pycache__
+.pytest_cache
+.ruff_cache
+.coverage
+build
+dist
+wheelhouse
+docs/build
+docs/generated

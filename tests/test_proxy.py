@@ -23,6 +23,7 @@ from pulserver.host._push import push
 from pulserver.proxy import (
     DesignCache,
     DesignIntake,
+    LocalReconstruction,
     ReconProxy,
     ReconServer,
     SequenceTable,
@@ -643,6 +644,70 @@ def test_a_forwarded_series_returns_the_image_a_local_worker_returns(
     np.testing.assert_array_equal(
         images(forwarded)[0].data, images(reconstructed)[0].data
     )
+
+
+def _in_process(root, series, *, data=flat, readouts=None, design=None, config=""):
+    """Reconstruct one series with :class:`LocalReconstruction`; return whether it was, and what it sent."""
+    header = ismrmrd.xsd.CreateFromDocument(header_xml(series, design=design))
+    count = len(series.table) if readouts is None else readouts
+    acquisitions = (
+        ismrmrd.Acquisition.from_array(data(series.table, index))
+        for index in range(count)
+    )
+    received = []
+    done = LocalReconstruction(root, RECON_PLUGINS).run(
+        header, acquisitions, received.append, config
+    )
+    return done, received
+
+
+def test_a_series_reconstructed_in_this_process_returns_the_image_a_worker_returns(
+    start_proxy, bucket
+):
+    root, series = bucket
+    proxy = start_proxy(slots=1)
+
+    def kspace(table, index):
+        return point(table, index, (0.004, -0.002, 0.0))
+
+    done, received = _in_process(root, series["bound"], data=kspace)
+    reconstructed = stream(proxy.port, series["bound"], data=kspace)
+
+    assert done
+    assert len(images(received)) == len(images(reconstructed)) == 1
+    np.testing.assert_array_equal(
+        images(received)[0].data, images(reconstructed)[0].data
+    )
+
+
+@pytest.mark.parametrize(
+    ("options", "reason"),
+    [
+        ({"readouts": 3}, "pulserver: the stream ended after 3 of the"),
+        ({"design": "0" * 18}, "pulserver: no design 000000000000000000"),
+        (
+            {"config": "crash"},
+            "pulserver: crash failed: this reconstruction always fails",
+        ),
+        ({"config": ""}, "pulserver: neither the design nor the config names"),
+        (
+            {"config": '{"parameters": {"config": "../gre2d"}}'},
+            "pulserver: invalid plugin name '../gre2d'",
+        ),
+        ({"config": "absent"}, "pulserver: no plugin 'absent'"),
+    ],
+)
+def test_in_this_process_a_series_is_refused_or_fails_with_the_proxys_text(
+    bucket, options, reason
+):
+    root, series = bucket
+    name = "raw" if "config" in options else "bound"
+
+    done, received = _in_process(root, series[name], **options)
+
+    assert not done
+    assert not images(received)
+    assert [item for item in received if isinstance(item, str)][-1].startswith(reason)
 
 
 @pytest.mark.parametrize("configured", [None, "default.xml"])
