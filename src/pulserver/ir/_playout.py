@@ -90,7 +90,9 @@ def playout(
         - ``overwrites``: loads that wrote over memory the instance in play
           was reading, and ``unloaded``: samples a block read where nothing
           was loaded. Both are 0 where every block plays what was loaded for
-          it.
+          it;
+        - ``rf_shims``: per subsequence, each RF shim's complex channel
+          weights, which a block's ``rf_shim`` indexes.
 
     Raises
     ------

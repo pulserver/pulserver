@@ -9,6 +9,7 @@ from pathlib import Path
 import numpy as np
 import pypulseqpp as pp
 
+from ._coils import Coil
 from ._phantom import Phantom
 
 #: The tissue classes of BrainWeb's normal brain, in the order of the fuzzy
@@ -27,6 +28,11 @@ TISSUES = {
     "connective tissue": (0.5, 0.07, 0.77),
 }
 
+#: Volume magnetic susceptibility, in ppm (SI), of air, and of water, which
+#: every tissue class of the head is taken to have (Schenck, Med Phys 23:815,
+#: 1996).
+AIR_PPM, WATER_PPM = 0.36, -9.05
+
 #: MNI coordinates, in mm, of the first voxel of the model, whose 1 mm voxels
 #: run along z, y and x, x fastest.
 _FIRST_VOXEL_MM = {"x": -90.0, "y": -126.0, "z": -72.0}
@@ -44,7 +50,8 @@ class BrainWeb:
     subject's left, y posterior and z superior. Each tissue class relaxes with
     the T1 and T2 and has the proton density BrainWeb's simulator gives it at
     1.5 T (Kwan et al., IEEE Trans Med Imaging 18:1085, 1999), at any field; fat
-    precesses at pypulseqpp's fat shift. The coils are those of
+    precesses at pypulseqpp's fat shift, and every isochromat at the field
+    :attr:`field_ppm` its head adds. The coils are those of
     :class:`~pulserver.virtual.Phantom`, fixed in the physical frame.
 
     Parameters
@@ -58,6 +65,8 @@ class BrainWeb:
     directory
         brainweb-dl's cache; ``BRAINWEB_DIR``, or ``~/.cache/brainweb``,
         without one.
+    susceptibility
+        Whether the field the head's susceptibility adds acts on it.
     """
 
     def __init__(
@@ -67,10 +76,12 @@ class BrainWeb:
         period: float = 0.5,
         depth: float = 0.5,
         directory: Path | str | None = None,
+        susceptibility: bool = True,
     ) -> None:
         self._coils = Phantom((), coils=coils, period=period, depth=depth)
         self.coils = coils
         self.directory = directory
+        self.susceptibility = susceptibility
 
     @functools.cached_property
     def fractions(self) -> np.ndarray:
@@ -100,6 +111,19 @@ class BrainWeb:
             )
         return fractions
 
+    @functools.cached_property
+    def field_ppm(self) -> np.ndarray:
+        """The field the head adds to B0 at each voxel, ``(z, y, x)``, in ppm of B0, as a first-order shim leaves it.
+
+        The head is water, and the background air, each voxel in proportion to
+        the fraction of it the background fills. The field along B0, the
+        physical z axis, is the susceptibility convolved with the dipole
+        kernel, the Lorentz sphere's third included (Marques and Bowtell,
+        Concepts Magn Reson B 25:65, 2005), whose constant and linear terms
+        over the voxels at least half head are then removed.
+        """
+        return _susceptibility_field(self.fractions[..., 0])
+
     def proton_density(
         self, points: np.ndarray, *, normal: np.ndarray, thickness: float
     ) -> np.ndarray:
@@ -119,6 +143,7 @@ class BrainWeb:
         field_t: float | None = None,
         off_resonance_hz: float = 0.0,
         region: np.ndarray | None = None,
+        coil: Coil | None = None,
         threads: int = 0,
     ) -> pp.Isochromats:
         """Return the brain sampled as isochromats, for :func:`~pulserver.virtual.simulate`.
@@ -126,7 +151,7 @@ class BrainWeb:
         The voxels are averaged in cubes ``spacing`` wide. Each tissue a cube
         holds is an isochromat at the cube's centre, of proton density the
         tissue's times the fraction of the cube it fills times the cube's
-        volume in m³.
+        volume in m³, precessing at the cube's mean :attr:`field_ppm`.
 
         Parameters
         ----------
@@ -142,14 +167,18 @@ class BrainWeb:
             ``(3, 2)`` lower and upper bounds along the physical axes, in
             metres, outside which no isochromat is kept; the whole head
             without one.
+        coil
+            The scanner's coil the brain is scanned with, in place of the
+            phantom's coils.
         threads
             Worker threads of the simulation; 0 for every core.
 
         Raises
         ------
         ValueError
-            If ``spacing`` is not a whole number of millimetres, or
-            ``field_t`` is not given.
+            If ``spacing`` is not a whole number of millimetres, ``field_t``
+            is not given, or the brain has coils of its own and ``coil`` is
+            given.
         """
         from pypulseqpp.sequences.preparation.fatsat import FAT_SHIFT_PPM
 
@@ -162,7 +191,14 @@ class BrainWeb:
             raise ValueError(
                 "BrainWeb's fat has a chemical shift: scan it at a field_t"
             )
+        if coil is not None and self.coils > 1:
+            raise ValueError(
+                "a phantom received by coils of its own is not scanned with a coil"
+            )
         cubes = _cubes(self.fractions, step)
+        field = np.zeros(cubes.shape[:3], dtype=np.float32)
+        if self.susceptibility:
+            field = _cubes(self.field_ppm[..., None], step)[..., 0]
         index = np.indices(cubes.shape[:3]).reshape(3, -1).T
         voxel = step * index + 0.5 * (step - 1)
         z, y, x = (
@@ -174,6 +210,7 @@ class BrainWeb:
             low, high = np.asarray(region, dtype=float).T
             inside = np.all((positions >= low) & (positions <= high), axis=1)
         per_ppm = 1e-6 * pp.Opts().gamma * field_t
+        inhomogeneity = per_ppm * field.reshape(-1)
         points, rows = [], []
         for tissue, (name, (t1, t2, density)) in enumerate(TISSUES.items()):
             fraction = cubes[..., tissue].reshape(-1)
@@ -186,7 +223,7 @@ class BrainWeb:
                         density * fraction[kept] * (step * 1e-3) ** 3,
                         np.full(kept.sum(), t1),
                         np.full(kept.sum(), t2),
-                        np.full(kept.sum(), shift + off_resonance_hz),
+                        shift + off_resonance_hz + inhomogeneity[kept],
                     ]
                 )
             )
@@ -198,7 +235,8 @@ class BrainWeb:
             t1=t1,
             t2=t2,
             off_resonance=frequency,
-            receive=self._coils._received(own),
+            transmit=None if coil is None else coil.transmit(own),
+            receive=self._coils._received(own) if coil is None else coil.receive(own),
             threads=threads,
         )
 
@@ -220,6 +258,30 @@ def _slab_density(
         x, y, z = voxel[inside].T
         total[inside] += fractions[z, y, x] @ densities
     return total / steps
+
+
+def _susceptibility_field(background: np.ndarray) -> np.ndarray:
+    """Return the shimmed field, in ppm, of a head whose voxels ``(z, y, x)`` the background fills the fraction ``background`` of."""
+    from scipy import fft
+
+    contrast = ((1.0 - background) * (WATER_PPM - AIR_PPM)).astype(np.float32)
+    shape = [fft.next_fast_len(3 * size // 2, real=True) for size in contrast.shape]
+    kz = np.fft.fftfreq(shape[0]).astype(np.float32)[:, None, None]
+    ky = np.fft.fftfreq(shape[1]).astype(np.float32)[None, :, None]
+    kx = np.fft.rfftfreq(shape[2]).astype(np.float32)[None, None, :]
+    squared = kz**2 + ky**2 + kx**2
+    squared[0, 0, 0] = 1.0
+    kernel = np.float32(1.0 / 3.0) - kz**2 / squared
+    kernel[0, 0, 0] = 0.0
+    spectrum = fft.rfftn(contrast, shape, workers=-1)
+    spectrum *= kernel
+    field = fft.irfftn(spectrum, shape, workers=-1)
+    field = field[tuple(slice(0, size) for size in contrast.shape)]
+    grid = np.indices(field.shape, dtype=np.float32)
+    head = background <= 0.5
+    basis = np.column_stack([np.ones(head.sum()), *(axis[head] for axis in grid)])
+    shim, *_ = np.linalg.lstsq(basis, field[head], rcond=None)
+    return (field - shim[0] - np.tensordot(shim[1:], grid, axes=1)).astype(np.float32)
 
 
 def _cubes(fractions: np.ndarray, step: int) -> np.ndarray:

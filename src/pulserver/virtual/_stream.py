@@ -14,7 +14,7 @@ import numpy as np
 import pypulseqpp as pp
 
 from .. import ir
-from ._bloch import _gradients, _played
+from ._bloch import _drive, _gradients, _played
 
 #: MATLAB Pulseq's audio sample rate, the default of ``pypulseqpp.gradient_sound``, in Hz.
 SAMPLE_RATE = 44100.0
@@ -62,6 +62,9 @@ class Scan:
     rotation
         ``(3, 3)`` rotation of the prescription from logical to physical axes,
         a reflection included; the identity by default.
+    default_shim
+        Channel weights of a coil of several transmit channels, as
+        :func:`~pulserver.virtual.simulate` takes them.
     """
 
     def __init__(
@@ -71,10 +74,11 @@ class Scan:
         cache_ext: str = ".pseg",
         *,
         rotation: np.ndarray | None = None,
+        default_shim: np.ndarray | None = None,
     ) -> None:
-        self._played = ir.playout(Path(seq_path), waveforms=True, cache_ext=cache_ext)[
-            "blocks"
-        ]
+        playout = ir.playout(Path(seq_path), waveforms=True, cache_ext=cache_ext)
+        self._played = playout["blocks"]
+        self._drive = _drive(playout, default_shim)
         self._isochromats = isochromats
         self._turn = None if rotation is None else np.asarray(rotation, dtype=float)
         durations = 1e-6 * self._played["duration_us"].astype(float)
@@ -157,7 +161,7 @@ class Scan:
 
     def _readouts(self, first: int, last: int) -> tuple[np.ndarray, ...]:
         played = (
-            _played(self._played, block, self._isochromats, self._turn)
+            _played(self._played, block, self._isochromats, self._turn, self._drive)
             for block in range(first, last)
         )
         return tuple(readout for readout in played if readout is not None)

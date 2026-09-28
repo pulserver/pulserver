@@ -209,3 +209,43 @@ def test_the_isochromats_of_an_ellipse_fill_its_area_at_its_density():
 def test_isochromats_carry_a_real_density_and_a_shift_at_a_field(ellipse, message):
     with pytest.raises(ValueError, match=message):
         virtual.Phantom([ellipse]).isochromats(SPACING)
+
+
+@pytest.fixture(scope="module")
+def shimmed(tmp_path_factory):
+    """A design of a pulse in a two-channel RF shim and a longer one without, each read out, beside its cache."""
+    seq = pp.Sequence(SYSTEM)
+    shim = pp.make_rf_shim(np.array([0.8 * np.exp(0.3j), 0.5 * np.exp(-1.1j)]))
+    for weights, duration in (([shim], 0.5e-3), ([], 0.7e-3)):
+        pulse = pp.make_block_pulse(math.pi / 4, duration=duration, system=SYSTEM)
+        seq.add_block(pulse, *weights)
+        seq.add_block(pp.make_adc(16, duration=1e-3, system=SYSTEM))
+    path = tmp_path_factory.mktemp("shimmed") / "shimmed.seq"
+    seq.write(str(path))
+    ir.convert(path, SYSTEM)
+    return path, seq
+
+
+def test_a_pulse_plays_on_each_transmit_channel_through_its_rf_shim_as_its_design_simulates_it(
+    shimmed,
+):
+    path, seq = shimmed
+    transmit = RNG.normal(size=(40, 2)) + 1j * RNG.normal(size=(40, 2))
+
+    played = virtual.simulate(
+        path,
+        pp.Isochromats(POSITIONS, transmit=transmit, **TISSUE),
+        default_shim=np.ones(2),
+    )
+
+    designed = seq.simulate(pp.Isochromats(POSITIONS, transmit=transmit, **TISSUE))
+    played = np.concatenate(played, axis=1)
+    assert np.abs(played - designed).max() < PRECISION * np.abs(designed).max()
+
+
+def test_an_rf_shim_of_other_channels_than_the_coils_is_refused(shimmed):
+    path, _ = shimmed
+    spins = pp.Isochromats(POSITIONS, transmit=np.ones((40, 3)), **TISSUE)
+
+    with pytest.raises(ValueError, match="weighs 2 channels, not the coil's 3"):
+        virtual.simulate(path, spins, default_shim=np.ones(3))

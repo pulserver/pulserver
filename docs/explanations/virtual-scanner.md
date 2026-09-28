@@ -154,6 +154,41 @@ the rotation leaves it, in single precision, and in a sequence that leaves its
 transverse magnetization unspoiled from one repetition to the next, the phase
 that rounding accrues is what separates the two.
 
+## Coils and the subject's field
+
+The coils of the signal model are the phantom's own. A scan on the Bloch
+simulation can take one of the scanner's {obj}`~pulserver.virtual.COILS`
+instead, fixed in the physical frame: a body coil, taken to be one channel of
+unit sensitivity each way; an 8-channel head coil that transmits and receives;
+and 32- and 48-channel head arrays that receive while the body coil transmits.
+The head coils' sensitivities are BART's coil models rather than
+electromagnetic simulations: the 8-channel coil is `HEAD_2D_8CH`, constant along
+$z$, and the arrays are the first 32 and 48 channels of `HEAD_3D_64CH`, each
+sampled by bartorch over a cube 25.6 cm wide about the isocentre and
+interpolated linearly between the samples. The receive sensitivities $s_c$
+have a root sum of squares of 1 at the isocentre. The transmit sensitivities
+$s^+_c$ are their complex conjugates, the quasi-static limit of reciprocity;
+the models show none of the dielectric effects of a wavelength comparable to
+the head.
+
+Each transmit channel plays the pulse the cache holds for it, scaled at each
+isochromat by $s^+_c(\mathbf{r})$, and the channels' fields add. A pTx pulse
+holds one waveform per channel. A single-channel pulse plays on every channel,
+weighted by its block's RF shim or, without one, by the coil's default shim,
+the unit weights that bring the channels into phase at the isocentre, where the
+pulse then has its nominal amplitude. A shim of another number of channels is
+refused.
+
+{class}`~pulserver.virtual.BrainWeb` carries the field its own susceptibility
+adds to $B_0$. Its head is water, of volume susceptibility $-9.05$ ppm, in air
+of $0.36$ ppm (Schenck, Med Phys 23:815, 1996), and the field along $B_0$ is
+the susceptibility difference convolved with the dipole kernel
+$1/3 - k_z^2/|\mathbf{k}|^2$, whose $1/3$ is the Lorentz sphere's (Marques and
+Bowtell, Concepts Magn Reson B 25:65, 2005). The constant and linear terms over
+the head are removed, as a first-order shim removes them. The field is in ppm
+of $B_0$, so an isochromat precesses $\gamma B_0$ times it faster, whatever
+the magnet's field.
+
 ## Scan clock and sound
 
 A scanner acquires in real time: each readout reaches the reconstruction once

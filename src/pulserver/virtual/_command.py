@@ -14,6 +14,8 @@ from typing import Any
 
 import numpy as np
 
+from ._coils import COILS
+
 _DESCRIPTION = """\
 Scan a phantom on the virtual scanner, as a console would. The design is
 generated from a scanner-sequence plugin, or imported from a sequence file,
@@ -86,7 +88,15 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--spacing", type=float, default=1.0, help="isochromat spacing, in mm"
     )
-    parser.add_argument("--coils", type=int, default=4, help="receive coils")
+    receivers = parser.add_mutually_exclusive_group()
+    receivers.add_argument(
+        "--coils", type=int, default=4, help="receive coils of the phantom's own"
+    )
+    receivers.add_argument(
+        "--coil",
+        choices=sorted(COILS),
+        help="coil of the virtual scanner to scan with, in place of --coils",
+    )
     parser.add_argument(
         "--speed",
         type=float,
@@ -283,11 +293,13 @@ def _scan(args: argparse.Namespace, store: Path, design: str) -> int:
 
     rotation, _ = prescription(args)
     field = float(parse_limits(args.limits.read_text())["B0"])
+    coil = None if args.coil is None else COILS[args.coil]
     tissue = _phantom(args)
     scan = Scan(
         DesignStore(store).directory(design) / "sequence.seq",
-        tissue.isochromats(1e-3 * args.spacing, field_t=field),
+        tissue.isochromats(1e-3 * args.spacing, field_t=field, coil=coil),
         rotation=rotation,
+        default_shim=None if coil is None else coil.default_shim,
     )
     series = {
         "frequency_hz": pp.Opts().gamma * field,
@@ -318,13 +330,15 @@ def _scan(args: argparse.Namespace, store: Path, design: str) -> int:
 
 
 def _phantom(args: argparse.Namespace) -> Any:
+    """Return the phantom ``args`` name, received by its own coils unless a coil of the scanner is named."""
     from . import BrainWeb
 
+    coils = 1 if args.coil is not None else args.coils
     if args.phantom is None:
-        return default_phantom(args.coils)
+        return default_phantom(coils)
     if str(args.phantom) == "brainweb":
-        return BrainWeb(coils=args.coils)
-    return read_phantom(args.phantom, args.coils)
+        return BrainWeb(coils=coils)
+    return read_phantom(args.phantom, coils)
 
 
 def _kept(

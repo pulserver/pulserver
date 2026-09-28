@@ -51,7 +51,7 @@ def test_each_tissue_of_a_voxel_is_an_isochromat_where_a_head_first_supine_head_
     model.fractions[2, 3, 1, GREY] = 0.25
     model.fractions[2, 3, 1, WHITE] = 0.75
 
-    virtual.BrainWeb(directory="cache").isochromats(field_t=3.0)
+    virtual.BrainWeb(directory="cache", susceptibility=False).isochromats(field_t=3.0)
 
     assert model.calls == [(0, "fuzzy", "cache")]
     (brain,) = made
@@ -85,11 +85,46 @@ def test_fat_precesses_at_its_shift_at_the_field_beside_the_off_resonance(model,
     model.fractions[1, 1, 1, FAT] = 1.0
     model.fractions[1, 1, 2, WHITE] = 1.0
 
-    virtual.BrainWeb().isochromats(field_t=3.0, off_resonance_hz=20.0)
+    virtual.BrainWeb(susceptibility=False).isochromats(
+        field_t=3.0, off_resonance_hz=20.0
+    )
 
     (brain,) = made
     fat = 1e-6 * pp.Opts().gamma * 3.0 * FAT_SHIFT_PPM
     np.testing.assert_allclose(brain.off_resonance, [20.0, fat + 20.0])
+
+
+def test_each_isochromat_precesses_at_the_mean_field_its_head_adds_over_its_cube(
+    model, made
+):
+    model.fractions[..., WHITE] = 1.0
+    field = np.arange(model.fractions[..., 0].size, dtype=np.float32).reshape(
+        model.fractions.shape[:3]
+    )
+    brain = virtual.BrainWeb()
+    brain.field_ppm = field
+
+    brain.isochromats(2e-3, field_t=3.0, off_resonance_hz=20.0)
+
+    (spins,) = made
+    cubes = field.reshape(2, 2, 3, 2, 4, 2).mean(axis=(1, 3, 5)).reshape(-1)
+    np.testing.assert_allclose(
+        spins.off_resonance, 20.0 + 1e-6 * pp.Opts().gamma * 3.0 * cubes, rtol=1e-6
+    )
+
+
+def test_a_sphere_of_tissue_in_air_has_no_field_inside_once_shimmed_and_a_dipole_outside():
+    centre, radius = 23.5, 10.0
+    z, y, x = np.indices((48, 48, 48)) - centre
+    distance = np.sqrt(x**2 + y**2 + z**2)
+
+    field = _brainweb._susceptibility_field((distance > radius).astype(np.float32))
+
+    contrast = _brainweb.WATER_PPM - _brainweb.AIR_PPM
+    assert np.abs(field[distance < radius - 2.0]).max() < 0.02 * abs(contrast)
+    pole, equator = field[39, 23, 23], field[23, 23, 39]
+    assert pole == pytest.approx(2.0 / 3.0 * contrast * (radius / 15.5) ** 3, rel=0.1)
+    assert equator == pytest.approx(-0.5 * pole, rel=0.05)
 
 
 def test_a_region_keeps_the_isochromats_inside_it(model, made):
@@ -148,7 +183,7 @@ def test_without_brainweb_dl_the_brain_names_the_extra_that_downloads_it(monkeyp
 
 
 def test_the_scan_command_scans_brainweb_by_name():
-    args = argparse.Namespace(phantom=Path("brainweb"), coils=3)
+    args = argparse.Namespace(phantom=Path("brainweb"), coils=3, coil=None)
 
     brain = _command._phantom(args)
 
