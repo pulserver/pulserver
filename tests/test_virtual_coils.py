@@ -65,7 +65,8 @@ def test_transmit_sensitivities_are_the_conjugates_of_the_receive_ones(modelled)
 
     ratio = transmit / np.conj(receive)
     np.testing.assert_allclose(ratio, ratio[0, 0], rtol=1e-5)
-    assert np.isreal(ratio[0, 0]) and ratio[0, 0].real > 0.0
+    assert ratio[0, 0].real > 0.0
+    assert abs(ratio[0, 0].imag) < 1e-6 * ratio[0, 0].real
 
 
 def test_sensitivities_are_interpolated_linearly_and_held_beyond_the_grid(modelled):
