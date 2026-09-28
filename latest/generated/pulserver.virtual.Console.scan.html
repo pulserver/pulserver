@@ -536,8 +536,11 @@
 <p><code class="docutils literal notranslate"><span class="pre">emit</span></code> receives the scan clock after each span played, as
 <code class="docutils literal notranslate"><span class="pre">{&quot;clock&quot;:</span> <span class="pre">s,</span> <span class="pre">&quot;duration&quot;:</span> <span class="pre">s}</span></code>, then the reconstruction’s images as
 DICOM, <code class="docutils literal notranslate"><span class="pre">{&quot;dicom&quot;:</span> <span class="pre">base64,</span> <span class="pre">&quot;name&quot;:</span> <span class="pre">file</span> <span class="pre">name}</span></code>, converting those the
-proxy returns as MRD, and its texts as <code class="docutils literal notranslate"><span class="pre">{&quot;text&quot;:</span> <span class="pre">...}</span></code>. The status is 1 when a text reports a refused or
-failed series, or when the scan is cancelled.</p>
+proxy returns as MRD, and its texts as <code class="docutils literal notranslate"><span class="pre">{&quot;text&quot;:</span> <span class="pre">...}</span></code>. With
+<code class="docutils literal notranslate"><span class="pre">sound</span></code>, each clock also carries the span’s sound as <code class="docutils literal notranslate"><span class="pre">sound</span></code>,
+base64 of 16-bit little-endian stereo samples at <code class="docutils literal notranslate"><span class="pre">rate</span></code> Hz. The
+status is 1 when a text reports a refused or failed series, or when
+the scan is cancelled.</p>
 </dd></dl>
 
 </section>

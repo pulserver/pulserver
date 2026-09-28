@@ -601,21 +601,25 @@
         <span class="n">centre_mm</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">float</span><span class="p">],</span>
         <span class="n">emit</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="nb">dict</span><span class="p">],</span> <span class="kc">None</span><span class="p">],</span>
         <span class="n">cancelled</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="nb">bool</span><span class="p">]</span> <span class="o">=</span> <span class="k">lambda</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">sound</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">"""Scan a stored design on the exam's phantom; return the reconstruction's status.</span>
 
 <span class="sd">        ``emit`` receives the scan clock after each span played, as</span>
 <span class="sd">        ``{"clock": s, "duration": s}``, then the reconstruction's images as</span>
 <span class="sd">        DICOM, ``{"dicom": base64, "name": file name}``, converting those the</span>
-<span class="sd">        proxy returns as MRD, and its texts as ``{"text": ...}``. The status is 1 when a text reports a refused or</span>
-<span class="sd">        failed series, or when the scan is cancelled.</span>
+<span class="sd">        proxy returns as MRD, and its texts as ``{"text": ...}``. With</span>
+<span class="sd">        ``sound``, each clock also carries the span's sound as ``sound``,</span>
+<span class="sd">        base64 of 16-bit little-endian stereo samples at ``rate`` Hz. The</span>
+<span class="sd">        status is 1 when a text reports a refused or failed series, or when</span>
+<span class="sd">        the scan is cancelled.</span>
 <span class="sd">        """</span>
         <span class="kn">import</span><span class="w"> </span><span class="nn">ismrmrd</span>
         <span class="kn">import</span><span class="w"> </span><span class="nn">pypulseqpp</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pp</span>
 
         <span class="kn">from</span><span class="w"> </span><span class="nn">..host</span><span class="w"> </span><span class="kn">import</span> <span class="n">DesignStore</span>
         <span class="kn">from</span><span class="w"> </span><span class="nn">..recon._runtime.mrd2dicom</span><span class="w"> </span><span class="kn">import</span> <span class="n">DicomWithName</span><span class="p">,</span> <span class="n">MrdDicomBuilder</span>
-        <span class="kn">from</span><span class="w"> </span><span class="nn">.</span><span class="w"> </span><span class="kn">import</span> <span class="n">Scan</span><span class="p">,</span> <span class="n">send</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">.</span><span class="w"> </span><span class="kn">import</span> <span class="n">SAMPLE_RATE</span><span class="p">,</span> <span class="n">Scan</span><span class="p">,</span> <span class="n">send</span>
         <span class="kn">from</span><span class="w"> </span><span class="nn">._client</span><span class="w"> </span><span class="kn">import</span> <span class="n">_header</span>
 
         <span class="n">rotation</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">rotation</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
@@ -627,11 +631,18 @@
         <span class="n">stopped</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Event</span><span class="p">()</span>
 
         <span class="k">def</span><span class="w"> </span><span class="nf">played</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]:</span>
-            <span class="k">for</span> <span class="n">chunk</span> <span class="ow">in</span> <span class="n">scan</span><span class="o">.</span><span class="n">chunks</span><span class="p">(</span><span class="mf">0.1</span><span class="p">,</span> <span class="n">speed</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">speed</span><span class="p">,</span> <span class="n">sound</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+            <span class="k">for</span> <span class="n">chunk</span> <span class="ow">in</span> <span class="n">scan</span><span class="o">.</span><span class="n">chunks</span><span class="p">(</span><span class="mf">0.1</span><span class="p">,</span> <span class="n">speed</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">speed</span><span class="p">,</span> <span class="n">sound</span><span class="o">=</span><span class="n">sound</span><span class="p">):</span>
                 <span class="k">if</span> <span class="n">cancelled</span><span class="p">():</span>
                     <span class="n">stopped</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
                     <span class="k">return</span>
-                <span class="n">emit</span><span class="p">({</span><span class="s2">"clock"</span><span class="p">:</span> <span class="n">chunk</span><span class="o">.</span><span class="n">stop</span><span class="p">,</span> <span class="s2">"duration"</span><span class="p">:</span> <span class="n">scan</span><span class="o">.</span><span class="n">duration</span><span class="p">})</span>
+                <span class="n">clock</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"clock"</span><span class="p">:</span> <span class="n">chunk</span><span class="o">.</span><span class="n">stop</span><span class="p">,</span> <span class="s2">"duration"</span><span class="p">:</span> <span class="n">scan</span><span class="o">.</span><span class="n">duration</span><span class="p">}</span>
+                <span class="k">if</span> <span class="n">sound</span><span class="p">:</span>
+                    <span class="n">samples</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">round</span><span class="p">(</span><span class="mi">32767</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">clip</span><span class="p">(</span><span class="n">chunk</span><span class="o">.</span><span class="n">sound</span><span class="o">.</span><span class="n">T</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">))</span>
+                    <span class="n">clock</span><span class="p">[</span><span class="s2">"sound"</span><span class="p">]</span> <span class="o">=</span> <span class="n">base64</span><span class="o">.</span><span class="n">b64encode</span><span class="p">(</span>
+                        <span class="n">samples</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="s2">"&lt;i2"</span><span class="p">)</span><span class="o">.</span><span class="n">tobytes</span><span class="p">()</span>
+                    <span class="p">)</span><span class="o">.</span><span class="n">decode</span><span class="p">()</span>
+                    <span class="n">clock</span><span class="p">[</span><span class="s2">"rate"</span><span class="p">]</span> <span class="o">=</span> <span class="n">SAMPLE_RATE</span>
+                <span class="n">emit</span><span class="p">(</span><span class="n">clock</span><span class="p">)</span>
                 <span class="k">yield from</span> <span class="n">chunk</span><span class="o">.</span><span class="n">readouts</span>
 
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">recon</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
@@ -716,6 +727,7 @@
                     <span class="n">centre_mm</span><span class="o">=</span><span class="n">request</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"centre_mm"</span><span class="p">,</span> <span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)),</span>
                     <span class="n">emit</span><span class="o">=</span><span class="k">lambda</span> <span class="n">message</span><span class="p">:</span> <span class="n">reply</span><span class="p">(</span><span class="n">ident</span><span class="p">,</span> <span class="n">message</span><span class="p">),</span>
                     <span class="n">cancelled</span><span class="o">=</span><span class="n">cancel</span><span class="o">.</span><span class="n">is_set</span><span class="p">,</span>
+                    <span class="n">sound</span><span class="o">=</span><span class="nb">bool</span><span class="p">(</span><span class="n">request</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"sound"</span><span class="p">,</span> <span class="kc">False</span><span class="p">)),</span>
                 <span class="p">)</span>
                 <span class="n">reply</span><span class="p">(</span><span class="n">ident</span><span class="p">,</span> <span class="p">{</span><span class="s2">"done"</span><span class="p">:</span> <span class="n">status</span><span class="p">})</span>
             <span class="k">else</span><span class="p">:</span>
