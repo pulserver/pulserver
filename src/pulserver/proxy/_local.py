@@ -89,10 +89,6 @@ class LocalReconstruction:
                 return False
         return True
 
-    def close(self) -> None:
-        """Close the current exam's cache."""
-        self.exams.close()
-
 
 class _Series:
     """A series as :func:`run_application` reads it: its items, and where its outputs go."""

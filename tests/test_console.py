@@ -216,12 +216,34 @@ def test_a_request_answered_in_process_carries_what_the_websocket_carries(tmp_pa
     answer("exam", subject="vials")
     scanned = answer("scan", design=generated["design"])
     [refused] = answer("reboot")
+    [failed] = answer("scan")
 
     assert [len(messages) for messages in answers[:2]] == [1, 1]
     assert scanned[-1] == {"done": 0}
     assert "clock" in scanned[0]
     assert len(_images(scanned)) == 1
     assert refused == {"error": "unknown call 'reboot'"}
+    assert failed == {"error": "KeyError: 'design'"}
+
+
+def test_a_scan_whose_reconstruction_is_refused_returns_the_reason_and_fails(
+    tmp_path,
+):
+    console = _console(tmp_path, recon_plugins=RECON_PLUGINS)
+    design = console.design("generate", "gre2d_raw", _block(TE=5000, nx=32, ny=32))[
+        "design"
+    ]
+    messages = []
+
+    status = console.scan(
+        design, rotation=np.eye(3), centre_mm=(0.0, 0.0, 0.0), emit=messages.append
+    )
+
+    assert status == 1
+    assert not _images(messages)
+    assert [m["text"] for m in messages if "text" in m] == [
+        "pulserver: neither the design nor the config names a reconstruction"
+    ]
 
 
 def test_a_cancelled_scan_stops_and_reports_it(tmp_path):
@@ -301,8 +323,21 @@ def test_the_gateway_answers_a_consoles_calls_over_a_websocket(tmp_path):
             request = {"id": 3, "call": "exam", "subject": "vials", "coil": "head32"}
             client.send(json.dumps(request))
             exam = json.loads(client.recv(timeout=DEADLINE))
+            examined_in = console.coil
             client.send(json.dumps({"id": 4, "call": "reboot"}))
             refused = json.loads(client.recv(timeout=DEADLINE))
+            block = _block(TE=5000, nx=32, ny=32)
+            client.send(json.dumps({"id": 5, "call": "exam", "coil": "body"}))
+            client.recv(timeout=DEADLINE)
+            request = {"id": 6, "call": "generate", "plugin": "gre2d", "block": block}
+            client.send(json.dumps(request))
+            design = json.loads(client.recv(timeout=DEADLINE))["design"]
+            # A cancel that arrives before a scan does not stop it.
+            client.send(json.dumps({"call": "cancel"}))
+            client.send(json.dumps({"id": 7, "call": "scan", "design": design}))
+            scanned = [json.loads(client.recv(timeout=DEADLINE))]
+            while "done" not in scanned[-1]:
+                scanned.append(json.loads(client.recv(timeout=DEADLINE)))
     finally:
         loop.call_soon_threadsafe(server["it"].close)
         thread.join(timeout=DEADLINE)
@@ -312,8 +347,11 @@ def test_the_gateway_answers_a_consoles_calls_over_a_websocket(tmp_path):
     assert coils == {"id": 2, "coils": console.coils()}
     assert exam["id"] == 3
     assert len(exam["localizer"]) == 3
-    assert console.coil is virtual.COILS["head32"]
+    assert examined_in is virtual.COILS["head32"]
     assert refused == {"id": 4, "error": "unknown call 'reboot'"}
+    assert {message["id"] for message in scanned} == {7}
+    assert "clock" in scanned[0]
+    assert scanned[-1]["done"] == 0
 
 
 def test_a_console_serves_the_pages_of_its_origins_and_clients_that_send_none(

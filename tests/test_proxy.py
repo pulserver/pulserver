@@ -689,6 +689,12 @@ def test_a_series_reconstructed_in_this_process_returns_the_image_a_worker_retur
             {"config": "crash"},
             "pulserver: crash failed: this reconstruction always fails",
         ),
+        ({"config": ""}, "pulserver: neither the design nor the config names"),
+        (
+            {"config": '{"parameters": {"config": "../gre2d"}}'},
+            "pulserver: invalid plugin name '../gre2d'",
+        ),
+        ({"config": "absent"}, "pulserver: no plugin 'absent'"),
     ],
 )
 def test_in_this_process_a_series_is_refused_or_fails_with_the_proxys_text(
