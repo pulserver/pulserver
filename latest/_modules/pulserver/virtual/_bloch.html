@@ -473,6 +473,7 @@
     <span class="n">cache_ext</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">".pseg"</span><span class="p">,</span>
     <span class="o">*</span><span class="p">,</span>
     <span class="n">rotation</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">default_shim</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]:</span>
 <span class="w">    </span><span class="sd">"""Return what each coil receives at every ADC sample the cache beside a sequence file plays on isochromats.</span>
 
@@ -484,22 +485,40 @@
 <span class="sd">    the prescription's ``rotation`` from logical to physical axes, a</span>
 <span class="sd">    reflection included, except in blocks labelled ``NOROT``. Its RF pulse</span>
 <span class="sd">    and ADC play as :meth:`pypulseqpp.Isochromats.play` plays RF and ADC</span>
-<span class="sd">    events, with the frequency and phase offsets the playout sets.</span>
+<span class="sd">    events, with the frequency and phase offsets the playout sets. With</span>
+<span class="sd">    ``default_shim``, the channel weights of a coil of several transmit</span>
+<span class="sd">    channels, a single-channel pulse plays on every channel, weighted by its</span>
+<span class="sd">    block's RF shim or, without one, by ``default_shim``.</span>
 
 <span class="sd">    :doc:`/explanations/virtual-scanner` states the signal model.</span>
 <span class="sd">    """</span>
-    <span class="n">played</span> <span class="o">=</span> <span class="n">ir</span><span class="o">.</span><span class="n">playout</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="n">seq_path</span><span class="p">),</span> <span class="n">waveforms</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">cache_ext</span><span class="o">=</span><span class="n">cache_ext</span><span class="p">)[</span><span class="s2">"blocks"</span><span class="p">]</span>
+    <span class="n">playout</span> <span class="o">=</span> <span class="n">ir</span><span class="o">.</span><span class="n">playout</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="n">seq_path</span><span class="p">),</span> <span class="n">waveforms</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">cache_ext</span><span class="o">=</span><span class="n">cache_ext</span><span class="p">)</span>
+    <span class="n">played</span> <span class="o">=</span> <span class="n">playout</span><span class="p">[</span><span class="s2">"blocks"</span><span class="p">]</span>
     <span class="n">turn</span> <span class="o">=</span> <span class="kc">None</span> <span class="k">if</span> <span class="n">rotation</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">rotation</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span>
+    <span class="n">drive</span> <span class="o">=</span> <span class="n">_drive</span><span class="p">(</span><span class="n">playout</span><span class="p">,</span> <span class="n">default_shim</span><span class="p">)</span>
     <span class="n">readouts</span> <span class="o">=</span> <span class="p">(</span>
-        <span class="n">_played</span><span class="p">(</span><span class="n">played</span><span class="p">,</span> <span class="n">block</span><span class="p">,</span> <span class="n">isochromats</span><span class="p">,</span> <span class="n">turn</span><span class="p">)</span>
+        <span class="n">_played</span><span class="p">(</span><span class="n">played</span><span class="p">,</span> <span class="n">block</span><span class="p">,</span> <span class="n">isochromats</span><span class="p">,</span> <span class="n">turn</span><span class="p">,</span> <span class="n">drive</span><span class="p">)</span>
         <span class="k">for</span> <span class="n">block</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">played</span><span class="p">[</span><span class="s2">"duration_us"</span><span class="p">]</span><span class="o">.</span><span class="n">size</span><span class="p">)</span>
     <span class="p">)</span>
     <span class="k">return</span> <span class="p">[</span><span class="n">readout</span> <span class="k">for</span> <span class="n">readout</span> <span class="ow">in</span> <span class="n">readouts</span> <span class="k">if</span> <span class="n">readout</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">]</span></div>
 
 
 
+<span class="k">def</span><span class="w"> </span><span class="nf">_drive</span><span class="p">(</span>
+    <span class="n">playout</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span> <span class="n">default_shim</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">list</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return the playout's RF shims beside a coil's default shim; None without one."""</span>
+    <span class="k">if</span> <span class="n">default_shim</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="k">return</span> <span class="n">playout</span><span class="p">[</span><span class="s2">"rf_shims"</span><span class="p">],</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">default_shim</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">complex</span><span class="p">)</span><span class="o">.</span><span class="n">ravel</span><span class="p">()</span>
+
+
 <span class="k">def</span><span class="w"> </span><span class="nf">_played</span><span class="p">(</span>
-    <span class="n">played</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span> <span class="n">block</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">isochromats</span><span class="p">:</span> <span class="n">pp</span><span class="o">.</span><span class="n">Isochromats</span><span class="p">,</span> <span class="n">turn</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span>
+    <span class="n">played</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span>
+    <span class="n">block</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">isochromats</span><span class="p">:</span> <span class="n">pp</span><span class="o">.</span><span class="n">Isochromats</span><span class="p">,</span>
+    <span class="n">turn</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">drive</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">list</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Play one block on the isochromats; return its readout, or None where it has no ADC."""</span>
     <span class="n">adc</span> <span class="o">=</span> <span class="n">_adc</span><span class="p">(</span><span class="n">played</span><span class="p">,</span> <span class="n">block</span><span class="p">)</span>
@@ -507,7 +526,7 @@
         <span class="mf">1e-6</span> <span class="o">*</span> <span class="nb">float</span><span class="p">(</span><span class="n">played</span><span class="p">[</span><span class="s2">"duration_us"</span><span class="p">][</span><span class="n">block</span><span class="p">]),</span>
         <span class="n">gradients</span><span class="o">=</span><span class="n">_gradients</span><span class="p">(</span><span class="n">played</span><span class="p">,</span> <span class="n">block</span><span class="p">),</span>
         <span class="n">rotation</span><span class="o">=</span><span class="n">turn</span> <span class="k">if</span> <span class="n">played</span><span class="p">[</span><span class="s2">"rotate"</span><span class="p">][</span><span class="n">block</span><span class="p">]</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">rf</span><span class="o">=</span><span class="n">_rf</span><span class="p">(</span><span class="n">played</span><span class="p">,</span> <span class="n">block</span><span class="p">),</span>
+        <span class="n">rf</span><span class="o">=</span><span class="n">_rf</span><span class="p">(</span><span class="n">played</span><span class="p">,</span> <span class="n">block</span><span class="p">,</span> <span class="n">drive</span><span class="p">),</span>
         <span class="n">adc</span><span class="o">=</span><span class="n">adc</span><span class="p">,</span>
     <span class="p">)</span>
     <span class="k">return</span> <span class="kc">None</span> <span class="k">if</span> <span class="n">adc</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">signal</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">complex64</span><span class="p">)</span>
@@ -525,15 +544,41 @@
     <span class="k">return</span> <span class="n">corners</span>
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_rf</span><span class="p">(</span><span class="n">played</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span> <span class="n">block</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">SimpleNamespace</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""Return the block's RF pulse as an RF event, timed from the pulse's start; None where it plays none."""</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_rf</span><span class="p">(</span>
+    <span class="n">played</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span> <span class="n">block</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">drive</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">list</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">SimpleNamespace</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return the block's RF pulse as an RF event, timed from the pulse's start; None where it plays none.</span>
+
+<span class="sd">    With ``drive``, a single-channel pulse becomes a pTx pulse of the</span>
+<span class="sd">    default shim's channels, each the pulse times its weight.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If the block's RF shim weighs another number of channels.</span>
+<span class="sd">    """</span>
     <span class="n">start</span><span class="p">,</span> <span class="n">stop</span> <span class="o">=</span> <span class="n">played</span><span class="p">[</span><span class="s2">"rf_span"</span><span class="p">][</span><span class="n">block</span><span class="p">]</span>
     <span class="k">if</span> <span class="n">stop</span> <span class="o">&lt;=</span> <span class="n">start</span> <span class="ow">or</span> <span class="n">played</span><span class="p">[</span><span class="s2">"rf_amp_hz"</span><span class="p">][</span><span class="n">block</span><span class="p">]</span> <span class="o">==</span> <span class="mf">0.0</span><span class="p">:</span>
         <span class="k">return</span> <span class="kc">None</span>
     <span class="n">delay_us</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">played</span><span class="p">[</span><span class="s2">"rf_delay_us"</span><span class="p">][</span><span class="n">block</span><span class="p">])</span>
+    <span class="n">signal</span> <span class="o">=</span> <span class="n">played</span><span class="p">[</span><span class="s2">"rf_waveform_hz"</span><span class="p">][</span><span class="n">start</span><span class="p">:</span><span class="n">stop</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">complex</span><span class="p">)</span>
+    <span class="n">times</span> <span class="o">=</span> <span class="mf">1e-6</span> <span class="o">*</span> <span class="p">(</span><span class="n">played</span><span class="p">[</span><span class="s2">"rf_time_us"</span><span class="p">][</span><span class="n">start</span><span class="p">:</span><span class="n">stop</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">float</span><span class="p">)</span> <span class="o">-</span> <span class="n">delay_us</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">drive</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">played</span><span class="p">[</span><span class="s2">"rf_channels"</span><span class="p">][</span><span class="n">block</span><span class="p">]</span> <span class="o">&lt;=</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="n">rf_shims</span><span class="p">,</span> <span class="n">weights</span> <span class="o">=</span> <span class="n">drive</span>
+        <span class="n">shim</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">played</span><span class="p">[</span><span class="s2">"rf_shim"</span><span class="p">][</span><span class="n">block</span><span class="p">])</span>
+        <span class="k">if</span> <span class="n">shim</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">shimmed</span> <span class="o">=</span> <span class="n">rf_shims</span><span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">played</span><span class="p">[</span><span class="s2">"subsequence"</span><span class="p">][</span><span class="n">block</span><span class="p">])][</span><span class="n">shim</span><span class="p">]</span>
+            <span class="k">if</span> <span class="n">shimmed</span><span class="o">.</span><span class="n">size</span> <span class="o">!=</span> <span class="n">weights</span><span class="o">.</span><span class="n">size</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">"the RF shim of block </span><span class="si">{</span><span class="n">block</span><span class="si">}</span><span class="s2"> weighs </span><span class="si">{</span><span class="n">shimmed</span><span class="o">.</span><span class="n">size</span><span class="si">}</span><span class="s2"> channels, "</span>
+                    <span class="sa">f</span><span class="s2">"not the coil's </span><span class="si">{</span><span class="n">weights</span><span class="o">.</span><span class="n">size</span><span class="si">}</span><span class="s2">"</span>
+                <span class="p">)</span>
+            <span class="n">weights</span> <span class="o">=</span> <span class="n">shimmed</span>
+        <span class="n">signal</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">outer</span><span class="p">(</span><span class="n">weights</span><span class="p">,</span> <span class="n">signal</span><span class="p">)</span><span class="o">.</span><span class="n">ravel</span><span class="p">()</span>
+        <span class="n">times</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">tile</span><span class="p">(</span><span class="n">times</span><span class="p">,</span> <span class="n">weights</span><span class="o">.</span><span class="n">size</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">SimpleNamespace</span><span class="p">(</span>
-        <span class="n">signal</span><span class="o">=</span><span class="n">played</span><span class="p">[</span><span class="s2">"rf_waveform_hz"</span><span class="p">][</span><span class="n">start</span><span class="p">:</span><span class="n">stop</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">complex</span><span class="p">),</span>
-        <span class="n">t</span><span class="o">=</span><span class="mf">1e-6</span> <span class="o">*</span> <span class="p">(</span><span class="n">played</span><span class="p">[</span><span class="s2">"rf_time_us"</span><span class="p">][</span><span class="n">start</span><span class="p">:</span><span class="n">stop</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">float</span><span class="p">)</span> <span class="o">-</span> <span class="n">delay_us</span><span class="p">),</span>
+        <span class="n">signal</span><span class="o">=</span><span class="n">signal</span><span class="p">,</span>
+        <span class="n">t</span><span class="o">=</span><span class="n">times</span><span class="p">,</span>
         <span class="n">delay</span><span class="o">=</span><span class="mf">1e-6</span> <span class="o">*</span> <span class="n">delay_us</span><span class="p">,</span>
         <span class="n">phase_offset</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">played</span><span class="p">[</span><span class="s2">"rf_phase_rad"</span><span class="p">][</span><span class="n">block</span><span class="p">]),</span>
         <span class="n">freq_offset</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">played</span><span class="p">[</span><span class="s2">"rf_freq_hz"</span><span class="p">][</span><span class="n">block</span><span class="p">]),</span>

@@ -464,6 +464,8 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">pypulseqpp</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pp</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">scipy.special</span><span class="w"> </span><span class="kn">import</span> <span class="n">j1</span>
 
+<span class="kn">from</span><span class="w"> </span><span class="nn">._coils</span><span class="w"> </span><span class="kn">import</span> <span class="n">Coil</span>
+
 
 <div class="viewcode-block" id="Ellipse">
 <a class="viewcode-back" href="../../../generated/pulserver.virtual.Ellipse.html#pulserver.virtual.Ellipse">[docs]</a>
@@ -570,6 +572,7 @@
         <span class="o">*</span><span class="p">,</span>
         <span class="n">field_t</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">off_resonance_hz</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">,</span>
+        <span class="n">coil</span><span class="p">:</span> <span class="n">Coil</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">threads</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">pp</span><span class="o">.</span><span class="n">Isochromats</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">"""Return the phantom sampled as isochromats, for :func:`~pulserver.virtual.simulate`.</span>
@@ -581,7 +584,8 @@
 <span class="sd">        ellipse's transform below the grid's Nyquist frequency. Overlapping</span>
 <span class="sd">        ellipses are separate isochromats. The positions are placed in the</span>
 <span class="sd">        physical frame as the phantom is, and the receive sensitivities are the</span>
-<span class="sd">        coils'.</span>
+<span class="sd">        phantom's coils', or ``coil``'s transmit and receive sensitivities</span>
+<span class="sd">        there.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
@@ -593,15 +597,22 @@
 <span class="sd">        off_resonance_hz</span>
 <span class="sd">            Frequency of every isochromat from the scanner's centre frequency,</span>
 <span class="sd">            in Hz, beside its chemical shift.</span>
+<span class="sd">        coil</span>
+<span class="sd">            The scanner's coil the phantom is scanned with.</span>
 <span class="sd">        threads</span>
 <span class="sd">            Worker threads of the simulation; 0 for every core.</span>
 
 <span class="sd">        Raises</span>
 <span class="sd">        ------</span>
 <span class="sd">        ValueError</span>
-<span class="sd">            If an ellipse has a complex intensity, or the phantom has a chemical</span>
-<span class="sd">            shift and ``field_t`` is not given.</span>
+<span class="sd">            If an ellipse has a complex intensity, the phantom has a chemical</span>
+<span class="sd">            shift and ``field_t`` is not given, or it has coils of its own and</span>
+<span class="sd">            ``coil`` is given.</span>
 <span class="sd">        """</span>
+        <span class="k">if</span> <span class="n">coil</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">coils</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">"a phantom received by coils of its own is not scanned with a coil"</span>
+            <span class="p">)</span>
         <span class="k">if</span> <span class="n">field_t</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">any</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">shifts_ppm</span><span class="p">):</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"a phantom with a chemical shift is scanned at a field_t"</span><span class="p">)</span>
         <span class="n">per_ppm</span> <span class="o">=</span> <span class="mf">0.0</span> <span class="k">if</span> <span class="n">field_t</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="mf">1e-6</span> <span class="o">*</span> <span class="n">pp</span><span class="o">.</span><span class="n">Opts</span><span class="p">()</span><span class="o">.</span><span class="n">gamma</span> <span class="o">*</span> <span class="n">field_t</span>
@@ -619,13 +630,15 @@
         <span class="n">density</span><span class="p">,</span> <span class="n">t1</span><span class="p">,</span> <span class="n">t2</span><span class="p">,</span> <span class="n">frequency</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">repeat</span><span class="p">(</span>
             <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">tissues</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">),</span> <span class="p">[</span><span class="nb">len</span><span class="p">(</span><span class="n">p</span><span class="p">)</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">points</span><span class="p">],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span>
         <span class="p">)</span><span class="o">.</span><span class="n">T</span>
+        <span class="n">positions</span> <span class="o">=</span> <span class="n">own</span> <span class="o">@</span> <span class="bp">self</span><span class="o">.</span><span class="n">_rotation</span><span class="o">.</span><span class="n">T</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">_position</span>
         <span class="k">return</span> <span class="n">pp</span><span class="o">.</span><span class="n">Isochromats</span><span class="p">(</span>
-            <span class="n">own</span> <span class="o">@</span> <span class="bp">self</span><span class="o">.</span><span class="n">_rotation</span><span class="o">.</span><span class="n">T</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">_position</span><span class="p">,</span>
+            <span class="n">positions</span><span class="p">,</span>
             <span class="n">proton_density</span><span class="o">=</span><span class="n">density</span><span class="p">,</span>
             <span class="n">t1</span><span class="o">=</span><span class="n">t1</span><span class="p">,</span>
             <span class="n">t2</span><span class="o">=</span><span class="n">t2</span><span class="p">,</span>
             <span class="n">off_resonance</span><span class="o">=</span><span class="n">frequency</span><span class="p">,</span>
-            <span class="n">receive</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_received</span><span class="p">(</span><span class="n">own</span><span class="p">),</span>
+            <span class="n">transmit</span><span class="o">=</span><span class="kc">None</span> <span class="k">if</span> <span class="n">coil</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">coil</span><span class="o">.</span><span class="n">transmit</span><span class="p">(</span><span class="n">positions</span><span class="p">),</span>
+            <span class="n">receive</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_received</span><span class="p">(</span><span class="n">own</span><span class="p">)</span> <span class="k">if</span> <span class="n">coil</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">coil</span><span class="o">.</span><span class="n">receive</span><span class="p">(</span><span class="n">positions</span><span class="p">),</span>
             <span class="n">threads</span><span class="o">=</span><span class="n">threads</span><span class="p">,</span>
         <span class="p">)</span></div>
 

@@ -521,6 +521,7 @@
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#scan-clock-and-sound">Scan clock and sound</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#external-simulators">External simulators</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#phantom">Phantom</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#coils">Coils</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#reconstruction-client">Reconstruction client</a></li>
 </ul>
             </nav>
@@ -620,13 +621,32 @@ scanner’s centre frequency.</p>
 <td><p>Ellipses whose signals add, received by one coil or several of analytic sensitivity, placed in the physical frame by a rotation and a position; sampled as isochromats for the Bloch simulation.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="../generated/pulserver.virtual.BrainWeb.html#pulserver.virtual.BrainWeb" title="pulserver.virtual.BrainWeb"><code class="xref py py-obj docutils literal notranslate"><span class="pre">BrainWeb</span></code></a></p></td>
-<td><p>BrainWeb’s normal brain, downloaded on first use, placed head first and supine with its tissues’ T1, T2 and proton density; sampled as isochromats for the Bloch simulation.</p></td>
+<td><p>BrainWeb’s normal brain, downloaded on first use, placed head first and supine with its tissues’ T1, T2 and proton density, in the field its susceptibility adds to B0; sampled as isochromats for the Bloch simulation.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.virtual.Ellipse.html#pulserver.virtual.Ellipse" title="pulserver.virtual.Ellipse"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Ellipse</span></code></a></p></td>
 <td><p>An ellipse of uniform magnetization in a plane of constant z, of one chemical shift and one pair of relaxation times.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="../generated/pulserver.virtual.localizer.html#pulserver.virtual.localizer" title="pulserver.virtual.localizer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">localizer</span></code></a></p></td>
 <td><p>The axial, coronal and sagittal images of a phantom’s proton density through a point, as DICOM, drawn from its ground truth with no sequence played.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section id="coils">
+<h2>Coils<a class="headerlink" href="#coils" title="Link to this heading">#</a></h2>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Object</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.virtual.Coil.html#pulserver.virtual.Coil" title="pulserver.virtual.Coil"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Coil</span></code></a></p></td>
+<td><p>An RF coil fixed in the physical frame: the transmit and receive sensitivities of one of BART’s coil models, sampled by bartorch, and the default shim a single-channel pulse plays through.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="../generated/pulserver.virtual.COILS.html#pulserver.virtual.COILS" title="pulserver.virtual.COILS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">COILS</span></code></a></p></td>
+<td><p>The virtual scanner’s coils by name: a body coil, an 8-channel transmit and receive head coil, and 32- and 48-channel receive head arrays.</p></td>
 </tr>
 </tbody>
 </table>
@@ -648,7 +668,7 @@ scanner’s centre frequency.</p>
 <td><p>Write one series to an ISMRMRD file as <code class="docutils literal notranslate"><span class="pre">send</span></code> sends it.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.virtual.Console.html#pulserver.virtual.Console" title="pulserver.virtual.Console"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Console</span></code></a></p></td>
-<td><p>A scanner console’s calls answered in process: the design calls on the interpreter’s text blocks, an exam’s localizer, and a scan of a stored design whose clock and DICOM images stream back; <code class="docutils literal notranslate"><span class="pre">pulserver</span> <span class="pre">console</span></code> serves them over a WebSocket.</p></td>
+<td><p>A scanner console’s calls answered in process: the design calls on the interpreter’s text blocks, an exam’s coil and localizer, and a scan of a stored design whose clock and DICOM images stream back; <code class="docutils literal notranslate"><span class="pre">pulserver</span> <span class="pre">console</span></code> serves them over a WebSocket.</p></td>
 </tr>
 </tbody>
 </table>
@@ -707,6 +727,7 @@ scanner’s centre frequency.</p>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#scan-clock-and-sound">Scan clock and sound</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#external-simulators">External simulators</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#phantom">Phantom</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#coils">Coils</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#reconstruction-client">Reconstruction client</a></li>
 </ul>
   </nav></div>

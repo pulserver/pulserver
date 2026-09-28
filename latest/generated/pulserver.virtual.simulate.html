@@ -541,7 +541,10 @@ one scan. Each block’s gradients, its own rotation in them, are turned by
 the prescription’s <code class="docutils literal notranslate"><span class="pre">rotation</span></code> from logical to physical axes, a
 reflection included, except in blocks labelled <code class="docutils literal notranslate"><span class="pre">NOROT</span></code>. Its RF pulse
 and ADC play as <a class="reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.Isochromats.play.html#pypulseqpp.Isochromats.play" title="(in pypulseqpp latest)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">pypulseqpp.Isochromats.play()</span></code></a> plays RF and ADC
-events, with the frequency and phase offsets the playout sets.</p>
+events, with the frequency and phase offsets the playout sets. With
+<code class="docutils literal notranslate"><span class="pre">default_shim</span></code>, the channel weights of a coil of several transmit
+channels, a single-channel pulse plays on every channel, weighted by its
+block’s RF shim or, without one, by <code class="docutils literal notranslate"><span class="pre">default_shim</span></code>.</p>
 <p><a class="reference internal" href="../explanations/virtual-scanner.html"><span class="doc">The virtual scanner</span></a> states the signal model.</p>
 </dd></dl>
 

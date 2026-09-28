@@ -543,7 +543,8 @@ anterior commissure, at the isocentre: the physical x axis points to the
 subject’s left, y posterior and z superior. Each tissue class relaxes with
 the T1 and T2 and has the proton density BrainWeb’s simulator gives it at
 1.5 T (Kwan et al., IEEE Trans Med Imaging 18:1085, 1999), at any field; fat
-precesses at pypulseqpp’s fat shift. The coils are those of
+precesses at pypulseqpp’s fat shift, and every isochromat at the field
+<a class="reference internal" href="pulserver.virtual.BrainWeb.field_ppm.html#pulserver.virtual.BrainWeb.field_ppm" title="pulserver.virtual.BrainWeb.field_ppm"><code class="xref py py-attr docutils literal notranslate"><span class="pre">field_ppm</span></code></a> its head adds. The coils are those of
 <a class="reference internal" href="pulserver.virtual.Phantom.html#pulserver.virtual.Phantom" title="pulserver.virtual.Phantom"><code class="xref py py-class docutils literal notranslate"><span class="pre">Phantom</span></code></a>, fixed in the physical frame.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -553,6 +554,7 @@ precesses at pypulseqpp’s fat shift. The coils are those of
 <li><p><strong>depth</strong> – Their modulation depth.</p></li>
 <li><p><strong>directory</strong> – brainweb-dl’s cache; <code class="docutils literal notranslate"><span class="pre">BRAINWEB_DIR</span></code>, or <code class="docutils literal notranslate"><span class="pre">~/.cache/brainweb</span></code>,
 without one.</p></li>
+<li><p><strong>susceptibility</strong> – Whether the field the head’s susceptibility adds acts on it.</p></li>
 </ul>
 </dd>
 </dl>
@@ -573,7 +575,10 @@ without one.</p></li>
 <p class="rubric">Attributes</p>
 <div class="pst-scrollable-table-container"><table class="autosummary longtable table">
 <tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.virtual.BrainWeb.fractions.html#pulserver.virtual.BrainWeb.fractions" title="pulserver.virtual.BrainWeb.fractions"><code class="xref py py-obj docutils literal notranslate"><span class="pre">fractions</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.virtual.BrainWeb.field_ppm.html#pulserver.virtual.BrainWeb.field_ppm" title="pulserver.virtual.BrainWeb.field_ppm"><code class="xref py py-obj docutils literal notranslate"><span class="pre">field_ppm</span></code></a></p></td>
+<td><p>The field the head adds to B0 at each voxel, <code class="docutils literal notranslate"><span class="pre">(z,</span> <span class="pre">y,</span> <span class="pre">x)</span></code>, in ppm of B0, as a first-order shim leaves it.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pulserver.virtual.BrainWeb.fractions.html#pulserver.virtual.BrainWeb.fractions" title="pulserver.virtual.BrainWeb.fractions"><code class="xref py py-obj docutils literal notranslate"><span class="pre">fractions</span></code></a></p></td>
 <td><p>The fraction of each voxel each tissue fills, <code class="docutils literal notranslate"><span class="pre">(z,</span> <span class="pre">y,</span> <span class="pre">x,</span> <span class="pre">tissue)</span></code>, downloaded on first use.</p></td>
 </tr>
 </tbody>

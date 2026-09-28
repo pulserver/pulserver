@@ -536,7 +536,7 @@
 <p>The voxels are averaged in cubes <code class="docutils literal notranslate"><span class="pre">spacing</span></code> wide. Each tissue a cube
 holds is an isochromat at the cube’s centre, of proton density the
 tissue’s times the fraction of the cube it fills times the cube’s
-volume in m³.</p>
+volume in m³, precessing at the cube’s mean <a class="reference internal" href="pulserver.virtual.BrainWeb.field_ppm.html#pulserver.virtual.BrainWeb.field_ppm" title="pulserver.virtual.BrainWeb.field_ppm"><code class="xref py py-attr docutils literal notranslate"><span class="pre">field_ppm</span></code></a>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
@@ -548,12 +548,15 @@ in Hz, beside its chemical shift.</p></li>
 <li><p><strong>region</strong> – <code class="docutils literal notranslate"><span class="pre">(3,</span> <span class="pre">2)</span></code> lower and upper bounds along the physical axes, in
 metres, outside which no isochromat is kept; the whole head
 without one.</p></li>
+<li><p><strong>coil</strong> – The scanner’s coil the brain is scanned with, in place of the
+phantom’s coils.</p></li>
 <li><p><strong>threads</strong> – Worker threads of the simulation; 0 for every core.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Raises<span class="colon">:</span></dt>
-<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If <code class="docutils literal notranslate"><span class="pre">spacing</span></code> is not a whole number of millimetres, or
-    <code class="docutils literal notranslate"><span class="pre">field_t</span></code> is not given.</p>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If <code class="docutils literal notranslate"><span class="pre">spacing</span></code> is not a whole number of millimetres, <code class="docutils literal notranslate"><span class="pre">field_t</span></code>
+    is not given, or the brain has coils of its own and <code class="docutils literal notranslate"><span class="pre">coil</span></code> is
+    given.</p>
 </dd>
 </dl>
 </dd></dl>

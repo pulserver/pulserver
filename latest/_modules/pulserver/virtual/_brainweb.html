@@ -461,6 +461,7 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">pypulseqpp</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pp</span>
 
+<span class="kn">from</span><span class="w"> </span><span class="nn">._coils</span><span class="w"> </span><span class="kn">import</span> <span class="n">Coil</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">._phantom</span><span class="w"> </span><span class="kn">import</span> <span class="n">Phantom</span>
 
 <span class="c1">#: The tissue classes of BrainWeb's normal brain, in the order of the fuzzy</span>
@@ -478,6 +479,11 @@
     <span class="s2">"glial matter"</span><span class="p">:</span> <span class="p">(</span><span class="mf">0.833</span><span class="p">,</span> <span class="mf">0.083</span><span class="p">,</span> <span class="mf">0.86</span><span class="p">),</span>
     <span class="s2">"connective tissue"</span><span class="p">:</span> <span class="p">(</span><span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.07</span><span class="p">,</span> <span class="mf">0.77</span><span class="p">),</span>
 <span class="p">}</span>
+
+<span class="c1">#: Volume magnetic susceptibility, in ppm (SI), of air, and of water, which</span>
+<span class="c1">#: every tissue class of the head is taken to have (Schenck, Med Phys 23:815,</span>
+<span class="c1">#: 1996).</span>
+<span class="n">AIR_PPM</span><span class="p">,</span> <span class="n">WATER_PPM</span> <span class="o">=</span> <span class="mf">0.36</span><span class="p">,</span> <span class="o">-</span><span class="mf">9.05</span>
 
 <span class="c1">#: MNI coordinates, in mm, of the first voxel of the model, whose 1 mm voxels</span>
 <span class="c1">#: run along z, y and x, x fastest.</span>
@@ -498,7 +504,8 @@
 <span class="sd">    subject's left, y posterior and z superior. Each tissue class relaxes with</span>
 <span class="sd">    the T1 and T2 and has the proton density BrainWeb's simulator gives it at</span>
 <span class="sd">    1.5 T (Kwan et al., IEEE Trans Med Imaging 18:1085, 1999), at any field; fat</span>
-<span class="sd">    precesses at pypulseqpp's fat shift. The coils are those of</span>
+<span class="sd">    precesses at pypulseqpp's fat shift, and every isochromat at the field</span>
+<span class="sd">    :attr:`field_ppm` its head adds. The coils are those of</span>
 <span class="sd">    :class:`~pulserver.virtual.Phantom`, fixed in the physical frame.</span>
 
 <span class="sd">    Parameters</span>
@@ -512,6 +519,8 @@
 <span class="sd">    directory</span>
 <span class="sd">        brainweb-dl's cache; ``BRAINWEB_DIR``, or ``~/.cache/brainweb``,</span>
 <span class="sd">        without one.</span>
+<span class="sd">    susceptibility</span>
+<span class="sd">        Whether the field the head's susceptibility adds acts on it.</span>
 <span class="sd">    """</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
@@ -521,10 +530,12 @@
         <span class="n">period</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.5</span><span class="p">,</span>
         <span class="n">depth</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.5</span><span class="p">,</span>
         <span class="n">directory</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">susceptibility</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_coils</span> <span class="o">=</span> <span class="n">Phantom</span><span class="p">((),</span> <span class="n">coils</span><span class="o">=</span><span class="n">coils</span><span class="p">,</span> <span class="n">period</span><span class="o">=</span><span class="n">period</span><span class="p">,</span> <span class="n">depth</span><span class="o">=</span><span class="n">depth</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">coils</span> <span class="o">=</span> <span class="n">coils</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">directory</span> <span class="o">=</span> <span class="n">directory</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">susceptibility</span> <span class="o">=</span> <span class="n">susceptibility</span>
 
     <span class="nd">@functools</span><span class="o">.</span><span class="n">cached_property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">fractions</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
@@ -554,6 +565,19 @@
             <span class="p">)</span>
         <span class="k">return</span> <span class="n">fractions</span>
 
+    <span class="nd">@functools</span><span class="o">.</span><span class="n">cached_property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">field_ppm</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The field the head adds to B0 at each voxel, ``(z, y, x)``, in ppm of B0, as a first-order shim leaves it.</span>
+
+<span class="sd">        The head is water, and the background air, each voxel in proportion to</span>
+<span class="sd">        the fraction of it the background fills. The field along B0, the</span>
+<span class="sd">        physical z axis, is the susceptibility convolved with the dipole</span>
+<span class="sd">        kernel, the Lorentz sphere's third included (Marques and Bowtell,</span>
+<span class="sd">        Concepts Magn Reson B 25:65, 2005), whose constant and linear terms</span>
+<span class="sd">        over the voxels at least half head are then removed.</span>
+<span class="sd">        """</span>
+        <span class="k">return</span> <span class="n">_susceptibility_field</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">fractions</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">0</span><span class="p">])</span>
+
 <div class="viewcode-block" id="BrainWeb.proton_density">
 <a class="viewcode-back" href="../../../generated/pulserver.virtual.BrainWeb.proton_density.html#pulserver.virtual.BrainWeb.proton_density">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">proton_density</span><span class="p">(</span>
@@ -578,6 +602,7 @@
         <span class="n">field_t</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">off_resonance_hz</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">,</span>
         <span class="n">region</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">coil</span><span class="p">:</span> <span class="n">Coil</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">threads</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">pp</span><span class="o">.</span><span class="n">Isochromats</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">"""Return the brain sampled as isochromats, for :func:`~pulserver.virtual.simulate`.</span>
@@ -585,7 +610,7 @@
 <span class="sd">        The voxels are averaged in cubes ``spacing`` wide. Each tissue a cube</span>
 <span class="sd">        holds is an isochromat at the cube's centre, of proton density the</span>
 <span class="sd">        tissue's times the fraction of the cube it fills times the cube's</span>
-<span class="sd">        volume in m³.</span>
+<span class="sd">        volume in m³, precessing at the cube's mean :attr:`field_ppm`.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
@@ -601,14 +626,18 @@
 <span class="sd">            ``(3, 2)`` lower and upper bounds along the physical axes, in</span>
 <span class="sd">            metres, outside which no isochromat is kept; the whole head</span>
 <span class="sd">            without one.</span>
+<span class="sd">        coil</span>
+<span class="sd">            The scanner's coil the brain is scanned with, in place of the</span>
+<span class="sd">            phantom's coils.</span>
 <span class="sd">        threads</span>
 <span class="sd">            Worker threads of the simulation; 0 for every core.</span>
 
 <span class="sd">        Raises</span>
 <span class="sd">        ------</span>
 <span class="sd">        ValueError</span>
-<span class="sd">            If ``spacing`` is not a whole number of millimetres, or</span>
-<span class="sd">            ``field_t`` is not given.</span>
+<span class="sd">            If ``spacing`` is not a whole number of millimetres, ``field_t``</span>
+<span class="sd">            is not given, or the brain has coils of its own and ``coil`` is</span>
+<span class="sd">            given.</span>
 <span class="sd">        """</span>
         <span class="kn">from</span><span class="w"> </span><span class="nn">pypulseqpp.sequences.preparation.fatsat</span><span class="w"> </span><span class="kn">import</span> <span class="n">FAT_SHIFT_PPM</span>
 
@@ -621,7 +650,14 @@
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
                 <span class="s2">"BrainWeb's fat has a chemical shift: scan it at a field_t"</span>
             <span class="p">)</span>
+        <span class="k">if</span> <span class="n">coil</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">coils</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">"a phantom received by coils of its own is not scanned with a coil"</span>
+            <span class="p">)</span>
         <span class="n">cubes</span> <span class="o">=</span> <span class="n">_cubes</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">fractions</span><span class="p">,</span> <span class="n">step</span><span class="p">)</span>
+        <span class="n">field</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">cubes</span><span class="o">.</span><span class="n">shape</span><span class="p">[:</span><span class="mi">3</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">susceptibility</span><span class="p">:</span>
+            <span class="n">field</span> <span class="o">=</span> <span class="n">_cubes</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">field_ppm</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="kc">None</span><span class="p">],</span> <span class="n">step</span><span class="p">)[</span><span class="o">...</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span>
         <span class="n">index</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">indices</span><span class="p">(</span><span class="n">cubes</span><span class="o">.</span><span class="n">shape</span><span class="p">[:</span><span class="mi">3</span><span class="p">])</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">T</span>
         <span class="n">voxel</span> <span class="o">=</span> <span class="n">step</span> <span class="o">*</span> <span class="n">index</span> <span class="o">+</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="p">(</span><span class="n">step</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
         <span class="n">z</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">x</span> <span class="o">=</span> <span class="p">(</span>
@@ -633,6 +669,7 @@
             <span class="n">low</span><span class="p">,</span> <span class="n">high</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">region</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span><span class="o">.</span><span class="n">T</span>
             <span class="n">inside</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">all</span><span class="p">((</span><span class="n">positions</span> <span class="o">&gt;=</span> <span class="n">low</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">positions</span> <span class="o">&lt;=</span> <span class="n">high</span><span class="p">),</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
         <span class="n">per_ppm</span> <span class="o">=</span> <span class="mf">1e-6</span> <span class="o">*</span> <span class="n">pp</span><span class="o">.</span><span class="n">Opts</span><span class="p">()</span><span class="o">.</span><span class="n">gamma</span> <span class="o">*</span> <span class="n">field_t</span>
+        <span class="n">inhomogeneity</span> <span class="o">=</span> <span class="n">per_ppm</span> <span class="o">*</span> <span class="n">field</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
         <span class="n">points</span><span class="p">,</span> <span class="n">rows</span> <span class="o">=</span> <span class="p">[],</span> <span class="p">[]</span>
         <span class="k">for</span> <span class="n">tissue</span><span class="p">,</span> <span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="p">(</span><span class="n">t1</span><span class="p">,</span> <span class="n">t2</span><span class="p">,</span> <span class="n">density</span><span class="p">))</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">TISSUES</span><span class="o">.</span><span class="n">items</span><span class="p">()):</span>
             <span class="n">fraction</span> <span class="o">=</span> <span class="n">cubes</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">tissue</span><span class="p">]</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
@@ -645,7 +682,7 @@
                         <span class="n">density</span> <span class="o">*</span> <span class="n">fraction</span><span class="p">[</span><span class="n">kept</span><span class="p">]</span> <span class="o">*</span> <span class="p">(</span><span class="n">step</span> <span class="o">*</span> <span class="mf">1e-3</span><span class="p">)</span> <span class="o">**</span> <span class="mi">3</span><span class="p">,</span>
                         <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">(</span><span class="n">kept</span><span class="o">.</span><span class="n">sum</span><span class="p">(),</span> <span class="n">t1</span><span class="p">),</span>
                         <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">(</span><span class="n">kept</span><span class="o">.</span><span class="n">sum</span><span class="p">(),</span> <span class="n">t2</span><span class="p">),</span>
-                        <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">(</span><span class="n">kept</span><span class="o">.</span><span class="n">sum</span><span class="p">(),</span> <span class="n">shift</span> <span class="o">+</span> <span class="n">off_resonance_hz</span><span class="p">),</span>
+                        <span class="n">shift</span> <span class="o">+</span> <span class="n">off_resonance_hz</span> <span class="o">+</span> <span class="n">inhomogeneity</span><span class="p">[</span><span class="n">kept</span><span class="p">],</span>
                     <span class="p">]</span>
                 <span class="p">)</span>
             <span class="p">)</span>
@@ -657,7 +694,8 @@
             <span class="n">t1</span><span class="o">=</span><span class="n">t1</span><span class="p">,</span>
             <span class="n">t2</span><span class="o">=</span><span class="n">t2</span><span class="p">,</span>
             <span class="n">off_resonance</span><span class="o">=</span><span class="n">frequency</span><span class="p">,</span>
-            <span class="n">receive</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_coils</span><span class="o">.</span><span class="n">_received</span><span class="p">(</span><span class="n">own</span><span class="p">),</span>
+            <span class="n">transmit</span><span class="o">=</span><span class="kc">None</span> <span class="k">if</span> <span class="n">coil</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">coil</span><span class="o">.</span><span class="n">transmit</span><span class="p">(</span><span class="n">own</span><span class="p">),</span>
+            <span class="n">receive</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_coils</span><span class="o">.</span><span class="n">_received</span><span class="p">(</span><span class="n">own</span><span class="p">)</span> <span class="k">if</span> <span class="n">coil</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">coil</span><span class="o">.</span><span class="n">receive</span><span class="p">(</span><span class="n">own</span><span class="p">),</span>
             <span class="n">threads</span><span class="o">=</span><span class="n">threads</span><span class="p">,</span>
         <span class="p">)</span></div>
 </div>
@@ -681,6 +719,30 @@
         <span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">z</span> <span class="o">=</span> <span class="n">voxel</span><span class="p">[</span><span class="n">inside</span><span class="p">]</span><span class="o">.</span><span class="n">T</span>
         <span class="n">total</span><span class="p">[</span><span class="n">inside</span><span class="p">]</span> <span class="o">+=</span> <span class="n">fractions</span><span class="p">[</span><span class="n">z</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">x</span><span class="p">]</span> <span class="o">@</span> <span class="n">densities</span>
     <span class="k">return</span> <span class="n">total</span> <span class="o">/</span> <span class="n">steps</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_susceptibility_field</span><span class="p">(</span><span class="n">background</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return the shimmed field, in ppm, of a head whose voxels ``(z, y, x)`` the background fills the fraction ``background`` of."""</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">scipy</span><span class="w"> </span><span class="kn">import</span> <span class="n">fft</span>
+
+    <span class="n">contrast</span> <span class="o">=</span> <span class="p">((</span><span class="mf">1.0</span> <span class="o">-</span> <span class="n">background</span><span class="p">)</span> <span class="o">*</span> <span class="p">(</span><span class="n">WATER_PPM</span> <span class="o">-</span> <span class="n">AIR_PPM</span><span class="p">))</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+    <span class="n">shape</span> <span class="o">=</span> <span class="p">[</span><span class="n">fft</span><span class="o">.</span><span class="n">next_fast_len</span><span class="p">(</span><span class="mi">3</span> <span class="o">*</span> <span class="n">size</span> <span class="o">//</span> <span class="mi">2</span><span class="p">,</span> <span class="n">real</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span> <span class="k">for</span> <span class="n">size</span> <span class="ow">in</span> <span class="n">contrast</span><span class="o">.</span><span class="n">shape</span><span class="p">]</span>
+    <span class="n">kz</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">fft</span><span class="o">.</span><span class="n">fftfreq</span><span class="p">(</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">)[:,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">]</span>
+    <span class="n">ky</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">fft</span><span class="o">.</span><span class="n">fftfreq</span><span class="p">(</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">)[</span><span class="kc">None</span><span class="p">,</span> <span class="p">:,</span> <span class="kc">None</span><span class="p">]</span>
+    <span class="n">kx</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">fft</span><span class="o">.</span><span class="n">rfftfreq</span><span class="p">(</span><span class="n">shape</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">)[</span><span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="p">:]</span>
+    <span class="n">squared</span> <span class="o">=</span> <span class="n">kz</span><span class="o">**</span><span class="mi">2</span> <span class="o">+</span> <span class="n">ky</span><span class="o">**</span><span class="mi">2</span> <span class="o">+</span> <span class="n">kx</span><span class="o">**</span><span class="mi">2</span>
+    <span class="n">squared</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="mf">1.0</span>
+    <span class="n">kernel</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">(</span><span class="mf">1.0</span> <span class="o">/</span> <span class="mf">3.0</span><span class="p">)</span> <span class="o">-</span> <span class="n">kz</span><span class="o">**</span><span class="mi">2</span> <span class="o">/</span> <span class="n">squared</span>
+    <span class="n">kernel</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="mf">0.0</span>
+    <span class="n">spectrum</span> <span class="o">=</span> <span class="n">fft</span><span class="o">.</span><span class="n">rfftn</span><span class="p">(</span><span class="n">contrast</span><span class="p">,</span> <span class="n">shape</span><span class="p">,</span> <span class="n">workers</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+    <span class="n">spectrum</span> <span class="o">*=</span> <span class="n">kernel</span>
+    <span class="n">field</span> <span class="o">=</span> <span class="n">fft</span><span class="o">.</span><span class="n">irfftn</span><span class="p">(</span><span class="n">spectrum</span><span class="p">,</span> <span class="n">shape</span><span class="p">,</span> <span class="n">workers</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+    <span class="n">field</span> <span class="o">=</span> <span class="n">field</span><span class="p">[</span><span class="nb">tuple</span><span class="p">(</span><span class="nb">slice</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">size</span><span class="p">)</span> <span class="k">for</span> <span class="n">size</span> <span class="ow">in</span> <span class="n">contrast</span><span class="o">.</span><span class="n">shape</span><span class="p">)]</span>
+    <span class="n">grid</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">indices</span><span class="p">(</span><span class="n">field</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+    <span class="n">head</span> <span class="o">=</span> <span class="n">background</span> <span class="o">&lt;=</span> <span class="mf">0.5</span>
+    <span class="n">basis</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">column_stack</span><span class="p">([</span><span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">head</span><span class="o">.</span><span class="n">sum</span><span class="p">()),</span> <span class="o">*</span><span class="p">(</span><span class="n">axis</span><span class="p">[</span><span class="n">head</span><span class="p">]</span> <span class="k">for</span> <span class="n">axis</span> <span class="ow">in</span> <span class="n">grid</span><span class="p">)])</span>
+    <span class="n">shim</span><span class="p">,</span> <span class="o">*</span><span class="n">_</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">lstsq</span><span class="p">(</span><span class="n">basis</span><span class="p">,</span> <span class="n">field</span><span class="p">[</span><span class="n">head</span><span class="p">],</span> <span class="n">rcond</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+    <span class="k">return</span> <span class="p">(</span><span class="n">field</span> <span class="o">-</span> <span class="n">shim</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">-</span> <span class="n">np</span><span class="o">.</span><span class="n">tensordot</span><span class="p">(</span><span class="n">shim</span><span class="p">[</span><span class="mi">1</span><span class="p">:],</span> <span class="n">grid</span><span class="p">,</span> <span class="n">axes</span><span class="o">=</span><span class="mi">1</span><span class="p">))</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_cubes</span><span class="p">(</span><span class="n">fractions</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">step</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>

@@ -720,7 +720,13 @@ normal brain, downloaded on first use by the <code class="docutils literal notra
 (<code class="docutils literal notranslate"><span class="pre">pip</span> <span class="pre">install</span> <span class="pre">'pulserver[brainweb]'</span></code>); its <code class="docutils literal notranslate"><span class="pre">--spacing</span></code> is a whole number of
 millimetres. Without <code class="docutils literal notranslate"><span class="pre">--phantom</span></code>, the phantom is seven vials of water around
 one of fat, with T1 from 0.3 s to 2.0 s and T2 from 0.04 s to 0.3 s.
-<code class="docutils literal notranslate"><span class="pre">--spacing</span></code>, in mm, and <code class="docutils literal notranslate"><span class="pre">--coils</span></code> set its isochromats and its receive coils.</p>
+<code class="docutils literal notranslate"><span class="pre">--spacing</span></code>, in mm, and <code class="docutils literal notranslate"><span class="pre">--coils</span></code> set its isochromats and its receive coils;
+<code class="docutils literal notranslate"><span class="pre">--coil</span></code> scans it with one of the scanner’s coils instead, whose
+sensitivities bartorch samples from BART’s coil models, which the <code class="docutils literal notranslate"><span class="pre">coils</span></code>
+extra installs (<code class="docutils literal notranslate"><span class="pre">pip</span> <span class="pre">install</span> <span class="pre">'pulserver[coils]'</span></code>). The sensitivities at
+every isochromat are written to a temporary file mapped into memory; where
+the temporary directory is a memory file system, set <code class="docutils literal notranslate"><span class="pre">TMPDIR</span></code> to one on
+disk.</p>
 </li>
 <li><p><code class="docutils literal notranslate"><span class="pre">--recon</span></code> streams the series to a reconstruction proxy, which looks the
 design up in its store: give that store as <code class="docutils literal notranslate"><span class="pre">--store</span></code>, or the proxy’s design
@@ -785,19 +791,23 @@ it repeats:</p>
 <td><p></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">plugins</span></code>: the plugin names</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">list</span></code>, <code class="docutils literal notranslate"><span class="pre">validate</span></code>, <code class="docutils literal notranslate"><span class="pre">generate</span></code>, <code class="docutils literal notranslate"><span class="pre">import</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">coils</span></code></p></td>
+<td><p></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">coils</span></code>: each coil’s <code class="docutils literal notranslate"><span class="pre">name</span></code> and its <code class="docutils literal notranslate"><span class="pre">transmit</span></code> and <code class="docutils literal notranslate"><span class="pre">receive</span></code> channels</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">list</span></code>, <code class="docutils literal notranslate"><span class="pre">validate</span></code>, <code class="docutils literal notranslate"><span class="pre">generate</span></code>, <code class="docutils literal notranslate"><span class="pre">import</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">plugin</span></code>, <code class="docutils literal notranslate"><span class="pre">block</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">status</span></code> and <code class="docutils literal notranslate"><span class="pre">reply</span></code>, as <code class="docutils literal notranslate"><span class="pre">pulserver</span> <span class="pre">design</span></code> answers; <code class="docutils literal notranslate"><span class="pre">design</span></code> for a generated or imported design</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">exam</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">subject</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">exam</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">subject</span></code>, <code class="docutils literal notranslate"><span class="pre">coil</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">localizer</span></code>: the axial, coronal and sagittal images of the subject’s phantom, as base64 DICOM files</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">scan</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">scan</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">design</span></code>, <code class="docutils literal notranslate"><span class="pre">rotation</span></code> (nine elements), <code class="docutils literal notranslate"><span class="pre">centre_mm</span></code>, <code class="docutils literal notranslate"><span class="pre">sound</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">clock</span></code> and <code class="docutils literal notranslate"><span class="pre">duration</span></code> after each span played, with the span’s <code class="docutils literal notranslate"><span class="pre">sound</span></code> when asked, as base64 of 16-bit little-endian stereo samples at <code class="docutils literal notranslate"><span class="pre">rate</span></code> Hz; <code class="docutils literal notranslate"><span class="pre">dicom</span></code> and <code class="docutils literal notranslate"><span class="pre">name</span></code> for each image the reconstruction returns, <code class="docutils literal notranslate"><span class="pre">text</span></code>, then <code class="docutils literal notranslate"><span class="pre">done</span></code> with the status</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">cancel</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">cancel</span></code></p></td>
 <td><p></p></td>
 <td><p>stops the scan in progress</p></td>
 </tr>
@@ -805,10 +815,12 @@ it repeats:</p>
 </table>
 </div>
 <p>A subject named <code class="docutils literal notranslate"><span class="pre">brainweb</span></code> is BrainWeb’s normal brain; any other is the vials.
-The localizer is drawn from the phantom’s proton density, so an exam can be
-planned before any scan. MaRGE is such a console when <code class="docutils literal notranslate"><span class="pre">MARGE_PULSERVER</span></code> holds
-the address, <code class="docutils literal notranslate"><span class="pre">ws://127.0.0.1:8765</span></code> here: its sequences are then the plugins,
-its subject names the phantom, and it opens each exam on the localizer. The
+An exam is scanned in the coil it names, or in the one it had, <code class="docutils literal notranslate"><span class="pre">--coil</span></code> at
+first; a head coil needs the <code class="docutils literal notranslate"><span class="pre">coils</span></code> extra. The localizer is drawn from the
+phantom’s proton density, so an exam can be planned before any scan. MaRGE is
+such a console when <code class="docutils literal notranslate"><span class="pre">MARGE_PULSERVER</span></code> holds the address, <code class="docutils literal notranslate"><span class="pre">ws://127.0.0.1:8765</span></code>
+here: its sequences are then the plugins, its subject names the phantom, its RF
+coil names the coil, and it opens each exam on the localizer. The
 browser build of MaRGE in <a class="reference external" href="https://github.com/pulserver/MaRGE">pulserver/MaRGE</a>
 runs it in a browser tab, opened with <code class="docutils literal notranslate"><span class="pre">?console=ws://127.0.0.1:8765</span></code>, and plays
 each scan’s sound as it streams.</p>

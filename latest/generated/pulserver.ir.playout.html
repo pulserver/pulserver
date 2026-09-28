@@ -583,7 +583,9 @@ loads into waveform memory;</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">overwrites</span></code>: loads that wrote over memory the instance in play
 was reading, and <code class="docutils literal notranslate"><span class="pre">unloaded</span></code>: samples a block read where nothing
 was loaded. Both are 0 where every block plays what was loaded for
-it.</p></li>
+it;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">rf_shims</span></code>: per subsequence, each RF shim’s complex channel
+weights, which a block’s <code class="docutils literal notranslate"><span class="pre">rf_shim</span></code> indexes.</p></li>
 </ul>
 </p>
 </dd>

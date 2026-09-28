@@ -14,6 +14,7 @@
    :toctree:
    :nosignatures:
 
+   ~Console.coils
    ~Console.design
    ~Console.exam
    ~Console.plugin_names

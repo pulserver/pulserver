@@ -25,4 +25,5 @@
    :toctree:
    :nosignatures:
 
+   ~BrainWeb.field_ppm
    ~BrainWeb.fractions

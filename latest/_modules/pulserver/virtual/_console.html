@@ -485,9 +485,10 @@
 <span class="w">    </span><span class="sd">"""What a scanner console asks of pulserver, answered in this process.</span>
 
 <span class="sd">    A console lists a plugin's protocol, validates and generates designs with</span>
-<span class="sd">    the text blocks the interpreter sends, starts an exam on a subject, and</span>
-<span class="sd">    scans a stored design on it with the virtual scanner. Images return as</span>
-<span class="sd">    DICOM from the reconstruction proxy at ``recon``.</span>
+<span class="sd">    the text blocks the interpreter sends, starts an exam on a subject with</span>
+<span class="sd">    one of the virtual scanner's :data:`~pulserver.virtual.COILS`, and scans</span>
+<span class="sd">    a stored design on it. Images return as DICOM from the reconstruction</span>
+<span class="sd">    proxy at ``recon``.</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
@@ -505,8 +506,8 @@
 <span class="sd">        Recon-side intake each design is pushed to.</span>
 <span class="sd">    spacing</span>
 <span class="sd">        Isochromat spacing of the phantom, in metres.</span>
-<span class="sd">    coils</span>
-<span class="sd">        Receive channels.</span>
+<span class="sd">    coil</span>
+<span class="sd">        Name of the coil an exam is started with unless it names another.</span>
 <span class="sd">    speed</span>
 <span class="sd">        Scan time elapsed per wall-clock second; as fast as possible without it.</span>
 <span class="sd">    """</span>
@@ -520,7 +521,7 @@
         <span class="n">recon</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">push</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">spacing</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1e-3</span><span class="p">,</span>
-        <span class="n">coils</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
+        <span class="n">coil</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"body"</span><span class="p">,</span>
         <span class="n">speed</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="kn">from</span><span class="w"> </span><span class="nn">..host._blocks</span><span class="w"> </span><span class="kn">import</span> <span class="n">parse_limits</span>
@@ -531,11 +532,11 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">recon</span> <span class="o">=</span> <span class="n">recon</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">push</span> <span class="o">=</span> <span class="n">push</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">spacing</span> <span class="o">=</span> <span class="n">spacing</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">coils</span> <span class="o">=</span> <span class="n">coils</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">coil</span> <span class="o">=</span> <span class="n">_coil</span><span class="p">(</span><span class="n">coil</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">speed</span> <span class="o">=</span> <span class="n">speed</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">field_t</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">parse_limits</span><span class="p">(</span><span class="n">limits</span><span class="p">)[</span><span class="s2">"B0"</span><span class="p">])</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">subject</span> <span class="o">=</span> <span class="s2">""</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">phantom</span> <span class="o">=</span> <span class="n">_subject_phantom</span><span class="p">(</span><span class="s2">""</span><span class="p">,</span> <span class="n">coils</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">phantom</span> <span class="o">=</span> <span class="n">_subject_phantom</span><span class="p">(</span><span class="s2">""</span><span class="p">)</span>
 
 <div class="viewcode-block" id="Console.design">
 <a class="viewcode-back" href="../../../generated/pulserver.virtual.Console.design.html#pulserver.virtual.Console.design">[docs]</a>
@@ -572,17 +573,41 @@
         <span class="k">return</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">path</span><span class="o">.</span><span class="n">stem</span> <span class="k">for</span> <span class="n">path</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">plugins</span><span class="o">.</span><span class="n">glob</span><span class="p">(</span><span class="s2">"*.py"</span><span class="p">))</span></div>
 
 
+<div class="viewcode-block" id="Console.coils">
+<a class="viewcode-back" href="../../../generated/pulserver.virtual.Console.coils.html#pulserver.virtual.Console.coils">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">coils</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">"""Return each coil an exam can be started with: its ``name`` and its ``transmit`` and ``receive`` channels."""</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">.</span><span class="w"> </span><span class="kn">import</span> <span class="n">COILS</span>
+
+        <span class="k">return</span> <span class="p">[</span>
+            <span class="p">{</span>
+                <span class="s2">"name"</span><span class="p">:</span> <span class="n">coil</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
+                <span class="s2">"transmit"</span><span class="p">:</span> <span class="n">coil</span><span class="o">.</span><span class="n">transmit_channels</span><span class="p">,</span>
+                <span class="s2">"receive"</span><span class="p">:</span> <span class="n">coil</span><span class="o">.</span><span class="n">receive_channels</span><span class="p">,</span>
+            <span class="p">}</span>
+            <span class="k">for</span> <span class="n">coil</span> <span class="ow">in</span> <span class="n">COILS</span><span class="o">.</span><span class="n">values</span><span class="p">()</span>
+        <span class="p">]</span></div>
+
+
 <div class="viewcode-block" id="Console.exam">
 <a class="viewcode-back" href="../../../generated/pulserver.virtual.Console.exam.html#pulserver.virtual.Console.exam">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">exam</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">subject</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">bytes</span><span class="p">]:</span>
-<span class="w">        </span><span class="sd">"""Start an exam on the phantom ``subject`` names; return its three-plane localizer as DICOM files.</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">exam</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">subject</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">coil</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">bytes</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""Start an exam on the phantom ``subject`` names, in the coil ``coil`` names; return its three-plane localizer as DICOM files.</span>
 
-<span class="sd">        ``brainweb`` names BrainWeb's normal brain; any other subject, the vials.</span>
+<span class="sd">        ``brainweb`` names BrainWeb's normal brain; any other subject, the</span>
+<span class="sd">        vials. Without ``coil``, the exam keeps the coil it had.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If ``coil`` names none of the virtual scanner's coils.</span>
 <span class="sd">        """</span>
         <span class="kn">from</span><span class="w"> </span><span class="nn">._localizer</span><span class="w"> </span><span class="kn">import</span> <span class="n">localizer</span>
 
+        <span class="k">if</span> <span class="n">coil</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">coil</span> <span class="o">=</span> <span class="n">_coil</span><span class="p">(</span><span class="n">coil</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">subject</span> <span class="o">=</span> <span class="n">subject</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">phantom</span> <span class="o">=</span> <span class="n">_subject_phantom</span><span class="p">(</span><span class="n">subject</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">coils</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">phantom</span> <span class="o">=</span> <span class="n">_subject_phantom</span><span class="p">(</span><span class="n">subject</span><span class="p">)</span>
         <span class="k">return</span> <span class="p">[</span>
             <span class="n">_dicom_bytes</span><span class="p">(</span><span class="n">dataset</span><span class="p">)</span>
             <span class="k">for</span> <span class="n">dataset</span> <span class="ow">in</span> <span class="n">localizer</span><span class="p">(</span>
@@ -625,8 +650,11 @@
         <span class="n">rotation</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">rotation</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
         <span class="n">scan</span> <span class="o">=</span> <span class="n">Scan</span><span class="p">(</span>
             <span class="n">DesignStore</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">store</span><span class="p">)</span><span class="o">.</span><span class="n">directory</span><span class="p">(</span><span class="n">design</span><span class="p">)</span> <span class="o">/</span> <span class="s2">"sequence.seq"</span><span class="p">,</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">phantom</span><span class="o">.</span><span class="n">isochromats</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">spacing</span><span class="p">,</span> <span class="n">field_t</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">field_t</span><span class="p">),</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">phantom</span><span class="o">.</span><span class="n">isochromats</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">spacing</span><span class="p">,</span> <span class="n">field_t</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">field_t</span><span class="p">,</span> <span class="n">coil</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">coil</span>
+            <span class="p">),</span>
             <span class="n">rotation</span><span class="o">=</span><span class="n">rotation</span><span class="p">,</span>
+            <span class="n">default_shim</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">coil</span><span class="o">.</span><span class="n">default_shim</span><span class="p">,</span>
         <span class="p">)</span>
         <span class="n">stopped</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Event</span><span class="p">()</span>
 
@@ -659,7 +687,9 @@
         <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">send</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">recon</span><span class="p">,</span> <span class="n">design</span><span class="p">,</span> <span class="n">played</span><span class="p">(),</span> <span class="o">**</span><span class="n">series</span><span class="p">):</span>
             <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">item</span><span class="p">,</span> <span class="n">ismrmrd</span><span class="o">.</span><span class="n">Image</span><span class="p">):</span>
                 <span class="k">if</span> <span class="n">convert</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-                    <span class="n">header</span> <span class="o">=</span> <span class="n">_header</span><span class="p">(</span><span class="n">design</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">coils</span><span class="p">,</span> <span class="n">series</span><span class="p">[</span><span class="s2">"frequency_hz"</span><span class="p">],</span> <span class="kc">None</span><span class="p">)</span>
+                    <span class="n">header</span> <span class="o">=</span> <span class="n">_header</span><span class="p">(</span>
+                        <span class="n">design</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">coil</span><span class="o">.</span><span class="n">receive_channels</span><span class="p">,</span> <span class="n">series</span><span class="p">[</span><span class="s2">"frequency_hz"</span><span class="p">],</span> <span class="kc">None</span>
+                    <span class="p">)</span>
                     <span class="n">convert</span> <span class="o">=</span> <span class="n">MrdDicomBuilder</span><span class="p">(</span><span class="n">ismrmrd</span><span class="o">.</span><span class="n">xsd</span><span class="o">.</span><span class="n">CreateFromDocument</span><span class="p">(</span><span class="n">header</span><span class="p">))</span>
                 <span class="n">item</span> <span class="o">=</span> <span class="n">convert</span><span class="p">(</span><span class="n">item</span><span class="p">)</span>
             <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">item</span><span class="p">,</span> <span class="n">DicomWithName</span><span class="p">)</span> <span class="ow">and</span> <span class="n">item</span><span class="o">.</span><span class="n">dset</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
@@ -672,13 +702,23 @@
 
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_subject_phantom</span><span class="p">(</span><span class="n">subject</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">coils</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_subject_phantom</span><span class="p">(</span><span class="n">subject</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
     <span class="kn">from</span><span class="w"> </span><span class="nn">.</span><span class="w"> </span><span class="kn">import</span> <span class="n">BrainWeb</span>
     <span class="kn">from</span><span class="w"> </span><span class="nn">._command</span><span class="w"> </span><span class="kn">import</span> <span class="n">default_phantom</span>
 
     <span class="k">if</span> <span class="n">subject</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="o">==</span> <span class="s2">"brainweb"</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">BrainWeb</span><span class="p">(</span><span class="n">coils</span><span class="o">=</span><span class="n">coils</span><span class="p">)</span>
-    <span class="k">return</span> <span class="n">default_phantom</span><span class="p">(</span><span class="n">coils</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">BrainWeb</span><span class="p">()</span>
+    <span class="k">return</span> <span class="n">default_phantom</span><span class="p">()</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_coil</span><span class="p">(</span><span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">.</span><span class="w"> </span><span class="kn">import</span> <span class="n">COILS</span>
+
+    <span class="k">if</span> <span class="n">name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">COILS</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"the virtual scanner's coils are </span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="n">COILS</span><span class="p">)</span><span class="si">}</span><span class="s2">, not </span><span class="si">{</span><span class="n">name</span><span class="si">!r}</span><span class="s2">"</span>
+        <span class="p">)</span>
+    <span class="k">return</span> <span class="n">COILS</span><span class="p">[</span><span class="n">name</span><span class="p">]</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_dicom_bytes</span><span class="p">(</span><span class="n">dataset</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bytes</span><span class="p">:</span>
@@ -706,6 +746,8 @@
         <span class="k">try</span><span class="p">:</span>
             <span class="k">if</span> <span class="n">call</span> <span class="o">==</span> <span class="s2">"plugins"</span><span class="p">:</span>
                 <span class="n">reply</span><span class="p">(</span><span class="n">ident</span><span class="p">,</span> <span class="p">{</span><span class="s2">"plugins"</span><span class="p">:</span> <span class="n">console</span><span class="o">.</span><span class="n">plugin_names</span><span class="p">()})</span>
+            <span class="k">elif</span> <span class="n">call</span> <span class="o">==</span> <span class="s2">"coils"</span><span class="p">:</span>
+                <span class="n">reply</span><span class="p">(</span><span class="n">ident</span><span class="p">,</span> <span class="p">{</span><span class="s2">"coils"</span><span class="p">:</span> <span class="n">console</span><span class="o">.</span><span class="n">coils</span><span class="p">()})</span>
             <span class="k">elif</span> <span class="n">call</span> <span class="ow">in</span> <span class="n">DESIGN_CALLS</span><span class="p">:</span>
                 <span class="n">reply</span><span class="p">(</span>
                     <span class="n">ident</span><span class="p">,</span>
@@ -714,7 +756,11 @@
                     <span class="p">),</span>
                 <span class="p">)</span>
             <span class="k">elif</span> <span class="n">call</span> <span class="o">==</span> <span class="s2">"exam"</span><span class="p">:</span>
-                <span class="n">files</span> <span class="o">=</span> <span class="n">console</span><span class="o">.</span><span class="n">exam</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">request</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"subject"</span><span class="p">,</span> <span class="s2">""</span><span class="p">)))</span>
+                <span class="n">coil</span> <span class="o">=</span> <span class="n">request</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"coil"</span><span class="p">)</span>
+                <span class="n">files</span> <span class="o">=</span> <span class="n">console</span><span class="o">.</span><span class="n">exam</span><span class="p">(</span>
+                    <span class="nb">str</span><span class="p">(</span><span class="n">request</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"subject"</span><span class="p">,</span> <span class="s2">""</span><span class="p">)),</span>
+                    <span class="kc">None</span> <span class="k">if</span> <span class="n">coil</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="nb">str</span><span class="p">(</span><span class="n">coil</span><span class="p">),</span>
+                <span class="p">)</span>
                 <span class="n">reply</span><span class="p">(</span>
                     <span class="n">ident</span><span class="p">,</span>
                     <span class="p">{</span><span class="s2">"localizer"</span><span class="p">:</span> <span class="p">[</span><span class="n">base64</span><span class="o">.</span><span class="n">b64encode</span><span class="p">(</span><span class="n">f</span><span class="p">)</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="s2">"ascii"</span><span class="p">)</span> <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">files</span><span class="p">]},</span>
@@ -775,7 +821,9 @@
     <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span>
         <span class="s2">"--spacing"</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="nb">float</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s2">"isochromat spacing, in mm"</span>
     <span class="p">)</span>
-    <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s2">"--coils"</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="nb">int</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s2">"receive channels"</span><span class="p">)</span>
+    <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span>
+        <span class="s2">"--coil"</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="s2">"body"</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s2">"coil an exam starts with unless it names one"</span>
+    <span class="p">)</span>
     <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span>
         <span class="s2">"--speed"</span><span class="p">,</span>
         <span class="nb">type</span><span class="o">=</span><span class="nb">float</span><span class="p">,</span>
@@ -798,7 +846,7 @@
         <span class="n">recon</span><span class="o">=</span><span class="n">recon</span><span class="p">,</span>
         <span class="n">push</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">push</span><span class="p">,</span>
         <span class="n">spacing</span><span class="o">=</span><span class="mf">1e-3</span> <span class="o">*</span> <span class="n">args</span><span class="o">.</span><span class="n">spacing</span><span class="p">,</span>
-        <span class="n">coils</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">coils</span><span class="p">,</span>
+        <span class="n">coil</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">coil</span><span class="p">,</span>
         <span class="n">speed</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">speed</span><span class="p">,</span>
     <span class="p">)</span>
     <span class="k">with</span> <span class="n">contextlib</span><span class="o">.</span><span class="n">suppress</span><span class="p">(</span><span class="ne">KeyboardInterrupt</span><span class="p">):</span>

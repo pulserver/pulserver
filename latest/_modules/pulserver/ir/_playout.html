@@ -547,7 +547,9 @@
 <span class="sd">        - ``overwrites``: loads that wrote over memory the instance in play</span>
 <span class="sd">          was reading, and ``unloaded``: samples a block read where nothing</span>
 <span class="sd">          was loaded. Both are 0 where every block plays what was loaded for</span>
-<span class="sd">          it.</span>
+<span class="sd">          it;</span>
+<span class="sd">        - ``rf_shims``: per subsequence, each RF shim's complex channel</span>
+<span class="sd">          weights, which a block's ``rf_shim`` indexes.</span>
 
 <span class="sd">    Raises</span>
 <span class="sd">    ------</span>

@@ -179,6 +179,8 @@ from.
    BrainWeb
    Ellipse
    localizer
+   Coil
+   COILS
    send
    record
    Console

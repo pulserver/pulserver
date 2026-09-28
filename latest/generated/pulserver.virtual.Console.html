@@ -535,9 +535,10 @@
 <dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/builtins/functions.html#object" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
 <p>What a scanner console asks of pulserver, answered in this process.</p>
 <p>A console lists a plugin’s protocol, validates and generates designs with
-the text blocks the interpreter sends, starts an exam on a subject, and
-scans a stored design on it with the virtual scanner. Images return as
-DICOM from the reconstruction proxy at <code class="docutils literal notranslate"><span class="pre">recon</span></code>.</p>
+the text blocks the interpreter sends, starts an exam on a subject with
+one of the virtual scanner’s <a class="reference internal" href="pulserver.virtual.COILS.html#pulserver.virtual.COILS" title="pulserver.virtual.COILS"><code class="xref py py-data docutils literal notranslate"><span class="pre">COILS</span></code></a>, and scans
+a stored design on it. Images return as DICOM from the reconstruction
+proxy at <code class="docutils literal notranslate"><span class="pre">recon</span></code>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
@@ -549,7 +550,7 @@ is the virtual magnet’s field.</p></li>
 no images.</p></li>
 <li><p><strong>push</strong> – Recon-side intake each design is pushed to.</p></li>
 <li><p><strong>spacing</strong> – Isochromat spacing of the phantom, in metres.</p></li>
-<li><p><strong>coils</strong> – Receive channels.</p></li>
+<li><p><strong>coil</strong> – Name of the coil an exam is started with unless it names another.</p></li>
 <li><p><strong>speed</strong> – Scan time elapsed per wall-clock second; as fast as possible without it.</p></li>
 </ul>
 </dd>
@@ -559,16 +560,19 @@ no images.</p></li>
 <p class="rubric">Methods</p>
 <div class="pst-scrollable-table-container"><table class="autosummary longtable table">
 <tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.virtual.Console.design.html#pulserver.virtual.Console.design" title="pulserver.virtual.Console.design"><code class="xref py py-obj docutils literal notranslate"><span class="pre">design</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.virtual.Console.coils.html#pulserver.virtual.Console.coils" title="pulserver.virtual.Console.coils"><code class="xref py py-obj docutils literal notranslate"><span class="pre">coils</span></code></a></p></td>
+<td><p>Return each coil an exam can be started with: its <code class="docutils literal notranslate"><span class="pre">name</span></code> and its <code class="docutils literal notranslate"><span class="pre">transmit</span></code> and <code class="docutils literal notranslate"><span class="pre">receive</span></code> channels.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pulserver.virtual.Console.design.html#pulserver.virtual.Console.design" title="pulserver.virtual.Console.design"><code class="xref py py-obj docutils literal notranslate"><span class="pre">design</span></code></a></p></td>
 <td><p>Answer a design call; a generated or imported design's id is <code class="docutils literal notranslate"><span class="pre">design</span></code>.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pulserver.virtual.Console.exam.html#pulserver.virtual.Console.exam" title="pulserver.virtual.Console.exam"><code class="xref py py-obj docutils literal notranslate"><span class="pre">exam</span></code></a></p></td>
-<td><p>Start an exam on the phantom <code class="docutils literal notranslate"><span class="pre">subject</span></code> names; return its three-plane localizer as DICOM files.</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.virtual.Console.exam.html#pulserver.virtual.Console.exam" title="pulserver.virtual.Console.exam"><code class="xref py py-obj docutils literal notranslate"><span class="pre">exam</span></code></a></p></td>
+<td><p>Start an exam on the phantom <code class="docutils literal notranslate"><span class="pre">subject</span></code> names, in the coil <code class="docutils literal notranslate"><span class="pre">coil</span></code> names; return its three-plane localizer as DICOM files.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.virtual.Console.plugin_names.html#pulserver.virtual.Console.plugin_names" title="pulserver.virtual.Console.plugin_names"><code class="xref py py-obj docutils literal notranslate"><span class="pre">plugin_names</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pulserver.virtual.Console.plugin_names.html#pulserver.virtual.Console.plugin_names" title="pulserver.virtual.Console.plugin_names"><code class="xref py py-obj docutils literal notranslate"><span class="pre">plugin_names</span></code></a></p></td>
 <td><p>Return the names of the plugins a console can list.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pulserver.virtual.Console.scan.html#pulserver.virtual.Console.scan" title="pulserver.virtual.Console.scan"><code class="xref py py-obj docutils literal notranslate"><span class="pre">scan</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.virtual.Console.scan.html#pulserver.virtual.Console.scan" title="pulserver.virtual.Console.scan"><code class="xref py py-obj docutils literal notranslate"><span class="pre">scan</span></code></a></p></td>
 <td><p>Scan a stored design on the exam's phantom; return the reconstruction's status.</p></td>
 </tr>
 </tbody>

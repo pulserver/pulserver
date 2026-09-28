@@ -540,7 +540,8 @@ proton density <code class="docutils literal notranslate"><span class="pre">inte
 ellipse’s transform below the grid’s Nyquist frequency. Overlapping
 ellipses are separate isochromats. The positions are placed in the
 physical frame as the phantom is, and the receive sensitivities are the
-coils’.</p>
+phantom’s coils’, or <code class="docutils literal notranslate"><span class="pre">coil</span></code>’s transmit and receive sensitivities
+there.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
@@ -549,12 +550,14 @@ coils’.</p>
 resolved into a frequency, with pypulseqpp’s default gamma.</p></li>
 <li><p><strong>off_resonance_hz</strong> – Frequency of every isochromat from the scanner’s centre frequency,
 in Hz, beside its chemical shift.</p></li>
+<li><p><strong>coil</strong> – The scanner’s coil the phantom is scanned with.</p></li>
 <li><p><strong>threads</strong> – Worker threads of the simulation; 0 for every core.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Raises<span class="colon">:</span></dt>
-<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If an ellipse has a complex intensity, or the phantom has a chemical
-    shift and <code class="docutils literal notranslate"><span class="pre">field_t</span></code> is not given.</p>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If an ellipse has a complex intensity, the phantom has a chemical
+    shift and <code class="docutils literal notranslate"><span class="pre">field_t</span></code> is not given, or it has coils of its own and
+    <code class="docutils literal notranslate"><span class="pre">coil</span></code> is given.</p>
 </dd>
 </dl>
 </dd></dl>
