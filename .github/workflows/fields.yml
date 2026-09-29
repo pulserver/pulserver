@@ -1,0 +1,72 @@
+# BrainWeb's head in the virtual scanner's coils: each coil's transmit and
+# receive maps and the transmit coils' VOPs, solved by mariepy's
+# examples/brainweb.py and published as an image that holds only those files,
+# which docker/Dockerfile copies in by digest. mariepy runs here as a program;
+# none of its code enters pulserver or its image.
+name: Fields
+
+on:
+  workflow_dispatch:
+    inputs:
+      mariepy:
+        description: mariepy commit the fields are solved with
+        required: true
+      resolution:
+        description: Voxel pitch of the head, in mm
+        required: false
+        default: "5"
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  solve:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    env:
+      RESOLUTION: ${{ inputs.resolution }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          repository: pulserver/mariepy
+          ref: ${{ inputs.mariepy }}
+          fetch-depth: 0 # setuptools_scm reads the version from the history
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install mariepy
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install . brainweb-dl scipy
+
+      - name: Solve
+        run: python examples/brainweb.py --out fields --resolution "$RESOLUTION"
+
+      - name: Record what solved them
+        env:
+          RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: >-
+          printf '{"mariepy": "%s", "resolution_mm": %d, "run": "%s"}\n'
+          "$(git rev-parse HEAD)" "$RESOLUTION" "$RUN" > fields/provenance.json
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: brainweb-fields
+          path: fields
+
+      - name: Publish
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ACTOR: ${{ github.actor }}
+        run: |
+          image="ghcr.io/pulserver/brainweb-fields:$(git rev-parse --short HEAD)-${RESOLUTION}mm"
+          echo "$TOKEN" | docker login ghcr.io -u "$ACTOR" --password-stdin
+          printf '%s\n' 'FROM scratch' \
+            'LABEL org.opencontainers.image.source=https://github.com/pulserver/pulserver' \
+            'COPY . /' | docker build -t "$image" -f - fields
+          docker push "$image"
+          echo "Published $(docker inspect --format '{{index .RepoDigests 0}}' "$image")" >> "$GITHUB_STEP_SUMMARY"
