@@ -275,6 +275,12 @@ def test_a_mapped_coils_vop_drive_plays_a_pulse_at_its_amplitude_at_the_isocentr
     assert abs(field) == pytest.approx(1.0 / SYSTEM.gamma, rel=1e-5)
 
 
+def test_a_mapped_coil_without_vops_beside_its_maps_has_no_vop_limits(fields):
+    (fields / "head8_vops.npz").unlink()
+
+    assert _coils.coils(fields)["head8/head32"].limits() == {}
+
+
 def test_a_coil_of_barts_models_has_no_vops():
     assert virtual.COILS["head8/head32"].limits() == {}
 
