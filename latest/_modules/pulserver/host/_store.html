@@ -518,6 +518,13 @@
 
 
 
+<span class="k">def</span><span class="w"> </span><span class="nf">_umask</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return the process umask, without leaving it changed."""</span>
+    <span class="n">mask</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">umask</span><span class="p">(</span><span class="mo">0o022</span><span class="p">)</span>
+    <span class="n">os</span><span class="o">.</span><span class="n">umask</span><span class="p">(</span><span class="n">mask</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">mask</span>
+
+
 <div class="viewcode-block" id="DesignStore">
 <a class="viewcode-back" href="../../../generated/pulserver.host.DesignStore.html#pulserver.host.DesignStore">[docs]</a>
 <span class="k">class</span><span class="w"> </span><span class="nc">DesignStore</span><span class="p">:</span>
@@ -687,6 +694,12 @@
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_publish</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">identity</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">staged</span><span class="p">:</span> <span class="n">Path</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
         <span class="n">design</span> <span class="o">=</span> <span class="n">design_id</span><span class="p">(</span><span class="n">identity</span><span class="p">)</span>
+        <span class="c1"># A design exists to be read by something other than what wrote it --</span>
+        <span class="c1"># on a scanner the reconstruction runs as another user than the design</span>
+        <span class="c1"># service -- and tempfile.mkdtemp() makes the stage private. Publish it</span>
+        <span class="c1"># as an ordinary mkdir would, and let a site that wants the store</span>
+        <span class="c1"># private say so with its umask.</span>
+        <span class="n">staged</span><span class="o">.</span><span class="n">chmod</span><span class="p">(</span><span class="mo">0o777</span> <span class="o">&amp;</span> <span class="o">~</span><span class="n">_umask</span><span class="p">())</span>
         <span class="k">try</span><span class="p">:</span>
             <span class="n">staged</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">root</span> <span class="o">/</span> <span class="n">design</span><span class="p">)</span>
         <span class="k">except</span> <span class="ne">OSError</span><span class="p">:</span>
