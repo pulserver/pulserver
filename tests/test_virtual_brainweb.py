@@ -192,6 +192,15 @@ def test_a_fractional_spacing_or_a_missing_field_is_refused(
 ):
     with pytest.raises(ValueError, match=match):
         virtual.BrainWeb().isochromats(spacing, field_t=field_t)
+    with pytest.raises(ValueError, match=match):
+        virtual.BrainWeb().count(spacing, field_t=field_t)
+
+
+def test_a_brain_received_by_coils_of_its_own_is_not_scanned_with_a_coil(model):
+    with pytest.raises(ValueError, match="coils of its own"):
+        virtual.BrainWeb(coils=3).isochromats(
+            field_t=3.0, coil=virtual.COILS["body/head48"]
+        )
 
 
 def test_a_model_of_other_tissues_is_refused(monkeypatch):
