@@ -164,6 +164,8 @@ py::dict summarize(const pulseg_collection *coll)
         entry["num_unique_rf"] = s.num_unique_rf;
         entry["num_tr_instances"] = s.num_tr_instances;
         entry["rf_amplitude_variable"] = s.rf_amplitude_variable;
+        entry["pmc_enabled"] = s.pmc_enabled;
+        entry["sar_burst_requested"] = s.sar_burst_requested;
         entry["vop_sar_ratio"] = s.vop_sar_ratio;
         entry["vop_global_sar_ratio"] = s.vop_global_sar_ratio;
         entry["grad_raster_us"] = s.grad_raster_us;

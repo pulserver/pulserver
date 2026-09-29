@@ -149,3 +149,31 @@ def test_a_repetition_that_does_not_start_at_the_first_block_is_refused(
     monkeypatch.setattr(sequence, "repetition", lambda: (3, 2))
     with pytest.raises(ValueError, match="repeats from block 2"):
         conversion_payload(sequence, SYSTEM)
+
+
+@pytest.mark.parametrize(
+    "declared,requested",
+    [(None, 0), (0, 0), (1, 1)],
+    ids=["undeclared", "declined", "asked"],
+)
+def test_a_scan_asking_for_sar_burst_limits_says_so_in_its_cache(
+    tmp_path, declared, requested
+):
+    """A scanner cannot grant what it cannot see it was asked for.
+
+    ``EnableSarBurstMode`` asks to be costed against the scanner's 10-second
+    limits rather than its long-term ones, which is what lets a chain of
+    interleaved contrasts be evaluated per contrast and then jointly. The
+    request is the sequence's to make and the grant the scanner's to give, so
+    the flag has to survive into the cache the scanner reads -- a request that
+    arrives as a zero is indistinguishable from one never made, and the scan
+    is costed against limits it never asked for.
+    """
+
+    def build(sequence):
+        alternating_delays_around_a_gradient(sequence)
+        if declared is not None:
+            sequence.set_definition("EnableSarBurstMode", declared)
+
+    unit = segmented(read(written(tmp_path, "sar_burst.seq", build)))
+    assert unit["sar_burst_requested"] == requested
