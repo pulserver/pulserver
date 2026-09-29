@@ -247,17 +247,28 @@ and a client that sends no `Origin`, which a browser always sends, is served
 either way.
 
 pulserver's image runs such a console by default, with bartorch for the head
-coils, BrainWeb's normal brain, so that an exam on `brainweb` downloads
-nothing, and the `gre2d` plugin reconstructed by the built-in Cartesian FFT,
-`pulserver.recon.handlers.simplefft`. It serves the pages of
-`https://pulserver.github.io`, `http://localhost:8000` and
-`http://127.0.0.1:8000` on port 8765 of this computer, and plays each scan at
-the scanner's speed, `--speed=1`:
+coils and BrainWeb's normal brain, so that an exam on `brainweb` downloads
+nothing. It serves the pages of `https://pulserver.github.io`,
+`http://localhost:8000` and `http://127.0.0.1:8000` on port 8765 of this
+computer, and plays each scan at the scanner's speed, `--speed=1`:
 
 ```bash
 docker run -d --restart unless-stopped --name pulserver \
   -p 127.0.0.1:8765:8765 ghcr.io/pulserver/pulserver
 ```
+
+Its sequences are pypulseqpp's, reconstructed by the built-in plugins of
+{doc}`reconstruction-plugins`, and each protocol starts at values the image's
+limits play:
+
+| Plugin | Sequence | Reconstruction |
+| --- | --- | --- |
+| `gre2d` | 2D gradient echo | `simplefft` |
+| `gre_multiecho2d` | 2D multi-echo gradient echo, one image per echo | `cartesian` |
+| `se2d` | 2D spin echo | `cartesian` |
+| `bssfp2d` | 2D balanced SSFP | `cartesian` |
+| `gre_radial2d` | 2D radial gradient echo | `nufft` |
+| `gre_spiral2d` | 2D spiral gradient echo | `nufft` |
 
 Directories mounted at `/console/user/plugins` and `/console/user/recon` add
 sequences and reconstructions to the image's. They are searched first, so a

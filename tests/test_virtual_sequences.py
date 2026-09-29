@@ -15,10 +15,12 @@ K_TOLERANCE = 1e-3
 
 @pytest.fixture(scope="module", params=sorted(SMALL))
 def design(request, tmp_path_factory):
+    """The design as its file holds it, which keeps six significant digits of an amplitude."""
     name = request.param
-    sequence = getattr(sequences, name)(**SMALL[name])
     path = tmp_path_factory.mktemp(name) / "scan.seq"
-    sequence.write(str(path))
+    getattr(sequences, name)(**SMALL[name]).write(str(path))
+    sequence = pp.Sequence()
+    sequence.read(str(path))
     return name, sequence, path
 
 

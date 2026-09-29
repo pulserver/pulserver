@@ -38,12 +38,12 @@ RUN for attempt in 1 2 3; do \
       rm -rf "$BRAINWEB_DIR"; [ "$attempt" = 3 ] && exit 1; sleep 30; \
     done
 
-# The console's sequence, its reconstruction, and the limits it designs under;
-# the user directories are searched first.
-COPY tests/plugins/gre2d.py /console/plugins/gre2d.py
+# The console's sequences, their reconstructions, and the limits they design
+# under; the user directories are searched first.
+COPY tests/plugins/gre2d.py docker/console/plugins/*.py /console/plugins/
+COPY docker/console/recon/*.py /console/recon/
 COPY docker/limits/limits.txt /console/limits.txt
-RUN mkdir -p /console/recon /console/user/plugins /console/user/recon \
- && echo "from pulserver.recon.handlers.simplefft import PLUGIN" > /console/recon/gre2d.py
+RUN mkdir -p /console/user/plugins /console/user/recon
 
 EXPOSE 8765
 ENTRYPOINT ["pulserver"]

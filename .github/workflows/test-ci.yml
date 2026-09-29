@@ -77,3 +77,6 @@ jobs:
 
       - name: Run the coil tests
         run: pytest -q -ra tests/test_virtual_coils.py
+
+      - name: Scan the console image's sequences, NUFFT reconstructions included
+        run: pytest -q -ra tests/test_console_sequences.py
