@@ -150,6 +150,37 @@ def test_an_infeasible_protocol_is_invalid_with_the_design_error_as_info(tiny, g
     assert "TR" in gre2d.validate(SYSTEM, {"TR": 1000}).info
 
 
+class Defaulted(ScannerSequence):
+    app = StatedApp
+    ui = {
+        UIParam.TE: TimeParam(
+            "te", range_max=80000, presets={TEPreset.MINIMUM: None}, default=4000
+        ),
+        UIParam.TR: TimeParam("tr", range_max=5_000_000, default=20000),
+    }
+
+
+def test_an_entry_s_default_is_the_protocol_s_initial_value_in_place_of_the_application_s():
+    listing = Defaulted().listing()
+    values = Defaulted().validate(SYSTEM, {}).values
+
+    assert (listing["TE"].value, listing["TR"].value) == (4000, 20000)
+    assert (values["TE"], values["TR"]) == (4000, 20000)
+
+
+def test_a_time_entry_defaults_to_a_preset_it_offers_and_no_other():
+    def bound(**entry):
+        ui = {UIParam.TE: TimeParam("te", default=TEPreset.MINIMUM, **entry)}
+        return type("Bound", (ScannerSequence,), {"app": StatedApp, "ui": ui})()
+
+    offered = bound(presets={TEPreset.MINIMUM: None})
+
+    assert offered.listing()["TE"].value == TEPreset.MINIMUM
+    assert offered.validate(SYSTEM, {}).values["TE"] == 2500
+    with pytest.raises(ValueError, match="does not offer"):
+        bound().listing()
+
+
 def test_a_preset_the_entry_does_not_offer_is_invalid(tiny):
     reply = tiny.validate(SYSTEM, {"TE": TEPreset.IN_PHASE})
     assert not reply.valid

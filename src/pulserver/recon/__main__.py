@@ -11,7 +11,11 @@ from pathlib import Path
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(prog="python -m pulserver.recon")
     parser.add_argument(
-        "--plugins", type=Path, required=True, help="directory of <plugin>.py"
+        "--plugins",
+        type=Path,
+        action="append",
+        required=True,
+        help="directory of <plugin>.py, repeatable; the first holding it is used",
     )
     parser.add_argument("--port", type=int, required=True, help="TCP port to listen on")
     parser.add_argument(

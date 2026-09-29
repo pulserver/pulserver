@@ -76,4 +76,14 @@ jobs:
           python -c "import bartorch.tools"
 
       - name: Run the coil tests
-        run: pytest -q -ra tests/test_virtual_coils.py
+        run: pytest -q -ra tests/test_virtual_coils.py --cov
+
+      - name: Scan the console image's sequences, NUFFT reconstructions included
+        run: pytest -q -ra --cov --cov-append --cov-report=xml tests/test_console_sequences.py
+
+      # The NUFFT reconstruction runs only here, where bartorch is installed.
+      - uses: codecov/codecov-action@v7
+        with:
+          fail_ci_if_error: false
+          token: ${{ secrets.CODECOV_TOKEN }}
+          slug: pulserver/pulserver

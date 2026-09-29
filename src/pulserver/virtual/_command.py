@@ -46,7 +46,12 @@ def _parser() -> argparse.ArgumentParser:
     source = parser.add_mutually_exclusive_group(required=True)
     source.add_argument("--seq", type=Path, help="sequence file to import")
     source.add_argument("--plugin", help="scanner-sequence plugin to generate from")
-    parser.add_argument("--plugins", type=Path, help="directory of <plugin>.py")
+    parser.add_argument(
+        "--plugins",
+        type=Path,
+        action="append",
+        help="directory of <plugin>.py, repeatable; the first holding it is used",
+    )
     parser.add_argument(
         "--protocol",
         type=Path,
@@ -219,7 +224,7 @@ def _design_call(args: argparse.Namespace, store: Path) -> tuple[int, str]:
     lines = [f"{name}: {float(value)!r}" for name, value in prescribed.items()]
     call.update(
         call="generate",
-        plugins=str(args.plugins.absolute()),
+        plugins=[str(path.absolute()) for path in args.plugins],
         plugin=args.plugin,
         input="\n".join([PROTOCOL_BEGIN, *kept, *lines, PROTOCOL_END]) + "\n",
     )
@@ -230,7 +235,15 @@ def _played(
     scan: Any, args: argparse.Namespace, audio: wave.Wave_write | None
 ) -> Iterator[np.ndarray]:
     """Yield the readouts of the scan as they are played, writing its sound and its clock."""
-    for chunk in scan.chunks(_SPAN, speed=args.speed, sound=audio is not None):
+
+    def preparing(left: float | None) -> None:
+        sys.stderr.write(
+            "preparing\n" if left is None else f"preparing, {left:.1f} s left\n"
+        )
+
+    for chunk in scan.chunks(
+        _SPAN, speed=args.speed, sound=audio is not None, preparing=preparing
+    ):
         if audio is not None:
             audio.writeframes(np.round(32767.0 * chunk.sound.T).astype("<i2").tobytes())
         sys.stderr.write(f"{chunk.stop:9.2f} s of {scan.duration:.2f} s\n")

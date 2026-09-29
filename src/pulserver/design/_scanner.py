@@ -42,7 +42,8 @@ class FloatParam:
     """A float UI entry bound to an ``init_sequence`` argument.
 
     The UI value is the argument divided by ``scale``, in ``unit``; a dropdown
-    when it has options.
+    when it has options. ``default`` is the UI value the protocol starts at;
+    ``None`` starts it at the application's default.
     """
 
     argument: str
@@ -52,6 +53,7 @@ class FloatParam:
     range_max: float = math.inf
     range_incr: float = 1.0
     options: tuple[float, ...] = ()
+    default: float | None = None
 
 
 @dataclass(frozen=True)
@@ -63,7 +65,9 @@ class TimeParam:
     reported. Each key of ``presets`` is a dropdown preset; its value is the
     time it requests: seconds, ``None`` for the application's own shortest
     choice, or a function of the scanner limits. The entry is a dropdown when
-    it has options or presets.
+    it has options or presets. ``default``, microseconds or a key of
+    ``presets``, is the value the protocol starts at; ``None`` starts it at the
+    application's default.
     """
 
     argument: str
@@ -72,11 +76,16 @@ class TimeParam:
     range_incr: int = 1
     options: tuple[int, ...] = ()
     presets: Mapping[int, Preset] = field(default_factory=dict)
+    default: int | None = None
 
 
 @dataclass(frozen=True)
 class IntParam:
-    """An integer UI entry bound to an ``init_sequence`` argument; a dropdown when it has options."""
+    """An integer UI entry bound to an ``init_sequence`` argument; a dropdown when it has options.
+
+    ``default`` is the value the protocol starts at; ``None`` starts it at the
+    application's default.
+    """
 
     argument: str
     unit: str = ""
@@ -84,24 +93,33 @@ class IntParam:
     range_max: int = 2**31 - 1
     range_incr: int = 1
     options: tuple[int, ...] = ()
+    default: int | None = None
 
 
 @dataclass(frozen=True)
 class BoolParam:
-    """A checkbox UI entry bound to an ``init_sequence`` argument."""
+    """A checkbox UI entry bound to an ``init_sequence`` argument.
+
+    ``default`` is the value the protocol starts at; ``None`` starts it at the
+    application's default.
+    """
 
     argument: str
+    default: bool | None = None
 
 
 @dataclass(frozen=True)
 class StringListParam:
     """A choice among option strings, bound to an ``init_sequence`` argument.
 
-    The argument receives the chosen string, not its index.
+    The argument receives the chosen string, not its index. ``default`` is the
+    option the protocol starts at; ``None`` starts it at the application's
+    default.
     """
 
     argument: str
     options: tuple[str, ...]
+    default: str | None = None
 
 
 @dataclass(frozen=True)
@@ -162,7 +180,13 @@ def _parameter(name: str, entry: Entry, defaults: Mapping[str, Any]) -> Paramete
     default = defaults[entry.argument]
     if isinstance(entry, TimeParam):
         options = (*entry.presets, *entry.options)
-        if default is None:
+        if entry.default is not None:
+            value = int(entry.default)
+            if value < 0 and value not in entry.presets:
+                raise ValueError(
+                    f"{name} defaults to preset {value}, which it does not offer"
+                )
+        elif default is None:
             shortest = [key for key, preset in entry.presets.items() if preset is None]
             if not shortest:
                 raise ValueError(
@@ -186,7 +210,9 @@ def _parameter(name: str, entry: Entry, defaults: Mapping[str, Any]) -> Paramete
         mode = InputMode.DROPDOWN if entry.options else InputMode.TYPEIN
         return Parameter(
             Kind.FLOAT,
-            _to_ui(default, entry.scale),
+            _to_ui(default, entry.scale)
+            if entry.default is None
+            else _ui_float(entry.default),
             mode,
             entry.range_min,
             entry.range_max,
@@ -198,7 +224,7 @@ def _parameter(name: str, entry: Entry, defaults: Mapping[str, Any]) -> Paramete
         mode = InputMode.DROPDOWN if entry.options else InputMode.TYPEIN
         return Parameter(
             Kind.INT,
-            default,
+            default if entry.default is None else int(entry.default),
             mode,
             entry.range_min,
             entry.range_max,
@@ -207,9 +233,12 @@ def _parameter(name: str, entry: Entry, defaults: Mapping[str, Any]) -> Paramete
             entry.options,
         )
     if isinstance(entry, BoolParam):
-        return Parameter(Kind.BOOL, default)
+        return Parameter(Kind.BOOL, default if entry.default is None else entry.default)
     return Parameter(
-        Kind.STRINGLIST, default, InputMode.DROPDOWN, options=entry.options
+        Kind.STRINGLIST,
+        default if entry.default is None else entry.default,
+        InputMode.DROPDOWN,
+        options=entry.options,
     )
 
 
@@ -220,7 +249,8 @@ class ScannerSequence:
     interpreter's parameter names: members of
     :class:`~pulserver.protocol.UIParam` or :class:`~pulserver.protocol.ConfigKey`,
     or user-entry keys. They are stored as plain strings. Entries a request
-    omits keep the application's defaults. An entry resolves to the value its
+    omits keep their initial values, the entry's ``default`` or else the
+    application's. An entry resolves to the value its
     argument took in the design, as the application records it with
     ``SequenceApp.resolve``, and otherwise keeps the requested value. Times
     travel as integer microseconds; other float values are read and reported

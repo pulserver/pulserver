@@ -53,8 +53,8 @@ scanner's centre frequency.
 
 | Object | Description |
 | --- | --- |
-| {obj}`~pulserver.virtual.Coil` | An RF coil fixed in the physical frame: the transmit and receive sensitivities of one of BART's coil models, sampled by bartorch, and the default shim a single-channel pulse plays through. |
-| {obj}`~pulserver.virtual.COILS` | The virtual scanner's coils by name: a body coil, an 8-channel transmit and receive head coil, and 32- and 48-channel receive head arrays. |
+| {obj}`~pulserver.virtual.Coil` | The RF coils of an exam, fixed in the physical frame: the transmit and receive sensitivities of BART's coil models, sampled by bartorch, or of each coil's field maps, the default shim a single-channel pulse plays through, and the VOP limits of mapped transmit coils. |
+| {obj}`~pulserver.virtual.COILS` | The virtual scanner's coils by name, `transmit/receive`: the body coil both ways, the body coil with a 48-channel receive head array, and an 8-channel parallel-transmit head coil with a 32-channel receive head array. |
 
 ## Reconstruction client
 

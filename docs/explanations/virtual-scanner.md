@@ -158,18 +158,35 @@ that rounding accrues is what separates the two.
 
 The coils of the signal model are the phantom's own. A scan on the Bloch
 simulation can take one of the scanner's {obj}`~pulserver.virtual.COILS`
-instead, fixed in the physical frame: a body coil, taken to be one channel of
-unit sensitivity each way; an 8-channel head coil that transmits and receives;
-and 32- and 48-channel head arrays that receive while the body coil transmits.
-The head coils' sensitivities are BART's coil models rather than
-electromagnetic simulations: the 8-channel coil is `HEAD_2D_8CH`, constant along
-$z$, and the arrays are the first 32 and 48 channels of `HEAD_3D_64CH`, each
-sampled by bartorch over a cube 25.6 cm wide about the isocentre and
-interpolated linearly between the samples. The receive sensitivities $s_c$
-have a root sum of squares of 1 at the isocentre. The transmit sensitivities
-$s^+_c$ are their complex conjugates, the quasi-static limit of reciprocity;
+instead, fixed in the physical frame, each a transmit coil and a receive coil,
+named `transmit/receive`: the body coil both ways, taken to be one channel of
+unit sensitivity each way; the body coil transmitting to a 48-channel receive
+head array, `body/head48`; and an 8-channel head coil for parallel transmission
+with a 32-channel receive head array, `head8/head32`. The head coils'
+sensitivities are BART's coil models rather than electromagnetic simulations:
+the 8-channel coil is `HEAD_2D_8CH`, constant along $z$, and the arrays are the
+first 48 and 32 channels of `HEAD_3D_64CH`, each sampled by bartorch over a cube
+25.6 cm wide about the isocentre and interpolated linearly between the samples.
+The receive sensitivities $s_c$ have a root sum of squares of 1 at the
+isocentre. The transmit sensitivities $s^+_c$ are the complex conjugates of the
+8-channel coil's receive sensitivities, the quasi-static limit of reciprocity;
 the models show none of the dielectric effects of a wavelength comparable to
 the head.
+
+A console given field maps takes the same coils from electromagnetic
+simulations of BrainWeb's head instead. mariepy, a port of MARIE 3.0, solves
+the head in a quadrature birdcage, whose two linear modes are the body coil's
+two channels, in the 8-channel coil and in the two arrays, and writes each
+channel's circular components $B^\pm_c = \mu_0 (H_x \pm j H_y)$ over the head,
+for the time dependence $e^{+j\omega t}$. With $B_0$ along $+z$, the part of a
+channel's field that rotates with the magnetization is half the complex
+conjugate of its $B^-_c$, and what it receives is weighted by the complex
+conjugate of its $B^+_c$: $s^+_c \propto \overline{B^-_c}$ and
+$s_c \propto \overline{B^+_c}$, scaled as the models' are. Outside the head
+each map takes the value of the nearest voxel inside it, and between voxels it
+is interpolated linearly. The maps show the dielectric effects the models do
+not; they are solved in BrainWeb's head alone, so such a console examines
+BrainWeb whatever the subject is called.
 
 Each transmit channel plays the pulse the cache holds for it, scaled at each
 isochromat by $s^+_c(\mathbf{r})$, and the channels' fields add. A pTx pulse
@@ -178,6 +195,14 @@ weighted by its block's RF shim or, without one, by the coil's default shim,
 the unit weights that bring the channels into phase at the isocentre, where the
 pulse then has its nominal amplitude. A shim of another number of channels is
 refused.
+
+The maps' transmit coils come with the VOPs mariepy compresses from the same
+fields, and every design is made under those of the exam's transmit coil: its
+limits name the VOP file, the default shim, and the drive of every channel per
+hertz of a pulse's amplitude with which the channels' fields reach that
+amplitude at the isocentre, $2 / (\gamma \sum_c |B^-_c(\mathbf{0})|)$ in the
+maps' unit of drive. The IR cache then reports each subsequence's SAR against
+the reference pulse in that coil ({doc}`ir-cache`).
 
 {class}`~pulserver.virtual.BrainWeb` carries the field its own susceptibility
 adds to $B_0$. Its head is water, of volume susceptibility $-9.05$ ppm, in air
@@ -201,6 +226,18 @@ it plays. At a speed, a span is released once the wall clock, running that many
 times as fast as the scan, has passed its end, so that a reconstruction
 receives the readouts at the rate a scanner acquires them;
 {func}`~pulserver.virtual.send` sends each readout as it is released.
+
+The spans are simulated in a thread of their own, ahead of their release, and
+the clock starts once the simulation will stay ahead of it to the end of the
+scan. A span's simulation time is estimated from the spans simulated before it:
+per ADC sample for a span that acquires, since the readouts' coil sums dominate
+it, and per second of scan time for one that does not, such as a train of
+dummy excitations. Where the simulation runs faster than the scan, the clock
+starts once a span of each kind has been simulated; where it runs slower, as
+for a short-TR balanced SSFP on a head of many isochromats and coils, most of
+the scan is simulated before the clock starts and the rest while it runs. A
+span simulated after its end on the clock, where the estimate fell short,
+holds the clock until it is, and the spans after it keep the scanner's pace.
 
 The sound is MATLAB Pulseq's, from `pypulseqpp.gradient_sound`: the gradients
 along the physical axes, the x axis on the left channel, the y axis on the
@@ -317,7 +354,9 @@ simulation of the cache on the same spins.
   checks turn it, under an axial, an oblique and a reflected prescription. A
   span played at a speed is released once the clock has passed it, and a
   series streamed readout by readout is reconstructed as the same series sent
-  whole.
+  whole. A scan simulated twice as slowly as it plays starts its clock late
+  enough that no span holds it; a span simulated after its time holds the
+  clock, and the spans after it keep its pace.
 - `pulserver scan` records the series the virtual scanner acquires of an
   imported file, sample for sample, and streams a generated design to a
   reconstruction proxy, whose image carries the prescribed centre and

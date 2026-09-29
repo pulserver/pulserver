@@ -22,7 +22,7 @@ classifiers = [
   "Programming Language :: Python :: 3.13",
 ]
 
-dependencies = ["pypulseqpp>=0.0.15", "numpy>=1.24", "ismrmrd>=1.14", "pydicom>=3.0"]
+dependencies = ["pypulseqpp>=0.0.18", "numpy>=1.24", "ismrmrd>=1.14", "pydicom>=3.0"]
 
 [project.optional-dependencies]
 brainweb = ["brainweb-dl>=0.4.6"]
@@ -135,6 +135,7 @@ ignore = [
 # where the page introduces them rather than all at the top. A scanner
 # sequence declares its `ui` as a class-level mapping, as a plugin file does.
 "gallery/**" = ["D205", "D400", "D401", "E402", "RUF012"]
+"docker/console/plugins/**" = ["RUF012"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "numpy"

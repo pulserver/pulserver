@@ -15,6 +15,8 @@ from typing import Any
 
 import numpy as np
 
+from .._plugins import PluginPath, directories, names
+
 #: The design calls a console forwards, answered as ``pulserver design`` answers them.
 DESIGN_CALLS = ("list", "validate", "generate", "import")
 
@@ -32,15 +34,16 @@ class Console:
 
     A console lists a plugin's protocol, validates and generates designs with
     the text blocks the interpreter sends, starts an exam on a subject with
-    one of the virtual scanner's :data:`~pulserver.virtual.COILS`, and scans
-    a stored design on it. Images return as DICOM from the reconstruction
-    proxy at ``recon``, or from the plugins of ``recon_plugins`` run in this
-    process as the proxy runs them; with neither, a scan returns no images.
+    one of the virtual scanner's coils, and scans a stored design on it.
+    Images return as DICOM from the reconstruction proxy at ``recon``, or from
+    the plugins of ``recon_plugins`` run in this process as the proxy runs
+    them; with neither, a scan returns no images.
 
     Parameters
     ----------
     plugins
-        Directory of the scanner-sequence plugins.
+        Directories of the scanner-sequence plugins, in search order: a name
+        is the plugin of the first directory holding ``<name>.py``.
     limits
         Text of the ``[Limits]`` block every design is made under; its ``B0``
         is the virtual magnet's field.
@@ -49,8 +52,8 @@ class Console:
     recon
         ``(host, port)`` of the reconstruction proxy.
     recon_plugins
-        Directory of reconstruction plugin files, ``<plugin>.py``, which
-        reconstruct each scan in this process
+        Directories of reconstruction plugin files, ``<plugin>.py``, in search
+        order, which reconstruct each scan in this process
         (:class:`~pulserver.proxy.LocalReconstruction`).
     push
         Recon-side intake each design is pushed to.
@@ -58,31 +61,40 @@ class Console:
         Isochromat spacing of the phantom, in metres.
     coil
         Name of the coil an exam is started with unless it names another.
+    fields
+        Directory of the coils' field maps, ``<coil>.npz``, and of the VOPs of
+        those that transmit, ``<coil>_vops.npz``, as mariepy writes them for
+        BrainWeb's head. Every exam is then on BrainWeb, and every design is
+        made under the VOPs of the exam's transmit coil. Without it, the coils
+        are :data:`~pulserver.virtual.COILS`.
     speed
-        Scan time elapsed per wall-clock second; as fast as possible without it.
+        Scan time elapsed per wall-clock second once the scan's simulation is
+        far enough ahead of its clock; as fast as it is simulated without it.
     """
 
     def __init__(
         self,
         *,
-        plugins: Path | str,
+        plugins: PluginPath,
         limits: str,
         store: Path | str,
         recon: tuple[str, int] | None = None,
-        recon_plugins: Path | str | None = None,
+        recon_plugins: PluginPath | None = None,
         push: str | None = None,
         spacing: float = 1e-3,
         coil: str = "body",
+        fields: Path | str | None = None,
         speed: float | None = None,
     ) -> None:
         from ..host._blocks import parse_limits
         from ..proxy import LocalReconstruction
+        from ._coils import coils
 
         if recon is not None and recon_plugins is not None:
             raise ValueError(
                 "a console reconstructs through a proxy or in this process, not both"
             )
-        self.plugins = Path(plugins)
+        self.plugins = directories(plugins)
         self.limits = limits
         self.store = Path(store)
         self.recon = recon
@@ -93,11 +105,18 @@ class Console:
         )
         self.push = push
         self.spacing = spacing
-        self.coil = _coil(coil)
         self.speed = speed
         self.field_t = float(parse_limits(limits)["B0"])
+        self.fields = None if fields is None else Path(fields)
+        self._coils = coils(self.fields, field_t=self.field_t)
+        self.coil = self._coil(coil)
         self.subject = ""
-        self.phantom = _subject_phantom("")
+        self.phantom = self._phantom("")
+        # The exam's isochromats between its scans, and how many exams have
+        # started, so that a scan hands back only those of the exam in progress.
+        self._held = threading.Lock()
+        self._isochromats: Any = None
+        self._exams = 0
 
     def design(self, call: str, plugin: str | None = None, block: str = "") -> dict:
         """Answer a design call; a generated or imported design's id is ``design``."""
@@ -109,9 +128,9 @@ class Console:
             )
         request = {
             "call": call,
-            "plugins": str(self.plugins),
+            "plugins": [str(directory) for directory in self.plugins],
             "plugin": plugin,
-            "limits": self.limits,
+            "limits": self._limits(),
             "store": str(self.store),
             "push": self.push,
             "input": block,
@@ -126,26 +145,25 @@ class Console:
 
     def plugin_names(self) -> list[str]:
         """Return the names of the plugins a console can list."""
-        return sorted(path.stem for path in self.plugins.glob("*.py"))
+        return names(self.plugins)
 
     def coils(self) -> list[dict[str, Any]]:
         """Return each coil an exam can be started with: its ``name`` and its ``transmit`` and ``receive`` channels."""
-        from . import COILS
-
         return [
             {
                 "name": coil.name,
                 "transmit": coil.transmit_channels,
                 "receive": coil.receive_channels,
             }
-            for coil in COILS.values()
+            for coil in self._coils.values()
         ]
 
     def exam(self, subject: str, coil: str | None = None) -> list[bytes]:
         """Start an exam on the phantom ``subject`` names, in the coil ``coil`` names; return its three-plane localizer as DICOM files.
 
-        ``brainweb`` names BrainWeb's normal brain; any other subject, the
-        vials. Without ``coil``, the exam keeps the coil it had.
+        ``brainweb`` names BrainWeb's normal brain, and so does every subject
+        of a console with field maps; any other subject, the vials. Without
+        ``coil``, the exam keeps the coil it had.
 
         Raises
         ------
@@ -155,9 +173,12 @@ class Console:
         from ._localizer import localizer
 
         if coil is not None:
-            self.coil = _coil(coil)
+            self.coil = self._coil(coil)
         self.subject = subject
-        self.phantom = _subject_phantom(subject)
+        self.phantom = self._phantom(subject)
+        with self._held:
+            self._exams += 1
+            self._isochromats = None
         return [
             _dicom_bytes(dataset)
             for dataset in localizer(
@@ -182,34 +203,102 @@ class Console:
         DICOM, ``{"dicom": base64, "name": file name}``, converting those it
         returns as MRD, and its texts as ``{"text": ...}``. With
         ``sound``, each clock also carries the span's sound as ``sound``,
-        base64 of 16-bit little-endian stereo samples at ``rate`` Hz. The
-        status is 1 when a text reports a refused or failed series, or when
-        the scan is cancelled.
-        """
-        import ismrmrd
-        import pypulseqpp as pp
+        base64 of 16-bit little-endian stereo samples at ``rate`` Hz. At a
+        speed, the scan is simulated ahead of its clock, and until the clock
+        starts ``emit`` receives ``{"preparing": s}`` about twice a second,
+        with the wall-clock time left before it does, or ``null`` before there
+        is an estimate. The status is 1 when a text reports a refused or
+        failed series, or when the scan is cancelled.
 
+        The exam's scans play on one set of isochromats, each from
+        equilibrium, which keeps the pulses the engine has computed; a scan
+        started while another plays has isochromats of its own.
+        """
+        if self.speed is not None:
+            emit({"preparing": None})
+        with self._held:
+            isochromats, self._isochromats = self._isochromats, None
+            exam = self._exams
+        if isochromats is None:
+            isochromats = self.phantom.isochromats(
+                self.spacing, field_t=self.field_t, coil=self.coil
+            )
+        else:
+            isochromats.reset()
+        try:
+            return self._scan(
+                design, isochromats, rotation, centre_mm, emit, cancelled, sound
+            )
+        finally:
+            with self._held:
+                if exam == self._exams:
+                    self._isochromats = isochromats
+
+    def _limits(self) -> str:
+        """Return the limits block of a design: the console's, with the VOP entries of the exam's coil."""
+        from ..host._blocks import format_limits, parse_limits
+
+        entries = self.coil.limits()
+        if not entries:
+            return self.limits
+        return format_limits({**parse_limits(self.limits), **entries})
+
+    def _coil(self, name: str) -> Any:
+        if name not in self._coils:
+            raise ValueError(
+                f"the virtual scanner's coils are {sorted(self._coils)}, not {name!r}"
+            )
+        return self._coils[name]
+
+    def _phantom(self, subject: str) -> Any:
+        from . import BrainWeb
+        from ._command import default_phantom
+
+        if self.fields is not None or subject.strip().lower() == "brainweb":
+            return BrainWeb()
+        return default_phantom()
+
+    def _scan(
+        self,
+        design: str,
+        isochromats: Any,
+        rotation: np.ndarray,
+        centre_mm: Sequence[float],
+        emit: Callable[[dict], None],
+        cancelled: Callable[[], bool],
+        sound: bool,
+    ) -> int:
         from ..host import DesignStore
-        from ..recon._runtime.mrd2dicom import DicomWithName, MrdDicomBuilder
-        from . import SAMPLE_RATE, Scan, send
-        from ._client import _header, _series
+        from . import SAMPLE_RATE, Scan
 
         rotation = np.asarray(rotation, dtype=float).reshape(3, 3)
         scan = Scan(
             DesignStore(self.store).directory(design) / "sequence.seq",
-            self.phantom.isochromats(
-                self.spacing, field_t=self.field_t, coil=self.coil
-            ),
+            isochromats,
             rotation=rotation,
             default_shim=self.coil.default_shim,
         )
         stopped = threading.Event()
 
+        def preparing(left: float | None) -> None:
+            if cancelled():
+                raise _Cancelled
+            emit({"preparing": left})
+
         def played() -> Iterator[np.ndarray]:
-            for chunk in scan.chunks(0.1, speed=self.speed, sound=sound):
+            chunks = scan.chunks(
+                0.1, speed=self.speed, sound=sound, preparing=preparing
+            )
+            try:
+                with contextlib.closing(chunks):
+                    yield from spans(chunks)
+            except _Cancelled:
+                stopped.set()
+
+        def spans(chunks: Iterator[Any]) -> Iterator[np.ndarray]:
+            for chunk in chunks:
                 if cancelled():
-                    stopped.set()
-                    return
+                    raise _Cancelled
                 clock = {"clock": chunk.stop, "duration": scan.duration}
                 if sound:
                     samples = np.round(32767 * np.clip(chunk.sound.T, -1.0, 1.0))
@@ -220,8 +309,30 @@ class Console:
                 emit(clock)
                 yield from chunk.readouts
 
+        # Closed however the scan ends, which stops its simulation before the
+        # isochromats are handed on.
+        with contextlib.closing(played()) as readouts:
+            return self._acquire(design, readouts, rotation, centre_mm, emit, stopped)
+
+    def _acquire(
+        self,
+        design: str,
+        readouts: Iterator[np.ndarray],
+        rotation: np.ndarray,
+        centre_mm: Sequence[float],
+        emit: Callable[[dict], None],
+        stopped: threading.Event,
+    ) -> int:
+        """Send the readouts to the reconstruction, emitting what it returns; return its status."""
+        import ismrmrd
+        import pypulseqpp as pp
+
+        from ..recon._runtime.mrd2dicom import DicomWithName, MrdDicomBuilder
+        from . import send
+        from ._client import _header, _series
+
         if self.recon is None and self.local is None:
-            for _ in played():
+            for _ in readouts:
                 pass
             return 1 if stopped.is_set() else 0
         status = 0
@@ -248,12 +359,12 @@ class Console:
                 status = 1 if item.startswith("pulserver:") else status
 
         if self.local is None:
-            for item in send(self.recon, design, played(), **series):
+            for item in send(self.recon, design, readouts, **series):
                 returned(item)
         else:
             header, acquisitions = _series(
                 design,
-                played(),
+                readouts,
                 series["frequency_hz"],
                 series["position_mm"],
                 rotation,
@@ -313,23 +424,8 @@ class Console:
             reply({"error": f"{type(error).__name__}: {error}"})
 
 
-def _subject_phantom(subject: str) -> Any:
-    from . import BrainWeb
-    from ._command import default_phantom
-
-    if subject.strip().lower() == "brainweb":
-        return BrainWeb()
-    return default_phantom()
-
-
-def _coil(name: str) -> Any:
-    from . import COILS
-
-    if name not in COILS:
-        raise ValueError(
-            f"the virtual scanner's coils are {sorted(COILS)}, not {name!r}"
-        )
-    return COILS[name]
+class _Cancelled(Exception):
+    """A scan cancelled while its simulation is under way."""
 
 
 def _dicom_bytes(dataset: Any) -> bytes:
@@ -397,7 +493,13 @@ def _parser() -> argparse.ArgumentParser:
         prog="pulserver console",
         description="Serve a scanner console's calls to pulserver over a WebSocket.",
     )
-    parser.add_argument("--plugins", type=Path, required=True, help="plugin directory")
+    parser.add_argument(
+        "--plugins",
+        type=Path,
+        action="append",
+        required=True,
+        help="plugin directory, repeatable; the first holding a plugin is used",
+    )
     parser.add_argument(
         "--limits", type=Path, required=True, help="file holding a [Limits] block"
     )
@@ -407,7 +509,9 @@ def _parser() -> argparse.ArgumentParser:
     recon.add_argument(
         "--recon-plugins",
         type=Path,
-        help="reconstruction plugin directory, run in this process instead of a proxy",
+        action="append",
+        help="reconstruction plugin directory, repeatable, run in this process "
+        "instead of a proxy",
     )
     parser.add_argument("--push", help="recon-side intake each design is pushed to")
     parser.add_argument("--host", default="127.0.0.1", help="address to listen on")
@@ -425,9 +529,16 @@ def _parser() -> argparse.ArgumentParser:
         "--coil", default="body", help="coil an exam starts with unless it names one"
     )
     parser.add_argument(
+        "--fields",
+        type=Path,
+        help="directory of the coils' field maps and VOPs, solved in BrainWeb's "
+        "head, on which every exam then is; BART's coil models without it",
+    )
+    parser.add_argument(
         "--speed",
         type=float,
-        help="scan time per second; as fast as possible without it",
+        help="scan time per second, once the simulation is far enough ahead; "
+        "as fast as it is simulated without it",
     )
     return parser
 
@@ -448,6 +559,7 @@ def main(argv: list[str] | None = None) -> int:
         push=args.push,
         spacing=1e-3 * args.spacing,
         coil=args.coil,
+        fields=args.fields,
         speed=args.speed,
     )
     with contextlib.suppress(KeyboardInterrupt):

@@ -119,9 +119,12 @@ with wave.open("scan.wav", "wb") as audio:
     received = virtual.send(("127.0.0.1", 9002), design, acquired())
 ```
 
-At `speed=1.0` the scan lasts as long as it would on a scanner, or longer where
-the simulation takes longer than the blocks it plays; without `speed`, the
-spans come as fast as they are computed.
+The spans are simulated in a thread of their own, ahead of the clock. At
+`speed=1.0` the clock starts once the simulation, at the rate it has run so
+far, stays ahead of it to the end of the scan, which then lasts as long as it
+would on a scanner; `preparing`, when given, receives the time left before the
+clock starts. A span simulated after its end on the clock holds the clock until
+it is. Without `speed`, the spans come as fast as they are simulated.
 
 ## Scan from the command line
 
@@ -173,7 +176,8 @@ line, is written to standard output, and the scan clock to standard error.
   millimetres. Without `--phantom`, the phantom is seven vials of water around
   one of fat, with T1 from 0.3 s to 2.0 s and T2 from 0.04 s to 0.3 s.
   `--spacing`, in mm, and `--coils` set its isochromats and its receive coils;
-  `--coil` scans it with one of the scanner's coils instead, whose
+  `--coil` scans it with one of the scanner's coils instead, `body`,
+  `body/head48` or `head8/head32`, named `transmit/receive`, whose
   sensitivities bartorch samples from BART's coil models, which the `coils`
   extra installs (`pip install 'pulserver[coils]'`). The sensitivities at
   every isochromat are written to a temporary file mapped into memory; where
@@ -184,8 +188,9 @@ line, is written to standard output, and the scan clock to standard error.
   intake as `--push`. The images go to `images.h5` in `--output`, the DICOM
   datasets to the files they are named by, and a text beginning `pulserver:`
   ends the command with status 1.
-- `--speed` plays the scan that many times as fast as a scanner; without it,
-  the scan runs as fast as the simulation.
+- `--speed` plays the scan that many times as fast as a scanner, once the
+  simulation is far enough ahead, writing the time left before it is to
+  standard error; without it, the scan runs as fast as the simulation.
 
 ## Prescribe an orientation
 
@@ -231,23 +236,59 @@ pulserver console --plugins sequences --limits limits.txt --store designs \
   --recon 127.0.0.1:9002 --port 8765
 ```
 
-With `--recon-plugins DIR` in place of `--recon`, each scan is reconstructed in
-the console's own process by the plugins of `DIR`, checked and enriched as the
+`--plugins` and `--recon-plugins` may be repeated, the first directory holding a
+plugin supplying it. With `--recon-plugins DIR` in place of `--recon`, each scan
+is reconstructed in the console's own process by the plugins of `DIR`, checked
+and enriched as the
 proxy checks and enriches a series ({class}`~pulserver.proxy.LocalReconstruction`),
 and no proxy runs. `--origin` names an origin whose browser pages the console
 serves, and may be repeated; without it, pages from every origin are served,
 and a client that sends no `Origin`, which a browser always sends, is served
-either way.
+either way. `--fields DIR` takes the coils from the field maps in `DIR`,
+`<coil>.npz` for each of `body`, `head8`, `head32` and `head48`, and
+`<coil>_vops.npz` for the two that transmit, as mariepy writes them for
+BrainWeb's head ({doc}`../explanations/virtual-scanner`). Every exam is then on
+BrainWeb, and every design is made under the VOP limits of the exam's transmit
+coil; maps solved at another frequency than the Larmor frequency of the limits'
+`B0` are refused.
 
-pulserver's image runs such a console by default, with bartorch for the head
-coils and the `gre2d` plugin reconstructed by the built-in Cartesian FFT,
-`pulserver.recon.handlers.simplefft`. It serves the pages of
-`https://pulserver.github.io`, `http://localhost:8000` and
-`http://127.0.0.1:8000` on port 8765 of this computer:
+pulserver's image runs such a console by default, with BrainWeb's normal brain
+and the field maps solved in it, `--fields=/console/fields`, so that every exam
+is on BrainWeb and downloads nothing, and with bartorch for the non-Cartesian
+reconstructions. It serves the pages of `https://pulserver.github.io`,
+`http://localhost:8000` and `http://127.0.0.1:8000` on port 8765 of this
+computer, and plays each scan at the scanner's speed, `--speed=1`:
 
 ```bash
 docker run -d --restart unless-stopped --name pulserver \
   -p 127.0.0.1:8765:8765 ghcr.io/pulserver/pulserver
+```
+
+Its sequences are pypulseqpp's, reconstructed by the built-in plugins of
+{doc}`reconstruction-plugins`, and each protocol starts at values the image's
+limits play:
+
+| Plugin | Sequence | Reconstruction |
+| --- | --- | --- |
+| `gre2d` | 2D gradient echo | `simplefft` |
+| `gre_multiecho2d` | 2D multi-echo gradient echo, one image per echo | `cartesian` |
+| `se2d` | 2D spin echo | `cartesian` |
+| `bssfp2d` | 2D balanced SSFP | `cartesian` |
+| `gre_radial2d` | 2D radial gradient echo | `nufft` |
+| `gre_spiral2d` | 2D spiral gradient echo | `nufft` |
+
+Directories mounted at `/console/user/plugins` and `/console/user/recon` add
+sequences and reconstructions to the image's. They are searched first, so a
+file there takes the place of the image's file of that name. A link must
+resolve inside the container, as a relative link within the mounted directory
+does. A file added or changed is used from the next call on:
+
+```bash
+docker run -d --restart unless-stopped --name pulserver \
+  -p 127.0.0.1:8765:8765 \
+  -v "$PWD/sequences:/console/user/plugins:ro" \
+  -v "$PWD/recon:/console/user/recon:ro" \
+  ghcr.io/pulserver/pulserver
 ```
 
 Each request is a JSON object carrying `call` and an `id` that every reply to
@@ -259,7 +300,7 @@ it repeats:
 | `coils` | | `coils`: each coil's `name` and its `transmit` and `receive` channels |
 | `list`, `validate`, `generate`, `import` | `plugin`, `block` | `status` and `reply`, as `pulserver design` answers; `design` for a generated or imported design |
 | `exam` | `subject`, `coil` | `localizer`: the axial, coronal and sagittal images of the subject's phantom, as base64 DICOM files |
-| `scan` | `design`, `rotation` (nine elements), `centre_mm`, `sound` | `clock` and `duration` after each span played, with the span's `sound` when asked, as base64 of 16-bit little-endian stereo samples at `rate` Hz; `dicom` and `name` for each image the reconstruction returns, `text`, then `done` with the status |
+| `scan` | `design`, `rotation` (nine elements), `centre_mm`, `sound` | at a speed, `preparing` about twice a second until the clock starts, the wall-clock time left in s or `null` before there is an estimate; `clock` and `duration` after each span played, with the span's `sound` when asked, as base64 of 16-bit little-endian stereo samples at `rate` Hz; `dicom` and `name` for each image the reconstruction returns, `text`, then `done` with the status |
 | `cancel` | | stops the scan in progress |
 
 {meth}`Console.answer <pulserver.virtual.Console.answer>` answers one request
@@ -267,9 +308,12 @@ in process with the same replies, without the `id`, for a console that reaches
 pulserver by another route than a WebSocket, such as the messages of a Web
 Worker running pulserver beside a browser page.
 
-A subject named `brainweb` is BrainWeb's normal brain; any other is the vials.
-An exam is scanned in the coil it names, or in the one it had, `--coil` at
-first; a head coil needs the `coils` extra. The localizer is drawn from the
+A subject named `brainweb` is BrainWeb's normal brain, and so is every subject
+of a console with field maps; any other is the vials. An exam is scanned in the
+coil it names, or in the one it had, `--coil` at first; a head coil of BART's
+models needs the `coils` extra. The exam's scans play on one set of
+isochromats, each from equilibrium, so that a scan after the first neither
+builds them nor computes again the pulses an earlier scan played. The localizer is drawn from the
 phantom's proton density, so an exam can be planned before any scan. MaRGE is
 such a console when `MARGE_PULSERVER` holds the address, `ws://127.0.0.1:8765`
 here: its sequences are then the plugins, its subject names the phantom, its RF

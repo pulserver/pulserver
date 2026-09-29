@@ -14,10 +14,12 @@ from pathlib import Path
 
 import numpy as np
 import pydicom
+import pypulseqpp as pp
 import pytest
-from _host import ANY_ORIENTATION, PLUGINS
+from _host import ANY_ORIENTATION, LIMITS, PLUGINS
+from _virtual import FIELD_CHANNELS, write_fields
 
-from pulserver import virtual
+from pulserver import ir, virtual
 from pulserver.host import DesignStore
 from pulserver.host._blocks import format_limits
 from pulserver.protocol import FOV_OFFSET, FOV_ROTATION, PROTOCOL_BEGIN, PROTOCOL_END
@@ -112,6 +114,70 @@ def test_the_subject_brainweb_starts_an_exam_on_brainweb(tmp_path, monkeypatch):
     assert isinstance(console.phantom, virtual.BrainWeb)
 
 
+@pytest.fixture
+def brainweb(monkeypatch):
+    """BrainWeb's model, empty, in place of the one brainweb-dl downloads."""
+    fractions = np.zeros((4, 4, 4, 10), dtype=np.float32)
+    monkeypatch.setitem(
+        sys.modules,
+        "brainweb_dl",
+        types.SimpleNamespace(get_mri=lambda *a, **k: fractions),
+    )
+
+
+@pytest.fixture
+def fields(tmp_path):
+    """A directory of every coil's field maps, and of VOPs for those that transmit."""
+    directory = tmp_path / "fields"
+    directory.mkdir()
+    return write_fields(directory)
+
+
+def test_a_console_with_field_maps_examines_brainweb_whatever_the_subject(
+    tmp_path, brainweb, fields
+):
+    console = _console(tmp_path, fields=fields)
+
+    files = console.exam("vials")
+
+    assert isinstance(console.phantom, virtual.BrainWeb)
+    assert {str(pydicom.dcmread(io.BytesIO(f)).PatientName) for f in files} == {"vials"}
+
+
+def test_a_console_with_field_maps_lists_the_channels_its_maps_hold(tmp_path, fields):
+    coils = _console(tmp_path, fields=fields).coils()
+
+    assert coils == [
+        {"name": "body", "transmit": FIELD_CHANNELS["body"], "receive": 2},
+        {"name": "body/head48", "transmit": 2, "receive": FIELD_CHANNELS["head48"]},
+        {"name": "head8/head32", "transmit": 8, "receive": FIELD_CHANNELS["head32"]},
+    ]
+
+
+def test_a_design_is_made_under_the_vops_of_the_exams_transmit_coil(
+    tmp_path, brainweb, fields
+):
+    console = _console(tmp_path, fields=fields, coil="head8/head32")
+    store = DesignStore(tmp_path / "designs")
+    block = _block(TE=5000, nx=32, ny=32)
+
+    head8 = console.design("generate", "gre2d", block)["design"]
+    console.exam("brainweb", "body")
+    body = console.design("generate", "gre2d", block)["design"]
+
+    assert head8 != body
+    for design, transmit in ((head8, "head8"), (body, "body")):
+        limits = store.manifest(design)["limits"]
+        assert limits["vop_file"] == str(fields / f"{transmit}_vops.npz")
+        (cached,) = ir.summary(
+            store.directory(design) / "sequence.seq",
+            pp.Opts(**LIMITS),
+            cache_ext=".pseg",
+        )["subsequences"]
+        assert cached["vop_sar_ratio"] > 0.0
+        assert cached["vop_global_sar_ratio"] > 0.0
+
+
 def test_a_console_lists_each_coil_an_exam_can_start_with_and_its_channels(tmp_path):
     coils = _console(tmp_path).coils()
 
@@ -130,10 +196,10 @@ def test_an_exam_starts_in_the_coil_it_names_and_keeps_it_until_another_is_named
 ):
     console = _console(tmp_path)
 
-    console.exam("vials", "head48")
+    console.exam("vials", "body/head48")
     console.exam("vials")
 
-    assert console.coil is virtual.COILS["head48"]
+    assert console.coil is virtual.COILS["body/head48"]
     with pytest.raises(ValueError, match="coils are"):
         console.exam("vials", "knee")
 
@@ -193,6 +259,36 @@ def test_a_scan_reconstructed_in_this_process_returns_the_images_a_proxy_returns
 
     assert len(returned["local"]) == len(returned["proxied"]) == 1
     np.testing.assert_array_equal(returned["local"][0], returned["proxied"][0])
+
+
+def test_an_exams_scans_play_on_its_isochromats_each_from_equilibrium(tmp_path):
+    console = _console(tmp_path, recon_plugins=RECON_PLUGINS)
+    design = console.design("generate", "gre2d", _block(TE=5000, nx=32, ny=32))[
+        "design"
+    ]
+    built = []
+
+    def scanned():
+        messages = []
+        status = console.scan(
+            design, rotation=np.eye(3), centre_mm=(0.0, 0.0, 0.0), emit=messages.append
+        )
+        assert status == 0
+        return _images(messages)[0]
+
+    def exam():
+        console.exam("vials")
+        build = console.phantom.isochromats
+        console.phantom.isochromats = lambda *a, **k: built.append(1) or build(*a, **k)
+
+    exam()
+    first, second = scanned(), scanned()
+    exam()
+    third = scanned()
+
+    assert len(built) == 2
+    np.testing.assert_array_equal(second, first)
+    np.testing.assert_array_equal(third, first)
 
 
 def test_a_console_reconstructs_through_a_proxy_or_in_process_not_both(tmp_path):
@@ -293,6 +389,55 @@ def test_a_scan_asked_for_its_sound_streams_it_with_its_clock(tmp_path):
     assert np.abs(samples).max() > 0
 
 
+def test_a_scan_cancelled_while_it_prepares_stops_before_its_clock_starts(
+    tmp_path, monkeypatch
+):
+    simulate = virtual.Scan._readouts
+
+    def slow(self, first, last):
+        time.sleep(1.0)
+        return simulate(self, first, last)
+
+    # Four times as long to simulate as to play: the clock would wait about
+    # three quarters of the simulation.
+    monkeypatch.setattr(virtual.Scan, "_readouts", slow)
+    console = _console(tmp_path, speed=1.0)
+    design = console.design("generate", "gre2d", _block(TE=5000, nx=32, ny=32))[
+        "design"
+    ]
+    messages = []
+    started = time.monotonic()
+
+    status = console.scan(
+        design,
+        rotation=np.eye(3),
+        centre_mm=(0.0, 0.0, 0.0),
+        emit=messages.append,
+        cancelled=lambda: bool(messages),
+    )
+
+    assert status == 1
+    assert time.monotonic() - started < 10.0
+    assert messages and all("preparing" in m for m in messages)
+
+
+def test_a_scan_at_a_speed_reports_its_preparation_before_its_clock_starts(tmp_path):
+    console = _console(tmp_path, speed=50.0)
+    design = console.design("generate", "gre2d", _block(TE=5000, nx=32, ny=32))[
+        "design"
+    ]
+    messages = []
+
+    status = console.scan(
+        design, rotation=np.eye(3), centre_mm=(0.0, 0.0, 0.0), emit=messages.append
+    )
+
+    assert status == 0
+    preparing = [m for m in messages if "preparing" in m]
+    assert preparing and messages[: len(preparing)] == preparing
+    assert preparing[0] == {"preparing": None}
+
+
 def test_the_gateway_answers_a_consoles_calls_over_a_websocket(tmp_path):
     console = _console(tmp_path)
     loop = asyncio.new_event_loop()
@@ -320,7 +465,12 @@ def test_the_gateway_answers_a_consoles_calls_over_a_websocket(tmp_path):
             plugins = json.loads(client.recv(timeout=DEADLINE))
             client.send(json.dumps({"id": 2, "call": "coils"}))
             coils = json.loads(client.recv(timeout=DEADLINE))
-            request = {"id": 3, "call": "exam", "subject": "vials", "coil": "head32"}
+            request = {
+                "id": 3,
+                "call": "exam",
+                "subject": "vials",
+                "coil": "body/head48",
+            }
             client.send(json.dumps(request))
             exam = json.loads(client.recv(timeout=DEADLINE))
             examined_in = console.coil
@@ -347,7 +497,7 @@ def test_the_gateway_answers_a_consoles_calls_over_a_websocket(tmp_path):
     assert coils == {"id": 2, "coils": console.coils()}
     assert exam["id"] == 3
     assert len(exam["localizer"]) == 3
-    assert examined_in is virtual.COILS["head32"]
+    assert examined_in is virtual.COILS["body/head48"]
     assert refused == {"id": 4, "error": "unknown call 'reboot'"}
     assert {message["id"] for message in scanned} == {7}
     assert "clock" in scanned[0]
@@ -430,7 +580,7 @@ def test_the_console_command_serves_a_console_of_its_options(tmp_path, monkeypat
             "--spacing",
             "2",
             "--coil",
-            "head8",
+            "head8/head32",
             "--origin",
             "https://pulserver.github.io",
         ]
@@ -443,8 +593,34 @@ def test_the_console_command_serves_a_console_of_its_options(tmp_path, monkeypat
     assert console.recon == ("recon.local", 9020)
     assert console.local is None
     assert console.spacing == pytest.approx(2e-3)
-    assert console.coil is virtual.COILS["head8"]
+    assert console.coil is virtual.COILS["head8/head32"]
     assert console.field_t == ANY_ORIENTATION["B0"]
+
+
+def test_the_console_command_scans_in_the_coils_of_the_field_maps_it_names(
+    tmp_path, monkeypatch, fields
+):
+    from pulserver import _cli
+    from pulserver.virtual import _console
+
+    limits = tmp_path / "limits.txt"
+    limits.write_text(format_limits(ANY_ORIENTATION))
+    served = {}
+
+    async def serve(console, host, port, origins):
+        served["console"] = console
+
+    monkeypatch.setattr(_console, "serve", serve)
+    options = ["--plugins", str(PLUGINS), "--limits", str(limits)]
+    options += ["--store", str(tmp_path / "designs"), "--coil", "head8/head32"]
+
+    status = _cli.main(["console", *options, "--fields", str(fields)])
+
+    assert status == 0
+    console = served["console"]
+    assert console.fields == fields
+    assert console.coil.transmit_model == fields / "head8.npz"
+    assert console.coil.receive_model == fields / "head32.npz"
 
 
 def test_the_console_command_reconstructs_in_process_with_recon_plugins(
@@ -464,11 +640,15 @@ def test_the_console_command_reconstructs_in_process_with_recon_plugins(
     options = [
         "console",
         "--plugins",
+        str(tmp_path / "sequences"),
+        "--plugins",
         str(PLUGINS),
         "--limits",
         str(limits),
         "--store",
         str(tmp_path / "designs"),
+        "--recon-plugins",
+        str(tmp_path / "recon"),
         "--recon-plugins",
         str(RECON_PLUGINS),
     ]
@@ -476,6 +656,29 @@ def test_the_console_command_reconstructs_in_process_with_recon_plugins(
     assert _cli.main(options) == 0
     console = served["console"]
     assert console.recon is None
-    assert console.local.plugins == RECON_PLUGINS
+    assert console.plugins == (tmp_path / "sequences", PLUGINS)
+    assert console.local.plugins == (tmp_path / "recon", RECON_PLUGINS)
     with pytest.raises(SystemExit):
         _cli.main([*options, "--recon", "recon.local:9020"])
+
+
+def test_a_console_lists_every_directorys_plugins_and_designs_from_the_first_holding_one(
+    tmp_path,
+):
+    own = tmp_path / "own"
+    own.mkdir()
+    (own / "gre2d.py").write_text((PLUGINS / "tiny.py").read_text())
+    (own / "alias.py").symlink_to(PLUGINS / "gre2d.py")
+    shipped = _console(tmp_path)
+    console = Console(
+        plugins=[own, PLUGINS],
+        limits=format_limits(ANY_ORIENTATION),
+        store=tmp_path / "designs",
+        spacing=2e-3,
+    )
+
+    generated = console.design("generate", "alias", _block(TE=5000, nx=32, ny=32))
+
+    assert console.plugin_names() == sorted({"alias", *shipped.plugin_names()})
+    assert console.design("list", "gre2d") == shipped.design("list", "tiny")
+    assert generated["status"] == 0

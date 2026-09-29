@@ -26,8 +26,9 @@ pulserver design prune    --store DIR [--max-age-days D] [--max-bytes B]
 
 Each call is answered from its arguments and standard input alone and writes
 its reply to standard output; `python -m pulserver.host` takes the same
-arguments. `--plugins` is the directory of scanner-sequence plugin files,
-`<plugin>.py`, and `--store` the design store, created when missing.
+arguments. `--plugins` is a directory of scanner-sequence plugin files,
+`<plugin>.py`, and may be repeated: a plugin is the file of the first directory
+that holds it. `--store` is the design store, created when missing.
 
 | Call | Reply |
 | --- | --- |
@@ -187,7 +188,8 @@ pulserver design serve --plugins DIR --socket PATH
 
 A call answered in its own process imports the design engine first, which
 takes most of its time. A warm server imports it once, designs, checks and
-converts a sequence of its own, and imports every plugin in `--plugins`. It then
+converts a sequence of its own, and imports every plugin of its `--plugins`
+directories. It then
 answers each call forwarded to its socket in a child process forked from it, so
 nothing a call does outlives the call, and a plugin that ends its process fails
 its own call only, with `ERROR the design call ended with exit status N`.
@@ -212,7 +214,7 @@ python -m pulserver.proxy --store DIR --port N --forward HOST:PORT [--forward-co
 | `--port` | TCP port the scanner's reconstruction client connects to |
 | `--host` | Address to listen on; the loopback interface when unset, `0.0.0.0` for every interface |
 | `--intake-port` | TCP port of the design intake, on the `--host` address; no intake when unset |
-| `--plugins` | Directory of reconstruction plugin files, `<plugin>.py`; required unless `--forward` is given |
+| `--plugins` | Directory of reconstruction plugin files, `<plugin>.py`, repeatable, searched in order; required unless `--forward` is given |
 | `--queue` | Directory the series waiting for a slot are written to; a temporary directory, removed when the proxy stops, when unset |
 | `--slots` | Series reconstructed at once; derived from available memory and the GPUs when unset |
 | `--gpu-slots` | Series reconstructed at once on each GPU when `--slots` is unset, default 1 |
