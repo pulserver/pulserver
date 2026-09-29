@@ -20,6 +20,9 @@ from .._plugins import PluginPath, directories, names
 #: The design calls a console forwards, answered as ``pulserver design`` answers them.
 DESIGN_CALLS = ("list", "validate", "generate", "import")
 
+# Spacings, 1 mm apart, a console tries in keeping a scan within its isochromats.
+_COARSER = 100
+
 #: What each design call takes, as ``pulserver design`` passes it.
 _CALL_INPUTS = {
     "list": ("plugins", "plugin"),
@@ -58,7 +61,13 @@ class Console:
     push
         Recon-side intake each design is pushed to.
     spacing
-        Isochromat spacing of the phantom, in metres.
+        Finest isochromat spacing of the phantom, in metres.
+    max_isochromats
+        Most isochromats a scan is simulated on. A scan is simulated on the
+        isochromats in the slabs its excitation pulses excite
+        (:func:`~pulserver.virtual.excited`), at the finest spacing, from
+        ``spacing`` up in steps of 1 mm, that keeps no more of them than this;
+        at ``spacing`` without it.
     coil
         Name of the coil an exam is started with unless it names another.
     fields
@@ -82,6 +91,7 @@ class Console:
         recon_plugins: PluginPath | None = None,
         push: str | None = None,
         spacing: float = 1e-3,
+        max_isochromats: int | None = None,
         coil: str = "body",
         fields: Path | str | None = None,
         speed: float | None = None,
@@ -105,6 +115,7 @@ class Console:
         )
         self.push = push
         self.spacing = spacing
+        self.max_isochromats = max_isochromats
         self.speed = speed
         self.field_t = float(parse_limits(limits)["B0"])
         self.fields = None if fields is None else Path(fields)
@@ -112,10 +123,11 @@ class Console:
         self.coil = self._coil(coil)
         self.subject = ""
         self.phantom = self._phantom("")
-        # The exam's isochromats between its scans, and how many exams have
-        # started, so that a scan hands back only those of the exam in progress.
+        # The exam's isochromats between its scans, beside the slabs they were
+        # kept in, and how many exams have started, so that a scan hands back
+        # only those of the exam in progress.
         self._held = threading.Lock()
-        self._isochromats: Any = None
+        self._isochromats: tuple[Any, Any] | None = None
         self._exams = 0
 
     def design(self, call: str, plugin: str | None = None, block: str = "") -> dict:
@@ -210,21 +222,34 @@ class Console:
         is an estimate. The status is 1 when a text reports a refused or
         failed series, or when the scan is cancelled.
 
-        The exam's scans play on one set of isochromats, each from
+        A scan plays on the phantom's isochromats in the slabs its excitation
+        pulses excite, at the spacing ``max_isochromats`` allows. Scans of an exam
+        that excite the same slabs play on the same isochromats, each from
         equilibrium, which keeps the pulses the engine has computed; a scan
         started while another plays has isochromats of its own.
         """
+        from ..host import DesignStore
+        from ._region import excited
+
         if self.speed is not None:
             emit({"preparing": None})
+        rotation = np.asarray(rotation, dtype=float).reshape(3, 3)
+        region = excited(
+            DesignStore(self.store).directory(design) / "sequence.seq", rotation
+        )
         with self._held:
-            isochromats, self._isochromats = self._isochromats, None
+            held, self._isochromats = self._isochromats, None
             exam = self._exams
-        if isochromats is None:
-            isochromats = self.phantom.isochromats(
-                self.spacing, field_t=self.field_t, coil=self.coil
-            )
-        else:
+        if held is not None and held[0] == region:
+            isochromats = held[1]
             isochromats.reset()
+        else:
+            isochromats = self.phantom.isochromats(
+                self._spacing(region),
+                field_t=self.field_t,
+                region=region,
+                coil=self.coil,
+            )
         try:
             return self._scan(
                 design, isochromats, rotation, centre_mm, emit, cancelled, sound
@@ -232,7 +257,27 @@ class Console:
         finally:
             with self._held:
                 if exam == self._exams:
-                    self._isochromats = isochromats
+                    self._isochromats = (region, isochromats)
+
+    def _spacing(self, region: Any) -> float:
+        """Return the finest spacing, from ``spacing`` up in steps of 1 mm, that keeps at most ``max_isochromats`` of the phantom's isochromats in ``region``.
+
+        Raises
+        ------
+        ValueError
+            If none within 10 cm of it does.
+        """
+        if self.max_isochromats is None:
+            return self.spacing
+        for step in range(_COARSER):
+            spacing = self.spacing + 1e-3 * step
+            kept = self.phantom.count(spacing, field_t=self.field_t, region=region)
+            if kept <= self.max_isochromats:
+                return spacing
+        raise ValueError(
+            f"the phantom holds more than {self.max_isochromats} isochromats at "
+            f"every spacing from {1e3 * self.spacing:g} mm to {1e3 * spacing:g} mm"
+        )
 
     def _limits(self) -> str:
         """Return the limits block of a design: the console's, with the VOP entries of the exam's coil."""
@@ -523,7 +568,14 @@ def _parser() -> argparse.ArgumentParser:
         help="origin of the browser pages served, repeatable; every origin without it",
     )
     parser.add_argument(
-        "--spacing", type=float, default=1.0, help="isochromat spacing, in mm"
+        "--spacing", type=float, default=1.0, help="finest isochromat spacing, in mm"
+    )
+    parser.add_argument(
+        "--max-isochromats",
+        type=int,
+        default=2_000_000,
+        help="most isochromats a scan is simulated on; the spacing is coarsened "
+        "by 1 mm until the slabs a scan excites hold no more",
     )
     parser.add_argument(
         "--coil", default="body", help="coil an exam starts with unless it names one"
@@ -558,6 +610,7 @@ def main(argv: list[str] | None = None) -> int:
         recon_plugins=args.recon_plugins,
         push=args.push,
         spacing=1e-3 * args.spacing,
+        max_isochromats=args.max_isochromats,
         coil=args.coil,
         fields=args.fields,
         speed=args.speed,

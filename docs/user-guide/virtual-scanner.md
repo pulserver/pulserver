@@ -88,7 +88,11 @@ readouts = virtual.simulate(sequence, tissue.isochromats(1e-3))
 The isochromats approximate the phantom in k-space below $1/(2\Delta)$ for a
 grid spacing $\Delta$, here 1 mm, so choose a spacing several times finer than
 the pixel; their number, and the time the simulation takes, grow as
-$1/\Delta^2$. A phantom with a chemical shift is sampled at the magnet's field,
+$1/\Delta^2$, or as $1/\Delta^3$ for a phantom that fills a volume. Sample
+such a phantom only where the design's excitation pulses excite it,
+`virtual.BrainWeb().isochromats(1e-3, field_t=3.0, region=virtual.excited(sequence))`,
+giving `excited` the prescription's rotation where there is one. A phantom with a
+chemical shift is sampled at the magnet's field,
 `tissue.isochromats(1e-3, field_t=3.0)`. The simulation starts from the
 magnetization the isochromats hold, so a second scan of the same isochromats
 continues the first: sample them again, or call their `reset`, to start from
@@ -175,6 +179,8 @@ line, is written to standard output, and the scan clock to standard error.
   (`pip install 'pulserver[brainweb]'`); its `--spacing` is a whole number of
   millimetres. Without `--phantom`, the phantom is seven vials of water around
   one of fat, with T1 from 0.3 s to 2.0 s and T2 from 0.04 s to 0.3 s.
+  Its isochromats are those in the slabs the design's excitation pulses excite
+  ({func}`~pulserver.virtual.excited`).
   `--spacing`, in mm, and `--coils` set its isochromats and its receive coils;
   `--coil` scans it with one of the scanner's coils instead, `body`,
   `body/head48` or `head8/head32`, named `transmit/receive`, whose
@@ -252,6 +258,12 @@ BrainWeb, and every design is made under the VOP limits of the exam's transmit
 coil; maps solved at another frequency than the Larmor frequency of the limits'
 `B0` are refused.
 
+A scan is simulated on the phantom's isochromats in the slabs its excitation
+pulses excite ({func}`~pulserver.virtual.excited`), sampled `--spacing` apart,
+1 mm by default. Where they number more than `--max-isochromats`, two million
+by default, as over a whole head, the spacing is coarsened in steps of 1 mm
+until they do not.
+
 pulserver's image runs such a console by default, with BrainWeb's normal brain
 and the field maps solved in it, `--fields=/console/fields`, so that every exam
 is on BrainWeb and downloads nothing, and with bartorch for the non-Cartesian
@@ -311,9 +323,9 @@ Worker running pulserver beside a browser page.
 A subject named `brainweb` is BrainWeb's normal brain, and so is every subject
 of a console with field maps; any other is the vials. An exam is scanned in the
 coil it names, or in the one it had, `--coil` at first; a head coil of BART's
-models needs the `coils` extra. The exam's scans play on one set of
-isochromats, each from equilibrium, so that a scan after the first neither
-builds them nor computes again the pulses an earlier scan played. The localizer is drawn from the
+models needs the `coils` extra. Scans of an exam that excite the same slabs play on
+one set of isochromats, each from equilibrium, so that a repeated scan neither
+builds them nor computes again the pulses an earlier one played. The localizer is drawn from the
 phantom's proton density, so an exam can be planned before any scan. MaRGE is
 such a console when `MARGE_PULSERVER` holds the address, `ws://127.0.0.1:8765`
 here: its sequences are then the plugins, its subject names the phantom, its RF

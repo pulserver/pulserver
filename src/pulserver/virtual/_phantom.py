@@ -5,7 +5,7 @@ from __future__ import annotations
 __all__ = ["Ellipse", "Phantom"]
 
 import math
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
 import numpy as np
@@ -110,6 +110,7 @@ class Phantom:
         *,
         field_t: float | None = None,
         off_resonance_hz: float = 0.0,
+        region: Callable[[np.ndarray, np.ndarray], np.ndarray] | None = None,
         coil: Coil | None = None,
         threads: int = 0,
     ) -> pp.Isochromats:
@@ -135,6 +136,10 @@ class Phantom:
         off_resonance_hz
             Frequency of every isochromat from the scanner's centre frequency,
             in Hz, beside its chemical shift.
+        region
+            Which isochromats are kept, from their ``(n, 3)`` physical
+            positions, in m, and ``(n,)`` frequencies, in Hz, as
+            :class:`~pulserver.virtual.Slabs` answers; every one without one.
         coil
             The scanner's coil the phantom is scanned with.
         threads
@@ -151,6 +156,46 @@ class Phantom:
             raise ValueError(
                 "a phantom received by coils of its own is not scanned with a coil"
             )
+        own, positions, density, t1, t2, frequency = self._sampled(
+            spacing, field_t, off_resonance_hz, region
+        )
+        return pp.Isochromats(
+            positions,
+            proton_density=density,
+            t1=t1,
+            t2=t2,
+            off_resonance=frequency,
+            transmit=None if coil is None else coil.transmit(positions),
+            receive=self._received(own) if coil is None else coil.receive(positions),
+            threads=threads,
+        )
+
+    def count(
+        self,
+        spacing: float,
+        *,
+        field_t: float | None = None,
+        off_resonance_hz: float = 0.0,
+        region: Callable[[np.ndarray, np.ndarray], np.ndarray] | None = None,
+    ) -> int:
+        """Return how many isochromats :meth:`isochromats` samples the phantom as, with the same arguments.
+
+        Raises
+        ------
+        ValueError
+            If an ellipse has a complex intensity, or the phantom has a
+            chemical shift and ``field_t`` is not given.
+        """
+        return len(self._sampled(spacing, field_t, off_resonance_hz, region)[0])
+
+    def _sampled(
+        self,
+        spacing: float,
+        field_t: float | None,
+        off_resonance_hz: float,
+        region: Callable[[np.ndarray, np.ndarray], np.ndarray] | None,
+    ) -> tuple[np.ndarray, ...]:
+        """Return the points along the phantom's axes, the physical positions, proton densities, T1, T2 and frequencies of its isochromats."""
         if field_t is None and any(self.shifts_ppm):
             raise ValueError("a phantom with a chemical shift is scanned at a field_t")
         per_ppm = 0.0 if field_t is None else 1e-6 * pp.Opts().gamma * field_t
@@ -169,16 +214,16 @@ class Phantom:
             np.array(tissues, dtype=float), [len(p) for p in points], axis=0
         ).T
         positions = own @ self._rotation.T + self._position
-        return pp.Isochromats(
-            positions,
-            proton_density=density,
-            t1=t1,
-            t2=t2,
-            off_resonance=frequency,
-            transmit=None if coil is None else coil.transmit(positions),
-            receive=self._received(own) if coil is None else coil.receive(positions),
-            threads=threads,
-        )
+        if region is not None:
+            kept = region(positions, frequency)
+            own, positions = own[kept], positions[kept]
+            density, t1, t2, frequency = (
+                density[kept],
+                t1[kept],
+                t2[kept],
+                frequency[kept],
+            )
+        return own, positions, density, t1, t2, frequency
 
     def _received(self, points: np.ndarray) -> np.ndarray | None:
         """Return each coil's sensitivity at ``(n, 3)`` points along the phantom's axes; None for one coil."""

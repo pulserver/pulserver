@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import functools
 import math
+from collections.abc import Callable
 from pathlib import Path
 
 import numpy as np
@@ -142,7 +143,7 @@ class BrainWeb:
         *,
         field_t: float | None = None,
         off_resonance_hz: float = 0.0,
-        region: np.ndarray | None = None,
+        region: Callable[[np.ndarray, np.ndarray], np.ndarray] | None = None,
         coil: Coil | None = None,
         threads: int = 0,
     ) -> pp.Isochromats:
@@ -164,9 +165,10 @@ class BrainWeb:
             Frequency of every isochromat from the scanner's centre frequency,
             in Hz, beside its chemical shift.
         region
-            ``(3, 2)`` lower and upper bounds along the physical axes, in
-            metres, outside which no isochromat is kept; the whole head
-            without one.
+            Which isochromats are kept, from their ``(n, 3)`` positions, in m,
+            and ``(n,)`` frequencies, in Hz, as
+            :class:`~pulserver.virtual.Slabs` answers; the whole head without
+            one.
         coil
             The scanner's coil the brain is scanned with, in place of the
             phantom's coils.
@@ -180,55 +182,14 @@ class BrainWeb:
             is not given, or the brain has coils of its own and ``coil`` is
             given.
         """
-        from pypulseqpp.sequences.preparation.fatsat import FAT_SHIFT_PPM
-
-        step = round(spacing / 1e-3)
-        if step < 1 or not math.isclose(step * 1e-3, spacing, rel_tol=1e-6):
-            raise ValueError(
-                f"BrainWeb is sampled in whole millimetres, not {spacing} m"
-            )
-        if field_t is None:
-            raise ValueError(
-                "BrainWeb's fat has a chemical shift: scan it at a field_t"
-            )
+        _whole_millimetres(spacing)
         if coil is not None and self.coils > 1:
             raise ValueError(
                 "a phantom received by coils of its own is not scanned with a coil"
             )
-        cubes = _cubes(self.fractions, step)
-        field = np.zeros(cubes.shape[:3], dtype=np.float32)
-        if self.susceptibility:
-            field = _cubes(self.field_ppm[..., None], step)[..., 0]
-        index = np.indices(cubes.shape[:3]).reshape(3, -1).T
-        voxel = step * index + 0.5 * (step - 1)
-        z, y, x = (
-            voxel[:, axis] + _FIRST_VOXEL_MM[name] for axis, name in enumerate("zyx")
+        own, proton_density, t1, t2, frequency = self._sampled(
+            spacing, field_t, off_resonance_hz, region
         )
-        positions = 1e-3 * np.column_stack([-x, -y, z])
-        inside = np.ones(len(positions), dtype=bool)
-        if region is not None:
-            low, high = np.asarray(region, dtype=float).T
-            inside = np.all((positions >= low) & (positions <= high), axis=1)
-        per_ppm = 1e-6 * pp.Opts().gamma * field_t
-        inhomogeneity = per_ppm * field.reshape(-1)
-        points, rows = [], []
-        for tissue, (name, (t1, t2, density)) in enumerate(TISSUES.items()):
-            fraction = cubes[..., tissue].reshape(-1)
-            kept = inside & (fraction > 0.0) & (density > 0.0)
-            shift = per_ppm * FAT_SHIFT_PPM if name == "fat" else 0.0
-            points.append(positions[kept])
-            rows.append(
-                np.column_stack(
-                    [
-                        density * fraction[kept] * (step * 1e-3) ** 3,
-                        np.full(kept.sum(), t1),
-                        np.full(kept.sum(), t2),
-                        shift + off_resonance_hz + inhomogeneity[kept],
-                    ]
-                )
-            )
-        own = np.concatenate(points)
-        proton_density, t1, t2, frequency = np.concatenate(rows).T
         return pp.Isochromats(
             own,
             proton_density=proton_density,
@@ -239,6 +200,89 @@ class BrainWeb:
             receive=self._coils._received(own) if coil is None else coil.receive(own),
             threads=threads,
         )
+
+    def count(
+        self,
+        spacing: float = 1e-3,
+        *,
+        field_t: float | None = None,
+        off_resonance_hz: float = 0.0,
+        region: Callable[[np.ndarray, np.ndarray], np.ndarray] | None = None,
+    ) -> int:
+        """Return how many isochromats :meth:`isochromats` samples the brain as, with the same arguments.
+
+        Raises
+        ------
+        ValueError
+            If ``spacing`` is not a whole number of millimetres or ``field_t``
+            is not given.
+        """
+        _whole_millimetres(spacing)
+        if region is not None:
+            return len(self._sampled(spacing, field_t, off_resonance_hz, region)[0])
+        if field_t is None:
+            raise ValueError(
+                "BrainWeb's fat has a chemical shift: scan it at a field_t"
+            )
+        cubes = _cubes(self.fractions, round(spacing / 1e-3))
+        dense = [density > 0.0 for _, _, density in TISSUES.values()]
+        return int(np.count_nonzero(cubes[..., dense] > 0.0))
+
+    def _sampled(
+        self,
+        spacing: float,
+        field_t: float | None,
+        off_resonance_hz: float,
+        region: Callable[[np.ndarray, np.ndarray], np.ndarray] | None,
+    ) -> tuple[np.ndarray, ...]:
+        """Return the positions, proton densities, T1, T2 and frequencies of the isochromats :meth:`isochromats` makes."""
+        from pypulseqpp.sequences.preparation.fatsat import FAT_SHIFT_PPM
+
+        if field_t is None:
+            raise ValueError(
+                "BrainWeb's fat has a chemical shift: scan it at a field_t"
+            )
+        step = round(spacing / 1e-3)
+        cubes = _cubes(self.fractions, step)
+        field = np.zeros(cubes.shape[:3], dtype=np.float32)
+        if self.susceptibility:
+            field = _cubes(self.field_ppm[..., None], step)[..., 0]
+        index = np.indices(cubes.shape[:3]).reshape(3, -1).T
+        voxel = step * index + 0.5 * (step - 1)
+        z, y, x = (
+            voxel[:, axis] + _FIRST_VOXEL_MM[name] for axis, name in enumerate("zyx")
+        )
+        positions = 1e-3 * np.column_stack([-x, -y, z])
+        per_ppm = 1e-6 * pp.Opts().gamma * field_t
+        inhomogeneity = per_ppm * field.reshape(-1)
+        points, rows = [], []
+        for tissue, (name, (t1, t2, density)) in enumerate(TISSUES.items()):
+            fraction = cubes[..., tissue].reshape(-1)
+            kept = np.flatnonzero((fraction > 0.0) & (density > 0.0))
+            shift = per_ppm * FAT_SHIFT_PPM if name == "fat" else 0.0
+            frequency = shift + off_resonance_hz + inhomogeneity[kept]
+            if region is not None:
+                inside = region(positions[kept], frequency)
+                kept, frequency = kept[inside], frequency[inside]
+            points.append(positions[kept])
+            rows.append(
+                np.column_stack(
+                    [
+                        density * fraction[kept] * (step * 1e-3) ** 3,
+                        np.full(kept.size, t1),
+                        np.full(kept.size, t2),
+                        frequency,
+                    ]
+                )
+            )
+        proton_density, t1, t2, frequency = np.concatenate(rows).T
+        return np.concatenate(points), proton_density, t1, t2, frequency
+
+
+def _whole_millimetres(spacing: float) -> None:
+    step = round(spacing / 1e-3)
+    if step < 1 or not math.isclose(step * 1e-3, spacing, rel_tol=1e-6):
+        raise ValueError(f"BrainWeb is sampled in whole millimetres, not {spacing} m")
 
 
 def _slab_density(
