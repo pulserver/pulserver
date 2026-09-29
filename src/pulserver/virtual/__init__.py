@@ -9,6 +9,7 @@ from ._console import Console
 from ._export import export
 from ._localizer import localizer
 from ._phantom import Ellipse, Phantom
+from ._region import Slabs, excited
 from ._scanner import acquire, trajectory
 from ._stream import SAMPLE_RATE, Chunk, Scan
 
@@ -28,7 +29,9 @@ __all__ = [
     "Ellipse",
     "Phantom",
     "Scan",
+    "Slabs",
     "acquire",
+    "excited",
     "export",
     "localizer",
     "record",

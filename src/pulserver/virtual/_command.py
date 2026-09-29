@@ -20,10 +20,11 @@ _DESCRIPTION = """\
 Scan a phantom on the virtual scanner, as a console would. The design is
 generated from a scanner-sequence plugin, or imported from a sequence file,
 and checked and converted to its IR cache under --limits, as the design calls
-do. Its cache is played on the phantom's isochromats in pypulseqpp's Bloch
-simulation, and the series is written to an ISMRMRD file, streamed to a
-reconstruction proxy, or both. The design call's reply is written to standard
-output, and the scan clock to standard error.
+do. Its cache is played on the phantom's isochromats in the slabs its
+excitation pulses excite, in pypulseqpp's Bloch simulation, and the series is
+written to an ISMRMRD file, streamed to a reconstruction proxy, or both. The
+design call's reply is written to standard output, and the scan clock to
+standard error.
 """
 
 #: Rotations from the logical readout, phase and slice axes to the physical
@@ -301,16 +302,22 @@ def _scan(args: argparse.Namespace, store: Path, design: str) -> int:
 
     from ..host import DesignStore
     from ..host._blocks import parse_limits
-    from . import Scan, record, send
+    from . import Scan, excited, record, send
     from ._stream import SAMPLE_RATE
 
     rotation, _ = prescription(args)
     field = float(parse_limits(args.limits.read_text())["B0"])
     coil = None if args.coil is None else COILS[args.coil]
     tissue = _phantom(args)
+    sequence = DesignStore(store).directory(design) / "sequence.seq"
     scan = Scan(
-        DesignStore(store).directory(design) / "sequence.seq",
-        tissue.isochromats(1e-3 * args.spacing, field_t=field, coil=coil),
+        sequence,
+        tissue.isochromats(
+            1e-3 * args.spacing,
+            field_t=field,
+            region=excited(sequence, rotation),
+            coil=coil,
+        ),
         rotation=rotation,
         default_shim=None if coil is None else coil.default_shim,
     )

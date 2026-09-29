@@ -127,18 +127,46 @@ def test_a_sphere_of_tissue_in_air_has_no_field_inside_once_shimmed_and_a_dipole
     assert equator == pytest.approx(-0.5 * pole, rel=0.05)
 
 
-def test_a_region_keeps_the_isochromats_inside_it(model, made):
+def test_a_region_keeps_the_isochromats_it_answers_for_from_their_positions_and_frequencies(
+    model, made
+):
     model.fractions[..., WHITE] = 1.0
+    model.fractions[..., FAT] = 1.0
     x = 1e-3 * -(np.arange(8) - 90.0)
-    region = [[x[5] - 1e-4, x[3] + 1e-4], [-1.0, 1.0], [-1.0, 1.0]]
 
-    virtual.BrainWeb().isochromats(field_t=3.0, region=region)
+    def region(positions, frequencies):
+        across = (positions[:, 0] >= x[5] - 1e-4) & (positions[:, 0] <= x[3] + 1e-4)
+        return across & (frequencies > -100.0)
 
-    (brain,) = made
-    assert len(brain.positions) == 4 * 6 * 3
+    brain = virtual.BrainWeb(susceptibility=False)
+    brain.isochromats(field_t=3.0, region=region)
+
+    (kept,) = made
+    assert len(kept.positions) == 4 * 6 * 3 == brain.count(field_t=3.0, region=region)
     assert np.all(
-        (brain.positions[:, 0] >= x[5] - 1e-4) & (brain.positions[:, 0] <= x[3] + 1e-4)
+        (kept.positions[:, 0] >= x[5] - 1e-4) & (kept.positions[:, 0] <= x[3] + 1e-4)
     )
+    np.testing.assert_allclose(kept.t1, _brainweb.TISSUES["white matter"][0])
+
+
+@pytest.mark.parametrize("spacing", [1e-3, 2e-3])
+def test_a_count_is_how_many_isochromats_the_brain_is_sampled_as(model, made, spacing):
+    model.fractions[1:3, 2:5, 3:8, GREY] = 0.4
+    model.fractions[0:3, 1:4, 2:6, FAT] = 0.6
+    brain = virtual.BrainWeb(susceptibility=False)
+
+    def region(positions, frequencies):
+        return frequencies > -100.0
+
+    counted = [
+        brain.count(spacing, field_t=3.0),
+        brain.count(spacing, field_t=3.0, region=region),
+    ]
+    brain.isochromats(spacing, field_t=3.0)
+    brain.isochromats(spacing, field_t=3.0, region=region)
+
+    assert counted == [len(sampled.positions) for sampled in made]
+    assert counted[1] < counted[0]
 
 
 def test_the_isochromats_start_at_rest_at_their_density_and_are_received_by_each_coil(
