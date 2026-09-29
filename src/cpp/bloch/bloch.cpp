@@ -160,16 +160,14 @@ namespace bloch
 
         void require_finite(const std::vector<double>& values, const char* name)
         {
-            for (const double value : values)
-                if (!std::isfinite(value))
-                    throw std::invalid_argument(std::string(name) + " must be finite");
+            if (!std::all_of(values.begin(), values.end(), [](double value) { return std::isfinite(value); }))
+                throw std::invalid_argument(std::string(name) + " must be finite");
         }
 
         void require_positive(const std::vector<double>& values)
         {
-            for (const double value : values)
-                if (!(value > 0.0))
-                    throw std::invalid_argument("relaxation times must be positive");
+            if (!std::all_of(values.begin(), values.end(), [](double value) { return value > 0.0; }))
+                throw std::invalid_argument("relaxation times must be positive");
         }
 
         /** Check @p values holds @p per finite sensitivities per isochromat,
@@ -402,11 +400,11 @@ namespace bloch
                 return true;
             if (gradient.mode != kOneDirection || gradient.along.empty())
                 return false;
-            along = gradient.along[0];
-            for (const double value : gradient.along)
-                if (!(std::abs(value - along) <= kHeldGradient * std::abs(along)))
-                    return false;
-            return true;
+            const double first = gradient.along[0];
+            along = first;
+            return std::all_of(gradient.along.begin(), gradient.along.end(), [first](double value) {
+                return std::abs(value - first) <= kHeldGradient * std::abs(first);
+            });
         }
 
         /** Turn the affine map (@p a, @p c) about z by @p angle on either
@@ -1297,9 +1295,11 @@ namespace bloch
 
     const Isochromats::Grouping& Isochromats::grouping(int mode, const double direction[3])
     {
-        for (const Grouping& held : groupings_)
-            if (held.mode == mode && same_bits(held.direction, direction))
-                return held;
+        const auto known = std::find_if(groupings_.begin(), groupings_.end(), [&](const Grouping& held) {
+            return held.mode == mode && same_bits(held.direction, direction);
+        });
+        if (known != groupings_.end())
+            return *known;
 
         const std::vector<std::array<double, 3>> positions = quantised(properties_, mode, direction);
         const auto less = [&](uint32_t i, uint32_t j) {
@@ -1332,12 +1332,12 @@ namespace bloch
         /* A pulse e^{i phi} times a held one, under the same gradient, turns
          * each step's field, and so the held maps, about z by phi. */
         const size_t samples = block.rf_channels * block.rf_steps;
-        for (auto it = held_.rbegin(); it != held_.rend(); ++it)
-            if (it->mode == gradient.mode && same_bits(it->direction, gradient.direction) &&
-                it->step == block.rf_step && it->channels == block.rf_channels && it->rf.size() == samples &&
-                it->delta == gradient.delta && one_phase_apart(it->rf, block.rf, turn))
-                return std::prev(it.base());
-        return held_.end();
+        const auto found = std::find_if(held_.rbegin(), held_.rend(), [&](const HeldPulse& held) {
+            return held.mode == gradient.mode && same_bits(held.direction, gradient.direction) &&
+                held.step == block.rf_step && held.channels == block.rf_channels && held.rf.size() == samples &&
+                held.delta == gradient.delta && one_phase_apart(held.rf, block.rf, turn);
+        });
+        return found == held_.rend() ? held_.end() : std::prev(found.base());
     }
 
     Isochromats::HeldPulse Isochromats::held_pulse(
@@ -1426,12 +1426,11 @@ namespace bloch
         const std::vector<std::complex<double>>& rf,
         std::complex<double>& turn)
     {
-        for (auto it = tables_.begin(); it != tables_.end(); ++it)
-            if (it->step == step && it->spacing == spacing && it->drive_spacing == drive_spacing &&
-                it->rf.size() == rf.size() && bits_of(it->t1) == bits_of(relaxation[0]) &&
-                bits_of(it->t2) == bits_of(relaxation[1]) && one_phase_apart(it->rf, rf.data(), turn))
-                return it;
-        return tables_.end();
+        return std::find_if(tables_.begin(), tables_.end(), [&](const PulseTable& table) {
+            return table.step == step && table.spacing == spacing && table.drive_spacing == drive_spacing &&
+                table.rf.size() == rf.size() && bits_of(table.t1) == bits_of(relaxation[0]) &&
+                bits_of(table.t2) == bits_of(relaxation[1]) && one_phase_apart(table.rf, rf.data(), turn);
+        });
     }
 
     void Isochromats::extend(PulseTable& table, const std::array<long long, 4>& bounds)
@@ -1553,9 +1552,10 @@ namespace bloch
                     sum += p.transmit[chosen[g] * channels + c] * weights[c];
                 drive[g] = sum;
             }
-            double integral = 0.0;
-            for (const std::complex<double>& value : waveform)
-                integral += std::abs(value);
+            const double integral = std::accumulate(
+                waveform.begin(), waveform.end(), 0.0, [](double sum, const std::complex<double>& value) {
+                    return sum + std::abs(value);
+                });
             drive_spacing = 1.0 / (kGridPoints * block.rf_step * integral);
         }
 
@@ -1651,21 +1651,27 @@ namespace bloch
         for (size_t coil = 0; coil < coils_; ++coil)
             for (size_t k = 0; k < samples; ++k)
             {
-                std::complex<double> total = 0.0;
-                for (const std::vector<double>& sum : sums)
-                    total += std::complex<double>(sum[2 * (coil * samples + k)], sum[2 * (coil * samples + k) + 1]);
-                signal[coil * block.adc_samples + first + k] = total;
+                const size_t at = 2 * (coil * samples + k);
+                signal[coil * block.adc_samples + first + k] = std::accumulate(
+                    sums.begin(),
+                    sums.end(),
+                    std::complex<double>(0.0),
+                    [at](const std::complex<double>& total, const std::vector<double>& sum) {
+                        return total + std::complex<double>(sum[at], sum[at + 1]);
+                    });
             }
     }
 
     const Nufft& Isochromats::window_transform(size_t samples)
     {
-        for (auto it = transforms_.begin(); it != transforms_.end(); ++it)
-            if ((*it)->modes() == samples)
-            {
-                transforms_.splice(transforms_.end(), transforms_, it);
-                return *transforms_.back();
-            }
+        const auto made = std::find_if(transforms_.begin(), transforms_.end(), [samples](const std::unique_ptr<Nufft>& transform) {
+            return transform->modes() == samples;
+        });
+        if (made != transforms_.end())
+        {
+            transforms_.splice(transforms_.end(), transforms_, made);
+            return *transforms_.back();
+        }
         if (transforms_.size() >= kTransforms)
             transforms_.pop_front();
         transforms_.push_back(std::unique_ptr<Nufft>(new Nufft(samples)));
