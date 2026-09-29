@@ -294,3 +294,27 @@ def test_a_bundle_names_every_file_by_its_digest(host):
     assert {
         name: hashlib.sha256(content).hexdigest() for name, content in contents.items()
     } == manifest["files"]
+
+
+def test_a_stored_design_is_readable_by_more_than_the_process_that_wrote_it(host):
+    """A design exists to be read by something else.
+
+    The design service writes it on one machine and a reconstruction reads it
+    on another, as another user. A stage is private, as a temporary directory
+    should be; what is published from it must not be, or the reader gets
+    EACCES and the failure surfaces far from here -- as a cache that cannot be
+    loaded, or a trajectory that never arrives.
+    """
+    design = generate(host, "gre2d", {})
+    mode = (host.root / design).stat().st_mode & 0o777
+    expected = 0o777 & ~_process_umask()
+    assert mode == expected, (
+        f"the design is mode {mode:o}, not the {expected:o} an ordinary mkdir "
+        "would leave under this umask"
+    )
+
+
+def _process_umask() -> int:
+    mask = os.umask(0o022)
+    os.umask(mask)
+    return mask

@@ -60,6 +60,13 @@ def design_id(identity: str) -> str:
     return identity[:ID_DIGITS]
 
 
+def _umask() -> int:
+    """Return the process umask, without leaving it changed."""
+    mask = os.umask(0o022)
+    os.umask(mask)
+    return mask
+
+
 class DesignStore:
     """The designs under one directory, each in ``<id>/`` and immutable once written.
 
@@ -206,6 +213,12 @@ class DesignStore:
 
     def _publish(self, identity: str, staged: Path) -> str:
         design = design_id(identity)
+        # A design exists to be read by something other than what wrote it --
+        # on a scanner the reconstruction runs as another user than the design
+        # service -- and tempfile.mkdtemp() makes the stage private. Publish it
+        # as an ordinary mkdir would, and let a site that wants the store
+        # private say so with its umask.
+        staged.chmod(0o777 & ~_umask())
         try:
             staged.replace(self.root / design)
         except OSError:
