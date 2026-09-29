@@ -17,8 +17,7 @@ from pathlib import Path
 import numpy as np
 import pypulseqpp as pp
 
-from .. import ir
-from ._bloch import _drive, _gradients, _played
+from ._bloch import Player, _gradients
 from ._isochromats import Isochromats
 
 #: MATLAB Pulseq's audio sample rate, the default of ``pypulseqpp.gradient_sound``, in Hz.
@@ -61,10 +60,11 @@ class Chunk:
 
 
 class Scan:
-    """The cache beside a sequence file played on isochromats block by block, against a scan clock.
+    """The cache beside a sequence file played on isochromats, against a scan clock.
 
-    The blocks are those :func:`~pulserver.virtual.simulate` plays, and they
-    advance the magnetization of the isochromats from where it stands.
+    The blocks are those :func:`~pulserver.virtual.simulate` plays, as it
+    plays them, and they advance the magnetization of the isochromats from
+    where it stands.
 
     Parameters
     ----------
@@ -80,6 +80,9 @@ class Scan:
     default_shim
         Channel weights of a coil of several transmit channels, as
         :func:`~pulserver.virtual.simulate` takes them.
+    tolerance
+        The accuracy of the samples of runs of repetitions, as
+        :func:`~pulserver.virtual.simulate` takes it.
     """
 
     def __init__(
@@ -90,11 +93,17 @@ class Scan:
         *,
         rotation: np.ndarray | None = None,
         default_shim: np.ndarray | None = None,
+        tolerance: float = 0.0,
     ) -> None:
-        playout = ir.playout(Path(seq_path), waveforms=True, cache_ext=cache_ext)
-        self._played = playout["blocks"]
-        self._drive = _drive(playout, default_shim)
-        self._isochromats = isochromats
+        self._player = Player(
+            seq_path,
+            isochromats,
+            cache_ext,
+            rotation=rotation,
+            default_shim=default_shim,
+            tolerance=tolerance,
+        )
+        self._played = self._player.played
         self._turn = None if rotation is None else np.asarray(rotation, dtype=float)
         durations = 1e-6 * self._played["duration_us"].astype(float)
         self._starts = np.concatenate([[0.0], np.cumsum(durations)])
@@ -223,19 +232,15 @@ class Scan:
         return int(self._played["adc_samples"][first:last][acquired].sum())
 
     def _span_end(self, first: int, length: float) -> int:
-        """Return the block after the last of the span that starts at block ``first``."""
+        """Return the block after the last of the span that starts at block ``first``: a span ends where a repetition of a run starts, or outside every run."""
         blocks = self._starts.size - 1
         last = first + 1
         while last < blocks and self._starts[last] - self._starts[first] < length:
             last += 1
-        return last
+        return self._player.boundary(last)
 
     def _readouts(self, first: int, last: int) -> tuple[np.ndarray, ...]:
-        played = (
-            _played(self._played, block, self._isochromats, self._turn, self._drive)
-            for block in range(first, last)
-        )
-        return tuple(readout for readout in played if readout is not None)
+        return tuple(self._player.readouts(first, last))
 
     def _samples(
         self, start: float, stop: float, final: bool, sample_rate: float

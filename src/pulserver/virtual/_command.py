@@ -303,6 +303,7 @@ def _scan(args: argparse.Namespace, store: Path, design: str) -> int:
     from ..host import DesignStore
     from ..host._blocks import parse_limits
     from . import Scan, excited, record, send
+    from ._bloch import TOLERANCE
     from ._stream import SAMPLE_RATE
 
     rotation, _ = prescription(args)
@@ -320,6 +321,7 @@ def _scan(args: argparse.Namespace, store: Path, design: str) -> int:
         ),
         rotation=rotation,
         default_shim=None if coil is None else coil.default_shim,
+        tolerance=TOLERANCE,
     )
     series = {
         "frequency_hz": pp.Opts().gamma * field,

@@ -9,6 +9,10 @@ from .._accelerators import require
 
 __all__ = ["Isochromats", "Repetitions"]
 
+#: Most bytes a run of repetitions holds beside its isochromats: for its maps,
+#: and again for the column sums its fixed points are read from.
+MEMORY = 4 << 30
+
 
 def _kernels():
     return require("bloch")
@@ -474,7 +478,11 @@ class Isochromats:
             np.ascontiguousarray(encoded).ravel(),
             float(tolerance),
         )
-        steady = _steady(native, encoded, float(tolerance)) if tolerance else None
+        steady = (
+            _steady(native, encoded, float(tolerance), [r.size for r in receivers])
+            if tolerance
+            else None
+        )
         return Repetitions(
             self,
             native,
@@ -487,15 +495,29 @@ class Isochromats:
         )
 
 
-def _steady(native, areas: np.ndarray, tolerance: float) -> list | None:
+def _steady(
+    native, areas: np.ndarray, tolerance: float, samples: list[int]
+) -> list | None:
     """Split the magnetisation; return what reads each window's samples from the fixed points, or None where it cannot.
 
     A window's fixed points are read by columns (:class:`_Columns`) along the
-    axes :func:`_encoded` finds.
+    axes :func:`_encoded` finds; where the columns of every window, of
+    ``samples`` samples each, would take more than :data:`MEMORY` bytes, the
+    magnetisation is not split.
     """
     readers = _encoded(native, areas, tolerance)
-    if readers is None or not native.split():
+    if readers is None:
         return None
+    sizes = [
+        16
+        * native.coils
+        * count
+        * int(np.prod([native.lattice(axis).size for axis in along]))
+        for count, along in zip(samples, readers, strict=True)
+    ]
+    if sum(sizes) > MEMORY or not native.split():
+        return None
+    kept = (MEMORY - sum(sizes)) // max(len(readers), 1)
     parts = []
     for w, along in enumerate(readers):
         constant = np.where(
@@ -506,7 +528,10 @@ def _steady(native, areas: np.ndarray, tolerance: float) -> list | None:
         sums = native.column_sums(w, along, np.ascontiguousarray(constant, dtype=float))
         parts.append(
             _Columns(
-                sums, [native.lattice(axis) for axis in along], areas[:, w][:, along]
+                sums,
+                [native.lattice(axis) for axis in along],
+                areas[:, w][:, along],
+                kept,
             )
         )
     return parts
@@ -543,14 +568,13 @@ class _Columns:
     repetition's area along them, in 1/m. A repetition's samples are the sums
     times exp(-2 pi i area . coordinate), summed over the columns. With two
     axes, the sum along the first, the outer axis, is taken once per area,
-    for the areas repetitions need together, and kept within a budget of
-    memory.
+    for the areas repetitions need together, and as many are kept as fit in
+    ``kept`` bytes.
     """
 
-    #: Outer sums kept at the most, in bytes.
-    _KEPT = 1 << 30
-
-    def __init__(self, sums: np.ndarray, values: list, encodings: np.ndarray) -> None:
+    def __init__(
+        self, sums: np.ndarray, values: list, encodings: np.ndarray, kept: int
+    ) -> None:
         self._values = values
         self._encodings = encodings
         self._shape = sums.shape[len(values) :]
@@ -563,7 +587,7 @@ class _Columns:
         self._outer = values[0]
         self._sums = sums.reshape(self._outer.size, -1)
         self._kept = {}
-        self._keep = max(1, self._KEPT // (self._sums.itemsize * self._sums.shape[1]))
+        self._keep = max(1, kept // (self._sums.itemsize * self._sums.shape[1]))
 
     def _outer_sums(self, indices: np.ndarray) -> None:
         """Keep the sums along the outer axis at the areas of ``indices``, those missing in one product."""

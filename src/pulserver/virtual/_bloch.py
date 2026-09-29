@@ -4,13 +4,20 @@ from __future__ import annotations
 
 __all__ = ["simulate"]
 
+from collections.abc import Iterator
 from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
 
 from .. import ir
-from ._isochromats import Isochromats
+from ._isochromats import MEMORY, Isochromats, Repetitions
+from ._repeats import Run, runs
+
+#: The ``tolerance`` of :meth:`Isochromats.repetitions` the console and the
+#: ``pulserver scan`` command play runs of repetitions to, relative to the sum
+#: of the magnitudes of the terms each sample sums.
+TOLERANCE = 1e-4
 
 
 def simulate(
@@ -20,6 +27,7 @@ def simulate(
     *,
     rotation: np.ndarray | None = None,
     default_shim: np.ndarray | None = None,
+    tolerance: float = 0.0,
 ) -> list[np.ndarray]:
     """Return what each coil receives at every ADC sample the cache beside a sequence file plays on isochromats.
 
@@ -36,17 +44,152 @@ def simulate(
     channels, a single-channel pulse plays on every channel, weighted by its
     block's RF shim or, without one, by ``default_shim``.
 
+    Runs of repetitions of blocks that differ only in their phase offsets and
+    phase encodings play from each isochromat's map over one repetition, as
+    :meth:`Isochromats.repetitions` plays them to within ``tolerance``; at
+    zero, their samples are those of the blocks played one by one, to
+    rounding.
+
     :doc:`/explanations/virtual-scanner` states the signal model.
     """
-    playout = ir.playout(Path(seq_path), waveforms=True, cache_ext=cache_ext)
-    played = playout["blocks"]
-    turn = None if rotation is None else np.asarray(rotation, dtype=float)
-    drive = _drive(playout, default_shim)
-    readouts = (
-        _played(played, block, isochromats, turn, drive)
-        for block in range(played["duration_us"].size)
+    player = Player(
+        seq_path,
+        isochromats,
+        cache_ext,
+        rotation=rotation,
+        default_shim=default_shim,
+        tolerance=tolerance,
     )
-    return [readout for readout in readouts if readout is not None]
+    return list(player.readouts(0, player.blocks))
+
+
+class Player:
+    """The blocks the cache beside a sequence file plays, played on isochromats in turn, as :func:`simulate` plays them.
+
+    Attributes
+    ----------
+    played
+        The playout's blocks, as :func:`pulserver.ir.playout` records them.
+    runs
+        The runs of repetitions played from each isochromat's map, by first
+        block.
+    """
+
+    def __init__(
+        self,
+        seq_path: Path | str,
+        isochromats: Isochromats,
+        cache_ext: str = ".pseg",
+        *,
+        rotation: np.ndarray | None = None,
+        default_shim: np.ndarray | None = None,
+        tolerance: float = 0.0,
+    ) -> None:
+        seq_path = Path(seq_path)
+        playout = ir.playout(seq_path, waveforms=True, cache_ext=cache_ext)
+        self.played = playout["blocks"]
+        self._turn = None if rotation is None else np.asarray(rotation, dtype=float)
+        self._drive = _drive(playout, default_shim)
+        self._isochromats = isochromats
+        self._tolerance = tolerance
+        self.runs = runs(
+            self.played,
+            self._turn,
+            windows=_windows(isochromats),
+            rounded=tolerance > 0.0,
+        )
+        self._firsts = np.array([run.first for run in self.runs], dtype=int)
+        # The run being played, its repetitions and the next to be played.
+        self._playing: tuple[Run, Repetitions, int] | None = None
+
+    @property
+    def blocks(self) -> int:
+        """Blocks in the scan."""
+        return int(self.played["duration_us"].size)
+
+    def boundary(self, block: int) -> int:
+        """Return the first block from ``block`` on that starts a repetition of a run or lies outside every run."""
+        run = self._run(block)
+        return block if run is None else block + (run.first - block) % run.size
+
+    def readouts(self, first: int, last: int) -> Iterator[np.ndarray]:
+        """Play the blocks from ``first`` to before ``last`` and yield each readout, as :func:`simulate` returns them.
+
+        A run's repetitions play whole from each repetition that starts
+        within the blocks and ends by ``last``; the rest play block by block.
+        """
+        block = first
+        while block < last:
+            run = self._run(block)
+            aligned = run is not None and (block - run.first) % run.size == 0
+            count = (min(last, run.stop) - block) // run.size if aligned else 0
+            if count > 0:
+                yield from self._repeated(run, (block - run.first) // run.size, count)
+                block += count * run.size
+                continue
+            self._playing = None
+            readout = _played(
+                self.played, block, self._isochromats, self._turn, self._drive
+            )
+            if readout is not None:
+                yield readout
+            block += 1
+
+    def _run(self, block: int) -> Run | None:
+        at = int(np.searchsorted(self._firsts, block, side="right")) - 1
+        return self.runs[at] if at >= 0 and block < self.runs[at].stop else None
+
+    def _repeated(self, run: Run, index: int, count: int) -> Iterator[np.ndarray]:
+        """Play ``count`` repetitions of ``run`` from repetition ``index``; yield their readouts."""
+        playing = self._playing
+        if playing is None or playing[0] is not run or playing[2] != index:
+            # The maps of the run played before are freed before these are made.
+            self._playing = playing = None
+            playing = (run, self._repetitions(run, index), index)
+        done = index + count == run.count
+        self._playing = None if done else (run, playing[1], index + count)
+        windows = [
+            int(self.played["adc_samples"][block])
+            for block in range(run.first, run.first + run.size)
+            if self.played["adc"][block]
+        ]
+        signal = playing[1].play(count).astype(np.complex64)
+        if not windows:
+            return
+        for samples in signal:
+            for readout in np.split(samples, np.cumsum(windows)[:-1], axis=1):
+                yield np.ascontiguousarray(readout)
+
+    def _repetitions(self, run: Run, index: int) -> Repetitions:
+        """Return the repetitions of ``run`` from repetition ``index`` on, from the magnetization where it stands."""
+        blocks = []
+        for position in range(run.size):
+            block = run.first + position
+            blocks.append(
+                {
+                    "duration": 1e-6 * float(self.played["duration_us"][block]),
+                    "gradients": _gradients(self.played, block),
+                    "rotation": self._turn if self.played["rotate"][block] else None,
+                    "rf": _rf(self.played, block, self._drive),
+                    "adc": _adc(self.played, block),
+                }
+            )
+        return self._isochromats.repetitions(
+            blocks,
+            run.phases[index:],
+            run.areas[index:],
+            adc_phases=run.adc_phases[index:],
+            tolerance=self._tolerance,
+        )
+
+
+def _windows(isochromats: Isochromats) -> int:
+    """Return the most ADC windows a repetition may hold for its maps on the isochromats to take at most :data:`MEMORY` bytes; negative where none fits."""
+    # Per isochromat, its map and the slot it is played from, in double
+    # precision; per window, the map of the transverse magnetisation at its
+    # first sample and the slot's kernel weights and receive factors.
+    per_window = 236 + 16 * isochromats.coils
+    return (MEMORY // max(len(isochromats), 1) - 264) // per_window
 
 
 def _drive(
