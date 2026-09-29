@@ -546,7 +546,7 @@ table, named by <a class="reference internal" href="../generated/pulserver.proto
 outside that table is refused when the class is defined, because the
 interpreter’s parser would drop it. An entry names the <code class="docutils literal notranslate"><span class="pre">init_sequence</span></code> argument
 it sets and how the scanner UI shows it; the application’s own defaults are the
-protocol’s initial values.</p>
+protocol’s initial values, except where an entry sets its <code class="docutils literal notranslate"><span class="pre">default</span></code>.</p>
 <div class="highlight-pycon notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">pypulseqpp.sequences.sequence.gre2D_sequence</span><span class="w"> </span><span class="kn">import</span> <span class="n">Gre2DApp</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">pulserver.design</span><span class="w"> </span><span class="kn">import</span> <span class="n">FloatParam</span><span class="p">,</span> <span class="n">IntParam</span><span class="p">,</span> <span class="n">ScannerSequence</span><span class="p">,</span> <span class="n">TimeParam</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">pulserver.protocol</span><span class="w"> </span><span class="kn">import</span> <span class="n">TEPreset</span><span class="p">,</span> <span class="n">TRPreset</span><span class="p">,</span> <span class="n">UIParam</span>
@@ -614,6 +614,12 @@ protocol’s initial values.</p>
 <code class="docutils literal notranslate"><span class="pre">{TEPreset.MINIMUM:</span> <span class="pre">None}</span></code> passes <code class="docutils literal notranslate"><span class="pre">None</span></code> to the application, which designs its
 shortest echo time; a preset can also map to a time in seconds or to a function
 of the scanner limits.</p>
+<p>An entry’s <code class="docutils literal notranslate"><span class="pre">default</span></code> is its initial value in the UI’s units, in place of the
+application’s default: microseconds or a preset for a time, <code class="docutils literal notranslate"><span class="pre">unit</span></code> for a float.
+It is how a sequence offers a protocol its scanner’s limits can play when the
+application’s defaults assume stronger gradients, such as
+<code class="docutils literal notranslate"><span class="pre">TimeParam(&quot;te&quot;,</span> <span class="pre">presets={TEPreset.MINIMUM:</span> <span class="pre">None},</span> <span class="pre">default=TEPreset.MINIMUM)</span></code>
+for the shortest echo time.</p>
 <p><code class="docutils literal notranslate"><span class="pre">recon</span></code> names the reconstruction plugin the data of this sequence is
 reconstructed with (see <a class="reference internal" href="reconstruction-plugins.html"><span class="doc">Reconstruction plugins</span></a>).</p>
 </section>
@@ -650,7 +656,7 @@ the IR, and the rotation from the logical to the physical axes, in whose frame
 the host checks the design (<a class="reference internal" href="../explanations/ir-cache.html"><span class="doc">The scanner IR</span></a>).</p>
 <p><a class="reference internal" href="../generated/pulserver.design.ScannerSequence.validate.html#pulserver.design.ScannerSequence.validate" title="pulserver.design.ScannerSequence.validate"><code class="xref py py-meth docutils literal notranslate"><span class="pre">validate()</span></code></a> constructs the application
 under the scanner limits and returns the protocol it will play. Entries the
-request omits keep the application’s defaults:</p>
+request omits keep their initial values:</p>
 <div class="highlight-pycon notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">pypulseqpp</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pp</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">system</span> <span class="o">=</span> <span class="n">pp</span><span class="o">.</span><span class="n">Opts</span><span class="p">(</span><span class="n">max_grad</span><span class="o">=</span><span class="mi">40</span><span class="p">,</span> <span class="n">grad_unit</span><span class="o">=</span><span class="s2">"mT/m"</span><span class="p">,</span> <span class="n">max_slew</span><span class="o">=</span><span class="mi">150</span><span class="p">,</span> <span class="n">slew_unit</span><span class="o">=</span><span class="s2">"T/m/s"</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">reply</span> <span class="o">=</span> <span class="n">Gre2D</span><span class="p">()</span><span class="o">.</span><span class="n">validate</span><span class="p">(</span><span class="n">system</span><span class="p">,</span> <span class="p">{</span><span class="s2">"TE"</span><span class="p">:</span> <span class="n">TEPreset</span><span class="o">.</span><span class="n">MINIMUM</span><span class="p">,</span> <span class="s2">"nx"</span><span class="p">:</span> <span class="mi">96</span><span class="p">})</span>

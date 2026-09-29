@@ -16,5 +16,6 @@
    :toctree:
    :nosignatures:
 
+   ~StringListParam.default
    ~StringListParam.argument
    ~StringListParam.options

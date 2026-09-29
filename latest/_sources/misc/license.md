@@ -12,9 +12,11 @@ Modules adapted from third-party code keep their notices:
 pulserver's container image carries BrainWeb's normal brain, the fuzzy tissue
 model of the [BrainWeb](https://brainweb.bic.mni.mcgill.ca/) Simulated Brain
 Database of the McConnell Brain Imaging Centre, as
-[brainweb-dl](https://github.com/paquiteau/brainweb-dl) downloads it. Work
-using it cites Collins et al., IEEE Trans Med Imaging 17:463, 1998, and Kwan et
-al., IEEE Trans Med Imaging 18:1085, 1999.
+[brainweb-dl](https://github.com/paquiteau/brainweb-dl) downloads it, and the
+coils' field maps and VOPs [mariepy](https://github.com/pulserver/mariepy)
+solves in it, which BrainWeb's terms of use cover as they cover the model. Work
+using them cites Collins et al., IEEE Trans Med Imaging 17:463, 1998, and Kwan
+et al., IEEE Trans Med Imaging 18:1085, 1999.
 
 The pulserver logo shares the bipolar-gradient mark of the pypulseqpp logo,
 which derives from the MIT-licensed

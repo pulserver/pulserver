@@ -16,4 +16,5 @@
    :toctree:
    :nosignatures:
 
+   ~BoolParam.default
    ~BoolParam.argument

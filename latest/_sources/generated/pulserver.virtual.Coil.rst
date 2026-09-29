@@ -14,6 +14,7 @@
    :toctree:
    :nosignatures:
 
+   ~Coil.limits
    ~Coil.receive
    ~Coil.transmit
 

@@ -16,6 +16,7 @@
    :toctree:
    :nosignatures:
 
+   ~TimeParam.default
    ~TimeParam.options
    ~TimeParam.range_incr
    ~TimeParam.range_max

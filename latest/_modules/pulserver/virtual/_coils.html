@@ -450,15 +450,18 @@
                 <article class="bd-article">
                   
   <h1>Source code for pulserver.virtual._coils</h1><div class="highlight"><pre>
-<span></span><span class="sd">"""RF coils of the virtual scanner, with the sensitivities of BART's coil models."""</span>
+<span></span><span class="sd">"""RF coils of the virtual scanner, with the sensitivities of BART's coil models or of each coil's field maps."""</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
-<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"COILS"</span><span class="p">,</span> <span class="s2">"Coil"</span><span class="p">]</span>
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"COILS"</span><span class="p">,</span> <span class="s2">"Coil"</span><span class="p">,</span> <span class="s2">"coils"</span><span class="p">]</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">functools</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">json</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">tempfile</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">NamedTuple</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 
@@ -468,6 +471,18 @@
 
 <span class="c1">#: Samples per axis of the grid a model is evaluated on and interpolated from.</span>
 <span class="n">_SAMPLES</span> <span class="o">=</span> <span class="mi">32</span>
+
+<span class="c1">#: Largest relative difference allowed between the frequency a coil's maps</span>
+<span class="c1">#: were solved at and the Larmor frequency of the magnet they are used in.</span>
+<span class="n">_FREQUENCY_TOLERANCE</span> <span class="o">=</span> <span class="mf">0.01</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">_Grid</span><span class="p">(</span><span class="n">NamedTuple</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Sensitivities ``(channels, z, y, x)``; sample ``i`` along an axis lies ``(i - centre) * step`` m from the isocentre."""</span>
+
+    <span class="n">values</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+    <span class="n">centre</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+    <span class="n">step</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
 
 
 <div class="viewcode-block" id="Coil">
@@ -479,32 +494,33 @@
 <span class="sd">    ``name`` is ``transmit/receive``, or one coil's name where it does both.</span>
 <span class="sd">    Each side is BART's coil model (``HEAD_2D_8CH`` or ``HEAD_3D_64CH``) and</span>
 <span class="sd">    the number of its channels the coil takes, the first ones, as ``phantom</span>
-<span class="sd">    -S`` selects them; a side without a model is one channel of unit</span>
-<span class="sd">    sensitivity everywhere, as a body coil is taken to be. A model is sampled</span>
-<span class="sd">    by bartorch on first use, which the ``coils`` extra installs, over</span>
-<span class="sd">    :data:`MODEL_FOV` along the physical axes, and interpolated linearly;</span>
-<span class="sd">    ``HEAD_2D_8CH`` is constant along z.</span>
+<span class="sd">    -S`` selects them, or the file of the coil's field maps :func:`coils`</span>
+<span class="sd">    reads; a side without either is one channel of unit sensitivity</span>
+<span class="sd">    everywhere, as a body coil is taken to be. A model is sampled by bartorch</span>
+<span class="sd">    on first use, which the ``coils`` extra installs, over :data:`MODEL_FOV`</span>
+<span class="sd">    along the physical axes; ``HEAD_2D_8CH`` is constant along z. Either is</span>
+<span class="sd">    interpolated linearly.</span>
 
 <span class="sd">    Receive sensitivities are scaled to a root sum of squares of 1 at the</span>
-<span class="sd">    isocentre. Transmit sensitivities are the complex conjugates of the</span>
-<span class="sd">    receive sensitivities of the transmit side's model, the quasi-static limit</span>
-<span class="sd">    of reciprocity, scaled so that the :attr:`default_shim` plays a pulse at</span>
-<span class="sd">    its nominal amplitude at the isocentre.</span>
+<span class="sd">    isocentre, and transmit sensitivities so that the :attr:`default_shim`</span>
+<span class="sd">    plays a pulse at its nominal amplitude at the isocentre. A model's</span>
+<span class="sd">    transmit sensitivities are the complex conjugates of its receive</span>
+<span class="sd">    sensitivities, the quasi-static limit of reciprocity.</span>
 <span class="sd">    """</span>
 
     <span class="n">name</span><span class="p">:</span> <span class="nb">str</span>
-    <span class="n">transmit_model</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
-    <span class="n">receive_model</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">transmit_model</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="n">Path</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">receive_model</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="n">Path</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">transmit_channels</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">"""Channels a pulse is played on."""</span>
-        <span class="k">return</span> <span class="mi">1</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">transmit_model</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">transmit_model</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+        <span class="k">return</span> <span class="n">_channels</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">transmit_model</span><span class="p">)</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">receive_channels</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">"""Coils a readout is received by."""</span>
-        <span class="k">return</span> <span class="mi">1</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">receive_model</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">receive_model</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+        <span class="k">return</span> <span class="n">_channels</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">receive_model</span><span class="p">)</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">default_shim</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
@@ -516,7 +532,7 @@
 <span class="sd">        """</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">transmit_model</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">return</span> <span class="kc">None</span>
-        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="mi">1</span><span class="n">j</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">angle</span><span class="p">(</span><span class="n">_isocentre</span><span class="p">(</span><span class="n">_transmit</span><span class="p">(</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">transmit_model</span><span class="p">))))</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="mi">1</span><span class="n">j</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">angle</span><span class="p">(</span><span class="n">_isocentre</span><span class="p">(</span><span class="n">_transmit</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">transmit_model</span><span class="p">))))</span>
 
 <div class="viewcode-block" id="Coil.transmit">
 <a class="viewcode-back" href="../../../generated/pulserver.virtual.Coil.transmit.html#pulserver.virtual.Coil.transmit">[docs]</a>
@@ -524,7 +540,7 @@
 <span class="w">        </span><span class="sd">"""Return each channel's transmit sensitivity at ``(n, 3)`` physical points, in m: ``(n, channels)``; None for one uniform channel."""</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">transmit_model</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">return</span> <span class="kc">None</span>
-        <span class="k">return</span> <span class="n">_interpolated</span><span class="p">(</span><span class="n">_transmit</span><span class="p">(</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">transmit_model</span><span class="p">),</span> <span class="n">points</span><span class="p">)</span></div>
+        <span class="k">return</span> <span class="n">_interpolated</span><span class="p">(</span><span class="n">_transmit</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">transmit_model</span><span class="p">),</span> <span class="n">points</span><span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="Coil.receive">
@@ -533,7 +549,34 @@
 <span class="w">        </span><span class="sd">"""Return each coil's receive sensitivity at ``(n, 3)`` physical points, in m: ``(n, coils)``; None for one uniform coil."""</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">receive_model</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">return</span> <span class="kc">None</span>
-        <span class="k">return</span> <span class="n">_interpolated</span><span class="p">(</span><span class="n">_receive</span><span class="p">(</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">receive_model</span><span class="p">),</span> <span class="n">points</span><span class="p">)</span></div>
+        <span class="k">return</span> <span class="n">_interpolated</span><span class="p">(</span><span class="n">_receive</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">receive_model</span><span class="p">),</span> <span class="n">points</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="Coil.limits">
+<a class="viewcode-back" href="../../../generated/pulserver.virtual.Coil.limits.html#pulserver.virtual.Coil.limits">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">limits</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""Return the VOP entries of the check limits a design is made under in this coil; none unless its transmit maps have VOPs beside them.</span>
+
+<span class="sd">        ``vop_file`` is ``&lt;coil&gt;_vops.npz`` beside the transmit maps</span>
+<span class="sd">        ``&lt;coil&gt;.npz``; ``vop_drive_per_hz`` the drive of every channel, in</span>
+<span class="sd">        the unit of the maps and the VOPs, per Hz of a pulse's amplitude,</span>
+<span class="sd">        with which the channels' rotating fields, half their ``minus``, add</span>
+<span class="sd">        up to the pulse's nominal amplitude at the isocentre through the</span>
+<span class="sd">        :attr:`default_shim`; and ``vop_default_shim`` that shim, a magnitude</span>
+<span class="sd">        and a phase per channel.</span>
+<span class="sd">        """</span>
+        <span class="n">maps</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">transmit_model</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">maps</span><span class="p">,</span> <span class="n">Path</span><span class="p">):</span>
+            <span class="k">return</span> <span class="p">{}</span>
+        <span class="n">vops</span> <span class="o">=</span> <span class="n">maps</span><span class="o">.</span><span class="n">with_name</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">maps</span><span class="o">.</span><span class="n">stem</span><span class="si">}</span><span class="s2">_vops.npz"</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">vops</span><span class="o">.</span><span class="n">is_file</span><span class="p">():</span>
+            <span class="k">return</span> <span class="p">{}</span>
+        <span class="n">phases</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">angle</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">default_shim</span><span class="p">)</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="s2">"vop_file"</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="n">vops</span><span class="p">),</span>
+            <span class="s2">"vop_drive_per_hz"</span><span class="p">:</span> <span class="nb">repr</span><span class="p">(</span><span class="n">_drive_per_hz</span><span class="p">(</span><span class="n">maps</span><span class="p">)),</span>
+            <span class="s2">"vop_default_shim"</span><span class="p">:</span> <span class="s2">" "</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="sa">f</span><span class="s2">"1.0 </span><span class="si">{</span><span class="n">phase</span><span class="si">!r}</span><span class="s2">"</span> <span class="k">for</span> <span class="n">phase</span> <span class="ow">in</span> <span class="n">phases</span><span class="p">),</span>
+        <span class="p">}</span></div>
 </div>
 
 
@@ -548,16 +591,94 @@
 <span class="p">}</span>
 
 
+<span class="k">def</span><span class="w"> </span><span class="nf">coils</span><span class="p">(</span>
+    <span class="n">fields</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">field_t</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Coil</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Return the virtual scanner's coils by name: :data:`COILS`, or the same coils with the field maps in ``fields``.</span>
+
+<span class="sd">    Each coil of a name has its maps in ``&lt;coil&gt;.npz``, as mariepy's</span>
+<span class="sd">    ``maps.write`` writes them: the circular components ``plus`` and</span>
+<span class="sd">    ``minus``, mu0 (Hx + j Hy) and mu0 (Hx - j Hy) with the time dependence</span>
+<span class="sd">    exp(+j omega t), of every channel's field over a body in the physical</span>
+<span class="sd">    frame, zero outside the body's mask. In a static field along +z, the</span>
+<span class="sd">    field a channel transmits is the complex conjugate of its ``minus``, and</span>
+<span class="sd">    what it receives is weighted by the complex conjugate of its ``plus``.</span>
+<span class="sd">    Voxels outside the mask take the value of the nearest voxel inside.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    FileNotFoundError</span>
+<span class="sd">        If ``fields`` lacks a coil's maps.</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If maps were solved at a frequency other than the Larmor frequency of</span>
+<span class="sd">        ``field_t``, in T.</span>
+<span class="sd">    """</span>
+    <span class="k">if</span> <span class="n">fields</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">COILS</span>
+    <span class="n">directory</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">fields</span><span class="p">)</span>
+    <span class="n">mapped</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">COILS</span><span class="p">:</span>
+        <span class="n">transmit</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">receive</span> <span class="o">=</span> <span class="n">name</span><span class="o">.</span><span class="n">partition</span><span class="p">(</span><span class="s2">"/"</span><span class="p">)</span>
+        <span class="n">mapped</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">Coil</span><span class="p">(</span>
+            <span class="n">name</span><span class="p">,</span>
+            <span class="n">directory</span> <span class="o">/</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">transmit</span><span class="si">}</span><span class="s2">.npz"</span><span class="p">,</span>
+            <span class="n">directory</span> <span class="o">/</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">receive</span><span class="w"> </span><span class="ow">or</span><span class="w"> </span><span class="n">transmit</span><span class="si">}</span><span class="s2">.npz"</span><span class="p">,</span>
+        <span class="p">)</span>
+    <span class="k">if</span> <span class="n">field_t</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="kn">import</span><span class="w"> </span><span class="nn">pypulseqpp</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pp</span>
+
+        <span class="n">larmor</span> <span class="o">=</span> <span class="n">pp</span><span class="o">.</span><span class="n">Opts</span><span class="p">()</span><span class="o">.</span><span class="n">gamma</span> <span class="o">*</span> <span class="n">field_t</span>
+        <span class="n">sides</span> <span class="o">=</span> <span class="p">{</span><span class="n">side</span> <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">COILS</span> <span class="k">for</span> <span class="n">side</span> <span class="ow">in</span> <span class="n">name</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">"/"</span><span class="p">)}</span>
+        <span class="k">for</span> <span class="n">path</span> <span class="ow">in</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">directory</span> <span class="o">/</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">side</span><span class="si">}</span><span class="s2">.npz"</span> <span class="k">for</span> <span class="n">side</span> <span class="ow">in</span> <span class="n">sides</span><span class="p">):</span>
+            <span class="n">solved</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">_metadata</span><span class="p">(</span><span class="n">path</span><span class="p">)[</span><span class="s2">"frequency_hz"</span><span class="p">])</span>
+            <span class="k">if</span> <span class="nb">abs</span><span class="p">(</span><span class="n">solved</span> <span class="o">-</span> <span class="n">larmor</span><span class="p">)</span> <span class="o">&gt;</span> <span class="n">_FREQUENCY_TOLERANCE</span> <span class="o">*</span> <span class="n">larmor</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">path</span><span class="si">}</span><span class="s2"> was solved at </span><span class="si">{</span><span class="n">solved</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="mf">1e6</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2"> MHz, and the magnet's "</span>
+                    <span class="sa">f</span><span class="s2">"Larmor frequency is </span><span class="si">{</span><span class="n">larmor</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="mf">1e6</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2"> MHz"</span>
+                <span class="p">)</span>
+    <span class="k">return</span> <span class="n">mapped</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_channels</span><span class="p">(</span><span class="n">side</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="n">Path</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+    <span class="k">if</span> <span class="n">side</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="mi">1</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">side</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">side</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+    <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="n">_metadata</span><span class="p">(</span><span class="n">side</span><span class="p">)[</span><span class="s2">"channels"</span><span class="p">])</span>
+
+
 <span class="nd">@functools</span><span class="o">.</span><span class="n">cache</span>
-<span class="k">def</span><span class="w"> </span><span class="nf">_receive</span><span class="p">(</span><span class="n">model</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">channels</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_receive</span><span class="p">(</span><span class="n">side</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="n">Path</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">_Grid</span><span class="p">:</span>
+    <span class="n">grid</span> <span class="o">=</span> <span class="n">_model</span><span class="p">(</span><span class="o">*</span><span class="n">side</span><span class="p">)</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">side</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">)</span> <span class="k">else</span> <span class="n">_map</span><span class="p">(</span><span class="n">side</span><span class="p">,</span> <span class="s2">"plus"</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">_scaled</span><span class="p">(</span><span class="n">grid</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">_isocentre</span><span class="p">(</span><span class="n">grid</span><span class="p">))</span> <span class="o">**</span> <span class="mi">2</span><span class="p">)))</span>
+
+
+<span class="nd">@functools</span><span class="o">.</span><span class="n">cache</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_transmit</span><span class="p">(</span><span class="n">side</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="n">Path</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">_Grid</span><span class="p">:</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">side</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">):</span>
+        <span class="n">grid</span> <span class="o">=</span> <span class="n">_model</span><span class="p">(</span><span class="o">*</span><span class="n">side</span><span class="p">)</span>
+        <span class="n">grid</span> <span class="o">=</span> <span class="n">grid</span><span class="o">.</span><span class="n">_replace</span><span class="p">(</span><span class="n">values</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">conj</span><span class="p">(</span><span class="n">grid</span><span class="o">.</span><span class="n">values</span><span class="p">))</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">grid</span> <span class="o">=</span> <span class="n">_map</span><span class="p">(</span><span class="n">side</span><span class="p">,</span> <span class="s2">"minus"</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">_scaled</span><span class="p">(</span><span class="n">grid</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">_isocentre</span><span class="p">(</span><span class="n">grid</span><span class="p">))))</span>
+
+
+<span class="nd">@functools</span><span class="o">.</span><span class="n">cache</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_drive_per_hz</span><span class="p">(</span><span class="n">maps</span><span class="p">:</span> <span class="n">Path</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+    <span class="kn">import</span><span class="w"> </span><span class="nn">pypulseqpp</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pp</span>
+
+    <span class="n">minus</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">_isocentre</span><span class="p">(</span><span class="n">_map</span><span class="p">(</span><span class="n">maps</span><span class="p">,</span> <span class="s2">"minus"</span><span class="p">))))</span>
+    <span class="k">return</span> <span class="mf">2.0</span> <span class="o">/</span> <span class="p">(</span><span class="n">pp</span><span class="o">.</span><span class="n">Opts</span><span class="p">()</span><span class="o">.</span><span class="n">gamma</span> <span class="o">*</span> <span class="nb">float</span><span class="p">(</span><span class="n">minus</span><span class="p">))</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_scaled</span><span class="p">(</span><span class="n">grid</span><span class="p">:</span> <span class="n">_Grid</span><span class="p">,</span> <span class="n">norm</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">_Grid</span><span class="p">:</span>
+    <span class="k">return</span> <span class="n">grid</span><span class="o">.</span><span class="n">_replace</span><span class="p">(</span><span class="n">values</span><span class="o">=</span><span class="n">grid</span><span class="o">.</span><span class="n">values</span> <span class="o">/</span> <span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">(</span><span class="n">norm</span><span class="p">))</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_model</span><span class="p">(</span><span class="n">model</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">channels</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">_Grid</span><span class="p">:</span>
     <span class="n">maps</span> <span class="o">=</span> <span class="n">_sampled</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">channels</span><span class="p">)</span>
-    <span class="k">return</span> <span class="n">maps</span> <span class="o">/</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">_isocentre</span><span class="p">(</span><span class="n">maps</span><span class="p">))</span> <span class="o">**</span> <span class="mi">2</span><span class="p">))</span>
-
-
-<span class="nd">@functools</span><span class="o">.</span><span class="n">cache</span>
-<span class="k">def</span><span class="w"> </span><span class="nf">_transmit</span><span class="p">(</span><span class="n">model</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">channels</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
-    <span class="n">maps</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">conj</span><span class="p">(</span><span class="n">_sampled</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">channels</span><span class="p">))</span>
-    <span class="k">return</span> <span class="n">maps</span> <span class="o">/</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">_isocentre</span><span class="p">(</span><span class="n">maps</span><span class="p">)))</span>
+    <span class="n">sizes</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">maps</span><span class="o">.</span><span class="n">shape</span><span class="p">[:</span><span class="mi">0</span><span class="p">:</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
+    <span class="k">return</span> <span class="n">_Grid</span><span class="p">(</span><span class="n">maps</span><span class="p">,</span> <span class="n">sizes</span> <span class="o">//</span> <span class="mi">2</span><span class="p">,</span> <span class="n">MODEL_FOV</span> <span class="o">/</span> <span class="n">sizes</span><span class="p">)</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_sampled</span><span class="p">(</span><span class="n">model</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">channels</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
@@ -579,14 +700,37 @@
     <span class="p">)</span>
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_isocentre</span><span class="p">(</span><span class="n">maps</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
-    <span class="k">return</span> <span class="n">maps</span><span class="p">[(</span><span class="nb">slice</span><span class="p">(</span><span class="kc">None</span><span class="p">),</span> <span class="o">*</span><span class="p">(</span><span class="n">size</span> <span class="o">//</span> <span class="mi">2</span> <span class="k">for</span> <span class="n">size</span> <span class="ow">in</span> <span class="n">maps</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">:]))]</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_map</span><span class="p">(</span><span class="n">path</span><span class="p">:</span> <span class="n">Path</span><span class="p">,</span> <span class="n">component</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">_Grid</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return the complex conjugate of a map file's ``plus`` or ``minus``, each voxel outside its mask given the value of the nearest voxel inside."""</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">scipy</span><span class="w"> </span><span class="kn">import</span> <span class="n">ndimage</span>
+
+    <span class="k">with</span> <span class="n">np</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">allow_pickle</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span> <span class="k">as</span> <span class="n">archive</span><span class="p">:</span>
+        <span class="n">values</span><span class="p">,</span> <span class="n">mask</span> <span class="o">=</span> <span class="n">archive</span><span class="p">[</span><span class="n">component</span><span class="p">],</span> <span class="n">archive</span><span class="p">[</span><span class="s2">"mask"</span><span class="p">]</span>
+    <span class="n">nearest</span> <span class="o">=</span> <span class="n">ndimage</span><span class="o">.</span><span class="n">distance_transform_edt</span><span class="p">(</span>
+        <span class="o">~</span><span class="n">mask</span><span class="p">,</span> <span class="n">return_distances</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">return_indices</span><span class="o">=</span><span class="kc">True</span>
+    <span class="p">)</span>
+    <span class="n">values</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">conj</span><span class="p">(</span><span class="n">values</span><span class="p">[(</span><span class="nb">slice</span><span class="p">(</span><span class="kc">None</span><span class="p">),</span> <span class="o">*</span><span class="n">nearest</span><span class="p">)])</span>
+    <span class="n">metadata</span> <span class="o">=</span> <span class="n">_metadata</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+    <span class="n">step</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="nb">float</span><span class="p">(</span><span class="n">metadata</span><span class="p">[</span><span class="s2">"resolution"</span><span class="p">]))</span>
+    <span class="k">return</span> <span class="n">_Grid</span><span class="p">(</span>
+        <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">values</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">)),</span>
+        <span class="o">-</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">metadata</span><span class="p">[</span><span class="s2">"origin"</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span> <span class="o">/</span> <span class="n">step</span><span class="p">,</span>
+        <span class="n">step</span><span class="p">,</span>
+    <span class="p">)</span>
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_interpolated</span><span class="p">(</span>
-    <span class="n">maps</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">points</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">chunk</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">&lt;&lt;</span> <span class="mi">16</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""Return ``maps`` ``(channels, z, y, x)`` interpolated trilinearly at ``(n, 3)`` physical points; the edge value beyond the grid.</span>
+<span class="nd">@functools</span><span class="o">.</span><span class="n">cache</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_metadata</span><span class="p">(</span><span class="n">path</span><span class="p">:</span> <span class="n">Path</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+    <span class="k">with</span> <span class="n">np</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">allow_pickle</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span> <span class="k">as</span> <span class="n">archive</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">archive</span><span class="p">[</span><span class="s2">"metadata"</span><span class="p">]))</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_isocentre</span><span class="p">(</span><span class="n">grid</span><span class="p">:</span> <span class="n">_Grid</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+    <span class="k">return</span> <span class="n">_trilinear</span><span class="p">(</span><span class="n">grid</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">1</span><span class="p">,</span> <span class="mi">3</span><span class="p">)))[</span><span class="mi">0</span><span class="p">]</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_interpolated</span><span class="p">(</span><span class="n">grid</span><span class="p">:</span> <span class="n">_Grid</span><span class="p">,</span> <span class="n">points</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">chunk</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">&lt;&lt;</span> <span class="mi">16</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return ``grid`` interpolated trilinearly at ``(n, 3)`` physical points; the edge value beyond it.</span>
 
 <span class="sd">    The result is complex128, as :class:`pypulseqpp.Isochromats` takes it,</span>
 <span class="sd">    in a temporary file mapped into memory: its pages belong to the file,</span>
@@ -594,27 +738,32 @@
 <span class="sd">    process's memory. ``TMPDIR`` names where the file is made.</span>
 <span class="sd">    """</span>
     <span class="n">points</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">points</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
-    <span class="n">table</span> <span class="o">=</span> <span class="n">maps</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">maps</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">T</span>
-    <span class="n">out</span> <span class="o">=</span> <span class="n">_mapped</span><span class="p">((</span><span class="nb">len</span><span class="p">(</span><span class="n">points</span><span class="p">),</span> <span class="n">maps</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]))</span>
+    <span class="n">out</span> <span class="o">=</span> <span class="n">_mapped</span><span class="p">((</span><span class="nb">len</span><span class="p">(</span><span class="n">points</span><span class="p">),</span> <span class="n">grid</span><span class="o">.</span><span class="n">values</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]))</span>
     <span class="k">for</span> <span class="n">start</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">points</span><span class="p">),</span> <span class="n">chunk</span><span class="p">):</span>
-        <span class="n">part</span> <span class="o">=</span> <span class="n">points</span><span class="p">[</span><span class="n">start</span> <span class="p">:</span> <span class="n">start</span> <span class="o">+</span> <span class="n">chunk</span><span class="p">]</span>
-        <span class="n">corners</span><span class="p">,</span> <span class="n">weights</span> <span class="o">=</span> <span class="p">[],</span> <span class="p">[]</span>
-        <span class="k">for</span> <span class="n">axis</span><span class="p">,</span> <span class="n">size</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">((</span><span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="n">maps</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">:],</span> <span class="n">strict</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
-            <span class="n">index</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">clip</span><span class="p">(</span><span class="n">part</span><span class="p">[:,</span> <span class="n">axis</span><span class="p">]</span> <span class="o">/</span> <span class="n">MODEL_FOV</span> <span class="o">*</span> <span class="n">size</span> <span class="o">+</span> <span class="n">size</span> <span class="o">//</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">size</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
-            <span class="n">low</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">minimum</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">floor</span><span class="p">(</span><span class="n">index</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">intp</span><span class="p">),</span> <span class="nb">max</span><span class="p">(</span><span class="n">size</span> <span class="o">-</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">0</span><span class="p">))</span>
-            <span class="n">corners</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">low</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">minimum</span><span class="p">(</span><span class="n">low</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="n">size</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)))</span>
-            <span class="n">weights</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="mf">1.0</span> <span class="o">-</span> <span class="p">(</span><span class="n">index</span> <span class="o">-</span> <span class="n">low</span><span class="p">),</span> <span class="n">index</span> <span class="o">-</span> <span class="n">low</span><span class="p">))</span>
-        <span class="n">total</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="nb">len</span><span class="p">(</span><span class="n">part</span><span class="p">),</span> <span class="n">maps</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">complex64</span><span class="p">)</span>
-        <span class="k">for</span> <span class="n">z</span> <span class="ow">in</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">):</span>
-            <span class="k">for</span> <span class="n">y</span> <span class="ow">in</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">):</span>
-                <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">):</span>
-                    <span class="n">flat</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ravel_multi_index</span><span class="p">(</span>
-                        <span class="p">(</span><span class="n">corners</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="n">z</span><span class="p">],</span> <span class="n">corners</span><span class="p">[</span><span class="mi">1</span><span class="p">][</span><span class="n">y</span><span class="p">],</span> <span class="n">corners</span><span class="p">[</span><span class="mi">2</span><span class="p">][</span><span class="n">x</span><span class="p">]),</span> <span class="n">maps</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span>
-                    <span class="p">)</span>
-                    <span class="n">weight</span> <span class="o">=</span> <span class="n">weights</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="n">z</span><span class="p">]</span> <span class="o">*</span> <span class="n">weights</span><span class="p">[</span><span class="mi">1</span><span class="p">][</span><span class="n">y</span><span class="p">]</span> <span class="o">*</span> <span class="n">weights</span><span class="p">[</span><span class="mi">2</span><span class="p">][</span><span class="n">x</span><span class="p">]</span>
-                    <span class="n">total</span> <span class="o">+=</span> <span class="n">weight</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">)[:,</span> <span class="kc">None</span><span class="p">]</span> <span class="o">*</span> <span class="n">table</span><span class="p">[</span><span class="n">flat</span><span class="p">]</span>
-        <span class="n">out</span><span class="p">[</span><span class="n">start</span> <span class="p">:</span> <span class="n">start</span> <span class="o">+</span> <span class="n">chunk</span><span class="p">]</span> <span class="o">=</span> <span class="n">total</span>
+        <span class="n">out</span><span class="p">[</span><span class="n">start</span> <span class="p">:</span> <span class="n">start</span> <span class="o">+</span> <span class="n">chunk</span><span class="p">]</span> <span class="o">=</span> <span class="n">_trilinear</span><span class="p">(</span><span class="n">grid</span><span class="p">,</span> <span class="n">points</span><span class="p">[</span><span class="n">start</span> <span class="p">:</span> <span class="n">start</span> <span class="o">+</span> <span class="n">chunk</span><span class="p">])</span>
     <span class="k">return</span> <span class="n">out</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_trilinear</span><span class="p">(</span><span class="n">grid</span><span class="p">:</span> <span class="n">_Grid</span><span class="p">,</span> <span class="n">points</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+    <span class="n">table</span> <span class="o">=</span> <span class="n">grid</span><span class="o">.</span><span class="n">values</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">grid</span><span class="o">.</span><span class="n">values</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">T</span>
+    <span class="n">corners</span><span class="p">,</span> <span class="n">weights</span> <span class="o">=</span> <span class="p">[],</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">axis</span><span class="p">,</span> <span class="n">size</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">((</span><span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="n">grid</span><span class="o">.</span><span class="n">values</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">:],</span> <span class="n">strict</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+        <span class="n">index</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">clip</span><span class="p">(</span>
+            <span class="n">points</span><span class="p">[:,</span> <span class="n">axis</span><span class="p">]</span> <span class="o">/</span> <span class="n">grid</span><span class="o">.</span><span class="n">step</span><span class="p">[</span><span class="n">axis</span><span class="p">]</span> <span class="o">+</span> <span class="n">grid</span><span class="o">.</span><span class="n">centre</span><span class="p">[</span><span class="n">axis</span><span class="p">],</span> <span class="mi">0</span><span class="p">,</span> <span class="n">size</span> <span class="o">-</span> <span class="mi">1</span>
+        <span class="p">)</span>
+        <span class="n">low</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">minimum</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">floor</span><span class="p">(</span><span class="n">index</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">intp</span><span class="p">),</span> <span class="nb">max</span><span class="p">(</span><span class="n">size</span> <span class="o">-</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">0</span><span class="p">))</span>
+        <span class="n">corners</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">low</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">minimum</span><span class="p">(</span><span class="n">low</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="n">size</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)))</span>
+        <span class="n">weights</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="mf">1.0</span> <span class="o">-</span> <span class="p">(</span><span class="n">index</span> <span class="o">-</span> <span class="n">low</span><span class="p">),</span> <span class="n">index</span> <span class="o">-</span> <span class="n">low</span><span class="p">))</span>
+    <span class="n">total</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="nb">len</span><span class="p">(</span><span class="n">points</span><span class="p">),</span> <span class="n">grid</span><span class="o">.</span><span class="n">values</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">complex64</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">z</span> <span class="ow">in</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">):</span>
+        <span class="k">for</span> <span class="n">y</span> <span class="ow">in</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">):</span>
+            <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">):</span>
+                <span class="n">flat</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ravel_multi_index</span><span class="p">(</span>
+                    <span class="p">(</span><span class="n">corners</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="n">z</span><span class="p">],</span> <span class="n">corners</span><span class="p">[</span><span class="mi">1</span><span class="p">][</span><span class="n">y</span><span class="p">],</span> <span class="n">corners</span><span class="p">[</span><span class="mi">2</span><span class="p">][</span><span class="n">x</span><span class="p">]),</span> <span class="n">grid</span><span class="o">.</span><span class="n">values</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span>
+                <span class="p">)</span>
+                <span class="n">weight</span> <span class="o">=</span> <span class="n">weights</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="n">z</span><span class="p">]</span> <span class="o">*</span> <span class="n">weights</span><span class="p">[</span><span class="mi">1</span><span class="p">][</span><span class="n">y</span><span class="p">]</span> <span class="o">*</span> <span class="n">weights</span><span class="p">[</span><span class="mi">2</span><span class="p">][</span><span class="n">x</span><span class="p">]</span>
+                <span class="n">total</span> <span class="o">+=</span> <span class="n">weight</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">)[:,</span> <span class="kc">None</span><span class="p">]</span> <span class="o">*</span> <span class="n">table</span><span class="p">[</span><span class="n">flat</span><span class="p">]</span>
+    <span class="k">return</span> <span class="n">total</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_mapped</span><span class="p">(</span><span class="n">shape</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>

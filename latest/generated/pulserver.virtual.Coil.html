@@ -537,25 +537,29 @@
 <p><code class="docutils literal notranslate"><span class="pre">name</span></code> is <code class="docutils literal notranslate"><span class="pre">transmit/receive</span></code>, or one coil’s name where it does both.
 Each side is BART’s coil model (<code class="docutils literal notranslate"><span class="pre">HEAD_2D_8CH</span></code> or <code class="docutils literal notranslate"><span class="pre">HEAD_3D_64CH</span></code>) and
 the number of its channels the coil takes, the first ones, as <code class="docutils literal notranslate"><span class="pre">phantom</span>
-<span class="pre">-S</span></code> selects them; a side without a model is one channel of unit
-sensitivity everywhere, as a body coil is taken to be. A model is sampled
-by bartorch on first use, which the <code class="docutils literal notranslate"><span class="pre">coils</span></code> extra installs, over
-<code class="xref py py-data docutils literal notranslate"><span class="pre">MODEL_FOV</span></code> along the physical axes, and interpolated linearly;
-<code class="docutils literal notranslate"><span class="pre">HEAD_2D_8CH</span></code> is constant along z.</p>
+<span class="pre">-S</span></code> selects them, or the file of the coil’s field maps <code class="xref py py-func docutils literal notranslate"><span class="pre">coils()</span></code>
+reads; a side without either is one channel of unit sensitivity
+everywhere, as a body coil is taken to be. A model is sampled by bartorch
+on first use, which the <code class="docutils literal notranslate"><span class="pre">coils</span></code> extra installs, over <code class="xref py py-data docutils literal notranslate"><span class="pre">MODEL_FOV</span></code>
+along the physical axes; <code class="docutils literal notranslate"><span class="pre">HEAD_2D_8CH</span></code> is constant along z. Either is
+interpolated linearly.</p>
 <p>Receive sensitivities are scaled to a root sum of squares of 1 at the
-isocentre. Transmit sensitivities are the complex conjugates of the
-receive sensitivities of the transmit side’s model, the quasi-static limit
-of reciprocity, scaled so that the <a class="reference internal" href="pulserver.virtual.Coil.default_shim.html#pulserver.virtual.Coil.default_shim" title="pulserver.virtual.Coil.default_shim"><code class="xref py py-attr docutils literal notranslate"><span class="pre">default_shim</span></code></a> plays a pulse at
-its nominal amplitude at the isocentre.</p>
+isocentre, and transmit sensitivities so that the <a class="reference internal" href="pulserver.virtual.Coil.default_shim.html#pulserver.virtual.Coil.default_shim" title="pulserver.virtual.Coil.default_shim"><code class="xref py py-attr docutils literal notranslate"><span class="pre">default_shim</span></code></a>
+plays a pulse at its nominal amplitude at the isocentre. A model’s
+transmit sensitivities are the complex conjugates of its receive
+sensitivities, the quasi-static limit of reciprocity.</p>
 </dd></dl>
 
 <p class="rubric">Methods</p>
 <div class="pst-scrollable-table-container"><table class="autosummary longtable table">
 <tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.virtual.Coil.receive.html#pulserver.virtual.Coil.receive" title="pulserver.virtual.Coil.receive"><code class="xref py py-obj docutils literal notranslate"><span class="pre">receive</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.virtual.Coil.limits.html#pulserver.virtual.Coil.limits" title="pulserver.virtual.Coil.limits"><code class="xref py py-obj docutils literal notranslate"><span class="pre">limits</span></code></a></p></td>
+<td><p>Return the VOP entries of the check limits a design is made under in this coil; none unless its transmit maps have VOPs beside them.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pulserver.virtual.Coil.receive.html#pulserver.virtual.Coil.receive" title="pulserver.virtual.Coil.receive"><code class="xref py py-obj docutils literal notranslate"><span class="pre">receive</span></code></a></p></td>
 <td><p>Return each coil's receive sensitivity at <code class="docutils literal notranslate"><span class="pre">(n,</span> <span class="pre">3)</span></code> physical points, in m: <code class="docutils literal notranslate"><span class="pre">(n,</span> <span class="pre">coils)</span></code>; None for one uniform coil.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pulserver.virtual.Coil.transmit.html#pulserver.virtual.Coil.transmit" title="pulserver.virtual.Coil.transmit"><code class="xref py py-obj docutils literal notranslate"><span class="pre">transmit</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.virtual.Coil.transmit.html#pulserver.virtual.Coil.transmit" title="pulserver.virtual.Coil.transmit"><code class="xref py py-obj docutils literal notranslate"><span class="pre">transmit</span></code></a></p></td>
 <td><p>Return each channel's transmit sensitivity at <code class="docutils literal notranslate"><span class="pre">(n,</span> <span class="pre">3)</span></code> physical points, in m: <code class="docutils literal notranslate"><span class="pre">(n,</span> <span class="pre">channels)</span></code>; None for one uniform channel.</p></td>
 </tr>
 </tbody>

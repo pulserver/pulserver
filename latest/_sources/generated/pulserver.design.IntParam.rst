@@ -16,6 +16,7 @@
    :toctree:
    :nosignatures:
 
+   ~IntParam.default
    ~IntParam.options
    ~IntParam.range_incr
    ~IntParam.range_max

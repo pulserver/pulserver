@@ -790,17 +790,60 @@ proxy checks and enriches a series (<a class="reference internal" href="../gener
 and no proxy runs. <code class="docutils literal notranslate"><span class="pre">--origin</span></code> names an origin whose browser pages the console
 serves, and may be repeated; without it, pages from every origin are served,
 and a client that sends no <code class="docutils literal notranslate"><span class="pre">Origin</span></code>, which a browser always sends, is served
-either way.</p>
-<p>pulserver’s image runs such a console by default, with bartorch for the head
-coils, BrainWeb’s normal brain, so that an exam on <code class="docutils literal notranslate"><span class="pre">brainweb</span></code> downloads
-nothing, and the <code class="docutils literal notranslate"><span class="pre">gre2d</span></code> plugin reconstructed by the built-in Cartesian FFT,
-<code class="docutils literal notranslate"><span class="pre">pulserver.recon.handlers.simplefft</span></code>. It serves the pages of
-<code class="docutils literal notranslate"><span class="pre">https://pulserver.github.io</span></code>, <code class="docutils literal notranslate"><span class="pre">http://localhost:8000</span></code> and
-<code class="docutils literal notranslate"><span class="pre">http://127.0.0.1:8000</span></code> on port 8765 of this computer, and plays each scan at
-the scanner’s speed, <code class="docutils literal notranslate"><span class="pre">--speed=1</span></code>:</p>
+either way. <code class="docutils literal notranslate"><span class="pre">--fields</span> <span class="pre">DIR</span></code> takes the coils from the field maps in <code class="docutils literal notranslate"><span class="pre">DIR</span></code>,
+<code class="docutils literal notranslate"><span class="pre">&lt;coil&gt;.npz</span></code> for each of <code class="docutils literal notranslate"><span class="pre">body</span></code>, <code class="docutils literal notranslate"><span class="pre">head8</span></code>, <code class="docutils literal notranslate"><span class="pre">head32</span></code> and <code class="docutils literal notranslate"><span class="pre">head48</span></code>, and
+<code class="docutils literal notranslate"><span class="pre">&lt;coil&gt;_vops.npz</span></code> for the two that transmit, as mariepy writes them for
+BrainWeb’s head (<a class="reference internal" href="../explanations/virtual-scanner.html"><span class="doc">The virtual scanner</span></a>). Every exam is then on
+BrainWeb, and every design is made under the VOP limits of the exam’s transmit
+coil; maps solved at another frequency than the Larmor frequency of the limits’
+<code class="docutils literal notranslate"><span class="pre">B0</span></code> are refused.</p>
+<p>pulserver’s image runs such a console by default, with BrainWeb’s normal brain
+and the field maps solved in it, <code class="docutils literal notranslate"><span class="pre">--fields=/console/fields</span></code>, so that every exam
+is on BrainWeb and downloads nothing, and with bartorch for the non-Cartesian
+reconstructions. It serves the pages of <code class="docutils literal notranslate"><span class="pre">https://pulserver.github.io</span></code>,
+<code class="docutils literal notranslate"><span class="pre">http://localhost:8000</span></code> and <code class="docutils literal notranslate"><span class="pre">http://127.0.0.1:8000</span></code> on port 8765 of this
+computer, and plays each scan at the scanner’s speed, <code class="docutils literal notranslate"><span class="pre">--speed=1</span></code>:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>docker<span class="w"> </span>run<span class="w"> </span>-d<span class="w"> </span>--restart<span class="w"> </span>unless-stopped<span class="w"> </span>--name<span class="w"> </span>pulserver<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>-p<span class="w"> </span><span class="m">127</span>.0.0.1:8765:8765<span class="w"> </span>ghcr.io/pulserver/pulserver
 </pre></div>
+</div>
+<p>Its sequences are pypulseqpp’s, reconstructed by the built-in plugins of
+<a class="reference internal" href="reconstruction-plugins.html"><span class="doc">Reconstruction plugins</span></a>, and each protocol starts at values the image’s
+limits play:</p>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Plugin</p></th>
+<th class="head"><p>Sequence</p></th>
+<th class="head"><p>Reconstruction</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">gre2d</span></code></p></td>
+<td><p>2D gradient echo</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">simplefft</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">gre_multiecho2d</span></code></p></td>
+<td><p>2D multi-echo gradient echo, one image per echo</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">cartesian</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">se2d</span></code></p></td>
+<td><p>2D spin echo</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">cartesian</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">bssfp2d</span></code></p></td>
+<td><p>2D balanced SSFP</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">cartesian</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">gre_radial2d</span></code></p></td>
+<td><p>2D radial gradient echo</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">nufft</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">gre_spiral2d</span></code></p></td>
+<td><p>2D spiral gradient echo</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">nufft</span></code></p></td>
+</tr>
+</tbody>
+</table>
 </div>
 <p>Directories mounted at <code class="docutils literal notranslate"><span class="pre">/console/user/plugins</span></code> and <code class="docutils literal notranslate"><span class="pre">/console/user/recon</span></code> add
 sequences and reconstructions to the image’s. They are searched first, so a
@@ -855,9 +898,10 @@ it repeats:</p>
 in process with the same replies, without the <code class="docutils literal notranslate"><span class="pre">id</span></code>, for a console that reaches
 pulserver by another route than a WebSocket, such as the messages of a Web
 Worker running pulserver beside a browser page.</p>
-<p>A subject named <code class="docutils literal notranslate"><span class="pre">brainweb</span></code> is BrainWeb’s normal brain; any other is the vials.
-An exam is scanned in the coil it names, or in the one it had, <code class="docutils literal notranslate"><span class="pre">--coil</span></code> at
-first; a head coil needs the <code class="docutils literal notranslate"><span class="pre">coils</span></code> extra. The exam’s scans play on one set of
+<p>A subject named <code class="docutils literal notranslate"><span class="pre">brainweb</span></code> is BrainWeb’s normal brain, and so is every subject
+of a console with field maps; any other is the vials. An exam is scanned in the
+coil it names, or in the one it had, <code class="docutils literal notranslate"><span class="pre">--coil</span></code> at first; a head coil of BART’s
+models needs the <code class="docutils literal notranslate"><span class="pre">coils</span></code> extra. The exam’s scans play on one set of
 isochromats, each from equilibrium, so that a scan after the first neither
 builds them nor computes again the pulses an earlier scan played. The localizer is drawn from the
 phantom’s proton density, so an exam can be planned before any scan. MaRGE is

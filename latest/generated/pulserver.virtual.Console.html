@@ -536,10 +536,10 @@
 <p>What a scanner console asks of pulserver, answered in this process.</p>
 <p>A console lists a plugin’s protocol, validates and generates designs with
 the text blocks the interpreter sends, starts an exam on a subject with
-one of the virtual scanner’s <a class="reference internal" href="pulserver.virtual.COILS.html#pulserver.virtual.COILS" title="pulserver.virtual.COILS"><code class="xref py py-data docutils literal notranslate"><span class="pre">COILS</span></code></a>, and scans
-a stored design on it. Images return as DICOM from the reconstruction
-proxy at <code class="docutils literal notranslate"><span class="pre">recon</span></code>, or from the plugins of <code class="docutils literal notranslate"><span class="pre">recon_plugins</span></code> run in this
-process as the proxy runs them; with neither, a scan returns no images.</p>
+one of the virtual scanner’s coils, and scans a stored design on it.
+Images return as DICOM from the reconstruction proxy at <code class="docutils literal notranslate"><span class="pre">recon</span></code>, or from
+the plugins of <code class="docutils literal notranslate"><span class="pre">recon_plugins</span></code> run in this process as the proxy runs
+them; with neither, a scan returns no images.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
@@ -555,6 +555,11 @@ order, which reconstruct each scan in this process
 <li><p><strong>push</strong> – Recon-side intake each design is pushed to.</p></li>
 <li><p><strong>spacing</strong> – Isochromat spacing of the phantom, in metres.</p></li>
 <li><p><strong>coil</strong> – Name of the coil an exam is started with unless it names another.</p></li>
+<li><p><strong>fields</strong> – Directory of the coils’ field maps, <code class="docutils literal notranslate"><span class="pre">&lt;coil&gt;.npz</span></code>, and of the VOPs of
+those that transmit, <code class="docutils literal notranslate"><span class="pre">&lt;coil&gt;_vops.npz</span></code>, as mariepy writes them for
+BrainWeb’s head. Every exam is then on BrainWeb, and every design is
+made under the VOPs of the exam’s transmit coil. Without it, the coils
+are <a class="reference internal" href="pulserver.virtual.COILS.html#pulserver.virtual.COILS" title="pulserver.virtual.COILS"><code class="xref py py-data docutils literal notranslate"><span class="pre">COILS</span></code></a>.</p></li>
 <li><p><strong>speed</strong> – Scan time elapsed per wall-clock second once the scan’s simulation is
 far enough ahead of its clock; as fast as it is simulated without it.</p></li>
 </ul>

@@ -14,7 +14,7 @@ table, named by {class}`~pulserver.protocol.UIParam` members, to entries. A name
 outside that table is refused when the class is defined, because the
 interpreter's parser would drop it. An entry names the `init_sequence` argument
 it sets and how the scanner UI shows it; the application's own defaults are the
-protocol's initial values.
+protocol's initial values, except where an entry sets its `default`.
 
 ```pycon
 >>> from pypulseqpp.sequences.sequence.gre2D_sequence import Gre2DApp
@@ -57,6 +57,13 @@ A preset is a negative value the interpreter sends in place of a time.
 shortest echo time; a preset can also map to a time in seconds or to a function
 of the scanner limits.
 
+An entry's `default` is its initial value in the UI's units, in place of the
+application's default: microseconds or a preset for a time, `unit` for a float.
+It is how a sequence offers a protocol its scanner's limits can play when the
+application's defaults assume stronger gradients, such as
+`TimeParam("te", presets={TEPreset.MINIMUM: None}, default=TEPreset.MINIMUM)`
+for the shortest echo time.
+
 `recon` names the reconstruction plugin the data of this sequence is
 reconstructed with (see {doc}`reconstruction-plugins`).
 
@@ -96,7 +103,7 @@ the host checks the design ({doc}`../explanations/ir-cache`).
 
 {meth}`~pulserver.design.ScannerSequence.validate` constructs the application
 under the scanner limits and returns the protocol it will play. Entries the
-request omits keep the application's defaults:
+request omits keep their initial values:
 
 ```pycon
 >>> import pypulseqpp as pp

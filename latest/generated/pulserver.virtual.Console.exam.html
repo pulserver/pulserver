@@ -533,8 +533,9 @@
 <dt class="sig sig-object py" id="pulserver.virtual.Console.exam">
 <span class="sig-prename descclassname"><span class="pre">Console.</span></span><span class="sig-name descname"><span class="pre">exam</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pulserver/virtual/_console.html#Console.exam"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.virtual.Console.exam" title="Link to this definition">#</a></dt>
 <dd><p>Start an exam on the phantom <code class="docutils literal notranslate"><span class="pre">subject</span></code> names, in the coil <code class="docutils literal notranslate"><span class="pre">coil</span></code> names; return its three-plane localizer as DICOM files.</p>
-<p><code class="docutils literal notranslate"><span class="pre">brainweb</span></code> names BrainWeb’s normal brain; any other subject, the
-vials. Without <code class="docutils literal notranslate"><span class="pre">coil</span></code>, the exam keeps the coil it had.</p>
+<p><code class="docutils literal notranslate"><span class="pre">brainweb</span></code> names BrainWeb’s normal brain, and so does every subject
+of a console with field maps; any other subject, the vials. Without
+<code class="docutils literal notranslate"><span class="pre">coil</span></code>, the exam keeps the coil it had.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Raises<span class="colon">:</span></dt>
 <dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If <code class="docutils literal notranslate"><span class="pre">coil</span></code> names none of the virtual scanner’s coils.</p>

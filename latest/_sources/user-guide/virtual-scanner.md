@@ -244,20 +244,38 @@ proxy checks and enriches a series ({class}`~pulserver.proxy.LocalReconstruction
 and no proxy runs. `--origin` names an origin whose browser pages the console
 serves, and may be repeated; without it, pages from every origin are served,
 and a client that sends no `Origin`, which a browser always sends, is served
-either way.
+either way. `--fields DIR` takes the coils from the field maps in `DIR`,
+`<coil>.npz` for each of `body`, `head8`, `head32` and `head48`, and
+`<coil>_vops.npz` for the two that transmit, as mariepy writes them for
+BrainWeb's head ({doc}`../explanations/virtual-scanner`). Every exam is then on
+BrainWeb, and every design is made under the VOP limits of the exam's transmit
+coil; maps solved at another frequency than the Larmor frequency of the limits'
+`B0` are refused.
 
-pulserver's image runs such a console by default, with bartorch for the head
-coils, BrainWeb's normal brain, so that an exam on `brainweb` downloads
-nothing, and the `gre2d` plugin reconstructed by the built-in Cartesian FFT,
-`pulserver.recon.handlers.simplefft`. It serves the pages of
-`https://pulserver.github.io`, `http://localhost:8000` and
-`http://127.0.0.1:8000` on port 8765 of this computer, and plays each scan at
-the scanner's speed, `--speed=1`:
+pulserver's image runs such a console by default, with BrainWeb's normal brain
+and the field maps solved in it, `--fields=/console/fields`, so that every exam
+is on BrainWeb and downloads nothing, and with bartorch for the non-Cartesian
+reconstructions. It serves the pages of `https://pulserver.github.io`,
+`http://localhost:8000` and `http://127.0.0.1:8000` on port 8765 of this
+computer, and plays each scan at the scanner's speed, `--speed=1`:
 
 ```bash
 docker run -d --restart unless-stopped --name pulserver \
   -p 127.0.0.1:8765:8765 ghcr.io/pulserver/pulserver
 ```
+
+Its sequences are pypulseqpp's, reconstructed by the built-in plugins of
+{doc}`reconstruction-plugins`, and each protocol starts at values the image's
+limits play:
+
+| Plugin | Sequence | Reconstruction |
+| --- | --- | --- |
+| `gre2d` | 2D gradient echo | `simplefft` |
+| `gre_multiecho2d` | 2D multi-echo gradient echo, one image per echo | `cartesian` |
+| `se2d` | 2D spin echo | `cartesian` |
+| `bssfp2d` | 2D balanced SSFP | `cartesian` |
+| `gre_radial2d` | 2D radial gradient echo | `nufft` |
+| `gre_spiral2d` | 2D spiral gradient echo | `nufft` |
 
 Directories mounted at `/console/user/plugins` and `/console/user/recon` add
 sequences and reconstructions to the image's. They are searched first, so a
@@ -290,9 +308,10 @@ in process with the same replies, without the `id`, for a console that reaches
 pulserver by another route than a WebSocket, such as the messages of a Web
 Worker running pulserver beside a browser page.
 
-A subject named `brainweb` is BrainWeb's normal brain; any other is the vials.
-An exam is scanned in the coil it names, or in the one it had, `--coil` at
-first; a head coil needs the `coils` extra. The exam's scans play on one set of
+A subject named `brainweb` is BrainWeb's normal brain, and so is every subject
+of a console with field maps; any other is the vials. An exam is scanned in the
+coil it names, or in the one it had, `--coil` at first; a head coil of BART's
+models needs the `coils` extra. The exam's scans play on one set of
 isochromats, each from equilibrium, so that a scan after the first neither
 builds them nor computes again the pulses an earlier scan played. The localizer is drawn from the
 phantom's proton density, so an exam can be planned before any scan. MaRGE is

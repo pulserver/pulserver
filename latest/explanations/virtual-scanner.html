@@ -735,6 +735,20 @@ isocentre. The transmit sensitivities <span class="math notranslate nohighlight"
 8-channel coil’s receive sensitivities, the quasi-static limit of reciprocity;
 the models show none of the dielectric effects of a wavelength comparable to
 the head.</p>
+<p>A console given field maps takes the same coils from electromagnetic
+simulations of BrainWeb’s head instead. mariepy, a port of MARIE 3.0, solves
+the head in a quadrature birdcage, whose two linear modes are the body coil’s
+two channels, in the 8-channel coil and in the two arrays, and writes each
+channel’s circular components <span class="math notranslate nohighlight">\(B^\pm_c = \mu_0 (H_x \pm j H_y)\)</span> over the head,
+for the time dependence <span class="math notranslate nohighlight">\(e^{+j\omega t}\)</span>. With <span class="math notranslate nohighlight">\(B_0\)</span> along <span class="math notranslate nohighlight">\(+z\)</span>, the part of a
+channel’s field that rotates with the magnetization is half the complex
+conjugate of its <span class="math notranslate nohighlight">\(B^-_c\)</span>, and what it receives is weighted by the complex
+conjugate of its <span class="math notranslate nohighlight">\(B^+_c\)</span>: <span class="math notranslate nohighlight">\(s^+_c \propto \overline{B^-_c}\)</span> and
+<span class="math notranslate nohighlight">\(s_c \propto \overline{B^+_c}\)</span>, scaled as the models’ are. Outside the head
+each map takes the value of the nearest voxel inside it, and between voxels it
+is interpolated linearly. The maps show the dielectric effects the models do
+not; they are solved in BrainWeb’s head alone, so such a console examines
+BrainWeb whatever the subject is called.</p>
 <p>Each transmit channel plays the pulse the cache holds for it, scaled at each
 isochromat by <span class="math notranslate nohighlight">\(s^+_c(\mathbf{r})\)</span>, and the channels’ fields add. A pTx pulse
 holds one waveform per channel. A single-channel pulse plays on every channel,
@@ -742,6 +756,13 @@ weighted by its block’s RF shim or, without one, by the coil’s default shim,
 the unit weights that bring the channels into phase at the isocentre, where the
 pulse then has its nominal amplitude. A shim of another number of channels is
 refused.</p>
+<p>The maps’ transmit coils come with the VOPs mariepy compresses from the same
+fields, and every design is made under those of the exam’s transmit coil: its
+limits name the VOP file, the default shim, and the drive of every channel per
+hertz of a pulse’s amplitude with which the channels’ fields reach that
+amplitude at the isocentre, <span class="math notranslate nohighlight">\(2 / (\gamma \sum_c |B^-_c(\mathbf{0})|)\)</span> in the
+maps’ unit of drive. The IR cache then reports each subsequence’s SAR against
+the reference pulse in that coil (<a class="reference internal" href="ir-cache.html"><span class="doc">The scanner IR</span></a>).</p>
 <p><a class="reference internal" href="../generated/pulserver.virtual.BrainWeb.html#pulserver.virtual.BrainWeb" title="pulserver.virtual.BrainWeb"><code class="xref py py-class docutils literal notranslate"><span class="pre">BrainWeb</span></code></a> carries the field its own susceptibility
 adds to <span class="math notranslate nohighlight">\(B_0\)</span>. Its head is water, of volume susceptibility <span class="math notranslate nohighlight">\(-9.05\)</span> ppm, in air
 of <span class="math notranslate nohighlight">\(0.36\)</span> ppm (Schenck, Med Phys 23:815, 1996), and the field along <span class="math notranslate nohighlight">\(B_0\)</span> is

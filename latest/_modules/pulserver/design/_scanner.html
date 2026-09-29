@@ -496,7 +496,8 @@
 <span class="w">    </span><span class="sd">"""A float UI entry bound to an ``init_sequence`` argument.</span>
 
 <span class="sd">    The UI value is the argument divided by ``scale``, in ``unit``; a dropdown</span>
-<span class="sd">    when it has options.</span>
+<span class="sd">    when it has options. ``default`` is the UI value the protocol starts at;</span>
+<span class="sd">    ``None`` starts it at the application's default.</span>
 <span class="sd">    """</span>
 
     <span class="n">argument</span><span class="p">:</span> <span class="nb">str</span>
@@ -505,7 +506,8 @@
     <span class="n">range_min</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span>
     <span class="n">range_max</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">math</span><span class="o">.</span><span class="n">inf</span>
     <span class="n">range_incr</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span>
-    <span class="n">options</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">=</span> <span class="p">()</span></div>
+    <span class="n">options</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">=</span> <span class="p">()</span>
+    <span class="n">default</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span></div>
 
 
 
@@ -520,7 +522,9 @@
 <span class="sd">    reported. Each key of ``presets`` is a dropdown preset; its value is the</span>
 <span class="sd">    time it requests: seconds, ``None`` for the application's own shortest</span>
 <span class="sd">    choice, or a function of the scanner limits. The entry is a dropdown when</span>
-<span class="sd">    it has options or presets.</span>
+<span class="sd">    it has options or presets. ``default``, microseconds or a key of</span>
+<span class="sd">    ``presets``, is the value the protocol starts at; ``None`` starts it at the</span>
+<span class="sd">    application's default.</span>
 <span class="sd">    """</span>
 
     <span class="n">argument</span><span class="p">:</span> <span class="nb">str</span>
@@ -528,7 +532,8 @@
     <span class="n">range_max</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">2</span><span class="o">**</span><span class="mi">31</span> <span class="o">-</span> <span class="mi">1</span>
     <span class="n">range_incr</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span>
     <span class="n">options</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">=</span> <span class="p">()</span>
-    <span class="n">presets</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">Preset</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">dict</span><span class="p">)</span></div>
+    <span class="n">presets</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">Preset</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">dict</span><span class="p">)</span>
+    <span class="n">default</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span></div>
 
 
 
@@ -536,14 +541,19 @@
 <a class="viewcode-back" href="../../../generated/pulserver.design.IntParam.html#pulserver.design.IntParam">[docs]</a>
 <span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 <span class="k">class</span><span class="w"> </span><span class="nc">IntParam</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""An integer UI entry bound to an ``init_sequence`` argument; a dropdown when it has options."""</span>
+<span class="w">    </span><span class="sd">"""An integer UI entry bound to an ``init_sequence`` argument; a dropdown when it has options.</span>
+
+<span class="sd">    ``default`` is the value the protocol starts at; ``None`` starts it at the</span>
+<span class="sd">    application's default.</span>
+<span class="sd">    """</span>
 
     <span class="n">argument</span><span class="p">:</span> <span class="nb">str</span>
     <span class="n">unit</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">""</span>
     <span class="n">range_min</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>
     <span class="n">range_max</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">2</span><span class="o">**</span><span class="mi">31</span> <span class="o">-</span> <span class="mi">1</span>
     <span class="n">range_incr</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span>
-    <span class="n">options</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">=</span> <span class="p">()</span></div>
+    <span class="n">options</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">=</span> <span class="p">()</span>
+    <span class="n">default</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span></div>
 
 
 
@@ -551,9 +561,14 @@
 <a class="viewcode-back" href="../../../generated/pulserver.design.BoolParam.html#pulserver.design.BoolParam">[docs]</a>
 <span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 <span class="k">class</span><span class="w"> </span><span class="nc">BoolParam</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""A checkbox UI entry bound to an ``init_sequence`` argument."""</span>
+<span class="w">    </span><span class="sd">"""A checkbox UI entry bound to an ``init_sequence`` argument.</span>
 
-    <span class="n">argument</span><span class="p">:</span> <span class="nb">str</span></div>
+<span class="sd">    ``default`` is the value the protocol starts at; ``None`` starts it at the</span>
+<span class="sd">    application's default.</span>
+<span class="sd">    """</span>
+
+    <span class="n">argument</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">default</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span></div>
 
 
 
@@ -563,11 +578,14 @@
 <span class="k">class</span><span class="w"> </span><span class="nc">StringListParam</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""A choice among option strings, bound to an ``init_sequence`` argument.</span>
 
-<span class="sd">    The argument receives the chosen string, not its index.</span>
+<span class="sd">    The argument receives the chosen string, not its index. ``default`` is the</span>
+<span class="sd">    option the protocol starts at; ``None`` starts it at the application's</span>
+<span class="sd">    default.</span>
 <span class="sd">    """</span>
 
     <span class="n">argument</span><span class="p">:</span> <span class="nb">str</span>
-    <span class="n">options</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span></div>
+    <span class="n">options</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span>
+    <span class="n">default</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span></div>
 
 
 
@@ -635,7 +653,13 @@
     <span class="n">default</span> <span class="o">=</span> <span class="n">defaults</span><span class="p">[</span><span class="n">entry</span><span class="o">.</span><span class="n">argument</span><span class="p">]</span>
     <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">entry</span><span class="p">,</span> <span class="n">TimeParam</span><span class="p">):</span>
         <span class="n">options</span> <span class="o">=</span> <span class="p">(</span><span class="o">*</span><span class="n">entry</span><span class="o">.</span><span class="n">presets</span><span class="p">,</span> <span class="o">*</span><span class="n">entry</span><span class="o">.</span><span class="n">options</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">default</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">entry</span><span class="o">.</span><span class="n">default</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">value</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">entry</span><span class="o">.</span><span class="n">default</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">value</span> <span class="o">&lt;</span> <span class="mi">0</span> <span class="ow">and</span> <span class="n">value</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">entry</span><span class="o">.</span><span class="n">presets</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2"> defaults to preset </span><span class="si">{</span><span class="n">value</span><span class="si">}</span><span class="s2">, which it does not offer"</span>
+                <span class="p">)</span>
+        <span class="k">elif</span> <span class="n">default</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">shortest</span> <span class="o">=</span> <span class="p">[</span><span class="n">key</span> <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">preset</span> <span class="ow">in</span> <span class="n">entry</span><span class="o">.</span><span class="n">presets</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">preset</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">]</span>
             <span class="k">if</span> <span class="ow">not</span> <span class="n">shortest</span><span class="p">:</span>
                 <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
@@ -659,7 +683,9 @@
         <span class="n">mode</span> <span class="o">=</span> <span class="n">InputMode</span><span class="o">.</span><span class="n">DROPDOWN</span> <span class="k">if</span> <span class="n">entry</span><span class="o">.</span><span class="n">options</span> <span class="k">else</span> <span class="n">InputMode</span><span class="o">.</span><span class="n">TYPEIN</span>
         <span class="k">return</span> <span class="n">Parameter</span><span class="p">(</span>
             <span class="n">Kind</span><span class="o">.</span><span class="n">FLOAT</span><span class="p">,</span>
-            <span class="n">_to_ui</span><span class="p">(</span><span class="n">default</span><span class="p">,</span> <span class="n">entry</span><span class="o">.</span><span class="n">scale</span><span class="p">),</span>
+            <span class="n">_to_ui</span><span class="p">(</span><span class="n">default</span><span class="p">,</span> <span class="n">entry</span><span class="o">.</span><span class="n">scale</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">entry</span><span class="o">.</span><span class="n">default</span> <span class="ow">is</span> <span class="kc">None</span>
+            <span class="k">else</span> <span class="n">_ui_float</span><span class="p">(</span><span class="n">entry</span><span class="o">.</span><span class="n">default</span><span class="p">),</span>
             <span class="n">mode</span><span class="p">,</span>
             <span class="n">entry</span><span class="o">.</span><span class="n">range_min</span><span class="p">,</span>
             <span class="n">entry</span><span class="o">.</span><span class="n">range_max</span><span class="p">,</span>
@@ -671,7 +697,7 @@
         <span class="n">mode</span> <span class="o">=</span> <span class="n">InputMode</span><span class="o">.</span><span class="n">DROPDOWN</span> <span class="k">if</span> <span class="n">entry</span><span class="o">.</span><span class="n">options</span> <span class="k">else</span> <span class="n">InputMode</span><span class="o">.</span><span class="n">TYPEIN</span>
         <span class="k">return</span> <span class="n">Parameter</span><span class="p">(</span>
             <span class="n">Kind</span><span class="o">.</span><span class="n">INT</span><span class="p">,</span>
-            <span class="n">default</span><span class="p">,</span>
+            <span class="n">default</span> <span class="k">if</span> <span class="n">entry</span><span class="o">.</span><span class="n">default</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="nb">int</span><span class="p">(</span><span class="n">entry</span><span class="o">.</span><span class="n">default</span><span class="p">),</span>
             <span class="n">mode</span><span class="p">,</span>
             <span class="n">entry</span><span class="o">.</span><span class="n">range_min</span><span class="p">,</span>
             <span class="n">entry</span><span class="o">.</span><span class="n">range_max</span><span class="p">,</span>
@@ -680,9 +706,12 @@
             <span class="n">entry</span><span class="o">.</span><span class="n">options</span><span class="p">,</span>
         <span class="p">)</span>
     <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">entry</span><span class="p">,</span> <span class="n">BoolParam</span><span class="p">):</span>
-        <span class="k">return</span> <span class="n">Parameter</span><span class="p">(</span><span class="n">Kind</span><span class="o">.</span><span class="n">BOOL</span><span class="p">,</span> <span class="n">default</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">Parameter</span><span class="p">(</span><span class="n">Kind</span><span class="o">.</span><span class="n">BOOL</span><span class="p">,</span> <span class="n">default</span> <span class="k">if</span> <span class="n">entry</span><span class="o">.</span><span class="n">default</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">entry</span><span class="o">.</span><span class="n">default</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">Parameter</span><span class="p">(</span>
-        <span class="n">Kind</span><span class="o">.</span><span class="n">STRINGLIST</span><span class="p">,</span> <span class="n">default</span><span class="p">,</span> <span class="n">InputMode</span><span class="o">.</span><span class="n">DROPDOWN</span><span class="p">,</span> <span class="n">options</span><span class="o">=</span><span class="n">entry</span><span class="o">.</span><span class="n">options</span>
+        <span class="n">Kind</span><span class="o">.</span><span class="n">STRINGLIST</span><span class="p">,</span>
+        <span class="n">default</span> <span class="k">if</span> <span class="n">entry</span><span class="o">.</span><span class="n">default</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">entry</span><span class="o">.</span><span class="n">default</span><span class="p">,</span>
+        <span class="n">InputMode</span><span class="o">.</span><span class="n">DROPDOWN</span><span class="p">,</span>
+        <span class="n">options</span><span class="o">=</span><span class="n">entry</span><span class="o">.</span><span class="n">options</span><span class="p">,</span>
     <span class="p">)</span>
 
 
@@ -695,7 +724,8 @@
 <span class="sd">    interpreter's parameter names: members of</span>
 <span class="sd">    :class:`~pulserver.protocol.UIParam` or :class:`~pulserver.protocol.ConfigKey`,</span>
 <span class="sd">    or user-entry keys. They are stored as plain strings. Entries a request</span>
-<span class="sd">    omits keep the application's defaults. An entry resolves to the value its</span>
+<span class="sd">    omits keep their initial values, the entry's ``default`` or else the</span>
+<span class="sd">    application's. An entry resolves to the value its</span>
 <span class="sd">    argument took in the design, as the application records it with</span>
 <span class="sd">    ``SequenceApp.resolve``, and otherwise keeps the requested value. Times</span>
 <span class="sd">    travel as integer microseconds; other float values are read and reported</span>
