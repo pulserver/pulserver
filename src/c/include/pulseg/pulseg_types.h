@@ -560,6 +560,9 @@ typedef struct pulseg_subseq_info
     int num_unique_adcs;       /**< unique ADC definitions              */
     int num_unique_rf;         /**< unique RF definitions               */
     int pmc_enabled;           /**< 1 if PMC (prospective motion corr)  */
+    int sar_burst_requested;   /**< 1 if the scan asks to be costed under
+                                *   the scanner's SAR burst limits; whether
+                                *   it is granted is the scanner's to say */
     int segment_offset;        /**< global segment index offset         */
     int num_adc_occurrences;   /**< ADC entries in label table          */
     int num_label_columns;     /**< label columns (vendor-dependent)    */
@@ -587,7 +590,7 @@ typedef struct pulseg_subseq_info
 /* clang-format off */
 #define PULSEG_SUBSEQ_INFO_INIT \
     { \
-    0.0f, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0.0f, 0.0f, 0.0f \
+    0.0f, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0.0f, 0.0f, 0.0f \
     }
 /* clang-format on */
 
