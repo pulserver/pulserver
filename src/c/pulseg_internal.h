@@ -463,6 +463,7 @@ typedef struct pulseg_sequence_descriptor
     float block_raster_us;
     int enable_pmc;
     int num_gain_cal_readouts; /**< readouts of the receive-gain calibration prescan */
+    int enable_sar_burst_mode; /**< the scan asks to be costed under SAR burst limits */
     float vop_sar_ratio;        /**< see pulseg_subseq_info.vop_sar_ratio */
     float vop_global_sar_ratio; /**< see pulseg_subseq_info.vop_global_sar_ratio */
     int vendor;                /**< PULSEG_VENDOR_* runtime constant */
@@ -629,7 +630,7 @@ typedef struct pulseg_sequence_descriptor
 /* clang-format off */
 #define PULSEG_SEQUENCE_DESCRIPTOR_INIT \
     { \
-    0.0f, 0.0f, 0.0f, 0.0f, 0, 0, /* vop ratios */ 0.0f, 0.0f, 0, {0, 1, 2}, {0, 0, 0}, {0, 0, \
+    0.0f, 0.0f, 0.0f, 0.0f, 0, 0, /* sar burst */ 0, /* vop ratios */ 0.0f, 0.0f, 0, {0, 1, 2}, {0, 0, 0}, {0, 0, \
     0}, {0, 0, 0}, {0, 0, 0}, 0, NULL, 0, NULL, 0, NULL, 0, NULL, 0, /* rf_amplitude_variable */ \
     0, NULL, 0, NULL, /* grad shape stats */ 0, NULL, NULL, NULL, NULL, \
     0, NULL, 0, NULL, 0, NULL, 0, NULL, 0, NULL, 0, NULL, \
