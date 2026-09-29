@@ -217,7 +217,7 @@ typedef struct pulseg_opts
 /* clang-format off */
 #define PULSEG_OPTS_INIT \
     { \
-    0, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, NULL, NULL, {0, 1, 2}, \
+    0, 0.0f, 0.0f, 0.0f, 0.0f, NULL, NULL, {0, 1, 2}, \
     PULSEG_CACHE_EXT_DEFAULT, NULL, NULL, 1, 0, 0 \
     }
 /* clang-format on */
