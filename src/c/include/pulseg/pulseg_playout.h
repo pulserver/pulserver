@@ -25,6 +25,15 @@ extern "C"
     /**
      * @brief One segment instance the scan loop plays.
      */
+    /**
+     * @brief What play_instance() returns to ask for the instance again.
+     *
+     * Positive, so the walk does not read it as a failure, and distinct from
+     * PULSEG_SUCCESS, which is itself 1: a backend that returns success must
+     * not be asking for anything.
+     */
+#define PULSEG_PLAYOUT_REPLAY 2
+
     typedef struct pulseg_playout_segment
     {
         int subsequence;    /**< subsequence it plays in                   */
@@ -149,7 +158,14 @@ extern "C"
             const pulseg_playout_segment *segment,
             const pulseg_playout_block *block);
 
-        /** Second stage: start the instance, once its blocks are set. */
+        /** Second stage: start the instance, once its blocks are set.
+         *
+         *  PULSEG_PLAYOUT_REPLAY asks for the same instance again, from its
+         *  first block, and it is not counted among the instances played
+         *  before the next one. A scan that judges a measurement only once it
+         *  has made it -- a tracker that rejects a repetition the subject
+         *  moved during -- says so here, where the decision is already made.
+         */
         int (*play_instance)(void *ctx, const pulseg_playout_segment *segment);
     } pulseg_playout_backend;
 
