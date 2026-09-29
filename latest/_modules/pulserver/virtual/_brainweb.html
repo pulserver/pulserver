@@ -456,6 +456,7 @@
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">functools</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">math</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Callable</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
@@ -601,7 +602,7 @@
         <span class="o">*</span><span class="p">,</span>
         <span class="n">field_t</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">off_resonance_hz</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">,</span>
-        <span class="n">region</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">region</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">],</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">coil</span><span class="p">:</span> <span class="n">Coil</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">threads</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">pp</span><span class="o">.</span><span class="n">Isochromats</span><span class="p">:</span>
@@ -623,9 +624,10 @@
 <span class="sd">            Frequency of every isochromat from the scanner's centre frequency,</span>
 <span class="sd">            in Hz, beside its chemical shift.</span>
 <span class="sd">        region</span>
-<span class="sd">            ``(3, 2)`` lower and upper bounds along the physical axes, in</span>
-<span class="sd">            metres, outside which no isochromat is kept; the whole head</span>
-<span class="sd">            without one.</span>
+<span class="sd">            Which isochromats are kept, from their ``(n, 3)`` positions, in m,</span>
+<span class="sd">            and ``(n,)`` frequencies, in Hz, as</span>
+<span class="sd">            :class:`~pulserver.virtual.Slabs` answers; the whole head without</span>
+<span class="sd">            one.</span>
 <span class="sd">        coil</span>
 <span class="sd">            The scanner's coil the brain is scanned with, in place of the</span>
 <span class="sd">            phantom's coils.</span>
@@ -639,55 +641,14 @@
 <span class="sd">            is not given, or the brain has coils of its own and ``coil`` is</span>
 <span class="sd">            given.</span>
 <span class="sd">        """</span>
-        <span class="kn">from</span><span class="w"> </span><span class="nn">pypulseqpp.sequences.preparation.fatsat</span><span class="w"> </span><span class="kn">import</span> <span class="n">FAT_SHIFT_PPM</span>
-
-        <span class="n">step</span> <span class="o">=</span> <span class="nb">round</span><span class="p">(</span><span class="n">spacing</span> <span class="o">/</span> <span class="mf">1e-3</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">step</span> <span class="o">&lt;</span> <span class="mi">1</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">math</span><span class="o">.</span><span class="n">isclose</span><span class="p">(</span><span class="n">step</span> <span class="o">*</span> <span class="mf">1e-3</span><span class="p">,</span> <span class="n">spacing</span><span class="p">,</span> <span class="n">rel_tol</span><span class="o">=</span><span class="mf">1e-6</span><span class="p">):</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">"BrainWeb is sampled in whole millimetres, not </span><span class="si">{</span><span class="n">spacing</span><span class="si">}</span><span class="s2"> m"</span>
-            <span class="p">)</span>
-        <span class="k">if</span> <span class="n">field_t</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                <span class="s2">"BrainWeb's fat has a chemical shift: scan it at a field_t"</span>
-            <span class="p">)</span>
+        <span class="n">_whole_millimetres</span><span class="p">(</span><span class="n">spacing</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">coil</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">coils</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
                 <span class="s2">"a phantom received by coils of its own is not scanned with a coil"</span>
             <span class="p">)</span>
-        <span class="n">cubes</span> <span class="o">=</span> <span class="n">_cubes</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">fractions</span><span class="p">,</span> <span class="n">step</span><span class="p">)</span>
-        <span class="n">field</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">cubes</span><span class="o">.</span><span class="n">shape</span><span class="p">[:</span><span class="mi">3</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">susceptibility</span><span class="p">:</span>
-            <span class="n">field</span> <span class="o">=</span> <span class="n">_cubes</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">field_ppm</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="kc">None</span><span class="p">],</span> <span class="n">step</span><span class="p">)[</span><span class="o">...</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span>
-        <span class="n">index</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">indices</span><span class="p">(</span><span class="n">cubes</span><span class="o">.</span><span class="n">shape</span><span class="p">[:</span><span class="mi">3</span><span class="p">])</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">T</span>
-        <span class="n">voxel</span> <span class="o">=</span> <span class="n">step</span> <span class="o">*</span> <span class="n">index</span> <span class="o">+</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="p">(</span><span class="n">step</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
-        <span class="n">z</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">x</span> <span class="o">=</span> <span class="p">(</span>
-            <span class="n">voxel</span><span class="p">[:,</span> <span class="n">axis</span><span class="p">]</span> <span class="o">+</span> <span class="n">_FIRST_VOXEL_MM</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="k">for</span> <span class="n">axis</span><span class="p">,</span> <span class="n">name</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="s2">"zyx"</span><span class="p">)</span>
+        <span class="n">own</span><span class="p">,</span> <span class="n">proton_density</span><span class="p">,</span> <span class="n">t1</span><span class="p">,</span> <span class="n">t2</span><span class="p">,</span> <span class="n">frequency</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sampled</span><span class="p">(</span>
+            <span class="n">spacing</span><span class="p">,</span> <span class="n">field_t</span><span class="p">,</span> <span class="n">off_resonance_hz</span><span class="p">,</span> <span class="n">region</span>
         <span class="p">)</span>
-        <span class="n">positions</span> <span class="o">=</span> <span class="mf">1e-3</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">column_stack</span><span class="p">([</span><span class="o">-</span><span class="n">x</span><span class="p">,</span> <span class="o">-</span><span class="n">y</span><span class="p">,</span> <span class="n">z</span><span class="p">])</span>
-        <span class="n">inside</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">positions</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">region</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">low</span><span class="p">,</span> <span class="n">high</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">region</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span><span class="o">.</span><span class="n">T</span>
-            <span class="n">inside</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">all</span><span class="p">((</span><span class="n">positions</span> <span class="o">&gt;=</span> <span class="n">low</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">positions</span> <span class="o">&lt;=</span> <span class="n">high</span><span class="p">),</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
-        <span class="n">per_ppm</span> <span class="o">=</span> <span class="mf">1e-6</span> <span class="o">*</span> <span class="n">pp</span><span class="o">.</span><span class="n">Opts</span><span class="p">()</span><span class="o">.</span><span class="n">gamma</span> <span class="o">*</span> <span class="n">field_t</span>
-        <span class="n">inhomogeneity</span> <span class="o">=</span> <span class="n">per_ppm</span> <span class="o">*</span> <span class="n">field</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
-        <span class="n">points</span><span class="p">,</span> <span class="n">rows</span> <span class="o">=</span> <span class="p">[],</span> <span class="p">[]</span>
-        <span class="k">for</span> <span class="n">tissue</span><span class="p">,</span> <span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="p">(</span><span class="n">t1</span><span class="p">,</span> <span class="n">t2</span><span class="p">,</span> <span class="n">density</span><span class="p">))</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">TISSUES</span><span class="o">.</span><span class="n">items</span><span class="p">()):</span>
-            <span class="n">fraction</span> <span class="o">=</span> <span class="n">cubes</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">tissue</span><span class="p">]</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
-            <span class="n">kept</span> <span class="o">=</span> <span class="n">inside</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">fraction</span> <span class="o">&gt;</span> <span class="mf">0.0</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">density</span> <span class="o">&gt;</span> <span class="mf">0.0</span><span class="p">)</span>
-            <span class="n">shift</span> <span class="o">=</span> <span class="n">per_ppm</span> <span class="o">*</span> <span class="n">FAT_SHIFT_PPM</span> <span class="k">if</span> <span class="n">name</span> <span class="o">==</span> <span class="s2">"fat"</span> <span class="k">else</span> <span class="mf">0.0</span>
-            <span class="n">points</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">positions</span><span class="p">[</span><span class="n">kept</span><span class="p">])</span>
-            <span class="n">rows</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
-                <span class="n">np</span><span class="o">.</span><span class="n">column_stack</span><span class="p">(</span>
-                    <span class="p">[</span>
-                        <span class="n">density</span> <span class="o">*</span> <span class="n">fraction</span><span class="p">[</span><span class="n">kept</span><span class="p">]</span> <span class="o">*</span> <span class="p">(</span><span class="n">step</span> <span class="o">*</span> <span class="mf">1e-3</span><span class="p">)</span> <span class="o">**</span> <span class="mi">3</span><span class="p">,</span>
-                        <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">(</span><span class="n">kept</span><span class="o">.</span><span class="n">sum</span><span class="p">(),</span> <span class="n">t1</span><span class="p">),</span>
-                        <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">(</span><span class="n">kept</span><span class="o">.</span><span class="n">sum</span><span class="p">(),</span> <span class="n">t2</span><span class="p">),</span>
-                        <span class="n">shift</span> <span class="o">+</span> <span class="n">off_resonance_hz</span> <span class="o">+</span> <span class="n">inhomogeneity</span><span class="p">[</span><span class="n">kept</span><span class="p">],</span>
-                    <span class="p">]</span>
-                <span class="p">)</span>
-            <span class="p">)</span>
-        <span class="n">own</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">(</span><span class="n">points</span><span class="p">)</span>
-        <span class="n">proton_density</span><span class="p">,</span> <span class="n">t1</span><span class="p">,</span> <span class="n">t2</span><span class="p">,</span> <span class="n">frequency</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">(</span><span class="n">rows</span><span class="p">)</span><span class="o">.</span><span class="n">T</span>
         <span class="k">return</span> <span class="n">pp</span><span class="o">.</span><span class="n">Isochromats</span><span class="p">(</span>
             <span class="n">own</span><span class="p">,</span>
             <span class="n">proton_density</span><span class="o">=</span><span class="n">proton_density</span><span class="p">,</span>
@@ -698,8 +659,94 @@
             <span class="n">receive</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_coils</span><span class="o">.</span><span class="n">_received</span><span class="p">(</span><span class="n">own</span><span class="p">)</span> <span class="k">if</span> <span class="n">coil</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">coil</span><span class="o">.</span><span class="n">receive</span><span class="p">(</span><span class="n">own</span><span class="p">),</span>
             <span class="n">threads</span><span class="o">=</span><span class="n">threads</span><span class="p">,</span>
         <span class="p">)</span></div>
-</div>
 
+
+<div class="viewcode-block" id="BrainWeb.count">
+<a class="viewcode-back" href="../../../generated/pulserver.virtual.BrainWeb.count.html#pulserver.virtual.BrainWeb.count">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">count</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">spacing</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1e-3</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">field_t</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">off_resonance_hz</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">,</span>
+        <span class="n">region</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">],</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Return how many isochromats :meth:`isochromats` samples the brain as, with the same arguments.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If ``spacing`` is not a whole number of millimetres or ``field_t``</span>
+<span class="sd">            is not given.</span>
+<span class="sd">        """</span>
+        <span class="n">_whole_millimetres</span><span class="p">(</span><span class="n">spacing</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">region</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_sampled</span><span class="p">(</span><span class="n">spacing</span><span class="p">,</span> <span class="n">field_t</span><span class="p">,</span> <span class="n">off_resonance_hz</span><span class="p">,</span> <span class="n">region</span><span class="p">)[</span><span class="mi">0</span><span class="p">])</span>
+        <span class="k">if</span> <span class="n">field_t</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">"BrainWeb's fat has a chemical shift: scan it at a field_t"</span>
+            <span class="p">)</span>
+        <span class="n">cubes</span> <span class="o">=</span> <span class="n">_cubes</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">fractions</span><span class="p">,</span> <span class="nb">round</span><span class="p">(</span><span class="n">spacing</span> <span class="o">/</span> <span class="mf">1e-3</span><span class="p">))</span>
+        <span class="n">dense</span> <span class="o">=</span> <span class="p">[</span><span class="n">density</span> <span class="o">&gt;</span> <span class="mf">0.0</span> <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">density</span> <span class="ow">in</span> <span class="n">TISSUES</span><span class="o">.</span><span class="n">values</span><span class="p">()]</span>
+        <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">count_nonzero</span><span class="p">(</span><span class="n">cubes</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">dense</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mf">0.0</span><span class="p">))</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_sampled</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">spacing</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+        <span class="n">field_t</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">off_resonance_hz</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+        <span class="n">region</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">],</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="o">...</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""Return the positions, proton densities, T1, T2 and frequencies of the isochromats :meth:`isochromats` makes."""</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">pypulseqpp.sequences.preparation.fatsat</span><span class="w"> </span><span class="kn">import</span> <span class="n">FAT_SHIFT_PPM</span>
+
+        <span class="k">if</span> <span class="n">field_t</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">"BrainWeb's fat has a chemical shift: scan it at a field_t"</span>
+            <span class="p">)</span>
+        <span class="n">step</span> <span class="o">=</span> <span class="nb">round</span><span class="p">(</span><span class="n">spacing</span> <span class="o">/</span> <span class="mf">1e-3</span><span class="p">)</span>
+        <span class="n">cubes</span> <span class="o">=</span> <span class="n">_cubes</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">fractions</span><span class="p">,</span> <span class="n">step</span><span class="p">)</span>
+        <span class="n">field</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">cubes</span><span class="o">.</span><span class="n">shape</span><span class="p">[:</span><span class="mi">3</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">susceptibility</span><span class="p">:</span>
+            <span class="n">field</span> <span class="o">=</span> <span class="n">_cubes</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">field_ppm</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="kc">None</span><span class="p">],</span> <span class="n">step</span><span class="p">)[</span><span class="o">...</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span>
+        <span class="n">index</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">indices</span><span class="p">(</span><span class="n">cubes</span><span class="o">.</span><span class="n">shape</span><span class="p">[:</span><span class="mi">3</span><span class="p">])</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">T</span>
+        <span class="n">voxel</span> <span class="o">=</span> <span class="n">step</span> <span class="o">*</span> <span class="n">index</span> <span class="o">+</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="p">(</span><span class="n">step</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="n">z</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">x</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">voxel</span><span class="p">[:,</span> <span class="n">axis</span><span class="p">]</span> <span class="o">+</span> <span class="n">_FIRST_VOXEL_MM</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="k">for</span> <span class="n">axis</span><span class="p">,</span> <span class="n">name</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="s2">"zyx"</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="n">positions</span> <span class="o">=</span> <span class="mf">1e-3</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">column_stack</span><span class="p">([</span><span class="o">-</span><span class="n">x</span><span class="p">,</span> <span class="o">-</span><span class="n">y</span><span class="p">,</span> <span class="n">z</span><span class="p">])</span>
+        <span class="n">per_ppm</span> <span class="o">=</span> <span class="mf">1e-6</span> <span class="o">*</span> <span class="n">pp</span><span class="o">.</span><span class="n">Opts</span><span class="p">()</span><span class="o">.</span><span class="n">gamma</span> <span class="o">*</span> <span class="n">field_t</span>
+        <span class="n">inhomogeneity</span> <span class="o">=</span> <span class="n">per_ppm</span> <span class="o">*</span> <span class="n">field</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">points</span><span class="p">,</span> <span class="n">rows</span> <span class="o">=</span> <span class="p">[],</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">tissue</span><span class="p">,</span> <span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="p">(</span><span class="n">t1</span><span class="p">,</span> <span class="n">t2</span><span class="p">,</span> <span class="n">density</span><span class="p">))</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">TISSUES</span><span class="o">.</span><span class="n">items</span><span class="p">()):</span>
+            <span class="n">fraction</span> <span class="o">=</span> <span class="n">cubes</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">tissue</span><span class="p">]</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+            <span class="n">kept</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">flatnonzero</span><span class="p">((</span><span class="n">fraction</span> <span class="o">&gt;</span> <span class="mf">0.0</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">density</span> <span class="o">&gt;</span> <span class="mf">0.0</span><span class="p">))</span>
+            <span class="n">shift</span> <span class="o">=</span> <span class="n">per_ppm</span> <span class="o">*</span> <span class="n">FAT_SHIFT_PPM</span> <span class="k">if</span> <span class="n">name</span> <span class="o">==</span> <span class="s2">"fat"</span> <span class="k">else</span> <span class="mf">0.0</span>
+            <span class="n">frequency</span> <span class="o">=</span> <span class="n">shift</span> <span class="o">+</span> <span class="n">off_resonance_hz</span> <span class="o">+</span> <span class="n">inhomogeneity</span><span class="p">[</span><span class="n">kept</span><span class="p">]</span>
+            <span class="k">if</span> <span class="n">region</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">inside</span> <span class="o">=</span> <span class="n">region</span><span class="p">(</span><span class="n">positions</span><span class="p">[</span><span class="n">kept</span><span class="p">],</span> <span class="n">frequency</span><span class="p">)</span>
+                <span class="n">kept</span><span class="p">,</span> <span class="n">frequency</span> <span class="o">=</span> <span class="n">kept</span><span class="p">[</span><span class="n">inside</span><span class="p">],</span> <span class="n">frequency</span><span class="p">[</span><span class="n">inside</span><span class="p">]</span>
+            <span class="n">points</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">positions</span><span class="p">[</span><span class="n">kept</span><span class="p">])</span>
+            <span class="n">rows</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                <span class="n">np</span><span class="o">.</span><span class="n">column_stack</span><span class="p">(</span>
+                    <span class="p">[</span>
+                        <span class="n">density</span> <span class="o">*</span> <span class="n">fraction</span><span class="p">[</span><span class="n">kept</span><span class="p">]</span> <span class="o">*</span> <span class="p">(</span><span class="n">step</span> <span class="o">*</span> <span class="mf">1e-3</span><span class="p">)</span> <span class="o">**</span> <span class="mi">3</span><span class="p">,</span>
+                        <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">(</span><span class="n">kept</span><span class="o">.</span><span class="n">size</span><span class="p">,</span> <span class="n">t1</span><span class="p">),</span>
+                        <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">(</span><span class="n">kept</span><span class="o">.</span><span class="n">size</span><span class="p">,</span> <span class="n">t2</span><span class="p">),</span>
+                        <span class="n">frequency</span><span class="p">,</span>
+                    <span class="p">]</span>
+                <span class="p">)</span>
+            <span class="p">)</span>
+        <span class="n">proton_density</span><span class="p">,</span> <span class="n">t1</span><span class="p">,</span> <span class="n">t2</span><span class="p">,</span> <span class="n">frequency</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">(</span><span class="n">rows</span><span class="p">)</span><span class="o">.</span><span class="n">T</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">(</span><span class="n">points</span><span class="p">),</span> <span class="n">proton_density</span><span class="p">,</span> <span class="n">t1</span><span class="p">,</span> <span class="n">t2</span><span class="p">,</span> <span class="n">frequency</span></div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_whole_millimetres</span><span class="p">(</span><span class="n">spacing</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="n">step</span> <span class="o">=</span> <span class="nb">round</span><span class="p">(</span><span class="n">spacing</span> <span class="o">/</span> <span class="mf">1e-3</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">step</span> <span class="o">&lt;</span> <span class="mi">1</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">math</span><span class="o">.</span><span class="n">isclose</span><span class="p">(</span><span class="n">step</span> <span class="o">*</span> <span class="mf">1e-3</span><span class="p">,</span> <span class="n">spacing</span><span class="p">,</span> <span class="n">rel_tol</span><span class="o">=</span><span class="mf">1e-6</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"BrainWeb is sampled in whole millimetres, not </span><span class="si">{</span><span class="n">spacing</span><span class="si">}</span><span class="s2"> m"</span><span class="p">)</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_slab_density</span><span class="p">(</span>

@@ -472,6 +472,9 @@
 <span class="c1">#: The design calls a console forwards, answered as ``pulserver design`` answers them.</span>
 <span class="n">DESIGN_CALLS</span> <span class="o">=</span> <span class="p">(</span><span class="s2">"list"</span><span class="p">,</span> <span class="s2">"validate"</span><span class="p">,</span> <span class="s2">"generate"</span><span class="p">,</span> <span class="s2">"import"</span><span class="p">)</span>
 
+<span class="c1"># Spacings, 1 mm apart, a console tries in keeping a scan within its isochromats.</span>
+<span class="n">_COARSER</span> <span class="o">=</span> <span class="mi">100</span>
+
 <span class="c1">#: What each design call takes, as ``pulserver design`` passes it.</span>
 <span class="n">_CALL_INPUTS</span> <span class="o">=</span> <span class="p">{</span>
     <span class="s2">"list"</span><span class="p">:</span> <span class="p">(</span><span class="s2">"plugins"</span><span class="p">,</span> <span class="s2">"plugin"</span><span class="p">),</span>
@@ -512,7 +515,13 @@
 <span class="sd">    push</span>
 <span class="sd">        Recon-side intake each design is pushed to.</span>
 <span class="sd">    spacing</span>
-<span class="sd">        Isochromat spacing of the phantom, in metres.</span>
+<span class="sd">        Finest isochromat spacing of the phantom, in metres.</span>
+<span class="sd">    max_isochromats</span>
+<span class="sd">        Most isochromats a scan is simulated on. A scan is simulated on the</span>
+<span class="sd">        isochromats in the slabs its excitation pulses excite</span>
+<span class="sd">        (:func:`~pulserver.virtual.excited`), at the finest spacing, from</span>
+<span class="sd">        ``spacing`` up in steps of 1 mm, that keeps no more of them than this;</span>
+<span class="sd">        at ``spacing`` without it.</span>
 <span class="sd">    coil</span>
 <span class="sd">        Name of the coil an exam is started with unless it names another.</span>
 <span class="sd">    fields</span>
@@ -536,6 +545,7 @@
         <span class="n">recon_plugins</span><span class="p">:</span> <span class="n">PluginPath</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">push</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">spacing</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1e-3</span><span class="p">,</span>
+        <span class="n">max_isochromats</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">coil</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"body"</span><span class="p">,</span>
         <span class="n">fields</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">speed</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -559,6 +569,7 @@
         <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">push</span> <span class="o">=</span> <span class="n">push</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">spacing</span> <span class="o">=</span> <span class="n">spacing</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">max_isochromats</span> <span class="o">=</span> <span class="n">max_isochromats</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">speed</span> <span class="o">=</span> <span class="n">speed</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">field_t</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">parse_limits</span><span class="p">(</span><span class="n">limits</span><span class="p">)[</span><span class="s2">"B0"</span><span class="p">])</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">fields</span> <span class="o">=</span> <span class="kc">None</span> <span class="k">if</span> <span class="n">fields</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">Path</span><span class="p">(</span><span class="n">fields</span><span class="p">)</span>
@@ -566,10 +577,11 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">coil</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_coil</span><span class="p">(</span><span class="n">coil</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">subject</span> <span class="o">=</span> <span class="s2">""</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">phantom</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_phantom</span><span class="p">(</span><span class="s2">""</span><span class="p">)</span>
-        <span class="c1"># The exam's isochromats between its scans, and how many exams have</span>
-        <span class="c1"># started, so that a scan hands back only those of the exam in progress.</span>
+        <span class="c1"># The exam's isochromats between its scans, beside the slabs they were</span>
+        <span class="c1"># kept in, and how many exams have started, so that a scan hands back</span>
+        <span class="c1"># only those of the exam in progress.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_held</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Lock</span><span class="p">()</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_isochromats</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_isochromats</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_exams</span> <span class="o">=</span> <span class="mi">0</span>
 
 <div class="viewcode-block" id="Console.design">
@@ -678,21 +690,34 @@
 <span class="sd">        is an estimate. The status is 1 when a text reports a refused or</span>
 <span class="sd">        failed series, or when the scan is cancelled.</span>
 
-<span class="sd">        The exam's scans play on one set of isochromats, each from</span>
+<span class="sd">        A scan plays on the phantom's isochromats in the slabs its excitation</span>
+<span class="sd">        pulses excite, at the spacing ``max_isochromats`` allows. Scans of an exam</span>
+<span class="sd">        that excite the same slabs play on the same isochromats, each from</span>
 <span class="sd">        equilibrium, which keeps the pulses the engine has computed; a scan</span>
 <span class="sd">        started while another plays has isochromats of its own.</span>
 <span class="sd">        """</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">..host</span><span class="w"> </span><span class="kn">import</span> <span class="n">DesignStore</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">._region</span><span class="w"> </span><span class="kn">import</span> <span class="n">excited</span>
+
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">speed</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">emit</span><span class="p">({</span><span class="s2">"preparing"</span><span class="p">:</span> <span class="kc">None</span><span class="p">})</span>
+        <span class="n">rotation</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">rotation</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
+        <span class="n">region</span> <span class="o">=</span> <span class="n">excited</span><span class="p">(</span>
+            <span class="n">DesignStore</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">store</span><span class="p">)</span><span class="o">.</span><span class="n">directory</span><span class="p">(</span><span class="n">design</span><span class="p">)</span> <span class="o">/</span> <span class="s2">"sequence.seq"</span><span class="p">,</span> <span class="n">rotation</span>
+        <span class="p">)</span>
         <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_held</span><span class="p">:</span>
-            <span class="n">isochromats</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_isochromats</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_isochromats</span><span class="p">,</span> <span class="kc">None</span>
+            <span class="n">held</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_isochromats</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_isochromats</span><span class="p">,</span> <span class="kc">None</span>
             <span class="n">exam</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_exams</span>
-        <span class="k">if</span> <span class="n">isochromats</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">isochromats</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">phantom</span><span class="o">.</span><span class="n">isochromats</span><span class="p">(</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">spacing</span><span class="p">,</span> <span class="n">field_t</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">field_t</span><span class="p">,</span> <span class="n">coil</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">coil</span>
-            <span class="p">)</span>
-        <span class="k">else</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">held</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">held</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="n">region</span><span class="p">:</span>
+            <span class="n">isochromats</span> <span class="o">=</span> <span class="n">held</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
             <span class="n">isochromats</span><span class="o">.</span><span class="n">reset</span><span class="p">()</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">isochromats</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">phantom</span><span class="o">.</span><span class="n">isochromats</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_spacing</span><span class="p">(</span><span class="n">region</span><span class="p">),</span>
+                <span class="n">field_t</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">field_t</span><span class="p">,</span>
+                <span class="n">region</span><span class="o">=</span><span class="n">region</span><span class="p">,</span>
+                <span class="n">coil</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">coil</span><span class="p">,</span>
+            <span class="p">)</span>
         <span class="k">try</span><span class="p">:</span>
             <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_scan</span><span class="p">(</span>
                 <span class="n">design</span><span class="p">,</span> <span class="n">isochromats</span><span class="p">,</span> <span class="n">rotation</span><span class="p">,</span> <span class="n">centre_mm</span><span class="p">,</span> <span class="n">emit</span><span class="p">,</span> <span class="n">cancelled</span><span class="p">,</span> <span class="n">sound</span>
@@ -700,8 +725,28 @@
         <span class="k">finally</span><span class="p">:</span>
             <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_held</span><span class="p">:</span>
                 <span class="k">if</span> <span class="n">exam</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">_exams</span><span class="p">:</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">_isochromats</span> <span class="o">=</span> <span class="n">isochromats</span></div>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_isochromats</span> <span class="o">=</span> <span class="p">(</span><span class="n">region</span><span class="p">,</span> <span class="n">isochromats</span><span class="p">)</span></div>
 
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_spacing</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">region</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Return the finest spacing, from ``spacing`` up in steps of 1 mm, that keeps at most ``max_isochromats`` of the phantom's isochromats in ``region``.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If none within 10 cm of it does.</span>
+<span class="sd">        """</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_isochromats</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">spacing</span>
+        <span class="k">for</span> <span class="n">step</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">_COARSER</span><span class="p">):</span>
+            <span class="n">spacing</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">spacing</span> <span class="o">+</span> <span class="mf">1e-3</span> <span class="o">*</span> <span class="n">step</span>
+            <span class="n">kept</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">phantom</span><span class="o">.</span><span class="n">count</span><span class="p">(</span><span class="n">spacing</span><span class="p">,</span> <span class="n">field_t</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">field_t</span><span class="p">,</span> <span class="n">region</span><span class="o">=</span><span class="n">region</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">kept</span> <span class="o">&lt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_isochromats</span><span class="p">:</span>
+                <span class="k">return</span> <span class="n">spacing</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"the phantom holds more than </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">max_isochromats</span><span class="si">}</span><span class="s2"> isochromats at "</span>
+            <span class="sa">f</span><span class="s2">"every spacing from </span><span class="si">{</span><span class="mf">1e3</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="bp">self</span><span class="o">.</span><span class="n">spacing</span><span class="si">:</span><span class="s2">g</span><span class="si">}</span><span class="s2"> mm to </span><span class="si">{</span><span class="mf">1e3</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">spacing</span><span class="si">:</span><span class="s2">g</span><span class="si">}</span><span class="s2"> mm"</span>
+        <span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_limits</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">"""Return the limits block of a design: the console's, with the VOP entries of the exam's coil."""</span>
@@ -996,7 +1041,14 @@
         <span class="n">help</span><span class="o">=</span><span class="s2">"origin of the browser pages served, repeatable; every origin without it"</span><span class="p">,</span>
     <span class="p">)</span>
     <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span>
-        <span class="s2">"--spacing"</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="nb">float</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s2">"isochromat spacing, in mm"</span>
+        <span class="s2">"--spacing"</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="nb">float</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s2">"finest isochromat spacing, in mm"</span>
+    <span class="p">)</span>
+    <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span>
+        <span class="s2">"--max-isochromats"</span><span class="p">,</span>
+        <span class="nb">type</span><span class="o">=</span><span class="nb">int</span><span class="p">,</span>
+        <span class="n">default</span><span class="o">=</span><span class="mi">2_000_000</span><span class="p">,</span>
+        <span class="n">help</span><span class="o">=</span><span class="s2">"most isochromats a scan is simulated on; the spacing is coarsened "</span>
+        <span class="s2">"by 1 mm until the slabs a scan excites hold no more"</span><span class="p">,</span>
     <span class="p">)</span>
     <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span>
         <span class="s2">"--coil"</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="s2">"body"</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s2">"coil an exam starts with unless it names one"</span>
@@ -1031,6 +1083,7 @@
         <span class="n">recon_plugins</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">recon_plugins</span><span class="p">,</span>
         <span class="n">push</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">push</span><span class="p">,</span>
         <span class="n">spacing</span><span class="o">=</span><span class="mf">1e-3</span> <span class="o">*</span> <span class="n">args</span><span class="o">.</span><span class="n">spacing</span><span class="p">,</span>
+        <span class="n">max_isochromats</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">max_isochromats</span><span class="p">,</span>
         <span class="n">coil</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">coil</span><span class="p">,</span>
         <span class="n">fields</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">fields</span><span class="p">,</span>
         <span class="n">speed</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">speed</span><span class="p">,</span>

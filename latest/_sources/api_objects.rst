@@ -172,6 +172,8 @@ from.
    trajectory
    acquire
    simulate
+   excited
+   Slabs
    Scan
    Chunk
    SAMPLE_RATE

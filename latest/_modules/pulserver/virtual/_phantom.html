@@ -457,7 +457,7 @@
 <span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"Ellipse"</span><span class="p">,</span> <span class="s2">"Phantom"</span><span class="p">]</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">math</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Sequence</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Sequence</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
@@ -572,6 +572,7 @@
         <span class="o">*</span><span class="p">,</span>
         <span class="n">field_t</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">off_resonance_hz</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">,</span>
+        <span class="n">region</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">],</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">coil</span><span class="p">:</span> <span class="n">Coil</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">threads</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">pp</span><span class="o">.</span><span class="n">Isochromats</span><span class="p">:</span>
@@ -597,6 +598,10 @@
 <span class="sd">        off_resonance_hz</span>
 <span class="sd">            Frequency of every isochromat from the scanner's centre frequency,</span>
 <span class="sd">            in Hz, beside its chemical shift.</span>
+<span class="sd">        region</span>
+<span class="sd">            Which isochromats are kept, from their ``(n, 3)`` physical</span>
+<span class="sd">            positions, in m, and ``(n,)`` frequencies, in Hz, as</span>
+<span class="sd">            :class:`~pulserver.virtual.Slabs` answers; every one without one.</span>
 <span class="sd">        coil</span>
 <span class="sd">            The scanner's coil the phantom is scanned with.</span>
 <span class="sd">        threads</span>
@@ -613,6 +618,50 @@
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
                 <span class="s2">"a phantom received by coils of its own is not scanned with a coil"</span>
             <span class="p">)</span>
+        <span class="n">own</span><span class="p">,</span> <span class="n">positions</span><span class="p">,</span> <span class="n">density</span><span class="p">,</span> <span class="n">t1</span><span class="p">,</span> <span class="n">t2</span><span class="p">,</span> <span class="n">frequency</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sampled</span><span class="p">(</span>
+            <span class="n">spacing</span><span class="p">,</span> <span class="n">field_t</span><span class="p">,</span> <span class="n">off_resonance_hz</span><span class="p">,</span> <span class="n">region</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">pp</span><span class="o">.</span><span class="n">Isochromats</span><span class="p">(</span>
+            <span class="n">positions</span><span class="p">,</span>
+            <span class="n">proton_density</span><span class="o">=</span><span class="n">density</span><span class="p">,</span>
+            <span class="n">t1</span><span class="o">=</span><span class="n">t1</span><span class="p">,</span>
+            <span class="n">t2</span><span class="o">=</span><span class="n">t2</span><span class="p">,</span>
+            <span class="n">off_resonance</span><span class="o">=</span><span class="n">frequency</span><span class="p">,</span>
+            <span class="n">transmit</span><span class="o">=</span><span class="kc">None</span> <span class="k">if</span> <span class="n">coil</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">coil</span><span class="o">.</span><span class="n">transmit</span><span class="p">(</span><span class="n">positions</span><span class="p">),</span>
+            <span class="n">receive</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_received</span><span class="p">(</span><span class="n">own</span><span class="p">)</span> <span class="k">if</span> <span class="n">coil</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">coil</span><span class="o">.</span><span class="n">receive</span><span class="p">(</span><span class="n">positions</span><span class="p">),</span>
+            <span class="n">threads</span><span class="o">=</span><span class="n">threads</span><span class="p">,</span>
+        <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="Phantom.count">
+<a class="viewcode-back" href="../../../generated/pulserver.virtual.Phantom.count.html#pulserver.virtual.Phantom.count">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">count</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">spacing</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">field_t</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">off_resonance_hz</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">,</span>
+        <span class="n">region</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">],</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Return how many isochromats :meth:`isochromats` samples the phantom as, with the same arguments.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If an ellipse has a complex intensity, or the phantom has a</span>
+<span class="sd">            chemical shift and ``field_t`` is not given.</span>
+<span class="sd">        """</span>
+        <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_sampled</span><span class="p">(</span><span class="n">spacing</span><span class="p">,</span> <span class="n">field_t</span><span class="p">,</span> <span class="n">off_resonance_hz</span><span class="p">,</span> <span class="n">region</span><span class="p">)[</span><span class="mi">0</span><span class="p">])</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_sampled</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">spacing</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+        <span class="n">field_t</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">off_resonance_hz</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+        <span class="n">region</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">],</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="o">...</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""Return the points along the phantom's axes, the physical positions, proton densities, T1, T2 and frequencies of its isochromats."""</span>
         <span class="k">if</span> <span class="n">field_t</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">any</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">shifts_ppm</span><span class="p">):</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"a phantom with a chemical shift is scanned at a field_t"</span><span class="p">)</span>
         <span class="n">per_ppm</span> <span class="o">=</span> <span class="mf">0.0</span> <span class="k">if</span> <span class="n">field_t</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="mf">1e-6</span> <span class="o">*</span> <span class="n">pp</span><span class="o">.</span><span class="n">Opts</span><span class="p">()</span><span class="o">.</span><span class="n">gamma</span> <span class="o">*</span> <span class="n">field_t</span>
@@ -631,17 +680,16 @@
             <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">tissues</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">),</span> <span class="p">[</span><span class="nb">len</span><span class="p">(</span><span class="n">p</span><span class="p">)</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">points</span><span class="p">],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span>
         <span class="p">)</span><span class="o">.</span><span class="n">T</span>
         <span class="n">positions</span> <span class="o">=</span> <span class="n">own</span> <span class="o">@</span> <span class="bp">self</span><span class="o">.</span><span class="n">_rotation</span><span class="o">.</span><span class="n">T</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">_position</span>
-        <span class="k">return</span> <span class="n">pp</span><span class="o">.</span><span class="n">Isochromats</span><span class="p">(</span>
-            <span class="n">positions</span><span class="p">,</span>
-            <span class="n">proton_density</span><span class="o">=</span><span class="n">density</span><span class="p">,</span>
-            <span class="n">t1</span><span class="o">=</span><span class="n">t1</span><span class="p">,</span>
-            <span class="n">t2</span><span class="o">=</span><span class="n">t2</span><span class="p">,</span>
-            <span class="n">off_resonance</span><span class="o">=</span><span class="n">frequency</span><span class="p">,</span>
-            <span class="n">transmit</span><span class="o">=</span><span class="kc">None</span> <span class="k">if</span> <span class="n">coil</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">coil</span><span class="o">.</span><span class="n">transmit</span><span class="p">(</span><span class="n">positions</span><span class="p">),</span>
-            <span class="n">receive</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_received</span><span class="p">(</span><span class="n">own</span><span class="p">)</span> <span class="k">if</span> <span class="n">coil</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">coil</span><span class="o">.</span><span class="n">receive</span><span class="p">(</span><span class="n">positions</span><span class="p">),</span>
-            <span class="n">threads</span><span class="o">=</span><span class="n">threads</span><span class="p">,</span>
-        <span class="p">)</span></div>
-
+        <span class="k">if</span> <span class="n">region</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">kept</span> <span class="o">=</span> <span class="n">region</span><span class="p">(</span><span class="n">positions</span><span class="p">,</span> <span class="n">frequency</span><span class="p">)</span>
+            <span class="n">own</span><span class="p">,</span> <span class="n">positions</span> <span class="o">=</span> <span class="n">own</span><span class="p">[</span><span class="n">kept</span><span class="p">],</span> <span class="n">positions</span><span class="p">[</span><span class="n">kept</span><span class="p">]</span>
+            <span class="n">density</span><span class="p">,</span> <span class="n">t1</span><span class="p">,</span> <span class="n">t2</span><span class="p">,</span> <span class="n">frequency</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="n">density</span><span class="p">[</span><span class="n">kept</span><span class="p">],</span>
+                <span class="n">t1</span><span class="p">[</span><span class="n">kept</span><span class="p">],</span>
+                <span class="n">t2</span><span class="p">[</span><span class="n">kept</span><span class="p">],</span>
+                <span class="n">frequency</span><span class="p">[</span><span class="n">kept</span><span class="p">],</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="n">own</span><span class="p">,</span> <span class="n">positions</span><span class="p">,</span> <span class="n">density</span><span class="p">,</span> <span class="n">t1</span><span class="p">,</span> <span class="n">t2</span><span class="p">,</span> <span class="n">frequency</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_received</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">points</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">"""Return each coil's sensitivity at ``(n, 3)`` points along the phantom's axes; None for one coil."""</span>

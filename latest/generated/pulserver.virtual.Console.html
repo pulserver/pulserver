@@ -553,7 +553,12 @@ is the virtual magnet’s field.</p></li>
 order, which reconstruct each scan in this process
 (<a class="reference internal" href="pulserver.proxy.LocalReconstruction.html#pulserver.proxy.LocalReconstruction" title="pulserver.proxy.LocalReconstruction"><code class="xref py py-class docutils literal notranslate"><span class="pre">LocalReconstruction</span></code></a>).</p></li>
 <li><p><strong>push</strong> – Recon-side intake each design is pushed to.</p></li>
-<li><p><strong>spacing</strong> – Isochromat spacing of the phantom, in metres.</p></li>
+<li><p><strong>spacing</strong> – Finest isochromat spacing of the phantom, in metres.</p></li>
+<li><p><strong>max_isochromats</strong> – Most isochromats a scan is simulated on. A scan is simulated on the
+isochromats in the slabs its excitation pulses excite
+(<a class="reference internal" href="pulserver.virtual.excited.html#pulserver.virtual.excited" title="pulserver.virtual.excited"><code class="xref py py-func docutils literal notranslate"><span class="pre">excited()</span></code></a>), at the finest spacing, from
+<code class="docutils literal notranslate"><span class="pre">spacing</span></code> up in steps of 1 mm, that keeps no more of them than this;
+at <code class="docutils literal notranslate"><span class="pre">spacing</span></code> without it.</p></li>
 <li><p><strong>coil</strong> – Name of the coil an exam is started with unless it names another.</p></li>
 <li><p><strong>fields</strong> – Directory of the coils’ field maps, <code class="docutils literal notranslate"><span class="pre">&lt;coil&gt;.npz</span></code>, and of the VOPs of
 those that transmit, <code class="docutils literal notranslate"><span class="pre">&lt;coil&gt;_vops.npz</span></code>, as mariepy writes them for

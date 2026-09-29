@@ -566,6 +566,12 @@ scanner’s centre frequency.</p>
 <tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.virtual.simulate.html#pulserver.virtual.simulate" title="pulserver.virtual.simulate"><code class="xref py py-obj docutils literal notranslate"><span class="pre">simulate</span></code></a></p></td>
 <td><p>The samples the cache beside a sequence file acquires of isochromats, in pypulseqpp’s Bloch simulation of the blocks it plays.</p></td>
 </tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="../generated/pulserver.virtual.excited.html#pulserver.virtual.excited" title="pulserver.virtual.excited"><code class="xref py py-obj docutils literal notranslate"><span class="pre">excited</span></code></a></p></td>
+<td><p>The slabs the excitation pulses of the cache beside a sequence file excite, found by playing each on a line of isochromats along its gradient; none where one excites the whole phantom.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.virtual.Slabs.html#pulserver.virtual.Slabs" title="pulserver.virtual.Slabs"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Slabs</span></code></a></p></td>
+<td><p>Slabs of the physical frame, each the isochromats that see a field within its bounds during a pulse, so that an isochromat’s own frequency moves its slab; the region a phantom is sampled in.</p></td>
+</tr>
 </tbody>
 </table>
 </div>

@@ -14,6 +14,7 @@
    :toctree:
    :nosignatures:
 
+   ~BrainWeb.count
    ~BrainWeb.isochromats
    ~BrainWeb.proton_density
 

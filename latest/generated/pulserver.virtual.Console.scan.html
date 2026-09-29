@@ -544,7 +544,9 @@ starts <code class="docutils literal notranslate"><span class="pre">emit</span><
 with the wall-clock time left before it does, or <code class="docutils literal notranslate"><span class="pre">null</span></code> before there
 is an estimate. The status is 1 when a text reports a refused or
 failed series, or when the scan is cancelled.</p>
-<p>The exam’s scans play on one set of isochromats, each from
+<p>A scan plays on the phantom’s isochromats in the slabs its excitation
+pulses excite, at the spacing <code class="docutils literal notranslate"><span class="pre">max_isochromats</span></code> allows. Scans of an exam
+that excite the same slabs play on the same isochromats, each from
 equilibrium, which keeps the pulses the engine has computed; a scan
 started while another plays has isochromats of its own.</p>
 </dd></dl>

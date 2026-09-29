@@ -710,6 +710,23 @@ points. The sum over the isochromats approximates each ellipse’s transform
 below the grid’s Nyquist frequency, <span class="math notranslate nohighlight">\(1/(2\Delta)\)</span> for a spacing <span class="math notranslate nohighlight">\(\Delta\)</span>, and
 converges to it as the grid is refined, so a grid several times finer than the
 image’s pixel acquires the analytic phantom wherever the signal model holds.</p>
+<p>An isochromat that no excitation pulse tips from rest adds nothing to the
+readouts, so a scan is simulated on the isochromats its excitation pulses
+excite. <a class="reference internal" href="../generated/pulserver.virtual.excited.html#pulserver.virtual.excited" title="pulserver.virtual.excited"><code class="xref py py-func docutils literal notranslate"><span class="pre">excited()</span></code></a> finds their slabs: each pulse the
+cache labels an excitation is played, at its nominal amplitude and at twice
+it, on a line of isochromats along its gradient, turned as the scan turns it,
+and its slab holds the fields at which it changes the magnetization at rest by
+at least a hundredth of the most it changes it, sidelobes included. An
+isochromat at <span class="math notranslate nohighlight">\(\mathbf{r}\)</span> precessing at <span class="math notranslate nohighlight">\(f\)</span> sees the field
+<span class="math notranslate nohighlight">\(\mathbf{g} \cdot \mathbf{r} + f\)</span> during a pulse played under the gradient
+<span class="math notranslate nohighlight">\(\mathbf{g}\)</span>, so a chemical shift or the subject’s field moves an isochromat’s
+slab as it moves the slice, and each slice of a multislice scan is a slab of
+its own. A pulse played without a gradient, or under one that changes during
+it, excites the whole phantom, as a volumetric excitation does. What other
+pulses tip into the transverse plane outside the slabs, such as the free
+induction decay of an imperfect refocusing pulse, is left out. The phantoms’
+<code class="docutils literal notranslate"><span class="pre">isochromats</span></code> keep those a region, such as <a class="reference internal" href="../generated/pulserver.virtual.Slabs.html#pulserver.virtual.Slabs" title="pulserver.virtual.Slabs"><code class="xref py py-class docutils literal notranslate"><span class="pre">Slabs</span></code></a>,
+answers for.</p>
 <p>The cache played on isochromats samples what pypulseqpp’s <code class="docutils literal notranslate"><span class="pre">Sequence.simulate</span></code>
 samples of the design, turned as the checks turn it, to the single precision
 of the cache’s waveforms. A gradient turned by a block’s rotation is stored as

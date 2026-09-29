@@ -14,6 +14,7 @@
    :toctree:
    :nosignatures:
 
+   ~Phantom.count
    ~Phantom.isochromats
    ~Phantom.kspace
    ~Phantom.proton_density
