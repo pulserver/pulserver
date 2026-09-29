@@ -3,7 +3,7 @@
  * @brief Vendor-neutral MR protocol parse / serialize.
  *
  * Implements the parameter lookup table, preamble parser, and
- * serializer for the NimPulseqGUI wire format.  Pure C89, no
+ * serializer for the protocol wire format.  Pure C89, no
  * vendor dependencies.
  */
 
@@ -520,11 +520,14 @@ int pulseg_protocol_parse(pulseg_protocol *out, const char *preamble)
         }
 
         /* Check for delimiters */
-        if (strstr(line, "[NimPulseqGUI Protocol End]"))
+        /* The block was once delimited by the name of a tool that drove it.
+         * Both spellings are read so a server and an interpreter deployed
+         * separately can differ in age; only the one below is written. */
+        if (strstr(line, "[Protocol End]") || strstr(line, "[NimPulseqGUI Protocol End]"))
         {
             break;
         }
-        if (strstr(line, "[NimPulseqGUI Protocol]"))
+        if (strstr(line, "[Protocol]") || strstr(line, "[NimPulseqGUI Protocol]"))
         {
             in_block = 1;
             continue;
@@ -661,7 +664,7 @@ int pulseg_protocol_serialize(const pulseg_protocol *p, char *buf, int bufsz)
     if (!p || !buf || bufsz <= 0)
         return -1;
 
-    n = ser_append(buf, bufsz, n, "[NimPulseqGUI Protocol]\n");
+    n = ser_append(buf, bufsz, n, "[Protocol]\n");
     if (n < 0)
         return -1;
 
@@ -708,7 +711,7 @@ int pulseg_protocol_serialize(const pulseg_protocol *p, char *buf, int bufsz)
         }
     }
 
-    n = ser_append(buf, bufsz, n, "[NimPulseqGUI Protocol End]\n");
+    n = ser_append(buf, bufsz, n, "[Protocol End]\n");
     if (n < 0)
         return -1;
 

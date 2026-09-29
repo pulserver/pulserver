@@ -2,17 +2,17 @@
  * @file pulseg_protocol.h
  * @brief Vendor-neutral MR protocol parameter table, parse, and serialize.
  *
- * Maps the standard NimPulseqGUI preamble wire format to a fixed set
+ * Maps the protocol block's wire format to a fixed set
  * of parameter IDs (mirroring the Python UIParam enum).  No vendor-
  * specific units, parameter names or UI concepts appear here.
  *
- * Wire format (standard NimPulseqGUI preamble):
- *   [NimPulseqGUI Protocol]
+ * Wire format:
+ *   [Protocol]
  *   TE: 5.0
  *   TR: 500.0
  *   NSlices: 10
  *   FatSat: 1
- *   [NimPulseqGUI Protocol End]
+ *   [Protocol End]
  */
 
 #ifndef PULSEG_PROTOCOL_H
@@ -290,7 +290,7 @@ extern "C"
     /* ================================================================== */
 
     /**
-     * @brief Parse a NimPulseqGUI preamble into a protocol.
+     * @brief Parse a protocol block into a protocol.
      *
      * Accepts both the simple form ("key: value") and the rich schema form
      * ("key: type|value|min|max|incr|unit"); rich lines additionally populate

@@ -13,7 +13,7 @@ Generate the design as the interpreter host process does, with the prescribed
 field-of-view offset in the protocol block ({doc}`running`):
 
 ```bash
-printf '[NimPulseqGUI Protocol]\nTE: 5000\nnx: 64\nny: 64\nfov_offset_x: 20.0\n[NimPulseqGUI Protocol End]\n' \
+printf '[Protocol]\nTE: 5000\nnx: 64\nny: 64\nfov_offset_x: 20.0\n[Protocol End]\n' \
   | pulserver design generate --plugins sequences --plugin gre2d --limits limits.txt --store designs
 ```
 
