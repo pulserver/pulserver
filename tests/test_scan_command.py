@@ -67,8 +67,18 @@ def test_a_headless_scan_records_the_series_the_virtual_scanner_acquires(
     assert status == 0
     sequence = DesignStore(store).directory(_reply(capsys)) / "sequence.seq"
     rotation = ORIENTATIONS["coronal"]
-    tissue = default_phantom(4).isochromats(1e-3, field_t=FIXTURE_LIMITS["B0"])
-    expected = virtual.simulate(sequence, tissue, rotation=rotation)
+    tissue = default_phantom(4)
+    field_t = FIXTURE_LIMITS["B0"]
+    expected = virtual.simulate(
+        sequence,
+        tissue.isochromats(
+            1e-3, field_t=field_t, region=virtual.excited(sequence, rotation)
+        ),
+        rotation=rotation,
+    )
+    whole = virtual.simulate(
+        sequence, tissue.isochromats(1e-3, field_t=field_t), rotation=rotation
+    )
     dataset = ismrmrd.hdf5.Dataset(str(mrd), "dataset", create_if_needed=False)
     try:
         acquisitions = [
@@ -87,6 +97,9 @@ def test_a_headless_scan_records_the_series_the_virtual_scanner_acquires(
         assert acquisition.is_flag_set(ismrmrd.ACQ_LAST_IN_MEASUREMENT) == (
             index == len(expected) - 1
         )
+    recorded = np.concatenate([acquisition.data for acquisition in acquisitions], 1)
+    whole = np.concatenate(whole, axis=1)
+    assert np.linalg.norm(recorded - whole) < 5e-3 * np.linalg.norm(whole)
     rate, audio = wavfile.read(sound)
     designed = pp.Sequence()
     designed.read(str(sequence))

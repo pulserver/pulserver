@@ -147,6 +147,24 @@ below the grid's Nyquist frequency, $1/(2\Delta)$ for a spacing $\Delta$, and
 converges to it as the grid is refined, so a grid several times finer than the
 image's pixel acquires the analytic phantom wherever the signal model holds.
 
+An isochromat that no excitation pulse tips from rest adds nothing to the
+readouts, so a scan is simulated on the isochromats its excitation pulses
+excite. {func}`~pulserver.virtual.excited` finds their slabs: each pulse the
+cache labels an excitation is played, at its nominal amplitude and at twice
+it, on a line of isochromats along its gradient, turned as the scan turns it,
+and its slab holds the fields at which it changes the magnetization at rest by
+at least a hundredth of the most it changes it, sidelobes included. An
+isochromat at $\mathbf{r}$ precessing at $f$ sees the field
+$\mathbf{g} \cdot \mathbf{r} + f$ during a pulse played under the gradient
+$\mathbf{g}$, so a chemical shift or the subject's field moves an isochromat's
+slab as it moves the slice, and each slice of a multislice scan is a slab of
+its own. A pulse played without a gradient, or under one that changes during
+it, excites the whole phantom, as a volumetric excitation does. What other
+pulses tip into the transverse plane outside the slabs, such as the free
+induction decay of an imperfect refocusing pulse, is left out. The phantoms'
+`isochromats` keep those a region, such as {class}`~pulserver.virtual.Slabs`,
+answers for.
+
 The cache played on isochromats samples what pypulseqpp's `Sequence.simulate`
 samples of the design, turned as the checks turn it, to the single precision
 of the cache's waveforms. A gradient turned by a block's rotation is stored as

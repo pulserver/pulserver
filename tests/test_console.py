@@ -24,6 +24,7 @@ from pulserver.host import DesignStore
 from pulserver.host._blocks import format_limits
 from pulserver.protocol import FOV_OFFSET, FOV_ROTATION, PROTOCOL_BEGIN, PROTOCOL_END
 from pulserver.proxy import ReconProxy
+from pulserver.virtual._command import ORIENTATIONS
 from pulserver.virtual._console import Console, _connection
 from pulserver.virtual._localizer import PLANES
 
@@ -43,12 +44,12 @@ def _block(**values):
     return "\n".join([PROTOCOL_BEGIN, *lines, PROTOCOL_END]) + "\n"
 
 
-def _console(tmp_path, **options):
+def _console(tmp_path, spacing=2e-3, **options):
     return Console(
         plugins=PLUGINS,
         limits=format_limits(ANY_ORIENTATION),
         store=tmp_path / "designs",
-        spacing=2e-3,
+        spacing=spacing,
         **options,
     )
 
@@ -289,6 +290,85 @@ def test_an_exams_scans_play_on_its_isochromats_each_from_equilibrium(tmp_path):
     assert len(built) == 2
     np.testing.assert_array_equal(second, first)
     np.testing.assert_array_equal(third, first)
+
+
+def _scanned(console, design, rotation):
+    status = console.scan(
+        design, rotation=rotation, centre_mm=(0.0, 0.0, 0.0), emit=lambda _: None
+    )
+    assert status == 0
+
+
+def _builds(console):
+    """The spacings the exam's phantom is sampled at, one per set of isochromats built."""
+    spacings = []
+    build = console.phantom.isochromats
+    console.phantom.isochromats = lambda spacing, **k: (
+        spacings.append(spacing) or build(spacing, **k)
+    )
+    return spacings
+
+
+def test_a_scan_plays_on_the_isochromats_in_the_slabs_its_excitations_excite(
+    tmp_path,
+):
+    console = _console(tmp_path)
+    design = console.design("generate", "gre2d", _block(TE=5000, nx=32, ny=32))[
+        "design"
+    ]
+    console.exam("vials")
+    coronal = ORIENTATIONS["coronal"]
+
+    _scanned(console, design, coronal)
+
+    region, isochromats = console._isochromats
+    sequence = DesignStore(tmp_path / "designs").directory(design) / "sequence.seq"
+    assert region == virtual.excited(sequence, coronal)
+    kept = console.phantom.count(2e-3, field_t=console.field_t, region=region)
+    assert len(isochromats) == kept
+    assert 0 < kept < console.phantom.count(2e-3, field_t=console.field_t)
+
+
+def test_scans_that_excite_other_slabs_play_on_isochromats_of_their_own(tmp_path):
+    console = _console(tmp_path)
+    design = console.design("generate", "gre2d", _block(TE=5000, nx=32, ny=32))[
+        "design"
+    ]
+    console.exam("vials")
+    spacings = _builds(console)
+
+    _scanned(console, design, np.eye(3))
+    _scanned(console, design, np.eye(3))
+    _scanned(console, design, ORIENTATIONS["coronal"])
+
+    assert len(spacings) == 2
+
+
+def test_a_console_coarsens_its_spacing_until_a_scan_keeps_no_more_isochromats_than_it_may(
+    tmp_path,
+):
+    console = _console(tmp_path, spacing=1e-3)
+    design = console.design("generate", "gre2d", _block(TE=5000, nx=32, ny=32))[
+        "design"
+    ]
+    console.exam("vials")
+    console.max_isochromats = console.phantom.count(2e-3, field_t=console.field_t)
+    spacings = _builds(console)
+
+    _scanned(console, design, np.eye(3))
+
+    assert spacings == [pytest.approx(2e-3)]
+
+
+def test_a_scan_no_spacing_keeps_within_the_consoles_isochromats_is_refused(tmp_path):
+    console = _console(tmp_path, max_isochromats=0)
+    design = console.design("generate", "gre2d", _block(TE=5000, nx=32, ny=32))[
+        "design"
+    ]
+    console.exam("vials")
+
+    with pytest.raises(ValueError, match="at every spacing"):
+        _scanned(console, design, np.eye(3))
 
 
 def test_a_console_reconstructs_through_a_proxy_or_in_process_not_both(tmp_path):
@@ -579,6 +659,8 @@ def test_the_console_command_serves_a_console_of_its_options(tmp_path, monkeypat
             "9876",
             "--spacing",
             "2",
+            "--max-isochromats",
+            "500000",
             "--coil",
             "head8/head32",
             "--origin",
@@ -593,6 +675,7 @@ def test_the_console_command_serves_a_console_of_its_options(tmp_path, monkeypat
     assert console.recon == ("recon.local", 9020)
     assert console.local is None
     assert console.spacing == pytest.approx(2e-3)
+    assert console.max_isochromats == 500_000
     assert console.coil is virtual.COILS["head8/head32"]
     assert console.field_t == ANY_ORIENTATION["B0"]
 
@@ -619,6 +702,7 @@ def test_the_console_command_scans_in_the_coils_of_the_field_maps_it_names(
     assert status == 0
     console = served["console"]
     assert console.fields == fields
+    assert console.max_isochromats == 2_000_000
     assert console.coil.transmit_model == fields / "head8.npz"
     assert console.coil.receive_model == fields / "head32.npz"
 
