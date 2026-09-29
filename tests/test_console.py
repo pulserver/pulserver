@@ -14,10 +14,12 @@ from pathlib import Path
 
 import numpy as np
 import pydicom
+import pypulseqpp as pp
 import pytest
-from _host import ANY_ORIENTATION, PLUGINS
+from _host import ANY_ORIENTATION, LIMITS, PLUGINS
+from _virtual import FIELD_CHANNELS, write_fields
 
-from pulserver import virtual
+from pulserver import ir, virtual
 from pulserver.host import DesignStore
 from pulserver.host._blocks import format_limits
 from pulserver.protocol import FOV_OFFSET, FOV_ROTATION, PROTOCOL_BEGIN, PROTOCOL_END
@@ -110,6 +112,70 @@ def test_the_subject_brainweb_starts_an_exam_on_brainweb(tmp_path, monkeypatch):
     console.exam("BrainWeb")
 
     assert isinstance(console.phantom, virtual.BrainWeb)
+
+
+@pytest.fixture
+def brainweb(monkeypatch):
+    """BrainWeb's model, empty, in place of the one brainweb-dl downloads."""
+    fractions = np.zeros((4, 4, 4, 10), dtype=np.float32)
+    monkeypatch.setitem(
+        sys.modules,
+        "brainweb_dl",
+        types.SimpleNamespace(get_mri=lambda *a, **k: fractions),
+    )
+
+
+@pytest.fixture
+def fields(tmp_path):
+    """A directory of every coil's field maps, and of VOPs for those that transmit."""
+    directory = tmp_path / "fields"
+    directory.mkdir()
+    return write_fields(directory)
+
+
+def test_a_console_with_field_maps_examines_brainweb_whatever_the_subject(
+    tmp_path, brainweb, fields
+):
+    console = _console(tmp_path, fields=fields)
+
+    files = console.exam("vials")
+
+    assert isinstance(console.phantom, virtual.BrainWeb)
+    assert {str(pydicom.dcmread(io.BytesIO(f)).PatientName) for f in files} == {"vials"}
+
+
+def test_a_console_with_field_maps_lists_the_channels_its_maps_hold(tmp_path, fields):
+    coils = _console(tmp_path, fields=fields).coils()
+
+    assert coils == [
+        {"name": "body", "transmit": FIELD_CHANNELS["body"], "receive": 2},
+        {"name": "body/head48", "transmit": 2, "receive": FIELD_CHANNELS["head48"]},
+        {"name": "head8/head32", "transmit": 8, "receive": FIELD_CHANNELS["head32"]},
+    ]
+
+
+def test_a_design_is_made_under_the_vops_of_the_exams_transmit_coil(
+    tmp_path, brainweb, fields
+):
+    console = _console(tmp_path, fields=fields, coil="head8/head32")
+    store = DesignStore(tmp_path / "designs")
+    block = _block(TE=5000, nx=32, ny=32)
+
+    head8 = console.design("generate", "gre2d", block)["design"]
+    console.exam("brainweb", "body")
+    body = console.design("generate", "gre2d", block)["design"]
+
+    assert head8 != body
+    for design, transmit in ((head8, "head8"), (body, "body")):
+        limits = store.manifest(design)["limits"]
+        assert limits["vop_file"] == str(fields / f"{transmit}_vops.npz")
+        (cached,) = ir.summary(
+            store.directory(design) / "sequence.seq",
+            pp.Opts(**LIMITS),
+            cache_ext=".pseg",
+        )["subsequences"]
+        assert cached["vop_sar_ratio"] > 0.0
+        assert cached["vop_global_sar_ratio"] > 0.0
 
 
 def test_a_console_lists_each_coil_an_exam_can_start_with_and_its_channels(tmp_path):
@@ -529,6 +595,32 @@ def test_the_console_command_serves_a_console_of_its_options(tmp_path, monkeypat
     assert console.spacing == pytest.approx(2e-3)
     assert console.coil is virtual.COILS["head8/head32"]
     assert console.field_t == ANY_ORIENTATION["B0"]
+
+
+def test_the_console_command_scans_in_the_coils_of_the_field_maps_it_names(
+    tmp_path, monkeypatch, fields
+):
+    from pulserver import _cli
+    from pulserver.virtual import _console
+
+    limits = tmp_path / "limits.txt"
+    limits.write_text(format_limits(ANY_ORIENTATION))
+    served = {}
+
+    async def serve(console, host, port, origins):
+        served["console"] = console
+
+    monkeypatch.setattr(_console, "serve", serve)
+    options = ["--plugins", str(PLUGINS), "--limits", str(limits)]
+    options += ["--store", str(tmp_path / "designs"), "--coil", "head8/head32"]
+
+    status = _cli.main(["console", *options, "--fields", str(fields)])
+
+    assert status == 0
+    console = served["console"]
+    assert console.fields == fields
+    assert console.coil.transmit_model == fields / "head8.npz"
+    assert console.coil.receive_model == fields / "head32.npz"
 
 
 def test_the_console_command_reconstructs_in_process_with_recon_plugins(

@@ -1,10 +1,10 @@
 """Drive a console as a scanner console does: an exam, then one scan.
 
-Usage: ``python docker/smoke.py [ADDRESS [COIL]] [--subject SUBJECT]
-[--exam-only]``, the exam started on the subject named, the vials by default,
-in the coil named, or in the console's own. Exits 1 unless the localizer holds
-three planes and, without ``--exam-only``, the scan returns at least one DICOM
-image with pixels.
+Usage: ``python docker/smoke.py [ADDRESS [COIL]] [--subject SUBJECT]``, the
+exam started on the subject named, the vials by default, which a console with
+field maps examines on BrainWeb, in the coil named, or in the console's own.
+Exits 1 unless the localizer holds three planes and the scan returns at least
+one DICOM image with pixels.
 """
 
 import argparse
@@ -31,7 +31,6 @@ def main() -> int:
     parser.add_argument("address", nargs="?", default="ws://127.0.0.1:8765")
     parser.add_argument("coil", nargs="?")
     parser.add_argument("--subject", default="vials")
-    parser.add_argument("--exam-only", action="store_true")
     args = parser.parse_args()
     deadline = time.monotonic() + 600.0
     while True:
@@ -62,9 +61,6 @@ def main() -> int:
     coil = {} if args.coil is None else {"coil": args.coil}
     exam, _ = call("exam", subject=args.subject, **coil)
     print(f"localizer: {len(exam['localizer'])} planes")
-    if args.exam_only:
-        socket.close()
-        return 0 if len(exam["localizer"]) == 3 else 1
     block = (
         "\n".join([PROTOCOL_BEGIN, "nx: 32", "ny: 32", *PRESCRIPTION, PROTOCOL_END])
         + "\n"

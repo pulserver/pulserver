@@ -77,3 +77,63 @@ def synthetic_sensitivities(model, channels):
         magnitude = 1.5 + np.cos(angle) * x + np.sin(angle) * y + 0.2 * z
         maps.append(magnitude * np.exp(1j * (angle + 3.0 * x)))
     return np.asarray(maps, dtype=np.complex64)
+
+
+#: Channels of each coil's field maps :func:`write_fields` writes.
+FIELD_CHANNELS = {"body": 2, "head8": 8, "head32": 32, "head48": 48}
+#: Voxels along x, y and z of those maps, their pitch in m, and the voxel
+#: centred on the isocentre.
+FIELD_SHAPE, FIELD_RESOLUTION, FIELD_ISOCENTRE = (7, 8, 5), 0.02, (3, 4, 2)
+
+
+def write_fields(directory, field_t=3.0):
+    """Write each coil's field maps as mariepy's ``maps.write`` does, and VOPs for the two that transmit.
+
+    Each channel's ``plus`` and ``minus`` vary smoothly in magnitude and turn
+    in phase along x, from a phase of their own; the voxels of one edge of the
+    box lie outside the body.
+    """
+    import json
+
+    import pypulseqpp as pp
+
+    generator = np.random.default_rng(3)
+    grid = np.indices(FIELD_SHAPE, dtype=float)
+    mask = np.ones(FIELD_SHAPE, dtype=bool)
+    mask[0, 0, :] = False
+    for name, channels in FIELD_CHANNELS.items():
+        components = {}
+        for component in ("plus", "minus"):
+            slope = generator.uniform(-1.0, 1.0, (channels, 3))
+            phase = generator.uniform(-np.pi, np.pi, (channels, 1, 1, 1))
+            magnitude = 1.0 + 0.05 * np.einsum("ca,axyz->cxyz", slope, grid)
+            field = 1e-6 * magnitude * np.exp(1j * (phase + 0.3 * grid[0]))
+            components[component] = np.where(mask, field, 0.0).astype(np.complex64)
+        metadata = {
+            "coil": name,
+            "channels": [f"{name}-{index + 1}" for index in range(channels)],
+            "frequency_hz": pp.Opts().gamma * field_t,
+            "drive_unit": "1 A",
+            "origin": [-FIELD_RESOLUTION * index for index in FIELD_ISOCENTRE],
+            "resolution": FIELD_RESOLUTION,
+            "frame": "the physical frame",
+            "bodies": ["a box"],
+            "mariepy_version": "0",
+            "data_licence": "none",
+        }
+        np.savez_compressed(
+            directory / f"{name}.npz",
+            **components,
+            mask=mask,
+            metadata=np.array(json.dumps(metadata)),
+        )
+        if name in ("body", "head8"):
+            vectors = generator.standard_normal((2, 4, channels, channels))
+            points = vectors[0] + 1j * vectors[1]
+            vops = points @ np.conj(points).transpose(0, 2, 1)
+            np.savez_compressed(
+                directory / f"{name}_vops.npz",
+                vops=vops,
+                global_matrix=vops.mean(axis=0, keepdims=True),
+            )
+    return directory

@@ -1,4 +1,4 @@
-"""The virtual scanner's coils: their channels, their scaling at the isocentre, and BART's models."""
+"""The virtual scanner's coils: their channels, their scaling at the isocentre, BART's models and field maps."""
 
 import math
 import sys
@@ -6,7 +6,14 @@ import sys
 import numpy as np
 import pypulseqpp as pp
 import pytest
-from _virtual import phantom, synthetic_sensitivities
+from _virtual import (
+    FIELD_CHANNELS,
+    FIELD_ISOCENTRE,
+    FIELD_RESOLUTION,
+    phantom,
+    synthetic_sensitivities,
+    write_fields,
+)
 
 from pulserver import ir, virtual
 from pulserver.virtual import _coils
@@ -62,7 +69,7 @@ def test_transmit_sensitivities_are_the_conjugates_of_the_receive_ones_of_their_
     points = np.array([[0.01, -0.03, 0.02], [0.05, 0.04, -0.06]])
 
     transmit = virtual.COILS["head8/head32"].transmit(points)
-    receive = _coils._interpolated(_coils._receive("HEAD_2D_8CH", 8), points)
+    receive = _coils._interpolated(_coils._receive(("HEAD_2D_8CH", 8)), points)
 
     ratio = transmit / np.conj(receive)
     np.testing.assert_allclose(ratio, ratio[0, 0], rtol=1e-5)
@@ -72,7 +79,7 @@ def test_transmit_sensitivities_are_the_conjugates_of_the_receive_ones_of_their_
 
 def test_sensitivities_are_interpolated_linearly_and_held_beyond_the_grid(modelled):
     step = _coils.MODEL_FOV / _coils._SAMPLES
-    maps = _coils._receive("HEAD_3D_64CH", 32)
+    maps = _coils._receive(("HEAD_3D_64CH", 32)).values
     centre = _coils._SAMPLES // 2
     head32 = virtual.COILS["head8/head32"]
 
@@ -168,3 +175,116 @@ def test_bartorch_samples_as_many_channels_of_barts_model_as_each_coil_takes(nam
     assert received.shape == (1, coil.receive_channels)
     assert np.sqrt(np.sum(np.abs(received) ** 2)) == pytest.approx(1.0, rel=1e-5)
     assert transmitted is None or transmitted.shape == (1, coil.transmit_channels)
+
+
+@pytest.fixture
+def fields(tmp_path):
+    """A directory of every coil's field maps, and of VOPs for those that transmit."""
+    return write_fields(tmp_path)
+
+
+def _maps(fields, name):
+    with np.load(fields / f"{name}.npz") as archive:
+        return archive["plus"], archive["minus"], archive["mask"]
+
+
+def _centres(voxels):
+    """Physical positions of voxel centres ``(n, 3)`` of the maps :func:`write_fields` writes."""
+    return FIELD_RESOLUTION * (np.asarray(voxels) - np.asarray(FIELD_ISOCENTRE))
+
+
+def test_mapped_coils_are_the_scanners_coils_with_the_channels_of_their_files(fields):
+    mapped = _coils.coils(fields)
+
+    channels = {
+        name: (coil.transmit_channels, coil.receive_channels)
+        for name, coil in mapped.items()
+    }
+
+    assert channels == {
+        "body": (FIELD_CHANNELS["body"], FIELD_CHANNELS["body"]),
+        "body/head48": (FIELD_CHANNELS["body"], FIELD_CHANNELS["head48"]),
+        "head8/head32": (FIELD_CHANNELS["head8"], FIELD_CHANNELS["head32"]),
+    }
+
+
+def test_a_mapped_coil_transmits_with_the_conjugate_of_minus_and_receives_with_that_of_plus(
+    fields,
+):
+    head8 = _coils.coils(fields)["head8/head32"]
+    _, minus, mask = _maps(fields, "head8")
+    plus, _, _ = _maps(fields, "head32")
+    voxels = np.argwhere(mask)[::7]
+    points = _centres(voxels)
+
+    for found, component in (
+        (head8.transmit(points), minus),
+        (head8.receive(points), plus),
+    ):
+        expected = np.conj(component[:, voxels[:, 0], voxels[:, 1], voxels[:, 2]]).T
+        ratio = found / expected
+        np.testing.assert_allclose(ratio, ratio[0, 0], rtol=1e-5)
+        assert ratio[0, 0].real > 0.0
+        assert abs(ratio[0, 0].imag) < 1e-6 * ratio[0, 0].real
+
+
+def test_a_voxel_outside_the_body_takes_the_field_of_the_nearest_voxel_inside(fields):
+    head8 = _coils.coils(fields)["head8/head32"]
+
+    outside, nearest = head8.transmit(_centres([[0, 0, 3], [1, 0, 3]]))
+
+    np.testing.assert_allclose(outside, nearest, rtol=1e-6)
+
+
+def test_a_pulse_without_an_rf_shim_turns_the_isocentre_by_its_flip_angle_in_mapped_coils(
+    fields, tmp_path
+):
+    head8 = _coils.coils(fields)["head8/head32"]
+    seq = pp.Sequence(SYSTEM)
+    seq.add_block(pp.make_block_pulse(math.pi / 2, duration=1e-3, system=SYSTEM))
+    seq.add_block(pp.make_adc(4, duration=1e-3, system=SYSTEM))
+    path = tmp_path / "excite.seq"
+    seq.write(str(path))
+    ir.convert(path, SYSTEM)
+    spins = pp.Isochromats(ISOCENTRE, transmit=head8.transmit(ISOCENTRE))
+
+    (readout,) = virtual.simulate(path, spins, default_shim=head8.default_shim)
+
+    np.testing.assert_allclose(np.abs(readout), 1.0, rtol=1e-4)
+
+
+@pytest.mark.parametrize(
+    ("name", "transmit"), [("body", "body"), ("head8/head32", "head8")]
+)
+def test_a_mapped_coils_vop_drive_plays_a_pulse_at_its_amplitude_at_the_isocentre(
+    fields, name, transmit
+):
+    coil = _coils.coils(fields)[name]
+    _, minus, _ = _maps(fields, transmit)
+
+    limits = coil.limits()
+
+    assert limits["vop_file"] == str(fields / f"{transmit}_vops.npz")
+    magnitudes, phases = np.reshape(
+        [float(value) for value in limits["vop_default_shim"].split()], (-1, 2)
+    ).T
+    drive = float(limits["vop_drive_per_hz"]) * magnitudes * np.exp(1j * phases)
+    np.testing.assert_allclose(drive / abs(drive), coil.default_shim, rtol=1e-6)
+    # A channel's clockwise field, in T per unit drive, is half its minus.
+    field = np.sum(drive * minus[(slice(None), *FIELD_ISOCENTRE)]) / 2.0
+    assert abs(field) == pytest.approx(1.0 / SYSTEM.gamma, rel=1e-5)
+
+
+def test_a_mapped_coil_without_vops_beside_its_maps_has_no_vop_limits(fields):
+    (fields / "head8_vops.npz").unlink()
+
+    assert _coils.coils(fields)["head8/head32"].limits() == {}
+
+
+def test_a_coil_of_barts_models_has_no_vops():
+    assert virtual.COILS["head8/head32"].limits() == {}
+
+
+def test_maps_solved_at_another_field_are_refused(fields):
+    with pytest.raises(ValueError, match="solved at"):
+        _coils.coils(fields, field_t=1.5)

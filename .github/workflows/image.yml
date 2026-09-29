@@ -1,7 +1,7 @@
 # pulserver's image, whose default command is the console of the virtual
-# scanner reconstructing in its own process: built, scanned through in the
-# head coils, which bartorch samples, examined on the BrainWeb brain it
-# carries, which loads without a network, and published from main.
+# scanner reconstructing in its own process: built with the coils' field maps,
+# scanned through on the BrainWeb brain it carries, which loads without a
+# network, in the head coils' maps, and published from main.
 name: Image
 
 on:
@@ -42,8 +42,6 @@ jobs:
         run: >-
           docker run --rm --network none --entrypoint python pulserver -c
           "from pulserver.virtual import BrainWeb; print(BrainWeb().fractions.shape)"
-      - name: Start an exam on BrainWeb
-        run: python docker/smoke.py ws://127.0.0.1:8765 body/head48 --subject brainweb --exam-only
       - name: Publish
         if: github.event_name == 'push'
         run: |
