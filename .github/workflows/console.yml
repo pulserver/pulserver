@@ -13,7 +13,6 @@ on:
 
 permissions:
   contents: read
-  packages: read
 
 jobs:
   compose:
@@ -26,9 +25,6 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
-      # The build copies the coils' field maps from their image.
-      - name: Log in to the registry
-        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
       - name: Start the console, the proxy and Gadgetron
         run: docker compose -f docker/compose.yaml up -d --build
       - name: Scan through the console

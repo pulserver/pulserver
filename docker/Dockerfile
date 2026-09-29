@@ -1,7 +1,8 @@
-# pulserver with its console, BrainWeb and coil extras, and BrainWeb's normal
-# brain, which an exam on the subject brainweb is scanned on. Run without a
-# command, it serves the console of the virtual scanner on port 8765,
-# reconstructing each scan in its own process, for MaRGE's page:
+# pulserver with its console, BrainWeb and coil extras, BrainWeb's normal
+# brain, and the field maps and VOPs of the virtual scanner's coils solved in
+# it, on which every exam is scanned. Run without a command, it serves the
+# console of the virtual scanner on port 8765, reconstructing each scan in its
+# own process, for MaRGE's page:
 #
 #   docker run -d --restart unless-stopped --name pulserver \
 #     -p 127.0.0.1:8765:8765 ghcr.io/pulserver/pulserver
@@ -22,8 +23,8 @@ RUN SETUPTOOLS_SCM_PRETEND_VERSION=0.0.0 \
 
 FROM python:3.12-slim
 
-# torch's CPU build: bartorch samples the head coils' models with it, and no
-# card is used.
+# torch's CPU build: bartorch reconstructs the non-Cartesian scans with it, and
+# no card is used.
 RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
 
 COPY --from=build /wheels /wheels
@@ -38,6 +39,10 @@ RUN for attempt in 1 2 3; do \
       rm -rf "$BRAINWEB_DIR"; [ "$attempt" = 3 ] && exit 1; sleep 30; \
     done
 
+# The coils' field maps and VOPs, which the Fields workflow solves in the same
+# brain with mariepy and publishes as an image of those files alone.
+COPY --from=ghcr.io/pulserver/brainweb-fields@sha256:c102b4f2563e1a1a19ca25d9cd3b9b9d7505555041b4795310aee4725a659ddb / /console/fields/
+
 # The console's sequences, their reconstructions, and the limits they design
 # under; the user directories are searched first.
 COPY tests/plugins/gre2d.py docker/console/plugins/*.py /console/plugins/
@@ -49,6 +54,7 @@ EXPOSE 8765
 ENTRYPOINT ["pulserver"]
 CMD ["console", "--plugins=/console/user/plugins", "--plugins=/console/plugins", \
      "--limits=/console/limits.txt", "--store=/console/designs", \
+     "--fields=/console/fields", \
      "--recon-plugins=/console/user/recon", "--recon-plugins=/console/recon", \
      "--host=0.0.0.0", "--port=8765", "--spacing=2", "--speed=1", \
      "--origin=https://pulserver.github.io", "--origin=http://localhost:8000", \
