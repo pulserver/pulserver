@@ -1,0 +1,317 @@
+/**
+ * @file repetitions.hpp
+ * @brief Repetitions of a sequence of blocks, played on isochromats from the
+ *        affine map one repetition applies to each isochromat.
+ */
+
+#ifndef PULSERVER_BLOCH_REPETITIONS_HPP
+#define PULSERVER_BLOCH_REPETITIONS_HPP
+
+#include <complex>
+#include <cstddef>
+#include <cstdint>
+#include <memory>
+#include <vector>
+
+#include "bloch/bloch.hpp"
+#include "bloch/nufft.hpp"
+
+namespace bloch
+{
+
+    /** One block's events, owning what BlockEvents points to. */
+    struct OwnedBlock
+    {
+        double duration = 0.0;
+        std::vector<double> gradient_times[3];
+        std::vector<double> gradient_values[3];
+        double rf_start = 0.0;
+        double rf_step = 0.0;
+        size_t rf_steps = 0;
+        size_t rf_channels = 0;
+        std::vector<std::complex<double>> rf;
+        std::vector<double> adc_times;
+        /** The phase, in rad, each ADC sample is multiplied by exp(i phase)
+         *  with; one per sample. */
+        std::vector<double> receiver;
+
+        BlockEvents events() const;
+    };
+
+    /**
+     * Repetitions of a sequence of blocks, played on isochromats.
+     *
+     * Repetition n plays the blocks with each RF pulse's field turned about z
+     * by -phases[n], as a phase offset larger by phases[n] turns it, and with
+     * gradients that differ from the blocks' by a waveform zero during every
+     * pulse and every ADC window, whose area at the first sample of the
+     * repetition's w-th window is areas[n][w], in 1/m, and over the repetition
+     * zero. Its samples are demodulated with each window's phase larger by
+     * adc_phases[n].
+     *
+     * One repetition applies an affine map to each isochromat's
+     * magnetisation, and another to its transverse magnetisation at each
+     * window's first sample: four plays of the blocks, from zero and from a
+     * unit magnetisation along each axis, give both. A repetition turned about
+     * z applies the maps turned alike, and a phase-encoding waveform turns the
+     * transverse magnetisation by its area at the sample and nothing else, so
+     * every repetition follows from the four plays. Each window is read by the
+     * non-uniform FFT the isochromats read a window under a held gradient
+     * with, and must be one.
+     *
+     * The isochromats hold the magnetisation at the start of the next
+     * repetition to be played; blocks played on them in between break the
+     * repetitions.
+     *
+     * The first play() moves the maps into the arrays the repetitions are
+     * played from and frees them: split() and column_sums() come before it.
+     */
+    class Repetitions
+    {
+    public:
+        /**
+         * Play the four plays of @p blocks, leaving the isochromats as they
+         * stand. A @p tolerance above zero, relative to the sum of the
+         * proton densities, lets play() carry the magnetisation in single
+         * precision from 1e-4 on and read the windows by a narrower kernel,
+         * and split() drop transients below it.
+         *
+         * @throws std::invalid_argument if the phases, ADC phases and areas
+         *         are not one per repetition, a window is not read under a
+         *         held gradient, or a block is one the isochromats cannot play.
+         */
+        Repetitions(
+            Isochromats& isochromats,
+            std::vector<OwnedBlock> blocks,
+            std::vector<double> phases,
+            std::vector<double> adc_phases,
+            std::vector<double> areas,
+            double tolerance = 0.0);
+        ~Repetitions();
+        Repetitions(const Repetitions&) = delete;
+        Repetitions& operator=(const Repetitions&) = delete;
+
+        /** Repetitions in all. */
+        size_t count() const
+        {
+            return phases_.size();
+        }
+        /** Repetitions played. */
+        size_t played() const
+        {
+            return next_;
+        }
+        /** Receive coils. */
+        size_t coils() const
+        {
+            return isochromats_.coils();
+        }
+        /** ADC windows per repetition. */
+        size_t windows() const
+        {
+            return windows_.size();
+        }
+        /** ADC samples per repetition. */
+        size_t samples() const
+        {
+            return samples_;
+        }
+
+        /**
+         * Split each isochromat's magnetisation into its fixed point under the
+         * repetitions and a transient about it, and from then on carry only
+         * transients larger than the tolerance times the proton density:
+         * play() then writes the transients' samples alone, and
+         * column_sums() gives what the fixed points send.
+         * Return false, splitting nothing, unless the pulses turn by one step
+         * each. A tolerance of zero drops no transient.
+         *
+         * @throws std::logic_error after the first play().
+         */
+        bool split();
+        /** Whether split() split the magnetisation. */
+        bool divided() const
+        {
+            return divided_;
+        }
+        /** Isochromats whose transient is carried. */
+        size_t carried() const;
+        /**
+         * The fixed points' samples of window @p window summed over each
+         * column of isochromats that share their coordinates along @p axes,
+         * each axis tabulated (see lattice()): (columns, coils, samples),
+         * column-major, the first axis's index slowest. Each isochromat
+         * contributes each coil's sensitivity times its transverse
+         * magnetisation at the window's first sample in its fixed point, in
+         * the frame of the repetition's pulses, times exp(-2 pi i encoding .
+         * r); and at sample k that times exp(-k step (1 / T2 + 2 pi i
+         * off-resonance) - 2 pi i k area . r), area and step the window's.
+         *
+         * Written to @p out, which holds the product of the axes' lattice()
+         * sizes times coils() times window_samples() values.
+         *
+         * @throws std::invalid_argument if an axis is not tabulated.
+         */
+        void column_sums(
+            size_t window, const std::vector<int>& axes, const double encoding[3], std::complex<double>* out) const;
+        /** The distinct coordinates, in m, ascending, of an axis some
+         *  window's phase encoding runs along, where there are few enough of
+         *  them to tabulate a phase per coordinate; empty otherwise. */
+        const std::vector<double>& lattice(int axis) const
+        {
+            return lattice_[axis].values;
+        }
+        size_t window_samples(size_t window) const
+        {
+            return windows_[window].samples;
+        }
+        /** The largest magnitude of any isochromat's coordinate, in m. */
+        double reach() const;
+
+        /**
+         * Play the next @p count repetitions, writing each repetition's
+         * samples, coil-major, to @p signal: signal[(r * coils + c) *
+         * samples() + k], and leave the isochromats at the start of the
+         * repetition after them.
+         *
+         * @throws std::invalid_argument if fewer than @p count remain.
+         */
+        void play(size_t count, std::complex<double>* signal);
+
+    private:
+        struct Set;
+
+        /** A block's ADC window as the repetitions read it. */
+        struct Window
+        {
+            size_t block = 0;
+            size_t samples = 0;
+            /** First sample of this window among the repetition's samples. */
+            size_t offset = 0;
+            /** Gradient area, in 1/m, and time, in s, from one sample to the
+             *  next. */
+            double area[3] = {0.0, 0.0, 0.0};
+            double step = 0.0;
+            std::vector<double> receiver;
+            /** Mx + i My at the first sample: u . m + v, m the magnetisation
+             *  at the repetition's start. */
+            std::vector<std::complex<double>> u;
+            std::vector<std::complex<double>> v;
+        };
+
+        /** Each isochromat's coordinate along one axis, as an index into the
+         *  distinct coordinates, where they are few enough that a
+         *  phase-encoding phase per coordinate costs less than one per
+         *  isochromat. */
+        struct Lattice
+        {
+            bool tabulated = false;
+            std::vector<double> values;
+            std::vector<uint32_t> index;
+        };
+
+        /** The field's turn of repetition @p n, in rad. */
+        double turn(size_t n) const
+        {
+            return -phases_[n];
+        }
+        /** Read each block's ADC window, and the repetition's duration. */
+        void read_windows();
+        /** The four plays: each isochromat's maps. */
+        void play_maps();
+        /** Play the blocks from no magnetisation, @p column -1, or from a
+         *  unit magnetisation along axis @p column, keeping the transverse
+         *  magnetisation at each window's first sample in @p first. */
+        void play_from(int column, std::vector<std::vector<std::complex<double>>>& first);
+        /** Keep what the play from @p column gives: b and v, or a column of
+         *  A and of u. */
+        void store_map(int column, const std::vector<std::vector<std::complex<double>>>& first);
+        /** Find the axes a phase encoding runs along, and tabulate the
+         *  coordinates along each. */
+        void tabulate_encoded();
+        /** The phase, in cycles, isochromat @p i turns by from one sample of
+         *  @p window to the next. */
+        double window_phase(const Window& window, size_t i) const;
+        /** Whether isochromat @p i's transient is above the tolerance times
+         *  its proton density. */
+        bool transient_above(size_t i) const;
+        /** The isochromats carried, in order of T2 and of the first window's
+         *  first grid point, which keeps a worker's spreading on a few grid
+         *  points at a time: after a split, those whose transient is above
+         *  the limit. */
+        std::vector<uint32_t> carried_order() const;
+        /** Move the maps into the set played from, and free them. */
+        template <typename Real>
+        void gather();
+        /** Write isochromat @p i to slot @p n of @p slots. */
+        template <typename Slots>
+        void fill_slot(Slots& slots, size_t n, size_t i, double* weights) const;
+        /** Write what window @p w reads of isochromat @p i to slot @p n. */
+        template <typename Slots>
+        void fill_window(Slots& slots, size_t w, size_t n, size_t i, double* weights) const;
+        void release_maps();
+        /** Each T2's decay from @p window's first sample to each. */
+        std::vector<double> decays(const Window& window) const;
+        template <typename Real>
+        void play_tiles(size_t count, std::complex<double>* signal);
+        /** What reading the windows of a tile reads, and its arrays sized. */
+        template <typename Tile>
+        void plan_tile(Tile& tile, size_t taps) const;
+        /** The turns and phase-encoding phases of the tile of repetitions
+         *  from @p first on. */
+        template <typename Tile>
+        void prepare_tile(Tile& tile, size_t first);
+        template <typename Tile>
+        void encode_tile(Tile& tile, size_t first);
+        /** Multiply the samples of @p count repetitions from @p first on by
+         *  their pulses' turn, ADC phase and receiver phase. */
+        void demodulate(size_t first, size_t count, std::complex<double>* out) const;
+        /** The mean step between the turns of the repetitions from the next
+         *  on, in @p step; false unless each step lies within
+         *  kStepTolerance of it. */
+        bool mean_step(double& step) const;
+        /** The isochromats of each column along @p axes, in @p members, and
+         *  where each column's start among them, one offset more than the
+         *  columns. */
+        std::vector<size_t> columns_along(const std::vector<int>& axes, std::vector<uint32_t>& members) const;
+        /** Write the magnetisation at the start of repetition @p n, in the
+         *  laboratory frame, to the isochromats. */
+        template <typename Real>
+        void settle(size_t n);
+
+        Isochromats& isochromats_;
+        std::vector<OwnedBlock> blocks_;
+        std::vector<double> phases_;
+        std::vector<double> adc_phases_;
+        std::vector<double> areas_;
+        std::vector<Window> windows_;
+        size_t samples_ = 0;
+        double duration_ = 0.0;
+        /** Per isochromat, the repetition's map M -> A M + b, A row-major. */
+        std::vector<double> a_;
+        std::vector<double> b_;
+        /** Per isochromat, the magnetisation at the start of the next
+         *  repetition, in the frame its pulses' turn turns. */
+        std::vector<double> m_;
+        size_t next_ = 0;
+        Lattice lattice_[3];
+        /** Whether any window's phase encoding runs along each axis. */
+        bool encoded_[3] = {false, false, false};
+        /** Whether m_ holds transients about the fixed points fixed_ and a_
+         *  holds the map turned by the step. */
+        bool divided_ = false;
+        double tolerance_ = 0.0;
+        double step_ = 0.0;
+        size_t split_at_ = 0;
+        std::vector<double> fixed_;
+        /** Each window's transform, by the kernel the tolerance allows. */
+        std::vector<std::unique_ptr<Nufft>> transforms_;
+        /** Each window's e^(i receiver phase) per sample. */
+        std::vector<std::vector<std::complex<double>>> receivers_;
+        /** The isochromats carried, from the first play() on. */
+        std::unique_ptr<Set> set_;
+    };
+
+} // namespace bloch
+
+#endif /* PULSERVER_BLOCH_REPETITIONS_HPP */

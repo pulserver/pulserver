@@ -20,8 +20,8 @@ _DESCRIPTION = """\
 Scan a phantom on the virtual scanner, as a console would. The design is
 generated from a scanner-sequence plugin, or imported from a sequence file,
 and checked and converted to its IR cache under --limits, as the design calls
-do. Its cache is played on the phantom's isochromats in the slabs its
-excitation pulses excite, in pypulseqpp's Bloch simulation, and the series is
+do. Its cache is played through the Bloch equation on the phantom's
+isochromats in the slabs its excitation pulses excite, and the series is
 written to an ISMRMRD file, streamed to a reconstruction proxy, or both. The
 design call's reply is written to standard output, and the scan clock to
 standard error.

@@ -13,6 +13,7 @@ rest of the documentation assumes.
 | {doc}`ir-cache` | The segmented representation of a sequence that a scanner interpreter plays, and the passes that compute it. |
 | {doc}`reconstruction` | Enrichment of the raw data from the sequence that played it, and the routing of each series to a reconstruction. |
 | {doc}`virtual-scanner` | The stand-ins that replace the scanner in tests: the playout, the physics and the reconstruction client, and what a run establishes. |
+| {doc}`bloch-simulation` | The Bloch equation the virtual scanner integrates on isochromats, how each Pulseq event enters it, and how repeated blocks are played from one repetition's maps. |
 
 ```{toctree}
 :hidden:
@@ -23,4 +24,5 @@ designs
 ir-cache
 reconstruction
 virtual-scanner
+bloch-simulation
 ```

@@ -16,7 +16,7 @@ from _virtual import (
 )
 
 from pulserver import ir, virtual
-from pulserver.virtual import _coils
+from pulserver.virtual import _coils, _phantom
 
 ISOCENTRE = np.zeros((1, 3))
 SYSTEM = pp.Opts(B0=3.0)
@@ -124,7 +124,7 @@ def test_a_pulse_without_an_rf_shim_turns_the_isocentre_by_its_flip_angle_throug
     path = tmp_path / "excite.seq"
     seq.write(str(path))
     ir.convert(path, SYSTEM)
-    spins = pp.Isochromats(ISOCENTRE, transmit=head8.transmit(ISOCENTRE))
+    spins = virtual.Isochromats(ISOCENTRE, transmit=head8.transmit(ISOCENTRE))
 
     (readout,) = virtual.simulate(path, spins, default_shim=head8.default_shim)
 
@@ -140,7 +140,7 @@ def test_a_phantom_scanned_with_a_coil_takes_its_sensitivities_where_it_lies(
     def isochromats(positions, **fields):
         made.update(fields, positions=positions)
 
-    monkeypatch.setattr(pp, "Isochromats", isochromats)
+    monkeypatch.setattr(_phantom, "Isochromats", isochromats)
     phantom(position=(0.01, 0.02, 0.0), coils=1).isochromats(2e-3, coil=head8)
 
     np.testing.assert_array_equal(made["transmit"], head8.transmit(made["positions"]))
@@ -246,7 +246,7 @@ def test_a_pulse_without_an_rf_shim_turns_the_isocentre_by_its_flip_angle_in_map
     path = tmp_path / "excite.seq"
     seq.write(str(path))
     ir.convert(path, SYSTEM)
-    spins = pp.Isochromats(ISOCENTRE, transmit=head8.transmit(ISOCENTRE))
+    spins = virtual.Isochromats(ISOCENTRE, transmit=head8.transmit(ISOCENTRE))
 
     (readout,) = virtual.simulate(path, spins, default_shim=head8.default_shim)
 

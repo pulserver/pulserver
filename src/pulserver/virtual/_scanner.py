@@ -79,7 +79,7 @@ def acquire(
     what it has accrued. Excitation and refocusing pulses act ideally and on
     every shift alike; a saturation pulse scales the longitudinal
     magnetization of each shift by the z component the pulse the cache plays
-    leaves at that frequency, in pypulseqpp's Bloch simulation, and the next
+    leaves at that frequency, in ``pypulseqpp.sim_bloch``, and the next
     excitation tips what remains. No other pulse acts, and a readout before
     the first excitation of its file acquires zeros. The signal model is that
     of :doc:`/explanations/virtual-scanner`.

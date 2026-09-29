@@ -54,6 +54,26 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
           slug: pulserver/pulserver
 
+  sanitize:
+    name: Isochromat engine under the sanitizers
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # A read past the end of an array is not a wrong answer but whatever
+      # was there, which the tests above catch only when it changes a number.
+      - name: Build the engine with the sanitizers on
+        run: |
+          g++ -std=c++17 -g -O1 \
+            -fsanitize=address,undefined -fno-sanitize-recover=all \
+            -fno-omit-frame-pointer -pthread \
+            -I src/cpp -o sanitize_bloch tests/native/sanitize_bloch.cpp \
+            src/cpp/bloch/bloch.cpp src/cpp/bloch/events.cpp \
+            src/cpp/bloch/nufft.cpp src/cpp/bloch/repetitions.cpp
+
+      - name: Play each of its paths
+        run: ./sanitize_bloch
+
   coils:
     name: Coil models sampled by bartorch
     runs-on: ubuntu-latest

@@ -34,14 +34,14 @@ def model(monkeypatch):
 
 @pytest.fixture
 def made(monkeypatch):
-    """The arguments pypulseqpp's isochromats are made with."""
+    """The arguments the isochromats are made with."""
     arguments = []
 
     def isochromats(positions, **fields):
         arguments.append(types.SimpleNamespace(positions=positions, **fields))
         return arguments[-1]
 
-    monkeypatch.setattr(pp, "Isochromats", isochromats)
+    monkeypatch.setattr(_brainweb, "Isochromats", isochromats)
     return arguments
 
 

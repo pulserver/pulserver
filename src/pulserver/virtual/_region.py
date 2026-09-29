@@ -9,10 +9,10 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
-import pypulseqpp as pp
 
 from .. import ir
 from ._bloch import _gradients, _rf
+from ._isochromats import Isochromats
 
 #: Fraction of the largest change a pulse makes to the magnetization at rest
 #: below which a field is outside the slab it excites.
@@ -149,7 +149,7 @@ def _profile(
     positions = np.outer(fields / strength, gradient / strength)
     changed = np.zeros(fields.size)
     for scale in _SCALES:
-        spins = pp.Isochromats(positions)
+        spins = Isochromats(positions)
         spins.play(
             1e-6 * float(played["duration_us"][block]),
             gradients=_gradients(played, block),

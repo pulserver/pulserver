@@ -13,6 +13,7 @@ import pypulseqpp as pp
 from scipy.special import j1
 
 from ._coils import Coil
+from ._isochromats import Isochromats
 
 
 @dataclass(frozen=True)
@@ -113,7 +114,7 @@ class Phantom:
         region: Callable[[np.ndarray, np.ndarray], np.ndarray] | None = None,
         coil: Coil | None = None,
         threads: int = 0,
-    ) -> pp.Isochromats:
+    ) -> Isochromats:
         """Return the phantom sampled as isochromats, for :func:`~pulserver.virtual.simulate`.
 
         Each ellipse is sampled at the points of a square grid, aligned with the
@@ -159,7 +160,7 @@ class Phantom:
         own, positions, density, t1, t2, frequency = self._sampled(
             spacing, field_t, off_resonance_hz, region
         )
-        return pp.Isochromats(
+        return Isochromats(
             positions,
             proton_density=density,
             t1=t1,
