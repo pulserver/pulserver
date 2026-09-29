@@ -77,6 +77,10 @@ static void seq_file_set_defaults(pulseq_file *seq)
     seq->rf_flip_deg = NULL;
     seq->rf_channels = NULL;
     seq->rf_b1sq_integral = NULL;
+    seq->rf_definitions = NULL;
+    seq->grad_definitions = NULL;
+    seq->adc_definitions = NULL;
+    seq->block_definitions = NULL;
     INIT_LIBRARY(seq, grad_library, grad_library_size, is_grad_library_parsed);
     seq->grad_statistics = NULL;
     INIT_LIBRARY(seq, adc_library, adc_library_size, is_adc_library_parsed);
@@ -173,6 +177,19 @@ void pulseq__file_reset(pulseq_file *seq)
             PULSEQ_FREE(seq->rf_b1sq_integral);
         seq->rf_b1sq_integral = NULL;
     }
+    /* Held whether or not the library they index was marked parsed. */
+    if (seq->rf_definitions)
+        PULSEQ_FREE(seq->rf_definitions);
+    seq->rf_definitions = NULL;
+    if (seq->grad_definitions)
+        PULSEQ_FREE(seq->grad_definitions);
+    seq->grad_definitions = NULL;
+    if (seq->adc_definitions)
+        PULSEQ_FREE(seq->adc_definitions);
+    seq->adc_definitions = NULL;
+    if (seq->block_definitions)
+        PULSEQ_FREE(seq->block_definitions);
+    seq->block_definitions = NULL;
     if (seq->is_grad_library_parsed)
     {
         PULSEQ_FREE(seq->grad_library);

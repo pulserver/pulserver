@@ -184,6 +184,17 @@ class SequenceLibraries:
         ``(A, 8)``: sample count; dwell in ns; delay in µs; the frequency and
         phase ppm offsets; the frequency offset in Hz; the phase offset in
         rad; the phase modulation shape id.
+    rf_definitions, grad_definitions, adc_definitions : NDArray[np.int32]
+        ``(R,)``, ``(G,)``, ``(A,)``: the definition each row was
+        deduplicated onto, counted from 1, as
+        ``pypulseqpp.Sequence.event_definitions`` gives them. Rows sharing a
+        definition play the same thing at different amplitudes, offsets or
+        phases, so waveform memory is materialised once per definition.
+    block_definitions : NDArray[np.int32]
+        ``(N,)``: the definition each block was deduplicated onto, counted
+        from 1. The ADC does not enter it, so a preparation shot playing an
+        imaging shot's gradients with the digitiser off shares the shot's
+        definition; a block carrying a trigger is never a plain wait.
     shapes : tuple[Shape, ...]
         Indexed by shape id minus one.
     """
@@ -198,6 +209,10 @@ class SequenceLibraries:
     grad: NDArray[np.float64]
     grad_statistics: NDArray[np.float64]
     adc: NDArray[np.float64]
+    rf_definitions: NDArray[np.int32]
+    grad_definitions: NDArray[np.int32]
+    adc_definitions: NDArray[np.int32]
+    block_definitions: NDArray[np.int32]
     shapes: tuple[Shape, ...]
 
 
@@ -293,6 +308,9 @@ def conversion_payload(sequence: Any, system: pp.Opts) -> dict[str, Any]:
         rf_flip_deg,
         rf_channels,
         rf_b1sq,
+        rf_definitions,
+        grad_definitions,
+        adc_definitions,
     ) = _compact(blocks, libraries)
     declared = sequence.definitions
 
@@ -338,6 +356,12 @@ def conversion_payload(sequence: Any, system: pp.Opts) -> dict[str, Any]:
         "grad": grad,
         "grad_statistics": grad_statistics,
         "adc": adc,
+        "rf_definitions": rf_definitions,
+        "grad_definitions": grad_definitions,
+        "adc_definitions": adc_definitions,
+        "block_definitions": _densified(
+            libraries.block_definitions, list(range(len(libraries.block_definitions)))
+        ),
         "shapes": [
             (shape.num_uncompressed_samples, shape.samples)
             for shape in libraries.shapes
@@ -384,6 +408,7 @@ def _sequence_libraries(sequence: Any, tables: Any) -> SequenceLibraries:
         (measured.peak_slew, measured.energy, measured.slew_energy), axis=1
     ).reshape(-1, 3)
     adc = _adc_library(tables)
+    interned = sequence.event_definitions()
     return SequenceLibraries(
         blocks,
         rf,
@@ -395,6 +420,10 @@ def _sequence_libraries(sequence: Any, tables: Any) -> SequenceLibraries:
         grad,
         grad_statistics,
         adc,
+        np.asarray(interned.rf, dtype=np.int32),
+        np.asarray(interned.gradient, dtype=np.int32),
+        np.asarray(interned.adc, dtype=np.int32),
+        np.asarray(sequence.block_definitions(), dtype=np.int32),
         shapes.entries(),
     )
 
@@ -670,12 +699,47 @@ def _compact(
     flips = libraries.rf_flip_deg[played_rf]
     channels = libraries.rf_channels[played_rf]
     integrals = libraries.rf_b1sq_integral[played_rf]
+    rf_defs = _densified(libraries.rf_definitions, played_rf)
+    grad_defs = _densified(
+        libraries.grad_definitions,
+        [old - 1 for old in sorted(grad_map, key=grad_map.get)],
+    )
+    adc_defs = _densified(
+        libraries.adc_definitions, [old - 1 for old in sorted(adc_map, key=adc_map.get)]
+    )
     for columns, mapping in (((1,), rf_map), ((2, 3, 4), grad_map), ((5,), adc_map)):
         for column in columns:
             blocks[:, column] = [
                 mapping.get(int(value), 0) for value in blocks[:, column]
             ]
-    return rf, grad, grad_statistics, adc, uses, spectra, flips, channels, integrals
+    return (
+        rf,
+        grad,
+        grad_statistics,
+        adc,
+        uses,
+        spectra,
+        flips,
+        channels,
+        integrals,
+        rf_defs,
+        grad_defs,
+        adc_defs,
+    )
+
+
+def _densified(definitions: NDArray[np.int32], played: list[int]) -> NDArray[np.int32]:
+    """Return the definitions of the played rows, numbered densely from 0.
+
+    Dropping the rows no block plays leaves gaps in the numbering, and the
+    conversion indexes its definition tables by these, so they are handed out
+    again in order of first appearance.
+    """
+    seen: dict[int, int] = {}
+    return np.array(
+        [seen.setdefault(int(definitions[row]), len(seen)) for row in played],
+        dtype=np.int32,
+    )
 
 
 def _played(

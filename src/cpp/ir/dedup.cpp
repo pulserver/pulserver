@@ -1,14 +1,19 @@
 /**
  * @file dedup.cpp
- * @brief Event deduplication: raw pulseq libraries -> unique definitions
- *        plus per-block instance tables.
+ * @brief The definitions a scan plays and the table of what each block plays
+ *        of them, read from the deduplication pypulseqpp performed.
  *
- * A .seq file repeats the same RF pulse, gradient shape and ADC hundreds of
- * times with only amplitudes differing. This pass collapses them into a
- * definition library (the distinct waveforms) and a table of per-block
- * instances (which definition, at which amplitude, on which shot) -- the
- * split that lets the pulse generator materialise memory once per definition
- * rather than once per block.
+ * A sequence repeats the same RF pulse, gradient shape and ADC hundreds of
+ * times with only amplitudes differing, and pypulseqpp interns them as it is
+ * built: each event onto a definition, each block onto a definition of the
+ * events it plays. This pass takes those and lays them out as the cache holds
+ * them -- a definition library, and a table of per-block instances naming a
+ * definition, an amplitude and a shot -- which is the split that lets the
+ * pulse generator materialise waveform memory once per definition rather than
+ * once per block.
+ *
+ * The statistics of each definition's waveform are measured here, since they
+ * are what a scanner checks and not part of the identity.
  */
 
 #include <string.h>
@@ -27,13 +32,12 @@ extern "C"
 /* ================================================================== */
 /*  File-scope constants                                              */
 /* ================================================================== */
-#define RF_DEF_COLS 5
-#define RF_PARAMS_COLS 3
-#define GRAD_DEF_COLS 6
-#define ADC_DEF_COLS 3
-#define ADC_PARAMS_COLS 2
+/* The per-block row the conversion keeps: the duration in block rasters, and
+ * the definition of each event the block plays, -1 for one it does not. */
 #define BLOCK_DEF_COLS 6
-#define BLOCK_GEOMETRY_COLS 5
+/* What makes a block definition here: the one pypulseqpp published, and the
+ * ADC definition it digitises with. */
+#define BLOCK_KEY_COLS 2
 
 /* ================================================================== */
 /*  Tiny helpers                                                      */
@@ -130,31 +134,49 @@ int pulseg__deduplicate_int_rows(
 }
 
 /* ================================================================== */
-/*  RF dedup helpers                                                  */
+/*  Adopting pypulseqpp's definitions                                 */
 /* ================================================================== */
 
-static void build_rf_def_row(const pulseq_file *seq, int *row, float *params, int rf_idx)
+/* Take the definition each row was deduplicated onto into the arrays the
+ * conversion keys on: the label of every row, and the first row carrying each
+ * label.
+ *
+ * @p ids are dense and in order of first appearance, which is the numbering
+ * pypulseqpp hands out and pulserver.ir preserves when it drops the rows no
+ * block plays. An id that is neither one already seen nor the next one would
+ * leave a definition with no row to read its waveform from, so it is refused
+ * rather than indexed.
+ *
+ * @return the number of definitions, or a negative error code. */
+static int adopt_definitions(const int *ids, int num_rows, int *unique_defs, int *event_table)
 {
-    float *rf = seq->rf_library[rf_idx];
+    int r, num_unique = 0;
 
-    row[0] = (int)rf[1]; /* mag shape id */
-    row[1] = (int)rf[2]; /* phase shape id */
-    row[2] = (int)rf[3]; /* time shape id */
-    row[3] = (int)rf[5]; /* delay */
-    row[4] = (int)floor(rf[4] + 0.5f); /* centre (us) */
-
-    params[0] = rf[0]; /* amplitude */
-    params[1] = rf[8]; /* frequency offset, ppm resolved on the host (Hz) */
-    params[2] = rf[9]; /* phase offset, ppm resolved on the host (rad) */
+    if (num_rows <= 0)
+        return 0;
+    if (!ids)
+        return PULSEG_ERR_NULL_POINTER;
+    for (r = 0; r < num_rows; ++r)
+    {
+        const int id = ids[r];
+        if (id < 0 || id > num_unique)
+            return PULSEG_ERR_INVALID_ARGUMENT;
+        event_table[r] = id;
+        if (id == num_unique)
+            unique_defs[num_unique++] = r;
+    }
+    return num_unique;
 }
+
+/* ================================================================== */
+/*  RF                                                                */
+/* ================================================================== */
 
 static int deduplicate_rf_library(
     const pulseq_file *seq,
     pulseg_rf_definition *rf_defs,
     pulseg_rf_table_element *rf_table)
 {
-    int(*int_rows)[RF_DEF_COLS] = NULL;
-    float(*params)[RF_PARAMS_COLS] = NULL;
     int *unique_defs = NULL;
     int *event_table = NULL;
     int num_unique, num_rows, i;
@@ -163,16 +185,10 @@ static int deduplicate_rf_library(
     if (num_rows <= 0)
         return 0;
 
-    int_rows = (int(*)[RF_DEF_COLS])PULSEG_ALLOC(num_rows * sizeof(*int_rows));
-    params = (float(*)[RF_PARAMS_COLS])PULSEG_ALLOC(num_rows * sizeof(*params));
     unique_defs = (int *)PULSEG_ALLOC(num_rows * sizeof(int));
     event_table = (int *)PULSEG_ALLOC(num_rows * sizeof(int));
-    if (!int_rows || !params || !unique_defs || !event_table)
+    if (!unique_defs || !event_table)
     {
-        if (int_rows)
-            PULSEG_FREE(int_rows);
-        if (params)
-            PULSEG_FREE(params);
         if (unique_defs)
             PULSEG_FREE(unique_defs);
         if (event_table)
@@ -180,79 +196,51 @@ static int deduplicate_rf_library(
         return 0;
     }
 
-    for (i = 0; i < num_rows; ++i)
-        build_rf_def_row(seq, int_rows[i], params[i], i);
-
-    num_unique = pulseg__deduplicate_int_rows(
-        unique_defs,
-        event_table,
-        (const int *)int_rows,
-        num_rows,
-        RF_DEF_COLS);
+    num_unique = adopt_definitions(seq->rf_definitions, num_rows, unique_defs, event_table);
+    if (num_unique < 0)
+    {
+        PULSEG_FREE(unique_defs);
+        PULSEG_FREE(event_table);
+        return num_unique;
+    }
 
     for (i = 0; i < num_unique; ++i)
     {
+        const float *rf = seq->rf_library[unique_defs[i]];
         rf_defs[i].id = unique_defs[i];
-        rf_defs[i].mag_shape_id = int_rows[unique_defs[i]][0];
-        rf_defs[i].phase_shape_id = int_rows[unique_defs[i]][1];
-        rf_defs[i].time_shape_id = int_rows[unique_defs[i]][2];
-        rf_defs[i].delay = int_rows[unique_defs[i]][3];
-        /* pypulseqpp counts the channels; the time shape is keyed above, so
-         * every row of a definition holds as many. */
+        rf_defs[i].mag_shape_id = (int)rf[1];
+        rf_defs[i].phase_shape_id = (int)rf[2];
+        rf_defs[i].time_shape_id = (int)rf[3];
+        rf_defs[i].delay = (int)rf[5];
+        /* pypulseqpp counts the channels; the time shape is part of the
+         * definition, so every row of one holds as many. */
         rf_defs[i].num_channels = seq->rf_channels ? seq->rf_channels[unique_defs[i]] : 1;
     }
     for (i = 0; i < num_rows; ++i)
     {
+        const float *rf = seq->rf_library[i];
         rf_table[i].id = event_table[i];
-        rf_table[i].amplitude = params[i][0];
-        rf_table[i].freq_offset = params[i][1];
-        rf_table[i].phase_offset = params[i][2];
+        rf_table[i].amplitude = rf[0];
+        rf_table[i].freq_offset = rf[8];  /* ppm resolved on the host (Hz)   */
+        rf_table[i].phase_offset = rf[9]; /* ppm resolved on the host (rad)  */
         rf_table[i].rf_use = (seq->rf_use_tags) ? seq->rf_use_tags[i] : PULSEG_RF_USE_UNKNOWN;
     }
 
-    PULSEG_FREE(int_rows);
-    PULSEG_FREE(params);
     PULSEG_FREE(unique_defs);
     PULSEG_FREE(event_table);
     return num_unique;
 }
 
 /* ================================================================== */
-/*  Grad dedup helpers                                                */
+/*  Gradients                                                         */
 /* ================================================================== */
 
-static void build_grad_def_row(const pulseq_file *seq, int *row, float *param, int grad_idx)
+/* The samples a gradient waveform shape stands for, 0 where it names none. */
+static int wave_samples(const pulseq_file *seq, int wave_id)
 {
-    float *grad = seq->grad_library[grad_idx];
-    int grad_type = (int)grad[0];
-    int wave_id;
-
-    row[0] = grad_type;
-    if (grad_type == 0)
-    {
-        row[1] = (int)grad[2]; /* rise */
-        row[2] = (int)grad[3]; /* flat */
-        row[3] = (int)grad[4]; /* fall */
-        row[4] = 0;
-        row[5] = (int)grad[5]; /* delay (trap: 6th column = grad[5]) */
-    }
-    else
-    {
-        row[1] = 0;
-        row[2] = 0;
-        wave_id = (int)grad[4];
-        if (wave_id > 0 && seq->is_shapes_library_parsed && wave_id <= seq->shapes_library_size)
-        {
-            row[3] = seq->shapes_library[wave_id - 1].num_uncompressed_samples;
-        }
-        else
-        {
-            row[3] = 0;
-        }
-        row[4] = (int)grad[5]; /* time shape id */
-        row[5] = (int)grad[6]; /* delay (arb: 7th column = grad[6]) */
-    }
-    *param = grad[1]; /* amplitude */
+    if (wave_id > 0 && seq->is_shapes_library_parsed && wave_id <= seq->shapes_library_size)
+        return seq->shapes_library[wave_id - 1].num_uncompressed_samples;
+    return 0;
 }
 
 static int deduplicate_grad_library(
@@ -260,8 +248,6 @@ static int deduplicate_grad_library(
     pulseg_grad_definition *grad_defs,
     pulseg_grad_table_element *grad_table)
 {
-    int(*int_rows)[GRAD_DEF_COLS] = NULL;
-    float *params = NULL;
     int *unique_defs = NULL;
     int *event_table = NULL;
     int num_unique, num_rows, i;
@@ -270,16 +256,10 @@ static int deduplicate_grad_library(
     if (num_rows <= 0)
         return 0;
 
-    int_rows = (int(*)[GRAD_DEF_COLS])PULSEG_ALLOC(num_rows * sizeof(*int_rows));
-    params = (float *)PULSEG_ALLOC(num_rows * sizeof(float));
     unique_defs = (int *)PULSEG_ALLOC(num_rows * sizeof(int));
     event_table = (int *)PULSEG_ALLOC(num_rows * sizeof(int));
-    if (!int_rows || !params || !unique_defs || !event_table)
+    if (!unique_defs || !event_table)
     {
-        if (int_rows)
-            PULSEG_FREE(int_rows);
-        if (params)
-            PULSEG_FREE(params);
         if (unique_defs)
             PULSEG_FREE(unique_defs);
         if (event_table)
@@ -287,61 +267,59 @@ static int deduplicate_grad_library(
         return 0;
     }
 
-    for (i = 0; i < num_rows; ++i)
-        build_grad_def_row(seq, int_rows[i], &params[i], i);
-
-    num_unique = pulseg__deduplicate_int_rows(
-        unique_defs,
-        event_table,
-        (const int *)int_rows,
-        num_rows,
-        GRAD_DEF_COLS);
+    num_unique = adopt_definitions(seq->grad_definitions, num_rows, unique_defs, event_table);
+    if (num_unique < 0)
+    {
+        PULSEG_FREE(unique_defs);
+        PULSEG_FREE(event_table);
+        return num_unique;
+    }
 
     for (i = 0; i < num_unique; ++i)
     {
+        const float *grad = seq->grad_library[unique_defs[i]];
+        const int grad_type = (int)grad[0];
+
         grad_defs[i].id = unique_defs[i];
-        grad_defs[i].type = int_rows[unique_defs[i]][0];
-        grad_defs[i].rise_time_or_unused = int_rows[unique_defs[i]][1];
-        grad_defs[i].flat_time_or_unused = int_rows[unique_defs[i]][2];
-        grad_defs[i].fall_time_or_num_uncompressed_samples = int_rows[unique_defs[i]][3];
-        grad_defs[i].unused_or_time_shape_id = int_rows[unique_defs[i]][4];
-        grad_defs[i].delay = int_rows[unique_defs[i]][5];
+        grad_defs[i].type = grad_type;
+        if (grad_type == 0)
+        {
+            grad_defs[i].rise_time_or_unused = (int)grad[2];
+            grad_defs[i].flat_time_or_unused = (int)grad[3];
+            grad_defs[i].fall_time_or_num_uncompressed_samples = (int)grad[4];
+            grad_defs[i].unused_or_time_shape_id = 0;
+            grad_defs[i].delay = (int)grad[5];
+        }
+        else
+        {
+            grad_defs[i].rise_time_or_unused = 0;
+            grad_defs[i].flat_time_or_unused = 0;
+            grad_defs[i].fall_time_or_num_uncompressed_samples =
+                wave_samples(seq, (int)grad[4]);
+            grad_defs[i].unused_or_time_shape_id = (int)grad[5];
+            grad_defs[i].delay = (int)grad[6];
+        }
     }
     for (i = 0; i < num_rows; ++i)
     {
         grad_table[i].id = event_table[i];
-        grad_table[i].amplitude = params[i];
+        grad_table[i].amplitude = seq->grad_library[i][1];
     }
 
-    PULSEG_FREE(int_rows);
-    PULSEG_FREE(params);
     PULSEG_FREE(unique_defs);
     PULSEG_FREE(event_table);
     return num_unique;
 }
 
 /* ================================================================== */
-/*  ADC dedup helpers                                                 */
+/*  ADC                                                               */
 /* ================================================================== */
-
-static void build_adc_def_row(const pulseq_file *seq, int *row, float *params, int adc_idx)
-{
-    float *adc = seq->adc_library[adc_idx];
-
-    row[0] = (int)adc[0]; /* num_samples */
-    row[1] = (int)adc[1]; /* dwell_time_ns */
-    row[2] = (int)adc[2]; /* delay */
-    params[0] = adc[5];   /* frequency offset, ppm resolved on the host (Hz) */
-    params[1] = adc[6];   /* phase offset, ppm resolved on the host (rad) */
-}
 
 static int deduplicate_adc_library(
     const pulseq_file *seq,
     pulseg_adc_definition *adc_defs,
     pulseg_adc_table_element *adc_table)
 {
-    int(*int_rows)[ADC_DEF_COLS] = NULL;
-    float(*params)[ADC_PARAMS_COLS] = NULL;
     int *unique_defs = NULL;
     int *event_table = NULL;
     int num_unique, num_rows, i;
@@ -350,16 +328,10 @@ static int deduplicate_adc_library(
     if (num_rows <= 0)
         return 0;
 
-    int_rows = (int(*)[ADC_DEF_COLS])PULSEG_ALLOC(num_rows * sizeof(*int_rows));
-    params = (float(*)[ADC_PARAMS_COLS])PULSEG_ALLOC(num_rows * sizeof(*params));
     unique_defs = (int *)PULSEG_ALLOC(num_rows * sizeof(int));
     event_table = (int *)PULSEG_ALLOC(num_rows * sizeof(int));
-    if (!int_rows || !params || !unique_defs || !event_table)
+    if (!unique_defs || !event_table)
     {
-        if (int_rows)
-            PULSEG_FREE(int_rows);
-        if (params)
-            PULSEG_FREE(params);
         if (unique_defs)
             PULSEG_FREE(unique_defs);
         if (event_table)
@@ -367,52 +339,36 @@ static int deduplicate_adc_library(
         return 0;
     }
 
-    for (i = 0; i < num_rows; ++i)
-        build_adc_def_row(seq, int_rows[i], params[i], i);
-
-    num_unique = pulseg__deduplicate_int_rows(
-        unique_defs,
-        event_table,
-        (const int *)int_rows,
-        num_rows,
-        ADC_DEF_COLS);
+    num_unique = adopt_definitions(seq->adc_definitions, num_rows, unique_defs, event_table);
+    if (num_unique < 0)
+    {
+        PULSEG_FREE(unique_defs);
+        PULSEG_FREE(event_table);
+        return num_unique;
+    }
 
     for (i = 0; i < num_unique; ++i)
     {
+        const float *adc = seq->adc_library[unique_defs[i]];
         adc_defs[i].id = unique_defs[i];
-        adc_defs[i].num_samples = int_rows[unique_defs[i]][0];
-        adc_defs[i].dwell_time = int_rows[unique_defs[i]][1];
-        adc_defs[i].delay = int_rows[unique_defs[i]][2];
+        adc_defs[i].num_samples = (int)adc[0];
+        adc_defs[i].dwell_time = (int)adc[1];
+        adc_defs[i].delay = (int)adc[2];
     }
     for (i = 0; i < num_rows; ++i)
     {
+        const float *adc = seq->adc_library[i];
         adc_table[i].id = event_table[i];
-        adc_table[i].freq_offset = params[i][0];
-        adc_table[i].phase_offset = params[i][1];
-        adc_table[i].phase_shape_id = (int)seq->adc_library[i][7];
+        adc_table[i].freq_offset = adc[5];  /* ppm resolved on the host (Hz)  */
+        adc_table[i].phase_offset = adc[6]; /* ppm resolved on the host (rad) */
+        adc_table[i].phase_shape_id = (int)adc[7];
     }
 
-    PULSEG_FREE(int_rows);
-    PULSEG_FREE(params);
     PULSEG_FREE(unique_defs);
     PULSEG_FREE(event_table);
     return num_unique;
 }
 
-/* ================================================================== */
-/*  Gradient shot indices                                             */
-/* ================================================================== */
-/*  Per-instance shape ids                                            */
-/* ================================================================== */
-
-/*
- * Record the pulseq shape each gradient instance plays.
- *
- * This used to also build a per-definition table of the distinct shapes and
- * hand each instance an ordinal into it, which is what capped a definition at
- * PULSEG_MAX_GRAD_SHOTS.  The id is carried directly now: the definition needs
- * no list, and nothing counts.
- */
 static int record_grad_shape_ids(
     const pulseq_file *seq,
     const pulseg_grad_definition *grad_defs,
@@ -1357,12 +1313,12 @@ int pulseg__get_unique_blocks(
     pulseg_block_table_element *tmp_blk_tab = NULL;
 
     int(*int_rows)[BLOCK_DEF_COLS] = NULL;
-    int *unique_defs = NULL;
-    int *event_table = NULL;
-    int *geometry_rows = NULL;
+    int(*key_rows)[BLOCK_KEY_COLS] = NULL;
     int *geometry_defs = NULL;
     int *geometry_of = NULL;
     int *def_map = NULL;
+    int *unique_defs = NULL;
+    int *event_table = NULL;
 
     pulseq_raw_block raw;
 
@@ -1470,6 +1426,11 @@ int pulseg__get_unique_blocks(
     if (seq->rf_library_size > 0)
     {
         num_unique_rf = deduplicate_rf_library(seq, tmp_rf_defs, tmp_rf_tab);
+        if (num_unique_rf < 0)
+        {
+            result = num_unique_rf;
+            goto fail;
+        }
         desc->num_unique_rfs = num_unique_rf;
         desc->rf_table_size = seq->rf_library_size;
         /* Neutral RF stats (flip angle, amplitudes, area, duration, isodelay,
@@ -1492,6 +1453,11 @@ int pulseg__get_unique_blocks(
     if (seq->grad_library_size > 0)
     {
         num_unique_grad = deduplicate_grad_library(seq, tmp_grad_defs, tmp_grad_tab);
+        if (num_unique_grad < 0)
+        {
+            result = num_unique_grad;
+            goto fail;
+        }
         desc->grad_table_size = seq->grad_library_size;
 
         desc->num_unique_grads = num_unique_grad;
@@ -1514,15 +1480,21 @@ int pulseg__get_unique_blocks(
     if (seq->adc_library_size > 0)
     {
         num_unique_adc = deduplicate_adc_library(seq, tmp_adc_defs, tmp_adc_tab);
+        if (num_unique_adc < 0)
+        {
+            result = num_unique_adc;
+            goto fail;
+        }
         desc->num_unique_adcs = num_unique_adc;
         desc->adc_table_size = seq->adc_library_size;
     }
 
     /* ---- step 2: block definition matrix ---- */
     int_rows = (int(*)[BLOCK_DEF_COLS])PULSEG_ALLOC(num_blocks * sizeof(*int_rows));
+    key_rows = (int(*)[BLOCK_KEY_COLS])PULSEG_ALLOC(num_blocks * sizeof(*key_rows));
     unique_defs = (int *)PULSEG_ALLOC(num_blocks * sizeof(int));
     event_table = (int *)PULSEG_ALLOC(num_blocks * sizeof(int));
-    if (!int_rows || !unique_defs || !event_table)
+    if (!int_rows || !key_rows || !unique_defs || !event_table)
         goto fail;
 
     for (n = 0; n < num_blocks; ++n)
@@ -1573,16 +1545,25 @@ int pulseg__get_unique_blocks(
         tmp_blk_tab[n].trid_set = seq->block_trid_set[n];
     }
 
-    /* step 3: dedup blocks */
+    /* step 3: the block definitions the cache holds */
     {
         int num_raw_defs, num_geometries, k, g, dense;
 
+        /* pypulseqpp's block definition answers what a position plays, and is
+         * deliberately blind to the digitiser: a position digitised two ways
+         * still repeats every shot rather than every pair, which is what its
+         * repetition is read off.  A pulse generator prepares the readout too,
+         * so here a definition is that one AND the ADC definition, and the
+         * published one is the geometry the two share. */
+        for (n = 0; n < num_blocks; ++n)
+        {
+            key_rows[n][0] = seq->block_definitions[n];
+            key_rows[n][1] = int_rows[n][5];
+        }
         num_raw_defs = pulseg__deduplicate_int_rows(
-            unique_defs,
-            event_table,
-            (const int *)int_rows,
-            num_blocks,
-            BLOCK_DEF_COLS);
+            unique_defs, event_table, (const int *)key_rows, num_blocks, BLOCK_KEY_COLS);
+        if (num_raw_defs <= 0)
+            goto fail;
         desc->num_blocks = num_blocks;
 
         /* A non-acquiring instance of an otherwise identical block -- a dummy
@@ -1590,24 +1571,21 @@ int pulseg__get_unique_blocks(
          * ADC" to every structural question asked of it.  Fold it into the
          * acquiring definition it stands in for.  The grouping runs over the
          * definitions, not the blocks, so it costs nothing at scan length. */
-        geometry_rows =
-            (int *)PULSEG_ALLOC((size_t)num_raw_defs * BLOCK_GEOMETRY_COLS * sizeof(int));
         geometry_defs = (int *)PULSEG_ALLOC((size_t)num_raw_defs * sizeof(int));
         geometry_of = (int *)PULSEG_ALLOC((size_t)num_raw_defs * sizeof(int));
         def_map = (int *)PULSEG_ALLOC((size_t)num_raw_defs * sizeof(int));
-        if (!geometry_rows || !geometry_defs || !geometry_of || !def_map)
+        if (!geometry_defs || !geometry_of || !def_map)
             goto fail;
 
+        /* The geometries are pypulseqpp's definitions, already dense and
+         * counted from 0, so grouping by them needs no second pass. */
+        num_geometries = 0;
         for (k = 0; k < num_raw_defs; ++k)
-            for (g = 0; g < BLOCK_GEOMETRY_COLS; ++g)
-                geometry_rows[k * BLOCK_GEOMETRY_COLS + g] = int_rows[unique_defs[k]][g];
-
-        num_geometries = pulseg__deduplicate_int_rows(
-            geometry_defs,
-            geometry_of,
-            geometry_rows,
-            num_raw_defs,
-            BLOCK_GEOMETRY_COLS);
+        {
+            geometry_of[k] = key_rows[unique_defs[k]][0];
+            if (geometry_of[k] >= num_geometries)
+                num_geometries = geometry_of[k] + 1;
+        }
 
         /* geometry_defs is reused as "an acquiring definition of this
          * geometry", -1 while none is known.  Where the geometry has several,
@@ -1619,7 +1597,7 @@ int pulseg__get_unique_blocks(
             geometry_defs[g] = -1;
         for (k = 0; k < num_raw_defs; ++k)
         {
-            if (int_rows[unique_defs[k]][5] < 0)
+            if (key_rows[unique_defs[k]][1] < 0)
                 continue;
             g = geometry_of[k];
             if (geometry_defs[g] == -1)
@@ -1629,7 +1607,7 @@ int pulseg__get_unique_blocks(
         for (k = 0; k < num_raw_defs; ++k)
         {
             def_map[k] = k;
-            if (int_rows[unique_defs[k]][5] >= 0)
+            if (key_rows[unique_defs[k]][1] >= 0)
                 continue;
             g = geometry_defs[geometry_of[k]];
             if (g >= 0)
@@ -1639,23 +1617,24 @@ int pulseg__get_unique_blocks(
         dense = 0;
         for (k = 0; k < num_raw_defs; ++k)
         {
+            const int rep = unique_defs[k];
             if (def_map[k] != k)
                 continue;
-            tmp_blk_defs[dense].id = unique_defs[k];
-            /* A pure delay's key carries no duration, so its definition
-             * takes the length the instance that introduced it waits; the
-             * block table carries what each instance waits. */
+            tmp_blk_defs[dense].id = rep;
+            /* A pure delay's definition carries no duration of its own, an
+             * interpreter setting what it waits at run time; it takes the
+             * length of the instance that introduced it, and the block table
+             * carries what each instance waits. */
             tmp_blk_defs[dense].duration_us =
-                (int_rows[unique_defs[k]][1] < 0 && int_rows[unique_defs[k]][2] < 0 &&
-                 int_rows[unique_defs[k]][3] < 0 && int_rows[unique_defs[k]][4] < 0 &&
-                 int_rows[unique_defs[k]][5] < 0)
-                ? tmp_blk_tab[unique_defs[k]].duration_us
-                : (int)(int_rows[unique_defs[k]][0] * desc->block_raster_us);
-            tmp_blk_defs[dense].rf_id = int_rows[unique_defs[k]][1];
-            tmp_blk_defs[dense].gx_id = int_rows[unique_defs[k]][2];
-            tmp_blk_defs[dense].gy_id = int_rows[unique_defs[k]][3];
-            tmp_blk_defs[dense].gz_id = int_rows[unique_defs[k]][4];
-            tmp_blk_defs[dense].adc_id = int_rows[unique_defs[k]][5];
+                (int_rows[rep][1] < 0 && int_rows[rep][2] < 0 && int_rows[rep][3] < 0 &&
+                 int_rows[rep][4] < 0 && int_rows[rep][5] < 0)
+                ? tmp_blk_tab[rep].duration_us
+                : (int)(int_rows[rep][0] * desc->block_raster_us);
+            tmp_blk_defs[dense].rf_id = int_rows[rep][1];
+            tmp_blk_defs[dense].gx_id = int_rows[rep][2];
+            tmp_blk_defs[dense].gy_id = int_rows[rep][3];
+            tmp_blk_defs[dense].gz_id = int_rows[rep][4];
+            tmp_blk_defs[dense].adc_id = int_rows[rep][5];
             geometry_of[k] = dense; /* reused as raw definition -> dense index */
             ++dense;
         }
@@ -1665,15 +1644,14 @@ int pulseg__get_unique_blocks(
             tmp_blk_tab[n].id = geometry_of[def_map[event_table[n]]];
     }
 
-    PULSEG_FREE(geometry_rows);
-    geometry_rows = NULL;
     PULSEG_FREE(geometry_defs);
     geometry_defs = NULL;
     PULSEG_FREE(geometry_of);
     geometry_of = NULL;
     PULSEG_FREE(def_map);
     def_map = NULL;
-
+    PULSEG_FREE(key_rows);
+    key_rows = NULL;
     PULSEG_FREE(int_rows);
     int_rows = NULL;
     PULSEG_FREE(unique_defs);
@@ -1818,17 +1796,17 @@ fail:
         PULSEG_FREE(tmp_blk_tab);
     if (int_rows)
         PULSEG_FREE(int_rows);
-    if (unique_defs)
-        PULSEG_FREE(unique_defs);
-    if (event_table)
-        PULSEG_FREE(event_table);
-    if (geometry_rows)
-        PULSEG_FREE(geometry_rows);
+    if (key_rows)
+        PULSEG_FREE(key_rows);
     if (geometry_defs)
         PULSEG_FREE(geometry_defs);
     if (geometry_of)
         PULSEG_FREE(geometry_of);
     if (def_map)
         PULSEG_FREE(def_map);
+    if (unique_defs)
+        PULSEG_FREE(unique_defs);
+    if (event_table)
+        PULSEG_FREE(event_table);
     return result;
 }
