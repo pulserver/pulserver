@@ -173,6 +173,21 @@ isocentre. The transmit sensitivities $s^+_c$ are the complex conjugates of the
 the models show none of the dielectric effects of a wavelength comparable to
 the head.
 
+A console given field maps takes the same coils from electromagnetic
+simulations of BrainWeb's head instead. mariepy, a port of MARIE 3.0, solves
+the head in a quadrature birdcage, whose two linear modes are the body coil's
+two channels, in the 8-channel coil and in the two arrays, and writes each
+channel's circular components $B^\pm_c = \mu_0 (H_x \pm j H_y)$ over the head,
+for the time dependence $e^{+j\omega t}$. With $B_0$ along $+z$, the part of a
+channel's field that rotates with the magnetization is half the complex
+conjugate of its $B^-_c$, and what it receives is weighted by the complex
+conjugate of its $B^+_c$: $s^+_c \propto \overline{B^-_c}$ and
+$s_c \propto \overline{B^+_c}$, scaled as the models' are. Outside the head
+each map takes the value of the nearest voxel inside it, and between voxels it
+is interpolated linearly. The maps show the dielectric effects the models do
+not; they are solved in BrainWeb's head alone, so such a console examines
+BrainWeb whatever the subject is called.
+
 Each transmit channel plays the pulse the cache holds for it, scaled at each
 isochromat by $s^+_c(\mathbf{r})$, and the channels' fields add. A pTx pulse
 holds one waveform per channel. A single-channel pulse plays on every channel,
@@ -180,6 +195,14 @@ weighted by its block's RF shim or, without one, by the coil's default shim,
 the unit weights that bring the channels into phase at the isocentre, where the
 pulse then has its nominal amplitude. A shim of another number of channels is
 refused.
+
+The maps' transmit coils come with the VOPs mariepy compresses from the same
+fields, and every design is made under those of the exam's transmit coil: its
+limits name the VOP file, the default shim, and the drive of every channel per
+hertz of a pulse's amplitude with which the channels' fields reach that
+amplitude at the isocentre, $2 / (\gamma \sum_c |B^-_c(\mathbf{0})|)$ in the
+maps' unit of drive. The IR cache then reports each subsequence's SAR against
+the reference pulse in that coil ({doc}`ir-cache`).
 
 {class}`~pulserver.virtual.BrainWeb` carries the field its own susceptibility
 adds to $B_0$. Its head is water, of volume susceptibility $-9.05$ ppm, in air

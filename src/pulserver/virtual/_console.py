@@ -34,10 +34,10 @@ class Console:
 
     A console lists a plugin's protocol, validates and generates designs with
     the text blocks the interpreter sends, starts an exam on a subject with
-    one of the virtual scanner's :data:`~pulserver.virtual.COILS`, and scans
-    a stored design on it. Images return as DICOM from the reconstruction
-    proxy at ``recon``, or from the plugins of ``recon_plugins`` run in this
-    process as the proxy runs them; with neither, a scan returns no images.
+    one of the virtual scanner's coils, and scans a stored design on it.
+    Images return as DICOM from the reconstruction proxy at ``recon``, or from
+    the plugins of ``recon_plugins`` run in this process as the proxy runs
+    them; with neither, a scan returns no images.
 
     Parameters
     ----------
@@ -61,6 +61,12 @@ class Console:
         Isochromat spacing of the phantom, in metres.
     coil
         Name of the coil an exam is started with unless it names another.
+    fields
+        Directory of the coils' field maps, ``<coil>.npz``, and of the VOPs of
+        those that transmit, ``<coil>_vops.npz``, as mariepy writes them for
+        BrainWeb's head. Every exam is then on BrainWeb, and every design is
+        made under the VOPs of the exam's transmit coil. Without it, the coils
+        are :data:`~pulserver.virtual.COILS`.
     speed
         Scan time elapsed per wall-clock second once the scan's simulation is
         far enough ahead of its clock; as fast as it is simulated without it.
@@ -77,10 +83,12 @@ class Console:
         push: str | None = None,
         spacing: float = 1e-3,
         coil: str = "body",
+        fields: Path | str | None = None,
         speed: float | None = None,
     ) -> None:
         from ..host._blocks import parse_limits
         from ..proxy import LocalReconstruction
+        from ._coils import coils
 
         if recon is not None and recon_plugins is not None:
             raise ValueError(
@@ -97,11 +105,13 @@ class Console:
         )
         self.push = push
         self.spacing = spacing
-        self.coil = _coil(coil)
         self.speed = speed
         self.field_t = float(parse_limits(limits)["B0"])
+        self.fields = None if fields is None else Path(fields)
+        self._coils = coils(self.fields, field_t=self.field_t)
+        self.coil = self._coil(coil)
         self.subject = ""
-        self.phantom = _subject_phantom("")
+        self.phantom = self._phantom("")
         # The exam's isochromats between its scans, and how many exams have
         # started, so that a scan hands back only those of the exam in progress.
         self._held = threading.Lock()
@@ -120,7 +130,7 @@ class Console:
             "call": call,
             "plugins": [str(directory) for directory in self.plugins],
             "plugin": plugin,
-            "limits": self.limits,
+            "limits": self._limits(),
             "store": str(self.store),
             "push": self.push,
             "input": block,
@@ -139,22 +149,21 @@ class Console:
 
     def coils(self) -> list[dict[str, Any]]:
         """Return each coil an exam can be started with: its ``name`` and its ``transmit`` and ``receive`` channels."""
-        from . import COILS
-
         return [
             {
                 "name": coil.name,
                 "transmit": coil.transmit_channels,
                 "receive": coil.receive_channels,
             }
-            for coil in COILS.values()
+            for coil in self._coils.values()
         ]
 
     def exam(self, subject: str, coil: str | None = None) -> list[bytes]:
         """Start an exam on the phantom ``subject`` names, in the coil ``coil`` names; return its three-plane localizer as DICOM files.
 
-        ``brainweb`` names BrainWeb's normal brain; any other subject, the
-        vials. Without ``coil``, the exam keeps the coil it had.
+        ``brainweb`` names BrainWeb's normal brain, and so does every subject
+        of a console with field maps; any other subject, the vials. Without
+        ``coil``, the exam keeps the coil it had.
 
         Raises
         ------
@@ -164,9 +173,9 @@ class Console:
         from ._localizer import localizer
 
         if coil is not None:
-            self.coil = _coil(coil)
+            self.coil = self._coil(coil)
         self.subject = subject
-        self.phantom = _subject_phantom(subject)
+        self.phantom = self._phantom(subject)
         with self._held:
             self._exams += 1
             self._isochromats = None
@@ -224,6 +233,30 @@ class Console:
             with self._held:
                 if exam == self._exams:
                     self._isochromats = isochromats
+
+    def _limits(self) -> str:
+        """Return the limits block of a design: the console's, with the VOP entries of the exam's coil."""
+        from ..host._blocks import format_limits, parse_limits
+
+        entries = self.coil.limits()
+        if not entries:
+            return self.limits
+        return format_limits({**parse_limits(self.limits), **entries})
+
+    def _coil(self, name: str) -> Any:
+        if name not in self._coils:
+            raise ValueError(
+                f"the virtual scanner's coils are {sorted(self._coils)}, not {name!r}"
+            )
+        return self._coils[name]
+
+    def _phantom(self, subject: str) -> Any:
+        from . import BrainWeb
+        from ._command import default_phantom
+
+        if self.fields is not None or subject.strip().lower() == "brainweb":
+            return BrainWeb()
+        return default_phantom()
 
     def _scan(
         self,
@@ -395,25 +428,6 @@ class _Cancelled(Exception):
     """A scan cancelled while its simulation is under way."""
 
 
-def _subject_phantom(subject: str) -> Any:
-    from . import BrainWeb
-    from ._command import default_phantom
-
-    if subject.strip().lower() == "brainweb":
-        return BrainWeb()
-    return default_phantom()
-
-
-def _coil(name: str) -> Any:
-    from . import COILS
-
-    if name not in COILS:
-        raise ValueError(
-            f"the virtual scanner's coils are {sorted(COILS)}, not {name!r}"
-        )
-    return COILS[name]
-
-
 def _dicom_bytes(dataset: Any) -> bytes:
     buffer = io.BytesIO()
     dataset.save_as(buffer, enforce_file_format=True)
@@ -515,6 +529,12 @@ def _parser() -> argparse.ArgumentParser:
         "--coil", default="body", help="coil an exam starts with unless it names one"
     )
     parser.add_argument(
+        "--fields",
+        type=Path,
+        help="directory of the coils' field maps and VOPs, solved in BrainWeb's "
+        "head, on which every exam then is; BART's coil models without it",
+    )
+    parser.add_argument(
         "--speed",
         type=float,
         help="scan time per second, once the simulation is far enough ahead; "
@@ -539,6 +559,7 @@ def main(argv: list[str] | None = None) -> int:
         push=args.push,
         spacing=1e-3 * args.spacing,
         coil=args.coil,
+        fields=args.fields,
         speed=args.speed,
     )
     with contextlib.suppress(KeyboardInterrupt):
