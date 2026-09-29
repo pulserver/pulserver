@@ -185,3 +185,39 @@ def test_each_played_gradient_carries_the_statistics_pypulseqpp_measures_for_it(
     np.testing.assert_array_equal(
         payload["grad_statistics"], by_id[[i - 1 for i in played]]
     )
+
+
+@pytest.mark.parametrize("name", fixtures())
+def test_the_definitions_are_the_ones_pypulseqpp_interned(name):
+    """The conversion takes the deduplication, it does not perform it again.
+
+    Every payload column of definitions partitions the played rows exactly as
+    ``Sequence.event_definitions`` partitions them, so a row the engine calls
+    a repeat of another is never split here, and two it tells apart are never
+    merged.
+    """
+    sequence = pp.Sequence()
+    sequence.read(FIXTURES / name, remove_duplicates=False)
+    payload = conversion_payload(sequence, pp.Opts())
+    interned = sequence.event_definitions()
+    blocks = sequence.libraries().blocks
+
+    # The engine's block table names its events in the file's order; the
+    # payload's prepends the duration, which is why the columns differ by one.
+    for column, published, taken in (
+        ((0,), interned.rf, payload["rf_definitions"]),
+        ((1, 2, 3), interned.gradient, payload["grad_definitions"]),
+        ((4,), interned.adc, payload["adc_definitions"]),
+    ):
+        played = sorted({int(v) for c in column for v in blocks[:, c]} - {0})
+        assert len(taken) == len(played)
+        engine = [int(published[old - 1]) for old in played]
+        assert _partition(engine) == _partition(list(taken))
+
+
+def _partition(labels):
+    """The labels as sets of the positions sharing one, however they are named."""
+    groups: dict[int, set[int]] = {}
+    for position, label in enumerate(labels):
+        groups.setdefault(label, set()).add(position)
+    return sorted(groups.values(), key=min)

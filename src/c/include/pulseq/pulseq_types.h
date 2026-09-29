@@ -364,6 +364,15 @@ typedef struct pulseq_file
      * s: pypulseqpp.calc_rf_power's energy over its peak power, both summed
      * over the transmit channels. NULL when not supplied. */
     PULSEQ_REAL *rf_b1sq_integral;
+    /* Per event, the definition it was deduplicated onto, counted from 0, as
+     * pypulseqpp's Sequence.event_definitions gives them; and per block, the
+     * one Sequence.block_definitions gives. Events sharing a definition play
+     * the same thing at different amplitudes, offsets or phases, so waveform
+     * memory is materialised once per definition. NULL when not supplied. */
+    int *rf_definitions;
+    int *grad_definitions;
+    int *adc_definitions;
+    int *block_definitions;
     int is_grad_library_parsed;
     int grad_library_size;
     PULSEQ_REAL (*grad_library)[7];
