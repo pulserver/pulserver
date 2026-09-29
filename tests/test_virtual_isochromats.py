@@ -187,19 +187,8 @@ def test_a_rotated_block_plays_its_gradients_along_the_rotated_axes():
 
 def test_a_rotated_gradient_steps_where_it_starts_and_ends_away_from_zero():
     """A step on one axis stays a step in the sum a rotation plays."""
-    step = pp.make_extended_trapezoid(
-        "x", times=np.array([0.0, 1e-3]), amplitudes=np.array([2e4, 2e4])
-    )
-    step.delay = 0.5e-3
-    ramp = pp.make_trapezoid("y", amplitude=1e4, rise_time=0.2e-3, flat_time=1.6e-3)
-    turn = pp.make_rotation(np.pi / 3)
-    seq = pp.Sequence(pp.Opts())
-    seq.add_block(step, ramp, turn, pp.make_delay(2.5e-3))
-    positions = RNG.uniform(-0.05, 0.05, size=(6, 3))
-    spins = Isochromats(positions)
-    spins.magnetization = [0.0, 1.0, 0.0]
-    design_samples(seq, spins)
-    area = np.array([2e4 * 1e-3, 1e4 * (0.2e-3 + 1.6e-3), 0.0])
+    step = np.array([[0.5e-3, 1.5e-3], [2e4, 2e4]])
+    ramp = np.array([[0.0, 0.2e-3, 1.8e-3, 2.0e-3], [0.0, 1e4, 1e4, 0.0]])
     matrix = np.array(
         [
             [np.cos(np.pi / 3), -np.sin(np.pi / 3), 0.0],
@@ -207,6 +196,11 @@ def test_a_rotated_gradient_steps_where_it_starts_and_ends_away_from_zero():
             [0.0, 0.0, 1.0],
         ]
     )
+    positions = RNG.uniform(-0.05, 0.05, size=(6, 3))
+    spins = Isochromats(positions)
+    spins.magnetization = [0.0, 1.0, 0.0]
+    spins.play(2.5e-3, gradients=[step, ramp, None], rotation=matrix)
+    area = np.array([2e4 * 1e-3, 1e4 * (0.2e-3 + 1.6e-3), 0.0])
     expected = 1j * np.exp(-2j * np.pi * positions @ (matrix @ area))
     m = spins.magnetization
     np.testing.assert_allclose(m[:, 0] + 1j * m[:, 1], expected, rtol=0, atol=1e-9)
