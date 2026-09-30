@@ -13,6 +13,8 @@ from typing import NamedTuple
 
 import numpy as np
 
+from .._accelerators import require
+
 #: Side, in m, of the cube centred on the isocentre that the unit field of view
 #: of BART's coil models is taken to span.
 MODEL_FOV = 0.256
@@ -265,18 +267,23 @@ def _isocentre(grid: _Grid) -> np.ndarray:
     return _trilinear(grid, np.zeros((1, 3)))[0]
 
 
-def _interpolated(grid: _Grid, points: np.ndarray, chunk: int = 1 << 16) -> np.ndarray:
-    """Return ``grid`` interpolated trilinearly at ``(n, 3)`` physical points; the edge value beyond it.
+def _interpolated(grid: _Grid, points: np.ndarray) -> np.ndarray:
+    """Return ``grid`` interpolated trilinearly at ``(n, 3)`` physical points, as :func:`_trilinear` interpolates it; the edge value beyond it.
 
     The result is complex128, as :class:`Isochromats` takes it,
     in a temporary file mapped into memory: its pages belong to the file,
     which the operating system writes back rather than holding in the
     process's memory. ``TMPDIR`` names where the file is made.
     """
-    points = np.asarray(points, dtype=float).reshape(-1, 3)
+    points = np.ascontiguousarray(np.asarray(points, dtype=float).reshape(-1, 3))
     out = _mapped((len(points), grid.values.shape[0]))
-    for start in range(0, len(points), chunk):
-        out[start : start + chunk] = _trilinear(grid, points[start : start + chunk])
+    require("bloch").trilinear(
+        grid.values,
+        np.asarray(grid.centre, dtype=float),
+        np.asarray(grid.step, dtype=float),
+        points,
+        out,
+    )
     return out
 
 

@@ -150,6 +150,37 @@ def test_a_region_keeps_the_isochromats_it_answers_for_from_their_positions_and_
 
 
 @pytest.mark.parametrize("spacing", [1e-3, 2e-3])
+def test_slabs_keep_in_order_the_isochromats_a_test_of_every_voxel_keeps(
+    model, made, spacing
+):
+    rng = np.random.default_rng(0)
+    model.fractions[...] = rng.uniform(size=model.fractions.shape) * (
+        rng.uniform(size=model.fractions.shape) < 0.5
+    )
+    # The model lies 83 to 90 mm along x and -72 to -69 mm along z. At 300 Hz
+    # off resonance, the first two slabs hold water two or three voxels thick
+    # and the third fat, which precesses 447 Hz lower at 3 T.
+    slabs = virtual.Slabs(
+        gradients=((1e4, 0.0, 0.0), (0.0, 0.0, 2e4), (1e4, 0.0, 0.0)),
+        bounds=((1145.0, 1172.0), (-1125.0, -1095.0), (698.0, 725.0)),
+    )
+    brain = virtual.BrainWeb(susceptibility=False)
+
+    brain.isochromats(spacing, field_t=3.0, off_resonance_hz=300.0, region=slabs)
+    brain.isochromats(
+        spacing, field_t=3.0, off_resonance_hz=300.0, region=lambda *at: slabs(*at)
+    )
+    brain.isochromats(spacing, field_t=3.0, off_resonance_hz=300.0)
+
+    through_slabs, everywhere, whole = made
+    assert 0 < len(through_slabs.positions) < len(whole.positions)
+    for field in ("positions", "proton_density", "t1", "t2", "off_resonance"):
+        np.testing.assert_array_equal(
+            getattr(through_slabs, field), getattr(everywhere, field)
+        )
+
+
+@pytest.mark.parametrize("spacing", [1e-3, 2e-3])
 def test_a_count_is_how_many_isochromats_the_brain_is_sampled_as(model, made, spacing):
     model.fractions[1:3, 2:5, 3:8, GREY] = 0.4
     model.fractions[0:3, 1:4, 2:6, FAT] = 0.6

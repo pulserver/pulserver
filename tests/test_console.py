@@ -115,6 +115,34 @@ def test_the_subject_brainweb_starts_an_exam_on_brainweb(tmp_path, monkeypatch):
     assert isinstance(console.phantom, virtual.BrainWeb)
 
 
+def test_a_console_loads_brainweb_once_and_computes_its_field_after_the_localizer(
+    tmp_path, monkeypatch
+):
+    fractions = np.zeros((4, 4, 4, 10), dtype=np.float32)
+    fractions[..., 3] = 1.0
+    loads = []
+
+    def get_mri(*args, **kwargs):
+        loads.append(args)
+        return fractions
+
+    monkeypatch.setitem(
+        sys.modules, "brainweb_dl", types.SimpleNamespace(get_mri=get_mri)
+    )
+    console = _console(tmp_path)
+
+    console.exam("brainweb")
+    brain = console.phantom
+    console._warming.join(timeout=60.0)
+    computed = "field_ppm" in vars(brain)
+    console.exam("vials")
+    console.exam("brainweb")
+
+    assert computed
+    assert console.phantom is brain
+    assert len(loads) == 1
+
+
 @pytest.fixture
 def brainweb(monkeypatch):
     """BrainWeb's model, empty, in place of the one brainweb-dl downloads."""

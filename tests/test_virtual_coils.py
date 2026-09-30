@@ -94,6 +94,21 @@ def test_sensitivities_are_interpolated_linearly_and_held_beyond_the_grid(modell
     np.testing.assert_allclose(beyond, maps[:, -1, centre, centre], rtol=1e-6)
 
 
+@pytest.mark.parametrize("model", [("HEAD_3D_64CH", 32), ("HEAD_2D_8CH", 8)])
+def test_sensitivities_are_the_trilinear_interpolation_of_their_grid_to_the_bit(
+    modelled, model
+):
+    grid = _coils._receive(model)
+    rng = np.random.default_rng(3)
+    points = np.concatenate(
+        [rng.uniform(-_coils.MODEL_FOV, _coils.MODEL_FOV, (500, 3)), np.zeros((1, 3))]
+    )
+
+    np.testing.assert_array_equal(
+        _coils._interpolated(grid, points), _coils._trilinear(grid, points)
+    )
+
+
 def test_sensitivities_are_complex128_in_a_file_mapped_into_memory(modelled):
     head8 = virtual.COILS["head8/head32"]
     points = np.array([[0.01, -0.03, 0.02], [0.05, 0.04, -0.06]])

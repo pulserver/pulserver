@@ -1154,12 +1154,23 @@ namespace bloch
         IsochromatProperties& p = properties_;
         receive_re_.resize(count_ * p.coils);
         receive_im_.resize(count_ * p.coils);
-        for (size_t i = 0; i < count_; ++i)
-            for (size_t c = 0; c < p.coils; ++c)
+        const std::complex<double>* given = p.receive;
+        const size_t coils = p.coils;
+        /* A block of isochromats at a time, so that the rows it reads stay
+         * in cache while each coil's column is written. */
+        constexpr size_t kBlock = 128;
+        parallel(count_, threads_, kChunk, [&](size_t, size_t first, size_t last) {
+            for (size_t block = first; block < last; block += kBlock)
             {
-                receive_re_[c * count_ + i] = p.receive[i * p.coils + c].real();
-                receive_im_[c * count_ + i] = p.receive[i * p.coils + c].imag();
+                const size_t end = std::min(last, block + kBlock);
+                for (size_t c = 0; c < coils; ++c)
+                    for (size_t i = block; i < end; ++i)
+                    {
+                        receive_re_[c * count_ + i] = given[i * coils + c].real();
+                        receive_im_[c * count_ + i] = given[i * coils + c].imag();
+                    }
             }
+        });
         p.receive = nullptr;
     }
 
