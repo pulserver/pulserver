@@ -72,6 +72,25 @@ def test_the_check_limits_are_read_apart_from_the_scanner_limits():
     )
 
 
+def test_a_rheobase_per_axis_reaches_the_model_axis_by_axis():
+    """A gradient coil whose axes stimulate differently says so per axis.
+
+    Folded to one value the check costs every axis as the one that stimulates
+    most, and refuses sequences the hardware plays.
+    """
+    _, _, checked = split_limits(
+        {
+            **SCANNER,
+            "pns_chronaxie": 360e-6,
+            "pns_rheobase": "20.0 22.5 18.0",
+            "pns_alpha": "0.324 0.33 0.31",
+        }
+    )
+    assert checked.pns == safety.ChronaxieModel(
+        360e-6, (20.0, 22.5, 18.0), (0.324, 0.33, 0.31)
+    )
+
+
 def test_a_vop_file_alone_is_read_with_a_unit_drive_and_equal_weights():
     assert check_limits({"vop_file": "/data/vops.mat"}) == ir.CheckLimits(
         vops=Path("/data/vops.mat")
@@ -243,6 +262,10 @@ def test_a_safe_model_is_read_for_every_axis_as_pypulseqpp_takes_it():
         ({**_safe_model(), "pns_chronaxie": 360e-6, "pns_rheobase": 20}, "not both"),
         ({k: v for k, v in _safe_model().items() if k != "pns_z_tau3"}, "pns_z_tau3"),
         ({"pns_chronaxie": 360e-6, "pns_rheobase": 20, "pns_limit": 0}, "positive"),
+        (
+            {"pns_chronaxie": 360e-6, "pns_rheobase": "20 22"},
+            "one value or one per physical axis",
+        ),
         ({"forbidden_band_1": "w 590 650"}, "forbidden band"),
         ({"forbidden_band_1": "x 590"}, "forbidden band"),
         ({"forbidden_band_1": "x 590 high"}, "forbidden band"),

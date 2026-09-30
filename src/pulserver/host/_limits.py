@@ -29,6 +29,10 @@ _CHRONAXIE = {
     "pns_rheobase": "rheobase",
     "pns_alpha": "alpha",
 }
+#: The chronaxie coefficients that are one value for the whole coil. The
+#: chronaxie sets the kernel's shape, which is shared; the rest say how much
+#: stimulation a given slew produces, which an axis states for itself.
+_SHARED = ("chronaxie",)
 _SAFE = re.compile(r"pns_([xyz])_(a[123]|tau[123]|stim_limit|g_scale)")
 _BAND = re.compile(r"forbidden_band_\d+")
 _VOP = ("vop_file", "vop_drive_per_hz", "vop_default_shim")
@@ -154,7 +158,9 @@ def check_limits(limits: Mapping[str, Any]) -> ir.CheckLimits:
     """Read the nerve and resonance limits and the VOP entries among a call's limits.
 
     - ``pns_chronaxie`` (s), ``pns_rheobase`` (T/m/s) and optionally
-      ``pns_alpha`` give a chronaxie nerve model; ``pns_<axis>_<field>``, for
+      ``pns_alpha`` give a chronaxie nerve model. The chronaxie is one value;
+      the rheobase and the alpha are one value, used for every axis, or three
+      separated by spaces, one per physical axis. ``pns_<axis>_<field>``, for
       the axes ``x``, ``y`` and ``z`` and the fields of a SAFE description
       (``a1``-``a3``, ``tau1``-``tau3`` in ms, ``stim_limit`` in T/m/s,
       ``g_scale``), give a SAFE one. ``pns_limit`` is the largest response
@@ -208,7 +214,9 @@ def check_limits(limits: Mapping[str, Any]) -> ir.CheckLimits:
 
 def _nerve_model(limits: Mapping[str, Any]) -> Any:
     chronaxie = {
-        name: float(limits[k]) for k, name in _CHRONAXIE.items() if k in limits
+        name: float(limits[k]) if name in _SHARED else _one_or_per_axis(k, limits[k])
+        for k, name in _CHRONAXIE.items()
+        if k in limits
     }
     safe = [_SAFE.fullmatch(k) for k in limits]
     safe = {m.groups(): float(limits[m.group(0)]) for m in safe if m}
@@ -233,6 +241,16 @@ def _nerve_model(limits: Mapping[str, Any]) -> Any:
             }
         )
     return None
+
+
+def _one_or_per_axis(key: str, value: Any) -> float | tuple[float, float, float]:
+    """Read a nerve coefficient given as one value or as one per physical axis."""
+    values = [float(v) for v in str(value).split()]
+    if len(values) == 1:
+        return values[0]
+    if len(values) == 3:
+        return (values[0], values[1], values[2])
+    raise ValueError(f"{key} is one value or one per physical axis: {value!r}")
 
 
 def _shim(text: str) -> tuple[complex, ...]:

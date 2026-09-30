@@ -118,7 +118,7 @@ the gradient heating.
 
 | Limit | Meaning |
 | --- | --- |
-| `pns_chronaxie`, `pns_rheobase`, `pns_alpha` | Chronaxie nerve model: chronaxie in s, rheobase in T/m/s, `alpha` 1 when left out |
+| `pns_chronaxie`, `pns_rheobase`, `pns_alpha` | Chronaxie nerve model: chronaxie in s, rheobase in T/m/s, `alpha` 1 when left out. The rheobase and the alpha are one value or three separated by spaces, one per physical axis |
 | `pns_<axis>_<field>` | SAFE nerve model, for the axes `x`, `y` and `z` and the fields `a1` to `a3`, `tau1` to `tau3` in ms, `stim_limit` in T/m/s and `g_scale` |
 | `pns_limit` | Largest PNS response allowed, as a fraction of the model's threshold; 1 when left out |
 | `forbidden_band_<n>` | One forbidden band: its physical axis (`x`, `y`, `z` or `all`), its lowest and highest frequency in Hz and, optionally, the largest amplitude allowed in it in mT/m, separated by spaces |
