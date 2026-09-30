@@ -114,6 +114,21 @@ class ReconResult:
     dicom: bool = False
 
 
+#: What a calibration scan leaves in the exam cache for the series that follow.
+#:
+#: A map is measured once and read by every later series of the exam, so the
+#: two have to mean the same thing by it. These are the names they agree on;
+#: a plugin storing a map under one of its own is storing it for itself alone.
+#:
+#: ``B0_MAP`` is off-resonance in Hz, ``B1_MAP`` the transmit field as a
+#: fraction of what was asked for, and ``COIL_SENSITIVITIES`` the receive
+#: sensitivity of each coil. Each is stored in the frame it was measured in;
+#: a series at another prescription resamples it.
+B0_MAP = "b0_map"
+B1_MAP = "b1_map"
+COIL_SENSITIVITIES = "coil_sensitivities"
+
+
 class ExamCache(MutableMapping[Hashable, Any]):
     """Thread-safe store of artifacts shared by the series of one exam.
 

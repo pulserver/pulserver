@@ -2,6 +2,9 @@
 
 from ._loader import load_plugin
 from .plugin import (
+    B0_MAP,
+    B1_MAP,
+    COIL_SENSITIVITIES,
     ExamCache,
     Gadget,
     ReconBuffer,
@@ -12,6 +15,9 @@ from .plugin import (
 )
 
 __all__ = [
+    "B0_MAP",
+    "B1_MAP",
+    "COIL_SENSITIVITIES",
     "ExamCache",
     "Gadget",
     "ReconBuffer",
