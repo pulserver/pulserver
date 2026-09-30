@@ -502,8 +502,13 @@ class _Remote:
         header: Any,
         plugin: str,
         items: Iterator[Any],
+        motion_corrected: bool = False,  # noqa: ARG002 -- the server's to honour
     ) -> None:
         """Stream the series ``items`` carries to the server and its outputs back.
+
+        A series whose scan is corrected while it plays is not held apart here:
+        the server that reconstructs it decides what may run beside it, and it
+        is the one that would publish a pose.
 
         The client's config text is not forwarded: the server is told the
         configured name, or else ``plugin``.
