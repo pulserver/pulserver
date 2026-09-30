@@ -28,4 +28,5 @@
 
    ~Isochromats.coils
    ~Isochromats.elapsed
+   ~Isochromats.lattice_windows
    ~Isochromats.magnetization

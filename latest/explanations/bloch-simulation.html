@@ -601,9 +601,10 @@ cost nothing per isochromat.</p>
 each coil’s sample is its sensitivity times <span class="math notranslate nohighlight">\(M_{xy}\)</span> summed over every
 isochromat, at a cost proportional to the isochromats, the coils and the
 samples. The engine forms these sums over tiles of isochromats in independent
-partial sums, four coils at a time, with AVX2 and FMA instructions on
-processors that have them. The order of the additions, and with it the
-rounding of a sample, depends on the processor and on the number of threads.</p>
+partial sums, four samples at a time, with AVX-512, or AVX2 and FMA,
+instructions on processors that have them. The order of the additions, and
+with it the rounding of a sample, depends on the processor and on the number
+of threads.</p>
 <p>When the gradient area and the time from one sample to the next are the same
 throughout the window, as under a gradient held over it, isochromat <span class="math notranslate nohighlight">\(j\)</span> turns
 by the same factor at every sample, and sample <span class="math notranslate nohighlight">\(k\)</span> of coil <span class="math notranslate nohighlight">\(c\)</span> is</p>
@@ -622,9 +623,49 @@ exponential-of-semicircle kernel of Barnett, Magland and af Klinteberg (SIAM J
 Sci Comput 2019), 13 grid points wide, transforms the grid and divides out the
 kernel’s transform. The samples agree with the sums to within about
 <span class="math notranslate nohighlight">\(10^{-13}\)</span> of <span class="math notranslate nohighlight">\(\sum_j |R_{jc}\,M_{xy,j}|\)</span>, at a cost proportional to the
-isochromats, the kernel’s width and the coils rather than to the samples. A
+isochromats, the kernel’s width and the coils rather than to the samples;
+played to a tolerance, the kernel is the narrowest that holds it. A
 window is read this way where that costs less than turning every isochromat at
 every sample and the isochromats hold at most 32 values of <span class="math notranslate nohighlight">\(T_2\)</span>.</p>
+<p>When the gradient changes during the window, as on a spiral or on the ramps of
+a readout, the sample at time <span class="math notranslate nohighlight">\(t\)</span> from the first is</p>
+<div class="math notranslate nohighlight">
+\[
+s_c(t) = \sum_j R_{jc}\,M_{xy,j}\,e^{-2\pi i\,\mathbf{k}(t)\cdot\mathbf{r}_j}\,e^{-z_j t},
+\qquad
+z_j = 1/T_{2,j} + 2\pi i\,\Delta f_j,
+\]</div>
+<p>with <span class="math notranslate nohighlight">\(\mathbf{k}(t)\)</span> the gradient area from the first sample. The engine reads
+such a window to within a tolerance <span class="math notranslate nohighlight">\(\varepsilon\)</span> of the sum of the magnitudes
+of the terms a sample sums: the one the window is played to, or <span class="math notranslate nohighlight">\(10^{-11}\)</span> at
+zero. Where the isochromats lie on a lattice, to within <span class="math notranslate nohighlight">\(10^{-6}\)</span> of its
+spacing, along each axis <span class="math notranslate nohighlight">\(\mathbf{k}\)</span> moves along, those at one lattice point
+<span class="math notranslate nohighlight">\(\mathbf{r}_q\)</span> share <span class="math notranslate nohighlight">\(e^{-2\pi i\,\mathbf{k}\cdot\mathbf{r}_q}\)</span>. Along an axis
+on which <span class="math notranslate nohighlight">\(\mathbf{k}\)</span> stays so close to zero that the phase it adds across the
+isochromats stays within <span class="math notranslate nohighlight">\(\varepsilon/8\)</span>, as through a slice, the positions
+are taken at their middle. Around the middle <span class="math notranslate nohighlight">\(\bar z\)</span> of the rates,
+<span class="math notranslate nohighlight">\(e^{-z_j t}\)</span> is interpolated between <span class="math notranslate nohighlight">\(L\)</span> Chebyshev points <span class="math notranslate nohighlight">\(t_l\)</span> of the window,
+with Lagrange basis <span class="math notranslate nohighlight">\(B_l\)</span>:</p>
+<div class="math notranslate nohighlight">
+\[
+s_c(t) \approx e^{-\bar z t} \sum_{l=1}^{L} B_l(t)
+\sum_q e^{-2\pi i\,\mathbf{k}(t)\cdot\mathbf{r}_q}\,S_{cl}(q),
+\qquad
+S_{cl}(q) = \sum_{j \in q} R_{jc}\,M_{xy,j}\,e^{-(z_j - \bar z)\,t_l}.
+\]</div>
+<p>The lattice sums <span class="math notranslate nohighlight">\(S_{cl}(q)\)</span> are exact. The sum over the lattice at each
+sample’s <span class="math notranslate nohighlight">\(\mathbf{k}\)</span> is a type-2 non-uniform FFT, which FINUFFT (Barnett,
+Magland and af Klinteberg, SIAM J Sci Comput 2019) computes for every coil and
+Chebyshev point. <span class="math notranslate nohighlight">\(L\)</span> is the fewest points that interpolate <span class="math notranslate nohighlight">\(e^{-zt}\)</span> to within
+<span class="math notranslate nohighlight">\(\varepsilon/4\)</span> for every rate on the boundary of the rectangle the rates
+span, where the error of the interpolation is largest. FINUFFT is given
+<span class="math notranslate nohighlight">\(\varepsilon/4\)</span> divided by the Lebesgue constant of the points and by the most
+the sums grow over the window from the middle rate, and works in single
+precision where that lies above <span class="math notranslate nohighlight">\(2 \times 10^{-6}\)</span>. The cost is proportional
+to the isochromats times the coils and <span class="math notranslate nohighlight">\(L\)</span>, and to the coils times <span class="math notranslate nohighlight">\(L\)</span> times
+the lattice points, rather than to the isochromats times the coils and the
+samples; a window is read this way where that costs less. Either way, the
+window leaves each isochromat as it stands at the last sample.</p>
 </section>
 <section id="rf-pulses">
 <h2>RF pulses<a class="headerlink" href="#rf-pulses" title="Link to this heading">#</a></h2>

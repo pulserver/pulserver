@@ -559,7 +559,14 @@ window under a gradient held throughout it is read by a non-uniform FFT
 of the isochromats of each T2, to within about <code class="docutils literal notranslate"><span class="pre">1e-13</span></code> of the sum of
 the magnitudes of their transverse magnetisations times their receive
 sensitivities, wherever that costs less than turning every isochromat at
-every sample.</p>
+every sample. A window under any other gradient whose k moves along axes
+on which the isochromats lie on a lattice is read by FINUFFT, wherever
+that costs less: each isochromat’s value is summed onto its lattice point
+for each coil and each of a few Chebyshev points across the window,
+between which its decay and precession are interpolated, and the lattice
+is transformed to each sample’s k, to within about <code class="docutils literal notranslate"><span class="pre">1e-11</span></code> of the sum of
+the magnitudes of the terms each sample sums. <a class="reference internal" href="pulserver.virtual.Isochromats.play.html#pulserver.virtual.Isochromats.play" title="pulserver.virtual.Isochromats.play"><code class="xref py py-meth docutils literal notranslate"><span class="pre">play()</span></code></a> reads either to
+within a tolerance instead where given one.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
@@ -628,7 +635,10 @@ to <code class="docutils literal notranslate"><span class="pre">+y</span></code>
 <tr class="row-even"><td><p><a class="reference internal" href="pulserver.virtual.Isochromats.elapsed.html#pulserver.virtual.Isochromats.elapsed" title="pulserver.virtual.Isochromats.elapsed"><code class="xref py py-obj docutils literal notranslate"><span class="pre">elapsed</span></code></a></p></td>
 <td><p>Time played since construction or the last <code class="xref py py-meth docutils literal notranslate"><span class="pre">reset()</span></code>, in s.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.virtual.Isochromats.magnetization.html#pulserver.virtual.Isochromats.magnetization" title="pulserver.virtual.Isochromats.magnetization"><code class="xref py py-obj docutils literal notranslate"><span class="pre">magnetization</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.virtual.Isochromats.lattice_windows.html#pulserver.virtual.Isochromats.lattice_windows" title="pulserver.virtual.Isochromats.lattice_windows"><code class="xref py py-obj docutils literal notranslate"><span class="pre">lattice_windows</span></code></a></p></td>
+<td><p>ADC windows read on a lattice by FINUFFT since construction.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pulserver.virtual.Isochromats.magnetization.html#pulserver.virtual.Isochromats.magnetization" title="pulserver.virtual.Isochromats.magnetization"><code class="xref py py-obj docutils literal notranslate"><span class="pre">magnetization</span></code></a></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">(n,</span> <span class="pre">3)</span></code> magnetisation, a copy; assigning replaces it.</p></td>
 </tr>
 </tbody>

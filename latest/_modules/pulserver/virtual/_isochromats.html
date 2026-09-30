@@ -455,10 +455,13 @@
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
+<span class="kn">import</span><span class="w"> </span><span class="nn">functools</span>
+
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">pypulseqpp</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pp</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">.._accelerators</span><span class="w"> </span><span class="kn">import</span> <span class="n">require</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.</span><span class="w"> </span><span class="kn">import</span> <span class="n">_finufft</span>
 
 <span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"Isochromats"</span><span class="p">,</span> <span class="s2">"Repetitions"</span><span class="p">]</span>
 
@@ -467,8 +470,11 @@
 <span class="n">MEMORY</span> <span class="o">=</span> <span class="mi">4</span> <span class="o">&lt;&lt;</span> <span class="mi">30</span>
 
 
+<span class="nd">@functools</span><span class="o">.</span><span class="n">cache</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">_kernels</span><span class="p">():</span>
-    <span class="k">return</span> <span class="n">require</span><span class="p">(</span><span class="s2">"bloch"</span><span class="p">)</span>
+    <span class="n">kernels</span> <span class="o">=</span> <span class="n">require</span><span class="p">(</span><span class="s2">"bloch"</span><span class="p">)</span>
+    <span class="n">_finufft</span><span class="o">.</span><span class="n">install</span><span class="p">(</span><span class="n">kernels</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">kernels</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_per_isochromat</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">count</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
@@ -599,7 +605,14 @@
 <span class="sd">    of the isochromats of each T2, to within about ``1e-13`` of the sum of</span>
 <span class="sd">    the magnitudes of their transverse magnetisations times their receive</span>
 <span class="sd">    sensitivities, wherever that costs less than turning every isochromat at</span>
-<span class="sd">    every sample.</span>
+<span class="sd">    every sample. A window under any other gradient whose k moves along axes</span>
+<span class="sd">    on which the isochromats lie on a lattice is read by FINUFFT, wherever</span>
+<span class="sd">    that costs less: each isochromat's value is summed onto its lattice point</span>
+<span class="sd">    for each coil and each of a few Chebyshev points across the window,</span>
+<span class="sd">    between which its decay and precession are interpolated, and the lattice</span>
+<span class="sd">    is transformed to each sample's k, to within about ``1e-11`` of the sum of</span>
+<span class="sd">    the magnitudes of the terms each sample sums. :meth:`play` reads either to</span>
+<span class="sd">    within a tolerance instead where given one.</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
@@ -692,6 +705,11 @@
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_native</span><span class="o">.</span><span class="n">elapsed</span>
 
     <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">lattice_windows</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""ADC windows read on a lattice by FINUFFT since construction."""</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_native</span><span class="o">.</span><span class="n">lattice_windows</span>
+
+    <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">magnetization</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">"""``(n, 3)`` magnetisation, a copy; assigning replaces it."""</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_native</span><span class="o">.</span><span class="n">magnetization</span><span class="p">()</span>
@@ -719,6 +737,7 @@
         <span class="n">rf</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">adc</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">system</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">tolerance</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">"""Play one block's events and return what each coil receives at each ADC sample.</span>
 
@@ -759,6 +778,10 @@
 <span class="sd">            The RF raster, over whose steps an RF event with a time shape is</span>
 <span class="sd">            held, and the gamma and B0 the events' ppm offsets are resolved</span>
 <span class="sd">            at; the default system when None.</span>
+<span class="sd">        tolerance : float, default=0.0</span>
+<span class="sd">            Above zero, an ADC window read by a transform is read to within</span>
+<span class="sd">            it, relative to the sum of the magnitudes of the terms each sample</span>
+<span class="sd">            sums.</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
@@ -795,6 +818,7 @@
             <span class="n">step</span><span class="p">,</span>
             <span class="n">samples</span><span class="p">,</span>
             <span class="n">times</span><span class="p">,</span>
+            <span class="nb">float</span><span class="p">(</span><span class="n">tolerance</span><span class="p">),</span>
         <span class="p">)</span>
         <span class="k">return</span> <span class="n">signal</span> <span class="k">if</span> <span class="n">receiver</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">signal</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="mi">1</span><span class="n">j</span> <span class="o">*</span> <span class="n">receiver</span><span class="p">)</span></div>
 

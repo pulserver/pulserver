@@ -62,9 +62,10 @@ Within an ADC window the update is applied from one sample to the next, and
 each coil's sample is its sensitivity times $M_{xy}$ summed over every
 isochromat, at a cost proportional to the isochromats, the coils and the
 samples. The engine forms these sums over tiles of isochromats in independent
-partial sums, four coils at a time, with AVX2 and FMA instructions on
-processors that have them. The order of the additions, and with it the
-rounding of a sample, depends on the processor and on the number of threads.
+partial sums, four samples at a time, with AVX-512, or AVX2 and FMA,
+instructions on processors that have them. The order of the additions, and
+with it the rounding of a sample, depends on the processor and on the number
+of threads.
 
 When the gradient area and the time from one sample to the next are the same
 throughout the window, as under a gradient held over it, isochromat $j$ turns
@@ -85,9 +86,52 @@ exponential-of-semicircle kernel of Barnett, Magland and af Klinteberg (SIAM J
 Sci Comput 2019), 13 grid points wide, transforms the grid and divides out the
 kernel's transform. The samples agree with the sums to within about
 $10^{-13}$ of $\sum_j |R_{jc}\,M_{xy,j}|$, at a cost proportional to the
-isochromats, the kernel's width and the coils rather than to the samples. A
+isochromats, the kernel's width and the coils rather than to the samples;
+played to a tolerance, the kernel is the narrowest that holds it. A
 window is read this way where that costs less than turning every isochromat at
 every sample and the isochromats hold at most 32 values of $T_2$.
+
+When the gradient changes during the window, as on a spiral or on the ramps of
+a readout, the sample at time $t$ from the first is
+
+$$
+s_c(t) = \sum_j R_{jc}\,M_{xy,j}\,e^{-2\pi i\,\mathbf{k}(t)\cdot\mathbf{r}_j}\,e^{-z_j t},
+\qquad
+z_j = 1/T_{2,j} + 2\pi i\,\Delta f_j,
+$$
+
+with $\mathbf{k}(t)$ the gradient area from the first sample. The engine reads
+such a window to within a tolerance $\varepsilon$ of the sum of the magnitudes
+of the terms a sample sums: the one the window is played to, or $10^{-11}$ at
+zero. Where the isochromats lie on a lattice, to within $10^{-6}$ of its
+spacing, along each axis $\mathbf{k}$ moves along, those at one lattice point
+$\mathbf{r}_q$ share $e^{-2\pi i\,\mathbf{k}\cdot\mathbf{r}_q}$. Along an axis
+on which $\mathbf{k}$ stays so close to zero that the phase it adds across the
+isochromats stays within $\varepsilon/8$, as through a slice, the positions
+are taken at their middle. Around the middle $\bar z$ of the rates,
+$e^{-z_j t}$ is interpolated between $L$ Chebyshev points $t_l$ of the window,
+with Lagrange basis $B_l$:
+
+$$
+s_c(t) \approx e^{-\bar z t} \sum_{l=1}^{L} B_l(t)
+\sum_q e^{-2\pi i\,\mathbf{k}(t)\cdot\mathbf{r}_q}\,S_{cl}(q),
+\qquad
+S_{cl}(q) = \sum_{j \in q} R_{jc}\,M_{xy,j}\,e^{-(z_j - \bar z)\,t_l}.
+$$
+
+The lattice sums $S_{cl}(q)$ are exact. The sum over the lattice at each
+sample's $\mathbf{k}$ is a type-2 non-uniform FFT, which FINUFFT (Barnett,
+Magland and af Klinteberg, SIAM J Sci Comput 2019) computes for every coil and
+Chebyshev point. $L$ is the fewest points that interpolate $e^{-zt}$ to within
+$\varepsilon/4$ for every rate on the boundary of the rectangle the rates
+span, where the error of the interpolation is largest. FINUFFT is given
+$\varepsilon/4$ divided by the Lebesgue constant of the points and by the most
+the sums grow over the window from the middle rate, and works in single
+precision where that lies above $2 \times 10^{-6}$. The cost is proportional
+to the isochromats times the coils and $L$, and to the coils times $L$ times
+the lattice points, rather than to the isochromats times the coils and the
+samples; a window is read this way where that costs less. Either way, the
+window leaves each isochromat as it stands at the last sample.
 
 ## RF pulses
 
