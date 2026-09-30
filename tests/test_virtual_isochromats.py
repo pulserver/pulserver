@@ -636,8 +636,8 @@ def test_each_coil_receives_its_sensitivity_times_the_magnetisation():
 def test_many_coils_receive_their_sensitivities_times_the_magnetisation_at_each_sample(
     gradient,
 ):
-    # Coils beyond one block of the coil sum, and isochromats that fill no
-    # whole number of tiles.
+    # Coils beyond one block of the coil sum, and isochromats and samples
+    # that fill no whole number of tiles and of the coil sum's blocks.
     n, coils = 1003, 9
     positions = RNG.uniform(-0.05, 0.05, size=(n, 3))
     receive = RNG.normal(size=(n, coils)) + 1j * RNG.normal(size=(n, coils))
@@ -646,7 +646,7 @@ def test_many_coils_receive_their_sensitivities_times_the_magnetisation_at_each_
     start = RNG.normal(size=n) + 1j * RNG.normal(size=n)
     spins = Isochromats(positions, t2=t2, off_resonance=off_resonance, receive=receive)
     spins.magnetization = np.column_stack([start.real, start.imag, np.zeros(n)])
-    adc = np.linspace(0.1e-3, 1.9e-3, 12)
+    adc = np.linspace(0.1e-3, 1.9e-3, 13)
     signal = spins.play(2e-3, gradients=[gradient, None, None], adc=adc)
 
     areas = np.array([_area(*gradient, t) for t in adc])

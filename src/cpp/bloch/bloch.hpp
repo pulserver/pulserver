@@ -102,8 +102,8 @@ namespace bloch
      * the sum of their transverse magnetisations' magnitudes, where that
      * costs less than turning every isochromat at every sample. An ADC
      * sample's coil sums are formed in partial sums over blocks of coils, with
-     * AVX2 and FMA where the processor has them, so their rounding depends on
-     * the processor and the number of threads.
+     * AVX2 and FMA or AVX-512 where the processor has them, so their rounding
+     * depends on the processor and the number of threads.
      */
     class Isochromats
     {
