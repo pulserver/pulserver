@@ -66,7 +66,7 @@
     <link rel="canonical" href="https://pulserver.github.io/pulserver/latest/explanations/virtual-scanner.html" />
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Examples" href="../examples/index.html" />
+    <link rel="next" title="Bloch simulation on isochromats" href="bloch-simulation.html" />
     <link rel="prev" title="Raw-data enrichment and routing" href="reconstruction.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
@@ -256,6 +256,7 @@
 <li class="toctree-l2"><a class="reference internal" href="ir-cache.html">The scanner IR</a></li>
 <li class="toctree-l2"><a class="reference internal" href="reconstruction.html">Raw-data enrichment and routing</a></li>
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">The virtual scanner</a></li>
+<li class="toctree-l2"><a class="reference internal" href="bloch-simulation.html">Bloch simulation on isochromats</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../examples/index.html">Examples</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -690,15 +691,15 @@ excitation of its file acquires zeros.</p>
 <p>The signal model leaves out what an RF pulse does beyond an ideal excitation,
 refocusing or saturation, and what the magnetization does between them.
 <a class="reference internal" href="../generated/pulserver.virtual.simulate.html#pulserver.virtual.simulate" title="pulserver.virtual.simulate"><code class="xref py py-func docutils literal notranslate"><span class="pre">simulate()</span></code></a> plays the blocks
-<a class="reference internal" href="../generated/pulserver.ir.playout.html#pulserver.ir.playout" title="pulserver.ir.playout"><code class="xref py py-func docutils literal notranslate"><span class="pre">playout()</span></code></a> returns on isochromats instead, with
-pypulseqpp’s Bloch simulation (<a class="reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.Isochromats.html#pypulseqpp.Isochromats" title="(in pypulseqpp latest)"><code class="xref py py-class docutils literal notranslate"><span class="pre">pypulseqpp.Isochromats</span></code></a>): flip angles,
-slice profiles, relaxation and the coherences one repetition leaves to the next
-act as the Bloch equation gives them, and the magnetization is carried from
-each block to the next, across the files of a chain. Each block’s gradients are
-those of the played trajectory, turned by <span class="math notranslate nohighlight">\(R\)</span> except in blocks labelled
-<code class="docutils literal notranslate"><span class="pre">NOROT</span></code>. Its RF pulse and its ADC play as pypulseqpp plays the RF and ADC
-events of a Pulseq block, with the frequency and phase offsets the playout
-sets, and each sample is demodulated by <span class="math notranslate nohighlight">\(\exp(i\theta(t))\)</span> as above. A 90°
+<a class="reference internal" href="../generated/pulserver.ir.playout.html#pulserver.ir.playout" title="pulserver.ir.playout"><code class="xref py py-func docutils literal notranslate"><span class="pre">playout()</span></code></a> returns on isochromats instead
+(<a class="reference internal" href="../generated/pulserver.virtual.Isochromats.html#pulserver.virtual.Isochromats" title="pulserver.virtual.Isochromats"><code class="xref py py-class docutils literal notranslate"><span class="pre">Isochromats</span></code></a>, <a class="reference internal" href="bloch-simulation.html"><span class="doc">Bloch simulation on isochromats</span></a>): flip
+angles, slice profiles, relaxation and the coherences one repetition leaves to
+the next act as the Bloch equation gives them, and the magnetization is carried
+from each block to the next, across the files of a chain. Each block’s
+gradients are those of the played trajectory, turned by <span class="math notranslate nohighlight">\(R\)</span> except in blocks
+labelled <code class="docutils literal notranslate"><span class="pre">NOROT</span></code>. Its RF pulse and its ADC play as the RF and ADC events of a
+Pulseq block, with the frequency and phase offsets the playout sets, and each
+sample is demodulated by <span class="math notranslate nohighlight">\(\exp(i\theta(t))\)</span> as above. A 90°
 excitation of phase <span class="math notranslate nohighlight">\(\phi_e\)</span> leaves the magnetization at the phase
 <span class="math notranslate nohighlight">\(\pi/2 - \phi_e\)</span> of the signal model.</p>
 <p><a class="reference internal" href="../generated/pulserver.virtual.Phantom.isochromats.html#pulserver.virtual.Phantom.isochromats" title="pulserver.virtual.Phantom.isochromats"><code class="xref py py-meth docutils literal notranslate"><span class="pre">isochromats()</span></code></a> samples the phantom on a square
@@ -727,12 +728,13 @@ pulses tip into the transverse plane outside the slabs, such as the free
 induction decay of an imperfect refocusing pulse, is left out. The phantoms’
 <code class="docutils literal notranslate"><span class="pre">isochromats</span></code> keep those a region, such as <a class="reference internal" href="../generated/pulserver.virtual.Slabs.html#pulserver.virtual.Slabs" title="pulserver.virtual.Slabs"><code class="xref py py-class docutils literal notranslate"><span class="pre">Slabs</span></code></a>,
 answers for.</p>
-<p>The cache played on isochromats samples what pypulseqpp’s <code class="docutils literal notranslate"><span class="pre">Sequence.simulate</span></code>
-samples of the design, turned as the checks turn it, to the single precision
-of the cache’s waveforms. A gradient turned by a block’s rotation is stored as
-the rotation leaves it, in single precision, and in a sequence that leaves its
-transverse magnetization unspoiled from one repetition to the next, the phase
-that rounding accrues is what separates the two.</p>
+<p>Played on isochromats, the cache samples what the design samples when its
+blocks, turned as the checks turn it, are played one by one on the same
+isochromats with the gradients <code class="docutils literal notranslate"><span class="pre">pypulseqpp.Sequence.waveforms</span></code> reports, to the
+single precision of the cache’s waveforms. A gradient turned by a block’s
+rotation is stored as the rotation leaves it, in single precision, and in a
+sequence that leaves its transverse magnetization unspoiled from one repetition
+to the next, the phase that rounding accrues is what separates the two.</p>
 </section>
 <section id="coils-and-the-subject-s-field">
 <h2>Coils and the subject’s field<a class="headerlink" href="#coils-and-the-subject-s-field" title="Link to this heading">#</a></h2>
@@ -868,10 +870,10 @@ block can drop a corner a gradient holds twice, such as the peak of a trapezoid
 without a flat top, so the job turns a design’s gradients itself. The two
 simulations then differ only where the cache plays something other than the
 design, or by the rounding of the text format.</p>
-<p>The same job compares KomaMRI with pypulseqpp’s Bloch simulation. KomaMRI adds
-a pulse’s phase shape and phase offset to its field with the opposite sign to
-pypulseqpp, and refers the phase its frequency offset accrues to the pulse’s
-centre. It also joins a pulse’s samples linearly and takes the field at the
+<p>The same job compares KomaMRI with the virtual scanner’s Bloch simulation.
+KomaMRI adds a pulse’s phase shape and phase offset to its field with the
+opposite sign, and refers the phase its frequency offset accrues to the
+pulse’s centre (<a class="reference internal" href="bloch-simulation.html"><span class="doc">Bloch simulation on isochromats</span></a>). It also joins a pulse’s samples linearly and takes the field at the
 start of each time step, where the playout holds each sample of a pulse sampled
 at the middles of equal intervals over its interval; read as written, such a
 pulse would play half an interval late. The exported file is therefore
@@ -879,9 +881,9 @@ simulated a third time with each pulse rewritten in KomaMRI’s convention: its
 samples conjugated, each sample of a pulse sampled at the middles of equal
 intervals held from the start of its interval, and its phase offset <span class="math notranslate nohighlight">\(\phi\)</span>
 replaced by <span class="math notranslate nohighlight">\(-\phi - 2\pi f t_c\)</span>, for the frequency offset <span class="math notranslate nohighlight">\(f\)</span> and the centre
-<span class="math notranslate nohighlight">\(t_c\)</span>. KomaMRI then plays the field pypulseqpp plays. That signal, demodulated
-by the receiver phase the export returns, is compared with pypulseqpp’s
-simulation of the cache on the same spins.</p>
+<span class="math notranslate nohighlight">\(t_c\)</span>. KomaMRI then plays the field the virtual scanner plays. That signal,
+demodulated by the receiver phase the export returns, is compared with the
+virtual scanner’s simulation of the cache on the same spins.</p>
 </section>
 <section id="what-a-run-establishes">
 <h2>What a run establishes<a class="headerlink" href="#what-a-run-establishes" title="Link to this heading">#</a></h2>
@@ -898,8 +900,9 @@ spin echo as the design draws it.</p></li>
 accrues the phase its file’s excitation, refocusing and ADC timing give it,
 so the cache plays each echo as the design times it.</p></li>
 <li><p>Fat precesses at its chemical shift at the magnet’s field. A fat saturation
-leaves water and fat what pypulseqpp’s Bloch simulation of the designed
-pulse leaves them, and one converted at another field misses the fat.</p></li>
+leaves water and fat what pypulseqpp’s relaxation-free Bloch simulation of
+the designed pulse leaves them, and one converted at another field misses
+the fat.</p></li>
 <li><p>The enrichment states the trajectory of the identity, along the logical
 axes, for every readout.</p></li>
 <li><p>An object posed where an axial, an oblique or a reflected prescription
@@ -912,8 +915,8 @@ reflected prescription is reconstructed into the image of the phantom at the
 isocentre, and the image carries the prescribed centre and the columns of
 <span class="math notranslate nohighlight">\(R\)</span> as its read, phase and slice directions; a series short of a readout is
 refused.</p></li>
-<li><p>Played on isochromats, the cache of every fixture samples what pypulseqpp’s
-simulation of its design samples, under an axial, an oblique and a reflected
+<li><p>Played on isochromats, the cache of every fixture samples what its design’s
+blocks played one by one sample, under an axial, an oblique and a reflected
 prescription, with the magnetization carried across the files of a chain.</p></li>
 <li><p>The phantom sampled as isochromats, posed where an axial, an oblique or a
 reflected prescription places the field of view and scanned by a
@@ -940,7 +943,7 @@ axial, an oblique and a reflected prescription, and holds each RF pulse with
 the samples, offsets, centre and use of the design’s.</p></li>
 <li><p>In the scheduled KomaMRI job, the signal simulated from the exported file of
 every fixture and every shipped sequence is the one simulated from its
-design, to the rounding of the text format, and pypulseqpp’s Bloch
+design, to the rounding of the text format, and the virtual scanner’s Bloch
 simulation of the cache gives the signal KomaMRI simulates of the exported
 file in its own RF convention, to the difference of the two simulators’ time
 steps through an RF pulse.</p></li>
@@ -952,7 +955,7 @@ steps through an RF pulse.</p></li>
 <li><p><a class="reference internal" href="ir-cache.html"><span class="doc">The scanner IR</span></a> — the IR, its prescription and its playback.</p></li>
 <li><p><a class="reference internal" href="../user-guide/reconstruction-client.html"><span class="doc">Reconstruction clients</span></a> — the stream the virtual reconstruction client sends.</p></li>
 <li><p><a class="reference internal" href="../api/virtual.html"><span class="doc">Virtual scanner</span></a> — the phantom, the acquisition, the Bloch simulation, the scan clock, the client and the export.</p></li>
-<li><p><a class="reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.Isochromats.html#pypulseqpp.Isochromats" title="(in pypulseqpp latest)"><code class="xref py py-class docutils literal notranslate"><span class="pre">pypulseqpp.Isochromats</span></code></a> — the Bloch simulation the cache is played with, and how it plays each Pulseq event.</p></li>
+<li><p><a class="reference internal" href="bloch-simulation.html"><span class="doc">Bloch simulation on isochromats</span></a> — the Bloch simulation the cache is played with, and how it plays each Pulseq event.</p></li>
 </ul>
 </section>
 </section>
@@ -978,11 +981,11 @@ steps through an RF pulse.</p></li>
       </div>
     </a>
     <a class="right-next"
-       href="../examples/index.html"
+       href="bloch-simulation.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Examples</p>
+        <p class="prev-next-title">Bloch simulation on isochromats</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>

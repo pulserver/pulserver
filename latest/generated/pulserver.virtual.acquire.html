@@ -252,6 +252,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../explanations/ir-cache.html">The scanner IR</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../explanations/reconstruction.html">Raw-data enrichment and routing</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../explanations/virtual-scanner.html">The virtual scanner</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../explanations/bloch-simulation.html">Bloch simulation on isochromats</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../examples/index.html">Examples</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -546,7 +547,7 @@ accrues its phase from each excitation and a refocusing pulse negates
 what it has accrued. Excitation and refocusing pulses act ideally and on
 every shift alike; a saturation pulse scales the longitudinal
 magnetization of each shift by the z component the pulse the cache plays
-leaves at that frequency, in pypulseqpp’s Bloch simulation, and the next
+leaves at that frequency, in <code class="docutils literal notranslate"><span class="pre">pypulseqpp.sim_bloch</span></code>, and the next
 excitation tips what remains. No other pulse acts, and a readout before
 the first excitation of its file acquires zeros. The signal model is that
 of <a class="reference internal" href="../explanations/virtual-scanner.html"><span class="doc">The virtual scanner</span></a>.</p>

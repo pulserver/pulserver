@@ -249,6 +249,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../../../explanations/ir-cache.html">The scanner IR</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../explanations/reconstruction.html">Raw-data enrichment and routing</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../explanations/virtual-scanner.html">The virtual scanner</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/bloch-simulation.html">Bloch simulation on isochromats</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../examples/index.html">Examples</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -732,7 +733,7 @@
 <span class="k">def</span><span class="w"> </span><span class="nf">_interpolated</span><span class="p">(</span><span class="n">grid</span><span class="p">:</span> <span class="n">_Grid</span><span class="p">,</span> <span class="n">points</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">chunk</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">&lt;&lt;</span> <span class="mi">16</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Return ``grid`` interpolated trilinearly at ``(n, 3)`` physical points; the edge value beyond it.</span>
 
-<span class="sd">    The result is complex128, as :class:`pypulseqpp.Isochromats` takes it,</span>
+<span class="sd">    The result is complex128, as :class:`Isochromats` takes it,</span>
 <span class="sd">    in a temporary file mapped into memory: its pages belong to the file,</span>
 <span class="sd">    which the operating system writes back rather than holding in the</span>
 <span class="sd">    process's memory. ``TMPDIR`` names where the file is made.</span>

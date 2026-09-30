@@ -249,6 +249,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../../../explanations/ir-cache.html">The scanner IR</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../explanations/reconstruction.html">Raw-data enrichment and routing</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../explanations/virtual-scanner.html">The virtual scanner</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/bloch-simulation.html">Bloch simulation on isochromats</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../examples/index.html">Examples</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -450,7 +451,7 @@
                 <article class="bd-article">
                   
   <h1>Source code for pulserver.virtual._bloch</h1><div class="highlight"><pre>
-<span></span><span class="sd">"""The cache beside a sequence file played on isochromats, with pypulseqpp's Bloch simulation."""</span>
+<span></span><span class="sd">"""The cache beside a sequence file played on isochromats."""</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
@@ -460,16 +461,16 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">types</span><span class="w"> </span><span class="kn">import</span> <span class="n">SimpleNamespace</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">pypulseqpp</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pp</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">..</span><span class="w"> </span><span class="kn">import</span> <span class="n">ir</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">._isochromats</span><span class="w"> </span><span class="kn">import</span> <span class="n">Isochromats</span>
 
 
 <div class="viewcode-block" id="simulate">
 <a class="viewcode-back" href="../../../generated/pulserver.virtual.simulate.html#pulserver.virtual.simulate">[docs]</a>
 <span class="k">def</span><span class="w"> </span><span class="nf">simulate</span><span class="p">(</span>
     <span class="n">seq_path</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span><span class="p">,</span>
-    <span class="n">isochromats</span><span class="p">:</span> <span class="n">pp</span><span class="o">.</span><span class="n">Isochromats</span><span class="p">,</span>
+    <span class="n">isochromats</span><span class="p">:</span> <span class="n">Isochromats</span><span class="p">,</span>
     <span class="n">cache_ext</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">".pseg"</span><span class="p">,</span>
     <span class="o">*</span><span class="p">,</span>
     <span class="n">rotation</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -484,8 +485,8 @@
 <span class="sd">    one scan. Each block's gradients, its own rotation in them, are turned by</span>
 <span class="sd">    the prescription's ``rotation`` from logical to physical axes, a</span>
 <span class="sd">    reflection included, except in blocks labelled ``NOROT``. Its RF pulse</span>
-<span class="sd">    and ADC play as :meth:`pypulseqpp.Isochromats.play` plays RF and ADC</span>
-<span class="sd">    events, with the frequency and phase offsets the playout sets. With</span>
+<span class="sd">    and ADC play as :meth:`Isochromats.play` plays RF and ADC events, with</span>
+<span class="sd">    the frequency and phase offsets the playout sets. With</span>
 <span class="sd">    ``default_shim``, the channel weights of a coil of several transmit</span>
 <span class="sd">    channels, a single-channel pulse plays on every channel, weighted by its</span>
 <span class="sd">    block's RF shim or, without one, by ``default_shim``.</span>
@@ -516,7 +517,7 @@
 <span class="k">def</span><span class="w"> </span><span class="nf">_played</span><span class="p">(</span>
     <span class="n">played</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span>
     <span class="n">block</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
-    <span class="n">isochromats</span><span class="p">:</span> <span class="n">pp</span><span class="o">.</span><span class="n">Isochromats</span><span class="p">,</span>
+    <span class="n">isochromats</span><span class="p">:</span> <span class="n">Isochromats</span><span class="p">,</span>
     <span class="n">turn</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">drive</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">list</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>

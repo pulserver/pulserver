@@ -174,6 +174,8 @@ from.
    simulate
    excited
    Slabs
+   Isochromats
+   Repetitions
    Scan
    Chunk
    SAMPLE_RATE

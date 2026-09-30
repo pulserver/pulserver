@@ -249,6 +249,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../../../explanations/ir-cache.html">The scanner IR</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../explanations/reconstruction.html">Raw-data enrichment and routing</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../explanations/virtual-scanner.html">The virtual scanner</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/bloch-simulation.html">Bloch simulation on isochromats</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../examples/index.html">Examples</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -461,10 +462,10 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">types</span><span class="w"> </span><span class="kn">import</span> <span class="n">SimpleNamespace</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">pypulseqpp</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pp</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">..</span><span class="w"> </span><span class="kn">import</span> <span class="n">ir</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">._bloch</span><span class="w"> </span><span class="kn">import</span> <span class="n">_gradients</span><span class="p">,</span> <span class="n">_rf</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">._isochromats</span><span class="w"> </span><span class="kn">import</span> <span class="n">Isochromats</span>
 
 <span class="c1">#: Fraction of the largest change a pulse makes to the magnetization at rest</span>
 <span class="c1">#: below which a field is outside the slab it excites.</span>
@@ -607,7 +608,7 @@
     <span class="n">positions</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">outer</span><span class="p">(</span><span class="n">fields</span> <span class="o">/</span> <span class="n">strength</span><span class="p">,</span> <span class="n">gradient</span> <span class="o">/</span> <span class="n">strength</span><span class="p">)</span>
     <span class="n">changed</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">fields</span><span class="o">.</span><span class="n">size</span><span class="p">)</span>
     <span class="k">for</span> <span class="n">scale</span> <span class="ow">in</span> <span class="n">_SCALES</span><span class="p">:</span>
-        <span class="n">spins</span> <span class="o">=</span> <span class="n">pp</span><span class="o">.</span><span class="n">Isochromats</span><span class="p">(</span><span class="n">positions</span><span class="p">)</span>
+        <span class="n">spins</span> <span class="o">=</span> <span class="n">Isochromats</span><span class="p">(</span><span class="n">positions</span><span class="p">)</span>
         <span class="n">spins</span><span class="o">.</span><span class="n">play</span><span class="p">(</span>
             <span class="mf">1e-6</span> <span class="o">*</span> <span class="nb">float</span><span class="p">(</span><span class="n">played</span><span class="p">[</span><span class="s2">"duration_us"</span><span class="p">][</span><span class="n">block</span><span class="p">]),</span>
             <span class="n">gradients</span><span class="o">=</span><span class="n">_gradients</span><span class="p">(</span><span class="n">played</span><span class="p">,</span> <span class="n">block</span><span class="p">),</span>

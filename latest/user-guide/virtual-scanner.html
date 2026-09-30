@@ -256,6 +256,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../explanations/ir-cache.html">The scanner IR</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../explanations/reconstruction.html">Raw-data enrichment and routing</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../explanations/virtual-scanner.html">The virtual scanner</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../explanations/bloch-simulation.html">Bloch simulation on isochromats</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../examples/index.html">Examples</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -606,8 +607,8 @@ offsets of the design’s RF pulses at it when it builds the IR
 <h2>Simulate relaxation and the RF pulses<a class="headerlink" href="#simulate-relaxation-and-the-rf-pulses" title="Link to this heading">#</a></h2>
 <p>The analytic acquisition acts on the phantom’s density alone. For relaxation,
 flip angles and slice profiles, sample the phantom as isochromats and play the
-cache on them in pypulseqpp’s Bloch simulation; the readouts are sent as
-before:</p>
+cache on them (<a class="reference internal" href="../explanations/bloch-simulation.html"><span class="doc">Bloch simulation on isochromats</span></a>); the readouts are sent
+as before:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">tissue</span> <span class="o">=</span> <span class="n">virtual</span><span class="o">.</span><span class="n">Phantom</span><span class="p">(</span>
     <span class="p">[</span>
         <span class="n">virtual</span><span class="o">.</span><span class="n">Ellipse</span><span class="p">((</span><span class="mf">0.02</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">),</span> <span class="p">(</span><span class="mf">0.08</span><span class="p">,</span> <span class="mf">0.06</span><span class="p">),</span> <span class="n">t1</span><span class="o">=</span><span class="mf">0.9</span><span class="p">,</span> <span class="n">t2</span><span class="o">=</span><span class="mf">0.07</span><span class="p">),</span>

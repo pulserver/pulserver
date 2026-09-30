@@ -250,6 +250,7 @@
 <li class="toctree-l2"><a class="reference internal" href="explanations/ir-cache.html">The scanner IR</a></li>
 <li class="toctree-l2"><a class="reference internal" href="explanations/reconstruction.html">Raw-data enrichment and routing</a></li>
 <li class="toctree-l2"><a class="reference internal" href="explanations/virtual-scanner.html">The virtual scanner</a></li>
+<li class="toctree-l2"><a class="reference internal" href="explanations/bloch-simulation.html">Bloch simulation on isochromats</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="examples/index.html">Examples</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -864,6 +865,12 @@ from.</p>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.virtual.Slabs.html#pulserver.virtual.Slabs" title="pulserver.virtual.Slabs"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Slabs</span></code></a></p></td>
 <td><p>Slabs of the physical frame, each the isochromats that see a field within its bounds during a pulse.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.virtual.Isochromats.html#pulserver.virtual.Isochromats" title="pulserver.virtual.Isochromats"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Isochromats</span></code></a></p></td>
+<td><p>Isochromats, and the magnetisation the Bloch equation carries from one block to the next.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.virtual.Repetitions.html#pulserver.virtual.Repetitions" title="pulserver.virtual.Repetitions"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Repetitions</span></code></a></p></td>
+<td><p>Repetitions of a sequence of blocks, played in turn on isochromats.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.virtual.Scan.html#pulserver.virtual.Scan" title="pulserver.virtual.Scan"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Scan</span></code></a></p></td>
 <td><p>The cache beside a sequence file played on isochromats block by block, against a scan clock.</p></td>

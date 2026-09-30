@@ -1,0 +1,31 @@
+﻿Isochromats
+===========
+
+.. currentmodule:: pulserver.virtual
+
+.. autoclass:: Isochromats
+   :show-inheritance:
+
+
+
+.. rubric:: Methods
+
+.. autosummary::
+   :toctree:
+   :nosignatures:
+
+   ~Isochromats.play
+   ~Isochromats.repetitions
+   ~Isochromats.reset
+
+
+
+.. rubric:: Attributes
+
+.. autosummary::
+   :toctree:
+   :nosignatures:
+
+   ~Isochromats.coils
+   ~Isochromats.elapsed
+   ~Isochromats.magnetization

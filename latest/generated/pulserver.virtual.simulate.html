@@ -252,6 +252,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../explanations/ir-cache.html">The scanner IR</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../explanations/reconstruction.html">Raw-data enrichment and routing</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../explanations/virtual-scanner.html">The virtual scanner</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../explanations/bloch-simulation.html">Bloch simulation on isochromats</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../examples/index.html">Examples</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -540,8 +541,8 @@ the physical axes, from where it stands, across the files of a chain as
 one scan. Each block’s gradients, its own rotation in them, are turned by
 the prescription’s <code class="docutils literal notranslate"><span class="pre">rotation</span></code> from logical to physical axes, a
 reflection included, except in blocks labelled <code class="docutils literal notranslate"><span class="pre">NOROT</span></code>. Its RF pulse
-and ADC play as <a class="reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.Isochromats.play.html#pypulseqpp.Isochromats.play" title="(in pypulseqpp latest)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">pypulseqpp.Isochromats.play()</span></code></a> plays RF and ADC
-events, with the frequency and phase offsets the playout sets. With
+and ADC play as <a class="reference internal" href="pulserver.virtual.Isochromats.play.html#pulserver.virtual.Isochromats.play" title="pulserver.virtual.Isochromats.play"><code class="xref py py-meth docutils literal notranslate"><span class="pre">Isochromats.play()</span></code></a> plays RF and ADC events, with
+the frequency and phase offsets the playout sets. With
 <code class="docutils literal notranslate"><span class="pre">default_shim</span></code>, the channel weights of a coil of several transmit
 channels, a single-channel pulse plays on every channel, weighted by its
 block’s RF shim or, without one, by <code class="docutils literal notranslate"><span class="pre">default_shim</span></code>.</p>

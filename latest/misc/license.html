@@ -250,6 +250,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../explanations/ir-cache.html">The scanner IR</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../explanations/reconstruction.html">Raw-data enrichment and routing</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../explanations/virtual-scanner.html">The virtual scanner</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../explanations/bloch-simulation.html">Bloch simulation on isochromats</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../examples/index.html">Examples</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -519,7 +520,8 @@
 <h1>License and notices<a class="headerlink" href="#license-and-notices" title="Link to this heading">#</a></h1>
 <p>The pulserver package is distributed under the
 <a class="reference external" href="https://github.com/pulserver/pulserver/blob/main/LICENSE">MIT licence</a>.
-Modules adapted from third-party code keep their notices:</p>
+Modules adapted from third-party code, and code vendored unchanged, keep their
+notices:</p>
 <div class="pst-scrollable-table-container"><table class="table">
 <thead>
 <tr class="row-odd"><th class="head"><p>Component</p></th>
@@ -538,6 +540,11 @@ Modules adapted from third-party code keep their notices:</p>
 <td><p><code class="docutils literal notranslate"><span class="pre">pulserver.recon</span></code>: the message identifiers, the stream capture, the DICOM converter and the Cartesian FFT handler</p></td>
 <td><p>MIT</p></td>
 <td><p><a class="reference external" href="https://github.com/pulserver/pulserver/blob/main/LICENSES/python-ismrmrd-server-MIT.txt"><code class="docutils literal notranslate"><span class="pre">LICENSES/python-ismrmrd-server-MIT.txt</span></code></a></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference external" href="https://gitlab.mpcdf.mpg.de/mtr/pocketfft">pocketfft</a></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">pulserver.virtual</span></code>: the FFTs of the isochromat engine’s non-uniform FFT, vendored unchanged as <code class="docutils literal notranslate"><span class="pre">src/cpp/third_party/pocketfft_hdronly.h</span></code></p></td>
+<td><p>BSD 3-Clause</p></td>
+<td><p><a class="reference external" href="https://github.com/pulserver/pulserver/blob/main/LICENSES/pocketfft-BSD-3-Clause.txt"><code class="docutils literal notranslate"><span class="pre">LICENSES/pocketfft-BSD-3-Clause.txt</span></code></a></p></td>
 </tr>
 </tbody>
 </table>
