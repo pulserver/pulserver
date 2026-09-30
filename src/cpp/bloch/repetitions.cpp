@@ -736,6 +736,118 @@ namespace bloch
             return dropped;
         }
 
+        /** carry_packs over @p group packs, at most kInterleaved: together
+         *  where there are that many, one at a time otherwise. */
+        template <typename Real, size_t L, bool Offsets>
+        BLOCH_INLINE void carry_group(
+            Real* const* packs,
+            size_t group,
+            size_t count,
+            const Slots<Real>& s,
+            size_t windows,
+            const Real* turn_cos,
+            const Real* turn_sin,
+            typename Lanes<Real, L>::Vector* q)
+        {
+            if (group == kInterleaved)
+            {
+                carry_packs<Real, L, Offsets, kInterleaved>(
+                    packs, count, windows, s.u_at, s.u_width, turn_cos, turn_sin, q);
+                return;
+            }
+            for (size_t g = 0; g < group; ++g)
+                carry_packs<Real, L, Offsets, 1>(
+                    packs + g, count, windows, s.u_at, s.u_width, turn_cos, turn_sin, q + g * 2 * windows * kTile);
+        }
+
+        /** The coefficients of pack @p p's first @p lanes slots in one
+         *  window, @p coefficients as carry_packs leaves them, turned by each
+         *  slot's phase-encoding phase into @p e, [slot][Re, Im][part]. */
+        template <typename Real, size_t L>
+        BLOCH_INLINE void encode_pack(
+            const Encodings<Real>& encoding,
+            size_t count,
+            size_t p,
+            size_t lanes,
+            const typename Lanes<Real, L>::Vector* coefficients,
+            typename Lanes<Real, L>::Vector* e)
+        {
+            using Vector = typename Lanes<Real, L>::Vector;
+            constexpr size_t P = kTile / L;
+            for (size_t l = 0; l < lanes; ++l)
+            {
+                Vector er[P], ei[P];
+                for (size_t b = 0; b < P; ++b)
+                {
+                    er[b] = coefficients[b * L + l];
+                    ei[b] = coefficients[kTile + b * L + l];
+                }
+                encode_slot<Real, L>(encoding, count, p * L + l, er, ei);
+                for (size_t b = 0; b < P; ++b)
+                {
+                    e[2 * l * P + b] = er[b];
+                    e[(2 * l + 1) * P + b] = ei[b];
+                }
+            }
+        }
+
+        /** Where slot @p slot spreads in window @p w's part of a grid: at the
+         *  first coil of its T2 class and its first grid point; at the part's
+         *  start for a window of one sample. */
+        template <typename Real>
+        BLOCH_INLINE size_t grid_point(const Tile<Real>& tile, const Slots<Real>& s, size_t slot, size_t w)
+        {
+            const size_t cells = tile.cells[w];
+            if (cells == 0)
+                return 0;
+            return (s.decay[slot] * tile.coils * (cells + tile.taps) + s.start[slot * tile.windows + w]) * 2 * kTile;
+        }
+
+        /** Pack @p p's first @p lanes slots' encoded coefficients of window
+         *  @p w, @p e as encode_pack leaves them, spread onto @p grid a run of
+         *  slots on the same grid points at a time. */
+        template <typename Real, size_t L>
+        BLOCH_INLINE void spread_pack(
+            const Tile<Real>& tile,
+            const Slots<Real>& s,
+            size_t w,
+            size_t p,
+            size_t lanes,
+            const typename Lanes<Real, L>::Vector* e,
+            Real* grid,
+            typename Lanes<Real, L>::Vector* v)
+        {
+            constexpr size_t P = kTile / L;
+            const size_t W = tile.windows;
+            const size_t C = tile.coils;
+            const size_t taps = tile.taps;
+            const size_t cells = tile.cells[w];
+            size_t point[L];
+            for (size_t l = 0; l < lanes; ++l)
+                point[l] = grid_point(tile, s, p * L + l, w);
+            const size_t per_coil = cells == 0 ? 2 * kTile : (cells + taps) * 2 * kTile;
+            for (size_t l0 = 0; l0 < lanes;)
+            {
+                size_t l1 = l0 + 1;
+                while (l1 < lanes && point[l1] == point[l0])
+                    ++l1;
+                const size_t slot = p * L + l0;
+                spread_run<Real, L>(
+                    e + 2 * l0 * P,
+                    l1 - l0,
+                    &s.factor[(slot * W + w) * C * 2],
+                    W * C * 2,
+                    taps == 0 ? nullptr : &s.weight[(slot * W + w) * taps],
+                    W * taps,
+                    C,
+                    cells == 0 ? 0 : taps,
+                    per_coil,
+                    grid + tile.region[w] + point[l0],
+                    v);
+                l0 = l1;
+            }
+        }
+
         /** Carry packs @p first to @p last through the tile: each slot's
          *  coefficients spread onto @p grid, per window onto the grid points
          *  of its T2 and coil or summed without a kernel for a window of one
@@ -748,14 +860,8 @@ namespace bloch
         {
             using Vector = typename Lanes<Real, L>::Vector;
             constexpr size_t T = kTile;
-            constexpr size_t P = T / L;
             constexpr size_t G = kInterleaved;
             const size_t W = tile.windows;
-            const size_t C = tile.coils;
-            const size_t taps = tile.taps;
-            const size_t count = tile.count;
-            const size_t width = s.width;
-            const size_t size = s.size;
             Real turn_cos[kTile], turn_sin[kTile];
             std::copy(tile.turn_cos, tile.turn_cos + kTile, turn_cos);
             std::copy(tile.turn_sin, tile.turn_sin + kTile, turn_sin);
@@ -774,60 +880,15 @@ namespace bloch
                 const size_t group = std::min(G, last - p);
                 Real* packs[G];
                 for (size_t g = 0; g < group; ++g)
-                    packs[g] = s.pack.data() + (p + g) * width * L;
-                if (group == G)
-                    carry_packs<Real, L, Offsets, G>(packs, count, W, s.u_at, s.u_width, turn_cos, turn_sin, q);
-                else
-                    for (size_t g = 0; g < group; ++g)
-                        carry_packs<Real, L, Offsets, 1>(
-                            packs + g, count, W, s.u_at, s.u_width, turn_cos, turn_sin, q + g * 2 * W * T);
+                    packs[g] = s.pack.data() + (p + g) * s.width * L;
+                carry_group<Real, L, Offsets>(packs, group, tile.count, s, W, turn_cos, turn_sin, q);
                 for (size_t g = 0; g < group; ++g, ++p)
                 {
-                    const size_t lanes = std::min(L, size - p * L);
-                    const Vector* coefficients = q + g * 2 * W * T;
+                    const size_t lanes = std::min(L, s.size - p * L);
                     for (size_t w = 0; w < W; ++w)
                     {
-                        const size_t cells = tile.cells[w];
-                        size_t point[L];
-                        for (size_t l = 0; l < lanes; ++l)
-                        {
-                            const size_t slot = p * L + l;
-                            Vector er[P], ei[P];
-                            for (size_t b = 0; b < P; ++b)
-                            {
-                                er[b] = coefficients[2 * w * T + b * L + l];
-                                ei[b] = coefficients[(2 * w + 1) * T + b * L + l];
-                            }
-                            encode_slot<Real, L>(encoding[w], count, slot, er, ei);
-                            for (size_t b = 0; b < P; ++b)
-                            {
-                                e[2 * l * P + b] = er[b];
-                                e[(2 * l + 1) * P + b] = ei[b];
-                            }
-                            point[l] =
-                                cells == 0 ? 0 : (s.decay[slot] * C * (cells + taps) + s.start[slot * W + w]) * 2 * T;
-                        }
-                        const size_t per_coil = cells == 0 ? 2 * T : (cells + taps) * 2 * T;
-                        for (size_t l0 = 0; l0 < lanes;)
-                        {
-                            size_t l1 = l0 + 1;
-                            while (l1 < lanes && point[l1] == point[l0])
-                                ++l1;
-                            const size_t slot = p * L + l0;
-                            spread_run<Real, L>(
-                                e + 2 * l0 * P,
-                                l1 - l0,
-                                &s.factor[(slot * W + w) * C * 2],
-                                W * C * 2,
-                                taps == 0 ? nullptr : &s.weight[(slot * W + w) * taps],
-                                W * taps,
-                                C,
-                                cells == 0 ? 0 : taps,
-                                per_coil,
-                                grid + tile.region[w] + point[l0],
-                                v);
-                            l0 = l1;
-                        }
+                        encode_pack<Real, L>(encoding[w], tile.count, p, lanes, q + (g * W + w) * 2 * T, e);
+                        spread_pack<Real, L>(tile, s, w, p, lanes, e, grid, v);
                     }
                     if (tile.drop)
                         dropped += drop_pack(s, packs[g], lanes);
