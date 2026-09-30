@@ -808,6 +808,8 @@
         <span class="n">areas</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="o">*</span><span class="p">,</span>
         <span class="n">adc_phases</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">readouts</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">nets</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">system</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">tolerance</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Repetitions</span><span class="p">:</span>
@@ -816,9 +818,11 @@
 <span class="sd">        Repetition ``n`` plays ``blocks`` with every RF event's phase offset</span>
 <span class="sd">        larger by ``phases[n]``, every ADC event's by ``adc_phases[n]``, and</span>
 <span class="sd">        gradients that differ from the blocks' by a waveform zero during every</span>
-<span class="sd">        RF pulse and every ADC window, whose area at the first sample of the</span>
-<span class="sd">        repetition's ``w``-th window is ``areas[n, w]``, and over the</span>
-<span class="sd">        repetition zero: a phase encoding and its rewinder.</span>
+<span class="sd">        RF pulse and held through every ADC window, at ``readouts[n, w]``</span>
+<span class="sd">        through the repetition's ``w``-th window, whose area at that window's</span>
+<span class="sd">        first sample is ``areas[n, w]``, by the start of any RF pulse zero,</span>
+<span class="sd">        and over the repetition ``nets[n]``: a phase encoding, or a readout</span>
+<span class="sd">        turned with its prephaser, rewound or not.</span>
 
 <span class="sd">        One repetition applies an affine map to each isochromat's</span>
 <span class="sd">        magnetisation, and another to its transverse magnetisation at each</span>
@@ -846,6 +850,17 @@
 <span class="sd">        adc_phases : array_like, default=None</span>
 <span class="sd">            ``(repetitions,)`` increase of every ADC event's phase offset, in</span>
 <span class="sd">            rad; ``phases`` by default.</span>
+<span class="sd">        readouts : array_like, default=None</span>
+<span class="sd">            ``(repetitions, windows, 3)`` gradient the difference holds</span>
+<span class="sd">            through each window, in Hz/m, along the axes the positions are</span>
+<span class="sd">            given along; none by default. A window with any is read along each</span>
+<span class="sd">            repetition's own gradient, and the magnetisation is not split.</span>
+<span class="sd">        nets : array_like, default=None</span>
+<span class="sd">            ``(repetitions, 3)`` area the difference leaves over each</span>
+<span class="sd">            repetition, in 1/m, along the same axes; none by default. With</span>
+<span class="sd">            any, each isochromat's transverse magnetisation is turned by its</span>
+<span class="sd">            own phase at the end of each repetition, and the magnetisation is</span>
+<span class="sd">            not split.</span>
 <span class="sd">        system : Opts, default=None</span>
 <span class="sd">            As :meth:`play` takes it.</span>
 <span class="sd">        tolerance : float, default=0.0</span>
@@ -923,15 +938,12 @@
                 <span class="sa">f</span><span class="s2">"adc_phases must hold one value per repetition, </span><span class="si">{</span><span class="n">count</span><span class="si">}</span><span class="s2">, got </span><span class="si">{</span><span class="n">adc_phases</span><span class="o">.</span><span class="n">size</span><span class="si">}</span><span class="s2">"</span>
             <span class="p">)</span>
         <span class="n">windows</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">receivers</span><span class="p">)</span>
-        <span class="n">encoded</span> <span class="o">=</span> <span class="p">(</span>
-            <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">count</span><span class="p">,</span> <span class="n">windows</span><span class="p">,</span> <span class="mi">3</span><span class="p">))</span>
-            <span class="k">if</span> <span class="n">areas</span> <span class="ow">is</span> <span class="kc">None</span>
-            <span class="k">else</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">areas</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span>
-        <span class="p">)</span>
-        <span class="k">if</span> <span class="n">encoded</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="p">(</span><span class="n">count</span><span class="p">,</span> <span class="n">windows</span><span class="p">,</span> <span class="mi">3</span><span class="p">):</span>
+        <span class="n">encoded</span> <span class="o">=</span> <span class="n">_per_window</span><span class="p">(</span><span class="n">areas</span><span class="p">,</span> <span class="s2">"areas"</span><span class="p">,</span> <span class="n">count</span><span class="p">,</span> <span class="n">windows</span><span class="p">)</span>
+        <span class="n">turned</span> <span class="o">=</span> <span class="n">_per_window</span><span class="p">(</span><span class="n">readouts</span><span class="p">,</span> <span class="s2">"readouts"</span><span class="p">,</span> <span class="n">count</span><span class="p">,</span> <span class="n">windows</span><span class="p">)</span>
+        <span class="n">left</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">count</span><span class="p">,</span> <span class="mi">3</span><span class="p">))</span> <span class="k">if</span> <span class="n">nets</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">nets</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">left</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="p">(</span><span class="n">count</span><span class="p">,</span> <span class="mi">3</span><span class="p">):</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">"areas must be (repetitions, windows, 3), </span><span class="si">{</span><span class="p">(</span><span class="n">count</span><span class="p">,</span><span class="w"> </span><span class="n">windows</span><span class="p">,</span><span class="w"> </span><span class="mi">3</span><span class="p">)</span><span class="si">}</span><span class="s2">, "</span>
-                <span class="sa">f</span><span class="s2">"got </span><span class="si">{</span><span class="n">encoded</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">"</span>
+                <span class="sa">f</span><span class="s2">"nets must be (repetitions, 3), </span><span class="si">{</span><span class="p">(</span><span class="n">count</span><span class="p">,</span><span class="w"> </span><span class="mi">3</span><span class="p">)</span><span class="si">}</span><span class="s2">, got </span><span class="si">{</span><span class="n">left</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">"</span>
             <span class="p">)</span>
         <span class="n">native</span> <span class="o">=</span> <span class="n">_kernels</span><span class="p">()</span><span class="o">.</span><span class="n">Repetitions</span><span class="p">(</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_native</span><span class="p">,</span>
@@ -939,6 +951,8 @@
             <span class="n">phases</span><span class="p">,</span>
             <span class="n">adc_phases</span><span class="p">,</span>
             <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">encoded</span><span class="p">)</span><span class="o">.</span><span class="n">ravel</span><span class="p">(),</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">turned</span><span class="p">)</span><span class="o">.</span><span class="n">ravel</span><span class="p">(),</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">left</span><span class="p">)</span><span class="o">.</span><span class="n">ravel</span><span class="p">(),</span>
             <span class="nb">float</span><span class="p">(</span><span class="n">tolerance</span><span class="p">),</span>
         <span class="p">)</span>
         <span class="n">steady</span> <span class="o">=</span> <span class="p">(</span>
@@ -958,6 +972,27 @@
         <span class="p">)</span></div>
 </div>
 
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_per_window</span><span class="p">(</span><span class="n">given</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">count</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">windows</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return ``given`` as ``(repetitions, windows, 3)``, zero where None.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If it holds another shape.</span>
+<span class="sd">    """</span>
+    <span class="n">values</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">count</span><span class="p">,</span> <span class="n">windows</span><span class="p">,</span> <span class="mi">3</span><span class="p">))</span>
+        <span class="k">if</span> <span class="n">given</span> <span class="ow">is</span> <span class="kc">None</span>
+        <span class="k">else</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">given</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span>
+    <span class="p">)</span>
+    <span class="k">if</span> <span class="n">values</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="p">(</span><span class="n">count</span><span class="p">,</span> <span class="n">windows</span><span class="p">,</span> <span class="mi">3</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2"> must be (repetitions, windows, 3), </span><span class="si">{</span><span class="p">(</span><span class="n">count</span><span class="p">,</span><span class="w"> </span><span class="n">windows</span><span class="p">,</span><span class="w"> </span><span class="mi">3</span><span class="p">)</span><span class="si">}</span><span class="s2">, "</span>
+            <span class="sa">f</span><span class="s2">"got </span><span class="si">{</span><span class="n">values</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">"</span>
+        <span class="p">)</span>
+    <span class="k">return</span> <span class="n">values</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_steady</span><span class="p">(</span>

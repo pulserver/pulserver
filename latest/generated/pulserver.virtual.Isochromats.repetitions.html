@@ -537,9 +537,11 @@
 <p>Repetition <code class="docutils literal notranslate"><span class="pre">n</span></code> plays <code class="docutils literal notranslate"><span class="pre">blocks</span></code> with every RF event’s phase offset
 larger by <code class="docutils literal notranslate"><span class="pre">phases[n]</span></code>, every ADC event’s by <code class="docutils literal notranslate"><span class="pre">adc_phases[n]</span></code>, and
 gradients that differ from the blocks’ by a waveform zero during every
-RF pulse and every ADC window, whose area at the first sample of the
-repetition’s <code class="docutils literal notranslate"><span class="pre">w</span></code>-th window is <code class="docutils literal notranslate"><span class="pre">areas[n,</span> <span class="pre">w]</span></code>, and over the
-repetition zero: a phase encoding and its rewinder.</p>
+RF pulse and held through every ADC window, at <code class="docutils literal notranslate"><span class="pre">readouts[n,</span> <span class="pre">w]</span></code>
+through the repetition’s <code class="docutils literal notranslate"><span class="pre">w</span></code>-th window, whose area at that window’s
+first sample is <code class="docutils literal notranslate"><span class="pre">areas[n,</span> <span class="pre">w]</span></code>, by the start of any RF pulse zero,
+and over the repetition <code class="docutils literal notranslate"><span class="pre">nets[n]</span></code>: a phase encoding, or a readout
+turned with its prephaser, rewound or not.</p>
 <p>One repetition applies an affine map to each isochromat’s
 magnetisation, and another to its transverse magnetisation at each
 window’s first sample. Four plays of <code class="docutils literal notranslate"><span class="pre">blocks</span></code>, from no magnetisation
@@ -562,6 +564,15 @@ first sample, in 1/m, along the axes the positions are given
 along; none by default.</p></li>
 <li><p><strong>adc_phases</strong> (<em>array_like</em><em>, </em><em>default=None</em>) – <code class="docutils literal notranslate"><span class="pre">(repetitions,)</span></code> increase of every ADC event’s phase offset, in
 rad; <code class="docutils literal notranslate"><span class="pre">phases</span></code> by default.</p></li>
+<li><p><strong>readouts</strong> (<em>array_like</em><em>, </em><em>default=None</em>) – <code class="docutils literal notranslate"><span class="pre">(repetitions,</span> <span class="pre">windows,</span> <span class="pre">3)</span></code> gradient the difference holds
+through each window, in Hz/m, along the axes the positions are
+given along; none by default. A window with any is read along each
+repetition’s own gradient, and the magnetisation is not split.</p></li>
+<li><p><strong>nets</strong> (<em>array_like</em><em>, </em><em>default=None</em>) – <code class="docutils literal notranslate"><span class="pre">(repetitions,</span> <span class="pre">3)</span></code> area the difference leaves over each
+repetition, in 1/m, along the same axes; none by default. With
+any, each isochromat’s transverse magnetisation is turned by its
+own phase at the end of each repetition, and the magnetisation is
+not split.</p></li>
 <li><p><strong>system</strong> (<em>Opts</em><em>, </em><em>default=None</em>) – As <a class="reference internal" href="pulserver.virtual.Isochromats.play.html#pulserver.virtual.Isochromats.play" title="pulserver.virtual.Isochromats.play"><code class="xref py py-meth docutils literal notranslate"><span class="pre">play()</span></code></a> takes it.</p></li>
 <li><p><strong>tolerance</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.14)"><em>float</em></a><em>, </em><em>default=0.0</em>) – Accuracy of the samples, relative to the sum of the magnitudes of
 the terms each sums; exact to rounding at zero. Above zero, the

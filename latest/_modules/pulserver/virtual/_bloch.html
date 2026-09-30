@@ -499,11 +499,11 @@
 <span class="sd">    channels, a single-channel pulse plays on every channel, weighted by its</span>
 <span class="sd">    block's RF shim or, without one, by ``default_shim``.</span>
 
-<span class="sd">    Runs of repetitions of blocks that differ only in their phase offsets and</span>
-<span class="sd">    phase encodings play from each isochromat's map over one repetition, as</span>
-<span class="sd">    :meth:`Isochromats.repetitions` plays them to within ``tolerance``; at</span>
-<span class="sd">    zero, their samples are those of the blocks played one by one, to</span>
-<span class="sd">    rounding.</span>
+<span class="sd">    Runs of repetitions of blocks that differ only in their phase offsets,</span>
+<span class="sd">    phase encodings and turned readouts play from each isochromat's map over</span>
+<span class="sd">    one repetition, as :meth:`Isochromats.repetitions` plays them to within</span>
+<span class="sd">    ``tolerance``; at zero, their samples are those of the blocks played one</span>
+<span class="sd">    by one, to rounding.</span>
 
 <span class="sd">    :doc:`/explanations/virtual-scanner` states the signal model.</span>
 <span class="sd">    """</span>
@@ -635,6 +635,8 @@
             <span class="n">run</span><span class="o">.</span><span class="n">phases</span><span class="p">[</span><span class="n">index</span><span class="p">:],</span>
             <span class="n">run</span><span class="o">.</span><span class="n">areas</span><span class="p">[</span><span class="n">index</span><span class="p">:],</span>
             <span class="n">adc_phases</span><span class="o">=</span><span class="n">run</span><span class="o">.</span><span class="n">adc_phases</span><span class="p">[</span><span class="n">index</span><span class="p">:],</span>
+            <span class="n">readouts</span><span class="o">=</span><span class="n">run</span><span class="o">.</span><span class="n">readouts</span><span class="p">[</span><span class="n">index</span><span class="p">:],</span>
+            <span class="n">nets</span><span class="o">=</span><span class="n">run</span><span class="o">.</span><span class="n">nets</span><span class="p">[</span><span class="n">index</span><span class="p">:],</span>
             <span class="n">tolerance</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_tolerance</span><span class="p">,</span>
         <span class="p">)</span>
 
@@ -642,10 +644,11 @@
 <span class="k">def</span><span class="w"> </span><span class="nf">_windows</span><span class="p">(</span><span class="n">isochromats</span><span class="p">:</span> <span class="n">Isochromats</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Return the most ADC windows a repetition may hold for its maps on the isochromats to take at most :data:`MEMORY` bytes; negative where none fits."""</span>
     <span class="c1"># Per isochromat, its map and the slot it is played from, in double</span>
-    <span class="c1"># precision; per window, the map of the transverse magnetisation at its</span>
-    <span class="c1"># first sample and the slot's kernel weights and receive factors.</span>
-    <span class="n">per_window</span> <span class="o">=</span> <span class="mi">236</span> <span class="o">+</span> <span class="mi">16</span> <span class="o">*</span> <span class="n">isochromats</span><span class="o">.</span><span class="n">coils</span>
-    <span class="k">return</span> <span class="p">(</span><span class="n">MEMORY</span> <span class="o">//</span> <span class="nb">max</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">isochromats</span><span class="p">),</span> <span class="mi">1</span><span class="p">)</span> <span class="o">-</span> <span class="mi">264</span><span class="p">)</span> <span class="o">//</span> <span class="n">per_window</span>
+    <span class="c1"># precision, with its coordinates; per window, the map of the transverse</span>
+    <span class="c1"># magnetisation at its first sample and the slot's kernel weights,</span>
+    <span class="c1"># receive factors and phase step.</span>
+    <span class="n">per_window</span> <span class="o">=</span> <span class="mi">244</span> <span class="o">+</span> <span class="mi">16</span> <span class="o">*</span> <span class="n">isochromats</span><span class="o">.</span><span class="n">coils</span>
+    <span class="k">return</span> <span class="p">(</span><span class="n">MEMORY</span> <span class="o">//</span> <span class="nb">max</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">isochromats</span><span class="p">),</span> <span class="mi">1</span><span class="p">)</span> <span class="o">-</span> <span class="mi">288</span><span class="p">)</span> <span class="o">//</span> <span class="n">per_window</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_drive</span><span class="p">(</span>

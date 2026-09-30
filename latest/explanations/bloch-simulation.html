@@ -745,7 +745,8 @@ each isochromat at its own position.</p>
 <section id="repeated-blocks">
 <h2>Repeated blocks<a class="headerlink" href="#repeated-blocks" title="Link to this heading">#</a></h2>
 <p>A scan often plays one sequence of blocks many times, changing only the phase
-offsets of its pulses and ADC events and its phase-encoding gradients.
+offsets of its pulses and ADC events, its phase-encoding gradients and the
+direction of its readout.
 <a class="reference internal" href="../generated/pulserver.virtual.Isochromats.repetitions.html#pulserver.virtual.Isochromats.repetitions" title="pulserver.virtual.Isochromats.repetitions"><code class="xref py py-meth docutils literal notranslate"><span class="pre">repetitions()</span></code></a> plays such a scan without
 integrating every block of every repetition.</p>
 <p>Every event the engine plays maps an isochromat’s magnetisation affinely, so a
@@ -763,19 +764,33 @@ turned with the pulses, <span class="math notranslate nohighlight">\(\mathbf{m} 
 <span class="math notranslate nohighlight">\(n\)</span> takes <span class="math notranslate nohighlight">\(\mathbf{m}\)</span> to <span class="math notranslate nohighlight">\(R_z(\theta_n - \theta_{n+1})\,(A_j\,\mathbf{m} +
 \mathbf{b}_j)\)</span>.</p>
 <p>A phase encoding is a gradient that differs from the first repetition’s by a
-waveform that is zero during every pulse and every ADC window and plays no net
-area over the repetition. It turns the transverse magnetisation about <span class="math notranslate nohighlight">\(z\)</span> by
-the area it has played, <span class="math notranslate nohighlight">\(e^{-2\pi i\,\mathbf{a}\cdot\mathbf{r}}\)</span>, and by none
-at the end of the repetition, so it leaves <span class="math notranslate nohighlight">\(A_j\)</span> and <span class="math notranslate nohighlight">\(\mathbf{b}_j\)</span> as they
-are and multiplies the transverse magnetisation at a window’s first sample by
-<span class="math notranslate nohighlight">\(e^{-2\pi i\,\mathbf{a}_n\cdot\mathbf{r}_j}\)</span>, with <span class="math notranslate nohighlight">\(\mathbf{a}_n\)</span> its area up
-to that sample. Under the gradient held over the window, isochromat <span class="math notranslate nohighlight">\(j\)</span> then
-turns and decays by one factor <span class="math notranslate nohighlight">\(z_j\)</span> from each sample to the next.</p>
+waveform that is zero during every pulse and every ADC window and plays no
+area by the start of any pulse. It turns the transverse magnetisation about
+<span class="math notranslate nohighlight">\(z\)</span> by the area it has played, <span class="math notranslate nohighlight">\(e^{-2\pi i\,\mathbf{a}\cdot\mathbf{r}}\)</span>, so it
+leaves <span class="math notranslate nohighlight">\(A_j\)</span> and <span class="math notranslate nohighlight">\(\mathbf{b}_j\)</span> as they are and multiplies the transverse
+magnetisation at a window’s first sample by <span class="math notranslate nohighlight">\(e^{-2\pi i\,\mathbf{a}_n\cdot
+\mathbf{r}_j}\)</span>, with <span class="math notranslate nohighlight">\(\mathbf{a}_n\)</span> its area up to that sample. Under the
+gradient held over the window, isochromat <span class="math notranslate nohighlight">\(j\)</span> then turns and decays by one
+factor <span class="math notranslate nohighlight">\(z_j\)</span> from each sample to the next. The area <span class="math notranslate nohighlight">\(\mathbf{c}_n\)</span> it leaves
+over the repetition, zero where it is rewound, turns isochromat <span class="math notranslate nohighlight">\(j\)</span> at the
+repetition’s end by <span class="math notranslate nohighlight">\(-2\pi\,\mathbf{c}_n\cdot\mathbf{r}_j\)</span> as well:
+repetition <span class="math notranslate nohighlight">\(n\)</span> takes <span class="math notranslate nohighlight">\(\mathbf{m}\)</span> to <span class="math notranslate nohighlight">\(R_z(\theta_n - \theta_{n+1} -
+2\pi\,\mathbf{c}_n\cdot\mathbf{r}_j)\,(A_j\,\mathbf{m} + \mathbf{b}_j)\)</span>.</p>
+<p>A turned readout differs from the first repetition’s by a waveform zero
+during every pulse, of no area by the start of any, and held through its ADC
+window at <span class="math notranslate nohighlight">\(\Delta\mathbf{g}_n\)</span>: a radial spoke turned with its prephaser. It
+acts as a phase encoding does up to the window’s first sample and over the
+repetition, and from one sample to the next it turns isochromat <span class="math notranslate nohighlight">\(j\)</span> by
+<span class="math notranslate nohighlight">\(e^{-2\pi i\,\Delta t\,\Delta\mathbf{g}_n\cdot\mathbf{r}_j}\)</span> more, with
+<span class="math notranslate nohighlight">\(\Delta t\)</span> the dwell time: each repetition reads the window along its own
+direction. The non-uniform FFT a window is read with then spreads each
+isochromat onto grid points found anew for every repetition.</p>
 <section id="fixed-points-and-transients">
 <h3>Fixed points and transients<a class="headerlink" href="#fixed-points-and-transients" title="Link to this heading">#</a></h3>
 <p>Where the phase offsets step by one increment, <span class="math notranslate nohighlight">\(\theta_{n+1} - \theta_n =
-\delta\)</span> for every <span class="math notranslate nohighlight">\(n\)</span>, the map in the turned frame is the same for every
-repetition, <span class="math notranslate nohighlight">\(A'_j = R_z(-\delta)\,A_j\)</span>, and has the fixed point
+\delta\)</span> for every <span class="math notranslate nohighlight">\(n\)</span>, no readout is turned and no area is left over a
+repetition, the map in the turned frame is the same for every repetition,
+<span class="math notranslate nohighlight">\(A'_j = R_z(-\delta)\,A_j\)</span>, and has the fixed point
 <span class="math notranslate nohighlight">\(\mathbf{m}^*_j = (I - A'_j)^{-1}R_z(-\delta)\,\mathbf{b}_j\)</span>. A sequence file
 holds a phase offset to about <span class="math notranslate nohighlight">\(10^{-5}\)</span> rad, so <span class="math notranslate nohighlight">\(\delta\)</span> is the mean step, and
 every step must lie within <span class="math notranslate nohighlight">\(10^{-4}\)</span> rad of it. The magnetisation is the fixed
