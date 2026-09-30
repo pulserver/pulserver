@@ -21,7 +21,7 @@ import ismrmrd.xsd as xsd
 
 from .._plugins import NAME, PluginPath, directories, find
 from ..recon._runtime import constants
-from ..recon._runtime.concurrency import Slot, Slots, slot_devices
+from ..recon._runtime.concurrency import HostSlots, Slot, slot_devices
 from ..recon._runtime.connection import Connection
 from ..recon._runtime.exam import ExamCacheManager
 from ..recon._runtime.mrd2dicom import MrdDicomBuilder
@@ -195,6 +195,11 @@ class ReconProxy(_Listener):
     queue
         Directory the queued series are written to; a temporary directory,
         removed on :meth:`close`, when ``None``.
+    slot_directory
+        Directory the slots are held in, shared with every other proxy on this
+        host so they count against one set;
+        :data:`~pulserver.recon._runtime.concurrency.DEFAULT_SLOT_DIRECTORY`
+        when ``None``.
     forward
         ``(host, port)`` of the MRD server that reconstructs every series;
         local workers when ``None``.
@@ -229,6 +234,7 @@ class ReconProxy(_Listener):
         spares: int = 1,
         recon_timeout: float | None = None,
         queue: Path | str | None = None,
+        slot_directory: Path | str | None = None,
         forward: tuple[str, int] | None = None,
         forward_config: str | None = None,
         forward_dicom: bool = False,
@@ -244,7 +250,7 @@ class ReconProxy(_Listener):
         if plugins is None:
             raise ValueError("a proxy that does not forward needs a plugin directory")
         local = self._reconstruction = _Workers(
-            plugins, slots, gpu_slots, spares, recon_timeout, queue
+            plugins, slots, gpu_slots, spares, recon_timeout, queue, slot_directory
         )
         self.workers, self.exams, self.queue = local.workers, local.exams, local.queue
 
@@ -297,6 +303,11 @@ class ReconServer(_Listener):
     queue
         Directory the queued series are written to; a temporary directory,
         removed on :meth:`close`, when ``None``.
+    slot_directory
+        Directory the slots are held in, shared with every other proxy on this
+        host so they count against one set;
+        :data:`~pulserver.recon._runtime.concurrency.DEFAULT_SLOT_DIRECTORY`
+        when ``None``.
 
     Attributes
     ----------
@@ -317,10 +328,11 @@ class ReconServer(_Listener):
         spares: int = 1,
         recon_timeout: float | None = None,
         queue: Path | str | None = None,
+        slot_directory: Path | str | None = None,
     ) -> None:
         super().__init__(plugins)
         local = self._reconstruction = _Workers(
-            plugins, slots, gpu_slots, spares, recon_timeout, queue
+            plugins, slots, gpu_slots, spares, recon_timeout, queue, slot_directory
         )
         self.workers, self.exams, self.queue = local.workers, local.exams, local.queue
 
@@ -348,6 +360,7 @@ class _Workers:
         spares: int,
         recon_timeout: float | None,
         queue: Path | str | None,
+        slot_directory: Path | str | None = None,
     ) -> None:
         self._owns_queue = queue is None
         self.queue = (
@@ -361,7 +374,7 @@ class _Workers:
         self.recon_timeout = recon_timeout
         self._exam_root = Path(tempfile.mkdtemp(prefix="pulserver-exams-"))
         self.exams = ExamCacheManager(directory=self._exam_root)
-        self._slots = Slots(slot_devices(slots, gpu_slots))
+        self._slots = HostSlots(slot_devices(slots, gpu_slots), slot_directory)
         self._queued = itertools.count(1)
 
     def run(
