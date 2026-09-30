@@ -106,7 +106,7 @@ bandwidth its design achieves, and the reply carries those values.
 
  .. code-block:: none
 
-    [NimPulseqGUI Protocol]
+    [Protocol]
     TE: int|dropdown|8000|1000|80000|1|us|-2
     TR: int|dropdown|250000|1000|5000000|1|us|-1
     bandwidth: float|typein|250000.0|1000.0|1000000.0|1.0|Hz
@@ -124,7 +124,7 @@ bandwidth its design achieves, and the reply carries those values.
     fov_rotation_31: float|off|0.0|-1.0|1.0|1e-06|
     fov_rotation_32: float|off|0.0|-1.0|1.0|1e-06|
     fov_rotation_33: float|off|1.0|-1.0|1.0|1e-06|
-    [NimPulseqGUI Protocol End]
+    [Protocol End]
 
 
 
@@ -339,7 +339,7 @@ which is what lets a design be identified by its resolved protocol
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 4.091 seconds)
+   **Total running time of the script:** (0 minutes 4.027 seconds)
 
 
 .. _sphx_glr_download_generated_gallery_01-protocol_01_protocol_resolution.py:

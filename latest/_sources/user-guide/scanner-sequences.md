@@ -75,7 +75,7 @@ schema, as the `list` design call replies it:
 ```pycon
 >>> from pulserver.protocol import format_listing
 >>> print(format_listing(Gre2D().listing()), end="")
-[NimPulseqGUI Protocol]
+[Protocol]
 TE: int|dropdown|8000|1000|80000|10|us|-2
 TR: int|dropdown|250000|1000|5000000|1|us|-1
 fov: float|typein|220.0|50.0|500.0|1.0|mm
@@ -92,7 +92,7 @@ fov_rotation_23: float|off|0.0|-1.0|1.0|1e-06|
 fov_rotation_31: float|off|0.0|-1.0|1.0|1e-06|
 fov_rotation_32: float|off|0.0|-1.0|1.0|1e-06|
 fov_rotation_33: float|off|1.0|-1.0|1.0|1e-06|
-[NimPulseqGUI Protocol End]
+[Protocol End]
 
 ```
 
