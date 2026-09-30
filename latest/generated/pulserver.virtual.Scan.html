@@ -534,9 +534,10 @@
 <dt class="sig sig-object py" id="pulserver.virtual.Scan">
 <span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">pulserver.virtual.</span></span><span class="sig-name descname"><span class="pre">Scan</span></span><a class="reference internal" href="../_modules/pulserver/virtual/_stream.html#Scan"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.virtual.Scan" title="Link to this definition">#</a></dt>
 <dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/builtins/functions.html#object" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
-<p>The cache beside a sequence file played on isochromats block by block, against a scan clock.</p>
-<p>The blocks are those <a class="reference internal" href="pulserver.virtual.simulate.html#pulserver.virtual.simulate" title="pulserver.virtual.simulate"><code class="xref py py-func docutils literal notranslate"><span class="pre">simulate()</span></code></a> plays, and they
-advance the magnetization of the isochromats from where it stands.</p>
+<p>The cache beside a sequence file played on isochromats, against a scan clock.</p>
+<p>The blocks are those <a class="reference internal" href="pulserver.virtual.simulate.html#pulserver.virtual.simulate" title="pulserver.virtual.simulate"><code class="xref py py-func docutils literal notranslate"><span class="pre">simulate()</span></code></a> plays, as it
+plays them, and they advance the magnetization of the isochromats from
+where it stands.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
@@ -547,6 +548,8 @@ advance the magnetization of the isochromats from where it stands.</p>
 a reflection included; the identity by default.</p></li>
 <li><p><strong>default_shim</strong> – Channel weights of a coil of several transmit channels, as
 <a class="reference internal" href="pulserver.virtual.simulate.html#pulserver.virtual.simulate" title="pulserver.virtual.simulate"><code class="xref py py-func docutils literal notranslate"><span class="pre">simulate()</span></code></a> takes them.</p></li>
+<li><p><strong>tolerance</strong> – The accuracy of the samples of runs of repetitions, as
+<a class="reference internal" href="pulserver.virtual.simulate.html#pulserver.virtual.simulate" title="pulserver.virtual.simulate"><code class="xref py py-func docutils literal notranslate"><span class="pre">simulate()</span></code></a> takes it.</p></li>
 </ul>
 </dd>
 </dl>

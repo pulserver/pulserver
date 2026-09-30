@@ -462,6 +462,10 @@
 
 <span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"Isochromats"</span><span class="p">,</span> <span class="s2">"Repetitions"</span><span class="p">]</span>
 
+<span class="c1">#: Most bytes a run of repetitions holds beside its isochromats: for its maps,</span>
+<span class="c1">#: and again for the column sums its fixed points are read from.</span>
+<span class="n">MEMORY</span> <span class="o">=</span> <span class="mi">4</span> <span class="o">&lt;&lt;</span> <span class="mi">30</span>
+
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_kernels</span><span class="p">():</span>
     <span class="k">return</span> <span class="n">require</span><span class="p">(</span><span class="s2">"bloch"</span><span class="p">)</span>
@@ -937,7 +941,11 @@
             <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">encoded</span><span class="p">)</span><span class="o">.</span><span class="n">ravel</span><span class="p">(),</span>
             <span class="nb">float</span><span class="p">(</span><span class="n">tolerance</span><span class="p">),</span>
         <span class="p">)</span>
-        <span class="n">steady</span> <span class="o">=</span> <span class="n">_steady</span><span class="p">(</span><span class="n">native</span><span class="p">,</span> <span class="n">encoded</span><span class="p">,</span> <span class="nb">float</span><span class="p">(</span><span class="n">tolerance</span><span class="p">))</span> <span class="k">if</span> <span class="n">tolerance</span> <span class="k">else</span> <span class="kc">None</span>
+        <span class="n">steady</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">_steady</span><span class="p">(</span><span class="n">native</span><span class="p">,</span> <span class="n">encoded</span><span class="p">,</span> <span class="nb">float</span><span class="p">(</span><span class="n">tolerance</span><span class="p">),</span> <span class="p">[</span><span class="n">r</span><span class="o">.</span><span class="n">size</span> <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">receivers</span><span class="p">])</span>
+            <span class="k">if</span> <span class="n">tolerance</span>
+            <span class="k">else</span> <span class="kc">None</span>
+        <span class="p">)</span>
         <span class="k">return</span> <span class="n">Repetitions</span><span class="p">(</span>
             <span class="bp">self</span><span class="p">,</span>
             <span class="n">native</span><span class="p">,</span>
@@ -952,15 +960,29 @@
 
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_steady</span><span class="p">(</span><span class="n">native</span><span class="p">,</span> <span class="n">areas</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">tolerance</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_steady</span><span class="p">(</span>
+    <span class="n">native</span><span class="p">,</span> <span class="n">areas</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">tolerance</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">samples</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Split the magnetisation; return what reads each window's samples from the fixed points, or None where it cannot.</span>
 
 <span class="sd">    A window's fixed points are read by columns (:class:`_Columns`) along the</span>
-<span class="sd">    axes :func:`_encoded` finds.</span>
+<span class="sd">    axes :func:`_encoded` finds; where the columns of every window, of</span>
+<span class="sd">    ``samples`` samples each, would take more than :data:`MEMORY` bytes, the</span>
+<span class="sd">    magnetisation is not split.</span>
 <span class="sd">    """</span>
     <span class="n">readers</span> <span class="o">=</span> <span class="n">_encoded</span><span class="p">(</span><span class="n">native</span><span class="p">,</span> <span class="n">areas</span><span class="p">,</span> <span class="n">tolerance</span><span class="p">)</span>
-    <span class="k">if</span> <span class="n">readers</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">native</span><span class="o">.</span><span class="n">split</span><span class="p">():</span>
+    <span class="k">if</span> <span class="n">readers</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">return</span> <span class="kc">None</span>
+    <span class="n">sizes</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="mi">16</span>
+        <span class="o">*</span> <span class="n">native</span><span class="o">.</span><span class="n">coils</span>
+        <span class="o">*</span> <span class="n">count</span>
+        <span class="o">*</span> <span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">prod</span><span class="p">([</span><span class="n">native</span><span class="o">.</span><span class="n">lattice</span><span class="p">(</span><span class="n">axis</span><span class="p">)</span><span class="o">.</span><span class="n">size</span> <span class="k">for</span> <span class="n">axis</span> <span class="ow">in</span> <span class="n">along</span><span class="p">]))</span>
+        <span class="k">for</span> <span class="n">count</span><span class="p">,</span> <span class="n">along</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">samples</span><span class="p">,</span> <span class="n">readers</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="p">]</span>
+    <span class="k">if</span> <span class="nb">sum</span><span class="p">(</span><span class="n">sizes</span><span class="p">)</span> <span class="o">&gt;</span> <span class="n">MEMORY</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">native</span><span class="o">.</span><span class="n">split</span><span class="p">():</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="n">kept</span> <span class="o">=</span> <span class="p">(</span><span class="n">MEMORY</span> <span class="o">-</span> <span class="nb">sum</span><span class="p">(</span><span class="n">sizes</span><span class="p">))</span> <span class="o">//</span> <span class="nb">max</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">readers</span><span class="p">),</span> <span class="mi">1</span><span class="p">)</span>
     <span class="n">parts</span> <span class="o">=</span> <span class="p">[]</span>
     <span class="k">for</span> <span class="n">w</span><span class="p">,</span> <span class="n">along</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">readers</span><span class="p">):</span>
         <span class="n">constant</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span>
@@ -971,7 +993,10 @@
         <span class="n">sums</span> <span class="o">=</span> <span class="n">native</span><span class="o">.</span><span class="n">column_sums</span><span class="p">(</span><span class="n">w</span><span class="p">,</span> <span class="n">along</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">constant</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">))</span>
         <span class="n">parts</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
             <span class="n">_Columns</span><span class="p">(</span>
-                <span class="n">sums</span><span class="p">,</span> <span class="p">[</span><span class="n">native</span><span class="o">.</span><span class="n">lattice</span><span class="p">(</span><span class="n">axis</span><span class="p">)</span> <span class="k">for</span> <span class="n">axis</span> <span class="ow">in</span> <span class="n">along</span><span class="p">],</span> <span class="n">areas</span><span class="p">[:,</span> <span class="n">w</span><span class="p">][:,</span> <span class="n">along</span><span class="p">]</span>
+                <span class="n">sums</span><span class="p">,</span>
+                <span class="p">[</span><span class="n">native</span><span class="o">.</span><span class="n">lattice</span><span class="p">(</span><span class="n">axis</span><span class="p">)</span> <span class="k">for</span> <span class="n">axis</span> <span class="ow">in</span> <span class="n">along</span><span class="p">],</span>
+                <span class="n">areas</span><span class="p">[:,</span> <span class="n">w</span><span class="p">][:,</span> <span class="n">along</span><span class="p">],</span>
+                <span class="n">kept</span><span class="p">,</span>
             <span class="p">)</span>
         <span class="p">)</span>
     <span class="k">return</span> <span class="n">parts</span>
@@ -1008,14 +1033,13 @@
 <span class="sd">    repetition's area along them, in 1/m. A repetition's samples are the sums</span>
 <span class="sd">    times exp(-2 pi i area . coordinate), summed over the columns. With two</span>
 <span class="sd">    axes, the sum along the first, the outer axis, is taken once per area,</span>
-<span class="sd">    for the areas repetitions need together, and kept within a budget of</span>
-<span class="sd">    memory.</span>
+<span class="sd">    for the areas repetitions need together, and as many are kept as fit in</span>
+<span class="sd">    ``kept`` bytes.</span>
 <span class="sd">    """</span>
 
-    <span class="c1">#: Outer sums kept at the most, in bytes.</span>
-    <span class="n">_KEPT</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">&lt;&lt;</span> <span class="mi">30</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">sums</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">values</span><span class="p">:</span> <span class="nb">list</span><span class="p">,</span> <span class="n">encodings</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">sums</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">values</span><span class="p">:</span> <span class="nb">list</span><span class="p">,</span> <span class="n">encodings</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">kept</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_values</span> <span class="o">=</span> <span class="n">values</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_encodings</span> <span class="o">=</span> <span class="n">encodings</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_shape</span> <span class="o">=</span> <span class="n">sums</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="nb">len</span><span class="p">(</span><span class="n">values</span><span class="p">)</span> <span class="p">:]</span>
@@ -1028,7 +1052,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_outer</span> <span class="o">=</span> <span class="n">values</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_sums</span> <span class="o">=</span> <span class="n">sums</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_outer</span><span class="o">.</span><span class="n">size</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_kept</span> <span class="o">=</span> <span class="p">{}</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_keep</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_KEPT</span> <span class="o">//</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_sums</span><span class="o">.</span><span class="n">itemsize</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sums</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_keep</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">kept</span> <span class="o">//</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_sums</span><span class="o">.</span><span class="n">itemsize</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sums</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]))</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_outer_sums</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">indices</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">"""Keep the sums along the outer axis at the areas of ``indices``, those missing in one product."""</span>

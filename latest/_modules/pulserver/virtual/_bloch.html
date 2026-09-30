@@ -457,13 +457,20 @@
 
 <span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"simulate"</span><span class="p">]</span>
 
+<span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Iterator</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">types</span><span class="w"> </span><span class="kn">import</span> <span class="n">SimpleNamespace</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">..</span><span class="w"> </span><span class="kn">import</span> <span class="n">ir</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">._isochromats</span><span class="w"> </span><span class="kn">import</span> <span class="n">Isochromats</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">._isochromats</span><span class="w"> </span><span class="kn">import</span> <span class="n">MEMORY</span><span class="p">,</span> <span class="n">Isochromats</span><span class="p">,</span> <span class="n">Repetitions</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">._repeats</span><span class="w"> </span><span class="kn">import</span> <span class="n">Run</span><span class="p">,</span> <span class="n">runs</span>
+
+<span class="c1">#: The ``tolerance`` of :meth:`Isochromats.repetitions` the console and the</span>
+<span class="c1">#: ``pulserver scan`` command play runs of repetitions to, relative to the sum</span>
+<span class="c1">#: of the magnitudes of the terms each sample sums.</span>
+<span class="n">TOLERANCE</span> <span class="o">=</span> <span class="mf">1e-4</span>
 
 
 <div class="viewcode-block" id="simulate">
@@ -475,6 +482,7 @@
     <span class="o">*</span><span class="p">,</span>
     <span class="n">rotation</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">default_shim</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">tolerance</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]:</span>
 <span class="w">    </span><span class="sd">"""Return what each coil receives at every ADC sample the cache beside a sequence file plays on isochromats.</span>
 
@@ -491,18 +499,153 @@
 <span class="sd">    channels, a single-channel pulse plays on every channel, weighted by its</span>
 <span class="sd">    block's RF shim or, without one, by ``default_shim``.</span>
 
+<span class="sd">    Runs of repetitions of blocks that differ only in their phase offsets and</span>
+<span class="sd">    phase encodings play from each isochromat's map over one repetition, as</span>
+<span class="sd">    :meth:`Isochromats.repetitions` plays them to within ``tolerance``; at</span>
+<span class="sd">    zero, their samples are those of the blocks played one by one, to</span>
+<span class="sd">    rounding.</span>
+
 <span class="sd">    :doc:`/explanations/virtual-scanner` states the signal model.</span>
 <span class="sd">    """</span>
-    <span class="n">playout</span> <span class="o">=</span> <span class="n">ir</span><span class="o">.</span><span class="n">playout</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="n">seq_path</span><span class="p">),</span> <span class="n">waveforms</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">cache_ext</span><span class="o">=</span><span class="n">cache_ext</span><span class="p">)</span>
-    <span class="n">played</span> <span class="o">=</span> <span class="n">playout</span><span class="p">[</span><span class="s2">"blocks"</span><span class="p">]</span>
-    <span class="n">turn</span> <span class="o">=</span> <span class="kc">None</span> <span class="k">if</span> <span class="n">rotation</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">rotation</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span>
-    <span class="n">drive</span> <span class="o">=</span> <span class="n">_drive</span><span class="p">(</span><span class="n">playout</span><span class="p">,</span> <span class="n">default_shim</span><span class="p">)</span>
-    <span class="n">readouts</span> <span class="o">=</span> <span class="p">(</span>
-        <span class="n">_played</span><span class="p">(</span><span class="n">played</span><span class="p">,</span> <span class="n">block</span><span class="p">,</span> <span class="n">isochromats</span><span class="p">,</span> <span class="n">turn</span><span class="p">,</span> <span class="n">drive</span><span class="p">)</span>
-        <span class="k">for</span> <span class="n">block</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">played</span><span class="p">[</span><span class="s2">"duration_us"</span><span class="p">]</span><span class="o">.</span><span class="n">size</span><span class="p">)</span>
+    <span class="n">player</span> <span class="o">=</span> <span class="n">Player</span><span class="p">(</span>
+        <span class="n">seq_path</span><span class="p">,</span>
+        <span class="n">isochromats</span><span class="p">,</span>
+        <span class="n">cache_ext</span><span class="p">,</span>
+        <span class="n">rotation</span><span class="o">=</span><span class="n">rotation</span><span class="p">,</span>
+        <span class="n">default_shim</span><span class="o">=</span><span class="n">default_shim</span><span class="p">,</span>
+        <span class="n">tolerance</span><span class="o">=</span><span class="n">tolerance</span><span class="p">,</span>
     <span class="p">)</span>
-    <span class="k">return</span> <span class="p">[</span><span class="n">readout</span> <span class="k">for</span> <span class="n">readout</span> <span class="ow">in</span> <span class="n">readouts</span> <span class="k">if</span> <span class="n">readout</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">]</span></div>
+    <span class="k">return</span> <span class="nb">list</span><span class="p">(</span><span class="n">player</span><span class="o">.</span><span class="n">readouts</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">player</span><span class="o">.</span><span class="n">blocks</span><span class="p">))</span></div>
 
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">Player</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""The blocks the cache beside a sequence file plays, played on isochromats in turn, as :func:`simulate` plays them.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    played</span>
+<span class="sd">        The playout's blocks, as :func:`pulserver.ir.playout` records them.</span>
+<span class="sd">    runs</span>
+<span class="sd">        The runs of repetitions played from each isochromat's map, by first</span>
+<span class="sd">        block.</span>
+<span class="sd">    """</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">seq_path</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">isochromats</span><span class="p">:</span> <span class="n">Isochromats</span><span class="p">,</span>
+        <span class="n">cache_ext</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">".pseg"</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">rotation</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">default_shim</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">tolerance</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">seq_path</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">seq_path</span><span class="p">)</span>
+        <span class="n">playout</span> <span class="o">=</span> <span class="n">ir</span><span class="o">.</span><span class="n">playout</span><span class="p">(</span><span class="n">seq_path</span><span class="p">,</span> <span class="n">waveforms</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">cache_ext</span><span class="o">=</span><span class="n">cache_ext</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">played</span> <span class="o">=</span> <span class="n">playout</span><span class="p">[</span><span class="s2">"blocks"</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_turn</span> <span class="o">=</span> <span class="kc">None</span> <span class="k">if</span> <span class="n">rotation</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">rotation</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_drive</span> <span class="o">=</span> <span class="n">_drive</span><span class="p">(</span><span class="n">playout</span><span class="p">,</span> <span class="n">default_shim</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_isochromats</span> <span class="o">=</span> <span class="n">isochromats</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_tolerance</span> <span class="o">=</span> <span class="n">tolerance</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">runs</span> <span class="o">=</span> <span class="n">runs</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">played</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_turn</span><span class="p">,</span>
+            <span class="n">windows</span><span class="o">=</span><span class="n">_windows</span><span class="p">(</span><span class="n">isochromats</span><span class="p">),</span>
+            <span class="n">rounded</span><span class="o">=</span><span class="n">tolerance</span> <span class="o">&gt;</span> <span class="mf">0.0</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_firsts</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">run</span><span class="o">.</span><span class="n">first</span> <span class="k">for</span> <span class="n">run</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">runs</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">int</span><span class="p">)</span>
+        <span class="c1"># The run being played, its repetitions and the next to be played.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_playing</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">Run</span><span class="p">,</span> <span class="n">Repetitions</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">blocks</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Blocks in the scan."""</span>
+        <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">played</span><span class="p">[</span><span class="s2">"duration_us"</span><span class="p">]</span><span class="o">.</span><span class="n">size</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">boundary</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">block</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Return the first block from ``block`` on that starts a repetition of a run or lies outside every run."""</span>
+        <span class="n">run</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_run</span><span class="p">(</span><span class="n">block</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">block</span> <span class="k">if</span> <span class="n">run</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">block</span> <span class="o">+</span> <span class="p">(</span><span class="n">run</span><span class="o">.</span><span class="n">first</span> <span class="o">-</span> <span class="n">block</span><span class="p">)</span> <span class="o">%</span> <span class="n">run</span><span class="o">.</span><span class="n">size</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">readouts</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">first</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">last</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""Play the blocks from ``first`` to before ``last`` and yield each readout, as :func:`simulate` returns them.</span>
+
+<span class="sd">        A run's repetitions play whole from each repetition that starts</span>
+<span class="sd">        within the blocks and ends by ``last``; the rest play block by block.</span>
+<span class="sd">        """</span>
+        <span class="n">block</span> <span class="o">=</span> <span class="n">first</span>
+        <span class="k">while</span> <span class="n">block</span> <span class="o">&lt;</span> <span class="n">last</span><span class="p">:</span>
+            <span class="n">run</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_run</span><span class="p">(</span><span class="n">block</span><span class="p">)</span>
+            <span class="n">aligned</span> <span class="o">=</span> <span class="n">run</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="p">(</span><span class="n">block</span> <span class="o">-</span> <span class="n">run</span><span class="o">.</span><span class="n">first</span><span class="p">)</span> <span class="o">%</span> <span class="n">run</span><span class="o">.</span><span class="n">size</span> <span class="o">==</span> <span class="mi">0</span>
+            <span class="n">count</span> <span class="o">=</span> <span class="p">(</span><span class="nb">min</span><span class="p">(</span><span class="n">last</span><span class="p">,</span> <span class="n">run</span><span class="o">.</span><span class="n">stop</span><span class="p">)</span> <span class="o">-</span> <span class="n">block</span><span class="p">)</span> <span class="o">//</span> <span class="n">run</span><span class="o">.</span><span class="n">size</span> <span class="k">if</span> <span class="n">aligned</span> <span class="k">else</span> <span class="mi">0</span>
+            <span class="k">if</span> <span class="n">count</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="k">yield from</span> <span class="bp">self</span><span class="o">.</span><span class="n">_repeated</span><span class="p">(</span><span class="n">run</span><span class="p">,</span> <span class="p">(</span><span class="n">block</span> <span class="o">-</span> <span class="n">run</span><span class="o">.</span><span class="n">first</span><span class="p">)</span> <span class="o">//</span> <span class="n">run</span><span class="o">.</span><span class="n">size</span><span class="p">,</span> <span class="n">count</span><span class="p">)</span>
+                <span class="n">block</span> <span class="o">+=</span> <span class="n">count</span> <span class="o">*</span> <span class="n">run</span><span class="o">.</span><span class="n">size</span>
+                <span class="k">continue</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_playing</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="n">readout</span> <span class="o">=</span> <span class="n">_played</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">played</span><span class="p">,</span> <span class="n">block</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_isochromats</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_turn</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_drive</span>
+            <span class="p">)</span>
+            <span class="k">if</span> <span class="n">readout</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">yield</span> <span class="n">readout</span>
+            <span class="n">block</span> <span class="o">+=</span> <span class="mi">1</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_run</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">block</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Run</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">at</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">searchsorted</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_firsts</span><span class="p">,</span> <span class="n">block</span><span class="p">,</span> <span class="n">side</span><span class="o">=</span><span class="s2">"right"</span><span class="p">))</span> <span class="o">-</span> <span class="mi">1</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">runs</span><span class="p">[</span><span class="n">at</span><span class="p">]</span> <span class="k">if</span> <span class="n">at</span> <span class="o">&gt;=</span> <span class="mi">0</span> <span class="ow">and</span> <span class="n">block</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">runs</span><span class="p">[</span><span class="n">at</span><span class="p">]</span><span class="o">.</span><span class="n">stop</span> <span class="k">else</span> <span class="kc">None</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_repeated</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">run</span><span class="p">:</span> <span class="n">Run</span><span class="p">,</span> <span class="n">index</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">count</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""Play ``count`` repetitions of ``run`` from repetition ``index``; yield their readouts."""</span>
+        <span class="n">playing</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_playing</span>
+        <span class="k">if</span> <span class="n">playing</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">playing</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">run</span> <span class="ow">or</span> <span class="n">playing</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">!=</span> <span class="n">index</span><span class="p">:</span>
+            <span class="c1"># The maps of the run played before are freed before these are made.</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_playing</span> <span class="o">=</span> <span class="n">playing</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="n">playing</span> <span class="o">=</span> <span class="p">(</span><span class="n">run</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_repetitions</span><span class="p">(</span><span class="n">run</span><span class="p">,</span> <span class="n">index</span><span class="p">),</span> <span class="n">index</span><span class="p">)</span>
+        <span class="n">done</span> <span class="o">=</span> <span class="n">index</span> <span class="o">+</span> <span class="n">count</span> <span class="o">==</span> <span class="n">run</span><span class="o">.</span><span class="n">count</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_playing</span> <span class="o">=</span> <span class="kc">None</span> <span class="k">if</span> <span class="n">done</span> <span class="k">else</span> <span class="p">(</span><span class="n">run</span><span class="p">,</span> <span class="n">playing</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">index</span> <span class="o">+</span> <span class="n">count</span><span class="p">)</span>
+        <span class="n">windows</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">played</span><span class="p">[</span><span class="s2">"adc_samples"</span><span class="p">][</span><span class="n">block</span><span class="p">])</span>
+            <span class="k">for</span> <span class="n">block</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">run</span><span class="o">.</span><span class="n">first</span><span class="p">,</span> <span class="n">run</span><span class="o">.</span><span class="n">first</span> <span class="o">+</span> <span class="n">run</span><span class="o">.</span><span class="n">size</span><span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">played</span><span class="p">[</span><span class="s2">"adc"</span><span class="p">][</span><span class="n">block</span><span class="p">]</span>
+        <span class="p">]</span>
+        <span class="n">signal</span> <span class="o">=</span> <span class="n">playing</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">play</span><span class="p">(</span><span class="n">count</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">complex64</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">windows</span><span class="p">:</span>
+            <span class="k">return</span>
+        <span class="k">for</span> <span class="n">samples</span> <span class="ow">in</span> <span class="n">signal</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">readout</span> <span class="ow">in</span> <span class="n">np</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="n">samples</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">cumsum</span><span class="p">(</span><span class="n">windows</span><span class="p">)[:</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">):</span>
+                <span class="k">yield</span> <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">readout</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_repetitions</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">run</span><span class="p">:</span> <span class="n">Run</span><span class="p">,</span> <span class="n">index</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Repetitions</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Return the repetitions of ``run`` from repetition ``index`` on, from the magnetization where it stands."""</span>
+        <span class="n">blocks</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">position</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">run</span><span class="o">.</span><span class="n">size</span><span class="p">):</span>
+            <span class="n">block</span> <span class="o">=</span> <span class="n">run</span><span class="o">.</span><span class="n">first</span> <span class="o">+</span> <span class="n">position</span>
+            <span class="n">blocks</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                <span class="p">{</span>
+                    <span class="s2">"duration"</span><span class="p">:</span> <span class="mf">1e-6</span> <span class="o">*</span> <span class="nb">float</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">played</span><span class="p">[</span><span class="s2">"duration_us"</span><span class="p">][</span><span class="n">block</span><span class="p">]),</span>
+                    <span class="s2">"gradients"</span><span class="p">:</span> <span class="n">_gradients</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">played</span><span class="p">,</span> <span class="n">block</span><span class="p">),</span>
+                    <span class="s2">"rotation"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_turn</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">played</span><span class="p">[</span><span class="s2">"rotate"</span><span class="p">][</span><span class="n">block</span><span class="p">]</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
+                    <span class="s2">"rf"</span><span class="p">:</span> <span class="n">_rf</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">played</span><span class="p">,</span> <span class="n">block</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_drive</span><span class="p">),</span>
+                    <span class="s2">"adc"</span><span class="p">:</span> <span class="n">_adc</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">played</span><span class="p">,</span> <span class="n">block</span><span class="p">),</span>
+                <span class="p">}</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_isochromats</span><span class="o">.</span><span class="n">repetitions</span><span class="p">(</span>
+            <span class="n">blocks</span><span class="p">,</span>
+            <span class="n">run</span><span class="o">.</span><span class="n">phases</span><span class="p">[</span><span class="n">index</span><span class="p">:],</span>
+            <span class="n">run</span><span class="o">.</span><span class="n">areas</span><span class="p">[</span><span class="n">index</span><span class="p">:],</span>
+            <span class="n">adc_phases</span><span class="o">=</span><span class="n">run</span><span class="o">.</span><span class="n">adc_phases</span><span class="p">[</span><span class="n">index</span><span class="p">:],</span>
+            <span class="n">tolerance</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_tolerance</span><span class="p">,</span>
+        <span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_windows</span><span class="p">(</span><span class="n">isochromats</span><span class="p">:</span> <span class="n">Isochromats</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return the most ADC windows a repetition may hold for its maps on the isochromats to take at most :data:`MEMORY` bytes; negative where none fits."""</span>
+    <span class="c1"># Per isochromat, its map and the slot it is played from, in double</span>
+    <span class="c1"># precision; per window, the map of the transverse magnetisation at its</span>
+    <span class="c1"># first sample and the slot's kernel weights and receive factors.</span>
+    <span class="n">per_window</span> <span class="o">=</span> <span class="mi">236</span> <span class="o">+</span> <span class="mi">16</span> <span class="o">*</span> <span class="n">isochromats</span><span class="o">.</span><span class="n">coils</span>
+    <span class="k">return</span> <span class="p">(</span><span class="n">MEMORY</span> <span class="o">//</span> <span class="nb">max</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">isochromats</span><span class="p">),</span> <span class="mi">1</span><span class="p">)</span> <span class="o">-</span> <span class="mi">264</span><span class="p">)</span> <span class="o">//</span> <span class="n">per_window</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_drive</span><span class="p">(</span>

@@ -43,7 +43,7 @@ states it. Times are in seconds, gradients in Hz/m and RF fields in Hz.
 
 | Object | Description |
 | --- | --- |
-| {obj}`~pulserver.virtual.Scan` | The cache beside a sequence file played on isochromats block by block against a scan clock, in spans carrying their readouts and the sound of their gradients. |
+| {obj}`~pulserver.virtual.Scan` | The cache beside a sequence file played on isochromats as {func}`~pulserver.virtual.simulate` plays it, against a scan clock, in spans carrying their readouts and the sound of their gradients. |
 | {obj}`~pulserver.virtual.Chunk` | A span of a scan between two block boundaries: its bounds in scan time, its readouts and its sound. |
 | {obj}`~pulserver.virtual.SAMPLE_RATE` | MATLAB Pulseq's audio sample rate, which a scan's sound takes unless given another. |
 

@@ -546,6 +546,11 @@ the frequency and phase offsets the playout sets. With
 <code class="docutils literal notranslate"><span class="pre">default_shim</span></code>, the channel weights of a coil of several transmit
 channels, a single-channel pulse plays on every channel, weighted by its
 block’s RF shim or, without one, by <code class="docutils literal notranslate"><span class="pre">default_shim</span></code>.</p>
+<p>Runs of repetitions of blocks that differ only in their phase offsets and
+phase encodings play from each isochromat’s map over one repetition, as
+<a class="reference internal" href="pulserver.virtual.Isochromats.repetitions.html#pulserver.virtual.Isochromats.repetitions" title="pulserver.virtual.Isochromats.repetitions"><code class="xref py py-meth docutils literal notranslate"><span class="pre">Isochromats.repetitions()</span></code></a> plays them to within <code class="docutils literal notranslate"><span class="pre">tolerance</span></code>; at
+zero, their samples are those of the blocks played one by one, to
+rounding.</p>
 <p><a class="reference internal" href="../explanations/virtual-scanner.html"><span class="doc">The virtual scanner</span></a> states the signal model.</p>
 </dd></dl>
 
