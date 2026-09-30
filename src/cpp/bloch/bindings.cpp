@@ -403,12 +403,70 @@ namespace
         return {low, std::min(low + 1, size - 1), {1.0 - above, above}};
     }
 
+    /** Maps, (channels, z, y, x), and where their samples lie: sample i
+     *  along an axis (i - centre) * step m from the isocentre, @c centre and
+     *  @c step along x, y and z. */
+    struct MapGrid
+    {
+        const std::complex<float>* values;
+        size_t channels;
+        size_t size[3];
+        const double* centre;
+        const double* step;
+    };
+
+    MapGrid map_grid(const SingleComplexes& values, const Doubles& centre, const Doubles& step)
+    {
+        if (values.ndim() != 4)
+            throw std::invalid_argument("the maps must be (channels, z, y, x)");
+        if (centre.ndim() != 1 || centre.shape(0) != 3 || step.ndim() != 1 || step.shape(0) != 3)
+            throw std::invalid_argument("the grid's centre and step must hold three values, along x, y and z");
+        MapGrid grid{values.data(),
+                     static_cast<size_t>(values.shape(0)),
+                     {static_cast<size_t>(values.shape(1)),
+                      static_cast<size_t>(values.shape(2)),
+                      static_cast<size_t>(values.shape(3))},
+                     centre.data(),
+                     step.data()};
+        if (grid.size[0] == 0 || grid.size[1] == 0 || grid.size[2] == 0)
+            throw std::invalid_argument("the maps must hold a sample along each axis");
+        return grid;
+    }
+
+    /** @p grid interpolated trilinearly at @p point, along x, y and z in m,
+     *  into @p re and @p im, a value per channel; a point beyond the grid
+     *  takes its edge value. Each weight is rounded to single precision and
+     *  the eight corners are summed in single precision, z slowest and x
+     *  fastest, as ``_coils._trilinear`` sums them. */
+    void interpolate(const MapGrid& grid, const double* point, float* re, float* im)
+    {
+        Straddle axes[3];
+        for (size_t k = 0; k < 3; ++k)
+            axes[k] = straddle(point[2 - k], grid.step[2 - k], grid.centre[2 - k], grid.size[k]);
+        std::fill(re, re + grid.channels, 0.0f);
+        std::fill(im, im + grid.channels, 0.0f);
+        const size_t per_channel = grid.size[0] * grid.size[1] * grid.size[2];
+        for (int z = 0; z < 2; ++z)
+            for (int y = 0; y < 2; ++y)
+                for (int x = 0; x < 2; ++x)
+                {
+                    const float weight =
+                        static_cast<float>(axes[0].weight[z] * axes[1].weight[y] * axes[2].weight[x]);
+                    const size_t row = (z ? axes[0].high : axes[0].low) * grid.size[1] + (y ? axes[1].high : axes[1].low);
+                    const std::complex<float>* sample = grid.values + row * grid.size[2] + (x ? axes[2].high : axes[2].low);
+                    for (size_t c = 0; c < grid.channels; ++c, sample += per_channel)
+                    {
+                        const float real = weight * sample->real();
+                        const float imaginary = weight * sample->imag();
+                        re[c] += real;
+                        im[c] += imaginary;
+                    }
+                }
+    }
+
     /** @p values, (channels, z, y, x), interpolated trilinearly at @p points,
-     *  (n, 3) along x, y and z, in m, into @p out, (n, channels): sample i
-     *  along an axis lies (i - centre) * step m from the isocentre, and a
-     *  point beyond the grid takes its edge value. Each weight is rounded to
-     *  single precision and the eight corners are summed in single precision,
-     *  z slowest and x fastest, as ``_coils._trilinear`` sums them. */
+     *  (n, 3) along x, y and z in m, into @p out, (n, channels), on every
+     *  core, as interpolate() interpolates them. */
     void trilinear(
         const SingleComplexes& values,
         const Doubles& centre,
@@ -416,62 +474,25 @@ namespace
         const Doubles& points,
         py::array_t<Complex, py::array::c_style> out)
     {
-        if (values.ndim() != 4)
-            throw std::invalid_argument("the maps must be (channels, z, y, x)");
-        if (centre.ndim() != 1 || centre.shape(0) != 3 || step.ndim() != 1 || step.shape(0) != 3)
-            throw std::invalid_argument("the grid's centre and step must hold three values, along x, y and z");
+        const MapGrid grid = map_grid(values, centre, step);
         if (points.ndim() != 2 || points.shape(1) != 3)
             throw std::invalid_argument("the points must be (n, 3)");
-        const size_t channels = static_cast<size_t>(values.shape(0));
         const size_t count = static_cast<size_t>(points.shape(0));
         if (out.ndim() != 2 || static_cast<size_t>(out.shape(0)) != count ||
-            static_cast<size_t>(out.shape(1)) != channels)
+            static_cast<size_t>(out.shape(1)) != grid.channels)
             throw std::invalid_argument("out must be (points, channels)");
-        const size_t size[3] = {static_cast<size_t>(values.shape(1)),
-                                static_cast<size_t>(values.shape(2)),
-                                static_cast<size_t>(values.shape(3))};
-        if (size[0] == 0 || size[1] == 0 || size[2] == 0)
-            throw std::invalid_argument("the maps must hold a sample along each axis");
-        const size_t per_channel = size[0] * size[1] * size[2];
-        const std::complex<float>* maps = values.data();
         const double* at = points.data();
-        const double* middle = centre.data();
-        const double* spacing = step.data();
         Complex* into = out.mutable_data();
         py::gil_scoped_release unlocked;
         bloch::parallel(
             count, std::max(1u, std::thread::hardware_concurrency()), kPointsPerWorker,
             [&](size_t, size_t first, size_t last) {
-                std::vector<float> re(channels), im(channels);
+                std::vector<float> re(grid.channels), im(grid.channels);
                 for (size_t n = first; n < last; ++n)
                 {
-                    const double* point = at + 3 * n;
-                    Straddle axes[3];
-                    for (size_t k = 0; k < 3; ++k)
-                        axes[k] = straddle(point[2 - k], spacing[2 - k], middle[2 - k], size[k]);
-                    std::fill(re.begin(), re.end(), 0.0f);
-                    std::fill(im.begin(), im.end(), 0.0f);
-                    for (int z = 0; z < 2; ++z)
-                        for (int y = 0; y < 2; ++y)
-                            for (int x = 0; x < 2; ++x)
-                            {
-                                const float weight =
-                                    static_cast<float>(axes[0].weight[z] * axes[1].weight[y] * axes[2].weight[x]);
-                                const size_t flat = ((z ? axes[0].high : axes[0].low) * size[1] +
-                                                     (y ? axes[1].high : axes[1].low)) *
-                                        size[2] +
-                                    (x ? axes[2].high : axes[2].low);
-                                for (size_t c = 0; c < channels; ++c)
-                                {
-                                    const std::complex<float> sample = maps[c * per_channel + flat];
-                                    const float real = weight * sample.real();
-                                    const float imaginary = weight * sample.imag();
-                                    re[c] += real;
-                                    im[c] += imaginary;
-                                }
-                            }
-                    for (size_t c = 0; c < channels; ++c)
-                        into[n * channels + c] = Complex(re[c], im[c]);
+                    interpolate(grid, at + 3 * n, re.data(), im.data());
+                    for (size_t c = 0; c < grid.channels; ++c)
+                        into[n * grid.channels + c] = Complex(re[c], im[c]);
                 }
             });
     }
