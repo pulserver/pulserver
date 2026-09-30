@@ -28,6 +28,7 @@ from ..recon._runtime.mrd2dicom import MrdDicomBuilder
 from ..recon._runtime.readers import deserialize_config, read_text
 from ._designs import Design, DesignCache
 from ._enrich import enrich_acquisition, enrich_header
+from ._motion import Pose, pose_of
 from ._queue import QueueFile
 from ._workers import WorkerPool
 
@@ -800,10 +801,13 @@ def _relay(
     source: Connection,
     client: Connection,
     convert: Callable[[Any], Any] | None = None,
+    poses: Callable[[Pose], None] | None = None,
 ) -> None:
     """Send everything a reconstruction emits back to the client, until its close.
 
-    ``convert`` turns each image into what is sent in its place. A message
+    ``convert`` turns each image into what is sent in its place. ``poses``
+    takes each pose the reconstruction states, which is not sent on: a pose is
+    addressed to the scan, not to whoever asked for the images. A message
     ``source`` has no reader for ends the relay, and the client is told its
     type, because what followed it in the stream cannot be read.
     """
@@ -811,6 +815,12 @@ def _relay(
         for item in source:
             if _is_close_marker(item):
                 break
+            if isinstance(item, ismrmrd.Waveform):
+                found = pose_of(item)
+                if found is not None:
+                    if poses is not None:
+                        poses(found)
+                    continue
             if convert is not None and isinstance(item, ismrmrd.Image):
                 item = convert(item)
             client.send(item)

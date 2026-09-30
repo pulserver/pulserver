@@ -105,3 +105,93 @@ def test_creating_replaces_the_poses_of_an_earlier_scan(tmp_path):
     with MotionWriter(path) as writer:
         assert writer.version == 0
         assert slot_of(path, 0) == [0] * 12
+
+
+def test_a_pose_states_where_the_object_is_and_what_to_do():
+    """A reconstruction states a pose as a waveform the proxy reads."""
+    from pulserver.proxy._motion import Pose, pose_of, pose_waveform
+
+    pose = Pose(
+        rotation=(0.0, -1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0),
+        translation_m=(0.01, -0.02, 0.003),
+        rescan=True,
+    )
+    read = pose_of(pose_waveform(pose))
+    assert read.rotation == pytest.approx(pose.rotation)
+    assert read.translation_m == pytest.approx(pose.translation_m, abs=1e-7)
+    assert read.rescan is True
+
+
+def test_a_waveform_that_is_not_a_pose_is_not_read_as_one():
+    """A physiological trace must not be mistaken for a pose."""
+    import ismrmrd
+    import numpy as np
+
+    from pulserver.proxy._motion import pose_of
+
+    trace = ismrmrd.Waveform.from_array(np.zeros((1, 32), dtype=np.uint32))
+    trace.waveform_id = 0
+    assert pose_of(trace) is None
+
+
+def test_a_pose_too_short_to_read_is_passed_over():
+    """A malformed pose leaves the last one standing rather than stopping a scan."""
+    import ismrmrd
+    import numpy as np
+
+    from pulserver.proxy._motion import POSE_WAVEFORM_ID, pose_of
+
+    short = ismrmrd.Waveform.from_array(np.zeros((1, 4), dtype=np.uint32))
+    short.waveform_id = POSE_WAVEFORM_ID
+    assert pose_of(short) is None
+
+
+def test_the_translation_does_not_cross_to_the_scan(tmp_path):
+    """Only the rotation reaches the sequencer; the translation is the recon's."""
+    from pulserver.proxy._motion import Pose
+
+    pose = Pose(rotation=TURNED, translation_m=(0.05, 0.0, 0.0))
+    path = tmp_path / "motion.buf"
+    with MotionWriter(path) as writer:
+        writer.publish(pose.rotation, rescan=pose.rescan)
+        words = slot_of(path, 0)
+    assert rotation_of(words) == pytest.approx(TURNED)
+    # Twelve words of version, rescan, check and nine of rotation: no room for
+    # a translation, and none is written.
+    assert len(words) == 12
+
+
+class _Stream:
+    """A connection's worth of items, and what was sent on."""
+
+    def __init__(self, items):
+        self._items = list(items)
+        self.sent = []
+        self.unreadable = None
+
+    def __iter__(self):
+        return iter(self._items)
+
+    def send(self, item):
+        self.sent.append(item)
+
+
+def test_a_pose_reaches_the_scan_and_not_whoever_asked_for_the_images():
+    """A pose is addressed to the sequencer; the client asked for pictures."""
+    import ismrmrd
+    import numpy as np
+
+    from pulserver.proxy._motion import Pose, pose_waveform
+    from pulserver.proxy._proxy import _relay
+
+    pose = Pose(rotation=TURNED)
+    trace = ismrmrd.Waveform.from_array(np.zeros((1, 8), dtype=np.uint32))
+    trace.waveform_id = 0
+    source = _Stream([trace, pose_waveform(pose), trace])
+    client = _Stream([])
+    taken = []
+    _relay(source, client, poses=taken.append)
+
+    assert [p.rotation for p in taken] == [pytest.approx(TURNED)]
+    assert len(client.sent) == 2, "the pose was sent on to the client"
+    assert all(w.waveform_id == 0 for w in client.sent)

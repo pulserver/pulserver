@@ -21,7 +21,11 @@ from __future__ import annotations
 
 import os
 import struct
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
+
+import numpy as np
 
 #: The file's first four bytes, as the writer's byte order lays them.
 MAGIC = 0x504D4342  # 'PMCB'
@@ -56,6 +60,66 @@ def _check_of(words, skip: int = _CHECK) -> int:
             continue
         total = ((total ^ (word & 0xFFFFFFFF)) * 16777619) & 0xFFFFFFFF
     return total or 1  # 0 is reserved for a slot never written
+
+
+#: The waveform a reconstruction states a pose in. Reserved: a stream carrying
+#: it is not carrying a physiological trace.
+POSE_WAVEFORM_ID = 1010
+
+
+@dataclass(frozen=True)
+class Pose:
+    """Where a reconstruction has found the object, and what to do about it.
+
+    ``rotation`` is row major, the physical frame from the logical one.
+    ``translation_m`` is what the reconstruction applies to its own data; it
+    does not cross to the sequencer, which corrects orientation alone.
+    """
+
+    rotation: tuple[float, ...]
+    translation_m: tuple[float, float, float] = (0.0, 0.0, 0.0)
+    rescan: bool = False
+
+
+def pose_of(waveform: Any) -> Pose | None:
+    """Read a pose out of a waveform, or None where it holds none.
+
+    Returns
+    -------
+    Pose or None
+        None where the waveform is not a pose, or holds too few values to be
+        one: a stream is not stopped over a malformed pose, the last one
+        published simply stands.
+    """
+    if int(getattr(waveform, "waveform_id", -1)) != POSE_WAVEFORM_ID:
+        return None
+    words = np.asarray(waveform.data, dtype=np.uint32).ravel()
+    if words.size < 13:
+        return None
+    values = words.view(np.float32)
+    return Pose(
+        rotation=tuple(float(v) for v in values[:9]),
+        translation_m=(
+            float(values[9]),
+            float(values[10]),
+            float(values[11]),
+        ),
+        rescan=bool(words[12]),
+    )
+
+
+def pose_waveform(pose: Pose) -> Any:
+    """Return the waveform a reconstruction states ``pose`` in."""
+    import ismrmrd
+
+    values = np.zeros(13, dtype=np.float32)
+    values[:9] = np.asarray(pose.rotation, dtype=np.float32)
+    values[9:12] = np.asarray(pose.translation_m, dtype=np.float32)
+    words = values.view(np.uint32).copy()
+    words[12] = 1 if pose.rescan else 0
+    waveform = ismrmrd.Waveform.from_array(words.reshape(1, -1))
+    waveform.waveform_id = POSE_WAVEFORM_ID
+    return waveform
 
 
 class MotionWriter:
