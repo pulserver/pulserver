@@ -584,6 +584,10 @@ stopped and the client told so; <code class="docutils literal notranslate"><span
 worker is terminated; a forwarded series’ connection is closed.</p></li>
 <li><p><strong>queue</strong> – Directory the queued series are written to; a temporary directory,
 removed on <a class="reference internal" href="pulserver.proxy.ReconProxy.close.html#pulserver.proxy.ReconProxy.close" title="pulserver.proxy.ReconProxy.close"><code class="xref py py-meth docutils literal notranslate"><span class="pre">close()</span></code></a>, when <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
+<li><p><strong>slot_directory</strong> – Directory the slots are held in, shared with every other proxy on this
+host so they count against one set;
+<code class="xref py py-data docutils literal notranslate"><span class="pre">DEFAULT_SLOT_DIRECTORY</span></code>
+when <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
 <li><p><strong>forward</strong> – <code class="docutils literal notranslate"><span class="pre">(host,</span> <span class="pre">port)</span></code> of the MRD server that reconstructs every series;
 local workers when <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
 <li><p><strong>forward_config</strong> – Config name sent to that server instead of the reconstruction plugin.</p></li>
