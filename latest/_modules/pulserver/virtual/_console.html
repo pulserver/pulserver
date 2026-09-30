@@ -577,6 +577,10 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_coils</span> <span class="o">=</span> <span class="n">coils</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">fields</span><span class="p">,</span> <span class="n">field_t</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">field_t</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">coil</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_coil</span><span class="p">(</span><span class="n">coil</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">subject</span> <span class="o">=</span> <span class="s2">""</span>
+        <span class="c1"># BrainWeb, kept from one exam to the next with what it has loaded, and</span>
+        <span class="c1"># the thread its field map is computed in after an exam's localizer.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_brainweb</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_warming</span><span class="p">:</span> <span class="n">threading</span><span class="o">.</span><span class="n">Thread</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">phantom</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_phantom</span><span class="p">(</span><span class="s2">""</span><span class="p">)</span>
         <span class="c1"># The exam's isochromats between its scans, beside the slabs they were</span>
         <span class="c1"># kept in, and how many exams have started, so that a scan hands back</span>
@@ -657,12 +661,14 @@
         <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_held</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_exams</span> <span class="o">+=</span> <span class="mi">1</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_isochromats</span> <span class="o">=</span> <span class="kc">None</span>
-        <span class="k">return</span> <span class="p">[</span>
+        <span class="n">files</span> <span class="o">=</span> <span class="p">[</span>
             <span class="n">_dicom_bytes</span><span class="p">(</span><span class="n">dataset</span><span class="p">)</span>
             <span class="k">for</span> <span class="n">dataset</span> <span class="ow">in</span> <span class="n">localizer</span><span class="p">(</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">phantom</span><span class="p">,</span> <span class="n">field_t</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">field_t</span><span class="p">,</span> <span class="n">subject</span><span class="o">=</span><span class="n">subject</span>
             <span class="p">)</span>
-        <span class="p">]</span></div>
+        <span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_warm</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">files</span></div>
 
 
 <div class="viewcode-block" id="Console.scan">
@@ -713,6 +719,8 @@
             <span class="n">isochromats</span> <span class="o">=</span> <span class="n">held</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
             <span class="n">isochromats</span><span class="o">.</span><span class="n">reset</span><span class="p">()</span>
         <span class="k">else</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_warming</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_warming</span><span class="o">.</span><span class="n">join</span><span class="p">()</span>
             <span class="n">isochromats</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">phantom</span><span class="o">.</span><span class="n">isochromats</span><span class="p">(</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_spacing</span><span class="p">(</span><span class="n">region</span><span class="p">),</span>
                 <span class="n">field_t</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">field_t</span><span class="p">,</span>
@@ -770,8 +778,30 @@
         <span class="kn">from</span><span class="w"> </span><span class="nn">._command</span><span class="w"> </span><span class="kn">import</span> <span class="n">default_phantom</span>
 
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">fields</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">subject</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="o">==</span> <span class="s2">"brainweb"</span><span class="p">:</span>
-            <span class="k">return</span> <span class="n">BrainWeb</span><span class="p">()</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_brainweb</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_brainweb</span> <span class="o">=</span> <span class="n">BrainWeb</span><span class="p">()</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_brainweb</span>
         <span class="k">return</span> <span class="n">default_phantom</span><span class="p">()</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_warm</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Compute the field map of the exam's BrainWeb in a thread of its own, unless it has one or is computing it."""</span>
+        <span class="n">brain</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">phantom</span>
+        <span class="k">if</span> <span class="n">brain</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_brainweb</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">brain</span><span class="o">.</span><span class="n">susceptibility</span><span class="p">:</span>
+            <span class="k">return</span>
+        <span class="k">if</span> <span class="s2">"field_ppm"</span> <span class="ow">in</span> <span class="nb">vars</span><span class="p">(</span><span class="n">brain</span><span class="p">)</span> <span class="ow">or</span> <span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_warming</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_warming</span><span class="o">.</span><span class="n">is_alive</span><span class="p">()</span>
+        <span class="p">):</span>
+            <span class="k">return</span>
+
+        <span class="k">def</span><span class="w"> </span><span class="nf">compute</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># A failure here is raised again by the scan that needs the map.</span>
+            <span class="k">with</span> <span class="n">contextlib</span><span class="o">.</span><span class="n">suppress</span><span class="p">(</span><span class="ne">Exception</span><span class="p">):</span>
+                <span class="n">brain</span><span class="o">.</span><span class="n">field_ppm</span>  <span class="c1"># noqa: B018</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_warming</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Thread</span><span class="p">(</span>
+            <span class="n">target</span><span class="o">=</span><span class="n">compute</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">"pulserver-field"</span><span class="p">,</span> <span class="n">daemon</span><span class="o">=</span><span class="kc">True</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_warming</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_scan</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
