@@ -17,10 +17,12 @@
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "bloch/bloch.hpp"
 #include "bloch/events.hpp"
+#include "bloch/parallel.hpp"
 #include "bloch/repetitions.hpp"
 
 namespace py = pybind11;
@@ -30,6 +32,10 @@ namespace
     using Complex = std::complex<double>;
     using Doubles = py::array_t<double, py::array::c_style | py::array::forcecast>;
     using Complexes = py::array_t<Complex, py::array::c_style | py::array::forcecast>;
+    using SingleComplexes = py::array_t<std::complex<float>, py::array::c_style | py::array::forcecast>;
+
+    /** Points a worker interpolates maps at, at least. */
+    constexpr size_t kPointsPerWorker = 4096;
 
     std::vector<double> column(const Doubles& values, size_t count, const char* name)
     {
@@ -381,6 +387,95 @@ namespace
             py::array_t<double>(static_cast<py::ssize_t>(window.receiver.size()), window.receiver.data()));
     }
 
+    /** An axis of a grid at a point: its two samples and their weights. */
+    struct Straddle
+    {
+        size_t low;
+        size_t high;
+        double weight[2];
+    };
+
+    Straddle straddle(double position, double step, double centre, size_t size)
+    {
+        const double index = std::min(std::max(position / step + centre, 0.0), static_cast<double>(size) - 1.0);
+        const size_t low = std::min(static_cast<size_t>(std::floor(index)), size > 1 ? size - 2 : 0);
+        const double above = index - static_cast<double>(low);
+        return {low, std::min(low + 1, size - 1), {1.0 - above, above}};
+    }
+
+    /** @p values, (channels, z, y, x), interpolated trilinearly at @p points,
+     *  (n, 3) along x, y and z, in m, into @p out, (n, channels): sample i
+     *  along an axis lies (i - centre) * step m from the isocentre, and a
+     *  point beyond the grid takes its edge value. Each weight is rounded to
+     *  single precision and the eight corners are summed in single precision,
+     *  z slowest and x fastest, as ``_coils._trilinear`` sums them. */
+    void trilinear(
+        const SingleComplexes& values,
+        const Doubles& centre,
+        const Doubles& step,
+        const Doubles& points,
+        py::array_t<Complex, py::array::c_style> out)
+    {
+        if (values.ndim() != 4)
+            throw std::invalid_argument("the maps must be (channels, z, y, x)");
+        if (centre.ndim() != 1 || centre.shape(0) != 3 || step.ndim() != 1 || step.shape(0) != 3)
+            throw std::invalid_argument("the grid's centre and step must hold three values, along x, y and z");
+        if (points.ndim() != 2 || points.shape(1) != 3)
+            throw std::invalid_argument("the points must be (n, 3)");
+        const size_t channels = static_cast<size_t>(values.shape(0));
+        const size_t count = static_cast<size_t>(points.shape(0));
+        if (out.ndim() != 2 || static_cast<size_t>(out.shape(0)) != count ||
+            static_cast<size_t>(out.shape(1)) != channels)
+            throw std::invalid_argument("out must be (points, channels)");
+        const size_t size[3] = {static_cast<size_t>(values.shape(1)),
+                                static_cast<size_t>(values.shape(2)),
+                                static_cast<size_t>(values.shape(3))};
+        if (size[0] == 0 || size[1] == 0 || size[2] == 0)
+            throw std::invalid_argument("the maps must hold a sample along each axis");
+        const size_t per_channel = size[0] * size[1] * size[2];
+        const std::complex<float>* maps = values.data();
+        const double* at = points.data();
+        const double* middle = centre.data();
+        const double* spacing = step.data();
+        Complex* into = out.mutable_data();
+        py::gil_scoped_release unlocked;
+        bloch::parallel(
+            count, std::max(1u, std::thread::hardware_concurrency()), kPointsPerWorker,
+            [&](size_t, size_t first, size_t last) {
+                std::vector<float> re(channels), im(channels);
+                for (size_t n = first; n < last; ++n)
+                {
+                    const double* point = at + 3 * n;
+                    Straddle axes[3];
+                    for (size_t k = 0; k < 3; ++k)
+                        axes[k] = straddle(point[2 - k], spacing[2 - k], middle[2 - k], size[k]);
+                    std::fill(re.begin(), re.end(), 0.0f);
+                    std::fill(im.begin(), im.end(), 0.0f);
+                    for (int z = 0; z < 2; ++z)
+                        for (int y = 0; y < 2; ++y)
+                            for (int x = 0; x < 2; ++x)
+                            {
+                                const float weight =
+                                    static_cast<float>(axes[0].weight[z] * axes[1].weight[y] * axes[2].weight[x]);
+                                const size_t flat = ((z ? axes[0].high : axes[0].low) * size[1] +
+                                                     (y ? axes[1].high : axes[1].low)) *
+                                        size[2] +
+                                    (x ? axes[2].high : axes[2].low);
+                                for (size_t c = 0; c < channels; ++c)
+                                {
+                                    const std::complex<float> sample = maps[c * per_channel + flat];
+                                    const float real = weight * sample.real();
+                                    const float imaginary = weight * sample.imag();
+                                    re[c] += real;
+                                    im[c] += imaginary;
+                                }
+                            }
+                    for (size_t c = 0; c < channels; ++c)
+                        into[n * channels + c] = Complex(re[c], im[c]);
+                }
+            });
+    }
+
 } // namespace
 
 void bind_bloch(py::module_& module)
@@ -445,6 +540,16 @@ void bind_bloch(py::module_& module)
         py::arg("frequency"),
         py::arg("raster"),
         "The field an RF pulse plays, as (start, step, (channels, steps) b1 in Hz).");
+
+    module.def(
+        "trilinear",
+        &trilinear,
+        py::arg("values"),
+        py::arg("centre"),
+        py::arg("step"),
+        py::arg("points"),
+        py::arg("out"),
+        "Maps (channels, z, y, x) interpolated trilinearly at (n, 3) points into out, (n, channels).");
 
     module.def(
         "adc_window",

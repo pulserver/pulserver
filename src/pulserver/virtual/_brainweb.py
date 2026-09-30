@@ -13,6 +13,7 @@ import pypulseqpp as pp
 from ._coils import Coil
 from ._isochromats import Isochromats
 from ._phantom import Phantom
+from ._region import Slabs
 
 #: The tissue classes of BrainWeb's normal brain, in the order of the fuzzy
 #: model brainweb-dl returns for its subject 0, each with the T1 and T2, in s,
@@ -38,6 +39,10 @@ AIR_PPM, WATER_PPM = 0.36, -9.05
 #: MNI coordinates, in mm, of the first voxel of the model, whose 1 mm voxels
 #: run along z, y and x, x fastest.
 _FIRST_VOXEL_MM = {"x": -90.0, "y": -126.0, "z": -72.0}
+
+# Field, in Hz, by which the bounds of a slab are widened in finding the cubes
+# it may hold, against the rounding of a cube's field computed axis by axis.
+_REACH_MARGIN = 1.0
 
 
 class BrainWeb:
@@ -102,7 +107,9 @@ class BrainWeb:
             raise ImportError(
                 "BrainWeb is downloaded by brainweb-dl: pip install 'pulserver[brainweb]'"
             ) from error
-        fractions = np.asarray(
+        # C order, as every sampling of the model reshapes it: brainweb-dl
+        # returns the NIfTI file's Fortran order.
+        fractions = np.ascontiguousarray(
             brainweb_dl.get_mri(0, "fuzzy", brainweb_dir=self.directory),
             dtype=np.float32,
         )
@@ -248,19 +255,35 @@ class BrainWeb:
         field = np.zeros(cubes.shape[:3], dtype=np.float32)
         if self.susceptibility:
             field = _cubes(self.field_ppm[..., None], step)[..., 0]
-        index = np.indices(cubes.shape[:3]).reshape(3, -1).T
+        per_ppm = 1e-6 * pp.Opts().gamma * field_t
+        shifts = [per_ppm * FAT_SHIFT_PPM if name == "fat" else 0.0 for name in TISSUES]
+        fractions = cubes.reshape(-1, len(TISSUES))
+        inhomogeneity = per_ppm * field.reshape(-1)
+        voxels = None
+        if isinstance(region, Slabs):
+            voxels = _reached(
+                region,
+                cubes.shape[:3],
+                step,
+                off_resonance_hz + min(shifts) + per_ppm * float(field.min()),
+                off_resonance_hz + max(shifts) + per_ppm * float(field.max()),
+            )
+            fractions, inhomogeneity = fractions[voxels], inhomogeneity[voxels]
+        index = (
+            np.indices(cubes.shape[:3]).reshape(3, -1).T
+            if voxels is None
+            else np.column_stack(np.unravel_index(voxels, cubes.shape[:3]))
+        )
         voxel = step * index + 0.5 * (step - 1)
         z, y, x = (
             voxel[:, axis] + _FIRST_VOXEL_MM[name] for axis, name in enumerate("zyx")
         )
         positions = 1e-3 * np.column_stack([-x, -y, z])
-        per_ppm = 1e-6 * pp.Opts().gamma * field_t
-        inhomogeneity = per_ppm * field.reshape(-1)
         points, rows = [], []
-        for tissue, (name, (t1, t2, density)) in enumerate(TISSUES.items()):
-            fraction = cubes[..., tissue].reshape(-1)
+        for tissue, (t1, t2, density) in enumerate(TISSUES.values()):
+            fraction = fractions[:, tissue]
             kept = np.flatnonzero((fraction > 0.0) & (density > 0.0))
-            shift = per_ppm * FAT_SHIFT_PPM if name == "fat" else 0.0
+            shift = shifts[tissue]
             frequency = shift + off_resonance_hz + inhomogeneity[kept]
             if region is not None:
                 inside = region(positions[kept], frequency)
@@ -278,6 +301,31 @@ class BrainWeb:
             )
         proton_density, t1, t2, frequency = np.concatenate(rows).T
         return np.concatenate(points), proton_density, t1, t2, frequency
+
+
+def _reached(
+    region: Slabs, shape: tuple[int, ...], step: int, lowest: float, highest: float
+) -> np.ndarray:
+    """Return the flat indices of the cubes of ``shape`` whose centres lie in a slab of ``region`` at some frequency from ``lowest`` to ``highest`` Hz, in their order.
+
+    The slabs' bounds are widened by ``_REACH_MARGIN``, so that the cubes
+    returned hold every isochromat the slabs keep.
+    """
+    z, y, x = (
+        1e-3 * (step * np.arange(size) + 0.5 * (step - 1) + _FIRST_VOXEL_MM[name])
+        for size, name in zip(shape, "zyx", strict=True)
+    )
+    reached = np.zeros(shape, dtype=bool)
+    for gradient, (low, high) in zip(region.gradients, region.bounds, strict=True):
+        along = (
+            (gradient[2] * z)[:, None, None]
+            - (gradient[1] * y)[None, :, None]
+            - (gradient[0] * x)[None, None, :]
+        )
+        reached |= (along >= low - highest - _REACH_MARGIN) & (
+            along <= high - lowest + _REACH_MARGIN
+        )
+    return np.flatnonzero(reached)
 
 
 def _whole_millimetres(spacing: float) -> None:

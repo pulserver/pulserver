@@ -122,6 +122,10 @@ class Console:
         self._coils = coils(self.fields, field_t=self.field_t)
         self.coil = self._coil(coil)
         self.subject = ""
+        # BrainWeb, kept from one exam to the next with what it has loaded, and
+        # the thread its field map is computed in after an exam's localizer.
+        self._brainweb: Any = None
+        self._warming: threading.Thread | None = None
         self.phantom = self._phantom("")
         # The exam's isochromats between its scans, beside the slabs they were
         # kept in, and how many exams have started, so that a scan hands back
@@ -191,12 +195,14 @@ class Console:
         with self._held:
             self._exams += 1
             self._isochromats = None
-        return [
+        files = [
             _dicom_bytes(dataset)
             for dataset in localizer(
                 self.phantom, field_t=self.field_t, subject=subject
             )
         ]
+        self._warm()
+        return files
 
     def scan(
         self,
@@ -244,6 +250,8 @@ class Console:
             isochromats = held[1]
             isochromats.reset()
         else:
+            if self._warming is not None:
+                self._warming.join()
             isochromats = self.phantom.isochromats(
                 self._spacing(region),
                 field_t=self.field_t,
@@ -300,8 +308,30 @@ class Console:
         from ._command import default_phantom
 
         if self.fields is not None or subject.strip().lower() == "brainweb":
-            return BrainWeb()
+            if self._brainweb is None:
+                self._brainweb = BrainWeb()
+            return self._brainweb
         return default_phantom()
+
+    def _warm(self) -> None:
+        """Compute the field map of the exam's BrainWeb in a thread of its own, unless it has one or is computing it."""
+        brain = self.phantom
+        if brain is not self._brainweb or not brain.susceptibility:
+            return
+        if "field_ppm" in vars(brain) or (
+            self._warming is not None and self._warming.is_alive()
+        ):
+            return
+
+        def compute() -> None:
+            # A failure here is raised again by the scan that needs the map.
+            with contextlib.suppress(Exception):
+                brain.field_ppm  # noqa: B018
+
+        self._warming = threading.Thread(
+            target=compute, name="pulserver-field", daemon=True
+        )
+        self._warming.start()
 
     def _scan(
         self,

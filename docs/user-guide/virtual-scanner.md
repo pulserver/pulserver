@@ -325,7 +325,9 @@ of a console with field maps; any other is the vials. An exam is scanned in the
 coil it names, or in the one it had, `--coil` at first; a head coil of BART's
 models needs the `coils` extra. Scans of an exam that excite the same slabs play on
 one set of isochromats, each from equilibrium, so that a repeated scan neither
-builds them nor computes again the pulses an earlier one played. The localizer is drawn from the
+builds them nor computes again the pulses an earlier one played. A console
+loads BrainWeb once, and computes the field its head adds while the first
+exam's localizer is viewed. The localizer is drawn from the
 phantom's proton density, so an exam can be planned before any scan. MaRGE is
 such a console when `MARGE_PULSERVER` holds the address, `ws://127.0.0.1:8765`
 here: its sequences are then the plugins, its subject names the phantom, its RF
