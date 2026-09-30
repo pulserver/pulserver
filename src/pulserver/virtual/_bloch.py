@@ -14,8 +14,8 @@ from .. import ir
 from ._isochromats import MEMORY, Isochromats, Repetitions
 from ._repeats import Run, runs
 
-#: The ``tolerance`` of :meth:`Isochromats.repetitions` the console and the
-#: ``pulserver scan`` command play runs of repetitions to, relative to the sum
+#: The ``tolerance`` the console and the ``pulserver scan`` command play runs
+#: of repetitions and read ADC windows by a transform to, relative to the sum
 #: of the magnitudes of the terms each sample sums.
 TOLERANCE = 1e-4
 
@@ -48,7 +48,8 @@ def simulate(
     phase encodings and turned readouts play from each isochromat's map over
     one repetition, as :meth:`Isochromats.repetitions` plays them to within
     ``tolerance``; at zero, their samples are those of the blocks played one
-    by one, to rounding.
+    by one, to rounding. The other blocks read their ADC windows as
+    :meth:`Isochromats.play` reads them to within ``tolerance``.
 
     :doc:`/explanations/virtual-scanner` states the signal model.
     """
@@ -129,7 +130,12 @@ class Player:
                 continue
             self._playing = None
             readout = _played(
-                self.played, block, self._isochromats, self._turn, self._drive
+                self.played,
+                block,
+                self._isochromats,
+                self._turn,
+                self._drive,
+                self._tolerance,
             )
             if readout is not None:
                 yield readout
@@ -210,6 +216,7 @@ def _played(
     isochromats: Isochromats,
     turn: np.ndarray | None,
     drive: tuple[list, np.ndarray] | None = None,
+    tolerance: float = 0.0,
 ) -> np.ndarray | None:
     """Play one block on the isochromats; return its readout, or None where it has no ADC."""
     adc = _adc(played, block)
@@ -219,6 +226,7 @@ def _played(
         rotation=turn if played["rotate"][block] else None,
         rf=_rf(played, block, drive),
         adc=adc,
+        tolerance=tolerance,
     )
     return None if adc is None else signal.astype(np.complex64)
 

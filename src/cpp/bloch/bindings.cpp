@@ -13,6 +13,7 @@
 #include <cmath>
 #include <complex>
 #include <cstddef>
+#include <cstdint>
 #include <iterator>
 #include <memory>
 #include <stdexcept>
@@ -22,6 +23,7 @@
 
 #include "bloch/bloch.hpp"
 #include "bloch/events.hpp"
+#include "bloch/finufft.hpp"
 #include "bloch/parallel.hpp"
 #include "bloch/repetitions.hpp"
 
@@ -172,7 +174,8 @@ namespace
         double rf_start,
         double rf_step,
         const py::object& rf,
-        const py::object& adc)
+        const py::object& adc,
+        double tolerance)
     {
         bloch::BlockEvents block;
         block.duration = duration;
@@ -208,9 +211,35 @@ namespace
         Complex* out = signal.mutable_data();
         {
             py::gil_scoped_release unlocked;
-            self.play(block, out);
+            self.play(block, out, tolerance);
         }
         return signal;
+    }
+
+    /** FINUFFT's entry points, as addresses by name, and its options'
+     *  layout: the struct's size and the byte offsets of its fields, by
+     *  name. */
+    bool use_finufft(const py::dict& entries, const py::dict& layout)
+    {
+        const auto entry = [&](const char* name) {
+            return reinterpret_cast<void*>(py::cast<uintptr_t>(entries[name]));
+        };
+        const auto plans = [&](const std::string& prefix) {
+            bloch::FinufftPlans made;
+            made.makeplan = entry((prefix + "_makeplan").c_str());
+            made.setpts = entry((prefix + "_setpts").c_str());
+            made.execute = entry((prefix + "_execute").c_str());
+            made.destroy = entry((prefix + "_destroy").c_str());
+            return made;
+        };
+        const auto field = [&](const char* name) { return py::cast<size_t>(layout[name]); };
+        bloch::FinufftOptions options;
+        options.size = field("size");
+        options.threads_at = field("nthreads");
+        options.fftw_at = field("fftw");
+        options.upsampling_at = field("upsampfac");
+        options.warnings_at = field("showwarn");
+        return bloch::use_finufft(plans("finufft"), plans("finufftf"), entry("finufft_default_opts"), options);
     }
 
     /** The RF pulse of a repeated block, given[3] to given[5] as
@@ -527,6 +556,7 @@ void bind_bloch(py::module_& module)
         .def_property_readonly("coils", &bloch::Isochromats::coils)
         .def_property_readonly("transmit_channels", &bloch::Isochromats::transmit_channels)
         .def_property_readonly("elapsed", &bloch::Isochromats::elapsed)
+        .def_property_readonly("lattice_windows", &bloch::Isochromats::lattice_windows)
         .def("reset", &bloch::Isochromats::reset)
         .def("magnetization", &magnetization)
         .def("set_magnetization", &set_magnetization)
@@ -538,7 +568,8 @@ void bind_bloch(py::module_& module)
              py::arg("rf_start") = 0.0,
              py::arg("rf_step") = 0.0,
              py::arg("rf") = py::none(),
-             py::arg("adc") = py::none());
+             py::arg("adc") = py::none(),
+             py::arg("tolerance") = 0.0);
 
     py::class_<bloch::Repetitions>(module, "Repetitions")
         .def(py::init(&make_repetitions),
@@ -584,6 +615,15 @@ void bind_bloch(py::module_& module)
         py::arg("points"),
         py::arg("out"),
         "Maps (channels, z, y, x) interpolated trilinearly at (n, 3) points into out, (n, channels).");
+
+    module.def(
+        "use_finufft",
+        &use_finufft,
+        py::arg("entries"),
+        py::arg("layout"),
+        "Take FINUFFT's entry points, addresses by name (finufft_ and finufftf_ makeplan, setpts, execute and "
+        "destroy, and finufft_default_opts), and its options' size and the byte offsets of nthreads, fftw, "
+        "upsampfac and showwarn; whether they were taken.");
 
     module.def(
         "adc_window",

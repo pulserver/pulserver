@@ -32,6 +32,7 @@ pybind11_add_module(_ext
     ${CMAKE_SOURCE_DIR}/src/cpp/bloch/bindings.cpp
     ${CMAKE_SOURCE_DIR}/src/cpp/bloch/bloch.cpp
     ${CMAKE_SOURCE_DIR}/src/cpp/bloch/events.cpp
+    ${CMAKE_SOURCE_DIR}/src/cpp/bloch/finufft.cpp
     ${CMAKE_SOURCE_DIR}/src/cpp/bloch/nufft.cpp
     ${CMAKE_SOURCE_DIR}/src/cpp/bloch/repetitions.cpp
 )

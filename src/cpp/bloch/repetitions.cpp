@@ -439,26 +439,7 @@ namespace bloch
             std::vector<size_t> first_class, last_class;
         };
 
-        /** A vector of @p L values: one per slot of a pack, or one per
-         *  repetition of a part of a tile. */
-        template <typename Real, size_t L>
-        struct Lanes;
-
-        template <typename Real>
-        struct Lanes<Real, 1>
-        {
-            typedef Real Vector;
-        };
-
 #if defined(__GNUC__)
-        template <typename Real, size_t L>
-        struct Lanes
-        {
-            typedef Real Vector __attribute__((vector_size(L * sizeof(Real)), aligned(sizeof(Real)), may_alias));
-            typedef std::conditional_t<sizeof(Real) == 4, int32_t, int64_t> Scalar;
-            typedef Scalar Index __attribute__((vector_size(L * sizeof(Real))));
-        };
-
         /** Rows @p a and @p b of a 2x2 matrix of H x H blocks of lanes, the
          *  blocks off its diagonal exchanged. */
         template <typename Real, size_t L, size_t H, size_t... J>
