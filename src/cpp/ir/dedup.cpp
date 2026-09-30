@@ -1360,6 +1360,7 @@ int pulseg__get_unique_blocks(
     desc->vop_sar_ratio = seq->reserved_definitions_library.vop_sar_ratio;
     desc->vop_global_sar_ratio = seq->reserved_definitions_library.vop_global_sar_ratio;
     desc->vendor = opts->vendor;
+    desc->profile = opts->profile;
     desc->label_column_map[0] = opts->label_column_map[0];
     desc->label_column_map[1] = opts->label_column_map[1];
     desc->label_column_map[2] = opts->label_column_map[2];

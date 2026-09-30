@@ -62,7 +62,8 @@ pulseg_opts make_opts(
     float block_raster_us,
     int vendor,
     const std::array<int, 3> &label_column_map,
-    const std::string &cache_ext)
+    const std::string &cache_ext,
+    const std::optional<std::array<float, 12>> &profile)
 {
     pulseg_opts opts;
     std::memset(&opts, 0, sizeof(opts));
@@ -73,6 +74,24 @@ pulseg_opts make_opts(
     opts.vendor = vendor;
     for (std::size_t i = 0; i < label_column_map.size(); ++i)
         opts.label_column_map[i] = label_column_map[i];
+    if (profile)
+    {
+        // A format and a step for each quantity, in the order
+        // pulseg_vendor_profile declares them.
+        pulseg_quantity_format *const held[6] = {
+            &opts.profile.grad_sample,
+            &opts.profile.grad_amplitude,
+            &opts.profile.rf_sample,
+            &opts.profile.rf_amplitude,
+            &opts.profile.rf_phase,
+            &opts.profile.rf_frequency,
+        };
+        for (std::size_t i = 0; i < 6; ++i)
+        {
+            held[i]->format = static_cast<int>((*profile)[2 * i]);
+            held[i]->step = (*profile)[2 * i + 1];
+        }
+    }
     return opts;
 }
 
@@ -641,7 +660,8 @@ PYBIND11_MODULE(_ext, module)
            int vendor,
            const std::array<int, 3> &label_column_map,
            const std::string &cache_ext,
-           const std::optional<Budget> &wave_budget)
+           const std::optional<Budget> &wave_budget,
+           const std::optional<std::array<float, 12>> &profile)
         {
             const pulseg_opts opts = make_opts(
                 rf_raster_us,
@@ -650,7 +670,8 @@ PYBIND11_MODULE(_ext, module)
                 block_raster_us,
                 vendor,
                 label_column_map,
-                cache_ext);
+                cache_ext,
+                profile);
             const Collection coll = convert(chain, opts);
             const pulseg_wave_budget budget = budget_for(coll.get(), wave_budget);
             pulseg_diagnostic diag = PULSEG_DIAGNOSTIC_INIT;
@@ -679,7 +700,8 @@ PYBIND11_MODULE(_ext, module)
                 block_raster_us,
                 0,
                 label_column_map,
-                PULSEG_CACHE_EXT_DEFAULT);
+                PULSEG_CACHE_EXT_DEFAULT,
+                std::nullopt);
             return summarize(convert(chain, opts).get());
         },
         "Segment a chain read into libraries and return its summary, writing no cache.");

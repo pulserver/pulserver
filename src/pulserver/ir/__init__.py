@@ -2,6 +2,9 @@
 
 from ._checks import CheckLimits, SarRatio, check, sar_ratios
 from ._convert import (
+    Format,
+    Quantity,
+    VendorProfile,
     WaveBudget,
     cache_path,
     chain,
@@ -15,8 +18,11 @@ from ._waves import plan_waves, repetition_gradients, sample_wave
 
 __all__ = [
     "CheckLimits",
+    "Format",
     "Prescan",
+    "Quantity",
     "SarRatio",
+    "VendorProfile",
     "WaveBudget",
     "cache_path",
     "chain",

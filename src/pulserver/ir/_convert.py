@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from enum import IntEnum
 from pathlib import Path
 from typing import Any
 
@@ -23,6 +24,62 @@ def _rasters(system: pp.Opts) -> tuple[float, ...]:
         system.adc_raster_time * 1e6,
         system.block_duration_raster * 1e6,
     )
+
+
+class Format(IntEnum):
+    """What a quantity is stored as."""
+
+    FLOAT32 = 0
+    INT16 = 1
+    INT32 = 2
+
+
+@dataclass(frozen=True)
+class Quantity:
+    """The format one quantity is stored in, and what one integer step means.
+
+    ``step`` is the quantity's SI value of one integer step, so a stored value
+    ``v`` means ``v * step``. It is 0 for a float, which is stored in its SI
+    unit.
+    """
+
+    format: Format = Format.FLOAT32
+    step: float = 0.0
+
+
+@dataclass(frozen=True)
+class VendorProfile:
+    """What a cache holds its numbers as, for the machine that reads it.
+
+    A sequencer that plays integers is given integers, already scaled, so it
+    converts nothing while it plays; a reader that works in SI is given floats.
+    Every quantity defaults to a float in its SI unit.
+
+    The steps belong to the machine and arrive with its other limits. Nothing
+    here supplies one.
+    """
+
+    grad_sample: Quantity = field(default_factory=Quantity)
+    grad_amplitude: Quantity = field(default_factory=Quantity)
+    rf_sample: Quantity = field(default_factory=Quantity)
+    rf_amplitude: Quantity = field(default_factory=Quantity)
+    rf_phase: Quantity = field(default_factory=Quantity)
+    rf_frequency: Quantity = field(default_factory=Quantity)
+
+    def as_pairs(self) -> tuple[float, ...]:
+        """Return a format and a step per quantity, as the extension takes them."""
+        return tuple(
+            value
+            for quantity in (
+                self.grad_sample,
+                self.grad_amplitude,
+                self.rf_sample,
+                self.rf_amplitude,
+                self.rf_phase,
+                self.rf_frequency,
+            )
+            for value in (float(int(quantity.format)), float(quantity.step))
+        )
 
 
 @dataclass(frozen=True)
@@ -113,6 +170,7 @@ def convert(
     verify_signature: bool = True,
     sar_ratios: Sequence[SarRatio] | None = None,
     wave_budget: WaveBudget | None = None,
+    profile: VendorProfile | None = None,
 ) -> Path:
     """Segment a sequence file and write its IR cache beside it.
 
@@ -149,6 +207,9 @@ def convert(
     sar_ratios
         One per file of the chain, as :func:`sar_ratios` returns them, written
         into each subsequence of the cache; zero when None.
+    profile
+        What the cache holds its numbers as; every quantity a float in its SI
+        unit when left out.
     wave_budget
         The waveform memory of the playout the cache is for, which the cache
         lays the waves out in (:func:`plan_waves`); None holds every wave at
@@ -189,6 +250,7 @@ def convert(
         list(label_column_map),
         cache_ext,
         _held(wave_budget),
+        None if profile is None else profile.as_pairs(),
     )
     if not target.is_file():
         raise OSError(f"no cache was written for {seq_path}")

@@ -33,7 +33,7 @@
 /* The full (major, minor, revision) triple must match exactly on read: a
  * cache at any other revision is rejected outright and the .seq is
  * re-parsed, never partially or heuristically read. */
-#define PULSEG_CACHE_VERSION_REVISION 1
+#define PULSEG_CACHE_VERSION_REVISION 2
 
 /* Per-consumer sections. Each carries its own distinct payload.
  * COMMON establishes the collection + descriptor framing; the others
@@ -148,6 +148,70 @@ static long get_file_size(const char *path)
     sz = ftell(f);
     fclose(f);
     return sz;
+}
+
+/* ------ The formats a cache states its numbers in ------ */
+/* Six quantities, each a format word and a step, laid out in the order
+ * pulseg_vendor_profile declares them. */
+#define PROFILE_QUANTITIES 6
+
+static const pulseg_quantity_format *profile_read(const pulseg_vendor_profile *p, int at)
+{
+    switch (at)
+    {
+    case 0: return &p->grad_sample;
+    case 1: return &p->grad_amplitude;
+    case 2: return &p->rf_sample;
+    case 3: return &p->rf_amplitude;
+    case 4: return &p->rf_phase;
+    default: return &p->rf_frequency;
+    }
+}
+
+static pulseg_quantity_format *profile_quantity(pulseg_vendor_profile *p, int at)
+{
+    switch (at)
+    {
+    case 0: return &p->grad_sample;
+    case 1: return &p->grad_amplitude;
+    case 2: return &p->rf_sample;
+    case 3: return &p->rf_amplitude;
+    case 4: return &p->rf_phase;
+    default: return &p->rf_frequency;
+    }
+}
+
+static int write_profile(FILE *f, const pulseg_vendor_profile *p)
+{
+    int at;
+    for (at = 0; at < PROFILE_QUANTITIES; ++at)
+    {
+        const pulseg_quantity_format *q = profile_read(p, at);
+        if (!pulseg__write4(f, &q->format, 1))
+            return 0;
+        if (!pulseg__write4(f, &q->step, 1))
+            return 0;
+    }
+    return 1;
+}
+
+static int read_profile(FILE *f, pulseg_vendor_profile *p, int do_swap)
+{
+    int at;
+    for (at = 0; at < PROFILE_QUANTITIES; ++at)
+    {
+        pulseg_quantity_format *q = profile_quantity(p, at);
+        if (!pulseg__read4(f, &q->format, 1))
+            return 0;
+        if (!pulseg__read4(f, &q->step, 1))
+            return 0;
+        if (do_swap)
+        {
+            pulseg__swap4(&q->format);
+            pulseg__swap4(&q->step);
+        }
+    }
+    return 1;
 }
 
 /* ------ Serialize the COMMON region of a descriptor ------ */
@@ -311,6 +375,8 @@ static int write_common(FILE *f, const pulseg_sequence_descriptor *d)
     if (!pulseg__write4(f, &d->rf_amplitude_variable, 1))
         return 0;
     if (!pulseg__write4(f, &d->vendor, 1))
+        return 0;
+    if (!write_profile(f, &d->profile))
         return 0;
     if (!pulseg__write4(f, d->label_column_map, 3))
         return 0;
@@ -824,6 +890,8 @@ static int read_common(FILE *f, pulseg_sequence_descriptor *d, int do_swap)
     if (!pulseg__read4(f, &d->rf_amplitude_variable, 1))
         return 0;
     if (!pulseg__read4(f, &d->vendor, 1))
+        return 0;
+    if (!read_profile(f, &d->profile, do_swap))
         return 0;
     if (!pulseg__read4(f, d->label_column_map, 3))
         return 0;
