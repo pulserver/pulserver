@@ -1,11 +1,16 @@
 /**
  * @file simd.hpp
- * @brief The AVX2, FMA and AVX-512 a function is compiled for, and whether
- *        the processor it runs on has them.
+ * @brief The AVX2, FMA and AVX-512 a function is compiled for, whether the
+ *        processor it runs on has them, and the vectors of lanes such a
+ *        function computes on.
  */
 
 #ifndef PULSERVER_BLOCH_SIMD_HPP
 #define PULSERVER_BLOCH_SIMD_HPP
+
+#include <cstddef>
+#include <cstdint>
+#include <type_traits>
 
 #if defined(__x86_64__) || defined(_M_X64)
 #define BLOCH_X86_64 1
@@ -44,6 +49,27 @@
 
 namespace bloch
 {
+
+    /** A vector of @p L values of @p Real, a GNU vector of them where the
+     *  compiler has vector extensions. */
+    template <typename Real, size_t L>
+    struct Lanes;
+
+    template <typename Real>
+    struct Lanes<Real, 1>
+    {
+        typedef Real Vector;
+    };
+
+#if defined(__GNUC__)
+    template <typename Real, size_t L>
+    struct Lanes
+    {
+        typedef Real Vector __attribute__((vector_size(L * sizeof(Real)), aligned(sizeof(Real)), may_alias));
+        typedef std::conditional_t<sizeof(Real) == 4, int32_t, int64_t> Scalar;
+        typedef Scalar Index __attribute__((vector_size(L * sizeof(Real))));
+    };
+#endif
 
 #ifdef BLOCH_X86_64
     /** Whether the processor has AVX2 and FMA, and the system saves the

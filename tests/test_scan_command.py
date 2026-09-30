@@ -18,6 +18,7 @@ from pulserver.host import DesignStore
 from pulserver.host._blocks import format_limits
 from pulserver.protocol import PROTOCOL_BEGIN, PROTOCOL_END
 from pulserver.proxy import ReconProxy
+from pulserver.virtual._bloch import TOLERANCE
 from pulserver.virtual._command import (
     ORIENTATIONS,
     default_phantom,
@@ -75,6 +76,7 @@ def test_a_headless_scan_records_the_series_the_virtual_scanner_acquires(
             1e-3, field_t=field_t, region=virtual.excited(sequence, rotation)
         ),
         rotation=rotation,
+        tolerance=TOLERANCE,
     )
     whole = virtual.simulate(
         sequence, tissue.isochromats(1e-3, field_t=field_t), rotation=rotation
