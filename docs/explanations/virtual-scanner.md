@@ -173,6 +173,52 @@ rotation is stored as the rotation leaves it, in single precision, and in a
 sequence that leaves its transverse magnetization unspoiled from one repetition
 to the next, the phase that rounding accrues is what separates the two.
 
+### Runs of repetitions
+
+Most of a scan repeats a few blocks many times, changing only the phase
+offsets of its pulses and ADC events and the amplitudes of its phase-encoding
+gradients. Such a run plays from each isochromat's map over one repetition,
+as {meth}`~pulserver.virtual.Isochromats.repetitions` plays it, rather than
+block by block. A repetition is the fewest consecutive blocks, up to 64, that the
+blocks after them repeat event for event, with the same registers but the
+phase offsets and the gradients' amplitudes; runs start at any block, so a
+preparation or a train of dummy excitations before the imaging blocks is a
+run of its own or plays block by block. Within a run:
+
+- every pulse of a repetition has its phase offset larger by the same
+  increment than in the first repetition, and so has every ADC event;
+- a gradient whose amplitude varies across the repetitions and is zero during
+  its block's pulse and ADC window is a phase encoding, which a repetition
+  plays at its amplitude less the first repetition's; the phase encodings of a
+  repetition leave no area by any of its pulses nor over it, so that they turn
+  only the samples of its windows;
+- any other gradient keeps its amplitude, and each ADC window is read under a
+  gradient held throughout it.
+
+A run ends where one of these stops holding. An interleaved multislice scan
+whose RF spoiling steps each slice's pulse by its own increment, a spin echo
+phase-encoded before its refocusing pulse, and radial or spiral readouts, whose
+gradients vary during the windows, play block by block.
+
+The maps take memory in proportion to the isochromats and to the ADC windows of
+a repetition. A repetition whose maps would take more than 4 GiB is not played
+from them: a run takes a shorter repetition that fits, or its blocks play one
+by one.
+
+{func}`~pulserver.virtual.simulate` and {class}`~pulserver.virtual.Scan` take
+the `tolerance` of {meth}`~pulserver.virtual.Isochromats.repetitions`. At zero,
+a run samples what its blocks played one by one sample, to the single precision
+of the cache's amplitudes, which leave the phase encodings' area at rounding
+where the run takes it as zero. The console and `pulserver scan` play runs to a
+tolerance of $10^{-4}$, at which the transients of a steady state are carried
+until they fall below it and its fixed points are summed once, by columns of
+isochromats along the encoded axes; a run whose column sums would take more
+than 4 GiB carries every transient instead. Played to a tolerance, a run also
+takes as zero the area its phase encodings leave at the six significant digits
+a Pulseq file keeps of an amplitude, up to $2 \times 10^{-5}$ of the largest
+area one of them plays, and its samples then differ from the blocks' by the
+phase that area accrues.
+
 ## Coils and the subject's field
 
 The coils of the signal model are the phantom's own. A scan on the Bloch
@@ -238,8 +284,9 @@ the magnet's field.
 A scanner acquires in real time: each readout reaches the reconstruction once
 the scanner has played it, and the gradients sound as they play.
 {class}`~pulserver.virtual.Scan` plays the cache on isochromats against a scan
-clock, the sum of the durations of the blocks played, in spans of whole blocks.
-Each span carries the readouts of its blocks, as
+clock, the sum of the durations of the blocks played, in spans of whole blocks
+that end where a repetition of a run starts. Each span carries the readouts of
+its blocks, as
 {func}`~pulserver.virtual.simulate` returns them, and the sound of the gradients
 it plays. At a speed, a span is released once the wall clock, running that many
 times as fast as the scan, has passed its end, so that a reconstruction
@@ -362,6 +409,17 @@ virtual scanner's simulation of the cache on the same spins.
 - Played on isochromats, the cache of every fixture samples what its design's
   blocks played one by one sample, under an axial, an oblique and a reflected
   prescription, with the magnetization carried across the files of a chain.
+- The runs of a balanced SSFP, a spoiled and a multi-echo gradient echo, a
+  spin echo, a fast spin echo and an MPRAGE sample what their blocks played
+  one by one sample; a balanced SSFP plays as runs of one repetition but for
+  its preparation, and to a tolerance of $10^{-4}$ samples within a thousandth
+  of its exact samples, with its fixed points summed by columns and without.
+  An interleaved multislice scan whose pulses step unevenly, a spin echo
+  phase-encoded before its refocusing pulse, and radial readouts play block by
+  block, and so do the echoes of a three-echo gradient echo where the maps of
+  one window fit and those of three do not. A balanced gradient echo whose
+  rewinders are off by a few millionths plays as one run to a tolerance. A run
+  played across spans samples what it samples played whole.
 - The phantom sampled as isochromats, posed where an axial, an oblique or a
   reflected prescription places the field of view and scanned by a
   single-shot EPI, is acquired as the analytic phantom is: a 90° excitation

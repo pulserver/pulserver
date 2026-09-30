@@ -315,6 +315,7 @@ class Console:
     ) -> int:
         from ..host import DesignStore
         from . import SAMPLE_RATE, Scan
+        from ._bloch import TOLERANCE
 
         rotation = np.asarray(rotation, dtype=float).reshape(3, 3)
         scan = Scan(
@@ -322,6 +323,7 @@ class Console:
             isochromats,
             rotation=rotation,
             default_shim=self.coil.default_shim,
+            tolerance=TOLERANCE,
         )
         stopped = threading.Event()
 
