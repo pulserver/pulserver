@@ -33,7 +33,7 @@
 /* The full (major, minor, revision) triple must match exactly on read: a
  * cache at any other revision is rejected outright and the .seq is
  * re-parsed, never partially or heuristically read. */
-#define PULSEG_CACHE_VERSION_REVISION 22
+#define PULSEG_CACHE_VERSION_REVISION 23
 
 /* Per-consumer sections. Each carries its own distinct payload.
  * COMMON establishes the collection + descriptor framing; the others
@@ -301,6 +301,8 @@ static int write_common(FILE *f, const pulseg_sequence_descriptor *d)
     if (!pulseg__write4(f, &d->adc_raster_us, 1))
         return 0;
     if (!pulseg__write4(f, &d->block_raster_us, 1))
+        return 0;
+    if (!pulseg__write4(f, &d->enable_sar_burst_mode, 1))
         return 0;
     if (!pulseg__write4(f, &d->enable_pmc, 1))
         return 0;
@@ -812,6 +814,8 @@ static int read_common(FILE *f, pulseg_sequence_descriptor *d, int do_swap)
     if (!pulseg__read4(f, &d->adc_raster_us, 1))
         return 0;
     if (!pulseg__read4(f, &d->block_raster_us, 1))
+        return 0;
+    if (!pulseg__read4(f, &d->enable_sar_burst_mode, 1))
         return 0;
     if (!pulseg__read4(f, &d->enable_pmc, 1))
         return 0;

@@ -439,6 +439,19 @@ def _scanner_build(directory, program, name, *defines):
     return output
 
 
+def test_every_public_initializer_fills_the_structure_it_is_for(tmp_path):
+    """An initializer nothing expands is one nothing checks.
+
+    Each is a list of values in a header, and a structure that gains, loses or
+    reorders a field leaves every one of them wrong in a way that compiles
+    until a translation unit finally writes one down. This writes them all
+    down, with warnings as errors.
+    """
+    _scanner_build(
+        tmp_path, "check_initializers.c", "check_initializers", "-Wall", "-Werror"
+    )
+
+
 @pytest.fixture(name="scanner_reader", scope="module")
 def scanner_reader_fixture(tmp_path_factory):
     """The cache reader compiled as a scanner builds it."""

@@ -1,4 +1,4 @@
-"""The virtual scanner on isochromats: the cache played through pypulseqpp's Bloch simulation."""
+"""The virtual scanner on isochromats: the cache played through the Bloch equation."""
 
 import itertools
 import math
@@ -10,7 +10,7 @@ from pathlib import Path
 import numpy as np
 import pypulseqpp as pp
 import pytest
-from _virtual import OFFSET, ORIENTATIONS, posed
+from _virtual import OFFSET, ORIENTATIONS, design_samples, posed
 from pypulseqpp import sequences
 from pypulseqpp.sequences.preparation.fatsat import FAT_SHIFT_PPM
 
@@ -47,17 +47,17 @@ def converted(tmp_path_factory):
 
 
 def _designed(seq, rotation):
-    """The samples pypulseqpp simulates of each file's design, turned as the checks turn it, one scan across the chain.
+    """The samples of each file's design played block by block, turned as the checks turn it, one scan across the chain.
 
     The files carry no field, so their ppm offsets are resolved at the one the
     caches are converted at.
     """
-    spins = pp.Isochromats(POSITIONS, **TISSUE)
+    spins = virtual.Isochromats(POSITIONS, **TISSUE)
     parts = []
     for _, sequence in read_chain(seq):
         sequence.system.B0 = SYSTEM.B0
         turned = pp.TransformFOV(rotation=rotation).apply_to_sequence(sequence)
-        parts.append(turned.simulate(spins))
+        parts.append(design_samples(turned, spins))
     return np.concatenate(parts, axis=1)
 
 
@@ -67,7 +67,7 @@ def test_the_cache_played_on_isochromats_samples_what_its_design_simulated_sampl
     name, rotation, converted
 ):
     played = virtual.simulate(
-        converted / name, pp.Isochromats(POSITIONS, **TISSUE), rotation=rotation
+        converted / name, virtual.Isochromats(POSITIONS, **TISSUE), rotation=rotation
     )
     assert all(readout.dtype == np.complex64 for readout in played)
     played = np.concatenate(played, axis=1)
@@ -80,14 +80,14 @@ def test_the_cache_played_on_isochromats_samples_what_its_design_simulated_sampl
 @pytest.mark.parametrize("name", SEQUENCES)
 def test_a_scan_played_in_spans_plays_its_blocks_once_each(name, rotation, converted):
     scan = virtual.Scan(
-        converted / name, pp.Isochromats(POSITIONS, **TISSUE), rotation=rotation
+        converted / name, virtual.Isochromats(POSITIONS, **TISSUE), rotation=rotation
     )
     chunks = list(scan.chunks(0.01))
     assert chunks[0].start == 0.0 and chunks[-1].stop == scan.duration
     assert all(a.stop == b.start for a, b in itertools.pairwise(chunks))
     assert all(chunk.stop - chunk.start >= 0.01 for chunk in chunks[:-1])
     whole = virtual.simulate(
-        converted / name, pp.Isochromats(POSITIONS, **TISSUE), rotation=rotation
+        converted / name, virtual.Isochromats(POSITIONS, **TISSUE), rotation=rotation
     )
     streamed = [readout for chunk in chunks for readout in chunk.readouts]
     assert len(streamed) == len(whole)
@@ -98,7 +98,9 @@ def test_a_scan_played_in_spans_plays_its_blocks_once_each(name, rotation, conve
 @pytest.mark.parametrize("name", [name for name in SEQUENCES if "pair" not in name])
 def test_the_spans_of_a_scan_sound_as_its_design_sounds(name, rotation, converted):
     """The sound of a single-file scan, span by span, is ``Sequence.sound`` of the design as the checks turn it."""
-    scan = virtual.Scan(converted / name, pp.Isochromats(POSITIONS), rotation=rotation)
+    scan = virtual.Scan(
+        converted / name, virtual.Isochromats(POSITIONS), rotation=rotation
+    )
     sound = np.concatenate([chunk.sound for chunk in scan.chunks(0.01)], axis=1)
     ((_, design),) = read_chain(converted / name)
     designed = pp.TransformFOV(rotation=rotation).apply_to_sequence(design).sound()
@@ -109,7 +111,7 @@ def test_the_spans_of_a_scan_sound_as_its_design_sounds(name, rotation, converte
 def test_a_scan_played_at_a_speed_yields_each_span_once_its_clock_passes_it(
     converted,
 ):
-    scan = virtual.Scan(converted / "gre_2d_3sl.seq", pp.Isochromats(POSITIONS))
+    scan = virtual.Scan(converted / "gre_2d_3sl.seq", virtual.Isochromats(POSITIONS))
     started = time.monotonic()
     for chunk in scan.chunks(0.05, speed=4.0, sound=False):
         assert time.monotonic() - started >= chunk.stop / 4.0
@@ -154,7 +156,7 @@ def _offsets(scan, preparing=None):
 def test_a_scan_simulated_slower_than_it_plays_starts_its_clock_once_it_will_not_be_held(
     converted,
 ):
-    scan = virtual.Scan(converted / "gre_2d_3sl.seq", pp.Isochromats(POSITIONS))
+    scan = virtual.Scan(converted / "gre_2d_3sl.seq", virtual.Isochromats(POSITIONS))
     total = sum(scan._adc_samples(*span) for span in scan._spans(0.05))
     playing = scan.duration / SPEED
     # Twice as long to simulate as to play, all of it in the readouts: a clock
@@ -171,7 +173,7 @@ def test_a_scan_simulated_slower_than_it_plays_starts_its_clock_once_it_will_not
 def test_a_span_simulated_after_its_time_holds_the_clock_and_the_rest_keep_its_pace(
     converted,
 ):
-    scan = virtual.Scan(converted / "gre_2d_3sl.seq", pp.Isochromats(POSITIONS))
+    scan = virtual.Scan(converted / "gre_2d_3sl.seq", virtual.Isochromats(POSITIONS))
     spans = scan._spans(0.05)
     total = sum(scan._adc_samples(*span) for span in spans)
     _slowed(scan, 0.5 * scan.duration / total, held=spans[5][0])
@@ -184,7 +186,7 @@ def test_a_span_simulated_after_its_time_holds_the_clock_and_the_rest_keep_its_p
 
 
 def test_a_scan_closed_while_playing_stops_simulating(converted):
-    scan = virtual.Scan(converted / "gre_2d_3sl.seq", pp.Isochromats(POSITIONS))
+    scan = virtual.Scan(converted / "gre_2d_3sl.seq", virtual.Isochromats(POSITIONS))
     _slowed(scan, 0.0, seconds_per_second=1.0)
     chunks = scan.chunks(0.05, sound=False)
     next(chunks)
@@ -193,7 +195,7 @@ def test_a_scan_closed_while_playing_stops_simulating(converted):
 
 
 def test_an_error_in_the_simulation_is_raised_where_the_spans_are_taken(converted):
-    scan = virtual.Scan(converted / "gre_2d_3sl.seq", pp.Isochromats(POSITIONS))
+    scan = virtual.Scan(converted / "gre_2d_3sl.seq", virtual.Isochromats(POSITIONS))
 
     def failing(first, last):
         raise RuntimeError("the engine refused a block")
@@ -209,7 +211,7 @@ def test_an_error_in_the_simulation_is_raised_where_the_spans_are_taken(converte
     [({"length": 0.0}, "positive time"), ({"speed": 0.0}, "speed")],
 )
 def test_a_span_of_no_time_or_a_scan_at_no_speed_is_refused(given, message, converted):
-    scan = virtual.Scan(converted / "gre_2d_3sl.seq", pp.Isochromats(POSITIONS))
+    scan = virtual.Scan(converted / "gre_2d_3sl.seq", virtual.Isochromats(POSITIONS))
     with pytest.raises(ValueError, match=message):
         next(scan.chunks(**given))
 
@@ -323,18 +325,22 @@ def test_a_pulse_plays_on_each_transmit_channel_through_its_rf_shim_as_its_desig
 
     played = virtual.simulate(
         path,
-        pp.Isochromats(POSITIONS, transmit=transmit, **TISSUE),
+        virtual.Isochromats(POSITIONS, transmit=transmit, **TISSUE),
         default_shim=np.ones(2),
     )
 
-    designed = seq.simulate(pp.Isochromats(POSITIONS, transmit=transmit, **TISSUE))
+    designed = design_samples(
+        seq,
+        virtual.Isochromats(POSITIONS, transmit=transmit, **TISSUE),
+        transmit_channels=2,
+    )
     played = np.concatenate(played, axis=1)
     assert np.abs(played - designed).max() < PRECISION * np.abs(designed).max()
 
 
 def test_an_rf_shim_of_other_channels_than_the_coils_is_refused(shimmed):
     path, _ = shimmed
-    spins = pp.Isochromats(POSITIONS, transmit=np.ones((40, 3)), **TISSUE)
+    spins = virtual.Isochromats(POSITIONS, transmit=np.ones((40, 3)), **TISSUE)
 
     with pytest.raises(ValueError, match="weighs 2 channels, not the coil's 3"):
         virtual.simulate(path, spins, default_shim=np.ones(3))

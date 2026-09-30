@@ -1356,6 +1356,7 @@ int pulseg__get_unique_blocks(
     /* per-subsequence flags */
     desc->enable_pmc = seq->reserved_definitions_library.enable_pmc;
     desc->num_gain_cal_readouts = seq->reserved_definitions_library.num_gain_cal_readouts;
+    desc->enable_sar_burst_mode = seq->reserved_definitions_library.enable_sar_burst_mode;
     desc->vop_sar_ratio = seq->reserved_definitions_library.vop_sar_ratio;
     desc->vop_global_sar_ratio = seq->reserved_definitions_library.vop_global_sar_ratio;
     desc->vendor = opts->vendor;

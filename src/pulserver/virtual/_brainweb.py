@@ -11,6 +11,7 @@ import numpy as np
 import pypulseqpp as pp
 
 from ._coils import Coil
+from ._isochromats import Isochromats
 from ._phantom import Phantom
 
 #: The tissue classes of BrainWeb's normal brain, in the order of the fuzzy
@@ -146,7 +147,7 @@ class BrainWeb:
         region: Callable[[np.ndarray, np.ndarray], np.ndarray] | None = None,
         coil: Coil | None = None,
         threads: int = 0,
-    ) -> pp.Isochromats:
+    ) -> Isochromats:
         """Return the brain sampled as isochromats, for :func:`~pulserver.virtual.simulate`.
 
         The voxels are averaged in cubes ``spacing`` wide. Each tissue a cube
@@ -190,7 +191,7 @@ class BrainWeb:
         own, proton_density, t1, t2, frequency = self._sampled(
             spacing, field_t, off_resonance_hz, region
         )
-        return pp.Isochromats(
+        return Isochromats(
             own,
             proton_density=proton_density,
             t1=t1,

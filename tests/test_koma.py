@@ -1,4 +1,4 @@
-"""What the cache plays, simulated by KomaMRI: the exported file gives the design's signal, and pypulseqpp's Bloch simulation of the cache gives KomaMRI's.
+"""What the cache plays, simulated by KomaMRI: the exported file gives the design's signal, and the virtual scanner's Bloch simulation of the cache gives KomaMRI's.
 
 Runs where ``PULSERVER_KOMA_PROJECT`` names a Julia project holding KomaMRI,
 such as ``tests/koma`` once instantiated, with ``julia`` on the path.
@@ -91,7 +91,7 @@ def _held(t, signal):
     """Return the times and samples at which KomaMRI plays a pulse as the playout does.
 
     The playout holds each sample of a pulse sampled at the middles of equal
-    intervals over its interval, as pypulseqpp's Bloch simulation does.
+    intervals over its interval, as the virtual scanner's Bloch simulation does.
     KomaMRI joins a pulse's samples linearly and takes the field at the start
     of each time step, so it would play such a pulse half an interval late.
     Each sample is therefore given at the start of its interval and a quarter
@@ -122,12 +122,13 @@ def _as_komamri_plays_it(exported, path):
     """Write the exported file with each RF pulse in KomaMRI's convention.
 
     KomaMRI adds a pulse's phase shape and phase offset to its field with the
-    opposite sign to pypulseqpp's Bloch simulation, and refers the phase the
-    frequency offset f accrues to the pulse's centre t_c. With the samples
-    conjugated and held as :func:`_held` holds them, and the phase offset phi
-    replaced by -phi - 2 pi f t_c, KomaMRI plays the field pypulseqpp plays of
-    the pulse. The offset is written within one turn of zero, where the text
-    format keeps it to its six significant figures of a radian or less.
+    opposite sign to the virtual scanner's Bloch simulation, and refers the
+    phase the frequency offset f accrues to the pulse's centre t_c. With the
+    samples conjugated and held as :func:`_held` holds them, and the phase
+    offset phi replaced by -phi - 2 pi f t_c, KomaMRI plays the field the
+    virtual scanner plays of the pulse. The offset is written within one turn
+    of zero, where the text format keeps it to its six significant figures of
+    a radian or less.
     """
     seq = pp.Sequence(SYSTEM)
     seq.read(str(exported))
@@ -191,12 +192,12 @@ def _as_komamri_reads_it(first, directory):
 
 @pytest.fixture(scope="module")
 def simulated(tmp_path_factory):
-    """The signals of each design, by name, of its cache, and of that cache in pypulseqpp's Bloch simulation.
+    """The signals of each design, by name, of its cache, and of that cache in the virtual scanner's Bloch simulation.
 
     KomaMRI simulates the design, the exported cache and the exported cache in
     its own RF convention, each without the ADC's offsets; the last is
     demodulated by the receiver phase the export returns, as the playout
-    demodulates. pypulseqpp simulates the cache on the same spins.
+    demodulates. The virtual scanner simulates the cache on the same spins.
     """
     root = tmp_path_factory.mktemp("koma")
     spins = _phantom()
@@ -213,7 +214,7 @@ def simulated(tmp_path_factory):
         _as_komamri_plays_it(case / "exported.seq", case / "komamri.seq")
         files = _as_komamri_reads_it(first, case)
         (case / "design.txt").write_text("\n".join(files) + "\n")
-        isochromats = pp.Isochromats(
+        isochromats = virtual.Isochromats(
             spins.positions,
             proton_density=spins.density,
             t1=spins.t1,
@@ -266,7 +267,7 @@ def test_komamri_simulates_the_signal_of_the_design_from_the_exported_cache(
 
 
 @pytest.mark.parametrize("name", NAMES)
-def test_komamri_and_pypulseqpps_bloch_simulation_give_one_signal_of_the_cache(
+def test_komamri_and_the_virtual_scanners_bloch_simulation_give_one_signal_of_the_cache(
     simulated, name
 ):
     komamri, engine = simulated[name].komamri, simulated[name].engine

@@ -7,6 +7,7 @@ from ._client import record, send
 from ._coils import Coil
 from ._console import Console
 from ._export import export
+from ._isochromats import Isochromats, Repetitions
 from ._localizer import localizer
 from ._phantom import Ellipse, Phantom
 from ._region import Slabs, excited
@@ -27,7 +28,9 @@ __all__ = [
     "Coil",
     "Console",
     "Ellipse",
+    "Isochromats",
     "Phantom",
+    "Repetitions",
     "Scan",
     "Slabs",
     "acquire",

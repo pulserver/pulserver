@@ -185,6 +185,15 @@ static int is_pmc_enabled(const pulseg_collection *coll, int subseq_idx)
     return coll->descriptors[subseq_idx].enable_pmc;
 }
 
+/* Whether the scan asks to be costed under the scanner's SAR burst limits.
+ * Declared by the head file of a chain; a scanner grants or refuses it. */
+static int is_sar_burst_requested(const pulseg_collection *coll, int subseq_idx)
+{
+    if (!coll || subseq_idx < 0 || subseq_idx >= coll->num_subsequences)
+        return 0;
+    return coll->descriptors[subseq_idx].enable_sar_burst_mode;
+}
+
 static int get_subseq_segment_offset(const pulseg_collection *coll, int subseq_idx)
 {
     int i, offset = 0;
@@ -3145,6 +3154,7 @@ int pulseg_get_subseq_info(const pulseg_collection *coll, pulseg_subseq_info *in
     info->num_unique_adcs = get_num_unique_adcs(coll, subseq_idx);
     info->num_unique_rf = get_num_unique_rf(coll, subseq_idx);
     info->pmc_enabled = is_pmc_enabled(coll, subseq_idx);
+    info->sar_burst_requested = is_sar_burst_requested(coll, subseq_idx);
     info->segment_offset = get_subseq_segment_offset(coll, subseq_idx);
     info->num_adc_occurrences = get_num_adc_occurrences(coll, subseq_idx);
     info->num_label_columns = get_num_label_columns(coll, subseq_idx);

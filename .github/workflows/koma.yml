@@ -4,9 +4,9 @@ name: KomaMRI
 # pypulseqpp ships: as designed, and as the file virtual.export writes of what
 # its cache plays, whose signals agree unless the cache plays something other
 # than the design; and as that file in KomaMRI's RF convention, whose signal
-# pypulseqpp's Bloch simulation of the cache reproduces. Every night against
-# pypulseqpp's latest release, and on demand. The virtual scanner's own tests
-# hold the cache to the design on every pull request.
+# the virtual scanner's Bloch simulation of the cache reproduces. Every night
+# against pypulseqpp's latest release, and on demand. The virtual scanner's own
+# tests hold the cache to the design on every pull request.
 
 on:
   schedule:
