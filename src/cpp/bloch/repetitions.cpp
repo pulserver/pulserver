@@ -363,6 +363,23 @@ namespace bloch
             }
         };
 
+        /** Per coordinate, its phase at each of the tile's repetitions,
+         *  [coordinate][repetition], real parts into @p re and imaginary parts
+         *  into @p im: the phases one slot's repetitions are turned by lie
+         *  together. A repetition's phases are the table's at its offset, or
+         *  none where it has none. */
+        template <typename Real>
+        void tabulate_phases(const Tables<Real>& tables, const size_t* offsets, size_t n, Real* re, Real* im)
+        {
+            for (size_t k = 0; k < n; ++k)
+                for (size_t r = 0; r < kTile; ++r)
+                {
+                    const bool held = offsets[r] != kNone;
+                    re[k * kTile + r] = held ? tables.values[offsets[r] + k] : Real(1);
+                    im[k * kTile + r] = held ? tables.values[offsets[r] + n + k] : Real(0);
+                }
+        }
+
         /** What playing the slots through one tile of repetitions reads: the
          *  carry, and the reading of the grids it spreads onto. */
         template <typename Real>
@@ -527,6 +544,61 @@ namespace bloch
             return *reinterpret_cast<typename Lanes<Real, L>::Vector*>(pack + value * L);
         }
 
+        /** Pack @p p's coefficients at a window whose map rows start at value
+         *  @p u, from its magnetisation @p m at the repetition's start. */
+        template <typename Real, size_t L, bool Offsets>
+        BLOCH_INLINE void window_coefficients(
+            Real* p,
+            size_t u,
+            const typename Lanes<Real, L>::Vector* m,
+            typename Lanes<Real, L>::Vector& re,
+            typename Lanes<Real, L>::Vector& im)
+        {
+            re = lanes_at<Real, L>(p, u) * m[0] + lanes_at<Real, L>(p, u + 1) * m[1] + lanes_at<Real, L>(p, u + 2) * m[2];
+            im = lanes_at<Real, L>(p, u + 3) * m[0] + lanes_at<Real, L>(p, u + 4) * m[1] +
+                lanes_at<Real, L>(p, u + 5) * m[2];
+            if (Offsets)
+            {
+                re += lanes_at<Real, L>(p, u + 6);
+                im += lanes_at<Real, L>(p, u + 7);
+            }
+        }
+
+        /** Pack @p p's magnetisation @p m carried through repetition @p r by
+         *  its map, and turned into the next repetition's frame: by @p c and
+         *  @p sn, or where @p Netted by each slot's own turn in @p nets. */
+        template <typename Real, size_t L, bool Offsets, bool Netted>
+        BLOCH_INLINE void carry_pack(Real* p, typename Lanes<Real, L>::Vector* m, Real c, Real sn, Real* nets, size_t r)
+        {
+            using Vector = typename Lanes<Real, L>::Vector;
+            constexpr size_t T = kTile;
+            Vector nx = lanes_at<Real, L>(p, 3) * m[0] + lanes_at<Real, L>(p, 4) * m[1] + lanes_at<Real, L>(p, 5) * m[2];
+            Vector ny = lanes_at<Real, L>(p, 6) * m[0] + lanes_at<Real, L>(p, 7) * m[1] + lanes_at<Real, L>(p, 8) * m[2];
+            Vector nz = lanes_at<Real, L>(p, 9) * m[0] + lanes_at<Real, L>(p, 10) * m[1] + lanes_at<Real, L>(p, 11) * m[2];
+            if (Offsets)
+            {
+                const Vector bx = nx + lanes_at<Real, L>(p, 12);
+                const Vector by = ny + lanes_at<Real, L>(p, 13);
+                nz += lanes_at<Real, L>(p, 14);
+                if (Netted)
+                {
+                    /* Each slot's own turn, its net area's phase in it. */
+                    const Vector cg = lanes_at<Real, L>(nets, r);
+                    const Vector sg = lanes_at<Real, L>(nets + T * L, r);
+                    nx = cg * bx - sg * by;
+                    ny = sg * bx + cg * by;
+                }
+                else
+                {
+                    nx = c * bx - sn * by;
+                    ny = sn * bx + c * by;
+                }
+            }
+            m[0] = nx;
+            m[1] = ny;
+            m[2] = nz;
+        }
+
         /**
          * @p G packs' slots through the tile's @p count repetitions: each
          * repetition's coefficient at each window's first sample, u . m plus v
@@ -562,58 +634,16 @@ namespace bloch
             for (size_t r = 0; r < count; ++r)
             {
                 for (size_t w = 0; w < windows; ++w)
-                {
-                    const size_t u = u_at + w * u_width;
                     for (size_t g = 0; g < G; ++g)
-                    {
-                        Real* p = pack[g];
-                        Vector re = lanes_at<Real, L>(p, u) * m[g][0] + lanes_at<Real, L>(p, u + 1) * m[g][1] +
-                            lanes_at<Real, L>(p, u + 2) * m[g][2];
-                        Vector im = lanes_at<Real, L>(p, u + 3) * m[g][0] + lanes_at<Real, L>(p, u + 4) * m[g][1] +
-                            lanes_at<Real, L>(p, u + 5) * m[g][2];
-                        if (Offsets)
-                        {
-                            re += lanes_at<Real, L>(p, u + 6);
-                            im += lanes_at<Real, L>(p, u + 7);
-                        }
-                        q[((g * windows + w) * 2) * T + r] = re;
-                        q[((g * windows + w) * 2 + 1) * T + r] = im;
-                    }
-                }
-                const Real c = turn_cos[r];
-                const Real sn = turn_sin[r];
+                        window_coefficients<Real, L, Offsets>(
+                            pack[g],
+                            u_at + w * u_width,
+                            m[g],
+                            q[((g * windows + w) * 2) * T + r],
+                            q[((g * windows + w) * 2 + 1) * T + r]);
                 for (size_t g = 0; g < G; ++g)
-                {
-                    Real* p = pack[g];
-                    Vector nx = lanes_at<Real, L>(p, 3) * m[g][0] + lanes_at<Real, L>(p, 4) * m[g][1] +
-                        lanes_at<Real, L>(p, 5) * m[g][2];
-                    Vector ny = lanes_at<Real, L>(p, 6) * m[g][0] + lanes_at<Real, L>(p, 7) * m[g][1] +
-                        lanes_at<Real, L>(p, 8) * m[g][2];
-                    Vector nz = lanes_at<Real, L>(p, 9) * m[g][0] + lanes_at<Real, L>(p, 10) * m[g][1] +
-                        lanes_at<Real, L>(p, 11) * m[g][2];
-                    if (Offsets && Netted)
-                    {
-                        /* Each slot's own turn, its net area's phase in it. */
-                        const Vector bx = nx + lanes_at<Real, L>(p, 12);
-                        const Vector by = ny + lanes_at<Real, L>(p, 13);
-                        nz += lanes_at<Real, L>(p, 14);
-                        const Vector cg = lanes_at<Real, L>(nets + g * 2 * T * L, r);
-                        const Vector sg = lanes_at<Real, L>(nets + g * 2 * T * L + T * L, r);
-                        nx = cg * bx - sg * by;
-                        ny = sg * bx + cg * by;
-                    }
-                    else if (Offsets)
-                    {
-                        const Vector bx = nx + lanes_at<Real, L>(p, 12);
-                        const Vector by = ny + lanes_at<Real, L>(p, 13);
-                        nz += lanes_at<Real, L>(p, 14);
-                        nx = c * bx - sn * by;
-                        ny = sn * bx + c * by;
-                    }
-                    m[g][0] = nx;
-                    m[g][1] = ny;
-                    m[g][2] = nz;
-                }
+                    carry_pack<Real, L, Offsets, Netted>(
+                        pack[g], m[g], turn_cos[r], turn_sin[r], Netted ? nets + g * 2 * T * L : nullptr, r);
             }
             for (size_t g = 0; g < G; ++g)
                 for (size_t k = 0; k < 3; ++k)
@@ -983,6 +1013,102 @@ namespace bloch
             return (2 * tile.coils + vector - 1) / vector * vector;
         }
 
+        /** Each of @p values factors, pairs laid out Re, Im, times i, into
+         *  @p swapped: @p chunks whole vectors, then one pair at a time. */
+        template <typename Real, size_t L>
+        BLOCH_INLINE void factors_times_i(const Real* factor, size_t values, size_t chunks, Real* swapped)
+        {
+            using Vector = typename Lanes<Real, L>::Vector;
+            const Vector* f = reinterpret_cast<const Vector*>(factor);
+            Vector* g = reinterpret_cast<Vector*>(swapped);
+            for (size_t k = 0; k < chunks; ++k)
+            {
+                g[k] = f[k];
+                times_i<Real, L>(g[k]);
+            }
+            for (size_t k = chunks * L; k < values; k += 2)
+            {
+                swapped[k] = -factor[k + 1];
+                swapped[k + 1] = factor[k];
+            }
+        }
+
+        /** Where a slot at @p place, whose window's first sample lies at
+         *  @p origin, is spread at each of the tile's repetitions: its first
+         *  grid point and its place in its interval, from the repetitions'
+         *  steps @p delta, [axis][repetition]. */
+        template <typename Real>
+        BLOCH_INLINE void locate_repetitions(
+            const Nufft& transform, const double* delta, const double* place, double origin, double* first, Real* offset)
+        {
+            const double x = place[0];
+            const double y = place[1];
+            const double z = place[2];
+            for (size_t r = 0; r < kTile; ++r)
+            {
+                double at = 0.0;
+                first[r] = transform.locate(origin + delta[r] * x + delta[kTile + r] * y + delta[2 * kTile + r] * z, at);
+                offset[r] = static_cast<Real>(at);
+            }
+        }
+
+        /** Each tap's weights at the tile's repetitions into @p sum,
+         *  [tap][repetition], by Horner's rule over their places @p t, the
+         *  taps side by side. */
+        template <typename Real, size_t L>
+        BLOCH_INLINE void weigh_repetitions(
+            const Real* polynomial,
+            size_t powers,
+            size_t taps,
+            const typename Lanes<Real, L>::Vector* t,
+            typename Lanes<Real, L>::Vector* sum)
+        {
+            using Vector = typename Lanes<Real, L>::Vector;
+            constexpr size_t P = kTile / L;
+            for (size_t j = 0; j < taps; ++j)
+                for (size_t q = 0; q < P; ++q)
+                    sum[j * P + q] = Vector{} + polynomial[(powers - 1) * taps + j];
+            for (size_t m = powers - 1; m-- > 0;)
+                for (size_t j = 0; j < taps; ++j)
+                {
+                    const Real c = polynomial[m * taps + j];
+                    for (size_t q = 0; q < P; ++q)
+                        sum[j * P + q] = sum[j * P + q] * t[q] + c;
+                }
+        }
+
+        /** A coefficient @p a + i @p b times each factor, Re c f + Im c (i f),
+         *  spread onto the @p taps grid points from @p point with @p weight
+         *  each: @p chunks whole vectors of the values, then one at a time. */
+        template <typename Real, size_t L>
+        BLOCH_INLINE void spread_repetition(
+            Real a,
+            Real b,
+            const Real* factor,
+            const Real* swapped,
+            size_t values,
+            size_t chunks,
+            const Real* weight,
+            size_t taps,
+            Real* point)
+        {
+            using Vector = typename Lanes<Real, L>::Vector;
+            const Vector* f = reinterpret_cast<const Vector*>(factor);
+            const Vector* g = reinterpret_cast<const Vector*>(swapped);
+            for (size_t k = 0; k < chunks; ++k)
+            {
+                const Vector v = a * f[k] + b * g[k];
+                for (size_t j = 0; j < taps; ++j)
+                    *reinterpret_cast<Vector*>(point + j * values + k * L) += weight[j] * v;
+            }
+            for (size_t k = chunks * L; k < values; ++k)
+            {
+                const Real v = a * factor[k] + b * swapped[k];
+                for (size_t j = 0; j < taps; ++j)
+                    point[j * values + k] += weight[j] * v;
+            }
+        }
+
         /** Pack @p p's first @p lanes slots' encoded coefficients of turned
          *  window @p w, @p e as encode_pack leaves them, spread onto @p grid
          *  a slot and a repetition at a time, each repetition along its own
@@ -1005,84 +1131,39 @@ namespace bloch
             const size_t values = 2 * tile.coils;
             /* The values of whole vectors, then the rest one at a time. */
             const size_t chunks = L > 1 ? values / L : 0;
-            const size_t whole = chunks * L;
             const size_t taps = tile.taps;
             const size_t points = tile.cells[w] + taps;
-            const size_t powers = tile.powers;
-            const Nufft& transform = *tile.transform[w];
-            const double* delta = &tile.delta[w * 3 * kTile];
-            const Real* polynomial = &tile.polynomials[w * powers * taps];
-            /* Each factor times i. */
-            Real* swapped = work;
+            const Real* polynomial = &tile.polynomials[w * tile.powers * taps];
             alignas(64) double first[kTile];
             alignas(64) Real offset[kTile];
             alignas(64) Real weights[Nufft::kWidest * kTile];
-            const Vector* t = reinterpret_cast<const Vector*>(offset);
-            Vector* sum = reinterpret_cast<Vector*>(weights);
             for (size_t l = 0; l < lanes; ++l)
             {
                 const size_t slot = p * L + l;
                 const Real* factor = &s.factor[(slot * W + w) * values];
-                const Vector* f = reinterpret_cast<const Vector*>(factor);
-                Vector* g = reinterpret_cast<Vector*>(swapped);
-                for (size_t k = 0; k < chunks; ++k)
-                {
-                    g[k] = f[k];
-                    times_i<Real, L>(g[k]);
-                }
-                for (size_t k = whole; k < values; k += 2)
-                {
-                    swapped[k] = -factor[k + 1];
-                    swapped[k + 1] = factor[k];
-                }
-                const double x = s.place[3 * slot];
-                const double y = s.place[3 * slot + 1];
-                const double z = s.place[3 * slot + 2];
-                const double origin = s.origin[slot * W + w];
-                for (size_t r = 0; r < kTile; ++r)
-                {
-                    double at = 0.0;
-                    first[r] = transform.locate(
-                        origin + delta[r] * x + delta[kTile + r] * y + delta[2 * kTile + r] * z, at);
-                    offset[r] = static_cast<Real>(at);
-                }
-                /* Each tap's weights at the tile's repetitions, [tap][repetition],
-                 * by Horner's rule over their offsets, the taps side by side. */
-                for (size_t j = 0; j < taps; ++j)
-                    for (size_t q = 0; q < P; ++q)
-                        sum[j * P + q] = Vector{} + polynomial[(powers - 1) * taps + j];
-                for (size_t m = powers - 1; m-- > 0;)
-                    for (size_t j = 0; j < taps; ++j)
-                    {
-                        const Real c = polynomial[m * taps + j];
-                        for (size_t q = 0; q < P; ++q)
-                            sum[j * P + q] = sum[j * P + q] * t[q] + c;
-                    }
+                factors_times_i<Real, L>(factor, values, chunks, work);
+                locate_repetitions<Real>(
+                    *tile.transform[w], &tile.delta[w * 3 * kTile], &s.place[3 * slot], s.origin[slot * W + w], first, offset);
+                weigh_repetitions<Real, L>(
+                    polynomial, tile.powers, taps, reinterpret_cast<const Vector*>(offset), reinterpret_cast<Vector*>(weights));
                 const Real* re = reinterpret_cast<const Real*>(e + 2 * l * P);
                 const Real* im = reinterpret_cast<const Real*>(e + (2 * l + 1) * P);
                 Real* rows = grid + tile.region[w] + s.decay[slot] * kTile * points * values;
                 for (size_t r = 0; r < tile.count; ++r)
                 {
-                    /* A coefficient c times a factor f is Re c f + Im c (i f),
-                     * spread onto each tap's grid point. */
-                    const Real a = re[r];
-                    const Real b = im[r];
                     Real weight[Nufft::kWidest];
                     for (size_t j = 0; j < taps; ++j)
                         weight[j] = weights[j * kTile + r];
-                    Real* point = rows + (r * points + static_cast<size_t>(first[r])) * values;
-                    for (size_t k = 0; k < chunks; ++k)
-                    {
-                        const Vector v = a * f[k] + b * g[k];
-                        for (size_t j = 0; j < taps; ++j)
-                            *reinterpret_cast<Vector*>(point + j * values + k * L) += weight[j] * v;
-                    }
-                    for (size_t k = whole; k < values; ++k)
-                    {
-                        const Real v = a * factor[k] + b * swapped[k];
-                        for (size_t j = 0; j < taps; ++j)
-                            point[j * values + k] += weight[j] * v;
-                    }
+                    spread_repetition<Real, L>(
+                        re[r],
+                        im[r],
+                        factor,
+                        work,
+                        values,
+                        chunks,
+                        weight,
+                        taps,
+                        rows + (r * points + static_cast<size_t>(first[r])) * values);
                 }
             }
         }
@@ -2373,18 +2454,9 @@ namespace bloch
                 const double area = r < tile.count ? encoding_area(first + r, at) : 0.0;
                 offsets[r] = area != 0.0 ? tables.find(axis, area, values) : kNone;
             }
-            /* Per coordinate, its phase at each repetition: the phases one
-             * slot's repetitions are turned by lie together. */
-            const size_t n = values.size();
             Real* re = &tile.tables[tile.table_at[at]];
-            Real* im = re + n * kTile;
-            for (size_t k = 0; k < n; ++k)
-                for (size_t r = 0; r < kTile; ++r)
-                {
-                    const bool held = offsets[r] != kNone;
-                    re[k * kTile + r] = held ? tables.values[offsets[r] + k] : Real(1);
-                    im[k * kTile + r] = held ? tables.values[offsets[r] + n + k] : Real(0);
-                }
+            Real* im = re + values.size() * kTile;
+            tabulate_phases(tables, offsets, values.size(), re, im);
             tile.table_re[at] = re;
             tile.table_im[at] = im;
         }
