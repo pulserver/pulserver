@@ -788,6 +788,62 @@ typedef struct pulseg_corner_point_stream
                                      loaded into the next slot ahead of it   */
 
 /**
+ * @brief How one quantity is stored in the cache.
+ *
+ * @c format is a @c PULSEG_FORMAT_* code. For an integer format, @c step is
+ * the quantity's SI value of one integer step, so a stored value @c v means
+ * @c v * step. For @c PULSEG_FORMAT_FLOAT32 the value is stored in its SI
+ * unit and @c step is 0.
+ *
+ * A step rather than a full scale, because the two are independent: a scanner
+ * may span its phase over one range of integers and carry it in a wider one,
+ * and a frequency is usually stated as the resolution the synthesiser steps
+ * by rather than as an extreme it reaches.
+ */
+typedef struct pulseg_quantity_format
+{
+    int format;  /**< PULSEG_FORMAT_* code                                 */
+    float step;  /**< SI value of one integer step; 0 when the quantity is
+                  *   stored as a float                                    */
+} pulseg_quantity_format;
+
+/* clang-format off */
+#define PULSEG_QUANTITY_FORMAT_INIT {PULSEG_FORMAT_FLOAT32, 0.0f}
+/* clang-format on */
+
+/**
+ * @brief What a cache holds its numbers as, for the machine that reads it.
+ *
+ * A sequencer that plays integers is written integers, already scaled, so it
+ * converts nothing at playout. A reader that works in SI is written floats.
+ * The profile travels in the cache header, so a reader can establish that the
+ * cache was built for it before reading a single sample.
+ *
+ * The steps belong to the machine, not to this library: they arrive with the
+ * scanner's other limits and are written here unchanged.
+ */
+typedef struct pulseg_vendor_profile
+{
+    pulseg_quantity_format grad_sample;    /**< gradient shape samples (Hz/m) */
+    pulseg_quantity_format grad_amplitude; /**< gradient amplitude (Hz/m)     */
+    pulseg_quantity_format rf_sample;      /**< RF magnitude samples (Hz)     */
+    pulseg_quantity_format rf_amplitude;   /**< RF amplitude (Hz)             */
+    pulseg_quantity_format rf_phase;       /**< RF phase (rad)                */
+    pulseg_quantity_format rf_frequency;   /**< RF frequency offset (Hz)      */
+} pulseg_vendor_profile;
+
+/* Every quantity in SI as a float: what a reader working in SI is given, and
+ * what a machine that has stated no scales gets. */
+/* clang-format off */
+#define PULSEG_VENDOR_PROFILE_INIT \
+    { \
+    PULSEG_QUANTITY_FORMAT_INIT, PULSEG_QUANTITY_FORMAT_INIT, \
+    PULSEG_QUANTITY_FORMAT_INIT, PULSEG_QUANTITY_FORMAT_INIT, \
+    PULSEG_QUANTITY_FORMAT_INIT, PULSEG_QUANTITY_FORMAT_INIT \
+    }
+/* clang-format on */
+
+/**
  * @brief What a playout's waveform memory affords the waves.
  *
  * A property of the playout, not of the sequence.

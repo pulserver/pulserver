@@ -1,15 +1,27 @@
 """Number of concurrent reconstructions the host memory and its GPUs allow."""
 
-__all__ = ["Slot", "Slots", "compute_max_concurrent", "gpu_devices", "slot_devices"]
+__all__ = [
+    "HostSlots",
+    "Slot",
+    "Slots",
+    "compute_max_concurrent",
+    "gpu_devices",
+    "slot_devices",
+]
 
+import contextlib
+import fcntl
 import logging
 import math
 import os
 import shutil
 import subprocess
+import tempfile
 import threading
+import time
 from collections.abc import Sequence
 from dataclasses import dataclass
+from pathlib import Path
 
 _DEFAULT_PER_RECON_GB: float = 48.0
 _DEFAULT_HEADROOM_FRACTION: float = 0.8
@@ -135,6 +147,94 @@ class Slots:
         with self._condition:
             self._free.append(slot)
             self._condition.notify()
+
+
+#: Where slots are held when no directory is named: one place per host, so
+#: every proxy on it counts against the same slots.
+DEFAULT_SLOT_DIRECTORY = Path(tempfile.gettempdir()) / "pulserver-slots"
+
+
+@dataclass(frozen=True, eq=False)
+class _HeldSlot(Slot):
+    """A slot and the descriptor whose lock holds it."""
+
+    fd: int = -1
+
+
+class HostSlots:
+    """The slots series take, counted across every process on the host.
+
+    :class:`Slots` bounds the series one process reconstructs at once. That is
+    not the bound that matters: a reconstruction computer runs one proxy per
+    acquisition, each deriving the same count from the same memory and the same
+    GPUs, so each would admit that many and together they would admit far more
+    than the host has. A slot is held here by a lock on a file all of them
+    share, so the count is the host's.
+
+    A lock is the kernel's, so a proxy that dies frees its slots without anyone
+    noticing it died. Slot ``i`` holds ``devices[i]`` in every process, and
+    :func:`slot_devices` answers the same on one host, so two proxies never
+    take the same GPU for different series.
+    """
+
+    def __init__(
+        self, devices: Sequence[str | None], directory: Path | str | None = None
+    ) -> None:
+        self._devices = tuple(devices)
+        self.directory = Path(
+            DEFAULT_SLOT_DIRECTORY if directory is None else directory
+        )
+        self.directory.mkdir(parents=True, exist_ok=True)
+        with contextlib.suppress(OSError):
+            self.directory.chmod(0o777)
+        self._from = 0
+
+    def take(self, *, wait: bool, poll: float = 0.2) -> Slot | None:
+        """Take a free slot; without ``wait``, ``None`` when every slot is taken.
+
+        Waiting polls, because what frees a slot is another process closing a
+        descriptor, and there is nothing here to be woken by.
+        """
+        count = len(self._devices)
+        while True:
+            for step in range(count):
+                # From where the last one was taken, so a series that follows
+                # another does not land on the device it has just released:
+                # memory a reconstruction held is not free the moment it exits.
+                index = (self._from + step) % count
+                held = self._hold(index, self._devices[index])
+                if held is not None:
+                    self._from = (index + 1) % count
+                    return held
+            if not wait:
+                return None
+            time.sleep(poll)
+
+    def release(self, slot: Slot) -> None:
+        """Return a slot :meth:`take` gave."""
+        fd = getattr(slot, "fd", -1)
+        if fd >= 0:
+            with contextlib.suppress(OSError):
+                fcntl.flock(fd, fcntl.LOCK_UN)
+            with contextlib.suppress(OSError):
+                os.close(fd)
+
+    def _hold(self, index: int, device: str | None) -> Slot | None:
+        """Take slot ``index`` if nothing else holds it."""
+        path = self.directory / f"slot{index:03d}"
+        try:
+            fd = os.open(path, os.O_CREAT | os.O_RDWR, 0o666)
+        except OSError:
+            return None
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            os.close(fd)
+            return None
+        with contextlib.suppress(OSError):
+            os.ftruncate(fd, 0)
+            os.write(fd, f"{os.getpid()}\n".encode())
+        return _HeldSlot(device, fd)
 
 
 def _listed_gpus() -> int:

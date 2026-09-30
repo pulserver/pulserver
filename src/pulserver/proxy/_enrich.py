@@ -155,6 +155,13 @@ class SequenceTable:
         file = int(np.searchsorted(self._first_rows, index, side="right")) - 1
         return self._files[file].readout_k(index - int(self._first_rows[file]))
 
+    def readout_phase_modulation(self, index: int) -> np.ndarray | None:
+        """Return the phase modulation of one readout's ADC, in rad, or None."""
+        file = int(np.searchsorted(self._first_rows, index, side="right")) - 1
+        return self._files[file].readout_phase_modulation(
+            index - int(self._first_rows[file])
+        )
+
     @classmethod
     def read(cls, path: Path | str) -> SequenceTable:
         """Tabulate the ``NextSequence`` chain starting at a sequence file.
@@ -299,8 +306,13 @@ def enrich_acquisition(acquisition: Any, table: SequenceTable, index: int) -> No
     Sets the encoding counters, flags, ``sample_time_us`` and
     ``encoding_space_ref``, and ``center_sample`` unless k does not move
     across the readout, in which case the received value stays. A readout
-    whose k moves gets it as ``traj``, trailing constant axes dropped. The
-    samples are left as received.
+    whose k moves gets it as ``traj``, trailing constant axes dropped.
+
+    The samples are left as received, except where the readout's ADC carries a
+    phase modulation. That is the part of a shifted field of view a receiver
+    cannot apply itself: under a gradient that holds one value, a shift is a
+    phase and a frequency offset, but under one that does not, the phase
+    curves over the readout and is applied here.
 
     Raises
     ------
@@ -326,6 +338,15 @@ def enrich_acquisition(acquisition: Any, table: SequenceTable, index: int) -> No
         acquisition.center_sample = int(table.center_sample[index])
     acquisition.sample_time_us = float(table.sample_time_us[index])
     acquisition.encoding_space_ref = int(table.encoding_space[index])
+
+    modulation = table.readout_phase_modulation(index)
+    if modulation is not None:
+        if modulation.size != count:
+            raise ValueError(
+                f"acquisition {index} carries {modulation.size} phase modulation "
+                f"values for {count} samples"
+            )
+        acquisition.data[:] = np.asarray(acquisition.data) * np.exp(1j * modulation)
 
     dimensions = int(table.trajectory_dimensions[index])
     if dimensions:

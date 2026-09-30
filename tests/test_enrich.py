@@ -267,3 +267,67 @@ def test_an_acquisition_of_the_wrong_length_is_refused():
     samples = np.ones((2, int(table.num_samples[0]) + 1), np.complex64)
     with pytest.raises(ValueError, match="samples"):
         enrich_acquisition(ismrmrd.Acquisition.from_array(samples), table, 0)
+
+
+def curving(tmp_path, shift_m):
+    """A readout under a gradient that does not hold one value, moved by shift_m."""
+    system = pp.Opts(B0=3.0)
+    seq = pp.Sequence(system)
+    samples = 64
+    waveform = 2.0e4 * np.sin(2 * np.pi * np.arange(samples) / samples)
+    seq.add_block(
+        pp.make_arbitrary_grad("x", waveform=waveform, system=system),
+        pp.make_adc(num_samples=samples, dwell=4e-6),
+    )
+    if any(shift_m):
+        pp.TransformFOV(translation=shift_m, through_rotation=True).apply_to_sequence(
+            seq, in_place=True
+        )
+    return written(seq, tmp_path)
+
+
+def test_a_curving_readout_carries_the_phase_its_receiver_cannot_apply(tmp_path):
+    """A shifted field of view curves the phase of a readout whose gradient varies.
+
+    Under a gradient that holds one value the shift is a phase and a frequency
+    offset, which the receiver applies. Under one that does not, what is left
+    is a curve over the readout, and it arrives unapplied.
+    """
+    table = curving(tmp_path, (0.04, 0.0, 0.0))
+    modulation = table.readout_phase_modulation(0)
+    assert modulation is not None
+    assert modulation.size == int(table.num_samples[0])
+    assert np.ptp(modulation) > 1e-3, "a curving readout's phase should not be flat"
+
+    samples = np.ones((2, int(table.num_samples[0])), np.complex64)
+    acquisition = ismrmrd.Acquisition.from_array(samples)
+    enrich_acquisition(acquisition, table, 0)
+    assert np.allclose(
+        np.asarray(acquisition.data), samples * np.exp(1j * modulation), atol=1e-6
+    )
+
+
+def test_an_unmoved_readout_arrives_as_it_was_received(tmp_path):
+    """Nothing is applied where the field of view was not moved."""
+    table = curving(tmp_path, (0.0, 0.0, 0.0))
+    assert table.readout_phase_modulation(0) is None
+
+    samples = (np.arange(64, dtype=np.complex64) + 1j).reshape(1, 64)
+    acquisition = ismrmrd.Acquisition.from_array(samples)
+    enrich_acquisition(acquisition, table, 0)
+    assert np.array_equal(np.asarray(acquisition.data), samples)
+
+
+def test_a_steady_readout_needs_no_curve(tmp_path):
+    """A gradient holding one value across the readout leaves nothing over."""
+    system = pp.Opts(B0=3.0)
+    seq = pp.Sequence(system)
+    readout = pp.make_trapezoid("x", flat_area=2000, flat_time=2.56e-3, system=system)
+    seq.add_block(
+        readout,
+        pp.make_adc(num_samples=64, duration=2.56e-3, delay=readout.rise_time),
+    )
+    pp.TransformFOV(
+        translation=(0.04, 0.0, 0.0), through_rotation=True
+    ).apply_to_sequence(seq, in_place=True)
+    assert written(seq, tmp_path).readout_phase_modulation(0) is None
