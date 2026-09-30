@@ -268,7 +268,7 @@ def _isocentre(grid: _Grid) -> np.ndarray:
 def _interpolated(grid: _Grid, points: np.ndarray, chunk: int = 1 << 16) -> np.ndarray:
     """Return ``grid`` interpolated trilinearly at ``(n, 3)`` physical points; the edge value beyond it.
 
-    The result is complex128, as :class:`pypulseqpp.Isochromats` takes it,
+    The result is complex128, as :class:`Isochromats` takes it,
     in a temporary file mapped into memory: its pages belong to the file,
     which the operating system writes back rather than holding in the
     process's memory. ``TMPDIR`` names where the file is made.

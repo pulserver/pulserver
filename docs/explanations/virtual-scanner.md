@@ -125,15 +125,15 @@ excitation of its file acquires zeros.
 The signal model leaves out what an RF pulse does beyond an ideal excitation,
 refocusing or saturation, and what the magnetization does between them.
 {func}`~pulserver.virtual.simulate` plays the blocks
-{func}`~pulserver.ir.playout` returns on isochromats instead, with
-pypulseqpp's Bloch simulation ({class}`pypulseqpp.Isochromats`): flip angles,
-slice profiles, relaxation and the coherences one repetition leaves to the next
-act as the Bloch equation gives them, and the magnetization is carried from
-each block to the next, across the files of a chain. Each block's gradients are
-those of the played trajectory, turned by $R$ except in blocks labelled
-`NOROT`. Its RF pulse and its ADC play as pypulseqpp plays the RF and ADC
-events of a Pulseq block, with the frequency and phase offsets the playout
-sets, and each sample is demodulated by $\exp(i\theta(t))$ as above. A 90°
+{func}`~pulserver.ir.playout` returns on isochromats instead
+({class}`~pulserver.virtual.Isochromats`, {doc}`bloch-simulation`): flip
+angles, slice profiles, relaxation and the coherences one repetition leaves to
+the next act as the Bloch equation gives them, and the magnetization is carried
+from each block to the next, across the files of a chain. Each block's
+gradients are those of the played trajectory, turned by $R$ except in blocks
+labelled `NOROT`. Its RF pulse and its ADC play as the RF and ADC events of a
+Pulseq block, with the frequency and phase offsets the playout sets, and each
+sample is demodulated by $\exp(i\theta(t))$ as above. A 90°
 excitation of phase $\phi_e$ leaves the magnetization at the phase
 $\pi/2 - \phi_e$ of the signal model.
 
@@ -165,12 +165,13 @@ induction decay of an imperfect refocusing pulse, is left out. The phantoms'
 `isochromats` keep those a region, such as {class}`~pulserver.virtual.Slabs`,
 answers for.
 
-The cache played on isochromats samples what pypulseqpp's `Sequence.simulate`
-samples of the design, turned as the checks turn it, to the single precision
-of the cache's waveforms. A gradient turned by a block's rotation is stored as
-the rotation leaves it, in single precision, and in a sequence that leaves its
-transverse magnetization unspoiled from one repetition to the next, the phase
-that rounding accrues is what separates the two.
+Played on isochromats, the cache samples what the design samples when its
+blocks, turned as the checks turn it, are played one by one on the same
+isochromats with the gradients `pypulseqpp.Sequence.waveforms` reports, to the
+single precision of the cache's waveforms. A gradient turned by a block's
+rotation is stored as the rotation leaves it, in single precision, and in a
+sequence that leaves its transverse magnetization unspoiled from one repetition
+to the next, the phase that rounding accrues is what separates the two.
 
 ## Coils and the subject's field
 
@@ -314,10 +315,10 @@ without a flat top, so the job turns a design's gradients itself. The two
 simulations then differ only where the cache plays something other than the
 design, or by the rounding of the text format.
 
-The same job compares KomaMRI with pypulseqpp's Bloch simulation. KomaMRI adds
-a pulse's phase shape and phase offset to its field with the opposite sign to
-pypulseqpp, and refers the phase its frequency offset accrues to the pulse's
-centre. It also joins a pulse's samples linearly and takes the field at the
+The same job compares KomaMRI with the virtual scanner's Bloch simulation.
+KomaMRI adds a pulse's phase shape and phase offset to its field with the
+opposite sign, and refers the phase its frequency offset accrues to the
+pulse's centre ({doc}`bloch-simulation`). It also joins a pulse's samples linearly and takes the field at the
 start of each time step, where the playout holds each sample of a pulse sampled
 at the middles of equal intervals over its interval; read as written, such a
 pulse would play half an interval late. The exported file is therefore
@@ -325,9 +326,9 @@ simulated a third time with each pulse rewritten in KomaMRI's convention: its
 samples conjugated, each sample of a pulse sampled at the middles of equal
 intervals held from the start of its interval, and its phase offset $\phi$
 replaced by $-\phi - 2\pi f t_c$, for the frequency offset $f$ and the centre
-$t_c$. KomaMRI then plays the field pypulseqpp plays. That signal, demodulated
-by the receiver phase the export returns, is compared with pypulseqpp's
-simulation of the cache on the same spins.
+$t_c$. KomaMRI then plays the field the virtual scanner plays. That signal,
+demodulated by the receiver phase the export returns, is compared with the
+virtual scanner's simulation of the cache on the same spins.
 
 ## What a run establishes
 
@@ -343,8 +344,9 @@ simulation of the cache on the same spins.
   accrues the phase its file's excitation, refocusing and ADC timing give it,
   so the cache plays each echo as the design times it.
 - Fat precesses at its chemical shift at the magnet's field. A fat saturation
-  leaves water and fat what pypulseqpp's Bloch simulation of the designed
-  pulse leaves them, and one converted at another field misses the fat.
+  leaves water and fat what pypulseqpp's relaxation-free Bloch simulation of
+  the designed pulse leaves them, and one converted at another field misses
+  the fat.
 - The enrichment states the trajectory of the identity, along the logical
   axes, for every readout.
 - An object posed where an axial, an oblique or a reflected prescription
@@ -357,8 +359,8 @@ simulation of the cache on the same spins.
   isocentre, and the image carries the prescribed centre and the columns of
   $R$ as its read, phase and slice directions; a series short of a readout is
   refused.
-- Played on isochromats, the cache of every fixture samples what pypulseqpp's
-  simulation of its design samples, under an axial, an oblique and a reflected
+- Played on isochromats, the cache of every fixture samples what its design's
+  blocks played one by one sample, under an axial, an oblique and a reflected
   prescription, with the magnetization carried across the files of a chain.
 - The phantom sampled as isochromats, posed where an axial, an oblique or a
   reflected prescription places the field of view and scanned by a
@@ -385,7 +387,7 @@ simulation of the cache on the same spins.
   the samples, offsets, centre and use of the design's.
 - In the scheduled KomaMRI job, the signal simulated from the exported file of
   every fixture and every shipped sequence is the one simulated from its
-  design, to the rounding of the text format, and pypulseqpp's Bloch
+  design, to the rounding of the text format, and the virtual scanner's Bloch
   simulation of the cache gives the signal KomaMRI simulates of the exported
   file in its own RF convention, to the difference of the two simulators' time
   steps through an RF pulse.
@@ -395,4 +397,4 @@ simulation of the cache on the same spins.
 * {doc}`ir-cache` — the IR, its prescription and its playback.
 * {doc}`../user-guide/reconstruction-client` — the stream the virtual reconstruction client sends.
 * {doc}`../api/virtual` — the phantom, the acquisition, the Bloch simulation, the scan clock, the client and the export.
-* {class}`pypulseqpp.Isochromats` — the Bloch simulation the cache is played with, and how it plays each Pulseq event.
+* {doc}`bloch-simulation` — the Bloch simulation the cache is played with, and how it plays each Pulseq event.

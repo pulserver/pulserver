@@ -19,6 +19,7 @@ import pypulseqpp as pp
 
 from .. import ir
 from ._bloch import _drive, _gradients, _played
+from ._isochromats import Isochromats
 
 #: MATLAB Pulseq's audio sample rate, the default of ``pypulseqpp.gradient_sound``, in Hz.
 SAMPLE_RATE = 44100.0
@@ -84,7 +85,7 @@ class Scan:
     def __init__(
         self,
         seq_path: Path | str,
-        isochromats: pp.Isochromats,
+        isochromats: Isochromats,
         cache_ext: str = ".pseg",
         *,
         rotation: np.ndarray | None = None,

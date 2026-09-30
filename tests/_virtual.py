@@ -1,5 +1,7 @@
 """The prescriptions, phantoms and designed timing the virtual scanner is tested with."""
 
+from types import SimpleNamespace
+
 import numpy as np
 from pypulseqpp.sequences.preparation.fatsat import FAT_SHIFT_PPM
 from scipy.spatial.transform import Rotation
@@ -62,6 +64,55 @@ def precession(sequence):
         after = sampled > time
         origin[after] = time if excites else 2.0 * time - origin[after]
     return sampled - origin
+
+
+def design_samples(sequence, isochromats, block_range=None, transmit_channels=0):
+    """Every ADC sample of a design's blocks played one by one on isochromats, ``(coils, samples)``.
+
+    The reference the cache played on isochromats is compared with. Each block
+    plays its events as :meth:`pulserver.virtual.Isochromats.play` plays them,
+    with the gradients :meth:`pypulseqpp.Sequence.waveforms` gives the block
+    after its rotation and the ppm offsets resolved at the design's field.
+    With ``transmit_channels``, a single-channel pulse plays on every channel,
+    weighted by the block's RF shim where it has one per channel.
+    """
+    first, last = (1, len(sequence)) if block_range is None else block_range
+    readouts = [np.zeros((isochromats.coils, 0), dtype=complex)]
+    for index in range(first, last + 1):
+        block = sequence.get_block(index)
+        rf = block.rf
+        if rf is not None and transmit_channels and _single_channel(rf.t):
+            shim = block.rf_shim
+            weights = (
+                shim.shim_vector
+                if shim is not None and shim.shim_vector.size == transmit_channels
+                else np.ones(transmit_channels)
+            )
+            rf = SimpleNamespace(
+                signal=np.outer(weights, rf.signal).ravel(),
+                t=np.tile(rf.t, transmit_channels),
+                delay=rf.delay,
+                freq_offset=rf.freq_offset,
+                phase_offset=rf.phase_offset,
+                freq_ppm=rf.freq_ppm,
+                phase_ppm=rf.phase_ppm,
+            )
+        signal = isochromats.play(
+            block.block_duration,
+            gradients=sequence.waveforms(block_range=(index, index)),
+            rf=rf,
+            adc=block.adc,
+            system=sequence.system,
+        )
+        if block.adc is not None:
+            readouts.append(signal)
+    return np.concatenate(readouts, axis=1)
+
+
+def _single_channel(times):
+    """Whether an RF event's times are one channel's, as a dynamic pTx pulse repeats them once per channel."""
+    count = np.count_nonzero(times == times[0])
+    return count < 2 or times.size % count != 0
 
 
 def synthetic_sensitivities(model, channels):

@@ -71,8 +71,8 @@ offsets of the design's RF pulses at it when it builds the IR
 
 The analytic acquisition acts on the phantom's density alone. For relaxation,
 flip angles and slice profiles, sample the phantom as isochromats and play the
-cache on them in pypulseqpp's Bloch simulation; the readouts are sent as
-before:
+cache on them ({doc}`../explanations/bloch-simulation`); the readouts are sent
+as before:
 
 ```python
 tissue = virtual.Phantom(

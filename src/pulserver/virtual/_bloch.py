@@ -1,4 +1,4 @@
-"""The cache beside a sequence file played on isochromats, with pypulseqpp's Bloch simulation."""
+"""The cache beside a sequence file played on isochromats."""
 
 from __future__ import annotations
 
@@ -8,14 +8,14 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
-import pypulseqpp as pp
 
 from .. import ir
+from ._isochromats import Isochromats
 
 
 def simulate(
     seq_path: Path | str,
-    isochromats: pp.Isochromats,
+    isochromats: Isochromats,
     cache_ext: str = ".pseg",
     *,
     rotation: np.ndarray | None = None,
@@ -30,8 +30,8 @@ def simulate(
     one scan. Each block's gradients, its own rotation in them, are turned by
     the prescription's ``rotation`` from logical to physical axes, a
     reflection included, except in blocks labelled ``NOROT``. Its RF pulse
-    and ADC play as :meth:`pypulseqpp.Isochromats.play` plays RF and ADC
-    events, with the frequency and phase offsets the playout sets. With
+    and ADC play as :meth:`Isochromats.play` plays RF and ADC events, with
+    the frequency and phase offsets the playout sets. With
     ``default_shim``, the channel weights of a coil of several transmit
     channels, a single-channel pulse plays on every channel, weighted by its
     block's RF shim or, without one, by ``default_shim``.
@@ -61,7 +61,7 @@ def _drive(
 def _played(
     played: dict,
     block: int,
-    isochromats: pp.Isochromats,
+    isochromats: Isochromats,
     turn: np.ndarray | None,
     drive: tuple[list, np.ndarray] | None = None,
 ) -> np.ndarray | None:

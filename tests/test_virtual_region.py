@@ -8,6 +8,7 @@ import pytest
 from _virtual import ORIENTATIONS
 
 from pulserver import ir, virtual
+from pulserver.virtual import _phantom
 
 SYSTEM = pp.Opts(B0=3.0)
 THICKNESS = 5e-3
@@ -132,7 +133,9 @@ def test_a_phantom_keeps_the_isochromats_its_region_answers_for_and_counts_them(
 ):
     made = []
     monkeypatch.setattr(
-        pp, "Isochromats", lambda positions, **fields: made.append((positions, fields))
+        _phantom,
+        "Isochromats",
+        lambda positions, **fields: made.append((positions, fields)),
     )
     tissue = virtual.Phantom(
         [

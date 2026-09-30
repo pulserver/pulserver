@@ -24,6 +24,7 @@
 #include <tuple>
 #include <vector>
 
+#include "bloch/bindings.hpp"
 #include "ir/from_libraries.hpp"
 #include "native.hpp"
 #include "playout.hpp"
@@ -627,7 +628,7 @@ Collection convert(const py::list &chain, const pulseg_opts &opts)
 
 PYBIND11_MODULE(_ext, module)
 {
-    module.doc() = "Compiled scanner IR conversion for pulserver";
+    module.doc() = "Compiled scanner IR conversion and isochromat engine for pulserver";
 
     module.def(
         "convert_libraries",
@@ -754,4 +755,7 @@ PYBIND11_MODULE(_ext, module)
             return as_array(values, {static_cast<py::ssize_t>(values.size())});
         },
         "One axis of a written cache's wave on a playout's raster.");
+
+    py::module_ bloch = module.def_submodule("bloch");
+    bind_bloch(bloch);
 }

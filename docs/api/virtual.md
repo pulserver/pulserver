@@ -24,9 +24,20 @@ scanner's centre frequency.
 | --- | --- |
 | {obj}`~pulserver.virtual.trajectory` | The k-space location of every ADC sample the cache beside a sequence file plays. |
 | {obj}`~pulserver.virtual.acquire` | The samples the cache beside a sequence file acquires of a phantom, demodulated as the playout demodulates. |
-| {obj}`~pulserver.virtual.simulate` | The samples the cache beside a sequence file acquires of isochromats, in pypulseqpp's Bloch simulation of the blocks it plays. |
+| {obj}`~pulserver.virtual.simulate` | The samples the cache beside a sequence file acquires of isochromats, the blocks it plays played on them in turn. |
 | {obj}`~pulserver.virtual.excited` | The slabs the excitation pulses of the cache beside a sequence file excite, found by playing each on a line of isochromats along its gradient; none where one excites the whole phantom. |
 | {obj}`~pulserver.virtual.Slabs` | Slabs of the physical frame, each the isochromats that see a field within its bounds during a pulse, so that an isochromat's own frequency moves its slab; the region a phantom is sampled in. |
+
+## Bloch simulation
+
+The Bloch equation with relaxation, integrated on isochromats in the frame
+rotating at the reference frequency, as {doc}`../explanations/bloch-simulation`
+states it. Times are in seconds, gradients in Hz/m and RF fields in Hz.
+
+| Object | Description |
+| --- | --- |
+| {obj}`~pulserver.virtual.Isochromats` | Isochromats, and the magnetisation the Bloch equation carries from one block to the next; one block's events played on them. |
+| {obj}`~pulserver.virtual.Repetitions` | Repetitions of a sequence of blocks that differ in their phase offsets and phase encodings, played in turn from the affine map one repetition applies to each isochromat. |
 
 ## Scan clock and sound
 

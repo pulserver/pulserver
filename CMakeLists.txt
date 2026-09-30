@@ -10,6 +10,7 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 find_package(pybind11 CONFIG REQUIRED)
 find_package(Python COMPONENTS Development.Module REQUIRED)
+find_package(Threads REQUIRED)
 
 # The scanner compiles src/c as ANSI C: a construct C89 rejects fails this
 # build too, before it can reach the interpreter.
@@ -28,10 +29,17 @@ pybind11_add_module(_ext
     ${CMAKE_SOURCE_DIR}/src/cpp/ir/waves.cpp
     ${CMAKE_SOURCE_DIR}/src/cpp/ir/wave_plan.cpp
     ${CMAKE_SOURCE_DIR}/src/cpp/ir/repetition.cpp
+    ${CMAKE_SOURCE_DIR}/src/cpp/bloch/bindings.cpp
+    ${CMAKE_SOURCE_DIR}/src/cpp/bloch/bloch.cpp
+    ${CMAKE_SOURCE_DIR}/src/cpp/bloch/events.cpp
+    ${CMAKE_SOURCE_DIR}/src/cpp/bloch/nufft.cpp
+    ${CMAKE_SOURCE_DIR}/src/cpp/bloch/repetitions.cpp
 )
-target_link_libraries(_ext PRIVATE pulseg)
+# The isochromat engine partitions its work across standard C++ threads.
+target_link_libraries(_ext PRIVATE pulseg Threads::Threads)
 # The passes are pulseg's own and see its private headers.
 target_include_directories(_ext PRIVATE
+    ${CMAKE_SOURCE_DIR}/src/cpp
     ${CMAKE_SOURCE_DIR}/src/c
     ${CMAKE_SOURCE_DIR}/src/c/pulseq
     ${CMAKE_SOURCE_DIR}/src/cpp/ir
