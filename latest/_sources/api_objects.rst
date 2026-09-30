@@ -51,12 +51,21 @@ from.
    play
    plan_waves
    WaveBudget
+   VendorProfile
+   Quantity
    sample_wave
    playout
    Prescan
    repetition_gradients
    chain
    cache_path
+
+.. autosummary::
+   :toctree: generated
+   :nosignatures:
+   :template: autosummary/enum.rst
+
+   Format
 
 .. currentmodule:: pulserver.mrd
 

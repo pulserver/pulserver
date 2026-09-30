@@ -558,6 +558,8 @@ designed.</p></li>
 file carrying none is read either way.</p></li>
 <li><p><strong>sar_ratios</strong> – One per file of the chain, as <a class="reference internal" href="pulserver.ir.sar_ratios.html#pulserver.ir.sar_ratios" title="pulserver.ir.sar_ratios"><code class="xref py py-func docutils literal notranslate"><span class="pre">sar_ratios()</span></code></a> returns them, written
 into each subsequence of the cache; zero when None.</p></li>
+<li><p><strong>profile</strong> – What the cache holds its numbers as; every quantity a float in its SI
+unit when left out.</p></li>
 <li><p><strong>wave_budget</strong> – The waveform memory of the playout the cache is for, which the cache
 lays the waves out in (<a class="reference internal" href="pulserver.ir.plan_waves.html#pulserver.ir.plan_waves" title="pulserver.ir.plan_waves"><code class="xref py py-func docutils literal notranslate"><span class="pre">plan_waves()</span></code></a>); None holds every wave at
 once on the gradient raster of the chain’s first file.</p></li>
