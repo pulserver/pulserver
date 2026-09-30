@@ -1,7 +1,7 @@
 /**
  * @file simd.hpp
- * @brief The AVX2 and FMA a function is compiled for, and whether the
- *        processor it runs on has them.
+ * @brief The AVX2, FMA and AVX-512 a function is compiled for, and whether
+ *        the processor it runs on has them.
  */
 
 #ifndef PULSERVER_BLOCH_SIMD_HPP
@@ -12,11 +12,13 @@
 #include <immintrin.h>
 #if defined(_MSC_VER) && !defined(__clang__)
 #include <intrin.h>
-/* MSVC compiles AVX2 intrinsics in any function. */
+/* MSVC compiles AVX2 and AVX-512 intrinsics in any function. */
 #define BLOCH_AVX2
+#define BLOCH_AVX512
 #else
 #include <cpuid.h>
 #define BLOCH_AVX2 __attribute__((target("avx2,fma")))
+#define BLOCH_AVX512 __attribute__((target("avx512f,avx2,fma")))
 #endif
 #endif
 
@@ -73,6 +75,27 @@ namespace bloch
         const bool avx = (features & (1u << 28)) != 0;
         const bool avx2 = (extended & (1u << 5)) != 0;
         return fma && avx && avx2 && (saved & 6) == 6;
+    }
+
+    /** Whether the processor has AVX-512F besides AVX2 and FMA, and the
+     *  system saves the mask and 512-bit registers it uses. */
+    inline bool avx512f()
+    {
+        if (!avx2_and_fma())
+            return false;
+#if defined(_MSC_VER) && !defined(__clang__)
+        int info[4];
+        __cpuidex(info, 7, 0);
+        const unsigned extended = static_cast<unsigned>(info[1]);
+        const unsigned long long saved = _xgetbv(0);
+#else
+        unsigned a = 0, extended = 0, c = 0, d = 0;
+        __get_cpuid_count(7, 0, &a, &extended, &c, &d);
+        unsigned low = 0, high = 0;
+        __asm__("xgetbv" : "=a"(low), "=d"(high) : "c"(0));
+        const unsigned long long saved = low;
+#endif
+        return (extended & (1u << 16)) != 0 && (saved & 0xE6) == 0xE6;
     }
 #endif
 

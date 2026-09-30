@@ -46,9 +46,6 @@ namespace bloch
          *  length of the vectors a grid point accumulates. */
         constexpr size_t kTile = 16;
 
-        /** Isochromats a worker carries through a tile at a time. */
-        constexpr size_t kChunk = 128;
-
         /** Distinct coordinates along an axis beyond which a phase-encoding
          *  phase is computed per isochromat rather than tabulated. */
         constexpr size_t kLatticeValues = size_t(1) << 16;
@@ -125,13 +122,6 @@ namespace bloch
             return out;
         }
 
-        /** One array of per-isochromat data, @p width bytes per slot. */
-        struct Column
-        {
-            unsigned char* data;
-            size_t width;
-        };
-
         /** How a slot's phase-encoding phase along an axis is found. */
         enum class Encoding
         {
@@ -140,36 +130,91 @@ namespace bloch
             computed
         };
 
+        /** Bytes the widest vectors the carry uses hold, and the alignment of
+         *  the arrays it reads and writes with them. */
+        constexpr size_t kVectorBytes = 64;
+
+        /** An allocator of arrays aligned to kVectorBytes. */
+        template <typename T>
+        struct Aligned
+        {
+            using value_type = T;
+            Aligned() = default;
+            template <typename U>
+            Aligned(const Aligned<U>&) noexcept
+            {
+            }
+            T* allocate(size_t n)
+            {
+                return static_cast<T*>(::operator new(n * sizeof(T), std::align_val_t(kVectorBytes)));
+            }
+            void deallocate(T* p, size_t) noexcept
+            {
+                ::operator delete(p, std::align_val_t(kVectorBytes));
+            }
+            template <typename U>
+            bool operator==(const Aligned<U>&) const noexcept
+            {
+                return true;
+            }
+            template <typename U>
+            bool operator!=(const Aligned<U>&) const noexcept
+            {
+                return false;
+            }
+        };
+
+        template <typename T>
+        using AlignedVector = std::vector<T, Aligned<T>>;
+
+        /** Where one value of every slot lies: @p width bytes per slot, in
+         *  packs of @p lanes slots @p stride bytes apart, or, with no lanes,
+         *  one after another. */
+        struct Column
+        {
+            unsigned char* data;
+            size_t width;
+            size_t lanes;
+            size_t stride;
+        };
+
         /**
-         * The isochromats carried, one slot each, in arrays over the slots:
-         * those a pass over many isochromats reads (magnetisation, map,
-         * readout coefficients, phase-encoding indices) one array per
-         * component, and those one isochromat's spreading reads (weights,
-         * factors) together per slot.
+         * The isochromats carried, one slot each. What the carry reads for
+         * several slots at once (magnetisation, map, readout coefficients,
+         * limit) is held in packs of as many slots as a vector has lanes, the
+         * slots' values of one kind together; what spreading reads for one
+         * slot (grid point, weights, factors, phase-encoding index) is held
+         * per slot.
          */
         template <typename Real>
         struct Slots
         {
             using Value = Real;
             size_t size = 0;
-            size_t stride = 0;
+            size_t lanes = 1;
             size_t windows = 0;
             size_t coils = 0;
             size_t taps = 0;
             /** Whether the maps' and the windows' constant terms apply: not to
              *  a transient about a fixed point. */
             bool offsets = true;
+            bool limits = false;
+            /** Values per slot of a pack: m 3, A 9 row-major, b 3 with the
+             *  offsets; per window from u_at on, u_width values: u Re x, y, z
+             *  then Im x, y, z, and v Re, Im with the offsets; then the
+             *  squared magnitude at or below which a transient is dropped. */
+            size_t width = 0;
+            size_t u_at = 0;
+            size_t u_width = 0;
+            size_t limit_at = 0;
+            /** [pack][value][lane]. */
+            AlignedVector<Real> pack;
             std::vector<uint32_t> id;
-            /** [component][slot]: m 3, a 9 row-major, b 3. */
-            std::vector<Real> m, a, b;
-            /** [window][component][slot]: u Re x, y, z then Im x, y, z; v Re,
-             *  Im. */
-            std::vector<Real> u, v;
-            /** [window][slot]: the first grid point spread onto. */
+            /** [slot][window]: the first grid point spread onto. */
             std::vector<uint32_t> start;
-            /** [window][slot][tap]. */
+            /** [slot][window][tap]. */
             std::vector<Real> weight;
-            /** [window][slot][coil][Re, Im]: receive sensitivity times the
+            /** [slot][window][coil][Re, Im]: receive sensitivity times the
              *  kernel's shift. */
             std::vector<Real> factor;
             /** Per axis encoded along, [slot]: the lattice index, or the
@@ -178,60 +223,72 @@ namespace bloch
             std::vector<Real> coordinate[3];
             /** [slot]: the T2 class. */
             std::vector<uint32_t> decay;
-            /** [slot]: the squared magnitude below which a transient is
-             *  dropped. */
-            std::vector<Real> limit;
 
-            /** Room for a slot per isochromat of @p order, the windows, coils
-             *  and taps set, encoded along each axis as @p along says, and
-             *  with a limit each where @p limits. */
-            void allocate(const std::vector<uint32_t>& order, const Encoding along[3], bool limits)
+            size_t packs() const
             {
-                size = stride = order.size();
+                return (size + lanes - 1) / lanes;
+            }
+
+            Real& value(size_t slot, size_t at)
+            {
+                return pack[(slot / lanes * width + at) * lanes + slot % lanes];
+            }
+
+            Real value(size_t slot, size_t at) const
+            {
+                return pack[(slot / lanes * width + at) * lanes + slot % lanes];
+            }
+
+            /** Room, zeroed, for a slot per isochromat of @p order in packs
+             *  of @p in_pack slots, the windows, coils, taps and offsets set,
+             *  encoded along each axis as @p along says, and with a limit
+             *  each where @p with_limits. */
+            void allocate(const std::vector<uint32_t>& order, size_t in_pack, const Encoding along[3], bool with_limits)
+            {
+                size = order.size();
+                lanes = in_pack;
+                limits = with_limits;
+                u_at = offsets ? 15 : 12;
+                u_width = offsets ? 8 : 6;
+                limit_at = u_at + windows * u_width;
+                width = limit_at + (limits ? 1 : 0);
+                pack.assign(packs() * width * lanes, Real(0));
                 id = order;
-                m.resize(3 * size);
-                a.resize(9 * size);
-                b.resize(offsets ? 3 * size : 0);
-                u.resize(windows * 6 * size);
-                v.resize(offsets ? windows * 2 * size : 0);
-                start.resize(windows * size);
-                weight.resize(windows * size * taps);
-                factor.resize(windows * size * 2 * coils);
+                start.assign(size * windows, 0);
+                weight.assign(size * windows * taps, Real(0));
+                factor.assign(size * windows * coils * 2, Real(0));
                 for (int axis = 0; axis < 3; ++axis)
                 {
                     index[axis].assign(along[axis] == Encoding::tabulated ? size : 0, 0);
                     coordinate[axis].assign(along[axis] == Encoding::computed ? size : 0, Real(0));
                 }
-                decay.resize(size);
-                limit.resize(limits ? size : 0);
+                decay.assign(size, 0);
             }
 
             std::vector<Column> columns()
             {
                 std::vector<Column> out;
-                const auto add = [&](auto& vector, size_t arrays, size_t per_slot) {
+                for (size_t at = 0; at < width; ++at)
+                    out.push_back(
+                        {reinterpret_cast<unsigned char*>(pack.data() + at * lanes),
+                         sizeof(Real),
+                         lanes,
+                         width * lanes * sizeof(Real)});
+                const auto add = [&](auto& vector, size_t per_slot) {
                     using Item = typename std::decay_t<decltype(vector)>::value_type;
-                    for (size_t k = 0; k < arrays && !vector.empty(); ++k)
-                        out.push_back(
-                            {reinterpret_cast<unsigned char*>(vector.data() + k * stride * per_slot),
-                             per_slot * sizeof(Item)});
+                    if (!vector.empty())
+                        out.push_back({reinterpret_cast<unsigned char*>(vector.data()), per_slot * sizeof(Item), 0, 0});
                 };
-                add(id, 1, 1);
-                add(m, 3, 1);
-                add(a, 9, 1);
-                add(b, 3, 1);
-                add(u, windows * 6, 1);
-                add(v, windows * 2, 1);
-                add(start, windows, 1);
-                add(weight, windows, taps);
-                add(factor, windows, 2 * coils);
+                add(id, 1);
+                add(start, windows);
+                add(weight, windows * taps);
+                add(factor, windows * coils * 2);
                 for (int axis = 0; axis < 3; ++axis)
                 {
-                    add(index[axis], 1, 1);
-                    add(coordinate[axis], 1, 1);
+                    add(index[axis], 1);
+                    add(coordinate[axis], 1);
                 }
-                add(decay, 1, 1);
-                add(limit, 1, 1);
+                add(decay, 1);
                 return out;
             }
         };
@@ -293,12 +350,17 @@ namespace bloch
             /** Per repetition, the turn from its frame to the next one's. */
             Real turn_cos[kTile] = {};
             Real turn_sin[kTile] = {};
-            /** Per repetition, window and axis, [(r * windows + w) * 3 +
-             *  axis]: the phase-encoding phase per tabulated coordinate, or
-             *  null; and -2 pi times the area where it is computed per slot. */
+            /** Per window and axis, [w * 3 + axis]: how the tile's
+             *  phase-encoding phases are found; where tabulated, the phase per
+             *  coordinate and repetition, [coordinate][repetition], in
+             *  tables at table_at, real parts then imaginary. */
+            std::vector<Encoding> encoding;
+            std::vector<size_t> table_at;
             std::vector<const Real*> table_re, table_im;
+            AlignedVector<Real> tables;
+            /** Per window, axis and repetition, [(w * 3 + axis) * kTile + r]:
+             *  -2 pi times the area, for a phase computed per slot. */
             std::vector<double> angle;
-            std::vector<unsigned char> computed;
             /** Per window, the grid points (none for a window of one sample)
              *  and the start of its part of a worker's grid. */
             std::vector<size_t> cells, region;
@@ -312,454 +374,638 @@ namespace bloch
             std::vector<std::vector<double>> decay;
             /** Samples of a repetition per coil. */
             size_t length = 0;
-            /** The workers' grids, region.back() values each, and which of
-             *  them carried slots through the tile. */
+            /** The workers' grids, region.back() values each, whether each
+             *  carried slots through the tile, and the T2 classes from
+             *  first_class to before last_class its slots belong to: the
+             *  slots are in order of their class. */
             Real* grids = nullptr;
             std::vector<unsigned char> ran;
+            std::vector<size_t> first_class, last_class;
         };
 
-        /** The coefficient at a window's first sample: u . m, plus v with
-         *  the constant terms. */
-        template <typename Real, bool Offsets>
-        BLOCH_INLINE void coefficients(
-            size_t n,
-            size_t st,
-            const Real* __restrict u,
-            const Real* __restrict v,
-            const Real* __restrict m0,
-            const Real* __restrict m1,
-            const Real* __restrict m2,
-            Real* __restrict pr,
-            Real* __restrict pi)
-        {
-            BLOCH_INDEPENDENT
-            for (size_t k = 0; k < n; ++k)
-            {
-                Real re = u[k] * m0[k] + u[st + k] * m1[k] + u[2 * st + k] * m2[k];
-                Real im = u[3 * st + k] * m0[k] + u[4 * st + k] * m1[k] + u[5 * st + k] * m2[k];
-                if (Offsets)
-                {
-                    re += v[k];
-                    im += v[st + k];
-                }
-                pr[k] = re;
-                pi[k] = im;
-            }
-        }
+        /** A vector of @p L values: one per slot of a pack, or one per
+         *  repetition of a part of a tile. */
+        template <typename Real, size_t L>
+        struct Lanes;
 
-        /** The coefficients turned by a tabulated phase-encoding phase. */
         template <typename Real>
-        BLOCH_INLINE void encode(
-            size_t n,
-            const Real* __restrict tr,
-            const Real* __restrict ti,
-            const uint32_t* __restrict index,
-            Real* __restrict pr,
-            Real* __restrict pi)
+        struct Lanes<Real, 1>
         {
-            BLOCH_INDEPENDENT
-            for (size_t k = 0; k < n; ++k)
-            {
-                const Real er = tr[index[k]];
-                const Real ei = ti[index[k]];
-                const Real re = pr[k] * er - pi[k] * ei;
-                pi[k] = pr[k] * ei + pi[k] * er;
-                pr[k] = re;
-            }
-        }
-
-        /** The coefficients turned by a phase-encoding phase computed per
-         *  slot. */
-        template <typename Real>
-        BLOCH_INLINE void encode_computed(
-            size_t n, double angle, const Real* __restrict coordinate, Real* __restrict pr, Real* __restrict pi)
-        {
-            for (size_t k = 0; k < n; ++k)
-            {
-                const double phase = angle * static_cast<double>(coordinate[k]);
-                const Real er = static_cast<Real>(std::cos(phase));
-                const Real ei = static_cast<Real>(std::sin(phase));
-                const Real re = pr[k] * er - pi[k] * ei;
-                pi[k] = pr[k] * ei + pi[k] * er;
-                pr[k] = re;
-            }
-        }
-
-        /** The magnetisation one repetition on: A m, plus b and turned
-         *  with the constant terms. */
-        template <typename Real, bool Offsets>
-        BLOCH_INLINE void propagate(
-            size_t n,
-            size_t st,
-            const Real* __restrict a,
-            const Real* __restrict b,
-            Real c,
-            Real sn,
-            Real* __restrict m0,
-            Real* __restrict m1,
-            Real* __restrict m2)
-        {
-            BLOCH_INDEPENDENT
-            for (size_t k = 0; k < n; ++k)
-            {
-                const Real x = m0[k], y = m1[k], z = m2[k];
-                Real nx = a[k] * x + a[st + k] * y + a[2 * st + k] * z;
-                Real ny = a[3 * st + k] * x + a[4 * st + k] * y + a[5 * st + k] * z;
-                Real nz = a[6 * st + k] * x + a[7 * st + k] * y + a[8 * st + k] * z;
-                if (Offsets)
-                {
-                    const Real bx = nx + b[k];
-                    const Real by = ny + b[st + k];
-                    nz += b[2 * st + k];
-                    nx = c * bx - sn * by;
-                    ny = sn * bx + c * by;
-                }
-                m0[k] = nx;
-                m1[k] = ny;
-                m2[k] = nz;
-            }
-        }
+            typedef Real Vector;
+        };
 
 #if defined(__GNUC__)
-        /* A tile's repetitions of one grid point as vectors of 256 bits,
-         * written out: a compiler left to itself vectorises spread_slot's
-         * loop over the taps instead. */
-        typedef float Floats __attribute__((vector_size(32), aligned(4), may_alias));
-        typedef double Doubles __attribute__((vector_size(32), aligned(8), may_alias));
-
-        template <typename Real>
-        struct Lanes;
-        template <>
-        struct Lanes<float>
+        template <typename Real, size_t L>
+        struct Lanes
         {
-            using Vector = Floats;
-        };
-        template <>
-        struct Lanes<double>
-        {
-            using Vector = Doubles;
+            typedef Real Vector __attribute__((vector_size(L * sizeof(Real)), aligned(sizeof(Real)), may_alias));
+            typedef std::conditional_t<sizeof(Real) == 4, int32_t, int64_t> Scalar;
+            typedef Scalar Index __attribute__((vector_size(L * sizeof(Real))));
         };
 
-        /** One slot's coefficients of a tile, times a coil's factor, added
-         *  onto the grid points from @p row on, each by its weight. */
-        template <typename Real>
-        BLOCH_INLINE void spread_slot(
-            const Real* er, const Real* ei, Real fr, Real fi, const Real* weight, size_t taps, Real* row)
+        /** Rows @p a and @p b of a 2x2 matrix of H x H blocks of lanes, the
+         *  blocks off its diagonal exchanged. */
+        template <typename Real, size_t L, size_t H, size_t... J>
+        BLOCH_INLINE void exchange(
+            typename Lanes<Real, L>::Vector& a, typename Lanes<Real, L>::Vector& b, std::index_sequence<J...>)
         {
-            using Vector = typename Lanes<Real>::Vector;
-            constexpr size_t T = kTile;
-            constexpr size_t L = sizeof(Vector) / sizeof(Real);
-            Vector vr[T / L], vi[T / L];
-            for (size_t h = 0; h < T / L; ++h)
-            {
-                const Vector a = *reinterpret_cast<const Vector*>(er + L * h);
-                const Vector b = *reinterpret_cast<const Vector*>(ei + L * h);
-                vr[h] = fr * a - fi * b;
-                vi[h] = fr * b + fi * a;
-            }
-            if (taps == 0)
-            {
-                for (size_t h = 0; h < T / L; ++h)
-                {
-                    *reinterpret_cast<Vector*>(row + L * h) += vr[h];
-                    *reinterpret_cast<Vector*>(row + T + L * h) += vi[h];
-                }
-                return;
-            }
-            for (size_t j = 0; j < taps; ++j)
-            {
-                const Real wj = weight[j];
-                Real* point = row + j * 2 * T;
-                for (size_t h = 0; h < T / L; ++h)
-                {
-                    *reinterpret_cast<Vector*>(point + L * h) += wj * vr[h];
-                    *reinterpret_cast<Vector*>(point + T + L * h) += wj * vi[h];
-                }
-            }
-        }
+            using Vector = typename Lanes<Real, L>::Vector;
+#if defined(__clang__)
+            const Vector low = (Vector)__builtin_shufflevector(a, b, ((J & H) ? L + J - H : J)...);
+            const Vector high = (Vector)__builtin_shufflevector(a, b, ((J & H) ? L + J : J + H)...);
 #else
-        /** One slot's coefficients of a tile, times a coil's factor, added
-         *  onto the grid points from @p row on, each by its weight. */
-        template <typename Real>
-        BLOCH_INLINE void spread_slot(
-            const Real* __restrict er,
-            const Real* __restrict ei,
-            Real fr,
-            Real fi,
-            const Real* __restrict weight,
-            size_t taps,
-            Real* __restrict row)
+            using Index = typename Lanes<Real, L>::Index;
+            using Scalar = typename Lanes<Real, L>::Scalar;
+            const Vector low = __builtin_shuffle(a, b, Index{static_cast<Scalar>((J & H) ? L + J - H : J)...});
+            const Vector high = __builtin_shuffle(a, b, Index{static_cast<Scalar>((J & H) ? L + J : J + H)...});
+#endif
+            a = low;
+            b = high;
+        }
+
+        template <typename Real, size_t L, size_t H>
+        BLOCH_INLINE void exchange_rows(typename Lanes<Real, L>::Vector* rows)
         {
-            constexpr size_t T = kTile;
-            Real vr[T], vi[T];
-            for (size_t r = 0; r < T; ++r)
-            {
-                vr[r] = fr * er[r] - fi * ei[r];
-                vi[r] = fr * ei[r] + fi * er[r];
-            }
-            if (taps == 0)
-            {
-                for (size_t r = 0; r < T; ++r)
-                {
-                    row[r] += vr[r];
-                    row[T + r] += vi[r];
-                }
-                return;
-            }
-            for (size_t j = 0; j < taps; ++j)
-            {
-                const Real wj = weight[j];
-                Real* __restrict point = row + j * 2 * T;
-                for (size_t r = 0; r < T; ++r)
-                {
-                    point[r] += wj * vr[r];
-                    point[T + r] += wj * vi[r];
-                }
-            }
+            for (size_t i = 0; i < L; ++i)
+                if ((i & H) == 0)
+                    exchange<Real, L, H>(rows[i], rows[i + H], std::make_index_sequence<L>());
         }
 #endif
 
-        /** The coefficients of repetition @p r's window @p w turned by its
-         *  phase-encoding phase along each axis. */
-        template <typename Real>
-        BLOCH_INLINE void encode_window(
-            const Tile<Real>& tile, const Slots<Real>& s, size_t r, size_t w, size_t lo, size_t n, Real* pr, Real* pi)
+        /** Transpose @p L rows of @p L lanes in place. */
+        template <typename Real, size_t L>
+        BLOCH_INLINE void transpose(typename Lanes<Real, L>::Vector* rows)
         {
-            for (int axis = 0; axis < 3; ++axis)
-            {
-                const size_t at = (r * tile.windows + w) * 3 + static_cast<size_t>(axis);
-                if (tile.table_re[at] != nullptr)
-                    encode(n, tile.table_re[at], tile.table_im[at], &s.index[axis][lo], pr, pi);
-                else if (tile.computed[at])
-                    encode_computed(n, tile.angle[at], &s.coordinate[axis][lo], pr, pi);
-            }
+#if defined(__GNUC__)
+            if constexpr (L >= 16)
+                exchange_rows<Real, L, 8>(rows);
+            if constexpr (L >= 8)
+                exchange_rows<Real, L, 4>(rows);
+            if constexpr (L >= 4)
+                exchange_rows<Real, L, 2>(rows);
+            if constexpr (L >= 2)
+                exchange_rows<Real, L, 1>(rows);
+#else
+            (void)rows;
+#endif
         }
 
-        /** Slots @p lo to @p lo + @p n through the tile: each repetition's
-         *  coefficient at each window's first sample, [window][repetition]
-         *  [slot] in @p qr and @p qi and zero past the tile's repetitions, and
-         *  the magnetisation at the start of the repetition after the tile. */
-        template <typename Real, bool Offsets>
-        BLOCH_INLINE void chunk_coefficients(
-            const Tile<Real>& tile, Slots<Real>& s, size_t lo, size_t n, Real* qr, Real* qi)
+        /** Packs a worker carries through a tile together: the repetitions of
+         *  one pack follow from each other, those of different packs do not,
+         *  so that several are computed at once. */
+        constexpr size_t kInterleaved = 4;
+
+        template <typename Real, size_t L>
+        BLOCH_INLINE typename Lanes<Real, L>::Vector& lanes_at(Real* pack, size_t value)
         {
-            constexpr size_t T = kTile;
-            const size_t st = s.stride;
-            Real* m0 = &s.m[lo];
-            Real* m1 = &s.m[st + lo];
-            Real* m2 = &s.m[2 * st + lo];
-            for (size_t r = 0; r < tile.count; ++r)
-            {
-                for (size_t w = 0; w < tile.windows; ++w)
-                {
-                    Real* pr = qr + (w * T + r) * kChunk;
-                    Real* pi = qi + (w * T + r) * kChunk;
-                    coefficients<Real, Offsets>(
-                        n, st, &s.u[w * 6 * st + lo], Offsets ? &s.v[w * 2 * st + lo] : nullptr, m0, m1, m2, pr, pi);
-                    encode_window(tile, s, r, w, lo, n, pr, pi);
-                }
-                propagate<Real, Offsets>(
-                    n, st, &s.a[lo], Offsets ? &s.b[lo] : nullptr, tile.turn_cos[r], tile.turn_sin[r], m0, m1, m2);
-            }
-            for (size_t w = 0; w < tile.windows; ++w)
-                for (size_t r = tile.count; r < T; ++r)
-                {
-                    std::fill(qr + (w * T + r) * kChunk, qr + (w * T + r) * kChunk + n, Real(0));
-                    std::fill(qi + (w * T + r) * kChunk, qi + (w * T + r) * kChunk + n, Real(0));
-                }
+            return *reinterpret_cast<typename Lanes<Real, L>::Vector*>(pack + value * L);
         }
 
-        /** The coefficients of slots @p lo to @p lo + @p n, times each coil's
-         *  factor, spread onto @p grid: per window, onto the grid points of
-         *  the slot's T2 and coil, or summed without a kernel for a window of
-         *  one sample. */
-        template <typename Real>
-        BLOCH_INLINE void spread_chunk(
-            const Tile<Real>& tile, const Slots<Real>& s, size_t lo, size_t n, const Real* qr, const Real* qi, Real* grid)
+        /**
+         * @p G packs' slots through the tile's @p count repetitions: each
+         * repetition's coefficient at each window's first sample, u . m plus v
+         * with the constant terms, and the magnetisation at the start of the
+         * repetition after the tile. Pack g's coefficients are left in @p q
+         * from vector 2 g windows kTile on, [window][Re, Im][repetition], zero
+         * past the tile's repetitions and transposed in blocks of L
+         * repetitions: row l of block b holds slot l's coefficients of
+         * repetitions b L to b L + L - 1.
+         */
+        template <typename Real, size_t L, bool Offsets, size_t G>
+        BLOCH_INLINE void carry_packs(
+            Real* const* packs,
+            size_t count,
+            size_t windows,
+            size_t u_at,
+            size_t u_width,
+            const Real* turn_cos,
+            const Real* turn_sin,
+            typename Lanes<Real, L>::Vector* q)
         {
+            using Vector = typename Lanes<Real, L>::Vector;
             constexpr size_t T = kTile;
-            const size_t C = tile.coils;
-            const size_t taps = tile.taps;
-            const size_t st = s.stride;
-            for (size_t k = 0; k < n; ++k)
+            Real* pack[G];
+            Vector m[G][3];
+            for (size_t g = 0; g < G; ++g)
             {
-                const size_t slot = lo + k;
-                for (size_t w = 0; w < tile.windows; ++w)
+                pack[g] = packs[g];
+                for (size_t k = 0; k < 3; ++k)
+                    m[g][k] = lanes_at<Real, L>(pack[g], k);
+            }
+            for (size_t r = 0; r < count; ++r)
+            {
+                for (size_t w = 0; w < windows; ++w)
                 {
-                    Real er[T], ei[T];
-                    for (size_t r = 0; r < T; ++r)
+                    const size_t u = u_at + w * u_width;
+                    for (size_t g = 0; g < G; ++g)
                     {
-                        er[r] = qr[(w * T + r) * kChunk + k];
-                        ei[r] = qi[(w * T + r) * kChunk + k];
+                        Real* p = pack[g];
+                        Vector re = lanes_at<Real, L>(p, u) * m[g][0] + lanes_at<Real, L>(p, u + 1) * m[g][1] +
+                            lanes_at<Real, L>(p, u + 2) * m[g][2];
+                        Vector im = lanes_at<Real, L>(p, u + 3) * m[g][0] + lanes_at<Real, L>(p, u + 4) * m[g][1] +
+                            lanes_at<Real, L>(p, u + 5) * m[g][2];
+                        if (Offsets)
+                        {
+                            re += lanes_at<Real, L>(p, u + 6);
+                            im += lanes_at<Real, L>(p, u + 7);
+                        }
+                        q[((g * windows + w) * 2) * T + r] = re;
+                        q[((g * windows + w) * 2 + 1) * T + r] = im;
                     }
-                    const size_t cells = tile.cells[w];
-                    const size_t first = cells == 0 ? 0 : (s.decay[slot] * C * (cells + taps) + s.start[w * st + slot]) * 2 * T;
-                    const size_t per_coil = cells == 0 ? 2 * T : (cells + taps) * 2 * T;
-                    const Real* factor = s.factor.data() + (w * st + slot) * 2 * C;
-                    const Real* weight = s.weight.data() + (w * st + slot) * taps;
-                    Real* row = grid + tile.region[w] + first;
-                    for (size_t coil = 0; coil < C; ++coil)
-                        spread_slot(
-                            er, ei, factor[2 * coil], factor[2 * coil + 1], weight, cells == 0 ? 0 : taps, row + coil * per_coil);
+                }
+                const Real c = turn_cos[r];
+                const Real sn = turn_sin[r];
+                for (size_t g = 0; g < G; ++g)
+                {
+                    Real* p = pack[g];
+                    Vector nx = lanes_at<Real, L>(p, 3) * m[g][0] + lanes_at<Real, L>(p, 4) * m[g][1] +
+                        lanes_at<Real, L>(p, 5) * m[g][2];
+                    Vector ny = lanes_at<Real, L>(p, 6) * m[g][0] + lanes_at<Real, L>(p, 7) * m[g][1] +
+                        lanes_at<Real, L>(p, 8) * m[g][2];
+                    Vector nz = lanes_at<Real, L>(p, 9) * m[g][0] + lanes_at<Real, L>(p, 10) * m[g][1] +
+                        lanes_at<Real, L>(p, 11) * m[g][2];
+                    if (Offsets)
+                    {
+                        const Vector bx = nx + lanes_at<Real, L>(p, 12);
+                        const Vector by = ny + lanes_at<Real, L>(p, 13);
+                        nz += lanes_at<Real, L>(p, 14);
+                        nx = c * bx - sn * by;
+                        ny = sn * bx + c * by;
+                    }
+                    m[g][0] = nx;
+                    m[g][1] = ny;
+                    m[g][2] = nz;
+                }
+            }
+            for (size_t g = 0; g < G; ++g)
+                for (size_t k = 0; k < 3; ++k)
+                    lanes_at<Real, L>(pack[g], k) = m[g][k];
+            for (size_t row = 0; row < 2 * G * windows; ++row)
+            {
+                for (size_t r = count; r < T; ++r)
+                    q[row * T + r] = Vector{};
+                for (size_t b = 0; b < T; b += L)
+                    transpose<Real, L>(q + row * T + b);
+            }
+        }
+
+        /** How a window's phase-encoding phases are found for a slot: per
+         *  axis tabulated, its table of each coordinate's phase at each of the
+         *  tile's repetitions and the slots' lattice indices; per axis
+         *  computed, -2 pi times each repetition's area and the slots'
+         *  coordinates. */
+        template <typename Real>
+        struct Encodings
+        {
+            size_t tabulated = 0;
+            const Real* re[3] = {};
+            const Real* im[3] = {};
+            const uint32_t* index[3] = {};
+            size_t computed = 0;
+            const double* angle[3] = {};
+            const Real* coordinate[3] = {};
+        };
+
+        template <typename Real>
+        Encodings<Real> encodings(const Tile<Real>& tile, const Slots<Real>& s, size_t w)
+        {
+            Encodings<Real> out;
+            for (size_t axis = 0; axis < 3; ++axis)
+            {
+                const size_t at = w * 3 + axis;
+                if (tile.encoding[at] == Encoding::tabulated)
+                {
+                    out.re[out.tabulated] = tile.table_re[at];
+                    out.im[out.tabulated] = tile.table_im[at];
+                    out.index[out.tabulated++] = s.index[axis].data();
+                }
+                else if (tile.encoding[at] == Encoding::computed)
+                {
+                    out.angle[out.computed] = &tile.angle[at * kTile];
+                    out.coordinate[out.computed++] = s.coordinate[axis].data();
+                }
+            }
+            return out;
+        }
+
+        /** A slot's coefficients of a tile, @p er and @p ei, turned by its
+         *  phase-encoding phase along each axis. */
+        template <typename Real, size_t L>
+        BLOCH_INLINE void encode_slot(
+            const Encodings<Real>& encoding,
+            size_t count,
+            size_t slot,
+            typename Lanes<Real, L>::Vector* er,
+            typename Lanes<Real, L>::Vector* ei)
+        {
+            using Vector = typename Lanes<Real, L>::Vector;
+            constexpr size_t P = kTile / L;
+            for (size_t n = 0; n < encoding.tabulated; ++n)
+            {
+                const size_t row = static_cast<size_t>(encoding.index[n][slot]) * kTile;
+                const Vector* cr = reinterpret_cast<const Vector*>(encoding.re[n] + row);
+                const Vector* ci = reinterpret_cast<const Vector*>(encoding.im[n] + row);
+                for (size_t b = 0; b < P; ++b)
+                {
+                    const Vector re = er[b] * cr[b] - ei[b] * ci[b];
+                    ei[b] = er[b] * ci[b] + ei[b] * cr[b];
+                    er[b] = re;
+                }
+            }
+            for (size_t n = 0; n < encoding.computed; ++n)
+            {
+                /* The tile's phases in a table of their own, so that the
+                 * coefficients are not written out to be turned one value at
+                 * a time. */
+                alignas(kVectorBytes) Real cr[kTile], ci[kTile];
+                const double x = static_cast<double>(encoding.coordinate[n][slot]);
+                for (size_t r = 0; r < kTile; ++r)
+                {
+                    const double phase = r < count ? encoding.angle[n][r] * x : 0.0;
+                    cr[r] = static_cast<Real>(std::cos(phase));
+                    ci[r] = static_cast<Real>(std::sin(phase));
+                }
+                for (size_t b = 0; b < P; ++b)
+                {
+                    Vector c, sn;
+                    std::memcpy(&c, cr + b * L, sizeof(Vector));
+                    std::memcpy(&sn, ci + b * L, sizeof(Vector));
+                    const Vector re = er[b] * c - ei[b] * sn;
+                    ei[b] = er[b] * sn + ei[b] * c;
+                    er[b] = re;
                 }
             }
         }
 
-        /** Carry slots @p begin to @p end through the tile: each repetition's
-         *  coefficient at each window's first sample spread onto @p grid, and
-         *  the magnetisation at the start of the repetition after the tile. */
-        template <typename Real, bool Offsets>
-        BLOCH_INLINE void carry(const Tile<Real>& tile, Slots<Real>& s, size_t begin, size_t end, Real* grid, Real* scratch)
+        /** The coefficients of a run of slots that spread onto the same grid
+         *  points, @p e, [slot][Re, Im][part], times each coil's factor and
+         *  each tap's weight, summed over the run and added onto the grid
+         *  points from @p row on, a coil's @p per_coil values apart; onto one
+         *  point, unweighted, without taps. Slot l's factor of coil k is at
+         *  factor[l * factor_step + 2 k] and its weight of tap j at
+         *  weight[l * weight_step + j]; @p v holds as many values as @p e. */
+        template <typename Real, size_t L>
+        BLOCH_INLINE void spread_run(
+            const typename Lanes<Real, L>::Vector* e,
+            size_t count,
+            const Real* factor,
+            size_t factor_step,
+            const Real* weight,
+            size_t weight_step,
+            size_t coils,
+            size_t taps,
+            size_t per_coil,
+            Real* row,
+            typename Lanes<Real, L>::Vector* v)
         {
-            /* [window][repetition][slot of the chunk] */
-            Real* qr = scratch;
-            Real* qi = scratch + tile.windows * kTile * kChunk;
-            for (size_t lo = begin; lo < end; lo += kChunk)
+            using Vector = typename Lanes<Real, L>::Vector;
+            constexpr size_t T = kTile;
+            constexpr size_t P = T / L;
+            for (size_t k = 0; k < coils; ++k)
             {
-                const size_t n = std::min(kChunk, end - lo);
-                chunk_coefficients<Real, Offsets>(tile, s, lo, n, qr, qi);
-                spread_chunk(tile, s, lo, n, qr, qi, grid);
+                for (size_t l = 0; l < count; ++l)
+                {
+                    const Real fr = factor[l * factor_step + 2 * k];
+                    const Real fi = factor[l * factor_step + 2 * k + 1];
+                    const Vector* er = e + 2 * l * P;
+                    const Vector* ei = er + P;
+                    for (size_t b = 0; b < P; ++b)
+                    {
+                        v[2 * l * P + b] = fr * er[b] - fi * ei[b];
+                        v[(2 * l + 1) * P + b] = fr * ei[b] + fi * er[b];
+                    }
+                }
+                Real* point = row + k * per_coil;
+                for (size_t j = 0; j < std::max<size_t>(taps, 1); ++j)
+                {
+                    /* Two sums, for two chains of additions at once. */
+                    Vector ar[P] = {}, ai[P] = {}, br[P] = {}, bi[P] = {};
+                    size_t l = 0;
+                    for (; l + 1 < count; l += 2)
+                    {
+                        const Real w0 = taps == 0 ? Real(1) : weight[l * weight_step + j];
+                        const Real w1 = taps == 0 ? Real(1) : weight[(l + 1) * weight_step + j];
+                        for (size_t b = 0; b < P; ++b)
+                        {
+                            ar[b] += w0 * v[2 * l * P + b];
+                            ai[b] += w0 * v[(2 * l + 1) * P + b];
+                            br[b] += w1 * v[(2 * l + 2) * P + b];
+                            bi[b] += w1 * v[(2 * l + 3) * P + b];
+                        }
+                    }
+                    if (l < count)
+                    {
+                        const Real w0 = taps == 0 ? Real(1) : weight[l * weight_step + j];
+                        for (size_t b = 0; b < P; ++b)
+                        {
+                            ar[b] += w0 * v[2 * l * P + b];
+                            ai[b] += w0 * v[(2 * l + 1) * P + b];
+                        }
+                    }
+                    Vector* re = reinterpret_cast<Vector*>(point + j * 2 * T);
+                    Vector* im = reinterpret_cast<Vector*>(point + j * 2 * T + T);
+                    for (size_t b = 0; b < P; ++b)
+                    {
+                        re[b] += ar[b] + br[b];
+                        im[b] += ai[b] + bi[b];
+                    }
+                }
             }
         }
 
+        /** Zero the transients of the pack's first @p lanes slots at or below
+         *  their limit; return how many were not zero. */
         template <typename Real>
-        using CarryRange = void (*)(const Tile<Real>&, Slots<Real>&, size_t, size_t, Real*, Real*);
-
-        template <typename Real, bool Offsets>
-        void carry_plain(const Tile<Real>& tile, Slots<Real>& s, size_t begin, size_t end, Real* grid, Real* scratch)
+        BLOCH_INLINE size_t drop_pack(const Slots<Real>& s, Real* pack, size_t lanes)
         {
-            carry<Real, Offsets>(tile, s, begin, end, grid, scratch);
-        }
-
-#ifdef BLOCH_X86_64
-        template <typename Real, bool Offsets>
-        BLOCH_AVX2 void carry_avx2(
-            const Tile<Real>& tile, Slots<Real>& s, size_t begin, size_t end, Real* grid, Real* scratch)
-        {
-            carry<Real, Offsets>(tile, s, begin, end, grid, scratch);
-        }
-#endif
-
-        /** The carry this processor runs fastest. */
-        template <typename Real>
-        CarryRange<Real> fastest_carry(bool offsets)
-        {
-#ifdef BLOCH_X86_64
-            static const bool wide = avx2_and_fma();
-            if (wide)
-                return offsets ? carry_avx2<Real, true> : carry_avx2<Real, false>;
-#endif
-            return offsets ? carry_plain<Real, true> : carry_plain<Real, false>;
-        }
-
-        /** Zero the transients of slots @p begin to @p end at or below their
-         *  limit; return how many were not zero. */
-        template <typename Real>
-        size_t drop(Slots<Real>& s, size_t begin, size_t end)
-        {
-            Real* m0 = &s.m[0];
-            Real* m1 = &s.m[s.stride];
-            Real* m2 = &s.m[2 * s.stride];
+            const size_t L = s.lanes;
+            Real* m0 = pack;
+            Real* m1 = pack + L;
+            Real* m2 = pack + 2 * L;
+            const Real* limit = pack + s.limit_at * L;
             size_t dropped = 0;
-            for (size_t i = begin; i < end; ++i)
+            for (size_t l = 0; l < lanes; ++l)
             {
-                const Real size = m0[i] * m0[i] + m1[i] * m1[i] + m2[i] * m2[i];
-                if (size > Real(0) && !(size > s.limit[i]))
+                const Real size = m0[l] * m0[l] + m1[l] * m1[l] + m2[l] * m2[l];
+                if (size > Real(0) && !(size > limit[l]))
                 {
-                    m0[i] = m1[i] = m2[i] = Real(0);
+                    m0[l] = m1[l] = m2[l] = Real(0);
                     ++dropped;
                 }
             }
             return dropped;
         }
 
-        /** Carry every slot through the tile, each worker onto its own grid,
+        /** Carry packs @p first to @p last through the tile: each slot's
+         *  coefficients spread onto @p grid, per window onto the grid points
+         *  of its T2 and coil or summed without a kernel for a window of one
+         *  sample, and the magnetisation at the start of the repetition after
+         *  the tile; drop the transients at or below their limit where the
+         *  tile drops them and return how many. */
+        template <typename Real, size_t L, bool Offsets>
+        BLOCH_INLINE size_t carry(
+            const Tile<Real>& tile, Slots<Real>& s, size_t first, size_t last, Real* grid, Real* scratch)
+        {
+            using Vector = typename Lanes<Real, L>::Vector;
+            constexpr size_t T = kTile;
+            constexpr size_t P = T / L;
+            constexpr size_t G = kInterleaved;
+            const size_t W = tile.windows;
+            const size_t C = tile.coils;
+            const size_t taps = tile.taps;
+            const size_t count = tile.count;
+            const size_t width = s.width;
+            const size_t size = s.size;
+            Real turn_cos[kTile], turn_sin[kTile];
+            std::copy(tile.turn_cos, tile.turn_cos + kTile, turn_cos);
+            std::copy(tile.turn_sin, tile.turn_sin + kTile, turn_sin);
+            std::vector<Encodings<Real>> encoding;
+            for (size_t w = 0; w < W; ++w)
+                encoding.push_back(encodings(tile, s, w));
+            /* The packs' coefficients, [pack][window][Re, Im][repetition];
+             * one window's, encoded, [slot][Re, Im][part]; and the latter
+             * times a coil's factor. */
+            Vector* q = reinterpret_cast<Vector*>(scratch);
+            Vector* e = q + G * 2 * W * T;
+            Vector* v = e + 2 * T;
+            size_t dropped = 0;
+            for (size_t p = first; p < last;)
+            {
+                const size_t group = std::min(G, last - p);
+                Real* packs[G];
+                for (size_t g = 0; g < group; ++g)
+                    packs[g] = s.pack.data() + (p + g) * width * L;
+                if (group == G)
+                    carry_packs<Real, L, Offsets, G>(packs, count, W, s.u_at, s.u_width, turn_cos, turn_sin, q);
+                else
+                    for (size_t g = 0; g < group; ++g)
+                        carry_packs<Real, L, Offsets, 1>(
+                            packs + g, count, W, s.u_at, s.u_width, turn_cos, turn_sin, q + g * 2 * W * T);
+                for (size_t g = 0; g < group; ++g, ++p)
+                {
+                    const size_t lanes = std::min(L, size - p * L);
+                    const Vector* coefficients = q + g * 2 * W * T;
+                    for (size_t w = 0; w < W; ++w)
+                    {
+                        const size_t cells = tile.cells[w];
+                        size_t point[L];
+                        for (size_t l = 0; l < lanes; ++l)
+                        {
+                            const size_t slot = p * L + l;
+                            Vector er[P], ei[P];
+                            for (size_t b = 0; b < P; ++b)
+                            {
+                                er[b] = coefficients[2 * w * T + b * L + l];
+                                ei[b] = coefficients[(2 * w + 1) * T + b * L + l];
+                            }
+                            encode_slot<Real, L>(encoding[w], count, slot, er, ei);
+                            for (size_t b = 0; b < P; ++b)
+                            {
+                                e[2 * l * P + b] = er[b];
+                                e[(2 * l + 1) * P + b] = ei[b];
+                            }
+                            point[l] =
+                                cells == 0 ? 0 : (s.decay[slot] * C * (cells + taps) + s.start[slot * W + w]) * 2 * T;
+                        }
+                        const size_t per_coil = cells == 0 ? 2 * T : (cells + taps) * 2 * T;
+                        for (size_t l0 = 0; l0 < lanes;)
+                        {
+                            size_t l1 = l0 + 1;
+                            while (l1 < lanes && point[l1] == point[l0])
+                                ++l1;
+                            const size_t slot = p * L + l0;
+                            spread_run<Real, L>(
+                                e + 2 * l0 * P,
+                                l1 - l0,
+                                &s.factor[(slot * W + w) * C * 2],
+                                W * C * 2,
+                                taps == 0 ? nullptr : &s.weight[(slot * W + w) * taps],
+                                W * taps,
+                                C,
+                                cells == 0 ? 0 : taps,
+                                per_coil,
+                                grid + tile.region[w] + point[l0],
+                                v);
+                            l0 = l1;
+                        }
+                    }
+                    if (tile.drop)
+                        dropped += drop_pack(s, packs[g], lanes);
+                }
+            }
+            return dropped;
+        }
+
+        template <typename Real>
+        using CarryRange = size_t (*)(const Tile<Real>&, Slots<Real>&, size_t, size_t, Real*, Real*);
+
+        template <typename Real, size_t L, bool Offsets>
+        size_t carry_plain(const Tile<Real>& tile, Slots<Real>& s, size_t first, size_t last, Real* grid, Real* scratch)
+        {
+            return carry<Real, L, Offsets>(tile, s, first, last, grid, scratch);
+        }
+
+#if defined(BLOCH_X86_64) && defined(__GNUC__)
+        template <typename Real, size_t L, bool Offsets>
+        BLOCH_AVX2 size_t
+            carry_avx2(const Tile<Real>& tile, Slots<Real>& s, size_t first, size_t last, Real* grid, Real* scratch)
+        {
+            return carry<Real, L, Offsets>(tile, s, first, last, grid, scratch);
+        }
+
+        template <typename Real, size_t L, bool Offsets>
+        BLOCH_AVX512 size_t
+            carry_avx512(const Tile<Real>& tile, Slots<Real>& s, size_t first, size_t last, Real* grid, Real* scratch)
+        {
+            return carry<Real, L, Offsets>(tile, s, first, last, grid, scratch);
+        }
+#endif
+
+        /** The carry this processor runs fastest, and the lanes of the packs
+         *  it reads. */
+        template <typename Real>
+        struct Carry
+        {
+            CarryRange<Real> range;
+            size_t lanes;
+        };
+
+        template <typename Real>
+        Carry<Real> fastest_carry(bool offsets)
+        {
+#if defined(BLOCH_X86_64) && defined(__GNUC__)
+            static const bool widest = avx512f();
+            static const bool wide = avx2_and_fma();
+            constexpr size_t Z = 64 / sizeof(Real);
+            constexpr size_t Y = 32 / sizeof(Real);
+            if (widest)
+                return {offsets ? carry_avx512<Real, Z, true> : carry_avx512<Real, Z, false>, Z};
+            if (wide)
+                return {offsets ? carry_avx2<Real, Y, true> : carry_avx2<Real, Y, false>, Y};
+#endif
+#if defined(__GNUC__)
+            constexpr size_t X = 16 / sizeof(Real);
+            return {offsets ? carry_plain<Real, X, true> : carry_plain<Real, X, false>, X};
+#else
+            return {offsets ? carry_plain<Real, 1, true> : carry_plain<Real, 1, false>, 1};
+#endif
+        }
+
+        /** Carry every pack through the tile, each worker onto its own grid,
          *  and drop the transients at or below their limit where the tile
          *  drops them; return how many were dropped. */
         template <typename Real>
         size_t carry_tile(Tile<Real>& tile, Slots<Real>& slots, CarryRange<Real> range, Real* scratch, size_t threads)
         {
             const size_t grid_size = tile.region.back();
-            const size_t scratch_size = tile.windows * kTile * kChunk * 2;
-            tile.ran.assign(workers_for(slots.size, threads, kLeast), 0);
+            const size_t scratch_size = (kInterleaved * tile.windows + 2) * 2 * kTile * slots.lanes;
+            const size_t packs = slots.packs();
+            const size_t least = std::max<size_t>(1, kLeast / slots.lanes);
+            const size_t workers = workers_for(packs, threads, least);
+            tile.ran.assign(workers, 0);
+            tile.first_class.assign(workers, 0);
+            tile.last_class.assign(workers, 0);
             std::atomic<size_t> dropped{0};
-            parallel(slots.size, threads, kLeast, [&](size_t worker, size_t begin, size_t end) {
+            parallel(packs, threads, least, [&](size_t worker, size_t begin, size_t end) {
+                const size_t first = slots.decay[begin * slots.lanes];
+                const size_t last = slots.decay[std::min(slots.size, end * slots.lanes) - 1] + 1;
                 Real* grid = tile.grids + worker * grid_size;
-                std::fill(grid, grid + grid_size, Real(0));
-                range(tile, slots, begin, end, grid, scratch + worker * scratch_size);
-                if (tile.drop)
-                    dropped += drop(slots, begin, end);
+                /* Only the rows of the worker's classes are spread onto, and
+                 * only they are read. */
+                for (size_t w = 0; w < tile.windows; ++w)
+                {
+                    Real* part = grid + tile.region[w];
+                    const size_t per_class = tile.coils * (tile.cells[w] + tile.taps) * 2 * kTile;
+                    if (tile.cells[w] == 0)
+                        std::fill(part, grid + tile.region[w + 1], Real(0));
+                    else
+                        std::fill(part + first * per_class, part + last * per_class, Real(0));
+                }
+                dropped += range(tile, slots, begin, end, grid, scratch + worker * scratch_size);
+                tile.first_class[worker] = first;
+                tile.last_class[worker] = last;
                 tile.ran[worker] = 1;
             });
             return dropped.load();
         }
 
-        /** Move the slots of @p begin to @p end whose transient is above
-         *  their limit to the front of the range, in their order, in every
-         *  column; return how many. */
-        template <typename Real>
-        size_t compact_range(Slots<Real>& s, const std::vector<Column>& columns, size_t begin, size_t end)
+        /** Move the values of @p column of the slots @p keep marks to the
+         *  front, in their order. */
+        template <size_t Bytes>
+        void compact_column(const Column& column, const std::vector<unsigned char>& keep)
         {
-            const Real* m0 = &s.m[0];
-            const Real* m1 = &s.m[s.stride];
-            const Real* m2 = &s.m[2 * s.stride];
-            std::vector<unsigned char> keep(end - begin);
-            for (size_t i = begin; i < end; ++i)
-                keep[i - begin] = m0[i] * m0[i] + m1[i] * m1[i] + m2[i] * m2[i] > s.limit[i];
-            size_t to = begin;
-            for (const Column& column : columns)
+            const size_t width = Bytes == 0 ? column.width : Bytes;
+            if (column.lanes == 0)
             {
-                to = begin;
-                for (size_t i = begin; i < end; ++i)
-                    if (keep[i - begin])
+                unsigned char* to = column.data;
+                const unsigned char* from = column.data;
+                for (size_t i = 0; i < keep.size(); ++i, from += width)
+                    if (keep[i])
                     {
-                        if (to != i)
-                            std::memcpy(column.data + to * column.width, column.data + i * column.width, column.width);
-                        ++to;
+                        if (to != from)
+                            std::memcpy(to, from, width);
+                        to += width;
                     }
+                return;
             }
-            return to - begin;
-        }
-
-        /** Move the @p kept slots of each part, from @p first on, to follow
-         *  the parts before it, in every column. */
-        void join_parts(
-            const std::vector<Column>& columns,
-            const std::vector<size_t>& first,
-            const std::vector<size_t>& kept,
-            size_t threads)
-        {
-            parallel(columns.size(), threads, 1, [&](size_t, size_t begin, size_t end) {
-                for (size_t c = begin; c < end; ++c)
-                {
-                    size_t to = 0;
-                    for (size_t part = 0; part < first.size(); ++part)
+            /* Lane by lane through the packs, reading and writing alike. */
+            unsigned char* to_pack = column.data;
+            size_t to_lane = 0;
+            const unsigned char* pack = column.data;
+            for (size_t i = 0; i < keep.size(); pack += column.stride)
+                for (size_t lane = 0; lane < column.lanes && i < keep.size(); ++lane, ++i)
+                    if (keep[i])
                     {
-                        if (to != first[part])
-                            std::memmove(
-                                columns[c].data + to * columns[c].width,
-                                columns[c].data + first[part] * columns[c].width,
-                                kept[part] * columns[c].width);
-                        to += kept[part];
+                        unsigned char* to = to_pack + to_lane * width;
+                        const unsigned char* from = pack + lane * width;
+                        if (to != from)
+                            std::memcpy(to, from, width);
+                        if (++to_lane == column.lanes)
+                        {
+                            to_lane = 0;
+                            to_pack += column.stride;
+                        }
                     }
-                }
-            });
         }
 
         /** Keep only the slots whose transient is above its limit, in their
-         *  order. */
+         *  order, and zero the lanes of the last pack past them. */
         template <typename Real>
         void compact(Slots<Real>& s, size_t threads)
         {
-            const std::vector<Column> columns = s.columns();
-            const size_t workers = workers_for(s.size, threads, kLeast);
-            std::vector<size_t> first(workers, 0), kept(workers, 0);
-            parallel(s.size, threads, kLeast, [&](size_t worker, size_t begin, size_t end) {
-                first[worker] = begin;
-                kept[worker] = compact_range(s, columns, begin, end);
+            std::vector<unsigned char> keep(s.size);
+            const size_t lanes = s.lanes;
+            parallel(s.packs(), threads, std::max<size_t>(1, kLeast / lanes), [&](size_t, size_t begin, size_t end) {
+                for (size_t p = begin; p < end; ++p)
+                {
+                    const Real* pack = s.pack.data() + p * s.width * lanes;
+                    const Real* limit = pack + s.limit_at * lanes;
+                    for (size_t l = 0; l < lanes && p * lanes + l < s.size; ++l)
+                    {
+                        const Real x = pack[l], y = pack[lanes + l], z = pack[2 * lanes + l];
+                        keep[p * lanes + l] = x * x + y * y + z * z > limit[l];
+                    }
+                }
             });
-            join_parts(columns, first, kept, threads);
-            s.size = std::accumulate(kept.begin(), kept.end(), size_t(0));
+            const std::vector<Column> columns = s.columns();
+            parallel(columns.size(), threads, 1, [&](size_t, size_t begin, size_t end) {
+                for (size_t c = begin; c < end; ++c)
+                    switch (columns[c].width)
+                    {
+                    case 4:
+                        compact_column<4>(columns[c], keep);
+                        break;
+                    case 8:
+                        compact_column<8>(columns[c], keep);
+                        break;
+                    default:
+                        compact_column<0>(columns[c], keep);
+                    }
+            });
+            s.size = static_cast<size_t>(std::count(keep.begin(), keep.end(), 1));
+            for (size_t slot = s.size; slot < s.packs() * s.lanes; ++slot)
+                for (size_t at = 0; at < s.width; ++at)
+                    s.value(slot, at) = Real(0);
         }
 
         /** Window @p w's sample, a window of one, per repetition of the tile
@@ -797,7 +1043,7 @@ namespace bloch
             bool any = false;
             for (size_t worker = 0; worker < tile.ran.size(); ++worker)
             {
-                if (!tile.ran[worker])
+                if (!tile.ran[worker] || d < tile.first_class[worker] || d >= tile.last_class[worker])
                     continue;
                 any = true;
                 const Real* row =
@@ -1067,9 +1313,9 @@ namespace bloch
         bool single = false;
         Slots<float> single_slots;
         Slots<double> double_slots;
-        /** Per worker, its grid; and its chunk's coefficients. */
-        std::vector<float> single_grids, single_scratch;
-        std::vector<double> double_grids, double_scratch;
+        /** Per worker, its grid; and its pack's coefficients. */
+        AlignedVector<float> single_grids, single_scratch;
+        AlignedVector<double> double_grids, double_scratch;
         Tables<float> single_tables;
         Tables<double> double_tables;
         /** Slots dropped since the last compaction. */
@@ -1080,9 +1326,9 @@ namespace bloch
         template <typename Real>
         Tables<Real>& tables();
         template <typename Real>
-        std::vector<Real>& grids();
+        AlignedVector<Real>& grids();
         template <typename Real>
-        std::vector<Real>& scratch();
+        AlignedVector<Real>& scratch();
     };
 
     template <>
@@ -1106,22 +1352,22 @@ namespace bloch
         return double_tables;
     }
     template <>
-    std::vector<float>& Repetitions::Set::grids<float>()
+    AlignedVector<float>& Repetitions::Set::grids<float>()
     {
         return single_grids;
     }
     template <>
-    std::vector<double>& Repetitions::Set::grids<double>()
+    AlignedVector<double>& Repetitions::Set::grids<double>()
     {
         return double_grids;
     }
     template <>
-    std::vector<float>& Repetitions::Set::scratch<float>()
+    AlignedVector<float>& Repetitions::Set::scratch<float>()
     {
         return single_scratch;
     }
     template <>
-    std::vector<double>& Repetitions::Set::scratch<double>()
+    AlignedVector<double>& Repetitions::Set::scratch<double>()
     {
         return double_scratch;
     }
@@ -1365,10 +1611,12 @@ namespace bloch
             along[axis] = !encoded_[axis] ? Encoding::none
                 : lattice_[axis].tabulated ? Encoding::tabulated
                                            : Encoding::computed;
-        slots.allocate(order, along, divided_ && tolerance_ > 0.0);
-        parallel(order.size(), s.threads_, kLeast, [&](size_t, size_t begin, size_t end) {
+        slots.allocate(order, fastest_carry<Real>(slots.offsets).lanes, along, divided_ && tolerance_ > 0.0);
+        const size_t lanes = slots.lanes;
+        /* Whole packs apiece, so that no two workers write one pack. */
+        parallel(slots.packs(), s.threads_, std::max<size_t>(1, kLeast / lanes), [&](size_t, size_t begin, size_t end) {
             std::vector<double> weights(Nufft::width_of());
-            for (size_t n = begin; n < end; ++n)
+            for (size_t n = begin * lanes; n < std::min(order.size(), end * lanes); ++n)
                 fill_slot(slots, n, order[n], weights.data());
         });
         release_maps();
@@ -1380,13 +1628,12 @@ namespace bloch
         using Real = typename SlotsOf::Value;
         const Isochromats& s = isochromats_;
         const IsochromatProperties& p = s.properties_;
-        const size_t size = slots.stride;
-        for (int k = 0; k < 3; ++k)
-            slots.m[k * size + n] = static_cast<Real>(m_[3 * i + k]);
-        for (int k = 0; k < 9; ++k)
-            slots.a[k * size + n] = static_cast<Real>(a_[9 * i + k]);
-        for (int k = 0; k < 3 && slots.offsets; ++k)
-            slots.b[k * size + n] = static_cast<Real>(b_[3 * i + k]);
+        for (size_t k = 0; k < 3; ++k)
+            slots.value(n, k) = static_cast<Real>(m_[3 * i + k]);
+        for (size_t k = 0; k < 9; ++k)
+            slots.value(n, 3 + k) = static_cast<Real>(a_[9 * i + k]);
+        for (size_t k = 0; k < 3 && slots.offsets; ++k)
+            slots.value(n, 12 + k) = static_cast<Real>(b_[3 * i + k]);
         for (size_t w = 0; w < windows_.size(); ++w)
             fill_window(slots, w, n, i, weights);
         const std::vector<double>* coordinates[3] = {&p.x, &p.y, &p.z};
@@ -1399,8 +1646,8 @@ namespace bloch
         }
         slots.decay[n] = s.decay_of_[i];
         const double limit = tolerance_ * p.proton_density[i];
-        if (!slots.limit.empty())
-            slots.limit[n] = static_cast<Real>(limit * limit);
+        if (slots.limits)
+            slots.value(n, slots.limit_at) = static_cast<Real>(limit * limit);
     }
 
     template <typename SlotsOf>
@@ -1409,24 +1656,25 @@ namespace bloch
         using Real = typename SlotsOf::Value;
         const Isochromats& s = isochromats_;
         const Window& window = windows_[w];
-        const size_t size = slots.stride;
-        for (int k = 0; k < 3; ++k)
+        const size_t W = windows_.size();
+        const size_t u = slots.u_at + w * slots.u_width;
+        for (size_t k = 0; k < 3; ++k)
         {
-            slots.u[(w * 6 + k) * size + n] = static_cast<Real>(window.u[3 * i + k].real());
-            slots.u[(w * 6 + 3 + k) * size + n] = static_cast<Real>(window.u[3 * i + k].imag());
+            slots.value(n, u + k) = static_cast<Real>(window.u[3 * i + k].real());
+            slots.value(n, u + 3 + k) = static_cast<Real>(window.u[3 * i + k].imag());
         }
         if (slots.offsets)
         {
-            slots.v[(w * 2) * size + n] = static_cast<Real>(window.v[i].real());
-            slots.v[(w * 2 + 1) * size + n] = static_cast<Real>(window.v[i].imag());
+            slots.value(n, u + 6) = static_cast<Real>(window.v[i].real());
+            slots.value(n, u + 7) = static_cast<Real>(window.v[i].imag());
         }
         std::complex<double> shift(1.0, 0.0);
         if (transforms_[w] != nullptr)
         {
-            slots.start[w * size + n] =
+            slots.start[n * W + w] =
                 static_cast<uint32_t>(transforms_[w]->spread(window_phase(window, i), weights, shift));
             for (size_t j = 0; j < slots.taps; ++j)
-                slots.weight[(w * size + n) * slots.taps + j] = static_cast<Real>(weights[j]);
+                slots.weight[(n * W + w) * slots.taps + j] = static_cast<Real>(weights[j]);
         }
         const bool sensitivities = !s.receive_re_.empty();
         for (size_t k = 0; k < slots.coils; ++k)
@@ -1435,8 +1683,8 @@ namespace bloch
                 ? std::complex<double>(s.receive_re_[k * s.count_ + i], s.receive_im_[k * s.count_ + i])
                 : std::complex<double>(1.0, 0.0);
             const std::complex<double> factor = receive * shift;
-            slots.factor[((w * size + n) * slots.coils + k) * 2] = static_cast<Real>(factor.real());
-            slots.factor[((w * size + n) * slots.coils + k) * 2 + 1] = static_cast<Real>(factor.imag());
+            slots.factor[((n * W + w) * slots.coils + k) * 2] = static_cast<Real>(factor.real());
+            slots.factor[((n * W + w) * slots.coils + k) * 2 + 1] = static_cast<Real>(factor.imag());
         }
     }
 
@@ -1511,12 +1759,12 @@ namespace bloch
         const size_t threads = std::max<size_t>(1, isochromats_.threads_);
         Tile<Real> tile;
         plan_tile(tile, slots.taps);
-        std::vector<Real>& grids = set_->template grids<Real>();
-        std::vector<Real>& scratch = set_->template scratch<Real>();
+        AlignedVector<Real>& grids = set_->template grids<Real>();
+        AlignedVector<Real>& scratch = set_->template scratch<Real>();
         grids.resize(threads * tile.region.back());
-        scratch.resize(threads * tile.windows * kTile * kChunk * 2);
+        scratch.resize(threads * (kInterleaved * tile.windows + 2) * 2 * kTile * slots.lanes);
         tile.grids = grids.data();
-        const CarryRange<Real> range = fastest_carry<Real>(slots.offsets);
+        const CarryRange<Real> range = fastest_carry<Real>(slots.offsets).range;
         std::vector<std::complex<double>> partial;
         for (size_t done = 0; done < count; done += kTile)
         {
@@ -1553,10 +1801,19 @@ namespace bloch
         tile.classes = s.decays_.size();
         tile.drop = divided_ && tolerance_ > 0.0;
         tile.length = samples_;
-        tile.table_re.assign(kTile * W * 3, nullptr);
-        tile.table_im.assign(kTile * W * 3, nullptr);
-        tile.angle.assign(kTile * W * 3, 0.0);
-        tile.computed.assign(kTile * W * 3, 0);
+        tile.encoding.assign(W * 3, Encoding::none);
+        tile.table_at.assign(W * 3, kNone);
+        tile.table_re.assign(W * 3, nullptr);
+        tile.table_im.assign(W * 3, nullptr);
+        tile.angle.assign(W * 3 * kTile, 0.0);
+        size_t tables = 0;
+        for (size_t at = 0; at < W * 3; ++at)
+            if (encoded_[at % 3] && lattice_[at % 3].tabulated)
+            {
+                tile.table_at[at] = tables;
+                tables += 2 * lattice_[at % 3].values.size() * kTile;
+            }
+        tile.tables.assign(tables, 0);
         tile.region.assign(1, 0);
         for (size_t w = 0; w < W; ++w)
         {
@@ -1597,24 +1854,43 @@ namespace bloch
         Tables<Real>& tables = set_->template tables<Real>();
         if (tables.values.size() > kTableValues)
             tables.clear();
-        const size_t per_repetition = windows_.size() * 3;
-        std::vector<size_t> offsets(kTile * per_repetition, kNone);
-        for (size_t at = 0; at < offsets.size(); ++at)
+        const size_t W = windows_.size();
+        size_t offsets[kTile];
+        for (size_t at = 0; at < W * 3; ++at)
         {
             const int axis = static_cast<int>(at % 3);
-            const double area = at / per_repetition < tile.count ? areas_[first * per_repetition + at] : 0.0;
-            const bool tabulated = lattice_[axis].tabulated;
-            tile.computed[at] = area != 0.0 && !tabulated;
-            tile.angle[at] = -kTwoPi * area;
-            if (area != 0.0 && tabulated)
-                offsets[at] = tables.find(axis, area, lattice_[axis].values);
-        }
-        /* The tables stay where they are until the next tile's. */
-        for (size_t at = 0; at < offsets.size(); ++at)
-        {
-            const bool held = offsets[at] != kNone;
-            tile.table_re[at] = held ? &tables.values[offsets[at]] : nullptr;
-            tile.table_im[at] = held ? &tables.values[offsets[at] + lattice_[at % 3].values.size()] : nullptr;
+            bool any = false;
+            for (size_t r = 0; r < kTile; ++r)
+            {
+                const double area = r < tile.count ? areas_[(first + r) * W * 3 + at] : 0.0;
+                tile.angle[at * kTile + r] = -kTwoPi * area;
+                any = any || area != 0.0;
+            }
+            tile.encoding[at] = !any ? Encoding::none
+                : lattice_[axis].tabulated ? Encoding::tabulated
+                                           : Encoding::computed;
+            if (tile.encoding[at] != Encoding::tabulated)
+                continue;
+            const std::vector<double>& values = lattice_[axis].values;
+            for (size_t r = 0; r < kTile; ++r)
+            {
+                const double area = r < tile.count ? areas_[(first + r) * W * 3 + at] : 0.0;
+                offsets[r] = area != 0.0 ? tables.find(axis, area, values) : kNone;
+            }
+            /* Per coordinate, its phase at each repetition: the phases one
+             * slot's repetitions are turned by lie together. */
+            const size_t n = values.size();
+            Real* re = &tile.tables[tile.table_at[at]];
+            Real* im = re + n * kTile;
+            for (size_t k = 0; k < n; ++k)
+                for (size_t r = 0; r < kTile; ++r)
+                {
+                    const bool held = offsets[r] != kNone;
+                    re[k * kTile + r] = held ? tables.values[offsets[r] + k] : Real(1);
+                    im[k * kTile + r] = held ? tables.values[offsets[r] + n + k] : Real(0);
+                }
+            tile.table_re[at] = re;
+            tile.table_im[at] = im;
         }
     }
 
@@ -1812,7 +2088,7 @@ namespace bloch
             for (size_t slot = begin; slot < end; ++slot)
             {
                 const size_t i = slots.id[slot];
-                double x = slots.m[slot], y = slots.m[slots.stride + slot], z = slots.m[2 * slots.stride + slot];
+                double x = slots.value(slot, 0), y = slots.value(slot, 1), z = slots.value(slot, 2);
                 if (divided_)
                 {
                     x += fixed_[3 * i];
