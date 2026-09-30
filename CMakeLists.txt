@@ -45,6 +45,17 @@ target_include_directories(_ext PRIVATE
     ${CMAKE_SOURCE_DIR}/src/cpp/ir
 )
 
+# The extension is loaded by whatever interpreter it lands in front of, and an
+# interpreter ships the C++ runtime it was built against -- often older than
+# the compiler that builds this. Carrying the runtime inside the extension
+# removes that dependency rather than betting on the host's: without it, a
+# distribution whose libstdc++ predates the build compiler refuses to load the
+# extension at all. Nothing here hands C++ objects to another extension, which
+# is what would make one runtime per module unsafe.
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_CXX_COMPILER_ID MATCHES "GNU")
+    target_link_options(_ext PRIVATE -static-libstdc++ -static-libgcc)
+endif()
+
 # Built into the build tree, never beside the sources: a binary left in the
 # source tree would be swept into wheels built for other interpreters.
 set_target_properties(_ext PROPERTIES
