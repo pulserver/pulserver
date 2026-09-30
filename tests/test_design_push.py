@@ -219,7 +219,7 @@ def test_a_generation_pushes_the_design_it_replies(host, intake):
         plugins=PLUGINS,
         plugin="tiny",
         limits=LIMITS,
-        block="[NimPulseqGUI Protocol]\nTE: 8000\n[NimPulseqGUI Protocol End]\n",
+        block="[Protocol]\nTE: 8000\n[Protocol End]\n",
         store=host,
         push=url(intake),
     )
@@ -238,7 +238,7 @@ def _closed_port():
 
 def test_a_design_that_cannot_be_pushed_is_an_error_and_stays_stored(host, tmp_path):
     unreachable = f"http://127.0.0.1:{_closed_port()}"
-    block = "[NimPulseqGUI Protocol]\nTE: 8000\n[NimPulseqGUI Protocol End]\n"
+    block = "[Protocol]\nTE: 8000\n[Protocol End]\n"
     inputs = {
         "plugins": PLUGINS,
         "plugin": "tiny",
@@ -318,3 +318,30 @@ def _process_umask() -> int:
     mask = os.umask(0o022)
     os.umask(mask)
     return mask
+
+
+@pytest.mark.parametrize(
+    "begin,end",
+    [
+        ("[Protocol]", "[Protocol End]"),
+        ("[NimPulseqGUI Protocol]", "[NimPulseqGUI Protocol End]"),
+    ],
+    ids=["current", "former"],
+)
+def test_a_value_block_is_read_under_either_delimiter(begin, end):
+    """An interpreter and a server are deployed separately and may differ in age.
+
+    Accepting either delimiter is what lets one side be replaced without the
+    other.
+    """
+    from pulserver.protocol._wire import _block_lines
+
+    assert list(_block_lines(f"{begin}\nTE: 8000\n{end}\n")) == [("TE", "8000")]
+
+
+def test_a_value_block_is_written_under_the_current_delimiter():
+    from pulserver.protocol._wire import PROTOCOL_BEGIN, PROTOCOL_END
+
+    assert PROTOCOL_BEGIN == "[Protocol]"
+    assert PROTOCOL_END == "[Protocol End]"
+    assert "NimPulseqGUI" not in PROTOCOL_BEGIN + PROTOCOL_END

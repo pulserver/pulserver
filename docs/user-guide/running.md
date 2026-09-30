@@ -139,7 +139,7 @@ A plugin can be exercised without a scanner through
 from pulserver.host import DesignStore, call
 
 limits = {"max_grad": 40.0, "grad_unit": "mT/m", "max_slew": 150.0, "slew_unit": "T/m/s"}
-block = "[NimPulseqGUI Protocol]\nTE: 5000\nnx: 96\n[NimPulseqGUI Protocol End]\n"
+block = "[Protocol]\nTE: 5000\nnx: 96\n[Protocol End]\n"
 status, reply = call("validate", plugins="sequences", plugin="gre2d",
                      limits=limits, block=block)
 status, reply = call("generate", plugins="sequences", plugin="gre2d",
