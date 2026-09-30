@@ -177,6 +177,12 @@ class ReadoutTable:
     center_sample: np.ndarray
     trajectory_dimensions: np.ndarray
     _runs: _Runs = field(repr=False)
+    #: One entry per distinct ADC: its phase modulation in rad, or None.
+    _phase_modulation: tuple[np.ndarray | None, ...] = field(default=(), repr=False)
+    #: Which entry of _phase_modulation each readout plays.
+    _modulated_by: np.ndarray = field(
+        default_factory=lambda: np.zeros(0, dtype=np.int64), repr=False
+    )
 
     def __len__(self) -> int:
         return int(self.num_samples.size)
@@ -210,7 +216,18 @@ class ReadoutTable:
             center_sample=center_sample,
             trajectory_dimensions=dimensions,
             _runs=_Runs(seq, num_samples),
+            _phase_modulation=tuple(_phase_modulation_of(adc) for adc in adcs),
+            _modulated_by=which,
         )
+
+    def readout_phase_modulation(self, index: int) -> np.ndarray | None:
+        """Return the phase modulation of one readout's ADC, in rad, or None.
+
+        One value per sample. A readout played under a gradient that holds one
+        value throughout carries none: its share of a shifted field of view is
+        a phase and a frequency offset, which the receiver applies itself.
+        """
+        return self._phase_modulation[int(self._modulated_by[index])]
 
     def readout_k(self, index: int) -> np.ndarray:
         """Return the k-space position of each sample of one readout, in 1/m.
@@ -260,6 +277,15 @@ class _Runs:
 
 
 # %% private module subroutines
+
+
+def _phase_modulation_of(adc: Any) -> np.ndarray | None:
+    """Return an ADC's phase modulation in rad, or None where it has none."""
+    values = getattr(adc, "phase_modulation", None)
+    if values is None:
+        return None
+    values = np.asarray(values, dtype=np.float64).ravel()
+    return values if values.size else None
 
 
 def _events_by_id(
