@@ -12,6 +12,8 @@
 #include <memory>
 #include <vector>
 
+#include "bloch/cycles.hpp"
+
 namespace bloch
 {
 
@@ -115,14 +117,6 @@ namespace bloch
         void finish(std::complex<double>* grid, std::complex<double>* out) const;
 
     private:
-        /** The whole number nearest @p v, ties to even, for |v| below 2^51
-         *  under the default rounding mode and without reassociation. */
-        static double nearest(double v)
-        {
-            constexpr double kShift = 6755399441055744.0; /* 1.5 * 2^52 */
-            return (v + kShift) - kShift;
-        }
-
         /** polynomials_, from the kernel at Chebyshev points. */
         void fit_polynomials();
 

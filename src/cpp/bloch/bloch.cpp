@@ -5,6 +5,7 @@
  */
 
 #include "bloch/bloch.hpp"
+#include "bloch/cycles.hpp"
 #include "bloch/nufft.hpp"
 #include "bloch/parallel.hpp"
 #include "bloch/simd.hpp"
@@ -738,6 +739,10 @@ namespace bloch
             /** One increment throughout, which makes an isochromat's turn per
              *  sample one complex factor. */
             bool uniform = true;
+            /** The time from one sample to the next where it is one
+             *  throughout, which makes an isochromat's decay per sample one
+             *  factor; 0 otherwise. */
+            double dwell = 0.0;
         };
 
         SampleSteps sample_steps(const double* times, size_t samples, const GradientAreas& areas)
@@ -745,6 +750,7 @@ namespace bloch
             SampleSteps steps;
             steps.area.assign(3 * samples, 0.0);
             steps.time.assign(samples, 0.0);
+            bool dwell = samples > 1;
             double previous[3];
             areas.at(times[0], previous);
             for (size_t k = 1; k < samples; ++k)
@@ -762,8 +768,9 @@ namespace bloch
                         steps.uniform = false;
                 }
                 if (k > 1 && std::fabs(steps.time[k] - steps.time[1]) > 1e-12 * steps.time[1] + 1e-18)
-                    steps.uniform = false;
+                    steps.uniform = dwell = false;
             }
+            steps.dwell = dwell ? steps.time[1] : 0.0;
             return steps;
         }
 
@@ -786,13 +793,26 @@ namespace bloch
             size_t count;
         };
 
-        /** Add to out[c * stride], real then imaginary, the sum over @p size
-         *  isochromats of coil c's sensitivity times Mx + i My. */
+        /** Add to out[c * stride + 2 k], real then imaginary, for each of
+         *  @p samples samples k, the sum over @p size isochromats of coil c's
+         *  sensitivity times the sample's Mx + i My, at zr[k * pitch] and
+         *  zi[k * pitch]. */
         using CoilSum = void (*)(
-            const Sensitivities& g, size_t size, const double* zr, const double* zi, double* out, size_t stride);
+            const Sensitivities& g,
+            size_t size,
+            const double* zr,
+            const double* zi,
+            size_t pitch,
+            size_t samples,
+            double* out,
+            size_t stride);
 
         /** Coils summed together, sharing each read of the magnetisation. */
         constexpr size_t kCoilBlock = 4;
+
+        /** Samples summed together by the vectorised coil sums, sharing each
+         *  read of a sensitivity. */
+        constexpr size_t kSampleBlock = 4;
 
         /** Isochromats one partial sum of the portable coil sum holds. */
         constexpr size_t kLanes = 2;
@@ -857,13 +877,23 @@ namespace bloch
         }
 
         void coil_sum(
-            const Sensitivities& g, size_t size, const double* zr, const double* zi, double* out, size_t stride)
+            const Sensitivities& g,
+            size_t size,
+            const double* zr,
+            const double* zi,
+            size_t pitch,
+            size_t samples,
+            double* out,
+            size_t stride)
         {
-            size_t c = 0;
-            for (; c + kCoilBlock <= g.coils; c += kCoilBlock)
-                coil_block<kCoilBlock>(g, c, size, zr, zi, out, stride);
-            for (; c < g.coils; ++c)
-                coil_block<1>(g, c, size, zr, zi, out, stride);
+            for (size_t k = 0; k < samples; ++k)
+            {
+                size_t c = 0;
+                for (; c + kCoilBlock <= g.coils; c += kCoilBlock)
+                    coil_block<kCoilBlock>(g, c, size, zr + k * pitch, zi + k * pitch, out + 2 * k, stride);
+                for (; c < g.coils; ++c)
+                    coil_block<1>(g, c, size, zr + k * pitch, zi + k * pitch, out + 2 * k, stride);
+            }
         }
 
 #ifdef BLOCH_X86_64
@@ -873,52 +903,172 @@ namespace bloch
             return _mm_cvtsd_f64(_mm_add_sd(half, _mm_unpackhi_pd(half, half)));
         }
 
-        /** coil_block with AVX2 and FMA, four isochromats to a vector. */
-        template <size_t Block>
+        /** Coils [@p c, @p c + Block) of the coil sums of @p Samples samples,
+         *  with AVX2 and FMA, four isochromats to a vector. */
+        template <size_t Block, size_t Samples>
         BLOCH_AVX2 void coil_block_avx2(
             const Sensitivities& g,
             size_t c,
             size_t size,
             const double* zr,
             const double* zi,
+            size_t pitch,
             double* out,
             size_t stride)
         {
             const size_t whole = size / 4 * 4;
-            __m256d ar[Block];
-            __m256d ai[Block];
+            __m256d ar[Block][Samples];
+            __m256d ai[Block][Samples];
             for (size_t q = 0; q < Block; ++q)
-                ar[q] = ai[q] = _mm256_setzero_pd();
+                for (size_t k = 0; k < Samples; ++k)
+                    ar[q][k] = ai[q][k] = _mm256_setzero_pd();
             for (size_t j = 0; j < whole; j += 4)
-            {
-                const __m256d xr = _mm256_loadu_pd(zr + j);
-                const __m256d xi = _mm256_loadu_pd(zi + j);
                 for (size_t q = 0; q < Block; ++q)
                 {
                     const __m256d gr = _mm256_loadu_pd(g.re + (c + q) * g.count + j);
                     const __m256d gi = _mm256_loadu_pd(g.im + (c + q) * g.count + j);
-                    ar[q] = _mm256_fnmadd_pd(gi, xi, _mm256_fmadd_pd(gr, xr, ar[q]));
-                    ai[q] = _mm256_fmadd_pd(gi, xr, _mm256_fmadd_pd(gr, xi, ai[q]));
+                    for (size_t k = 0; k < Samples; ++k)
+                    {
+                        const __m256d xr = _mm256_loadu_pd(zr + k * pitch + j);
+                        const __m256d xi = _mm256_loadu_pd(zi + k * pitch + j);
+                        ar[q][k] = _mm256_fnmadd_pd(gi, xi, _mm256_fmadd_pd(gr, xr, ar[q][k]));
+                        ai[q][k] = _mm256_fmadd_pd(gi, xr, _mm256_fmadd_pd(gr, xi, ai[q][k]));
+                    }
+                }
+            for (size_t q = 0; q < Block; ++q)
+                for (size_t k = 0; k < Samples; ++k)
+                {
+                    double sr = lane_sum(ar[q][k]);
+                    double si = lane_sum(ai[q][k]);
+                    coil_products(g, c + q, whole, size, zr + k * pitch, zi + k * pitch, sr, si);
+                    out[(c + q) * stride + 2 * k] += sr;
+                    out[(c + q) * stride + 2 * k + 1] += si;
+                }
+        }
+
+        /** The coil sums of @p Samples samples, in blocks of @p Block coils. */
+        template <size_t Block, size_t Samples>
+        BLOCH_AVX2 void coil_sums_avx2(
+            const Sensitivities& g,
+            size_t size,
+            const double* zr,
+            const double* zi,
+            size_t pitch,
+            double* out,
+            size_t stride)
+        {
+            size_t c = 0;
+            for (; c + Block <= g.coils; c += Block)
+                coil_block_avx2<Block, Samples>(g, c, size, zr, zi, pitch, out, stride);
+            for (; c < g.coils; ++c)
+                coil_block_avx2<1, Samples>(g, c, size, zr, zi, pitch, out, stride);
+        }
+
+        /** The coil sum with AVX2 and FMA, kSampleBlock samples at a time
+         *  where there are as many, so that a tile's sensitivities are read
+         *  once for them all. */
+        BLOCH_AVX2 void coil_sum_avx2(
+            const Sensitivities& g,
+            size_t size,
+            const double* zr,
+            const double* zi,
+            size_t pitch,
+            size_t samples,
+            double* out,
+            size_t stride)
+        {
+            size_t k = 0;
+            for (; k + kSampleBlock <= samples; k += kSampleBlock)
+                coil_sums_avx2<1, kSampleBlock>(g, size, zr + k * pitch, zi + k * pitch, pitch, out + 2 * k, stride);
+            for (; k < samples; ++k)
+                coil_sums_avx2<kCoilBlock, 1>(g, size, zr + k * pitch, zi + k * pitch, pitch, out + 2 * k, stride);
+        }
+
+        /** Coils [@p c, @p c + Block) of the coil sums of @p Samples samples,
+         *  with AVX-512, eight isochromats to a vector. */
+        template <size_t Block, size_t Samples>
+        BLOCH_AVX512 void coil_block_avx512(
+            const Sensitivities& g,
+            size_t c,
+            size_t size,
+            const double* zr,
+            const double* zi,
+            size_t pitch,
+            double* out,
+            size_t stride)
+        {
+            const size_t whole = size / 8 * 8;
+            __m512d ar[Block][Samples];
+            __m512d ai[Block][Samples];
+            for (size_t q = 0; q < Block; ++q)
+                for (size_t k = 0; k < Samples; ++k)
+                    ar[q][k] = ai[q][k] = _mm512_setzero_pd();
+            for (size_t j = 0; j < whole; j += 8)
+            {
+                __m512d xr[Samples];
+                __m512d xi[Samples];
+                for (size_t k = 0; k < Samples; ++k)
+                {
+                    xr[k] = _mm512_loadu_pd(zr + k * pitch + j);
+                    xi[k] = _mm512_loadu_pd(zi + k * pitch + j);
+                }
+                for (size_t q = 0; q < Block; ++q)
+                {
+                    const __m512d gr = _mm512_loadu_pd(g.re + (c + q) * g.count + j);
+                    const __m512d gi = _mm512_loadu_pd(g.im + (c + q) * g.count + j);
+                    for (size_t k = 0; k < Samples; ++k)
+                    {
+                        ar[q][k] = _mm512_fnmadd_pd(gi, xi[k], _mm512_fmadd_pd(gr, xr[k], ar[q][k]));
+                        ai[q][k] = _mm512_fmadd_pd(gi, xr[k], _mm512_fmadd_pd(gr, xi[k], ai[q][k]));
+                    }
                 }
             }
             for (size_t q = 0; q < Block; ++q)
-            {
-                double sr = lane_sum(ar[q]);
-                double si = lane_sum(ai[q]);
-                coil_products(g, c + q, whole, size, zr, zi, sr, si);
-                out[(c + q) * stride] += sr;
-                out[(c + q) * stride + 1] += si;
-            }
+                for (size_t k = 0; k < Samples; ++k)
+                {
+                    double sr = _mm512_reduce_add_pd(ar[q][k]);
+                    double si = _mm512_reduce_add_pd(ai[q][k]);
+                    coil_products(g, c + q, whole, size, zr + k * pitch, zi + k * pitch, sr, si);
+                    out[(c + q) * stride + 2 * k] += sr;
+                    out[(c + q) * stride + 2 * k + 1] += si;
+                }
         }
 
-        BLOCH_AVX2 void coil_sum_avx2(
-            const Sensitivities& g, size_t size, const double* zr, const double* zi, double* out, size_t stride)
+        /** The coil sums of @p Samples samples, two coils at a time. */
+        template <size_t Samples>
+        BLOCH_AVX512 void coil_sums_avx512(
+            const Sensitivities& g,
+            size_t size,
+            const double* zr,
+            const double* zi,
+            size_t pitch,
+            double* out,
+            size_t stride)
         {
             size_t c = 0;
-            for (; c + kCoilBlock <= g.coils; c += kCoilBlock)
-                coil_block_avx2<kCoilBlock>(g, c, size, zr, zi, out, stride);
+            for (; c + 2 <= g.coils; c += 2)
+                coil_block_avx512<2, Samples>(g, c, size, zr, zi, pitch, out, stride);
             for (; c < g.coils; ++c)
-                coil_block_avx2<1>(g, c, size, zr, zi, out, stride);
+                coil_block_avx512<1, Samples>(g, c, size, zr, zi, pitch, out, stride);
+        }
+
+        /** The coil sum with AVX-512, kSampleBlock samples at a time where
+         *  there are as many. */
+        BLOCH_AVX512 void coil_sum_avx512(
+            const Sensitivities& g,
+            size_t size,
+            const double* zr,
+            const double* zi,
+            size_t pitch,
+            size_t samples,
+            double* out,
+            size_t stride)
+        {
+            size_t k = 0;
+            for (; k + kSampleBlock <= samples; k += kSampleBlock)
+                coil_sums_avx512<kSampleBlock>(g, size, zr + k * pitch, zi + k * pitch, pitch, out + 2 * k, stride);
+            for (; k < samples; ++k)
+                coil_sums_avx512<1>(g, size, zr + k * pitch, zi + k * pitch, pitch, out + 2 * k, stride);
         }
 
 #endif
@@ -927,7 +1077,7 @@ namespace bloch
         CoilSum fastest_coil_sum()
         {
 #ifdef BLOCH_X86_64
-            static const CoilSum chosen = avx2_and_fma() ? coil_sum_avx2 : coil_sum;
+            static const CoilSum chosen = avx512f() ? coil_sum_avx512 : avx2_and_fma() ? coil_sum_avx2 : coil_sum;
             return chosen;
 #else
             return coil_sum;
@@ -952,6 +1102,118 @@ namespace bloch
             out[1] += std::accumulate(zi + whole, zi + size, std::accumulate(ai, ai + kSums, 0.0));
         }
 
+        /** A tile's positions, in m, and off-resonances, in Hz, from its first
+         *  isochromat. */
+        struct Precession
+        {
+            const double* x;
+            const double* y;
+            const double* z;
+            const double* f;
+        };
+
+        /** Each of @p size isochromats' magnetisation (@p zr, @p zi) turned
+         *  over an increment of @p area, in 1/m, and @p time, in s, by
+         *  -2 pi (r . area + f time), and times its @p decay, into (@p tr,
+         *  @p ti). */
+        using AdvanceTile = void (*)(
+            const Precession& p,
+            const double* area,
+            double time,
+            const double* decay,
+            size_t size,
+            const double* zr,
+            const double* zi,
+            double* tr,
+            double* ti);
+
+        BLOCH_INLINE void advance_tile(
+            const Precession& p,
+            const double* area,
+            double time,
+            const double* decay,
+            size_t size,
+            const double* zr,
+            const double* zi,
+            double* tr,
+            double* ti)
+        {
+            const double a0 = area[0];
+            const double a1 = area[1];
+            const double a2 = area[2];
+            BLOCH_INDEPENDENT
+            for (size_t j = 0; j < size; ++j)
+            {
+                double c = 0.0, s = 0.0;
+                cis(-(p.x[j] * a0 + p.y[j] * a1 + p.z[j] * a2 + p.f[j] * time), c, s);
+                const double wr = decay[j] * c;
+                const double wi = decay[j] * s;
+                tr[j] = zr[j] * wr - zi[j] * wi;
+                ti[j] = zr[j] * wi + zi[j] * wr;
+            }
+        }
+
+        void advance_tile_plain(
+            const Precession& p,
+            const double* area,
+            double time,
+            const double* decay,
+            size_t size,
+            const double* zr,
+            const double* zi,
+            double* tr,
+            double* ti)
+        {
+            advance_tile(p, area, time, decay, size, zr, zi, tr, ti);
+        }
+
+#ifdef BLOCH_X86_64
+        BLOCH_AVX2 void advance_tile_avx2(
+            const Precession& p,
+            const double* area,
+            double time,
+            const double* decay,
+            size_t size,
+            const double* zr,
+            const double* zi,
+            double* tr,
+            double* ti)
+        {
+            advance_tile(p, area, time, decay, size, zr, zi, tr, ti);
+        }
+
+        BLOCH_AVX512 void advance_tile_avx512(
+            const Precession& p,
+            const double* area,
+            double time,
+            const double* decay,
+            size_t size,
+            const double* zr,
+            const double* zi,
+            double* tr,
+            double* ti)
+        {
+            advance_tile(p, area, time, decay, size, zr, zi, tr, ti);
+        }
+#endif
+
+        /** The tile's advance this processor computes fastest. */
+        AdvanceTile fastest_advance_tile()
+        {
+#ifdef BLOCH_X86_64
+            static const AdvanceTile chosen =
+                avx512f() ? advance_tile_avx512 : avx2_and_fma() ? advance_tile_avx2 : advance_tile_plain;
+            return chosen;
+#else
+            return advance_tile_plain;
+#endif
+        }
+
+        /** Samples a window reader holds at once, so that their coil sums are
+         *  formed together. */
+        constexpr size_t kBatch = kSampleBlock;
+        static_assert(kBatch > 1, "a sample is turned from the one before it into a row of its own");
+
         /** One worker's reading of an ADC window, a tile of isochromats at a time. */
         class WindowReader
         {
@@ -959,41 +1221,57 @@ namespace bloch
             WindowReader(const IsochromatProperties& p, const SampleSteps& steps, size_t samples, const Receive& receive)
                 : p_(p), steps_(steps), samples_(samples), coils_(receive.coils), count_(receive.count),
                   re_(receive.re.empty() ? nullptr : receive.re.data()),
-                  im_(receive.im.empty() ? nullptr : receive.im.data()), coil_sum_(fastest_coil_sum())
+                  im_(receive.im.empty() ? nullptr : receive.im.data()), coil_sum_(fastest_coil_sum()),
+                  advance_tile_(fastest_advance_tile())
             {
             }
 
             void tile(size_t first, size_t size, double* mx, double* my, double* sum) const
             {
-                double zr[kTile], zi[kTile], wr[kTile], wi[kTile];
-                std::copy(mx + first, mx + first + size, zr);
-                std::copy(my + first, my + first + size, zi);
-                if (steps_.uniform && samples_ > 1)
+                /* The magnetisation at a batch of consecutive samples,
+                 * [sample][isochromat]; each isochromat's turn to the next
+                 * sample where that is one factor; and its decay per sample
+                 * where that is. */
+                double zr[kBatch][kTile], zi[kBatch][kTile], wr[kTile], wi[kTile], decay[kTile];
+                std::copy(mx + first, mx + first + size, zr[0]);
+                std::copy(my + first, my + first + size, zi[0]);
+                const bool uniform = steps_.uniform && samples_ > 1;
+                if (uniform)
                     for (size_t j = 0; j < size; ++j)
                         turn(first + j, &steps_.area[3], steps_.time[1], wr[j], wi[j]);
-                for (size_t k = 0; k < samples_; ++k)
+                else if (steps_.dwell > 0.0)
+                    for (size_t j = 0; j < size; ++j)
+                        decay[j] = std::exp(-steps_.dwell * rate(p_.t2[first + j]));
+                /* The row holding the latest sample. */
+                size_t at = 0;
+                for (size_t k0 = 0; k0 < samples_; k0 += kBatch)
                 {
-                    if (k > 0)
+                    const size_t batch = std::min(kBatch, samples_ - k0);
+                    for (size_t b = k0 == 0 ? 1 : 0; b < batch; ++b)
                     {
-                        if (!steps_.uniform)
-                            for (size_t j = 0; j < size; ++j)
-                                turn(first + j, &steps_.area[3 * k], steps_.time[k], wr[j], wi[j]);
-                        rotate(zr, zi, wr, wi, size);
+                        if (uniform)
+                            rotate(zr[at], zi[at], wr, wi, zr[b], zi[b], size);
+                        else
+                            advance(first, size, k0 + b, decay, zr[at], zi[at], zr[b], zi[b]);
+                        at = b;
                     }
-                    accumulate(zr, zi, first, size, k, sum);
+                    accumulate(zr, zi, first, size, k0, batch, sum);
                 }
-                std::copy(zr, zr + size, mx + first);
-                std::copy(zi, zi + size, my + first);
+                std::copy(zr[at], zr[at] + size, mx + first);
+                std::copy(zi[at], zi[at] + size, my + first);
             }
 
         private:
-            static void rotate(double* zr, double* zi, const double* wr, const double* wi, size_t size)
+            /** (@p tr, @p ti) = (@p zr, @p zi) times (@p wr, @p wi), a row of
+             *  the batch from another. */
+            static void rotate(
+                const double* zr, const double* zi, const double* wr, const double* wi, double* tr, double* ti, size_t size)
             {
+                BLOCH_INDEPENDENT
                 for (size_t j = 0; j < size; ++j)
                 {
-                    const double r = zr[j] * wr[j] - zi[j] * wi[j];
-                    zi[j] = zr[j] * wi[j] + zi[j] * wr[j];
-                    zr[j] = r;
+                    tr[j] = zr[j] * wr[j] - zi[j] * wi[j];
+                    ti[j] = zr[j] * wi[j] + zi[j] * wr[j];
                 }
             }
 
@@ -1006,12 +1284,49 @@ namespace bloch
                 im = e2 * std::sin(phase);
             }
 
-            void accumulate(const double* zr, const double* zi, size_t first, size_t size, size_t k, double* sum) const
+            /** The tile's magnetisation turned and decayed from sample @p k - 1
+             *  to sample @p k, with @p decay where the dwell is one. */
+            void advance(
+                size_t first,
+                size_t size,
+                size_t k,
+                double* decay,
+                const double* zr,
+                const double* zi,
+                double* tr,
+                double* ti) const
+            {
+                const double time = steps_.time[k];
+                if (!(steps_.dwell > 0.0))
+                    for (size_t j = 0; j < size; ++j)
+                        decay[j] = std::exp(-time * rate(p_.t2[first + j]));
+                const Precession precession{
+                    p_.x.data() + first, p_.y.data() + first, p_.z.data() + first, p_.off_resonance.data() + first};
+                advance_tile_(precession, &steps_.area[3 * k], time, decay, size, zr, zi, tr, ti);
+            }
+
+            void accumulate(
+                const double (*zr)[kTile],
+                const double (*zi)[kTile],
+                size_t first,
+                size_t size,
+                size_t k0,
+                size_t batch,
+                double* sum) const
             {
                 if (re_ == nullptr)
-                    magnetisation_sum(size, zr, zi, sum + 2 * k);
+                    for (size_t b = 0; b < batch; ++b)
+                        magnetisation_sum(size, zr[b], zi[b], sum + 2 * (k0 + b));
                 else
-                    coil_sum_({re_ + first, im_ + first, coils_, count_}, size, zr, zi, sum + 2 * k, 2 * samples_);
+                    coil_sum_(
+                        {re_ + first, im_ + first, coils_, count_},
+                        size,
+                        zr[0],
+                        zi[0],
+                        kTile,
+                        batch,
+                        sum + 2 * k0,
+                        2 * samples_);
             }
 
             const IsochromatProperties& p_;
@@ -1022,6 +1337,7 @@ namespace bloch
             const double* re_;
             const double* im_;
             CoilSum coil_sum_;
+            AdvanceTile advance_tile_;
         };
 
         void check_gradients(const BlockEvents& block)
