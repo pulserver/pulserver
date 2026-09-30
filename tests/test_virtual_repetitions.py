@@ -18,6 +18,37 @@ ENCODE = np.array([[0.0, 0.05e-3, 0.3e-3, 0.35e-3], [0.0, 1.0, 1.0, 0.0]])
 ENCODE_AREA = 0.3e-3
 
 
+def _area(times, values):
+    """The area of a piecewise-linear waveform, in its units times s."""
+    return float(np.sum(np.diff(times) * (values[1:] + values[:-1]) / 2))
+
+
+_SPAN = SAMPLES * DWELL
+_HEAD = np.array(
+    [
+        [0.0, 0.05e-3, 0.35e-3, PRE, PRE + _SPAN],
+        [0.0, -READOUT * _SPAN / 0.6e-3, -READOUT * _SPAN / 0.6e-3, READOUT, READOUT],
+    ]
+)
+_REWINDER = -(_area(*_HEAD) + 0.025e-3 * READOUT) / 0.35e-3
+#: A radial spoke along x, in s over Hz/m: its prephaser, the readout and a
+#: rewinder, which leave no area.
+SPOKE = np.column_stack(
+    [
+        _HEAD,
+        [
+            [PRE + _SPAN + 0.05e-3, PRE + _SPAN + 0.35e-3, PRE + _SPAN + 0.4e-3],
+            [_REWINDER, _REWINDER, 0.0],
+        ],
+    ]
+)
+#: The spoke without its rewinder, which leaves the area of its prephaser and
+#: readout.
+OPEN_SPOKE = np.column_stack([_HEAD, [[PRE + _SPAN + 0.05e-3], [0.0]]])
+#: The spoke's area at the first sample, in 1/m.
+SPOKE_FIRST = _area(*_HEAD[:, :4]) + READOUT * DWELL / 2
+
+
 def _properties(positions, coils=2, transmit=None):
     count = len(positions)
     return {
@@ -39,10 +70,11 @@ def _engines(properties):
     return Isochromats(positions, **given), Isochromats(positions, **given)
 
 
-def _repetition(encoding=(0.0, 0.0), rf_phase=0.0, adc_phase=0.0):
+def _repetition(encoding=(0.0, 0.0), rf_phase=0.0, adc_phase=0.0, rewound=True):
     """A slice-selective pulse; a readout prephaser and phase encodings along y and z; a readout; the rewinders.
 
-    ``encoding`` is each phase encoding's area, in 1/m.
+    ``encoding`` is each phase encoding's area, in 1/m; without ``rewound``,
+    the encodings are left as they are.
     """
     rf, gz, _ = pp.make_sinc_pulse(
         np.pi / 6,
@@ -67,7 +99,10 @@ def _repetition(encoding=(0.0, 0.0), rf_phase=0.0, adc_phase=0.0):
         [[0.0, 0.1e-3, 1.1e-3, 1.2e-3], [0.0, gz.amplitude, gz.amplitude, 0.0]]
     )
     phase = [ENCODE * [[1.0], [a / ENCODE_AREA]] if a else None for a in encoding]
-    rewind = [ENCODE * [[1.0], [-a / ENCODE_AREA]] if a else None for a in encoding]
+    rewind = [
+        ENCODE * [[1.0], [-a / ENCODE_AREA]] if a and rewound else None
+        for a in encoding
+    ]
     return [
         {"duration": 1.2e-3, "rf": rf, "gradients": [None, None, select]},
         {"duration": PRE + span + 0.05e-3, "adc": adc, "gradients": [gx, *phase]},
@@ -75,13 +110,13 @@ def _repetition(encoding=(0.0, 0.0), rf_phase=0.0, adc_phase=0.0):
     ]
 
 
-def _played(spins, encodings, rf_phases, adc_phases):
+def _played(spins, encodings, rf_phases, adc_phases, rewound=True):
     """Every repetition's samples, played block by block."""
     out = []
     for encoding, rf_phase, adc_phase in zip(
         encodings, rf_phases, adc_phases, strict=True
     ):
-        for block in _repetition(tuple(encoding), rf_phase, adc_phase):
+        for block in _repetition(tuple(encoding), rf_phase, adc_phase, rewound):
             signal = spins.play(**block)
             if signal.shape[1]:
                 out.append(signal)
@@ -96,6 +131,13 @@ def _repeated(spins, encodings, rf_phases, adc_phases, tolerance=0.0, first=3):
         _repetition(), rf_phases, areas, adc_phases=adc_phases, tolerance=tolerance
     )
     return np.concatenate([scan.play(first), scan.play()]), scan
+
+
+def _spoke(angle, rf_phase=0.0, adc_phase=0.0, spoke=SPOKE):
+    """:func:`_repetition` unencoded, its readout ``spoke`` turned by ``angle`` about z."""
+    pulse, readout, pause = _repetition(rf_phase=rf_phase, adc_phase=adc_phase)
+    along = [spoke * [[1.0], [np.cos(angle)]], spoke * [[1.0], [np.sin(angle)]], None]
+    return [pulse, {**readout, "duration": SPOKE[0, -1], "gradients": along}, pause]
 
 
 def _phases(kind, count):
@@ -190,6 +232,90 @@ def test_isochromats_shared_between_threads_answer_as_their_blocks_played_one_by
     assert (scan.carried < len(repeated)) == (tolerance > 0.0)
     error = np.abs(got - expected).max() / np.abs(expected).max()
     assert error < (1e-10 if tolerance == 0.0 else 10 * tolerance)
+
+
+@pytest.mark.parametrize("tolerance", [0.0, 1e-4])
+@pytest.mark.parametrize(
+    ("positions", "threads", "spoke"),
+    [
+        ("lattice", 1, SPOKE),
+        ("slab", 1, SPOKE),
+        ("lattice", 4, SPOKE),
+        ("lattice", 1, OPEN_SPOKE),
+        ("slab", 1, OPEN_SPOKE),
+    ],
+    ids=["lattice", "slab", "threads", "unrewound", "unrewound-slab"],
+)
+def test_spokes_turned_by_each_repetition_answer_as_their_blocks_played_one_by_one(
+    positions, threads, spoke, tolerance
+):
+    """Each repetition reads its window along its own direction, from the maps of the first's; an unrewound spoke turns each isochromat by the area it leaves."""
+    count = 20
+    where = {"lattice": _grid(40), "slab": _slab()}[positions]
+    reference, repeated = _engines({**_properties(where), "threads": threads})
+    angles = np.pi * np.arange(count) / count + 0.3
+    rf_phases = _phases("quadratic", count)
+    expected = []
+    for angle, phase in zip(angles, rf_phases, strict=True):
+        for block in _spoke(angle, phase, phase, spoke):
+            signal = reference.play(**block)
+            if signal.shape[1]:
+                expected.append(signal)
+    turned = np.zeros((count, 1, 3))
+    turned[:, 0, 0] = np.cos(angles) - np.cos(angles[0])
+    turned[:, 0, 1] = np.sin(angles) - np.sin(angles[0])
+
+    scan = repeated.repetitions(
+        _spoke(angles[0], spoke=spoke),
+        rf_phases,
+        SPOKE_FIRST * turned,
+        readouts=READOUT * turned,
+        nets=_area(*spoke) * turned[:, 0],
+        tolerance=tolerance,
+    )
+    got = np.concatenate([scan.play(3), scan.play()])
+
+    error = np.abs(got - np.stack(expected)).max() / np.abs(expected).max()
+    assert error < (1e-10 if tolerance == 0.0 else 1e-3)
+    np.testing.assert_allclose(
+        repeated.magnetization,
+        reference.magnetization,
+        rtol=0,
+        atol=1e-11 if tolerance == 0.0 else tolerance,
+    )
+
+
+@pytest.mark.parametrize("tolerance", [0.0, 1e-4])
+def test_phase_encodings_left_unrewound_turn_each_isochromat_by_the_area_they_leave(
+    tolerance,
+):
+    """No fixed point holds under a turn that varies from one repetition to the next: the magnetisation is not split."""
+    count = 40
+    reference, repeated = _engines(_properties(_grid(40)))
+    rf_phases = _phases("alternating", count)
+    encodings = _lines(count)
+    areas = np.zeros((count, 1, 3))
+    areas[:, 0, 1:] = encodings
+
+    expected = _played(reference, encodings, rf_phases, rf_phases, rewound=False)
+    scan = repeated.repetitions(
+        _repetition(rewound=False),
+        rf_phases,
+        areas,
+        nets=areas[:, 0],
+        tolerance=tolerance,
+    )
+    got = np.concatenate([scan.play(3), scan.play()])
+
+    error = np.abs(got - expected).max() / np.abs(expected).max()
+    assert error < (1e-10 if tolerance == 0.0 else 1e-3)
+    assert scan._steady is None
+    np.testing.assert_allclose(
+        repeated.magnetization,
+        reference.magnetization,
+        rtol=0,
+        atol=1e-11 if tolerance == 0.0 else tolerance,
+    )
 
 
 @pytest.mark.parametrize("tolerance", [1e-8, 1e-4])

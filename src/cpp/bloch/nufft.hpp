@@ -22,14 +22,19 @@ namespace bloch
      *
      * Each term is spread onto a periodic grid of twice the modes by the
      * exponential-of-semicircle kernel (Barnett, Magland and af Klinteberg,
-     * SIAM J Sci Comput 41:C479, 2019), tabulated and read by cubic
-     * interpolation; the grid is transformed and the kernel's transform
-     * divided out. The caller spreads into grids of its own, so that series
-     * whose terms share their u_n share one evaluation of the kernel per term.
+     * SIAM J Sci Comput 41:C479, 2019): read from a table by cubic
+     * interpolation in spread(), or as a polynomial per grid point in the
+     * term's place in its interval after locate(); the grid is transformed and
+     * the kernel's transform divided out. The caller spreads into grids of its
+     * own, so that series whose terms share their u_n share one evaluation of
+     * the kernel per term.
      */
     class Nufft
     {
     public:
+        /** Grid points the widest kernel spreads a term onto. */
+        static constexpr size_t kWidest = 13;
+
         explicit Nufft(size_t modes, size_t width = width_of());
         ~Nufft();
         Nufft(const Nufft&) = delete;
@@ -57,6 +62,12 @@ namespace bloch
         {
             return width_;
         }
+        /** Modes below zero the grid's transform holds F's from: the term at
+         *  u is spread times exp(-2 pi i centre() u). */
+        size_t centre() const
+        {
+            return centre_;
+        }
 
         /**
          * The kernel's weights of the term at @p u, width() of them, onto the
@@ -66,22 +77,67 @@ namespace bloch
          */
         size_t spread(double u, double* weights, std::complex<double>& shift) const;
 
+        /**
+         * Where the term at @p u is spread: the first grid point, as spread()
+         * returns it but for ties, as a whole number of type double, and in
+         * @p offset where the term lies in its interval, in [-0.5, 0.5]. The
+         * kernel's weight onto the j-th grid point from the first is
+         * polynomial j of polynomials() at @p offset. Inline and free of
+         * branches and calls, so that a loop over terms vectorises.
+         */
+        double locate(double u, double& offset) const
+        {
+            /* Only u's fractional part matters to exp(-2 pi i k u) at integer
+             * k, which puts the term within half a period of the grid's
+             * origin; the first point then lies within half a grid and half a
+             * kernel of the origin, and a kernel spans at most half the grid. */
+            const double grid = static_cast<double>(grid_);
+            const double y = grid * (u - nearest(u)) - 0.5 * static_cast<double>(width_) + 0.5;
+            const double first = nearest(y);
+            offset = y - first;
+            return first < 0.0 ? first + grid : first;
+        }
+        /** Powers of the polynomials locate() refers to, beyond the
+         *  constant: the width and three more, which hold the kernel as
+         *  closely as its table does. */
+        size_t degree() const
+        {
+            return width_ + 3;
+        }
+        /** Their coefficients, [power][grid point], the constant first. */
+        const std::vector<double>& polynomials() const
+        {
+            return polynomials_;
+        }
+
         /** Transform @p grid, grid() values spread onto, in place, and write
          *  F(0) ... F(modes() - 1) to @p out. */
         void finish(std::complex<double>* grid, std::complex<double>* out) const;
 
     private:
+        /** The whole number nearest @p v, ties to even, for |v| below 2^51
+         *  under the default rounding mode and without reassociation. */
+        static double nearest(double v)
+        {
+            constexpr double kShift = 6755399441055744.0; /* 1.5 * 2^52 */
+            return (v + kShift) - kShift;
+        }
+
+        /** polynomials_, from the kernel at Chebyshev points. */
+        void fit_polynomials();
+
         struct Plan;
         size_t modes_;
         size_t grid_;
         size_t width_;
         /** Modes below zero the grid's transform holds F's from. */
         size_t centre_;
-        /** The kernel at each 1/kTablePoints of its support, and a point
+        /** The kernel across its support at a fixed spacing, and a point
          *  more on either side for the cubic. */
         std::vector<double> table_;
         /** The kernel's transform at each mode. */
         std::vector<double> transform_;
+        std::vector<double> polynomials_;
         std::unique_ptr<Plan> plan_;
     };
 

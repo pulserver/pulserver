@@ -44,11 +44,11 @@ def simulate(
     channels, a single-channel pulse plays on every channel, weighted by its
     block's RF shim or, without one, by ``default_shim``.
 
-    Runs of repetitions of blocks that differ only in their phase offsets and
-    phase encodings play from each isochromat's map over one repetition, as
-    :meth:`Isochromats.repetitions` plays them to within ``tolerance``; at
-    zero, their samples are those of the blocks played one by one, to
-    rounding.
+    Runs of repetitions of blocks that differ only in their phase offsets,
+    phase encodings and turned readouts play from each isochromat's map over
+    one repetition, as :meth:`Isochromats.repetitions` plays them to within
+    ``tolerance``; at zero, their samples are those of the blocks played one
+    by one, to rounding.
 
     :doc:`/explanations/virtual-scanner` states the signal model.
     """
@@ -179,6 +179,8 @@ class Player:
             run.phases[index:],
             run.areas[index:],
             adc_phases=run.adc_phases[index:],
+            readouts=run.readouts[index:],
+            nets=run.nets[index:],
             tolerance=self._tolerance,
         )
 
@@ -186,10 +188,11 @@ class Player:
 def _windows(isochromats: Isochromats) -> int:
     """Return the most ADC windows a repetition may hold for its maps on the isochromats to take at most :data:`MEMORY` bytes; negative where none fits."""
     # Per isochromat, its map and the slot it is played from, in double
-    # precision; per window, the map of the transverse magnetisation at its
-    # first sample and the slot's kernel weights and receive factors.
-    per_window = 236 + 16 * isochromats.coils
-    return (MEMORY // max(len(isochromats), 1) - 264) // per_window
+    # precision, with its coordinates; per window, the map of the transverse
+    # magnetisation at its first sample and the slot's kernel weights,
+    # receive factors and phase step.
+    per_window = 244 + 16 * isochromats.coils
+    return (MEMORY // max(len(isochromats), 1) - 288) // per_window
 
 
 def _drive(

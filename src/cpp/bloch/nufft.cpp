@@ -18,10 +18,9 @@ namespace bloch
 
         constexpr double kTwoPi = 6.283185307179586476925286766559;
 
-        /** Grid points a term is spread onto at the widest: the width the
-         *  reference gives a grid of twice the modes for a tolerance of
-         *  1e-12, whose kernel's rate is 2.30 times its width. */
-        constexpr size_t kWidth = 13;
+        /** The kernel's rate per grid point of its width: Nufft::kWidest is
+         *  the width the reference gives a grid of twice the modes for a
+         *  tolerance of 1e-12 at this rate. */
         constexpr double kRatePerPoint = 2.30;
 
         /** Points of the kernel's table per grid spacing. */
@@ -58,7 +57,7 @@ namespace bloch
 
     size_t Nufft::width_of()
     {
-        return kWidth;
+        return kWidest;
     }
 
     size_t Nufft::width_for(double tolerance)
@@ -66,9 +65,9 @@ namespace bloch
         /* The reference's rule for a grid of twice the modes: a width of w
          * holds to about 10^(1 - w). */
         if (!(tolerance > 1e-12))
-            return kWidth;
+            return kWidest;
         const double points = std::ceil(-std::log10(tolerance / 10.0));
-        return std::min(kWidth, static_cast<size_t>(std::max(2.0, points)));
+        return std::min(kWidest, static_cast<size_t>(std::max(2.0, points)));
     }
 
     Nufft::Nufft(size_t modes, size_t width)
@@ -103,6 +102,38 @@ namespace bloch
                 sum += value[i] * std::cos(frequency * z[i]);
             transform_[k] = sum * h;
         }
+        fit_polynomials();
+    }
+
+    void Nufft::fit_polynomials()
+    {
+        /* Each grid point's weight, interpolated at the Chebyshev points of
+         * the offset's interval and taken to powers of the offset. */
+        const size_t n = degree() + 1;
+        const double half = 0.5 * static_cast<double>(width_);
+        std::vector<double> nodes(n);
+        for (size_t i = 0; i < n; ++i)
+            nodes[i] = std::cos(kTwoPi / 2.0 * (static_cast<double>(i) + 0.5) / static_cast<double>(n));
+        /* The Chebyshev polynomials of 2 offset, as powers of 2 offset. */
+        std::vector<double> chebyshev(n * n, 0.0);
+        chebyshev[0] = 1.0;
+        if (n > 1)
+            chebyshev[n + 1] = 1.0;
+        for (size_t k = 2; k < n; ++k)
+            for (size_t m = 0; m < n; ++m)
+                chebyshev[k * n + m] = (m > 0 ? 2.0 * chebyshev[(k - 1) * n + m - 1] : 0.0) - chebyshev[(k - 2) * n + m];
+        polynomials_.assign(n * width_, 0.0);
+        for (size_t j = 0; j < width_; ++j)
+            for (size_t k = 0; k < n; ++k)
+            {
+                double coefficient = 0.0;
+                for (size_t i = 0; i < n; ++i)
+                    coefficient += kernel(static_cast<double>(j) - (half - 0.5 + 0.5 * nodes[i]), width_) *
+                        std::cos(kTwoPi / 2.0 * static_cast<double>(k) * (static_cast<double>(i) + 0.5) / static_cast<double>(n));
+                coefficient *= (k == 0 ? 1.0 : 2.0) / static_cast<double>(n);
+                for (size_t m = 0; m < n; ++m)
+                    polynomials_[m * width_ + j] += coefficient * chebyshev[k * n + m] * std::ldexp(1.0, static_cast<int>(m));
+            }
     }
 
     Nufft::~Nufft() = default;

@@ -58,6 +58,22 @@ namespace bloch
          *  compacted. */
         constexpr double kCompactAt = 0.25;
 
+        /** Cells along each axis of the Z-order curve turned windows' slots
+         *  are ordered along. */
+        constexpr uint32_t kCurveCells = 1024;
+
+        /** The ten low bits of @p v, two zeros after each: one axis's part of
+         *  a Z-order code. */
+        uint64_t interleave(uint32_t v)
+        {
+            uint64_t x = v & (kCurveCells - 1);
+            x = (x | (x << 16)) & 0x030000FFull;
+            x = (x | (x << 8)) & 0x0300F00Full;
+            x = (x | (x << 4)) & 0x030C30C3ull;
+            x = (x | (x << 2)) & 0x09249249ull;
+            return x;
+        }
+
         /** Each isochromat's coordinate as an index into the distinct
          *  coordinates, unless there are more than kLatticeValues of them or
          *  fewer than four isochromats to one on average. */
@@ -199,6 +215,8 @@ namespace bloch
              *  a transient about a fixed point. */
             bool offsets = true;
             bool limits = false;
+            /** Whether a window is turned, and its slots hold where they lie. */
+            bool turned = false;
             /** Values per slot of a pack: m 3, A 9 row-major, b 3 with the
              *  offsets; per window from u_at on, u_width values: u Re x, y, z
              *  then Im x, y, z, and v Re, Im with the offsets; then the
@@ -223,6 +241,11 @@ namespace bloch
             std::vector<Real> coordinate[3];
             /** [slot]: the T2 class. */
             std::vector<uint32_t> decay;
+            /** With a turned window, [slot][window]: the phase, in cycles, the
+             *  slot turns by from one of the blocks' samples to the next; and
+             *  [slot][axis]: its coordinates, in m. */
+            std::vector<double> origin;
+            std::vector<double> place;
 
             size_t packs() const
             {
@@ -263,6 +286,8 @@ namespace bloch
                     coordinate[axis].assign(along[axis] == Encoding::computed ? size : 0, Real(0));
                 }
                 decay.assign(size, 0);
+                origin.assign(turned ? size * windows : 0, 0.0);
+                place.assign(turned ? size * 3 : 0, 0.0);
             }
 
             std::vector<Column> columns()
@@ -289,6 +314,8 @@ namespace bloch
                     add(coordinate[axis], 1);
                 }
                 add(decay, 1);
+                add(origin, windows);
+                add(place, 3);
                 return out;
             }
         };
@@ -364,6 +391,18 @@ namespace bloch
             /** Per window, the grid points (none for a window of one sample)
              *  and the start of its part of a worker's grid. */
             std::vector<size_t> cells, region;
+            /** Per window, whether it is turned; and per window, axis and
+             *  repetition, [(w * 3 + axis) * kTile + r], how much the area
+             *  from one sample to the next exceeds the window's, in 1/m. */
+            std::vector<unsigned char> turned;
+            std::vector<double> delta;
+            /** Per turned window, its transform's polynomials(), [w][power]
+             *  [tap], powers of each. */
+            size_t powers = 0;
+            std::vector<Real> polynomials;
+            /** Whether the repetitions leave net areas: their phases are then
+             *  found as a set of encodings after the windows'. */
+            bool netted = false;
             /** Whether transients at or below their limit are dropped. */
             bool drop = false;
             /** Per window: its samples, the first of them among a
@@ -430,7 +469,34 @@ namespace bloch
                 if ((i & H) == 0)
                     exchange<Real, L, H>(rows[i], rows[i + H], std::make_index_sequence<L>());
         }
+
+        template <typename Real, size_t L, size_t... J>
+        BLOCH_INLINE void turn_pairs(typename Lanes<Real, L>::Vector& a, std::index_sequence<J...>)
+        {
+            using Vector = typename Lanes<Real, L>::Vector;
+            const Vector sign = {((J & 1) ? Real(1) : Real(-1))...};
+#if defined(__clang__)
+            a = (Vector)__builtin_shufflevector(a, a, (J ^ 1)...) * sign;
+#else
+            using Index = typename Lanes<Real, L>::Index;
+            using Scalar = typename Lanes<Real, L>::Scalar;
+            a = __builtin_shuffle(a, Index{static_cast<Scalar>(J ^ 1)...}) * sign;
 #endif
+        }
+#endif
+
+        /** Each pair of lanes of @p a, a complex number laid out Re, Im,
+         *  times i, in place. */
+        template <typename Real, size_t L>
+        BLOCH_INLINE void times_i(typename Lanes<Real, L>::Vector& a)
+        {
+#if defined(__GNUC__)
+            if constexpr (L > 1)
+                turn_pairs<Real, L>(a, std::make_index_sequence<L>());
+#else
+            (void)a;
+#endif
+        }
 
         /** Transpose @p L rows of @p L lanes in place. */
         template <typename Real, size_t L>
@@ -471,7 +537,7 @@ namespace bloch
          * repetitions: row l of block b holds slot l's coefficients of
          * repetitions b L to b L + L - 1.
          */
-        template <typename Real, size_t L, bool Offsets, size_t G>
+        template <typename Real, size_t L, bool Offsets, size_t G, bool Netted = false>
         BLOCH_INLINE void carry_packs(
             Real* const* packs,
             size_t count,
@@ -480,7 +546,8 @@ namespace bloch
             size_t u_width,
             const Real* turn_cos,
             const Real* turn_sin,
-            typename Lanes<Real, L>::Vector* q)
+            typename Lanes<Real, L>::Vector* q,
+            Real* nets = nullptr)
         {
             using Vector = typename Lanes<Real, L>::Vector;
             constexpr size_t T = kTile;
@@ -524,7 +591,18 @@ namespace bloch
                         lanes_at<Real, L>(p, 8) * m[g][2];
                     Vector nz = lanes_at<Real, L>(p, 9) * m[g][0] + lanes_at<Real, L>(p, 10) * m[g][1] +
                         lanes_at<Real, L>(p, 11) * m[g][2];
-                    if (Offsets)
+                    if (Offsets && Netted)
+                    {
+                        /* Each slot's own turn, its net area's phase in it. */
+                        const Vector bx = nx + lanes_at<Real, L>(p, 12);
+                        const Vector by = ny + lanes_at<Real, L>(p, 13);
+                        nz += lanes_at<Real, L>(p, 14);
+                        const Vector cg = lanes_at<Real, L>(nets + g * 2 * T * L, r);
+                        const Vector sg = lanes_at<Real, L>(nets + g * 2 * T * L + T * L, r);
+                        nx = cg * bx - sg * by;
+                        ny = sg * bx + cg * by;
+                    }
+                    else if (Offsets)
                     {
                         const Vector bx = nx + lanes_at<Real, L>(p, 12);
                         const Vector by = ny + lanes_at<Real, L>(p, 13);
@@ -737,7 +815,9 @@ namespace bloch
         }
 
         /** carry_packs over @p group packs, at most kInterleaved: together
-         *  where there are that many, one at a time otherwise. */
+         *  where there are that many, one at a time otherwise; each slot
+         *  turned by its own turns from @p nets, as net_turns() leaves them,
+         *  where given. */
         template <typename Real, size_t L, bool Offsets>
         BLOCH_INLINE void carry_group(
             Real* const* packs,
@@ -747,17 +827,63 @@ namespace bloch
             size_t windows,
             const Real* turn_cos,
             const Real* turn_sin,
-            typename Lanes<Real, L>::Vector* q)
+            typename Lanes<Real, L>::Vector* q,
+            Real* nets)
         {
-            if (group == kInterleaved)
+            const size_t u_at = s.u_at;
+            const size_t u_width = s.u_width;
+            if (group == kInterleaved && nets != nullptr)
+                carry_packs<Real, L, Offsets, kInterleaved, true>(
+                    packs, count, windows, u_at, u_width, turn_cos, turn_sin, q, nets);
+            else if (group == kInterleaved)
+                carry_packs<Real, L, Offsets, kInterleaved>(packs, count, windows, u_at, u_width, turn_cos, turn_sin, q);
+            for (size_t g = 0; g < group && group != kInterleaved; ++g)
             {
-                carry_packs<Real, L, Offsets, kInterleaved>(
-                    packs, count, windows, s.u_at, s.u_width, turn_cos, turn_sin, q);
-                return;
+                auto* own = q + g * 2 * windows * kTile;
+                if (nets != nullptr)
+                    carry_packs<Real, L, Offsets, 1, true>(
+                        packs + g, count, windows, u_at, u_width, turn_cos, turn_sin, own, nets + g * 2 * kTile * L);
+                else
+                    carry_packs<Real, L, Offsets, 1>(packs + g, count, windows, u_at, u_width, turn_cos, turn_sin, own);
             }
+        }
+
+        /** Each slot's turn from each repetition's frame to the next one's,
+         *  the phase of the repetition's net area included, for the @p group
+         *  packs from @p p on: [pack][cos, sin][repetition][lane] in
+         *  @p turns. */
+        template <typename Real, size_t L>
+        BLOCH_INLINE void net_turns(
+            const Tile<Real>& tile, const Encodings<Real>& net, const Slots<Real>& s, size_t p, size_t group, Real* turns)
+        {
+            using Vector = typename Lanes<Real, L>::Vector;
+            constexpr size_t T = kTile;
+            constexpr size_t P = T / L;
             for (size_t g = 0; g < group; ++g)
-                carry_packs<Real, L, Offsets, 1>(
-                    packs + g, count, windows, s.u_at, s.u_width, turn_cos, turn_sin, q + g * 2 * windows * kTile);
+            {
+                Real* cosines = turns + g * 2 * T * L;
+                Real* sines = cosines + T * L;
+                const size_t lanes = std::min(L, s.size - (p + g) * L);
+                for (size_t l = 0; l < L; ++l)
+                {
+                    Vector er[P], ei[P];
+                    for (size_t b = 0; b < P; ++b)
+                    {
+                        er[b] = Vector{} + Real(1);
+                        ei[b] = Vector{};
+                    }
+                    if (l < lanes)
+                        encode_slot<Real, L>(net, tile.count, (p + g) * L + l, er, ei);
+                    Real re[T], im[T];
+                    std::memcpy(re, er, sizeof(re));
+                    std::memcpy(im, ei, sizeof(im));
+                    for (size_t r = 0; r < T; ++r)
+                    {
+                        cosines[r * L + l] = tile.turn_cos[r] * re[r] - tile.turn_sin[r] * im[r];
+                        sines[r * L + l] = tile.turn_sin[r] * re[r] + tile.turn_cos[r] * im[r];
+                    }
+                }
+            }
         }
 
         /** The coefficients of pack @p p's first @p lanes slots in one
@@ -848,6 +974,119 @@ namespace bloch
             }
         }
 
+        /** Values a turned window's spreading works in: two per coil, in a
+         *  whole number of kVectorBytes. */
+        template <typename Real>
+        size_t turned_values(const Tile<Real>& tile)
+        {
+            constexpr size_t vector = kVectorBytes / sizeof(Real);
+            return (2 * tile.coils + vector - 1) / vector * vector;
+        }
+
+        /** Pack @p p's first @p lanes slots' encoded coefficients of turned
+         *  window @p w, @p e as encode_pack leaves them, spread onto @p grid
+         *  a slot and a repetition at a time, each repetition along its own
+         *  direction: the window's part of the grid is [T2 class][repetition]
+         *  [grid point][coil][Re, Im]. @p work holds two values per coil. */
+        template <typename Real, size_t L>
+        BLOCH_INLINE void spread_turned(
+            const Tile<Real>& tile,
+            const Slots<Real>& s,
+            size_t w,
+            size_t p,
+            size_t lanes,
+            const typename Lanes<Real, L>::Vector* e,
+            Real* grid,
+            Real* work)
+        {
+            using Vector = typename Lanes<Real, L>::Vector;
+            constexpr size_t P = kTile / L;
+            const size_t W = tile.windows;
+            const size_t values = 2 * tile.coils;
+            /* The values of whole vectors, then the rest one at a time. */
+            const size_t chunks = L > 1 ? values / L : 0;
+            const size_t whole = chunks * L;
+            const size_t taps = tile.taps;
+            const size_t points = tile.cells[w] + taps;
+            const size_t powers = tile.powers;
+            const Nufft& transform = *tile.transform[w];
+            const double* delta = &tile.delta[w * 3 * kTile];
+            const Real* polynomial = &tile.polynomials[w * powers * taps];
+            /* Each factor times i. */
+            Real* swapped = work;
+            alignas(64) double first[kTile];
+            alignas(64) Real offset[kTile];
+            alignas(64) Real weights[Nufft::kWidest * kTile];
+            const Vector* t = reinterpret_cast<const Vector*>(offset);
+            Vector* sum = reinterpret_cast<Vector*>(weights);
+            for (size_t l = 0; l < lanes; ++l)
+            {
+                const size_t slot = p * L + l;
+                const Real* factor = &s.factor[(slot * W + w) * values];
+                const Vector* f = reinterpret_cast<const Vector*>(factor);
+                Vector* g = reinterpret_cast<Vector*>(swapped);
+                for (size_t k = 0; k < chunks; ++k)
+                {
+                    g[k] = f[k];
+                    times_i<Real, L>(g[k]);
+                }
+                for (size_t k = whole; k < values; k += 2)
+                {
+                    swapped[k] = -factor[k + 1];
+                    swapped[k + 1] = factor[k];
+                }
+                const double x = s.place[3 * slot];
+                const double y = s.place[3 * slot + 1];
+                const double z = s.place[3 * slot + 2];
+                const double origin = s.origin[slot * W + w];
+                for (size_t r = 0; r < kTile; ++r)
+                {
+                    double at = 0.0;
+                    first[r] = transform.locate(
+                        origin + delta[r] * x + delta[kTile + r] * y + delta[2 * kTile + r] * z, at);
+                    offset[r] = static_cast<Real>(at);
+                }
+                /* Each tap's weights at the tile's repetitions, [tap][repetition],
+                 * by Horner's rule over their offsets, the taps side by side. */
+                for (size_t j = 0; j < taps; ++j)
+                    for (size_t q = 0; q < P; ++q)
+                        sum[j * P + q] = Vector{} + polynomial[(powers - 1) * taps + j];
+                for (size_t m = powers - 1; m-- > 0;)
+                    for (size_t j = 0; j < taps; ++j)
+                    {
+                        const Real c = polynomial[m * taps + j];
+                        for (size_t q = 0; q < P; ++q)
+                            sum[j * P + q] = sum[j * P + q] * t[q] + c;
+                    }
+                const Real* re = reinterpret_cast<const Real*>(e + 2 * l * P);
+                const Real* im = reinterpret_cast<const Real*>(e + (2 * l + 1) * P);
+                Real* rows = grid + tile.region[w] + s.decay[slot] * kTile * points * values;
+                for (size_t r = 0; r < tile.count; ++r)
+                {
+                    /* A coefficient c times a factor f is Re c f + Im c (i f),
+                     * spread onto each tap's grid point. */
+                    const Real a = re[r];
+                    const Real b = im[r];
+                    Real weight[Nufft::kWidest];
+                    for (size_t j = 0; j < taps; ++j)
+                        weight[j] = weights[j * kTile + r];
+                    Real* point = rows + (r * points + static_cast<size_t>(first[r])) * values;
+                    for (size_t k = 0; k < chunks; ++k)
+                    {
+                        const Vector v = a * f[k] + b * g[k];
+                        for (size_t j = 0; j < taps; ++j)
+                            *reinterpret_cast<Vector*>(point + j * values + k * L) += weight[j] * v;
+                    }
+                    for (size_t k = whole; k < values; ++k)
+                    {
+                        const Real v = a * factor[k] + b * swapped[k];
+                        for (size_t j = 0; j < taps; ++j)
+                            point[j * values + k] += weight[j] * v;
+                    }
+                }
+            }
+        }
+
         /** Carry packs @p first to @p last through the tile: each slot's
          *  coefficients spread onto @p grid, per window onto the grid points
          *  of its T2 and coil or summed without a kernel for a window of one
@@ -868,12 +1107,15 @@ namespace bloch
             std::vector<Encodings<Real>> encoding;
             for (size_t w = 0; w < W; ++w)
                 encoding.push_back(encodings(tile, s, w));
+            const Encodings<Real> net = tile.netted ? encodings(tile, s, W) : Encodings<Real>{};
             /* The packs' coefficients, [pack][window][Re, Im][repetition];
-             * one window's, encoded, [slot][Re, Im][part]; and the latter
-             * times a coil's factor. */
+             * one window's, encoded, [slot][Re, Im][part]; the latter times a
+             * coil's factor; and what spreading a turned window works in. */
             Vector* q = reinterpret_cast<Vector*>(scratch);
             Vector* e = q + G * 2 * W * T;
             Vector* v = e + 2 * T;
+            Real* work = reinterpret_cast<Real*>(v + 2 * T);
+            Real* nets = tile.netted ? work + turned_values(tile) : nullptr;
             size_t dropped = 0;
             for (size_t p = first; p < last;)
             {
@@ -881,14 +1123,19 @@ namespace bloch
                 Real* packs[G];
                 for (size_t g = 0; g < group; ++g)
                     packs[g] = s.pack.data() + (p + g) * s.width * L;
-                carry_group<Real, L, Offsets>(packs, group, tile.count, s, W, turn_cos, turn_sin, q);
+                if (nets != nullptr)
+                    net_turns<Real, L>(tile, net, s, p, group, nets);
+                carry_group<Real, L, Offsets>(packs, group, tile.count, s, W, turn_cos, turn_sin, q, nets);
                 for (size_t g = 0; g < group; ++g, ++p)
                 {
                     const size_t lanes = std::min(L, s.size - p * L);
                     for (size_t w = 0; w < W; ++w)
                     {
                         encode_pack<Real, L>(encoding[w], tile.count, p, lanes, q + (g * W + w) * 2 * T, e);
-                        spread_pack<Real, L>(tile, s, w, p, lanes, e, grid, v);
+                        if (tile.turned[w])
+                            spread_turned<Real, L>(tile, s, w, p, lanes, e, grid, work);
+                        else
+                            spread_pack<Real, L>(tile, s, w, p, lanes, e, grid, v);
                     }
                     if (tile.drop)
                         dropped += drop_pack(s, packs[g], lanes);
@@ -952,6 +1199,16 @@ namespace bloch
 #endif
         }
 
+        /** Values of a worker's scratch: carry()'s coefficients, what a turned
+         *  window's spreading works in, and the slots' turns where the
+         *  repetitions leave net areas. */
+        template <typename Real>
+        size_t scratch_per_worker(const Tile<Real>& tile, size_t lanes)
+        {
+            const size_t nets = tile.netted ? kInterleaved * 2 * kTile * lanes : 0;
+            return (kInterleaved * tile.windows + 2) * 2 * kTile * lanes + turned_values(tile) + nets;
+        }
+
         /** Carry every pack through the tile, each worker onto its own grid,
          *  and drop the transients at or below their limit where the tile
          *  drops them; return how many were dropped. */
@@ -959,7 +1216,7 @@ namespace bloch
         size_t carry_tile(Tile<Real>& tile, Slots<Real>& slots, CarryRange<Real> range, Real* scratch, size_t threads)
         {
             const size_t grid_size = tile.region.back();
-            const size_t scratch_size = (kInterleaved * tile.windows + 2) * 2 * kTile * slots.lanes;
+            const size_t scratch_size = scratch_per_worker(tile, slots.lanes);
             const size_t packs = slots.packs();
             const size_t least = std::max<size_t>(1, kLeast / slots.lanes);
             const size_t workers = workers_for(packs, threads, least);
@@ -1180,6 +1437,75 @@ namespace bloch
                 for (size_t item = from; item < to; ++item)
                     if (fold_grids(tile, w, item / coils, item % coils, columns))
                         finish_grids(tile, w, item / coils, columns, &partial[item * kTile * samples]);
+            });
+            parallel(tile.count * coils, threads, 1, [&](size_t, size_t from, size_t to) {
+                for (size_t item = from; item < to; ++item)
+                    sum_classes(tile, w, item / coils, item % coils, partial, out);
+            });
+        }
+
+        /** The workers' grids of turned window @p w, T2 class @p d and
+         *  repetition @p r, summed and folded onto the window's grid points,
+         *  per coil into @p columns, [coil][grid point]; false where no worker
+         *  spread onto them. */
+        template <typename Real>
+        bool fold_turned(const Tile<Real>& tile, size_t w, size_t d, size_t r, std::vector<std::complex<double>>& columns)
+        {
+            const size_t cells = tile.cells[w];
+            const size_t points = cells + tile.taps;
+            const size_t coils = tile.coils;
+            const size_t grid_size = tile.region.back();
+            std::fill(columns.begin(), columns.end(), std::complex<double>(0.0, 0.0));
+            bool any = false;
+            for (size_t worker = 0; worker < tile.ran.size(); ++worker)
+            {
+                if (!tile.ran[worker] || d < tile.first_class[worker] || d >= tile.last_class[worker])
+                    continue;
+                any = true;
+                const Real* point =
+                    tile.grids + worker * grid_size + tile.region[w] + (d * kTile + r) * points * 2 * coils;
+                for (size_t g = 0; g < points; ++g, point += 2 * coils)
+                {
+                    const size_t at = g < cells ? g : g - cells;
+                    for (size_t k = 0; k < coils; ++k)
+                        columns[k * cells + at] += std::complex<double>(point[2 * k], point[2 * k + 1]);
+                }
+            }
+            return any;
+        }
+
+        /** Turned window @p w's samples per repetition of the tile and coil,
+         *  as read_transformed() reads a window, a T2 class and a repetition
+         *  at a time. */
+        template <typename Real>
+        void read_turned(
+            const Tile<Real>& tile,
+            size_t w,
+            size_t threads,
+            std::vector<std::complex<double>>& partial,
+            std::complex<double>* out)
+        {
+            const size_t samples = tile.samples[w];
+            const size_t coils = tile.coils;
+            const size_t cells = tile.cells[w];
+            partial.assign(tile.classes * coils * kTile * samples, std::complex<double>(0.0, 0.0));
+            parallel(tile.classes * tile.count, threads, 1, [&](size_t, size_t from, size_t to) {
+                std::vector<std::complex<double>> columns(coils * cells);
+                for (size_t item = from; item < to; ++item)
+                {
+                    const size_t d = item / tile.count;
+                    const size_t r = item % tile.count;
+                    if (!fold_turned(tile, w, d, r, columns))
+                        continue;
+                    const double* decay = &tile.decay[w][d * samples];
+                    for (size_t k = 0; k < coils; ++k)
+                    {
+                        std::complex<double>* sample = &partial[((d * coils + k) * kTile + r) * samples];
+                        tile.transform[w]->finish(&columns[k * cells], sample);
+                        for (size_t j = 0; j < samples; ++j)
+                            sample[j] *= decay[j];
+                    }
+                }
             });
             parallel(tile.count * coils, threads, 1, [&](size_t, size_t from, size_t to) {
                 for (size_t item = from; item < to; ++item)
@@ -1459,12 +1785,15 @@ namespace bloch
         std::vector<double> phases,
         std::vector<double> adc_phases,
         std::vector<double> areas,
+        std::vector<double> readouts,
+        std::vector<double> nets,
         double tolerance)
         : isochromats_(isochromats),
           blocks_(std::move(blocks)),
           phases_(std::move(phases)),
           adc_phases_(std::move(adc_phases)),
           areas_(std::move(areas)),
+          nets_(std::move(nets)),
           tolerance_(tolerance)
     {
         if (!(tolerance >= 0.0) || !std::isfinite(tolerance))
@@ -1476,12 +1805,17 @@ namespace bloch
             throw std::invalid_argument(
                 "the repetitions need three phase-encoding areas per ADC window, " +
                 std::to_string(windows_.size()) + " per repetition");
+        if (!nets_.empty() && nets_.size() != phases_.size() * 3)
+            throw std::invalid_argument("the repetitions need three net areas each, or none");
+        if (std::all_of(nets_.begin(), nets_.end(), [](double area) { return area == 0.0; }))
+            nets_.clear();
         const size_t width = Nufft::width_for(tolerance_);
         for (const Window& window : windows_)
         {
             transforms_.push_back(window.samples > 1 ? std::make_unique<Nufft>(window.samples, width) : nullptr);
             receivers_.push_back(phasors(window.receiver));
         }
+        turn_windows(readouts);
         if (phases_.empty())
             return;
 
@@ -1536,6 +1870,40 @@ namespace bloch
             samples_ += window.samples;
             windows_.push_back(std::move(window));
         }
+    }
+
+    void Repetitions::turn_windows(const std::vector<double>& readouts)
+    {
+        const size_t W = windows_.size();
+        if (!readouts.empty() && readouts.size() != phases_.size() * W * 3)
+            throw std::invalid_argument(
+                "the repetitions need three readout gradients per ADC window, " + std::to_string(W) +
+                " per repetition, or none");
+        readouts_.assign(phases_.size() * W * 3, 0.0);
+        for (size_t at = 0; at < readouts.size(); ++at)
+        {
+            Window& window = windows_[at / 3 % W];
+            if (transforms_[at / 3 % W] == nullptr || readouts[at] == 0.0)
+                continue;
+            window.turned = true;
+            readouts_[at] = readouts[at] * window.step;
+        }
+        /* A turned sample's spreading factor turns as a phase encoding of
+         * centre() times its change of step would: it joins the area. */
+        for (size_t at = 0; at < readouts_.size(); ++at)
+            if (readouts_[at] != 0.0)
+                areas_[at] += static_cast<double>(transforms_[at / 3 % W]->centre()) * readouts_[at];
+    }
+
+    bool Repetitions::turned() const
+    {
+        return std::any_of(windows_.begin(), windows_.end(), [](const Window& window) { return window.turned; });
+    }
+
+    double Repetitions::encoding_area(size_t n, size_t at) const
+    {
+        const size_t W = windows_.size();
+        return at < W * 3 ? areas_[n * W * 3 + at] : nets_[n * 3 + at - W * 3];
     }
 
     void Repetitions::play_maps()
@@ -1607,6 +1975,8 @@ namespace bloch
         {
             for (size_t k = static_cast<size_t>(axis); k < areas_.size() && !encoded_[axis]; k += 3)
                 encoded_[axis] = areas_[k] != 0.0;
+            for (size_t k = static_cast<size_t>(axis); k < nets_.size() && !encoded_[axis]; k += 3)
+                encoded_[axis] = nets_[k] != 0.0;
             if (encoded_[axis])
                 lattice_[axis].tabulated =
                     tabulate(*coordinates[axis], s.threads_, lattice_[axis].values, lattice_[axis].index);
@@ -1635,6 +2005,8 @@ namespace bloch
         for (size_t i = 0; i < s.count_; ++i)
             if (!divided_ || transient_above(i))
                 chosen.push_back(static_cast<uint32_t>(i));
+        if (turned())
+            return spatial_order(chosen);
         const Nufft* transform = windows_.empty() ? nullptr : transforms_[0].get();
         const size_t cells = transform != nullptr ? transform->grid() : 1;
         std::vector<uint32_t> key(chosen.size());
@@ -1655,6 +2027,37 @@ namespace bloch
         return order;
     }
 
+    std::vector<uint32_t> Repetitions::spatial_order(const std::vector<uint32_t>& chosen) const
+    {
+        const Isochromats& s = isochromats_;
+        const IsochromatProperties& p = s.properties_;
+        const std::vector<double>* axes[3] = {&p.x, &p.y, &p.z};
+        double low[3], scale[3];
+        for (int axis = 0; axis < 3; ++axis)
+        {
+            const auto range = std::minmax_element(axes[axis]->begin(), axes[axis]->end());
+            low[axis] = range.first == axes[axis]->end() ? 0.0 : *range.first;
+            const double span = range.first == axes[axis]->end() ? 0.0 : *range.second - low[axis];
+            scale[axis] = span > 0.0 ? static_cast<double>(kCurveCells - 1) / span : 0.0;
+        }
+        std::vector<uint64_t> key(chosen.size());
+        parallel(chosen.size(), s.threads_, kLeast, [&](size_t, size_t begin, size_t end) {
+            for (size_t n = begin; n < end; ++n)
+            {
+                const size_t i = chosen[n];
+                uint64_t code = 0;
+                for (int axis = 0; axis < 3; ++axis)
+                    code |= interleave(static_cast<uint32_t>(((*axes[axis])[i] - low[axis]) * scale[axis])) << axis;
+                key[n] = (static_cast<uint64_t>(s.decay_of_[i]) << 32) | code;
+            }
+        });
+        std::vector<uint32_t> order(chosen.size());
+        std::iota(order.begin(), order.end(), 0u);
+        std::stable_sort(order.begin(), order.end(), [&](uint32_t a, uint32_t b) { return key[a] < key[b]; });
+        std::transform(order.begin(), order.end(), order.begin(), [&](uint32_t n) { return chosen[n]; });
+        return order;
+    }
+
     template <typename Real>
     void Repetitions::gather()
     {
@@ -1667,6 +2070,7 @@ namespace bloch
         slots.coils = s.coils_;
         slots.taps = transformed ? Nufft::width_for(tolerance_) : 0;
         slots.offsets = !divided_;
+        slots.turned = turned();
         Encoding along[3];
         for (int axis = 0; axis < 3; ++axis)
             along[axis] = !encoded_[axis] ? Encoding::none
@@ -1706,6 +2110,8 @@ namespace bloch
                 slots.coordinate[axis][n] = static_cast<Real>((*coordinates[axis])[i]);
         }
         slots.decay[n] = s.decay_of_[i];
+        for (int axis = 0; axis < 3 && slots.turned; ++axis)
+            slots.place[3 * n + axis] = (*coordinates[axis])[i];
         const double limit = tolerance_ * p.proton_density[i];
         if (slots.limits)
             slots.value(n, slots.limit_at) = static_cast<Real>(limit * limit);
@@ -1730,6 +2136,8 @@ namespace bloch
             slots.value(n, u + 7) = static_cast<Real>(window.v[i].imag());
         }
         std::complex<double> shift(1.0, 0.0);
+        if (slots.turned)
+            slots.origin[n * W + w] = window_phase(window, i);
         if (transforms_[w] != nullptr)
         {
             slots.start[n * W + w] =
@@ -1823,7 +2231,7 @@ namespace bloch
         AlignedVector<Real>& grids = set_->template grids<Real>();
         AlignedVector<Real>& scratch = set_->template scratch<Real>();
         grids.resize(threads * tile.region.back());
-        scratch.resize(threads * (kInterleaved * tile.windows + 2) * 2 * kTile * slots.lanes);
+        scratch.resize(threads * scratch_per_worker(tile, slots.lanes));
         tile.grids = grids.data();
         const CarryRange<Real> range = fastest_carry<Real>(slots.offsets).range;
         std::vector<std::complex<double>> partial;
@@ -1838,6 +2246,8 @@ namespace bloch
             {
                 if (tile.cells[w] == 0)
                     read_single(tile, w, out);
+                else if (tile.turned[w])
+                    read_turned(tile, w, threads, partial, out);
                 else
                     read_transformed(tile, w, threads, partial, out);
             }
@@ -1854,6 +2264,7 @@ namespace bloch
     template <typename TileOf>
     void Repetitions::plan_tile(TileOf& tile, size_t taps) const
     {
+        using Real = typename TileOf::Value;
         const Isochromats& s = isochromats_;
         const size_t W = windows_.size();
         tile.windows = W;
@@ -1862,13 +2273,16 @@ namespace bloch
         tile.classes = s.decays_.size();
         tile.drop = divided_ && tolerance_ > 0.0;
         tile.length = samples_;
-        tile.encoding.assign(W * 3, Encoding::none);
-        tile.table_at.assign(W * 3, kNone);
-        tile.table_re.assign(W * 3, nullptr);
-        tile.table_im.assign(W * 3, nullptr);
-        tile.angle.assign(W * 3 * kTile, 0.0);
+        tile.netted = !nets_.empty();
+        /* The windows' encodings, then the net areas' as one more set. */
+        const size_t sets = W + (tile.netted ? 1 : 0);
+        tile.encoding.assign(sets * 3, Encoding::none);
+        tile.table_at.assign(sets * 3, kNone);
+        tile.table_re.assign(sets * 3, nullptr);
+        tile.table_im.assign(sets * 3, nullptr);
+        tile.angle.assign(sets * 3 * kTile, 0.0);
         size_t tables = 0;
-        for (size_t at = 0; at < W * 3; ++at)
+        for (size_t at = 0; at < sets * 3; ++at)
             if (encoded_[at % 3] && lattice_[at % 3].tabulated)
             {
                 tile.table_at[at] = tables;
@@ -1876,9 +2290,12 @@ namespace bloch
             }
         tile.tables.assign(tables, 0);
         tile.region.assign(1, 0);
+        tile.turned.clear();
+        tile.delta.assign(W * kTile * 3, 0.0);
         for (size_t w = 0; w < W; ++w)
         {
             const Nufft* transform = transforms_[w].get();
+            tile.turned.push_back(windows_[w].turned ? 1 : 0);
             const size_t cells = transform != nullptr ? transform->grid() : 0;
             const size_t points = cells > 0 ? tile.classes * tile.coils * (cells + taps) : tile.coils;
             tile.cells.push_back(cells);
@@ -1888,6 +2305,18 @@ namespace bloch
             tile.decay.push_back(decays(windows_[w]));
             tile.region.push_back(tile.region.back() + points * 2 * kTile);
         }
+        tile.powers = 0;
+        for (size_t w = 0; w < W; ++w)
+            if (tile.turned[w])
+                tile.powers = tile.transform[w]->degree() + 1;
+        tile.polynomials.assign(W * tile.powers * taps, Real(0));
+        for (size_t w = 0; w < W; ++w)
+            if (tile.turned[w])
+                std::transform(
+                    tile.transform[w]->polynomials().begin(),
+                    tile.transform[w]->polynomials().end(),
+                    tile.polynomials.begin() + static_cast<std::ptrdiff_t>(w * tile.powers * taps),
+                    [](double c) { return static_cast<Real>(c); });
     }
 
     template <typename TileOf>
@@ -1905,6 +2334,13 @@ namespace bloch
             tile.turn_cos[r] = static_cast<Real>(std::cos(step));
             tile.turn_sin[r] = static_cast<Real>(std::sin(step));
         }
+        const size_t W = windows_.size();
+        for (size_t at = 0; at < W * 3 * kTile; ++at)
+        {
+            const size_t w = at / (3 * kTile);
+            const size_t r = at % kTile;
+            tile.delta[at] = r < tile.count ? readouts_[((first + r) * W + w) * 3 + at / kTile % 3] : 0.0;
+        }
         encode_tile(tile, first);
     }
 
@@ -1915,15 +2351,14 @@ namespace bloch
         Tables<Real>& tables = set_->template tables<Real>();
         if (tables.values.size() > kTableValues)
             tables.clear();
-        const size_t W = windows_.size();
         size_t offsets[kTile];
-        for (size_t at = 0; at < W * 3; ++at)
+        for (size_t at = 0; at < tile.encoding.size(); ++at)
         {
             const int axis = static_cast<int>(at % 3);
             bool any = false;
             for (size_t r = 0; r < kTile; ++r)
             {
-                const double area = r < tile.count ? areas_[(first + r) * W * 3 + at] : 0.0;
+                const double area = r < tile.count ? encoding_area(first + r, at) : 0.0;
                 tile.angle[at * kTile + r] = -kTwoPi * area;
                 any = any || area != 0.0;
             }
@@ -1935,7 +2370,7 @@ namespace bloch
             const std::vector<double>& values = lattice_[axis].values;
             for (size_t r = 0; r < kTile; ++r)
             {
-                const double area = r < tile.count ? areas_[(first + r) * W * 3 + at] : 0.0;
+                const double area = r < tile.count ? encoding_area(first + r, at) : 0.0;
                 offsets[r] = area != 0.0 ? tables.find(axis, area, values) : kNone;
             }
             /* Per coordinate, its phase at each repetition: the phases one
@@ -1980,7 +2415,7 @@ namespace bloch
             return true;
         if (set_)
             throw std::logic_error("the magnetisation is split before the first repetition is played");
-        if (next_ >= phases_.size())
+        if (next_ >= phases_.size() || turned() || !nets_.empty())
             return false;
         Isochromats& s = isochromats_;
         const std::lock_guard<std::mutex> held(s.mutex_);

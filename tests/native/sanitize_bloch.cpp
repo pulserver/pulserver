@@ -260,6 +260,18 @@ namespace
         }
     }
 
+    /** The readout turned about z by a step per repetition, and the phase
+     *  encoding along y left unrewound. */
+    void turn(size_t count, std::vector<double>& readouts, std::vector<double>& nets)
+    {
+        for (size_t n = 0; n < count; ++n)
+        {
+            const double angle = 0.1 * static_cast<double>(n);
+            readouts.insert(readouts.end(), {5e3 * (std::cos(angle) - 1.0), 5e3 * std::sin(angle), 0.0});
+            nets.insert(nets.end(), {0.0, 20.0 * (static_cast<double>(n % 8) - 4.0), 0.0});
+        }
+    }
+
     /** The fixed points' samples summed over the columns along y, and along
      *  z and y. */
     void sum_columns(const bloch::Repetitions& scan, size_t coils)
@@ -277,12 +289,15 @@ namespace
         }
     }
 
-    void repetitions(bloch::Isochromats& spins, size_t channels, double tolerance, bool read)
+    void repetitions(bloch::Isochromats& spins, size_t channels, double tolerance, bool read, bool turned)
     {
         const size_t count = 24;
-        std::vector<double> phases, areas;
+        std::vector<double> phases, areas, readouts, nets;
         schedule(count, tolerance, read, phases, areas);
-        bloch::Repetitions scan(spins, repetition(channels ? channels : 1, read), phases, phases, areas, tolerance);
+        if (turned)
+            turn(count, readouts, nets);
+        bloch::Repetitions scan(
+            spins, repetition(channels ? channels : 1, read), phases, phases, areas, readouts, nets, tolerance);
         if (tolerance > 0.0 && read && scan.split())
             sum_columns(scan, spins.coils());
         // In parts of three and of seven, the last what is left.
@@ -306,8 +321,11 @@ int main()
         bloch::Isochromats spins(lattice(channels, channels ? 3 : 1, receive), 2);
         blocks(spins, channels);
         for (double tolerance : {0.0, 1e-4})
+        {
             for (bool read : {true, false})
-                repetitions(spins, channels, tolerance, read);
+                repetitions(spins, channels, tolerance, read, false);
+            repetitions(spins, channels, tolerance, true, true);
+        }
         std::vector<double> magnetization(3 * spins.size());
         spins.magnetization(magnetization.data());
         sink = std::accumulate(magnetization.begin(), magnetization.end(), sink);
