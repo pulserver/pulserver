@@ -474,11 +474,27 @@ static int set_block(scan_walk *w, const pulseg_collection *coll, int s)
     return rc;
 }
 
-static int end_instance(scan_walk *w)
+static int end_instance(scan_walk *w, pulseg_collection *coll)
 {
     const pulseg_playout_backend *backend = w->loader.backend;
     const int rc =
         backend->play_instance ? backend->play_instance(backend->ctx, &w->segment) : PULSEG_SUCCESS;
+
+    if (rc == PULSEG_PLAYOUT_REPLAY)
+    {
+        /* The instance is asked for again, so it has not been played: the
+         * cursor goes back to the block it was marked at, and the count it
+         * would have joined is left alone.
+         *
+         * One before it, because the walk reads the block the cursor moves
+         * onto: landing on the first block would play the instance from its
+         * second. */
+        pulseg_cursor_rewind(coll);
+        coll->block_cursor.exec_stream_position -= 1;
+        w->position = 0;
+        w->local = -1;
+        return PULSEG_SUCCESS;
+    }
 
     w->instances[w->segment.segment] += 1;
     w->done = w->prescan >= 0 && w->readouts_left <= 0;
@@ -486,7 +502,7 @@ static int end_instance(scan_walk *w)
 }
 
 /* Play the entry at the cursor. */
-static int play_entry(scan_walk *w, const pulseg_collection *coll)
+static int play_entry(scan_walk *w, pulseg_collection *coll)
 {
     const int s = coll->block_cursor.sequence_index;
     const int n = coll->block_cursor.exec_stream_position;
@@ -501,11 +517,15 @@ static int play_entry(scan_walk *w, const pulseg_collection *coll)
     if (!track_position(w, desc, s, n) || (w->prescan >= 0 && s != w->prescan))
         return rc;
     if (w->position == 0)
+    {
+        /* Where a replay returns to. */
+        pulseg_cursor_mark(coll);
         rc = begin_instance(w, coll, s, n);
+    }
     if (PULSEG_SUCCEEDED(rc))
         rc = set_block(w, coll, s);
     if (PULSEG_SUCCEEDED(rc) && instance_ends(desc, n, w->position, w->segment.num_blocks))
-        rc = end_instance(w);
+        rc = end_instance(w, coll);
     return rc;
 }
 

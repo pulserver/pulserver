@@ -856,3 +856,66 @@ def test_each_problem_of_a_chain_names_its_file():
         "dedup_gre_pair.seq",
         "dedup_gre_pair_b.seq",
     ]
+
+
+@pytest.fixture(name="replay_driver", scope="module")
+def replay_driver_fixture(tmp_path_factory):
+    """A scan loop whose backend can ask for an instance again."""
+    return _scanner_build(
+        tmp_path_factory.mktemp("replay"), "replay_an_instance.c", "replay_an_instance"
+    )
+
+
+def _played(driver, seq_path, replay_at):
+    done = subprocess.run(
+        [str(driver), str(seq_path), str(replay_at)],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return [line.split() for line in done.stdout.splitlines()]
+
+
+def test_an_instance_the_backend_asks_for_again_is_played_again(
+    replay_driver, tmp_path
+):
+    """A scan may judge a measurement only once it has made it.
+
+    A tracker that rejects the repetition a subject moved during wants that
+    repetition again, under the corrected pose. The decision is already made
+    by the time the instance has played, so the backend says so there, and the
+    loop returns to the instance's first block.
+    """
+    seq = _copy("gre_2d_3sl.seq", tmp_path)
+    # The driver loads the cache beside the sequence, as a scanner does, so it
+    # is written under the extension that build derives.
+    convert(seq, SYSTEM, vendor=VENDOR, label_column_map=LABELS)
+
+    once = _played(replay_driver, seq, -1)
+    again = _played(replay_driver, seq, 1)
+
+    plain = [row[1:] for row in once if row[0] == "played"]
+    replayed = [row[1:] for row in again if row[0] == "played"]
+    asked = [row[1:] for row in again if row[0] == "replay"]
+    assert len(asked) == 1, "the backend asked for no replay"
+    instance = asked[0]
+
+    # The instance asked for again is played twice under the same number: it
+    # has not been played, so nothing counts it.
+    assert replayed.count(instance) == 2
+
+    # Every instance is otherwise the one it was, in the order it was, so the
+    # replay did not renumber the scan behind it.
+    without, seen = [], False
+    for row in replayed:
+        if row == instance and not seen:
+            seen = True
+            continue
+        without.append(row)
+    assert without == plain
+
+    # And it is played from its first block, not from its second.
+    blocks = [row[1:] for row in again if row[0] == "block"]
+    its = [row[2] for row in blocks if row[:2] == instance]
+    assert its == its[: len(its) // 2] * 2
+    assert its[0] == "0"
