@@ -1,5 +1,10 @@
 """The isochromat Bloch engine against closed forms and the relaxation-free kernel."""
 
+import os
+import select
+import signal
+import sys
+from concurrent.futures import ThreadPoolExecutor
 from types import SimpleNamespace
 
 import numpy as np
@@ -549,6 +554,62 @@ def test_threads_do_not_change_the_answer():
         for n in (1, 4)
     ]
     np.testing.assert_allclose(answers[0], answers[1], rtol=1e-11, atol=1e-9)
+
+
+def _engine(positions, receive):
+    return Isochromats(
+        positions, t2=0.07, off_resonance=12.0, receive=receive, threads=4
+    )
+
+
+def test_isochromats_played_from_two_threads_at_once_answer_as_played_alone():
+    positions = RNG.uniform(-0.05, 0.05, size=(20000, 3))
+    receive = np.exp(1j * RNG.uniform(0, 2 * np.pi, size=(20000, 3)))
+    seq = _gradient_echo()
+
+    alone = design_samples(seq, _engine(positions, receive))
+    with ThreadPoolExecutor(2) as threads:
+        together = list(
+            threads.map(
+                lambda _: design_samples(seq, _engine(positions, receive)), range(2)
+            )
+        )
+
+    for answer in together:
+        np.testing.assert_allclose(answer, alone, rtol=1e-11, atol=1e-9)
+
+
+@pytest.mark.skipif(
+    not sys.platform.startswith("linux"),
+    reason="elsewhere a child forked from threads may call async-signal-safe functions only",
+)
+def test_isochromats_played_before_a_fork_play_in_the_child():
+    positions = RNG.uniform(-0.05, 0.05, size=(20000, 3))
+    receive = np.exp(1j * RNG.uniform(0, 2 * np.pi, size=(20000, 3)))
+    seq = _gradient_echo()
+    before = design_samples(seq, _engine(positions, receive))
+
+    read, write = os.pipe()
+    child = os.fork()
+    if child == 0:
+        os.close(read)
+        try:
+            after = design_samples(seq, _engine(positions, receive))
+            same = np.allclose(after, before, rtol=1e-11, atol=1e-9)
+        except BaseException:
+            same = False
+        os.write(write, b"1" if same else b"0")
+        os._exit(0)
+    os.close(write)
+    try:
+        ready, _, _ = select.select([read], [], [], 300)
+        answer = os.read(read, 1) if ready else b""
+    finally:
+        os.close(read)
+        if not answer:
+            os.kill(child, signal.SIGKILL)
+        os.waitpid(child, 0)
+    assert answer == b"1"
 
 
 def test_each_coil_receives_its_sensitivity_times_the_magnetisation():

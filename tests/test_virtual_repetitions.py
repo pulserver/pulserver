@@ -155,6 +155,43 @@ def test_repetitions_answer_as_their_blocks_played_one_by_one(phases, transmit):
     assert repeated.elapsed == pytest.approx(reference.elapsed)
 
 
+@pytest.mark.parametrize("tolerance", [0.0, 1e-4])
+@pytest.mark.parametrize("count", [1, 50, 83])
+def test_any_number_of_isochromats_answers_as_its_blocks_played_one_by_one(
+    count, tolerance
+):
+    """Isochromats are carried a vector's width at a time, the last vector part filled."""
+    repetitions = 12
+    reference, repeated = _engines(_properties(_slab(count)))
+    rf_phases = _phases("quadratic", repetitions)
+    encodings = _lines(repetitions)
+
+    expected = _played(reference, encodings, rf_phases, rf_phases)
+    got, _ = _repeated(repeated, encodings, rf_phases, rf_phases, tolerance)
+
+    error = np.abs(got - expected).max() / np.abs(expected).max()
+    assert error < (1e-10 if tolerance == 0.0 else 1e-3)
+
+
+@pytest.mark.parametrize("tolerance", [0.0, 1e-4])
+def test_isochromats_shared_between_threads_answer_as_their_blocks_played_one_by_one(
+    tolerance,
+):
+    """Each thread carries isochromats of a few T2s; at 1e-4 the transients below it are dropped and the rest gathered."""
+    count = 300
+    properties = _properties(_grid(142))
+    reference, repeated = _engines({**properties, "threads": 4})
+    rf_phases = _phases("alternating", count)
+    encodings = _lines(count, 32)
+
+    expected = _played(reference, encodings, rf_phases, rf_phases)
+    got, scan = _repeated(repeated, encodings, rf_phases, rf_phases, tolerance)
+
+    assert (scan.carried < len(repeated)) == (tolerance > 0.0)
+    error = np.abs(got - expected).max() / np.abs(expected).max()
+    assert error < (1e-10 if tolerance == 0.0 else 10 * tolerance)
+
+
 @pytest.mark.parametrize("tolerance", [1e-8, 1e-4])
 def test_a_split_holds_every_repetition_to_the_tolerance(tolerance):
     """Fixed points summed by columns, and transients carried until they fall below the tolerance."""
