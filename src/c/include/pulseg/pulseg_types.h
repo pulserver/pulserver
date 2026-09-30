@@ -134,6 +134,87 @@ typedef struct pulseg_rf_view
 /* ================================================================== */
 
 /**
+ * @brief How one quantity is stored in the cache.
+ *
+ * @c format is a @c PULSEG_FORMAT_* code. For an integer format, @c step is
+ * the quantity's SI value of one integer step, so a stored value @c v means
+ * @c v * step. For @c PULSEG_FORMAT_FLOAT32 the value is stored in its SI
+ * unit and @c step is 0.
+ *
+ * A step rather than a full scale, because the two are independent: a scanner
+ * may span its phase over one range of integers and carry it in a wider one,
+ * and a frequency is usually stated as the resolution the synthesiser steps
+ * by rather than as an extreme it reaches.
+ */
+typedef struct pulseg_quantity_format
+{
+    int format;  /**< PULSEG_FORMAT_* code                                 */
+    float step;  /**< SI value of one integer step; 0 when the quantity is
+                  *   stored as a float                                    */
+} pulseg_quantity_format;
+
+/* clang-format off */
+#define PULSEG_QUANTITY_FORMAT_INIT {PULSEG_FORMAT_FLOAT32, 0.0f}
+/* clang-format on */
+
+/**
+ * @brief What a cache holds its numbers as, for the machine that reads it.
+ *
+ * A sequencer that plays integers is written integers, already scaled, so it
+ * converts nothing at playout. A reader that works in SI is written floats.
+ * The profile travels in the cache header, so a reader can establish that the
+ * cache was built for it before reading a single sample.
+ *
+ * The steps belong to the machine, not to this library: they arrive with the
+ * scanner's other limits and are written here unchanged.
+ */
+typedef struct pulseg_vendor_profile
+{
+    pulseg_quantity_format grad_sample;    /**< gradient shape samples (Hz/m) */
+    pulseg_quantity_format grad_amplitude; /**< gradient amplitude (Hz/m)     */
+    pulseg_quantity_format rf_sample;      /**< RF magnitude samples (Hz)     */
+    pulseg_quantity_format rf_amplitude;   /**< RF amplitude (Hz)             */
+    pulseg_quantity_format rf_phase;       /**< RF phase (rad)                */
+    pulseg_quantity_format rf_frequency;   /**< RF frequency offset (Hz)      */
+} pulseg_vendor_profile;
+
+/* Every quantity in SI as a float: what a reader working in SI is given, and
+ * what a machine that has stated no scales gets. */
+/* clang-format off */
+#define PULSEG_VENDOR_PROFILE_INIT \
+    { \
+    PULSEG_QUANTITY_FORMAT_INIT, PULSEG_QUANTITY_FORMAT_INIT, \
+    PULSEG_QUANTITY_FORMAT_INIT, PULSEG_QUANTITY_FORMAT_INIT, \
+    PULSEG_QUANTITY_FORMAT_INIT, PULSEG_QUANTITY_FORMAT_INIT \
+    }
+/* clang-format on */
+
+/**
+ * @brief What a playout's waveform memory affords the waves.
+ *
+ * A property of the playout, not of the sequence.
+ */
+typedef struct pulseg_wave_budget
+{
+    long max_samples;         /**< samples each gradient axis holds for
+                                   waves                                   */
+    float raster_us;          /**< the playout's gradient raster, us per
+                                   sample                                  */
+    float load_us_per_sample; /**< time to sample and load one sample on one
+                                   axis; 0 leaves the loading unchecked    */
+    float headroom;           /**< share of the playout's time its loading
+                                   may take                                */
+    int slots;                /**< slots per position a streamed layout
+                                   rings through, at least 2: how many
+                                   segment instances the loading may run
+                                   ahead of the playout, plus one          */
+} pulseg_wave_budget;
+
+/* clang-format off */
+#define PULSEG_WAVE_BUDGET_INIT {0L, 0.0f, 0.0f, 0.5f, 2}
+/* clang-format on */
+
+/**
  * @brief The scanner the conversion reads a sequence for.
  *
  * All raster times are in microseconds.
@@ -212,13 +293,21 @@ typedef struct pulseg_opts
      * buffer alive for as long as the collection lives. Default 0.
      */
     int borrow_buffer_shapes;
+    /**
+     * @brief What the cache holds its numbers as.
+     *
+     * Every quantity is a float in its SI unit unless the machine that will
+     * read the cache has stated a format and a step for it.
+     */
+    pulseg_vendor_profile profile;
 } pulseg_opts;
 
 /* clang-format off */
 #define PULSEG_OPTS_INIT \
     { \
     0, 0.0f, 0.0f, 0.0f, 0.0f, NULL, NULL, {0, 1, 2}, \
-    PULSEG_CACHE_EXT_DEFAULT, NULL, NULL, 1, 0, 0 \
+    PULSEG_CACHE_EXT_DEFAULT, NULL, NULL, 1, 0, 0, \
+    PULSEG_VENDOR_PROFILE_INIT \
     }
 /* clang-format on */
 
@@ -786,87 +875,6 @@ typedef struct pulseg_corner_point_stream
 #define PULSEG_WAVES_STREAMED 2 /**< a ring of slots per position that plays
                                      waves; each segment instance's waves
                                      loaded into the next slot ahead of it   */
-
-/**
- * @brief How one quantity is stored in the cache.
- *
- * @c format is a @c PULSEG_FORMAT_* code. For an integer format, @c step is
- * the quantity's SI value of one integer step, so a stored value @c v means
- * @c v * step. For @c PULSEG_FORMAT_FLOAT32 the value is stored in its SI
- * unit and @c step is 0.
- *
- * A step rather than a full scale, because the two are independent: a scanner
- * may span its phase over one range of integers and carry it in a wider one,
- * and a frequency is usually stated as the resolution the synthesiser steps
- * by rather than as an extreme it reaches.
- */
-typedef struct pulseg_quantity_format
-{
-    int format;  /**< PULSEG_FORMAT_* code                                 */
-    float step;  /**< SI value of one integer step; 0 when the quantity is
-                  *   stored as a float                                    */
-} pulseg_quantity_format;
-
-/* clang-format off */
-#define PULSEG_QUANTITY_FORMAT_INIT {PULSEG_FORMAT_FLOAT32, 0.0f}
-/* clang-format on */
-
-/**
- * @brief What a cache holds its numbers as, for the machine that reads it.
- *
- * A sequencer that plays integers is written integers, already scaled, so it
- * converts nothing at playout. A reader that works in SI is written floats.
- * The profile travels in the cache header, so a reader can establish that the
- * cache was built for it before reading a single sample.
- *
- * The steps belong to the machine, not to this library: they arrive with the
- * scanner's other limits and are written here unchanged.
- */
-typedef struct pulseg_vendor_profile
-{
-    pulseg_quantity_format grad_sample;    /**< gradient shape samples (Hz/m) */
-    pulseg_quantity_format grad_amplitude; /**< gradient amplitude (Hz/m)     */
-    pulseg_quantity_format rf_sample;      /**< RF magnitude samples (Hz)     */
-    pulseg_quantity_format rf_amplitude;   /**< RF amplitude (Hz)             */
-    pulseg_quantity_format rf_phase;       /**< RF phase (rad)                */
-    pulseg_quantity_format rf_frequency;   /**< RF frequency offset (Hz)      */
-} pulseg_vendor_profile;
-
-/* Every quantity in SI as a float: what a reader working in SI is given, and
- * what a machine that has stated no scales gets. */
-/* clang-format off */
-#define PULSEG_VENDOR_PROFILE_INIT \
-    { \
-    PULSEG_QUANTITY_FORMAT_INIT, PULSEG_QUANTITY_FORMAT_INIT, \
-    PULSEG_QUANTITY_FORMAT_INIT, PULSEG_QUANTITY_FORMAT_INIT, \
-    PULSEG_QUANTITY_FORMAT_INIT, PULSEG_QUANTITY_FORMAT_INIT \
-    }
-/* clang-format on */
-
-/**
- * @brief What a playout's waveform memory affords the waves.
- *
- * A property of the playout, not of the sequence.
- */
-typedef struct pulseg_wave_budget
-{
-    long max_samples;         /**< samples each gradient axis holds for
-                                   waves                                   */
-    float raster_us;          /**< the playout's gradient raster, us per
-                                   sample                                  */
-    float load_us_per_sample; /**< time to sample and load one sample on one
-                                   axis; 0 leaves the loading unchecked    */
-    float headroom;           /**< share of the playout's time its loading
-                                   may take                                */
-    int slots;                /**< slots per position a streamed layout
-                                   rings through, at least 2: how many
-                                   segment instances the loading may run
-                                   ahead of the playout, plus one          */
-} pulseg_wave_budget;
-
-/* clang-format off */
-#define PULSEG_WAVE_BUDGET_INIT {0L, 0.0f, 0.0f, 0.5f, 2}
-/* clang-format on */
 
 /**
  * @brief One stretch of waveform memory: a wave, or a slot waves are loaded

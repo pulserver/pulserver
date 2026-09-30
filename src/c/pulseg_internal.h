@@ -467,6 +467,8 @@ typedef struct pulseg_sequence_descriptor
     float vop_sar_ratio;        /**< see pulseg_subseq_info.vop_sar_ratio */
     float vop_global_sar_ratio; /**< see pulseg_subseq_info.vop_global_sar_ratio */
     int vendor;                /**< PULSEG_VENDOR_* runtime constant */
+    /** what the cache holds its numbers as; copied from pulseg_opts */
+    pulseg_vendor_profile profile;
     int label_column_map[3];   /**< copy of pulseg_opts.label_column_map at dedup time */
 
     float fov[3];        /**< field of view (mm), from [DEFINITIONS] FOV */
@@ -630,7 +632,8 @@ typedef struct pulseg_sequence_descriptor
 /* clang-format off */
 #define PULSEG_SEQUENCE_DESCRIPTOR_INIT \
     { \
-    0.0f, 0.0f, 0.0f, 0.0f, 0, 0, /* sar burst */ 0, /* vop ratios */ 0.0f, 0.0f, 0, {0, 1, 2}, {0, 0, 0}, {0, 0, \
+    0.0f, 0.0f, 0.0f, 0.0f, 0, 0, /* sar burst */ 0, /* vop ratios */ 0.0f, 0.0f, 0, \
+    PULSEG_VENDOR_PROFILE_INIT, {0, 1, 2}, {0, 0, 0}, {0, 0, \
     0}, {0, 0, 0}, {0, 0, 0}, 0, NULL, 0, NULL, 0, NULL, 0, NULL, 0, /* rf_amplitude_variable */ \
     0, NULL, 0, NULL, /* grad shape stats */ 0, NULL, NULL, NULL, NULL, \
     0, NULL, 0, NULL, 0, NULL, 0, NULL, 0, NULL, 0, NULL, \
