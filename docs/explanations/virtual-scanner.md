@@ -176,28 +176,31 @@ to the next, the phase that rounding accrues is what separates the two.
 ### Runs of repetitions
 
 Most of a scan repeats a few blocks many times, changing only the phase
-offsets of its pulses and ADC events and the amplitudes of its phase-encoding
-gradients. Such a run plays from each isochromat's map over one repetition,
-as {meth}`~pulserver.virtual.Isochromats.repetitions` plays it, rather than
+offsets of its pulses and ADC events, the amplitudes of its phase-encoding
+gradients and the direction of its readout. Such a run plays from each
+isochromat's map over one repetition, as
+{meth}`~pulserver.virtual.Isochromats.repetitions` plays it, rather than
 block by block. A repetition is the fewest consecutive blocks, up to 64, that the
 blocks after them repeat event for event, with the same registers but the
-phase offsets and the gradients' amplitudes; runs start at any block, so a
-preparation or a train of dummy excitations before the imaging blocks is a
-run of its own or plays block by block. Within a run:
+phase offsets, the gradients' amplitudes and their waves; runs start at any
+block, so a preparation or a train of dummy excitations before the imaging
+blocks is a run of its own or plays block by block. Within a run:
 
 - every pulse of a repetition has its phase offset larger by the same
   increment than in the first repetition, and so has every ADC event;
-- a gradient whose amplitude varies across the repetitions and is zero during
-  its block's pulse and ADC window is a phase encoding, which a repetition
-  plays at its amplitude less the first repetition's; the phase encodings of a
-  repetition leave no area by any of its pulses nor over it, so that they turn
-  only the samples of its windows;
-- any other gradient keeps its amplitude, and each ADC window is read under a
-  gradient held throughout it.
+- a gradient that varies across the repetitions differs from the first
+  repetition's by a waveform zero during its block's pulse and held through
+  its block's ADC window: a phase encoding, whose amplitude varies, or a
+  readout turned by a rotation with its prephaser, as a radial spoke is, whose
+  wave's corners fall at the first repetition's times; the waveforms of a
+  repetition leave no area by any of its pulses, so that they turn only the
+  samples of its windows and, by the area they leave over it, each
+  isochromat's magnetization at its end;
+- each ADC window is read under a gradient held throughout it.
 
 A run ends where one of these stops holding. An interleaved multislice scan
 whose RF spoiling steps each slice's pulse by its own increment, a spin echo
-phase-encoded before its refocusing pulse, and radial or spiral readouts, whose
+phase-encoded before its refocusing pulse, and spiral readouts, whose
 gradients vary during the windows, play block by block.
 
 The maps take memory in proportion to the isochromats and to the ADC windows of
@@ -208,16 +211,17 @@ by one.
 {func}`~pulserver.virtual.simulate` and {class}`~pulserver.virtual.Scan` take
 the `tolerance` of {meth}`~pulserver.virtual.Isochromats.repetitions`. At zero,
 a run samples what its blocks played one by one sample, to the single precision
-of the cache's amplitudes, which leave the phase encodings' area at rounding
-where the run takes it as zero. The console and `pulserver scan` play runs to a
-tolerance of $10^{-4}$, at which the transients of a steady state are carried
-until they fall below it and its fixed points are summed once, by columns of
-isochromats along the encoded axes; a run whose column sums would take more
-than 4 GiB carries every transient instead. Played to a tolerance, a run also
-takes as zero the area its phase encodings leave at the six significant digits
-a Pulseq file keeps of an amplitude, up to $2 \times 10^{-5}$ of the largest
-area one of them plays, and its samples then differ from the blocks' by the
-phase that area accrues.
+of the cache's amplitudes, which leave the varying gradients' area by a pulse
+at rounding where the run takes it as zero. The console and `pulserver scan`
+play runs to a tolerance of $10^{-4}$, at which the transients of a steady
+state are carried until they fall below it and its fixed points are summed
+once, by columns of isochromats along the encoded axes; a run whose column sums
+would take more than 4 GiB carries every transient instead. Played to a
+tolerance, a run also takes as zero the area its varying gradients leave by a
+pulse or over a repetition at the six significant digits a Pulseq file keeps
+of an amplitude, up to $2 \times 10^{-5}$ of the largest area one of them
+plays, and its samples then differ from the blocks' by the phase that area
+accrues.
 
 ## Coils and the subject's field
 

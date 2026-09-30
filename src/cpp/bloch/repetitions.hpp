@@ -44,20 +44,23 @@ namespace bloch
      * Repetition n plays the blocks with each RF pulse's field turned about z
      * by -phases[n], as a phase offset larger by phases[n] turns it, and with
      * gradients that differ from the blocks' by a waveform zero during every
-     * pulse and every ADC window, whose area at the first sample of the
-     * repetition's w-th window is areas[n][w], in 1/m, and over the repetition
-     * zero. Its samples are demodulated with each window's phase larger by
-     * adc_phases[n].
+     * pulse and held through every ADC window, at readouts[n][w] in Hz/m
+     * through the repetition's w-th window, whose area at that window's first
+     * sample is areas[n][w], in 1/m, by the start of any pulse zero, and over
+     * the repetition nets[n]. Its samples are demodulated with each window's
+     * phase larger by adc_phases[n].
      *
      * One repetition applies an affine map to each isochromat's
      * magnetisation, and another to its transverse magnetisation at each
      * window's first sample: four plays of the blocks, from zero and from a
      * unit magnetisation along each axis, give both. A repetition turned about
-     * z applies the maps turned alike, and a phase-encoding waveform turns the
-     * transverse magnetisation by its area at the sample and nothing else, so
-     * every repetition follows from the four plays. Each window is read by the
-     * non-uniform FFT the isochromats read a window under a held gradient
-     * with, and must be one.
+     * z applies the maps turned alike, and a waveform of no area at any pulse
+     * turns the transverse magnetisation by its area at the sample, and at the
+     * repetition's end by its net area, and nothing else, so every repetition
+     * follows from the four plays. Each window is
+     * read by the non-uniform FFT the isochromats read a window under a held
+     * gradient with, and must be one; a window whose readouts are not zero is
+     * turned, read along each repetition's own gradient.
      *
      * The isochromats hold the magnetisation at the start of the next
      * repetition to be played; blocks played on them in between break the
@@ -76,9 +79,10 @@ namespace bloch
          * precision from 1e-4 on and read the windows by a narrower kernel,
          * and split() drop transients below it.
          *
-         * @throws std::invalid_argument if the phases, ADC phases and areas
-         *         are not one per repetition, a window is not read under a
-         *         held gradient, or a block is one the isochromats cannot play.
+         * @throws std::invalid_argument if the phases, ADC phases, areas,
+         *         readouts and nets, the last two possibly none, are not one
+         *         per repetition, a window is not read under a held gradient,
+         *         or a block is one the isochromats cannot play.
          */
         Repetitions(
             Isochromats& isochromats,
@@ -86,6 +90,8 @@ namespace bloch
             std::vector<double> phases,
             std::vector<double> adc_phases,
             std::vector<double> areas,
+            std::vector<double> readouts,
+            std::vector<double> nets,
             double tolerance = 0.0);
         ~Repetitions();
         Repetitions(const Repetitions&) = delete;
@@ -124,7 +130,8 @@ namespace bloch
          * play() then writes the transients' samples alone, and
          * column_sums() gives what the fixed points send.
          * Return false, splitting nothing, unless the pulses turn by one step
-         * each. A tolerance of zero drops no transient.
+         * each, no window is turned and the repetitions leave no net area. A
+         * tolerance of zero drops no transient.
          *
          * @throws std::logic_error after the first play().
          */
@@ -192,6 +199,9 @@ namespace bloch
              *  next. */
             double area[3] = {0.0, 0.0, 0.0};
             double step = 0.0;
+            /** Whether the repetitions read it along gradients of their
+             *  own. */
+            bool turned = false;
             std::vector<double> receiver;
             /** Mx + i My at the first sample: u . m + v, m the magnetisation
              *  at the repetition's start. */
@@ -217,6 +227,13 @@ namespace bloch
         }
         /** Read each block's ADC window, and the repetition's duration. */
         void read_windows();
+        /** Take @p readouts as each turned window's steps, and turn the
+         *  windows whose readouts are not zero. */
+        void turn_windows(const std::vector<double>& readouts);
+        bool turned() const;
+        /** Phase-encoding area @p at of repetition @p n: [window][axis] of
+         *  its windows' areas, then [axis] of its net area. */
+        double encoding_area(size_t n, size_t at) const;
         /** The four plays: each isochromat's maps. */
         void play_maps();
         /** Play the blocks from no magnetisation, @p column -1, or from a
@@ -240,6 +257,10 @@ namespace bloch
          *  points at a time: after a split, those whose transient is above
          *  the limit. */
         std::vector<uint32_t> carried_order() const;
+        /** @p chosen in order of T2 and along a Z-order curve through the
+         *  isochromats' coordinates: neighbours spread onto nearby grid
+         *  points whatever the direction a turned window is read along. */
+        std::vector<uint32_t> spatial_order(const std::vector<uint32_t>& chosen) const;
         /** Move the maps into the set played from, and free them. */
         template <typename Real>
         void gather();
@@ -284,6 +305,13 @@ namespace bloch
         std::vector<double> phases_;
         std::vector<double> adc_phases_;
         std::vector<double> areas_;
+        /** Per repetition and window, [(n * windows + w) * 3 + axis], how
+         *  much the gradient area from one sample to the next exceeds the
+         *  window's, in 1/m. */
+        std::vector<double> readouts_;
+        /** Per repetition and axis, the area it leaves, in 1/m; empty where
+         *  none leaves any. */
+        std::vector<double> nets_;
         std::vector<Window> windows_;
         size_t samples_ = 0;
         double duration_ = 0.0;

@@ -37,7 +37,7 @@ states it. Times are in seconds, gradients in Hz/m and RF fields in Hz.
 | Object | Description |
 | --- | --- |
 | {obj}`~pulserver.virtual.Isochromats` | Isochromats, and the magnetisation the Bloch equation carries from one block to the next; one block's events played on them. |
-| {obj}`~pulserver.virtual.Repetitions` | Repetitions of a sequence of blocks that differ in their phase offsets and phase encodings, played in turn from the affine map one repetition applies to each isochromat. |
+| {obj}`~pulserver.virtual.Repetitions` | Repetitions of a sequence of blocks that differ in their phase offsets, phase encodings and readout directions, played in turn from the affine map one repetition applies to each isochromat. |
 
 ## Scan clock and sound
 

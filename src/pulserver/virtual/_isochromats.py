@@ -345,6 +345,8 @@ class Isochromats:
         areas=None,
         *,
         adc_phases=None,
+        readouts=None,
+        nets=None,
         system=None,
         tolerance: float = 0.0,
     ) -> Repetitions:
@@ -353,9 +355,11 @@ class Isochromats:
         Repetition ``n`` plays ``blocks`` with every RF event's phase offset
         larger by ``phases[n]``, every ADC event's by ``adc_phases[n]``, and
         gradients that differ from the blocks' by a waveform zero during every
-        RF pulse and every ADC window, whose area at the first sample of the
-        repetition's ``w``-th window is ``areas[n, w]``, and over the
-        repetition zero: a phase encoding and its rewinder.
+        RF pulse and held through every ADC window, at ``readouts[n, w]``
+        through the repetition's ``w``-th window, whose area at that window's
+        first sample is ``areas[n, w]``, by the start of any RF pulse zero,
+        and over the repetition ``nets[n]``: a phase encoding, or a readout
+        turned with its prephaser, rewound or not.
 
         One repetition applies an affine map to each isochromat's
         magnetisation, and another to its transverse magnetisation at each
@@ -383,6 +387,17 @@ class Isochromats:
         adc_phases : array_like, default=None
             ``(repetitions,)`` increase of every ADC event's phase offset, in
             rad; ``phases`` by default.
+        readouts : array_like, default=None
+            ``(repetitions, windows, 3)`` gradient the difference holds
+            through each window, in Hz/m, along the axes the positions are
+            given along; none by default. A window with any is read along each
+            repetition's own gradient, and the magnetisation is not split.
+        nets : array_like, default=None
+            ``(repetitions, 3)`` area the difference leaves over each
+            repetition, in 1/m, along the same axes; none by default. With
+            any, each isochromat's transverse magnetisation is turned by its
+            own phase at the end of each repetition, and the magnetisation is
+            not split.
         system : Opts, default=None
             As :meth:`play` takes it.
         tolerance : float, default=0.0
@@ -460,15 +475,12 @@ class Isochromats:
                 f"adc_phases must hold one value per repetition, {count}, got {adc_phases.size}"
             )
         windows = len(receivers)
-        encoded = (
-            np.zeros((count, windows, 3))
-            if areas is None
-            else np.asarray(areas, dtype=float)
-        )
-        if encoded.shape != (count, windows, 3):
+        encoded = _per_window(areas, "areas", count, windows)
+        turned = _per_window(readouts, "readouts", count, windows)
+        left = np.zeros((count, 3)) if nets is None else np.asarray(nets, dtype=float)
+        if left.shape != (count, 3):
             raise ValueError(
-                f"areas must be (repetitions, windows, 3), {(count, windows, 3)}, "
-                f"got {encoded.shape}"
+                f"nets must be (repetitions, 3), {(count, 3)}, got {left.shape}"
             )
         native = _kernels().Repetitions(
             self._native,
@@ -476,6 +488,8 @@ class Isochromats:
             phases,
             adc_phases,
             np.ascontiguousarray(encoded).ravel(),
+            np.ascontiguousarray(turned).ravel(),
+            np.ascontiguousarray(left).ravel(),
             float(tolerance),
         )
         steady = (
@@ -493,6 +507,27 @@ class Isochromats:
             ),
             steady=steady,
         )
+
+
+def _per_window(given, name: str, count: int, windows: int) -> np.ndarray:
+    """Return ``given`` as ``(repetitions, windows, 3)``, zero where None.
+
+    Raises
+    ------
+    ValueError
+        If it holds another shape.
+    """
+    values = (
+        np.zeros((count, windows, 3))
+        if given is None
+        else np.asarray(given, dtype=float)
+    )
+    if values.shape != (count, windows, 3):
+        raise ValueError(
+            f"{name} must be (repetitions, windows, 3), {(count, windows, 3)}, "
+            f"got {values.shape}"
+        )
+    return values
 
 
 def _steady(

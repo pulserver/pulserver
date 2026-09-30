@@ -289,6 +289,8 @@ namespace
         const Doubles& phases,
         const Doubles& adc_phases,
         const Doubles& areas,
+        const Doubles& readouts,
+        const Doubles& nets,
         double tolerance)
     {
         std::vector<bloch::OwnedBlock> owned;
@@ -299,9 +301,18 @@ namespace
         std::vector<double> turns = values_of(phases);
         std::vector<double> adc_turns = values_of(adc_phases);
         std::vector<double> encoded = values_of(areas);
+        std::vector<double> read = values_of(readouts);
+        std::vector<double> left = values_of(nets);
         py::gil_scoped_release unlocked;
         return new bloch::Repetitions(
-            isochromats, std::move(owned), std::move(turns), std::move(adc_turns), std::move(encoded), tolerance);
+            isochromats,
+            std::move(owned),
+            std::move(turns),
+            std::move(adc_turns),
+            std::move(encoded),
+            std::move(read),
+            std::move(left),
+            tolerance);
     }
 
     py::array_t<Complex> play_repetitions(bloch::Repetitions& self, size_t count)
@@ -536,6 +547,8 @@ void bind_bloch(py::module_& module)
              py::arg("phases"),
              py::arg("adc_phases"),
              py::arg("areas"),
+             py::arg("readouts"),
+             py::arg("nets"),
              py::arg("tolerance") = 0.0,
              py::keep_alive<1, 2>())
         .def_property_readonly("count", &bloch::Repetitions::count)

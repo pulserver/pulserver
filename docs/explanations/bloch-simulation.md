@@ -217,7 +217,8 @@ each isochromat at its own position.
 ## Repeated blocks
 
 A scan often plays one sequence of blocks many times, changing only the phase
-offsets of its pulses and ADC events and its phase-encoding gradients.
+offsets of its pulses and ADC events, its phase-encoding gradients and the
+direction of its readout.
 {meth}`~pulserver.virtual.Isochromats.repetitions` plays such a scan without
 integrating every block of every repetition.
 
@@ -238,20 +239,35 @@ $n$ takes $\mathbf{m}$ to $R_z(\theta_n - \theta_{n+1})\,(A_j\,\mathbf{m} +
 \mathbf{b}_j)$.
 
 A phase encoding is a gradient that differs from the first repetition's by a
-waveform that is zero during every pulse and every ADC window and plays no net
-area over the repetition. It turns the transverse magnetisation about $z$ by
-the area it has played, $e^{-2\pi i\,\mathbf{a}\cdot\mathbf{r}}$, and by none
-at the end of the repetition, so it leaves $A_j$ and $\mathbf{b}_j$ as they
-are and multiplies the transverse magnetisation at a window's first sample by
-$e^{-2\pi i\,\mathbf{a}_n\cdot\mathbf{r}_j}$, with $\mathbf{a}_n$ its area up
-to that sample. Under the gradient held over the window, isochromat $j$ then
-turns and decays by one factor $z_j$ from each sample to the next.
+waveform that is zero during every pulse and every ADC window and plays no
+area by the start of any pulse. It turns the transverse magnetisation about
+$z$ by the area it has played, $e^{-2\pi i\,\mathbf{a}\cdot\mathbf{r}}$, so it
+leaves $A_j$ and $\mathbf{b}_j$ as they are and multiplies the transverse
+magnetisation at a window's first sample by $e^{-2\pi i\,\mathbf{a}_n\cdot
+\mathbf{r}_j}$, with $\mathbf{a}_n$ its area up to that sample. Under the
+gradient held over the window, isochromat $j$ then turns and decays by one
+factor $z_j$ from each sample to the next. The area $\mathbf{c}_n$ it leaves
+over the repetition, zero where it is rewound, turns isochromat $j$ at the
+repetition's end by $-2\pi\,\mathbf{c}_n\cdot\mathbf{r}_j$ as well:
+repetition $n$ takes $\mathbf{m}$ to $R_z(\theta_n - \theta_{n+1} -
+2\pi\,\mathbf{c}_n\cdot\mathbf{r}_j)\,(A_j\,\mathbf{m} + \mathbf{b}_j)$.
+
+A turned readout differs from the first repetition's by a waveform zero
+during every pulse, of no area by the start of any, and held through its ADC
+window at $\Delta\mathbf{g}_n$: a radial spoke turned with its prephaser. It
+acts as a phase encoding does up to the window's first sample and over the
+repetition, and from one sample to the next it turns isochromat $j$ by
+$e^{-2\pi i\,\Delta t\,\Delta\mathbf{g}_n\cdot\mathbf{r}_j}$ more, with
+$\Delta t$ the dwell time: each repetition reads the window along its own
+direction. The non-uniform FFT a window is read with then spreads each
+isochromat onto grid points found anew for every repetition.
 
 ### Fixed points and transients
 
 Where the phase offsets step by one increment, $\theta_{n+1} - \theta_n =
-\delta$ for every $n$, the map in the turned frame is the same for every
-repetition, $A'_j = R_z(-\delta)\,A_j$, and has the fixed point
+\delta$ for every $n$, no readout is turned and no area is left over a
+repetition, the map in the turned frame is the same for every repetition,
+$A'_j = R_z(-\delta)\,A_j$, and has the fixed point
 $\mathbf{m}^*_j = (I - A'_j)^{-1}R_z(-\delta)\,\mathbf{b}_j$. A sequence file
 holds a phase offset to about $10^{-5}$ rad, so $\delta$ is the mean step, and
 every step must lie within $10^{-4}$ rad of it. The magnetisation is the fixed

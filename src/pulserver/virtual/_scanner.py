@@ -257,20 +257,25 @@ def _k(
 def _area(times: np.ndarray, values: np.ndarray, at: np.ndarray) -> np.ndarray:
     """Return the integral of the piecewise-linear waveform through ``(times, values)`` up to each of ``at``.
 
-    Zero before the first corner and constant after the last.
+    Zero before the first corner and constant after the last. ``values`` may
+    hold several waveforms through the same times, ``(..., corners)``; the
+    result is then ``(..., at)``.
     """
     at = np.asarray(at, dtype=float)
     if times.size == 0:
-        return np.zeros(at.shape)
+        return np.zeros((*values.shape[:-1], *at.shape))
     steps = np.diff(times)
+    cumulative = np.cumsum(0.5 * (values[..., 1:] + values[..., :-1]) * steps, axis=-1)
     cumulative = np.concatenate(
-        [[0.0], np.cumsum(0.5 * (values[1:] + values[:-1]) * steps)]
+        [np.zeros((*values.shape[:-1], 1)), cumulative], axis=-1
     )
     inside = (at > times[0]) & (at < times[-1])
-    area = np.where(at >= times[-1], cumulative[-1], 0.0)
+    area = np.where(at >= times[-1], cumulative[..., -1:], 0.0)
     j = np.searchsorted(times, at[inside], side="right") - 1
     elapsed = at[inside] - times[j]
     width = np.where(steps[j] > 0.0, steps[j], 1.0)
-    slope = (values[j + 1] - values[j]) / width
-    area[inside] = cumulative[j] + values[j] * elapsed + 0.5 * slope * elapsed**2
+    slope = (values[..., j + 1] - values[..., j]) / width
+    area[..., inside] = (
+        cumulative[..., j] + values[..., j] * elapsed + 0.5 * slope * elapsed**2
+    )
     return area

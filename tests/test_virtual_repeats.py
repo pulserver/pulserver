@@ -18,8 +18,10 @@ SYSTEM = pp.Opts(max_grad=30, grad_unit="mT/m", max_slew=120, slew_unit="T/m/s")
 RNG = np.random.default_rng(11)
 POSITIONS = RNG.uniform(-0.05, 0.05, size=(60, 3))
 TISSUE = {"t1": 0.9, "t2": 0.09, "off_resonance": RNG.uniform(-30.0, 30.0, 60)}
-#: Sequences whose imaging repeats one repetition with other phase offsets and
-#: phase encodings, a spin echo and an inversion-prepared train among them.
+#: Sequences whose imaging repeats one repetition with other phase offsets,
+#: phase encodings and readout directions: a spin echo, an inversion-prepared
+#: train, the blades of a propeller and the unrewound partitions of a stack of
+#: stars among them.
 REPEATING = [
     "bssfp3D_sequence",
     "gre3D_sequence",
@@ -27,6 +29,8 @@ REPEATING = [
     "se2D_sequence",
     "fse3D_sequence",
     "mprage3D_sequence",
+    "gre_propeller2D_sequence",
+    "gre_stack_of_stars3D_sequence",
 ]
 
 
@@ -112,8 +116,8 @@ def test_runs_of_repetitions_sample_what_their_blocks_played_one_by_one_sample(
     assert player.runs
     repeated = np.concatenate(virtual.simulate(repeating, _isochromats()), axis=1)
     played = np.concatenate(_one_by_one(repeating, monkeypatch), axis=1)
-    # The cache's single-precision amplitudes leave the phase encodings'
-    # net areas at rounding, which repetitions take as zero.
+    # A run scales one repetition's gradient shape by each repetition's
+    # amplitude, which the cache holds in single precision.
     np.testing.assert_allclose(
         repeated, played, rtol=0, atol=1e-6 * np.abs(played).max()
     )
@@ -129,14 +133,21 @@ def test_a_balanced_sequence_plays_as_runs_of_one_repetition_but_for_its_prepara
     assert {run.size for run in player.runs} == {3}
 
 
-def test_phase_encodings_rewound_to_the_precision_of_the_pulseq_format_play_as_one_run_to_a_tolerance(
-    tmp_path,
+def test_phase_encodings_rewound_to_the_precision_of_the_pulseq_format_leave_their_area_played_exactly_and_none_to_a_tolerance(
+    tmp_path, monkeypatch
 ):
     """The six significant digits a Pulseq file keeps of an amplitude leave a repetition's encoding a net area of a few millionths of its largest."""
     path = _balanced(tmp_path / "rounded.seq", rewinder=1.0 + 3e-6)
-    assert all(run.count < 24 for run in _bloch.Player(path, _isochromats()).runs)
-    player = _bloch.Player(path, _isochromats(), tolerance=1e-4)
-    assert [(run.first, run.size, run.count) for run in player.runs] == [(0, 4, 24)]
+    (exact,) = _bloch.Player(path, _isochromats()).runs
+    (within,) = _bloch.Player(path, _isochromats(), tolerance=1e-4).runs
+    assert (exact.first, exact.size, exact.count) == (0, 4, 24)
+    assert (within.first, within.size, within.count) == (0, 4, 24)
+    assert np.any(exact.nets) and not np.any(within.nets)
+    repeated = np.concatenate(virtual.simulate(path, _isochromats()), axis=1)
+    one_by_one = np.concatenate(_one_by_one(path, monkeypatch), axis=1)
+    np.testing.assert_allclose(
+        repeated, one_by_one, rtol=0, atol=1e-10 * np.abs(one_by_one).max()
+    )
 
 
 def test_a_phase_encoding_played_across_a_refocusing_pulse_plays_block_by_block(
@@ -163,7 +174,7 @@ def test_repetitions_hold_no_more_windows_than_their_maps_have_memory_for(
     path = _designed("gre_multiecho2D_sequence", tmp_path_factory)
     spins = _isochromats()
     assert max(_windows_held(_bloch.Player(path, spins))) == 3
-    monkeypatch.setattr(_bloch, "MEMORY", len(spins) * (264 + 236 + 16 * spins.coils))
+    monkeypatch.setattr(_bloch, "MEMORY", len(spins) * (288 + 244 + 16 * spins.coils))
     assert _bloch._windows(spins) == 1
     assert max(_windows_held(_bloch.Player(path, spins)), default=0) <= 1
 
@@ -199,9 +210,28 @@ def test_pulses_whose_phases_step_unevenly_within_a_repetition_play_block_by_blo
     assert not _bloch.Player(tmp_path / "gre_2d_3sl.seq", _isochromats()).runs
 
 
-def test_readout_gradients_that_vary_play_block_by_block(tmp_path_factory):
-    """Radial spokes: the dummy scans before them repeat, the spokes do not."""
+def test_radial_spokes_play_as_one_run_each_read_along_its_own_direction(
+    tmp_path_factory, monkeypatch
+):
+    """Each spoke is the first turned with its prephaser and rewinder, which leave no area over a repetition."""
     path = _designed("gre_radial2D_sequence", tmp_path_factory)
+    played = ir.playout(path)["blocks"]
+    runs = _bloch.Player(path, _isochromats()).runs
+    (spokes,) = [run for run in runs if played["adc"][run.first : run.stop].any()]
+    assert spokes.count == int(played["adc"].sum())
+    assert np.any(spokes.readouts) and np.any(spokes.areas)
+    repeated = np.concatenate(virtual.simulate(path, _isochromats()), axis=1)
+    one_by_one = np.concatenate(_one_by_one(path, monkeypatch), axis=1)
+    np.testing.assert_allclose(
+        repeated, one_by_one, rtol=0, atol=1e-6 * np.abs(one_by_one).max()
+    )
+
+
+def test_readout_gradients_that_vary_within_a_window_play_block_by_block(
+    tmp_path_factory,
+):
+    """Spiral interleaves: the dummy scans before them repeat, the interleaves do not."""
+    path = _designed("gre_spiral2D_sequence", tmp_path_factory)
     played = ir.playout(path)["blocks"]
     runs = _bloch.Player(path, _isochromats()).runs
     assert runs
