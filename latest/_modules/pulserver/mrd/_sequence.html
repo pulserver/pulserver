@@ -641,6 +641,12 @@
     <span class="n">center_sample</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
     <span class="n">trajectory_dimensions</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
     <span class="n">_runs</span><span class="p">:</span> <span class="n">_Runs</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="nb">repr</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="c1">#: One entry per distinct ADC: its phase modulation in rad, or None.</span>
+    <span class="n">_phase_modulation</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="p">(),</span> <span class="nb">repr</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="c1">#: Which entry of _phase_modulation each readout plays.</span>
+    <span class="n">_modulated_by</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span>
+        <span class="n">default_factory</span><span class="o">=</span><span class="k">lambda</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">),</span> <span class="nb">repr</span><span class="o">=</span><span class="kc">False</span>
+    <span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__len__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
         <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_samples</span><span class="o">.</span><span class="n">size</span><span class="p">)</span>
@@ -676,7 +682,21 @@
             <span class="n">center_sample</span><span class="o">=</span><span class="n">center_sample</span><span class="p">,</span>
             <span class="n">trajectory_dimensions</span><span class="o">=</span><span class="n">dimensions</span><span class="p">,</span>
             <span class="n">_runs</span><span class="o">=</span><span class="n">_Runs</span><span class="p">(</span><span class="n">seq</span><span class="p">,</span> <span class="n">num_samples</span><span class="p">),</span>
+            <span class="n">_phase_modulation</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(</span><span class="n">_phase_modulation_of</span><span class="p">(</span><span class="n">adc</span><span class="p">)</span> <span class="k">for</span> <span class="n">adc</span> <span class="ow">in</span> <span class="n">adcs</span><span class="p">),</span>
+            <span class="n">_modulated_by</span><span class="o">=</span><span class="n">which</span><span class="p">,</span>
         <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="ReadoutTable.readout_phase_modulation">
+<a class="viewcode-back" href="../../../generated/pulserver.mrd.ReadoutTable.readout_phase_modulation.html#pulserver.mrd.ReadoutTable.readout_phase_modulation">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">readout_phase_modulation</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">index</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Return the phase modulation of one readout's ADC, in rad, or None.</span>
+
+<span class="sd">        One value per sample. A readout played under a gradient that holds one</span>
+<span class="sd">        value throughout carries none: its share of a shifted field of view is</span>
+<span class="sd">        a phase and a frequency offset, which the receiver applies itself.</span>
+<span class="sd">        """</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_phase_modulation</span><span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_modulated_by</span><span class="p">[</span><span class="n">index</span><span class="p">])]</span></div>
 
 
 <div class="viewcode-block" id="ReadoutTable.readout_k">
@@ -731,6 +751,15 @@
 
 
 <span class="c1"># %% private module subroutines</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_phase_modulation_of</span><span class="p">(</span><span class="n">adc</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return an ADC's phase modulation in rad, or None where it has none."""</span>
+    <span class="n">values</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">adc</span><span class="p">,</span> <span class="s2">"phase_modulation"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">values</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="n">values</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">values</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span><span class="o">.</span><span class="n">ravel</span><span class="p">()</span>
+    <span class="k">return</span> <span class="n">values</span> <span class="k">if</span> <span class="n">values</span><span class="o">.</span><span class="n">size</span> <span class="k">else</span> <span class="kc">None</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_events_by_id</span><span class="p">(</span>

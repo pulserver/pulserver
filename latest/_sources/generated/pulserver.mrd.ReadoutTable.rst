@@ -16,6 +16,7 @@
 
    ~ReadoutTable.from_sequence
    ~ReadoutTable.readout_k
+   ~ReadoutTable.readout_phase_modulation
 
 
 

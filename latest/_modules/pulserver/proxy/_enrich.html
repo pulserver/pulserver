@@ -616,6 +616,16 @@
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_files</span><span class="p">[</span><span class="n">file</span><span class="p">]</span><span class="o">.</span><span class="n">readout_k</span><span class="p">(</span><span class="n">index</span> <span class="o">-</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_first_rows</span><span class="p">[</span><span class="n">file</span><span class="p">]))</span></div>
 
 
+<div class="viewcode-block" id="SequenceTable.readout_phase_modulation">
+<a class="viewcode-back" href="../../../generated/pulserver.proxy.SequenceTable.readout_phase_modulation.html#pulserver.proxy.SequenceTable.readout_phase_modulation">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">readout_phase_modulation</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">index</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Return the phase modulation of one readout's ADC, in rad, or None."""</span>
+        <span class="n">file</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">searchsorted</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_first_rows</span><span class="p">,</span> <span class="n">index</span><span class="p">,</span> <span class="n">side</span><span class="o">=</span><span class="s2">"right"</span><span class="p">))</span> <span class="o">-</span> <span class="mi">1</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_files</span><span class="p">[</span><span class="n">file</span><span class="p">]</span><span class="o">.</span><span class="n">readout_phase_modulation</span><span class="p">(</span>
+            <span class="n">index</span> <span class="o">-</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_first_rows</span><span class="p">[</span><span class="n">file</span><span class="p">])</span>
+        <span class="p">)</span></div>
+
+
 <div class="viewcode-block" id="SequenceTable.read">
 <a class="viewcode-back" href="../../../generated/pulserver.proxy.SequenceTable.read.html#pulserver.proxy.SequenceTable.read">[docs]</a>
     <span class="nd">@classmethod</span>
@@ -769,8 +779,13 @@
 <span class="sd">    Sets the encoding counters, flags, ``sample_time_us`` and</span>
 <span class="sd">    ``encoding_space_ref``, and ``center_sample`` unless k does not move</span>
 <span class="sd">    across the readout, in which case the received value stays. A readout</span>
-<span class="sd">    whose k moves gets it as ``traj``, trailing constant axes dropped. The</span>
-<span class="sd">    samples are left as received.</span>
+<span class="sd">    whose k moves gets it as ``traj``, trailing constant axes dropped.</span>
+
+<span class="sd">    The samples are left as received, except where the readout's ADC carries a</span>
+<span class="sd">    phase modulation. That is the part of a shifted field of view a receiver</span>
+<span class="sd">    cannot apply itself: under a gradient that holds one value, a shift is a</span>
+<span class="sd">    phase and a frequency offset, but under one that does not, the phase</span>
+<span class="sd">    curves over the readout and is applied here.</span>
 
 <span class="sd">    Raises</span>
 <span class="sd">    ------</span>
@@ -796,6 +811,15 @@
         <span class="n">acquisition</span><span class="o">.</span><span class="n">center_sample</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">table</span><span class="o">.</span><span class="n">center_sample</span><span class="p">[</span><span class="n">index</span><span class="p">])</span>
     <span class="n">acquisition</span><span class="o">.</span><span class="n">sample_time_us</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">table</span><span class="o">.</span><span class="n">sample_time_us</span><span class="p">[</span><span class="n">index</span><span class="p">])</span>
     <span class="n">acquisition</span><span class="o">.</span><span class="n">encoding_space_ref</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">table</span><span class="o">.</span><span class="n">encoding_space</span><span class="p">[</span><span class="n">index</span><span class="p">])</span>
+
+    <span class="n">modulation</span> <span class="o">=</span> <span class="n">table</span><span class="o">.</span><span class="n">readout_phase_modulation</span><span class="p">(</span><span class="n">index</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">modulation</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">modulation</span><span class="o">.</span><span class="n">size</span> <span class="o">!=</span> <span class="n">count</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"acquisition </span><span class="si">{</span><span class="n">index</span><span class="si">}</span><span class="s2"> carries </span><span class="si">{</span><span class="n">modulation</span><span class="o">.</span><span class="n">size</span><span class="si">}</span><span class="s2"> phase modulation "</span>
+                <span class="sa">f</span><span class="s2">"values for </span><span class="si">{</span><span class="n">count</span><span class="si">}</span><span class="s2"> samples"</span>
+            <span class="p">)</span>
+        <span class="n">acquisition</span><span class="o">.</span><span class="n">data</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">acquisition</span><span class="o">.</span><span class="n">data</span><span class="p">)</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="mi">1</span><span class="n">j</span> <span class="o">*</span> <span class="n">modulation</span><span class="p">)</span>
 
     <span class="n">dimensions</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">table</span><span class="o">.</span><span class="n">trajectory_dimensions</span><span class="p">[</span><span class="n">index</span><span class="p">])</span>
     <span class="k">if</span> <span class="n">dimensions</span><span class="p">:</span>

@@ -16,6 +16,7 @@
 
    ~SequenceTable.read
    ~SequenceTable.readout_k
+   ~SequenceTable.readout_phase_modulation
 
 
 
