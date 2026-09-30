@@ -31,6 +31,17 @@
 #define PULSEG_VENDOR_PHILIPS 3
 #define PULSEG_VENDOR_UNITED_IMAGING 4
 #define PULSEG_VENDOR_BRUKER 5
+#define PULSEG_VENDOR_VIRTUAL 6
+
+/* ================================================================== */
+/*  Stored number formats                                             */
+/* ================================================================== */
+/* What a quantity is written as in the cache. A scanner that plays
+ * integers is given integers, so its sequencer converts nothing; a
+ * reader that works in SI is given floats. */
+#define PULSEG_FORMAT_FLOAT32 0
+#define PULSEG_FORMAT_INT16 1
+#define PULSEG_FORMAT_INT32 2
 
 /* Compile-time default (overrideable via -DPULSEG_VENDOR=N). Public
  * builds are vendor-neutral; a vendor layer defines PULSEG_VENDOR before

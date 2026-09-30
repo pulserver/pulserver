@@ -28,12 +28,12 @@
 /* ================================================================== */
 
 #define PULSEG_CACHE_ENDIAN_MARKER 0x01020304
-#define PULSEG_CACHE_VERSION_MAJOR 2
+#define PULSEG_CACHE_VERSION_MAJOR 0
 #define PULSEG_CACHE_VERSION_MINOR 0
 /* The full (major, minor, revision) triple must match exactly on read: a
  * cache at any other revision is rejected outright and the .seq is
  * re-parsed, never partially or heuristically read. */
-#define PULSEG_CACHE_VERSION_REVISION 23
+#define PULSEG_CACHE_VERSION_REVISION 1
 
 /* Per-consumer sections. Each carries its own distinct payload.
  * COMMON establishes the collection + descriptor framing; the others
