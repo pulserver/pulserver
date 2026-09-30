@@ -12,6 +12,7 @@
 #include <condition_variable>
 #include <cstddef>
 #include <functional>
+#include <memory>
 #include <mutex>
 #include <thread>
 #include <vector>
@@ -54,8 +55,11 @@ namespace bloch
 
         /** Checks of a condition before its thread sleeps on it: calls come
          *  in quick succession, and a wake-up costs more than a wait of a few
-         *  tens of microseconds. */
+         *  tens of microseconds. A thread that waits gives way to others at
+         *  every kYieldEvery checks, and sleeps at once after a call of more
+         *  parts than the processor has cores. */
         constexpr int kSpins = 1 << 11;
+        constexpr int kYieldEvery = 1 << 7;
 
         inline void relax()
         {
@@ -68,15 +72,18 @@ namespace bloch
 #endif
         }
 
-        /** Whether @p ready() holds within kSpins checks. */
+        /** Whether @p ready() holds within @p spins checks. */
         template <typename Ready>
-        bool spin(Ready ready)
+        bool spin(Ready ready, int spins)
         {
-            for (int n = 0; n < kSpins; ++n)
+            for (int n = 1; n <= spins; ++n)
             {
                 if (ready())
                     return true;
-                relax();
+                if (n % kYieldEvery == 0)
+                    std::this_thread::yield();
+                else
+                    relax();
             }
             return ready();
         }
@@ -84,8 +91,9 @@ namespace bloch
         /**
          * Threads that run the parts of one parallel() call at a time and wait
          * between calls, so that a call costs their waking rather than their
-         * creation. A child of fork() has none of its parent's threads, and
-         * makes a pool of its own.
+         * creation. Each thread is given its part in a place of its own, and
+         * only the threads a call gives parts to are woken. A child of fork()
+         * has none of its parent's threads, and makes a pool of its own.
          */
         class Pool
         {
@@ -117,32 +125,38 @@ namespace bloch
                 std::unique_lock<std::mutex> held(held_, std::try_to_lock);
                 if (!held.owns_lock())
                     return false;
-                const size_t workers = (count + chunk - 1) / chunk;
+                const size_t parts = (count + chunk - 1) / chunk;
+                while (threads_.size() + 1 < parts)
                 {
-                    std::lock_guard<std::mutex> lock(mutex_);
-                    while (threads_.size() + 1 < workers)
-                    {
-                        const size_t index = threads_.size() + 1;
-                        const size_t round = round_.load(std::memory_order_relaxed);
-                        threads_.emplace_back([this, index, round] { serve(index, round); });
-                        threads_.back().detach();
-                    }
-                    body_ = &body;
-                    workers_ = workers;
-                    count_ = count;
-                    chunk_ = chunk;
-                    /* Every thread answers every call, those without a part
-                     * too, so that none reads a call's fields as the next
-                     * call's are set. */
-                    pending_.store(threads_.size(), std::memory_order_relaxed);
-                    round_.fetch_add(1, std::memory_order_release);
+                    /* A thread that fails to start leaves no place behind for
+                     * a call to wait on. */
+                    threads_.reserve(threads_.size() + 1);
+                    auto made = std::make_unique<Thread>();
+                    Thread* thread = made.get();
+                    const size_t index = threads_.size() + 1;
+                    std::thread([this, thread, index] { serve(*thread, index); }).detach();
+                    threads_.push_back(std::move(made));
                 }
-                start_.notify_all();
+                const int spins = cores_ == 0 || parts <= cores_ ? kSpins : 0;
+                pending_.store(parts - 1, std::memory_order_relaxed);
+                for (size_t index = 1; index < parts; ++index)
+                {
+                    Thread& thread = *threads_[index - 1];
+                    thread.body = &body;
+                    thread.first = index * chunk;
+                    thread.last = std::min(count, thread.first + chunk);
+                    thread.spins = spins;
+                    {
+                        std::lock_guard<std::mutex> lock(thread.mutex);
+                        thread.calls.fetch_add(1, std::memory_order_release);
+                    }
+                    thread.wake.notify_one();
+                }
                 in_pool = true;
                 body(0, 0, std::min(count, chunk));
                 in_pool = false;
                 const auto done = [this] { return pending_.load(std::memory_order_acquire) == 0; };
-                if (!spin(done))
+                if (!spin(done, spins))
                 {
                     std::unique_lock<std::mutex> lock(mutex_);
                     finish_.wait(lock, done);
@@ -151,29 +165,43 @@ namespace bloch
             }
 
         private:
-            explicit Pool(long process) : process_(process)
+            /** A pool thread, and the part it is given, with how long it
+             *  waits for its next once done: set before calls is advanced,
+             *  and read by the thread before it lowers pending_. */
+            struct Thread
+            {
+                std::mutex mutex;
+                std::condition_variable wake;
+                std::atomic<size_t> calls{0};
+                const Body* body = nullptr;
+                size_t first = 0;
+                size_t last = 0;
+                int spins = 0;
+            };
+
+            explicit Pool(long process) : process_(process), cores_(std::thread::hardware_concurrency())
             {
             }
 
-            /** Thread @p index's loop: the part of each call from the one
-             *  after @p round on that it is given. */
-            void serve(size_t index, size_t round)
+            /** Pool thread @p index's loop: each part it is given. */
+            void serve(Thread& thread, size_t index)
             {
                 in_pool = true;
+                size_t served = 0;
+                int spins = 0;
                 for (;;)
                 {
-                    const auto called = [this, &round] { return round_.load(std::memory_order_acquire) != round; };
-                    if (!spin(called))
+                    const auto given = [&thread, &served] {
+                        return thread.calls.load(std::memory_order_acquire) != served;
+                    };
+                    if (!spin(given, spins))
                     {
-                        std::unique_lock<std::mutex> lock(mutex_);
-                        start_.wait(lock, called);
+                        std::unique_lock<std::mutex> lock(thread.mutex);
+                        thread.wake.wait(lock, given);
                     }
-                    round = round_.load(std::memory_order_acquire);
-                    if (index < workers_)
-                    {
-                        const size_t first = index * chunk_;
-                        (*body_)(index, first, std::min(count_, first + chunk_));
-                    }
+                    ++served;
+                    spins = thread.spins;
+                    (*thread.body)(index, thread.first, thread.last);
                     if (pending_.fetch_sub(1, std::memory_order_acq_rel) == 1)
                     {
                         std::lock_guard<std::mutex> lock(mutex_);
@@ -183,19 +211,13 @@ namespace bloch
             }
 
             const long process_;
+            /** Cores of the processor; none where they are not known. */
+            const size_t cores_;
             /** Held by the call the pool runs. */
             std::mutex held_;
             std::mutex mutex_;
-            std::condition_variable start_;
             std::condition_variable finish_;
-            std::vector<std::thread> threads_;
-            /** The call running, set before round_ is advanced and read by
-             *  each thread before it lowers pending_. */
-            const Body* body_ = nullptr;
-            size_t workers_ = 0;
-            size_t count_ = 0;
-            size_t chunk_ = 0;
-            std::atomic<size_t> round_{0};
+            std::vector<std::unique_ptr<Thread>> threads_;
             std::atomic<size_t> pending_{0};
         };
 

@@ -3,6 +3,7 @@
 import os
 import select
 import signal
+import sys
 from concurrent.futures import ThreadPoolExecutor
 from types import SimpleNamespace
 
@@ -578,7 +579,10 @@ def test_isochromats_played_from_two_threads_at_once_answer_as_played_alone():
         np.testing.assert_allclose(answer, alone, rtol=1e-11, atol=1e-9)
 
 
-@pytest.mark.skipif(not hasattr(os, "fork"), reason="needs fork()")
+@pytest.mark.skipif(
+    not sys.platform.startswith("linux"),
+    reason="elsewhere a child forked from threads may call async-signal-safe functions only",
+)
 def test_isochromats_played_before_a_fork_play_in_the_child():
     positions = RNG.uniform(-0.05, 0.05, size=(20000, 3))
     receive = np.exp(1j * RNG.uniform(0, 2 * np.pi, size=(20000, 3)))
