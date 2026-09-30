@@ -13,8 +13,14 @@ from dataclasses import dataclass
 from ._schema import InputMode, Kind, Parameter
 
 #: First and last lines of every protocol block, listing or values.
-PROTOCOL_BEGIN = "[NimPulseqGUI Protocol]"
-PROTOCOL_END = "[NimPulseqGUI Protocol End]"
+PROTOCOL_BEGIN = "[Protocol]"
+PROTOCOL_END = "[Protocol End]"
+
+#: The block was once delimited by the name of a tool that drove it. A server
+#: and an interpreter are deployed separately and may differ in age, so both
+#: spellings are read; only the one above is written.
+_FORMER_BEGIN = "[NimPulseqGUI Protocol]"
+_FORMER_END = "[NimPulseqGUI Protocol End]"
 
 
 @dataclass(frozen=True)
@@ -77,9 +83,9 @@ def _block_lines(text: str) -> list[tuple[str, str]]:
     entries, inside = [], False
     for raw in text.splitlines():
         line = raw.strip().lstrip("#").strip()
-        if PROTOCOL_END in line:
+        if PROTOCOL_END in line or _FORMER_END in line:
             break
-        if PROTOCOL_BEGIN in line:
+        if PROTOCOL_BEGIN in line or _FORMER_BEGIN in line:
             inside = True
             continue
         if inside and ": " in line:
