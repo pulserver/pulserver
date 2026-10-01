@@ -308,6 +308,51 @@ def test_a_design_is_one_of_the_vop_file_contents_its_sar_ratios_came_from(
     assert generated(generate(store, "tiny", {}, limits=limits)) == first
 
 
+def test_a_design_is_converted_under_the_vendor_file_its_limits_name(tmp_path, store):
+    vendor = tmp_path / "vendor.txt"
+    vendor.write_text(
+        "[Grouping]\nboundary_gradient_hz_per_m: 100\nsplit_by_pulses: true\n"
+        "split_by_readouts: true\nsplit_navigators: true\n"
+        "split_edge_delays: false\n[Grouping End]\n[VendorProfile]\n"
+        + "".join(
+            f"{name}: float32 0\n"
+            for name in (
+                "grad_sample",
+                "grad_amplitude",
+                "rf_sample",
+                "rf_amplitude",
+                "rf_phase",
+                "rf_frequency",
+            )
+        )
+        + "[VendorProfile End]\n"
+    )
+    limits = {**LIMITS, "ir_vendor_file": str(vendor)}
+    first = generated(generate(store, "gre2d", GRE, limits=limits))
+    plain = generated(generate(store, "gre2d", GRE))
+    assert first != plain
+    cache = store.directory(first) / "sequence.pseg"
+    seq = tmp_path / "sequence.seq"
+    shutil.copy(store.directory(plain) / "sequence.seq", seq)
+    system = pp.Opts(**LIMITS)
+    expected = service.ir.convert(
+        seq, system, grouping=service.ir.Grouping(split_edge_delays=False)
+    )
+    assert cache.read_bytes() == expected.read_bytes()
+    vendor.write_text(vendor.read_text().replace("100", "200"))
+    assert generated(generate(store, "gre2d", GRE, limits=limits)) != first
+
+
+def test_an_unreadable_vendor_file_is_refused_and_stores_nothing(tmp_path, store):
+    vendor = tmp_path / "vendor.txt"
+    vendor.write_text("[Grouping]\n[Grouping End]\n")
+    limits = {**LIMITS, "ir_vendor_file": str(vendor)}
+    status, reply = generate(store, "tiny", {}, limits=limits)
+    assert status == 1
+    assert reply.startswith("ERROR ")
+    assert list(store) == []
+
+
 def test_an_imported_chain_is_copied_checked_and_converted(store):
     design = generated(imported(store, FIXTURES / "dedup_gre_pair.seq"))
     directory = store.directory(design)

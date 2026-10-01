@@ -73,6 +73,7 @@ Further options are for the IR conversion:
 | `ir_vendor` | `PULSEG_VENDOR_*` code the cache is tagged with; 0 is vendor-neutral |
 | `ir_label_column_map` | Three Pulseq label state indices, separated by spaces, filling the ADC label columns |
 | `ir_cache_ext` | Extension of the cache file, `.pseg` by default |
+| `ir_vendor_file` | Vendor file the cache is grouped and stored under, read by {func}`~pulserver.ir.read_vendor`; a file it cannot read refuses the call |
 | `ir_wave_max_samples` | Samples each gradient axis of the playout's waveform memory holds for waves |
 | `ir_wave_raster_us` | The playout's gradient raster, in µs per sample |
 | `ir_wave_load_us_per_sample` | Time the playout takes to load one sample on one axis, in µs; 0, the default, leaves the loading unchecked |
