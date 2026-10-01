@@ -32,7 +32,7 @@ from ..recon._runtime.mrd2dicom import MrdDicomBuilder
 from ..recon._runtime.readers import deserialize_config, read_text
 from ._designs import Design, DesignCache
 from ._enrich import enrich_acquisition, enrich_header
-from ._motion import Pose, pose_of
+from ._motion import FILENAME, MotionWriter, Pose, pose_of, pose_waveform
 from ._queue import QueueFile
 from ._workers import WorkerPool
 
@@ -174,6 +174,12 @@ class ReconProxy(_Listener):
     :class:`~pulserver.recon.ExamCache`. It is deleted once a header names
     another exam and no series of the exam still runs.
 
+    A series whose sequence sets ``EnablePmc`` is corrected for motion while
+    it plays: the poses its reconstruction states are published into the
+    pose file the scan reads, ``motion.buf`` in the design's directory,
+    rather than sent to the client. A forwarded series publishes the poses the
+    server passes back.
+
     A forwarded series is sent on as it arrives; the server's own slots and
     queue determine when it is reconstructed. The server is sent a config file message naming
     ``forward_config``, or else the series' reconstruction plugin; the client's
@@ -295,7 +301,7 @@ class ReconProxy(_Listener):
             header,
             plugin,
             _enriched(client, design),
-            motion_corrected=design.prospective_motion,
+            motion=design.directory / FILENAME if design.prospective_motion else None,
         )
 
 
@@ -386,7 +392,16 @@ class ReconServer(_Listener):
         if not plugin:
             raise ValueError("the config names no reconstruction")
         _log.info("series: %s", plugin)
-        self._reconstruction.run(client, config, header, plugin, _received(client))
+        # The proxy that forwarded the series holds the scan's pose file, so a
+        # pose goes back to it rather than being taken here.
+        self._reconstruction.run(
+            client,
+            config,
+            header,
+            plugin,
+            _received(client),
+            poses=lambda pose: client.send(pose_waveform(pose)),
+        )
 
 
 class _Workers:
@@ -444,15 +459,19 @@ class _Workers:
         header: Any,
         plugin: str,
         items: Iterator[Any],
-        motion_corrected: bool = False,
+        motion: Path | None = None,
+        poses: Callable[[Pose], None] | None = None,
     ) -> None:
         """Reconstruct the series ``items`` streams on a worker, in a slot or from the queue.
 
-        A series whose scan is corrected for motion while it plays runs alone
-        among such series, wherever its proxy runs.
+        ``motion`` is the pose file of a scan corrected for motion while it
+        plays: the poses the reconstruction states are published into it,
+        created anew for the series. Such a series runs alone among such
+        series, wherever its proxy runs. Otherwise the poses go to ``poses``,
+        and are dropped where it is ``None``.
         """
         path = self._plugin_path(plugin)
-        if motion_corrected:
+        if motion is not None:
             # Waits rather than queueing: a pose is worth nothing once the scan
             # it described has moved on, so a series that would publish one
             # either runs now or runs behind the one that is.
@@ -460,9 +479,16 @@ class _Workers:
             try:
                 slot = self._slots.take(wait=True)
                 try:
-                    self._run(
-                        client, config, header, path, slot, lambda w: _send(items, w)
-                    )
+                    with MotionWriter(motion) as writer:
+                        self._run(
+                            client,
+                            config,
+                            header,
+                            path,
+                            slot,
+                            lambda w: _send(items, w),
+                            _publisher(writer),
+                        )
                 finally:
                     self._slots.release(slot)
             finally:
@@ -471,7 +497,15 @@ class _Workers:
         slot = self._slots.take(wait=False)
         if slot is not None:
             try:
-                self._run(client, config, header, path, slot, lambda w: _send(items, w))
+                self._run(
+                    client,
+                    config,
+                    header,
+                    path,
+                    slot,
+                    lambda w: _send(items, w),
+                    poses,
+                )
             finally:
                 self._slots.release(slot)
             return
@@ -488,6 +522,7 @@ class _Workers:
                     path,
                     slot,
                     lambda worker: _replay(queued, others, worker),
+                    poses,
                 )
             finally:
                 self._slots.release(slot)
@@ -510,6 +545,7 @@ class _Workers:
         plugin: Path,
         slot: Slot,
         feed: Callable[[Connection], None],
+        poses: Callable[[Pose], None] | None = None,
     ) -> None:
         """Give a worker the config, the header and whatever ``feed`` sends it."""
         with self.exams.lease(header) as exam:
@@ -524,6 +560,7 @@ class _Workers:
                     feed,
                     self.recon_timeout,
                     f"{plugin.stem} did not finish",
+                    poses=poses,
                 )
 
     def _plugin_path(self, plugin: str) -> Path:
@@ -552,13 +589,14 @@ class _Remote:
         header: Any,
         plugin: str,
         items: Iterator[Any],
-        motion_corrected: bool = False,  # noqa: ARG002 -- the server's to honour
+        motion: Path | None = None,
     ) -> None:
         """Stream the series ``items`` carries to the server and its outputs back.
 
-        A series whose scan is corrected while it plays is not held apart here:
-        the server that reconstructs it decides what may run beside it, and it
-        is the one that would publish a pose.
+        The poses the server passes back are published into ``motion``, the
+        scan's pose file, when there is one. A series whose scan is corrected
+        while it plays is not held apart here: the server decides what may run
+        beside it.
 
         The client's config text is not forwarded: the server is told the
         configured name, or else ``plugin``.
@@ -575,7 +613,13 @@ class _Remote:
                 f"the reconstruction server at {host}:{port} cannot be reached: {error}"
             ) from error
         channel = _RemoteChannel(stream)
-        with channel as server:
+        with contextlib.ExitStack() as stack:
+            server = stack.enter_context(channel)
+            poses = (
+                None
+                if motion is None
+                else _publisher(stack.enter_context(MotionWriter(motion)))
+            )
             server.send_config_file(name)
             server.send_header(header)
             _drive(
@@ -586,6 +630,7 @@ class _Remote:
                 self.recon_timeout,
                 f"the reconstruction server at {host}:{port} did not finish",
                 convert,
+                poses,
             )
 
     def close(self) -> None:
@@ -600,15 +645,17 @@ def _drive(
     timeout: float | None,
     late: str,
     convert: Callable[[Any], Any] | None = None,
+    poses: Callable[[Pose], None] | None = None,
 ) -> None:
     """Feed a reconstruction its series while its outputs are relayed to the client.
 
     ``late`` opens the text the client receives when the reconstruction is
-    still running ``timeout`` seconds after the series ended.
+    still running ``timeout`` seconds after the series ended. ``poses`` is
+    :func:`_relay`'s.
     """
     relay = threading.Thread(
         target=_relay,
-        args=(reconstruction, client, convert),
+        args=(reconstruction, client, convert, poses),
         daemon=True,
         name="relay",
     )
@@ -881,6 +928,15 @@ def _replay(queued: QueueFile, others: list[Any], worker: Connection) -> None:
         worker.send(item)
     for item in queued:
         worker.send(item)
+
+
+def _publisher(writer: MotionWriter) -> Callable[[Pose], None]:
+    """Return what publishes each pose a reconstruction states into ``writer``."""
+
+    def publish(pose: Pose) -> None:
+        writer.publish(pose.rotation, rescan=pose.rescan)
+
+    return publish
 
 
 def _relay(
