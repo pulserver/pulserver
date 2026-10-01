@@ -535,9 +535,12 @@
 <span class="sig-prename descclassname"><span class="pre">BrainWeb.</span></span><span class="sig-name descname"><span class="pre">isochromats</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pulserver/virtual/_brainweb.html#BrainWeb.isochromats"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.virtual.BrainWeb.isochromats" title="Link to this definition">#</a></dt>
 <dd><p>Return the brain sampled as isochromats, for <a class="reference internal" href="pulserver.virtual.simulate.html#pulserver.virtual.simulate" title="pulserver.virtual.simulate"><code class="xref py py-func docutils literal notranslate"><span class="pre">simulate()</span></code></a>.</p>
 <p>The voxels are averaged in cubes <code class="docutils literal notranslate"><span class="pre">spacing</span></code> wide. Each tissue a cube
-holds is an isochromat at the cube’s centre, of proton density the
+holds is <code class="docutils literal notranslate"><span class="pre">spins</span></code> isochromats of proton density, between them, the
 tissue’s times the fraction of the cube it fills times the cube’s
-volume in m³, precessing at the cube’s mean <a class="reference internal" href="pulserver.virtual.BrainWeb.field_ppm.html#pulserver.virtual.BrainWeb.field_ppm" title="pulserver.virtual.BrainWeb.field_ppm"><code class="xref py py-attr docutils literal notranslate"><span class="pre">field_ppm</span></code></a>.</p>
+volume in m³, precessing at the cube’s mean <a class="reference internal" href="pulserver.virtual.BrainWeb.field_ppm.html#pulserver.virtual.BrainWeb.field_ppm" title="pulserver.virtual.BrainWeb.field_ppm"><code class="xref py py-attr docutils literal notranslate"><span class="pre">field_ppm</span></code></a>: at the
+cube’s centre, or over the cube for a <code class="docutils literal notranslate"><span class="pre">&quot;box&quot;</span></code> <code class="docutils literal notranslate"><span class="pre">voxel</span></code>, and at the
+quantiles of the Lorentzian line of the tissue’s T2’
+(<a class="reference internal" href="../explanations/bloch-simulation.html"><span class="doc">Bloch simulation on isochromats</span></a>).</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
@@ -552,6 +555,12 @@ and <code class="docutils literal notranslate"><span class="pre">(n,)</span></co
 one.</p></li>
 <li><p><strong>coil</strong> – The scanner’s coil the brain is scanned with, in place of the
 phantom’s coils.</p></li>
+<li><p><strong>spins</strong> – Isochromats per tissue of a cube: a cube number for a <code class="docutils literal notranslate"><span class="pre">&quot;box&quot;</span></code>.</p></li>
+<li><p><strong>voxel</strong> – <code class="docutils literal notranslate"><span class="pre">&quot;point&quot;</span></code> or <code class="docutils literal notranslate"><span class="pre">&quot;box&quot;</span></code>: where a cube’s isochromats lie.</p></li>
+<li><p><strong>motion</strong> – The head’s motion, as <a class="reference internal" href="pulserver.virtual.Isochromats.html#pulserver.virtual.Isochromats" title="pulserver.virtual.Isochromats"><code class="xref py py-class docutils literal notranslate"><span class="pre">Isochromats</span></code></a>
+takes it.</p></li>
+<li><p><strong>seed</strong> – Seed of the frequencies of each voxel’s isochromats and of their
+Brownian walks.</p></li>
 <li><p><strong>threads</strong> – Worker threads of the simulation; 0 for every core.</p></li>
 <li><p><strong>device</strong> – The device the windows read on a lattice are read on, as
 <a class="reference internal" href="pulserver.virtual.Isochromats.html#pulserver.virtual.Isochromats" title="pulserver.virtual.Isochromats"><code class="xref py py-class docutils literal notranslate"><span class="pre">Isochromats</span></code></a> takes it; the engine
@@ -560,8 +569,8 @@ reads them itself without one.</p></li>
 </dd>
 <dt class="field-even">Raises<span class="colon">:</span></dt>
 <dd class="field-even"><p><strong>ValueError</strong> – If <code class="docutils literal notranslate"><span class="pre">spacing</span></code> is not a whole number of millimetres, <code class="docutils literal notranslate"><span class="pre">field_t</span></code>
-    is not given, or the brain has coils of its own and <code class="docutils literal notranslate"><span class="pre">coil</span></code> is
-    given.</p>
+    is not given, the brain has coils of its own and <code class="docutils literal notranslate"><span class="pre">coil</span></code> is
+    given, or <code class="docutils literal notranslate"><span class="pre">spins</span></code> do not fill a <code class="docutils literal notranslate"><span class="pre">voxel</span></code>.</p>
 </dd>
 </dl>
 </dd></dl>

@@ -189,6 +189,13 @@ line, is written to standard output, and the scan clock to standard error.
   every isochromat are written to a temporary file mapped into memory; where
   the temporary directory is a memory file system, set `TMPDIR` to one on
   disk.
+- `--spins` spreads each voxel over that many isochromats, at the quantiles of
+  the Lorentzian line of its tissue's T2′, at its centre or, with
+  `--voxel box`, over it; `--diffusion` lets BrainWeb's tissue classes diffuse
+  ({doc}`../explanations/bloch-simulation`). A phantom file gives each ellipse
+  its `t2_prime`, in s, and `diffusion`, in m²/s. Isochromats that diffuse are
+  played block by block, and a voxel's diffusion attenuation needs many spins
+  to be resolved.
 - `--recon` streams the series to a reconstruction proxy, which looks the
   design up in its store: give that store as `--store`, or the proxy's design
   intake as `--push`. The images go to `images.h5` in `--output`, the DICOM

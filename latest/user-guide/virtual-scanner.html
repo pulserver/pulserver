@@ -739,6 +739,13 @@ every isochromat are written to a temporary file mapped into memory; where
 the temporary directory is a memory file system, set <code class="docutils literal notranslate"><span class="pre">TMPDIR</span></code> to one on
 disk.</p>
 </li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--spins</span></code> spreads each voxel over that many isochromats, at the quantiles of
+the Lorentzian line of its tissue’s T2′, at its centre or, with
+<code class="docutils literal notranslate"><span class="pre">--voxel</span> <span class="pre">box</span></code>, over it; <code class="docutils literal notranslate"><span class="pre">--diffusion</span></code> lets BrainWeb’s tissue classes diffuse
+(<a class="reference internal" href="../explanations/bloch-simulation.html"><span class="doc">Bloch simulation on isochromats</span></a>). A phantom file gives each ellipse
+its <code class="docutils literal notranslate"><span class="pre">t2_prime</span></code>, in s, and <code class="docutils literal notranslate"><span class="pre">diffusion</span></code>, in m²/s. Isochromats that diffuse are
+played block by block, and a voxel’s diffusion attenuation needs many spins
+to be resolved.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">--recon</span></code> streams the series to a reconstruction proxy, which looks the
 design up in its store: give that store as <code class="docutils literal notranslate"><span class="pre">--store</span></code>, or the proxy’s design
 intake as <code class="docutils literal notranslate"><span class="pre">--push</span></code>. The images go to <code class="docutils literal notranslate"><span class="pre">images.h5</span></code> in <code class="docutils literal notranslate"><span class="pre">--output</span></code>, the DICOM

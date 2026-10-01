@@ -503,7 +503,8 @@
 <span class="sd">    phase encodings and turned readouts play from each isochromat's map over</span>
 <span class="sd">    one repetition, as :meth:`Isochromats.repetitions` plays them to within</span>
 <span class="sd">    ``tolerance``; at zero, their samples are those of the blocks played one</span>
-<span class="sd">    by one, to rounding. The other blocks read their ADC windows as</span>
+<span class="sd">    by one, to rounding. Isochromats that move or diffuse play every block</span>
+<span class="sd">    one by one. The other blocks read their ADC windows as</span>
 <span class="sd">    :meth:`Isochromats.play` reads them to within ``tolerance``.</span>
 
 <span class="sd">    :doc:`/explanations/virtual-scanner` states the signal model.</span>
@@ -549,11 +550,15 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_drive</span> <span class="o">=</span> <span class="n">_drive</span><span class="p">(</span><span class="n">playout</span><span class="p">,</span> <span class="n">default_shim</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_isochromats</span> <span class="o">=</span> <span class="n">isochromats</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_tolerance</span> <span class="o">=</span> <span class="n">tolerance</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">runs</span> <span class="o">=</span> <span class="n">runs</span><span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">played</span><span class="p">,</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_turn</span><span class="p">,</span>
-            <span class="n">windows</span><span class="o">=</span><span class="n">_windows</span><span class="p">(</span><span class="n">isochromats</span><span class="p">),</span>
-            <span class="n">rounded</span><span class="o">=</span><span class="n">tolerance</span> <span class="o">&gt;</span> <span class="mf">0.0</span><span class="p">,</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">runs</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="p">[]</span>
+            <span class="k">if</span> <span class="n">isochromats</span><span class="o">.</span><span class="n">moving</span>
+            <span class="k">else</span> <span class="n">runs</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">played</span><span class="p">,</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_turn</span><span class="p">,</span>
+                <span class="n">windows</span><span class="o">=</span><span class="n">_windows</span><span class="p">(</span><span class="n">isochromats</span><span class="p">),</span>
+                <span class="n">rounded</span><span class="o">=</span><span class="n">tolerance</span> <span class="o">&gt;</span> <span class="mf">0.0</span><span class="p">,</span>
+            <span class="p">)</span>
         <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_firsts</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">run</span><span class="o">.</span><span class="n">first</span> <span class="k">for</span> <span class="n">run</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">runs</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">int</span><span class="p">)</span>
         <span class="c1"># The run being played, its repetitions and the next to be played.</span>

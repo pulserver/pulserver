@@ -17,6 +17,7 @@
    ~BrainWeb.count
    ~BrainWeb.isochromats
    ~BrainWeb.proton_density
+   ~BrainWeb.relaxation
 
 
 
@@ -26,5 +27,6 @@
    :toctree:
    :nosignatures:
 
+   ~BrainWeb.DIFFUSION
    ~BrainWeb.field_ppm
    ~BrainWeb.fractions

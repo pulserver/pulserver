@@ -535,14 +535,19 @@
 <span class="sig-prename descclassname"><span class="pre">Phantom.</span></span><span class="sig-name descname"><span class="pre">isochromats</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pulserver/virtual/_phantom.html#Phantom.isochromats"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.virtual.Phantom.isochromats" title="Link to this definition">#</a></dt>
 <dd><p>Return the phantom sampled as isochromats, for <a class="reference internal" href="pulserver.virtual.simulate.html#pulserver.virtual.simulate" title="pulserver.virtual.simulate"><code class="xref py py-func docutils literal notranslate"><span class="pre">simulate()</span></code></a>.</p>
 <p>Each ellipse is sampled at the points of a square grid, aligned with the
-phantom’s origin and axes, that lie inside it: each an isochromat of
-proton density <code class="docutils literal notranslate"><span class="pre">intensity</span> <span class="pre">*</span> <span class="pre">spacing**2</span></code> relaxing with the ellipse’s
-<code class="docutils literal notranslate"><span class="pre">t1</span></code> and <code class="docutils literal notranslate"><span class="pre">t2</span></code>, so that the sum over them approximates the
-ellipse’s transform below the grid’s Nyquist frequency. Overlapping
-ellipses are separate isochromats. The positions are placed in the
-physical frame as the phantom is, and the receive sensitivities are the
-phantom’s coils’, or <code class="docutils literal notranslate"><span class="pre">coil</span></code>’s transmit and receive sensitivities
-there.</p>
+phantom’s origin and axes, that lie inside it: each a voxel of
+<code class="docutils literal notranslate"><span class="pre">spins</span></code> isochromats of proton density <code class="docutils literal notranslate"><span class="pre">intensity</span> <span class="pre">*</span> <span class="pre">spacing**2</span></code>
+between them, relaxing with the ellipse’s <code class="docutils literal notranslate"><span class="pre">t1</span></code> and <code class="docutils literal notranslate"><span class="pre">t2</span></code>, so that
+the sum over them approximates the ellipse’s transform below the
+grid’s Nyquist frequency. A voxel’s isochromats lie at its centre, or
+over a square <code class="docutils literal notranslate"><span class="pre">spacing</span></code> wide in the ellipse’s plane for a <code class="docutils literal notranslate"><span class="pre">&quot;box&quot;</span></code>
+<code class="docutils literal notranslate"><span class="pre">voxel</span></code>, and precess at the quantiles of the Lorentzian line of the
+ellipse’s <code class="docutils literal notranslate"><span class="pre">t2_prime</span></code> (<a class="reference internal" href="../explanations/bloch-simulation.html"><span class="doc">Bloch simulation on isochromats</span></a>).
+Overlapping ellipses are separate isochromats. The positions are placed
+in the physical frame as the phantom is, and the receive sensitivities
+are the phantom’s coils’, or <code class="docutils literal notranslate"><span class="pre">coil</span></code>’s transmit and receive
+sensitivities there. The isochromats diffuse with the ellipses’
+<code class="docutils literal notranslate"><span class="pre">diffusion</span></code>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
@@ -555,6 +560,12 @@ in Hz, beside its chemical shift.</p></li>
 positions, in m, and <code class="docutils literal notranslate"><span class="pre">(n,)</span></code> frequencies, in Hz, as
 <a class="reference internal" href="pulserver.virtual.Slabs.html#pulserver.virtual.Slabs" title="pulserver.virtual.Slabs"><code class="xref py py-class docutils literal notranslate"><span class="pre">Slabs</span></code></a> answers; every one without one.</p></li>
 <li><p><strong>coil</strong> – The scanner’s coil the phantom is scanned with.</p></li>
+<li><p><strong>spins</strong> – Isochromats per voxel: a square number for a <code class="docutils literal notranslate"><span class="pre">&quot;box&quot;</span></code>.</p></li>
+<li><p><strong>voxel</strong> – <code class="docutils literal notranslate"><span class="pre">&quot;point&quot;</span></code> or <code class="docutils literal notranslate"><span class="pre">&quot;box&quot;</span></code>: where a voxel’s isochromats lie.</p></li>
+<li><p><strong>motion</strong> – The phantom’s motion, as <a class="reference internal" href="pulserver.virtual.Isochromats.html#pulserver.virtual.Isochromats" title="pulserver.virtual.Isochromats"><code class="xref py py-class docutils literal notranslate"><span class="pre">Isochromats</span></code></a>
+takes it.</p></li>
+<li><p><strong>seed</strong> – Seed of the frequencies of each voxel’s isochromats and of their
+Brownian walks.</p></li>
 <li><p><strong>threads</strong> – Worker threads of the simulation; 0 for every core.</p></li>
 <li><p><strong>device</strong> – The device the windows read on a lattice are read on, as
 <a class="reference internal" href="pulserver.virtual.Isochromats.html#pulserver.virtual.Isochromats" title="pulserver.virtual.Isochromats"><code class="xref py py-class docutils literal notranslate"><span class="pre">Isochromats</span></code></a> takes it; the engine
@@ -563,8 +574,8 @@ reads them itself without one.</p></li>
 </dd>
 <dt class="field-even">Raises<span class="colon">:</span></dt>
 <dd class="field-even"><p><strong>ValueError</strong> – If an ellipse has a complex intensity, the phantom has a chemical
-    shift and <code class="docutils literal notranslate"><span class="pre">field_t</span></code> is not given, or it has coils of its own and
-    <code class="docutils literal notranslate"><span class="pre">coil</span></code> is given.</p>
+    shift and <code class="docutils literal notranslate"><span class="pre">field_t</span></code> is not given, it has coils of its own and
+    <code class="docutils literal notranslate"><span class="pre">coil</span></code> is given, or <code class="docutils literal notranslate"><span class="pre">spins</span></code> do not fill a <code class="docutils literal notranslate"><span class="pre">voxel</span></code>.</p>
 </dd>
 </dl>
 </dd></dl>

@@ -31,3 +31,5 @@
    ~Isochromats.elapsed
    ~Isochromats.lattice_windows
    ~Isochromats.magnetization
+   ~Isochromats.moving
+   ~Isochromats.positions

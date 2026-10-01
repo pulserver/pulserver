@@ -191,6 +191,7 @@ from.
    Slabs
    Isochromats
    Repetitions
+   RigidMotion
    Scan
    Chunk
    SAMPLE_RATE

@@ -529,6 +529,13 @@
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#tolerance">Tolerance</a></li>
 </ul>
 </li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#voxels-motion-and-diffusion">Voxels, motion and diffusion</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#a-voxel-s-isochromats">A voxel’s isochromats</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#motion">Motion</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#diffusion">Diffusion</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#relation-to-mrzero">Relation to MRzero</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#relation-to-komamri">Relation to KomaMRI</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#what-is-not-modelled">What is not modelled</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#see-also">See also</a></li>
@@ -883,6 +890,100 @@ kernel that holds it, carries the magnetisation in single precision from
 summed by the widest kernel at any tolerance.</p>
 </section>
 </section>
+<section id="voxels-motion-and-diffusion">
+<h2>Voxels, motion and diffusion<a class="headerlink" href="#voxels-motion-and-diffusion" title="Link to this heading">#</a></h2>
+<section id="a-voxel-s-isochromats">
+<h3>A voxel’s isochromats<a class="headerlink" href="#a-voxel-s-isochromats" title="Link to this heading">#</a></h3>
+<p>A phantom’s voxel is one isochromat by default, at the voxel’s centre
+(<code class="docutils literal notranslate"><span class="pre">spins=1</span></code>). With several (<code class="docutils literal notranslate"><span class="pre">spins</span></code> of
+<a class="reference internal" href="../generated/pulserver.virtual.Phantom.isochromats.html#pulserver.virtual.Phantom.isochromats" title="pulserver.virtual.Phantom.isochromats"><code class="xref py py-meth docutils literal notranslate"><span class="pre">Phantom.isochromats</span></code></a> and
+<a class="reference internal" href="../generated/pulserver.virtual.BrainWeb.isochromats.html#pulserver.virtual.BrainWeb.isochromats" title="pulserver.virtual.BrainWeb.isochromats"><code class="xref py py-meth docutils literal notranslate"><span class="pre">BrainWeb.isochromats</span></code></a>), they
+share the voxel’s proton density and differ in two respects.</p>
+<p><em>Position.</em> A <code class="docutils literal notranslate"><span class="pre">&quot;point&quot;</span></code> voxel keeps them at its centre; a <code class="docutils literal notranslate"><span class="pre">&quot;box&quot;</span></code> voxel places
+them at the centres of a grid of cells filling it, <span class="math notranslate nohighlight">\(m\)</span> to a side. A gradient
+that winds the phase through a whole number of cycles across a box voxel along
+one of its axes, and not a multiple of <span class="math notranslate nohighlight">\(m\)</span>, leaves the voxel no signal, as it
+leaves a uniform voxel none; a point voxel, and a lattice of them, keeps its
+signal under any such winding. The cells of all voxels lie on one lattice,
+<span class="math notranslate nohighlight">\(m\)</span> times finer, on which windows under a changing gradient are still read.</p>
+<p><em>Frequency.</em> T2′ is the decay of a voxel’s signal by a static distribution of
+frequencies within it, which a spin echo refocuses. A Lorentzian line of half
+width <span class="math notranslate nohighlight">\(1/(2\pi T_2')\)</span> gives the decay <span class="math notranslate nohighlight">\(e^{-|t|/T_2'}\)</span> of the free induction and
+<span class="math notranslate nohighlight">\(e^{-|t - T_E|/T_2'}\)</span> about a spin echo at <span class="math notranslate nohighlight">\(T_E\)</span>. The isochromats of a voxel
+take one frequency each from strata of equal probability of that line, the
+strata shifted together by one uniform draw per voxel: over many voxels the
+mean signal decays as <span class="math notranslate nohighlight">\(e^{-|t|/T_2'}\)</span>, while each voxel’s own decay departs
+from it by a spread that falls with the number of isochromats. The line is cut
+at 32 half widths, which keeps a
+voxel’s frequencies within <span class="math notranslate nohighlight">\(\pm 32/(2\pi T_2')\)</span> of its own and takes 2% of
+the line, so that the decay starts quadratically for <span class="math notranslate nohighlight">\(|t| \lesssim T_2'/32\)</span>.
+One isochromat per voxel precesses at the voxel’s frequency, whatever its T2′.
+BrainWeb’s tissue classes take the T2′ that the T2 and T2* of BrainWeb’s
+simulator leave at 1.5 T, <span class="math notranslate nohighlight">\(R_2' = R_2^* - R_2\)</span>, with <span class="math notranslate nohighlight">\(R_2'\)</span> in proportion to
+the field, as in the static dephasing regime; their T1 grows with the field as
+measured for white and grey matter
+(<a class="reference internal" href="../generated/pulserver.virtual.BrainWeb.relaxation.html#pulserver.virtual.BrainWeb.relaxation" title="pulserver.virtual.BrainWeb.relaxation"><code class="xref py py-meth docutils literal notranslate"><span class="pre">BrainWeb.relaxation</span></code></a>).</p>
+</section>
+<section id="motion">
+<h3>Motion<a class="headerlink" href="#motion" title="Link to this heading">#</a></h3>
+<p>A subject moves as a function of the scan clock: <code class="docutils literal notranslate"><span class="pre">motion(t,</span> <span class="pre">positions)</span></code>
+returns where the positions at rest lie at time <span class="math notranslate nohighlight">\(t\)</span>,
+<a class="reference internal" href="../generated/pulserver.virtual.RigidMotion.html#pulserver.virtual.RigidMotion" title="pulserver.virtual.RigidMotion"><code class="xref py py-class docutils literal notranslate"><span class="pre">RigidMotion</span></code></a> for a rigid body. Each isochromat
+keeps its proton density, relaxation times, off-resonance and transmit and
+receive sensitivities as it moves, so that the sensitivities move with the
+subject rather than stay with the coils.</p>
+<p>Before each block the isochromats are placed where the motion puts them at the
+block’s start, and they are read there through the block. After the block,
+each is turned by the phase the gradient adds along its path,</p>
+<div class="math notranslate nohighlight">
+\[
+\phi = 2\pi \int_{t_s}^{T} \mathbf{G}(t)\cdot\bigl(\mathbf{r}(t) - \mathbf{r}(0)\bigr)\,dt,
+\]</div>
+<p>from the end of the block’s RF pulse <span class="math notranslate nohighlight">\(t_s\)</span>, or its start without one, to its
+end <span class="math notranslate nohighlight">\(T\)</span>, integrated by three Gauss–Legendre points on each stretch of at most
+0.5 ms on which the gradient is linear. A block without RF therefore leaves
+each isochromat exactly as its motion through the block would, the first
+moment of a bipolar gradient included; samples within a block, and the phase
+accrued before the end of a pulse, are those of the isochromats where they
+stood at the block’s start.</p>
+</section>
+<section id="diffusion">
+<h3>Diffusion<a class="headerlink" href="#diffusion" title="Link to this heading">#</a></h3>
+<p>An isochromat with a diffusion coefficient <span class="math notranslate nohighlight">\(D\)</span> follows a Brownian walk
+<span class="math notranslate nohighlight">\(\mathbf{w}(t)\)</span> of its own, of independent increments of variance <span class="math notranslate nohighlight">\(2D\,dt\)</span>
+along each axis. The walk acts through the phase alone: the isochromat keeps
+its position, and after each block it is turned by
+<span class="math notranslate nohighlight">\(2\pi\int_{t_s}^{T}\mathbf{G}(t)\cdot\mathbf{w}(t)\,dt\)</span>. With <span class="math notranslate nohighlight">\(K(t)\)</span> the area
+the gradient plays from <span class="math notranslate nohighlight">\(t\)</span> to <span class="math notranslate nohighlight">\(T\)</span>, that phase is
+<span class="math notranslate nohighlight">\(2\pi\,K(t_s)\cdot\mathbf{w}(t_s) + 2\pi\int_{t_s}^{T} K(t)\cdot
+d\mathbf{w}(t)\)</span>; the second term and the walk’s displacement over the block
+are jointly normal, of variances <span class="math notranslate nohighlight">\(2D\int K^2\,dt\)</span> and <span class="math notranslate nohighlight">\(2D(T-t_s)\)</span> and
+covariance <span class="math notranslate nohighlight">\(2D\int K\,dt\)</span> per axis, and are drawn together. The phase is
+therefore exact in distribution, however the gradient is cut into blocks, and
+the mean over a voxel’s isochromats of their transverse magnetisation after a
+diffusion encoding is <span class="math notranslate nohighlight">\(e^{-bD}\)</span> times its value without one, with
+<span class="math notranslate nohighlight">\(b = \int (2\pi k(t))^2\,dt\)</span>. Its spread about that mean is about
+<span class="math notranslate nohighlight">\(1/\sqrt{2N}\)</span> for <span class="math notranslate nohighlight">\(N\)</span> isochromats, so that a voxel’s attenuation needs
+many isochromats to be resolved. The walk does not carry magnetisation from
+one place to another.</p>
+<p>Isochromats that move or diffuse play block by block: runs of repetitions are
+not used for them.</p>
+</section>
+</section>
+<section id="relation-to-mrzero">
+<h2>Relation to MRzero<a class="headerlink" href="#relation-to-mrzero" title="Link to this heading">#</a></h2>
+<p>MRzero computes the same signal from a phase distribution graph: each state of
+the magnetisation carries the time and the gradient area since it was
+dephased, from which it applies <span class="math notranslate nohighlight">\(e^{-|\tau|/T_2'}\)</span>, <span class="math notranslate nohighlight">\(e^{-bD}\)</span> and a voxel’s
+dephasing function exactly, and moving voxels accrue the phase of their path
+evaluated at each event. Its isochromat simulation, against which it checks
+the graph, spreads each voxel over isochromats at shared positions within a box
+and at shared quantiles of the Lorentzian line. Here the same voxel
+properties act through isochromats: T2′ and a box voxel through the isochromats
+of a voxel, motion through their positions and phases, and diffusion through
+each one’s walk. Where a voxel holds many isochromats, the two agree to the
+spread of the voxel’s isochromats about their mean.</p>
+</section>
 <section id="relation-to-komamri">
 <h2>Relation to KomaMRI<a class="headerlink" href="#relation-to-komamri" title="Link to this heading">#</a></h2>
 <p>KomaMRI turns the magnetisation in the same sense, and plays a pulse’s
@@ -900,9 +1001,10 @@ phase of a pulse or of the demodulation differs between them.</p>
 <h2>What is not modelled<a class="headerlink" href="#what-is-not-modelled" title="Link to this heading">#</a></h2>
 <p>The engine computes the signal of an ideal system playing the sequence as
 written: no gradient delays, eddy currents, gradient nonlinearity, concomitant
-fields or receiver noise. Isochromats neither diffuse, flow nor move, and the
-decay of a voxel’s signal by intravoxel dephasing appears only where several
-isochromats represent the voxel.</p>
+fields or receiver noise. The decay of a voxel’s signal by intravoxel
+dephasing and by T2′ appears only where several isochromats represent the
+voxel, and diffusion attenuates a voxel’s signal only on average over its
+isochromats.</p>
 </section>
 <section id="see-also">
 <h2>See also<a class="headerlink" href="#see-also" title="Link to this heading">#</a></h2>
@@ -972,6 +1074,13 @@ simulation of the blocks a cache plays.</p></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#tolerance">Tolerance</a></li>
 </ul>
 </li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#voxels-motion-and-diffusion">Voxels, motion and diffusion</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#a-voxel-s-isochromats">A voxel’s isochromats</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#motion">Motion</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#diffusion">Diffusion</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#relation-to-mrzero">Relation to MRzero</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#relation-to-komamri">Relation to KomaMRI</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#what-is-not-modelled">What is not modelled</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#see-also">See also</a></li>

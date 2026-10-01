@@ -542,9 +542,11 @@ cache, which the <code class="docutils literal notranslate"><span class="pre">br
 lying head first and supine, with the origin of its MNI coordinates, the
 anterior commissure, at the isocentre: the physical x axis points to the
 subject’s left, y posterior and z superior. Each tissue class relaxes with
-the T1 and T2 and has the proton density BrainWeb’s simulator gives it at
-1.5 T (Kwan et al., IEEE Trans Med Imaging 18:1085, 1999), at any field; fat
-precesses at pypulseqpp’s fat shift, and every isochromat at the field
+the T1, T2 and T2’ <a class="reference internal" href="pulserver.virtual.BrainWeb.relaxation.html#pulserver.virtual.BrainWeb.relaxation" title="pulserver.virtual.BrainWeb.relaxation"><code class="xref py py-meth docutils literal notranslate"><span class="pre">relaxation()</span></code></a> derives at the field it is scanned
+at from the parameters BrainWeb’s simulator gives it at 1.5 T (Kwan et
+al., IEEE Trans Med Imaging 18:1085, 1999), and has the proton density
+the simulator gives it; T2’ acts where a voxel holds several isochromats.
+Fat precesses at pypulseqpp’s fat shift, and every isochromat at the field
 <a class="reference internal" href="pulserver.virtual.BrainWeb.field_ppm.html#pulserver.virtual.BrainWeb.field_ppm" title="pulserver.virtual.BrainWeb.field_ppm"><code class="xref py py-attr docutils literal notranslate"><span class="pre">field_ppm</span></code></a> its head adds. The coils are those of
 <a class="reference internal" href="pulserver.virtual.Phantom.html#pulserver.virtual.Phantom" title="pulserver.virtual.Phantom"><code class="xref py py-class docutils literal notranslate"><span class="pre">Phantom</span></code></a>, fixed in the physical frame.</p>
 <dl class="field-list simple">
@@ -556,6 +558,10 @@ precesses at pypulseqpp’s fat shift, and every isochromat at the field
 <li><p><strong>directory</strong> – brainweb-dl’s cache; <code class="docutils literal notranslate"><span class="pre">BRAINWEB_DIR</span></code>, or <code class="docutils literal notranslate"><span class="pre">~/.cache/brainweb</span></code>,
 without one.</p></li>
 <li><p><strong>susceptibility</strong> – Whether the field the head’s susceptibility adds acts on it.</p></li>
+<li><p><strong>t2_prime</strong> – T2’, in s, by tissue class, in place of the one <a class="reference internal" href="pulserver.virtual.BrainWeb.relaxation.html#pulserver.virtual.BrainWeb.relaxation" title="pulserver.virtual.BrainWeb.relaxation"><code class="xref py py-meth docutils literal notranslate"><span class="pre">relaxation()</span></code></a>
+derives, at any field.</p></li>
+<li><p><strong>diffusion</strong> – Isotropic diffusion coefficient, in m²/s, by tissue class, as
+<a class="reference internal" href="pulserver.virtual.BrainWeb.DIFFUSION.html#pulserver.virtual.BrainWeb.DIFFUSION" title="pulserver.virtual.BrainWeb.DIFFUSION"><code class="xref py py-attr docutils literal notranslate"><span class="pre">DIFFUSION</span></code></a> gives them; a class without one does not diffuse.</p></li>
 </ul>
 </dd>
 </dl>
@@ -573,16 +579,22 @@ without one.</p></li>
 <tr class="row-odd"><td><p><a class="reference internal" href="pulserver.virtual.BrainWeb.proton_density.html#pulserver.virtual.BrainWeb.proton_density" title="pulserver.virtual.BrainWeb.proton_density"><code class="xref py py-obj docutils literal notranslate"><span class="pre">proton_density</span></code></a></p></td>
 <td><p>Return the proton density of a slab <code class="docutils literal notranslate"><span class="pre">thickness</span></code> thick along <code class="docutils literal notranslate"><span class="pre">normal</span></code> at each of <code class="docutils literal notranslate"><span class="pre">(n,</span> <span class="pre">3)</span></code> physical points, in metres.</p></td>
 </tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pulserver.virtual.BrainWeb.relaxation.html#pulserver.virtual.BrainWeb.relaxation" title="pulserver.virtual.BrainWeb.relaxation"><code class="xref py py-obj docutils literal notranslate"><span class="pre">relaxation</span></code></a></p></td>
+<td><p>Return the T1, T2 and T2', in s, of each tissue class at <code class="docutils literal notranslate"><span class="pre">field_t</span></code> T.</p></td>
+</tr>
 </tbody>
 </table>
 </div>
 <p class="rubric">Attributes</p>
 <div class="pst-scrollable-table-container"><table class="autosummary longtable table">
 <tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.virtual.BrainWeb.field_ppm.html#pulserver.virtual.BrainWeb.field_ppm" title="pulserver.virtual.BrainWeb.field_ppm"><code class="xref py py-obj docutils literal notranslate"><span class="pre">field_ppm</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.virtual.BrainWeb.DIFFUSION.html#pulserver.virtual.BrainWeb.DIFFUSION" title="pulserver.virtual.BrainWeb.DIFFUSION"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DIFFUSION</span></code></a></p></td>
+<td><p>Isotropic diffusion coefficients, in m²/s, of the tissue classes whose water diffusion is measured: the apparent diffusion coefficients of cortical grey matter and of white matter in adults (Helenius et al., AJNR Am J Neuroradiol 23:194, 2002), which glial matter and connective tissue take as BrainWeb gives them those tissues' relaxation, and that of free water at 37 degrees C for CSF (Holz et al., Phys Chem Chem Phys 2:4740, 2000).</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pulserver.virtual.BrainWeb.field_ppm.html#pulserver.virtual.BrainWeb.field_ppm" title="pulserver.virtual.BrainWeb.field_ppm"><code class="xref py py-obj docutils literal notranslate"><span class="pre">field_ppm</span></code></a></p></td>
 <td><p>The field the head adds to B0 at each voxel, <code class="docutils literal notranslate"><span class="pre">(z,</span> <span class="pre">y,</span> <span class="pre">x)</span></code>, in ppm of B0, as a first-order shim leaves it.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pulserver.virtual.BrainWeb.fractions.html#pulserver.virtual.BrainWeb.fractions" title="pulserver.virtual.BrainWeb.fractions"><code class="xref py py-obj docutils literal notranslate"><span class="pre">fractions</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.virtual.BrainWeb.fractions.html#pulserver.virtual.BrainWeb.fractions" title="pulserver.virtual.BrainWeb.fractions"><code class="xref py py-obj docutils literal notranslate"><span class="pre">fractions</span></code></a></p></td>
 <td><p>The fraction of each voxel each tissue fills, <code class="docutils literal notranslate"><span class="pre">(z,</span> <span class="pre">y,</span> <span class="pre">x,</span> <span class="pre">tissue)</span></code>, downloaded on first use.</p></td>
 </tr>
 </tbody>

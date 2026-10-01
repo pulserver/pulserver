@@ -457,31 +457,49 @@
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">functools</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">math</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Callable</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Mapping</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">types</span><span class="w"> </span><span class="kn">import</span> <span class="n">MappingProxyType</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">pypulseqpp</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pp</span>
 
+<span class="kn">from</span><span class="w"> </span><span class="nn">.</span><span class="w"> </span><span class="kn">import</span> <span class="n">_voxels</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">._coils</span><span class="w"> </span><span class="kn">import</span> <span class="n">Coil</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">._isochromats</span><span class="w"> </span><span class="kn">import</span> <span class="n">Isochromats</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">._phantom</span><span class="w"> </span><span class="kn">import</span> <span class="n">Phantom</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">._region</span><span class="w"> </span><span class="kn">import</span> <span class="n">Slabs</span>
 
 <span class="c1">#: The tissue classes of BrainWeb's normal brain, in the order of the fuzzy</span>
-<span class="c1">#: model brainweb-dl returns for its subject 0, each with the T1 and T2, in s,</span>
-<span class="c1">#: and the proton density BrainWeb's MRI simulator gives it at 1.5 T.</span>
+<span class="c1">#: model brainweb-dl returns for its subject 0, each with the T1, T2 and T2*,</span>
+<span class="c1">#: in s, and the proton density BrainWeb's MRI simulator gives it at 1.5 T, as</span>
+<span class="c1">#: its tissue MR parameters list them</span>
+<span class="c1">#: (https://brainweb.bic.mni.mcgill.ca/brainweb/tissue_mr_parameters.txt).</span>
 <span class="n">TISSUES</span> <span class="o">=</span> <span class="p">{</span>
-    <span class="s2">"background"</span><span class="p">:</span> <span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">),</span>
-    <span class="s2">"CSF"</span><span class="p">:</span> <span class="p">(</span><span class="mf">2.569</span><span class="p">,</span> <span class="mf">0.329</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">),</span>
-    <span class="s2">"grey matter"</span><span class="p">:</span> <span class="p">(</span><span class="mf">0.833</span><span class="p">,</span> <span class="mf">0.083</span><span class="p">,</span> <span class="mf">0.86</span><span class="p">),</span>
-    <span class="s2">"white matter"</span><span class="p">:</span> <span class="p">(</span><span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.07</span><span class="p">,</span> <span class="mf">0.77</span><span class="p">),</span>
-    <span class="s2">"fat"</span><span class="p">:</span> <span class="p">(</span><span class="mf">0.35</span><span class="p">,</span> <span class="mf">0.07</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">),</span>
-    <span class="s2">"muscle and skin"</span><span class="p">:</span> <span class="p">(</span><span class="mf">0.9</span><span class="p">,</span> <span class="mf">0.047</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">),</span>
-    <span class="s2">"skin"</span><span class="p">:</span> <span class="p">(</span><span class="mf">2.569</span><span class="p">,</span> <span class="mf">0.329</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">),</span>
-    <span class="s2">"skull"</span><span class="p">:</span> <span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">),</span>
-    <span class="s2">"glial matter"</span><span class="p">:</span> <span class="p">(</span><span class="mf">0.833</span><span class="p">,</span> <span class="mf">0.083</span><span class="p">,</span> <span class="mf">0.86</span><span class="p">),</span>
-    <span class="s2">"connective tissue"</span><span class="p">:</span> <span class="p">(</span><span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.07</span><span class="p">,</span> <span class="mf">0.77</span><span class="p">),</span>
+    <span class="s2">"background"</span><span class="p">:</span> <span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">),</span>
+    <span class="s2">"CSF"</span><span class="p">:</span> <span class="p">(</span><span class="mf">2.569</span><span class="p">,</span> <span class="mf">0.329</span><span class="p">,</span> <span class="mf">0.058</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">),</span>
+    <span class="s2">"grey matter"</span><span class="p">:</span> <span class="p">(</span><span class="mf">0.833</span><span class="p">,</span> <span class="mf">0.083</span><span class="p">,</span> <span class="mf">0.069</span><span class="p">,</span> <span class="mf">0.86</span><span class="p">),</span>
+    <span class="s2">"white matter"</span><span class="p">:</span> <span class="p">(</span><span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.07</span><span class="p">,</span> <span class="mf">0.061</span><span class="p">,</span> <span class="mf">0.77</span><span class="p">),</span>
+    <span class="s2">"fat"</span><span class="p">:</span> <span class="p">(</span><span class="mf">0.35</span><span class="p">,</span> <span class="mf">0.07</span><span class="p">,</span> <span class="mf">0.058</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">),</span>
+    <span class="s2">"muscle and skin"</span><span class="p">:</span> <span class="p">(</span><span class="mf">0.9</span><span class="p">,</span> <span class="mf">0.047</span><span class="p">,</span> <span class="mf">0.030</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">),</span>
+    <span class="s2">"skin"</span><span class="p">:</span> <span class="p">(</span><span class="mf">2.569</span><span class="p">,</span> <span class="mf">0.329</span><span class="p">,</span> <span class="mf">0.058</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">),</span>
+    <span class="s2">"skull"</span><span class="p">:</span> <span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">),</span>
+    <span class="s2">"glial matter"</span><span class="p">:</span> <span class="p">(</span><span class="mf">0.833</span><span class="p">,</span> <span class="mf">0.083</span><span class="p">,</span> <span class="mf">0.069</span><span class="p">,</span> <span class="mf">0.86</span><span class="p">),</span>
+    <span class="s2">"connective tissue"</span><span class="p">:</span> <span class="p">(</span><span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.07</span><span class="p">,</span> <span class="mf">0.061</span><span class="p">,</span> <span class="mf">0.77</span><span class="p">),</span>
+<span class="p">}</span>
+
+<span class="c1">#: The field, in T, at which BrainWeb's simulator gives :data:`TISSUES`.</span>
+<span class="n">TISSUES_FIELD_T</span> <span class="o">=</span> <span class="mf">1.5</span>
+
+<span class="c1">#: Exponents ``b`` of the power laws ``T1 ~ B0**b`` that white matter and grey</span>
+<span class="c1">#: matter follow from 0.2 T to 7 T (Rooney et al., Magn Reson Med 57:308,</span>
+<span class="c1">#: 2007), by the tissue classes BrainWeb gives their relaxation. CSF's T1 does</span>
+<span class="c1">#: not change with the field there; the other classes keep BrainWeb's.</span>
+<span class="n">T1_EXPONENTS</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">"white matter"</span><span class="p">:</span> <span class="mf">0.382</span><span class="p">,</span>
+    <span class="s2">"connective tissue"</span><span class="p">:</span> <span class="mf">0.382</span><span class="p">,</span>
+    <span class="s2">"grey matter"</span><span class="p">:</span> <span class="mf">0.376</span><span class="p">,</span>
+    <span class="s2">"glial matter"</span><span class="p">:</span> <span class="mf">0.376</span><span class="p">,</span>
 <span class="p">}</span>
 
 <span class="c1">#: Volume magnetic susceptibility, in ppm (SI), of air, and of water, which</span>
@@ -510,9 +528,11 @@
 <span class="sd">    lying head first and supine, with the origin of its MNI coordinates, the</span>
 <span class="sd">    anterior commissure, at the isocentre: the physical x axis points to the</span>
 <span class="sd">    subject's left, y posterior and z superior. Each tissue class relaxes with</span>
-<span class="sd">    the T1 and T2 and has the proton density BrainWeb's simulator gives it at</span>
-<span class="sd">    1.5 T (Kwan et al., IEEE Trans Med Imaging 18:1085, 1999), at any field; fat</span>
-<span class="sd">    precesses at pypulseqpp's fat shift, and every isochromat at the field</span>
+<span class="sd">    the T1, T2 and T2' :meth:`relaxation` derives at the field it is scanned</span>
+<span class="sd">    at from the parameters BrainWeb's simulator gives it at 1.5 T (Kwan et</span>
+<span class="sd">    al., IEEE Trans Med Imaging 18:1085, 1999), and has the proton density</span>
+<span class="sd">    the simulator gives it; T2' acts where a voxel holds several isochromats.</span>
+<span class="sd">    Fat precesses at pypulseqpp's fat shift, and every isochromat at the field</span>
 <span class="sd">    :attr:`field_ppm` its head adds. The coils are those of</span>
 <span class="sd">    :class:`~pulserver.virtual.Phantom`, fixed in the physical frame.</span>
 
@@ -529,7 +549,30 @@
 <span class="sd">        without one.</span>
 <span class="sd">    susceptibility</span>
 <span class="sd">        Whether the field the head's susceptibility adds acts on it.</span>
+<span class="sd">    t2_prime</span>
+<span class="sd">        T2', in s, by tissue class, in place of the one :meth:`relaxation`</span>
+<span class="sd">        derives, at any field.</span>
+<span class="sd">    diffusion</span>
+<span class="sd">        Isotropic diffusion coefficient, in m²/s, by tissue class, as</span>
+<span class="sd">        :attr:`DIFFUSION` gives them; a class without one does not diffuse.</span>
 <span class="sd">    """</span>
+
+    <span class="c1">#: Isotropic diffusion coefficients, in m²/s, of the tissue classes whose</span>
+    <span class="c1">#: water diffusion is measured: the apparent diffusion coefficients of</span>
+    <span class="c1">#: cortical grey matter and of white matter in adults (Helenius et al.,</span>
+    <span class="c1">#: AJNR Am J Neuroradiol 23:194, 2002), which glial matter and connective</span>
+    <span class="c1">#: tissue take as BrainWeb gives them those tissues' relaxation, and that</span>
+    <span class="c1">#: of free water at 37 degrees C for CSF (Holz et al., Phys Chem Chem Phys</span>
+    <span class="c1">#: 2:4740, 2000).</span>
+    <span class="n">DIFFUSION</span> <span class="o">=</span> <span class="n">MappingProxyType</span><span class="p">(</span>
+        <span class="p">{</span>
+            <span class="s2">"CSF"</span><span class="p">:</span> <span class="mf">3.0e-9</span><span class="p">,</span>
+            <span class="s2">"grey matter"</span><span class="p">:</span> <span class="mf">0.89e-9</span><span class="p">,</span>
+            <span class="s2">"white matter"</span><span class="p">:</span> <span class="mf">0.70e-9</span><span class="p">,</span>
+            <span class="s2">"glial matter"</span><span class="p">:</span> <span class="mf">0.89e-9</span><span class="p">,</span>
+            <span class="s2">"connective tissue"</span><span class="p">:</span> <span class="mf">0.70e-9</span><span class="p">,</span>
+        <span class="p">}</span>
+    <span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
@@ -539,11 +582,19 @@
         <span class="n">depth</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.5</span><span class="p">,</span>
         <span class="n">directory</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">susceptibility</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">t2_prime</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">diffusion</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">given</span> <span class="ow">in</span> <span class="p">(</span><span class="n">t2_prime</span><span class="p">,</span> <span class="n">diffusion</span><span class="p">):</span>
+            <span class="n">unknown</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">given</span> <span class="ow">or</span> <span class="p">())</span> <span class="o">-</span> <span class="nb">set</span><span class="p">(</span><span class="n">TISSUES</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">unknown</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"BrainWeb has no tissue class </span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="n">unknown</span><span class="p">)</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_coils</span> <span class="o">=</span> <span class="n">Phantom</span><span class="p">((),</span> <span class="n">coils</span><span class="o">=</span><span class="n">coils</span><span class="p">,</span> <span class="n">period</span><span class="o">=</span><span class="n">period</span><span class="p">,</span> <span class="n">depth</span><span class="o">=</span><span class="n">depth</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">coils</span> <span class="o">=</span> <span class="n">coils</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">directory</span> <span class="o">=</span> <span class="n">directory</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">susceptibility</span> <span class="o">=</span> <span class="n">susceptibility</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">t2_prime</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">t2_prime</span> <span class="ow">or</span> <span class="p">{})</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">diffusion</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">diffusion</span> <span class="ow">or</span> <span class="p">{})</span>
 
     <span class="nd">@functools</span><span class="o">.</span><span class="n">cached_property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">fractions</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
@@ -588,6 +639,34 @@
 <span class="sd">        """</span>
         <span class="k">return</span> <span class="n">_susceptibility_field</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">fractions</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">0</span><span class="p">])</span>
 
+<div class="viewcode-block" id="BrainWeb.relaxation">
+<a class="viewcode-back" href="../../../generated/pulserver.virtual.BrainWeb.relaxation.html#pulserver.virtual.BrainWeb.relaxation">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">relaxation</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">field_t</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">"""Return the T1, T2 and T2', in s, of each tissue class at ``field_t`` T.</span>
+
+<span class="sd">        T1 is BrainWeb's, at 1.5 T, times ``(field_t / 1.5)**b`` with the</span>
+<span class="sd">        class's exponent in :data:`T1_EXPONENTS`, or BrainWeb's without one; T2</span>
+<span class="sd">        is BrainWeb's. T2' is the one BrainWeb's T2 and T2* leave at 1.5 T,</span>
+<span class="sd">        ``1 / (1/T2* - 1/T2)``, times ``1.5 / field_t``, as the static</span>
+<span class="sd">        dephasing regime makes R2' proportional to the field (Yablonskiy and</span>
+<span class="sd">        Haacke, Magn Reson Med 32:749, 1994), or the one :attr:`t2_prime`</span>
+<span class="sd">        gives the class; infinite for a class without T2 or T2*.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If ``field_t`` is not above zero.</span>
+<span class="sd">        """</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">field_t</span> <span class="o">&gt;</span> <span class="mf">0.0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"tissues relax at a field above zero, not </span><span class="si">{</span><span class="n">field_t</span><span class="si">}</span><span class="s2"> T"</span><span class="p">)</span>
+        <span class="n">ratio</span> <span class="o">=</span> <span class="n">field_t</span> <span class="o">/</span> <span class="n">TISSUES_FIELD_T</span>
+        <span class="n">relaxed</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="p">(</span><span class="n">t1</span><span class="p">,</span> <span class="n">t2</span><span class="p">,</span> <span class="n">t2_star</span><span class="p">,</span> <span class="n">_</span><span class="p">)</span> <span class="ow">in</span> <span class="n">TISSUES</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="n">t2_prime</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">t2_prime</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">_t2_prime</span><span class="p">(</span><span class="n">t2</span><span class="p">,</span> <span class="n">t2_star</span><span class="p">)</span> <span class="o">/</span> <span class="n">ratio</span><span class="p">)</span>
+            <span class="n">relaxed</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="n">t1</span> <span class="o">*</span> <span class="n">ratio</span> <span class="o">**</span> <span class="n">T1_EXPONENTS</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">),</span> <span class="n">t2</span><span class="p">,</span> <span class="n">t2_prime</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">relaxed</span></div>
+
+
 <div class="viewcode-block" id="BrainWeb.proton_density">
 <a class="viewcode-back" href="../../../generated/pulserver.virtual.BrainWeb.proton_density.html#pulserver.virtual.BrainWeb.proton_density">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">proton_density</span><span class="p">(</span>
@@ -613,15 +692,22 @@
         <span class="n">off_resonance_hz</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">,</span>
         <span class="n">region</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">],</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">coil</span><span class="p">:</span> <span class="n">Coil</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">spins</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
+        <span class="n">voxel</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"point"</span><span class="p">,</span>
+        <span class="n">motion</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">seed</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">threads</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span>
         <span class="n">device</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Isochromats</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">"""Return the brain sampled as isochromats, for :func:`~pulserver.virtual.simulate`.</span>
 
 <span class="sd">        The voxels are averaged in cubes ``spacing`` wide. Each tissue a cube</span>
-<span class="sd">        holds is an isochromat at the cube's centre, of proton density the</span>
+<span class="sd">        holds is ``spins`` isochromats of proton density, between them, the</span>
 <span class="sd">        tissue's times the fraction of the cube it fills times the cube's</span>
-<span class="sd">        volume in m³, precessing at the cube's mean :attr:`field_ppm`.</span>
+<span class="sd">        volume in m³, precessing at the cube's mean :attr:`field_ppm`: at the</span>
+<span class="sd">        cube's centre, or over the cube for a ``"box"`` ``voxel``, and at the</span>
+<span class="sd">        quantiles of the Lorentzian line of the tissue's T2'</span>
+<span class="sd">        (:doc:`/explanations/bloch-simulation`).</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
@@ -641,6 +727,16 @@
 <span class="sd">        coil</span>
 <span class="sd">            The scanner's coil the brain is scanned with, in place of the</span>
 <span class="sd">            phantom's coils.</span>
+<span class="sd">        spins</span>
+<span class="sd">            Isochromats per tissue of a cube: a cube number for a ``"box"``.</span>
+<span class="sd">        voxel</span>
+<span class="sd">            ``"point"`` or ``"box"``: where a cube's isochromats lie.</span>
+<span class="sd">        motion</span>
+<span class="sd">            The head's motion, as :class:`~pulserver.virtual.Isochromats`</span>
+<span class="sd">            takes it.</span>
+<span class="sd">        seed</span>
+<span class="sd">            Seed of the frequencies of each voxel's isochromats and of their</span>
+<span class="sd">            Brownian walks.</span>
 <span class="sd">        threads</span>
 <span class="sd">            Worker threads of the simulation; 0 for every core.</span>
 <span class="sd">        device</span>
@@ -652,25 +748,32 @@
 <span class="sd">        ------</span>
 <span class="sd">        ValueError</span>
 <span class="sd">            If ``spacing`` is not a whole number of millimetres, ``field_t``</span>
-<span class="sd">            is not given, or the brain has coils of its own and ``coil`` is</span>
-<span class="sd">            given.</span>
+<span class="sd">            is not given, the brain has coils of its own and ``coil`` is</span>
+<span class="sd">            given, or ``spins`` do not fill a ``voxel``.</span>
 <span class="sd">        """</span>
         <span class="n">_whole_millimetres</span><span class="p">(</span><span class="n">spacing</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">coil</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">coils</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
                 <span class="s2">"a phantom received by coils of its own is not scanned with a coil"</span>
             <span class="p">)</span>
-        <span class="n">own</span><span class="p">,</span> <span class="n">proton_density</span><span class="p">,</span> <span class="n">t1</span><span class="p">,</span> <span class="n">t2</span><span class="p">,</span> <span class="n">frequency</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sampled</span><span class="p">(</span>
+        <span class="n">centres</span><span class="p">,</span> <span class="n">proton_density</span><span class="p">,</span> <span class="n">t1</span><span class="p">,</span> <span class="n">t2</span><span class="p">,</span> <span class="n">frequency</span><span class="p">,</span> <span class="n">t2_prime</span><span class="p">,</span> <span class="n">diffusion</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sampled</span><span class="p">(</span>
             <span class="n">spacing</span><span class="p">,</span> <span class="n">field_t</span><span class="p">,</span> <span class="n">off_resonance_hz</span><span class="p">,</span> <span class="n">region</span>
         <span class="p">)</span>
+        <span class="n">offsets</span><span class="p">,</span> <span class="n">order</span> <span class="o">=</span> <span class="n">_voxels</span><span class="o">.</span><span class="n">stencil</span><span class="p">(</span><span class="n">spins</span><span class="p">,</span> <span class="n">voxel</span><span class="p">,</span> <span class="n">spacing</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">3</span><span class="p">))</span>
+        <span class="n">rng</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">default_rng</span><span class="p">(</span><span class="n">seed</span><span class="p">)</span>
+        <span class="n">own</span> <span class="o">=</span> <span class="n">_voxels</span><span class="o">.</span><span class="n">spread</span><span class="p">(</span><span class="n">centres</span><span class="p">,</span> <span class="n">spins</span><span class="p">)</span> <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">tile</span><span class="p">(</span><span class="n">offsets</span><span class="p">,</span> <span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">t1</span><span class="p">),</span> <span class="mi">1</span><span class="p">))</span>
         <span class="k">return</span> <span class="n">Isochromats</span><span class="p">(</span>
             <span class="n">own</span><span class="p">,</span>
-            <span class="n">proton_density</span><span class="o">=</span><span class="n">proton_density</span><span class="p">,</span>
-            <span class="n">t1</span><span class="o">=</span><span class="n">t1</span><span class="p">,</span>
-            <span class="n">t2</span><span class="o">=</span><span class="n">t2</span><span class="p">,</span>
-            <span class="n">off_resonance</span><span class="o">=</span><span class="n">frequency</span><span class="p">,</span>
+            <span class="n">proton_density</span><span class="o">=</span><span class="n">_voxels</span><span class="o">.</span><span class="n">spread</span><span class="p">(</span><span class="n">proton_density</span><span class="p">,</span> <span class="n">spins</span><span class="p">)</span> <span class="o">/</span> <span class="n">spins</span><span class="p">,</span>
+            <span class="n">t1</span><span class="o">=</span><span class="n">_voxels</span><span class="o">.</span><span class="n">spread</span><span class="p">(</span><span class="n">t1</span><span class="p">,</span> <span class="n">spins</span><span class="p">),</span>
+            <span class="n">t2</span><span class="o">=</span><span class="n">_voxels</span><span class="o">.</span><span class="n">spread</span><span class="p">(</span><span class="n">t2</span><span class="p">,</span> <span class="n">spins</span><span class="p">),</span>
+            <span class="n">off_resonance</span><span class="o">=</span><span class="n">_voxels</span><span class="o">.</span><span class="n">spread</span><span class="p">(</span><span class="n">frequency</span><span class="p">,</span> <span class="n">spins</span><span class="p">)</span>
+            <span class="o">+</span> <span class="n">_voxels</span><span class="o">.</span><span class="n">frequencies</span><span class="p">(</span><span class="n">t2_prime</span><span class="p">,</span> <span class="n">order</span><span class="p">,</span> <span class="n">rng</span><span class="p">),</span>
             <span class="n">transmit</span><span class="o">=</span><span class="kc">None</span> <span class="k">if</span> <span class="n">coil</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">coil</span><span class="o">.</span><span class="n">transmit</span><span class="p">(</span><span class="n">own</span><span class="p">),</span>
             <span class="n">receive</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_coils</span><span class="o">.</span><span class="n">_received</span><span class="p">(</span><span class="n">own</span><span class="p">)</span> <span class="k">if</span> <span class="n">coil</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">coil</span><span class="o">.</span><span class="n">receive</span><span class="p">(</span><span class="n">own</span><span class="p">),</span>
+            <span class="n">diffusion</span><span class="o">=</span><span class="n">_voxels</span><span class="o">.</span><span class="n">spread</span><span class="p">(</span><span class="n">diffusion</span><span class="p">,</span> <span class="n">spins</span><span class="p">),</span>
+            <span class="n">motion</span><span class="o">=</span><span class="n">motion</span><span class="p">,</span>
+            <span class="n">seed</span><span class="o">=</span><span class="n">rng</span><span class="p">,</span>
             <span class="n">threads</span><span class="o">=</span><span class="n">threads</span><span class="p">,</span>
             <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
         <span class="p">)</span></div>
@@ -685,6 +788,7 @@
         <span class="n">field_t</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">off_resonance_hz</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">,</span>
         <span class="n">region</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">],</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">spins</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">"""Return how many isochromats :meth:`isochromats` samples the brain as, with the same arguments.</span>
 
@@ -696,14 +800,15 @@
 <span class="sd">        """</span>
         <span class="n">_whole_millimetres</span><span class="p">(</span><span class="n">spacing</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">region</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_sampled</span><span class="p">(</span><span class="n">spacing</span><span class="p">,</span> <span class="n">field_t</span><span class="p">,</span> <span class="n">off_resonance_hz</span><span class="p">,</span> <span class="n">region</span><span class="p">)[</span><span class="mi">0</span><span class="p">])</span>
+            <span class="n">sampled</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sampled</span><span class="p">(</span><span class="n">spacing</span><span class="p">,</span> <span class="n">field_t</span><span class="p">,</span> <span class="n">off_resonance_hz</span><span class="p">,</span> <span class="n">region</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">spins</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">sampled</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
         <span class="k">if</span> <span class="n">field_t</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
                 <span class="s2">"BrainWeb's fat has a chemical shift: scan it at a field_t"</span>
             <span class="p">)</span>
         <span class="n">cubes</span> <span class="o">=</span> <span class="n">_cubes</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">fractions</span><span class="p">,</span> <span class="nb">round</span><span class="p">(</span><span class="n">spacing</span> <span class="o">/</span> <span class="mf">1e-3</span><span class="p">))</span>
-        <span class="n">dense</span> <span class="o">=</span> <span class="p">[</span><span class="n">density</span> <span class="o">&gt;</span> <span class="mf">0.0</span> <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">density</span> <span class="ow">in</span> <span class="n">TISSUES</span><span class="o">.</span><span class="n">values</span><span class="p">()]</span>
-        <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">count_nonzero</span><span class="p">(</span><span class="n">cubes</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">dense</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mf">0.0</span><span class="p">))</span></div>
+        <span class="n">dense</span> <span class="o">=</span> <span class="p">[</span><span class="n">density</span> <span class="o">&gt;</span> <span class="mf">0.0</span> <span class="k">for</span> <span class="o">*</span><span class="n">_</span><span class="p">,</span> <span class="n">density</span> <span class="ow">in</span> <span class="n">TISSUES</span><span class="o">.</span><span class="n">values</span><span class="p">()]</span>
+        <span class="k">return</span> <span class="n">spins</span> <span class="o">*</span> <span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">count_nonzero</span><span class="p">(</span><span class="n">cubes</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">dense</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mf">0.0</span><span class="p">))</span></div>
 
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_sampled</span><span class="p">(</span>
@@ -713,7 +818,7 @@
         <span class="n">off_resonance_hz</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
         <span class="n">region</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">],</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="o">...</span><span class="p">]:</span>
-<span class="w">        </span><span class="sd">"""Return the positions, proton densities, T1, T2 and frequencies of the isochromats :meth:`isochromats` makes."""</span>
+<span class="w">        </span><span class="sd">"""Return the centres, proton densities, T1, T2, frequencies, T2' and diffusion coefficients of the tissues of the cubes :meth:`isochromats` spreads into isochromats."""</span>
         <span class="kn">from</span><span class="w"> </span><span class="nn">pypulseqpp.sequences.preparation.fatsat</span><span class="w"> </span><span class="kn">import</span> <span class="n">FAT_SHIFT_PPM</span>
 
         <span class="k">if</span> <span class="n">field_t</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
@@ -749,8 +854,10 @@
             <span class="n">voxel</span><span class="p">[:,</span> <span class="n">axis</span><span class="p">]</span> <span class="o">+</span> <span class="n">_FIRST_VOXEL_MM</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="k">for</span> <span class="n">axis</span><span class="p">,</span> <span class="n">name</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="s2">"zyx"</span><span class="p">)</span>
         <span class="p">)</span>
         <span class="n">positions</span> <span class="o">=</span> <span class="mf">1e-3</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">column_stack</span><span class="p">([</span><span class="o">-</span><span class="n">x</span><span class="p">,</span> <span class="o">-</span><span class="n">y</span><span class="p">,</span> <span class="n">z</span><span class="p">])</span>
+        <span class="n">relaxed</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">relaxation</span><span class="p">(</span><span class="n">field_t</span><span class="p">)</span>
         <span class="n">points</span><span class="p">,</span> <span class="n">rows</span> <span class="o">=</span> <span class="p">[],</span> <span class="p">[]</span>
-        <span class="k">for</span> <span class="n">tissue</span><span class="p">,</span> <span class="p">(</span><span class="n">t1</span><span class="p">,</span> <span class="n">t2</span><span class="p">,</span> <span class="n">density</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">TISSUES</span><span class="o">.</span><span class="n">values</span><span class="p">()):</span>
+        <span class="k">for</span> <span class="n">tissue</span><span class="p">,</span> <span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="p">(</span><span class="o">*</span><span class="n">_</span><span class="p">,</span> <span class="n">density</span><span class="p">))</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">TISSUES</span><span class="o">.</span><span class="n">items</span><span class="p">()):</span>
+            <span class="n">t1</span><span class="p">,</span> <span class="n">t2</span><span class="p">,</span> <span class="n">t2_prime</span> <span class="o">=</span> <span class="n">relaxed</span><span class="p">[</span><span class="n">name</span><span class="p">]</span>
             <span class="n">fraction</span> <span class="o">=</span> <span class="n">fractions</span><span class="p">[:,</span> <span class="n">tissue</span><span class="p">]</span>
             <span class="n">kept</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">flatnonzero</span><span class="p">((</span><span class="n">fraction</span> <span class="o">&gt;</span> <span class="mf">0.0</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">density</span> <span class="o">&gt;</span> <span class="mf">0.0</span><span class="p">))</span>
             <span class="n">shift</span> <span class="o">=</span> <span class="n">shifts</span><span class="p">[</span><span class="n">tissue</span><span class="p">]</span>
@@ -766,11 +873,12 @@
                         <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">(</span><span class="n">kept</span><span class="o">.</span><span class="n">size</span><span class="p">,</span> <span class="n">t1</span><span class="p">),</span>
                         <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">(</span><span class="n">kept</span><span class="o">.</span><span class="n">size</span><span class="p">,</span> <span class="n">t2</span><span class="p">),</span>
                         <span class="n">frequency</span><span class="p">,</span>
+                        <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">(</span><span class="n">kept</span><span class="o">.</span><span class="n">size</span><span class="p">,</span> <span class="n">t2_prime</span><span class="p">),</span>
+                        <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">(</span><span class="n">kept</span><span class="o">.</span><span class="n">size</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">diffusion</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)),</span>
                     <span class="p">]</span>
                 <span class="p">)</span>
             <span class="p">)</span>
-        <span class="n">proton_density</span><span class="p">,</span> <span class="n">t1</span><span class="p">,</span> <span class="n">t2</span><span class="p">,</span> <span class="n">frequency</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">(</span><span class="n">rows</span><span class="p">)</span><span class="o">.</span><span class="n">T</span>
-        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">(</span><span class="n">points</span><span class="p">),</span> <span class="n">proton_density</span><span class="p">,</span> <span class="n">t1</span><span class="p">,</span> <span class="n">t2</span><span class="p">,</span> <span class="n">frequency</span></div>
+        <span class="k">return</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">(</span><span class="n">points</span><span class="p">),</span> <span class="o">*</span><span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">(</span><span class="n">rows</span><span class="p">)</span><span class="o">.</span><span class="n">T</span><span class="p">)</span></div>
 
 
 
@@ -799,6 +907,13 @@
     <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">flatnonzero</span><span class="p">(</span><span class="n">reached</span><span class="p">)</span>
 
 
+<span class="k">def</span><span class="w"> </span><span class="nf">_t2_prime</span><span class="p">(</span><span class="n">t2</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">t2_star</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return the T2' that T2 and T2*, in s, leave, R2' = R2* - R2; infinite for a tissue without either."""</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="mf">0.0</span> <span class="o">&lt;</span> <span class="n">t2_star</span> <span class="o">&lt;</span> <span class="n">t2</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">math</span><span class="o">.</span><span class="n">inf</span>
+    <span class="k">return</span> <span class="mf">1.0</span> <span class="o">/</span> <span class="p">(</span><span class="mf">1.0</span> <span class="o">/</span> <span class="n">t2_star</span> <span class="o">-</span> <span class="mf">1.0</span> <span class="o">/</span> <span class="n">t2</span><span class="p">)</span>
+
+
 <span class="k">def</span><span class="w"> </span><span class="nf">_whole_millimetres</span><span class="p">(</span><span class="n">spacing</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
     <span class="n">step</span> <span class="o">=</span> <span class="nb">round</span><span class="p">(</span><span class="n">spacing</span> <span class="o">/</span> <span class="mf">1e-3</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">step</span> <span class="o">&lt;</span> <span class="mi">1</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">math</span><span class="o">.</span><span class="n">isclose</span><span class="p">(</span><span class="n">step</span> <span class="o">*</span> <span class="mf">1e-3</span><span class="p">,</span> <span class="n">spacing</span><span class="p">,</span> <span class="n">rel_tol</span><span class="o">=</span><span class="mf">1e-6</span><span class="p">):</span>
@@ -809,7 +924,7 @@
     <span class="n">fractions</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">points</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">normal</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">thickness</span><span class="p">:</span> <span class="nb">float</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Return the proton density at ``(n, 3)`` physical points, averaged over 1 mm steps across the slab."""</span>
-    <span class="n">densities</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">density</span> <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">density</span> <span class="ow">in</span> <span class="n">TISSUES</span><span class="o">.</span><span class="n">values</span><span class="p">()])</span>
+    <span class="n">densities</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">density</span> <span class="k">for</span> <span class="o">*</span><span class="n">_</span><span class="p">,</span> <span class="n">density</span> <span class="ow">in</span> <span class="n">TISSUES</span><span class="o">.</span><span class="n">values</span><span class="p">()])</span>
     <span class="n">first</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">_FIRST_VOXEL_MM</span><span class="p">[</span><span class="n">axis</span><span class="p">]</span> <span class="k">for</span> <span class="n">axis</span> <span class="ow">in</span> <span class="s2">"xyz"</span><span class="p">])</span>
     <span class="n">size</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">fractions</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">2</span><span class="p">::</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
     <span class="n">steps</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="nb">round</span><span class="p">(</span><span class="n">thickness</span> <span class="o">/</span> <span class="mf">1e-3</span><span class="p">))</span>
