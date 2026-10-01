@@ -159,7 +159,9 @@ $\mathbf{g} \cdot \mathbf{r} + f$ during a pulse played under the gradient
 $\mathbf{g}$, so a chemical shift or the subject's field moves an isochromat's
 slab as it moves the slice, and each slice of a multislice scan is a slab of
 its own. A pulse played without a gradient, or under one that changes during
-it, excites the whole phantom, as a volumetric excitation does. What other
+it, excites the whole phantom, as a volumetric excitation does. So do pulses
+played under more than 16 gradients, as a ZTE scan plays one under each
+spoke's: between them, their slabs leave out next to none of the object. What other
 pulses tip into the transverse plane outside the slabs, such as the free
 induction decay of an imperfect refocusing pulse, is left out. The phantoms'
 `isochromats` keep those a region, such as {class}`~pulserver.virtual.Slabs`,
