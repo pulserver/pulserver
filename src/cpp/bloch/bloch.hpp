@@ -65,9 +65,11 @@ namespace bloch
      */
     struct LatticeWindowRead
     {
-        /** The positions' revision: the lattice of given axes, and the
-         *  isochromats' order on it, are the same for every window of one
-         *  revision. */
+        /** The engine, and its positions' revision, unique across engines:
+         *  the isochromats' properties are the same for every window of one
+         *  engine, and the lattice of given axes, and the isochromats' order
+         *  on it, for every window of one revision. */
+        size_t engine = 0;
         size_t layout = 0;
         /** The lattice axes, a bit per axis, the points along each, the
          *  lowest axis first and fastest, and the points in all. */
@@ -118,16 +120,63 @@ namespace bloch
     };
 
     /**
-     * Reads windows on the lattice in the engine's place. @c read starts
+     * A window the engine would read sample by sample, as it hands it to a
+     * device that sums every isochromat's term at every sample in its place.
+     * Every array is the engine's own, valid during the call.
+     */
+    struct SampleWindowRead
+    {
+        /** As in LatticeWindowRead. */
+        size_t engine = 0;
+        size_t layout = 0;
+        /** Each isochromat's position, in m, off-resonance, in Hz, and T2
+         *  class, whose rate, in 1/s, is rates[class]. */
+        size_t isochromats = 0;
+        const double* x = nullptr;
+        const double* y = nullptr;
+        const double* z = nullptr;
+        const double* off_resonance = nullptr;
+        const uint32_t* decay_of = nullptr;
+        size_t decays = 0;
+        const double* rates = nullptr;
+        /** The receive sensitivities, coil-major; none for one coil of unit
+         *  sensitivity. */
+        size_t coils = 0;
+        const double* receive_re = nullptr;
+        const double* receive_im = nullptr;
+        /** The transverse magnetisation at the first sample. */
+        const double* mx = nullptr;
+        const double* my = nullptr;
+        /** Each sample's k from the first, in 1/m, three per sample, and time
+         *  from it, in s; and the middle of the isochromats' off-resonances,
+         *  in Hz. */
+        size_t samples = 0;
+        const double* k = nullptr;
+        const double* time = nullptr;
+        double frequency = 0.0;
+        /** The tolerance the window is read to, and whether it is summed in
+         *  single precision. */
+        double tolerance = 0.0;
+        bool single = false;
+        /** Each coil's sum over the isochromats of its sensitivity times the
+         *  transverse magnetisation, [coil][sample], held until the read is
+         *  finished. */
+        std::complex<double>* out = nullptr;
+    };
+
+    /**
+     * Reads windows in the engine's place: @c lattice those on the lattice,
+     * @c samples those the engine would read sample by sample. Either starts
      * reading a window and returns true, or declines it and returns false;
      * the engine then takes the isochromats to the window's last sample
      * while the device reads, and calls @c finish, which returns once
      * @c out holds the window. Arrays other than @c out are read before
-     * @c read returns.
+     * the call returns.
      */
-    struct LatticeDevice
+    struct WindowDevice
     {
-        std::function<bool(const LatticeWindowRead&)> read;
+        std::function<bool(const LatticeWindowRead&)> lattice;
+        std::function<bool(const SampleWindowRead&)> samples;
         std::function<void()> finish;
     };
 
@@ -231,16 +280,18 @@ namespace bloch
             return lattice_windows_;
         }
 
-        /** Of those, the windows a device read. */
+        /** ADC windows a device read since construction, on a lattice or
+         *  sample by sample. */
         size_t device_windows() const
         {
             const std::lock_guard<std::mutex> held(mutex_);
             return device_windows_;
         }
 
-        /** Offer every window read on the lattice to @p device before the
-         *  engine reads it; an empty one offers none. */
-        void use_lattice_device(LatticeDevice device);
+        /** Offer @p device every window read on the lattice, and every other
+         *  window outside a run before the engine reads it by its own
+         *  transform or sample by sample; an empty one offers none. */
+        void use_device(WindowDevice device);
 
         /** Put every isochromat at equilibrium, along +z, and the clock at zero. */
         void reset();
@@ -471,6 +522,10 @@ namespace bloch
             std::vector<double> nodes;
             std::vector<double> basis;
         };
+        /** Write each sample's k and time from the first, for the samples
+         *  @p area and @p time apart, and the window's span, to @p window. */
+        static void trace_window(
+            const std::vector<double>& area, const std::vector<double>& time, size_t samples, LatticeWindow& window);
         /** Fill @p window for the samples @p area and @p time apart; false
          *  where its k moves along no axis or along one the isochromats do not
          *  lie on a lattice of, to within @p error of the sum of the
@@ -513,13 +568,26 @@ namespace bloch
             const std::vector<std::vector<double>>& x,
             double tolerance,
             std::vector<std::complex<double>>& out);
-        /** Hand the window to the lattice device; whether it read it. */
+        /** Hand the window to the device to read on the lattice; whether it
+         *  read it. */
         bool read_on_device(
             const LatticeWindow& window,
             const Segments& segments,
             const std::vector<std::vector<double>>& x,
             double tolerance,
             std::vector<std::complex<double>>& out);
+        /** Hand the window whose samples are @p area and @p time apart to the
+         *  device to read sample by sample into signal[c * stride + k], to
+         *  within @p error of the sum of the magnitudes of the terms each
+         *  sample sums, and leave the isochromats as they stand at its last
+         *  sample; whether the device read it. */
+        bool read_samples_on_device(
+            const std::vector<double>& area,
+            const std::vector<double>& time,
+            size_t samples,
+            double error,
+            std::complex<double>* signal,
+            size_t stride);
         /** Worker @p worker's lattice transform of @p modes along @p axes
          *  axes, of @p vectors vectors at once, to within @p tolerance. */
         LatticeTransform& lattice_transform(
@@ -659,9 +727,11 @@ namespace bloch
         std::vector<Segmentation> segmentations_;
         size_t lattice_windows_ = 0;
         size_t device_windows_ = 0;
-        /** Revision of the positions, counted from construction. */
+        /** The engine's identity, and the revision of its positions, drawn
+         *  from one count shared by every engine. */
+        size_t engine_ = 0;
         size_t layout_ = 0;
-        LatticeDevice lattice_device_;
+        WindowDevice device_;
         /** The lattice's sums and their transforms at the samples, in
          *  either precision, kept from one window to the next. */
         std::vector<std::complex<double>> lattice_sums_, lattice_values_;

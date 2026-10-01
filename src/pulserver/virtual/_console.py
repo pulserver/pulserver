@@ -80,7 +80,7 @@ class Console:
         Scan time elapsed per wall-clock second once the scan's simulation is
         far enough ahead of its clock; as fast as it is simulated without it.
     device
-        Device a scan's windows read on a lattice are read on, as
+        Device a scan's ADC windows outside runs are read on, as
         :class:`~pulserver.virtual.Isochromats` takes it; the engine reads
         them itself without one.
     """
@@ -633,8 +633,8 @@ def _parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--device",
-        help="torch device windows read on a lattice are read on, such as cuda "
-        "(the gpu extra); the engine reads them without it",
+        help="torch device the ADC windows outside runs are read on, such as "
+        "cuda (the gpu extra); the engine reads them without it",
     )
     return parser
 
