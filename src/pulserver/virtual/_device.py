@@ -6,9 +6,13 @@ import os
 from collections import OrderedDict
 
 import numpy as np
-import torch
-import triton
-import triton.language as tl
+
+try:
+    import torch
+    import triton
+    import triton.language as tl
+except ImportError:  # without the gpu extra, which LatticeDevice names
+    torch = triton = tl = None
 
 __all__ = ["LatticeDevice"]
 
@@ -22,70 +26,72 @@ MEMORY = 1 << 30
 PLANS = 4
 
 
-@triton.jit
-def _lattice_sums(
-    starts_ptr,
-    magnetization_ptr,
-    shift_ptr,
-    decay_of_ptr,
-    decay_ptr,
-    nodes_ptr,
-    receive_ptr,
-    receive_stride,
-    sums_ptr,
-    points,
-    coils,
-    count,
-    POINTS: tl.constexpr,
-    ISOCHROMATS: tl.constexpr,
-    COILS: tl.constexpr,
-    NODES: tl.constexpr,
-):
-    """Sum the isochromats of POINTS lattice points into COILS coils' sums at the Chebyshev points.
+if triton is not None:
 
-    Positions count the isochromats in lattice order. Each isochromat's value
-    at Chebyshev point l is its transverse magnetisation times its decay at
-    the point times exp(2 pi i shift t_l), summed into
-    sums[coil][l][point], real and imaginary parts interleaved.
-    """
-    real = magnetization_ptr.dtype.element_ty
-    coil = tl.program_id(1) * COILS + tl.arange(0, COILS)
-    node = tl.arange(0, NODES)
-    nodes = tl.load(nodes_ptr + node)
-    for p in range(POINTS):
-        q = tl.program_id(0) * POINTS + p
-        if q < points:
-            start = tl.load(starts_ptr + q)
-            end = tl.load(starts_ptr + q + 1)
-            sum_re = tl.zeros((COILS, NODES), dtype=real)
-            sum_im = tl.zeros((COILS, NODES), dtype=real)
-            for first in range(start, end, ISOCHROMATS):
-                j = first + tl.arange(0, ISOCHROMATS)
-                held = j < end
-                m_re = tl.load(magnetization_ptr + 2 * j, mask=held, other=0.0)
-                m_im = tl.load(magnetization_ptr + 2 * j + 1, mask=held, other=0.0)
-                shift = tl.load(shift_ptr + j, mask=held, other=0.0)
-                kind = tl.load(decay_of_ptr + j, mask=held, other=0)
-                decay = tl.load(decay_ptr + kind[:, None] * NODES + node[None, :])
-                turn = 6.283185307179586 * (shift[:, None] * nodes[None, :])
-                c = decay * tl.cos(turn)
-                s = decay * tl.sin(turn)
-                f_re = m_re[:, None] * c - m_im[:, None] * s
-                f_im = m_re[:, None] * s + m_im[:, None] * c
-                at = j[:, None].to(tl.int64) * receive_stride + 2 * coil[None, :]
-                read = held[:, None] & (coil[None, :] < coils)
-                r_re = tl.trans(tl.load(receive_ptr + at, mask=read, other=0.0))
-                r_im = tl.trans(tl.load(receive_ptr + at + 1, mask=read, other=0.0))
-                sum_re = tl.dot(r_re, f_re, sum_re, input_precision="ieee")
-                sum_re = tl.dot(-r_im, f_im, sum_re, input_precision="ieee")
-                sum_im = tl.dot(r_re, f_im, sum_im, input_precision="ieee")
-                sum_im = tl.dot(r_im, f_re, sum_im, input_precision="ieee")
-            out = 2 * (
-                (coil[:, None].to(tl.int64) * count + node[None, :]) * points + q
-            )
-            written = (coil[:, None] < coils) & (node[None, :] < count)
-            tl.store(sums_ptr + out, sum_re, mask=written)
-            tl.store(sums_ptr + out + 1, sum_im, mask=written)
+    @triton.jit
+    def _lattice_sums(
+        starts_ptr,
+        magnetization_ptr,
+        shift_ptr,
+        decay_of_ptr,
+        decay_ptr,
+        nodes_ptr,
+        receive_ptr,
+        receive_stride,
+        sums_ptr,
+        points,
+        coils,
+        count,
+        POINTS: tl.constexpr,
+        ISOCHROMATS: tl.constexpr,
+        COILS: tl.constexpr,
+        NODES: tl.constexpr,
+    ):
+        """Sum the isochromats of POINTS lattice points into COILS coils' sums at the Chebyshev points.
+
+        Positions count the isochromats in lattice order. Each isochromat's value
+        at Chebyshev point l is its transverse magnetisation times its decay at
+        the point times exp(2 pi i shift t_l), summed into
+        sums[coil][l][point], real and imaginary parts interleaved.
+        """
+        real = magnetization_ptr.dtype.element_ty
+        coil = tl.program_id(1) * COILS + tl.arange(0, COILS)
+        node = tl.arange(0, NODES)
+        nodes = tl.load(nodes_ptr + node)
+        for p in range(POINTS):
+            q = tl.program_id(0) * POINTS + p
+            if q < points:
+                start = tl.load(starts_ptr + q)
+                end = tl.load(starts_ptr + q + 1)
+                sum_re = tl.zeros((COILS, NODES), dtype=real)
+                sum_im = tl.zeros((COILS, NODES), dtype=real)
+                for first in range(start, end, ISOCHROMATS):
+                    j = first + tl.arange(0, ISOCHROMATS)
+                    held = j < end
+                    m_re = tl.load(magnetization_ptr + 2 * j, mask=held, other=0.0)
+                    m_im = tl.load(magnetization_ptr + 2 * j + 1, mask=held, other=0.0)
+                    shift = tl.load(shift_ptr + j, mask=held, other=0.0)
+                    kind = tl.load(decay_of_ptr + j, mask=held, other=0)
+                    decay = tl.load(decay_ptr + kind[:, None] * NODES + node[None, :])
+                    turn = 6.283185307179586 * (shift[:, None] * nodes[None, :])
+                    c = decay * tl.cos(turn)
+                    s = decay * tl.sin(turn)
+                    f_re = m_re[:, None] * c - m_im[:, None] * s
+                    f_im = m_re[:, None] * s + m_im[:, None] * c
+                    at = j[:, None].to(tl.int64) * receive_stride + 2 * coil[None, :]
+                    read = held[:, None] & (coil[None, :] < coils)
+                    r_re = tl.trans(tl.load(receive_ptr + at, mask=read, other=0.0))
+                    r_im = tl.trans(tl.load(receive_ptr + at + 1, mask=read, other=0.0))
+                    sum_re = tl.dot(r_re, f_re, sum_re, input_precision="ieee")
+                    sum_re = tl.dot(-r_im, f_im, sum_re, input_precision="ieee")
+                    sum_im = tl.dot(r_re, f_im, sum_im, input_precision="ieee")
+                    sum_im = tl.dot(r_im, f_re, sum_im, input_precision="ieee")
+                out = 2 * (
+                    (coil[:, None].to(tl.int64) * count + node[None, :]) * points + q
+                )
+                written = (coil[:, None] < coils) & (node[None, :] < count)
+                tl.store(sums_ptr + out, sum_re, mask=written)
+                tl.store(sums_ptr + out + 1, sum_im, mask=written)
 
 
 def _interpreted() -> bool:
@@ -159,12 +165,16 @@ class LatticeDevice:
     Raises
     ------
     ImportError
-        On a CUDA device without cuFINUFFT.
+        Without torch and Triton, or on a CUDA device without cuFINUFFT.
     RuntimeError
         On the CPU outside Triton's interpreter.
     """
 
     def __init__(self, device="cuda", *, memory: int | None = None):
+        if triton is None:
+            raise ImportError(
+                "windows read on a device need torch and Triton: install the gpu extra"
+            )
         self.device = torch.device(device)
         self.memory = memory
         if self.device.type == "cuda":
