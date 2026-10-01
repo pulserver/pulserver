@@ -251,10 +251,10 @@ namespace bloch
         /** Replace the magnetisation with (size(), 3) row-major @p from. */
         void set_magnetization(const double* from);
 
-        /** Move the isochromats to (size(), 3) row-major @p positions, in m,
-         *  once the free precession pending has been applied where they
-         *  stand. */
-        void set_positions(const double* positions);
+        /** Move the isochromats to (size(), 3) row-major positions @p from,
+         *  in m, once the free precession pending has been applied where
+         *  they stand. */
+        void set_positions(const double* from);
 
         /** Write the positions, (size(), 3) row-major, to @p into. */
         void positions(double* into) const;

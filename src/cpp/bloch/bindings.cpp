@@ -118,7 +118,7 @@ namespace
         self.set_magnetization(values.data());
     }
 
-    py::array_t<double> positions(bloch::Isochromats& self)
+    py::array_t<double> positions(const bloch::Isochromats& self)
     {
         py::array_t<double> out({static_cast<py::ssize_t>(self.size()), static_cast<py::ssize_t>(3)});
         double* into = out.mutable_data();

@@ -2092,22 +2092,22 @@ namespace bloch
         pending_time_ = 0.0;
     }
 
-    void Isochromats::set_positions(const double* positions)
+    void Isochromats::set_positions(const double* from)
     {
-        const std::lock_guard<std::mutex> held(mutex_);
+        const std::lock_guard<std::mutex> locked(mutex_);
         flush();
         IsochromatProperties& p = properties_;
         for (size_t i = 0; i < count_; ++i)
         {
-            p.x[i] = positions[3 * i];
-            p.y[i] = positions[3 * i + 1];
-            p.z[i] = positions[3 * i + 2];
+            p.x[i] = from[3 * i];
+            p.y[i] = from[3 * i + 1];
+            p.z[i] = from[3 * i + 2];
         }
         groupings_.clear();
         held_.clear();
         held_bytes_ = 0;
-        for (std::unique_ptr<Lattice>& lattice : lattices_)
-            lattice.reset();
+        for (std::unique_ptr<Lattice>& held : lattices_)
+            held.reset();
         lattice_orders_.clear();
         ++layout_;
     }
@@ -2189,9 +2189,9 @@ namespace bloch
         if (known != groupings_.end())
             return *known;
 
-        const std::vector<std::array<double, 3>> positions = quantised(properties_, mode, direction);
+        const std::vector<std::array<double, 3>> along = quantised(properties_, mode, direction);
         const auto less = [&](uint32_t i, uint32_t j) {
-            return class_of_[i] != class_of_[j] ? class_of_[i] < class_of_[j] : positions[i] < positions[j];
+            return class_of_[i] != class_of_[j] ? class_of_[i] < class_of_[j] : along[i] < along[j];
         };
         std::vector<uint32_t> order(count_);
         std::iota(order.begin(), order.end(), 0u);
@@ -2923,12 +2923,12 @@ namespace bloch
                 window.k[3 * s + axis] = window.k[3 * (s - 1) + axis] + area[3 * s + axis];
         }
         window.span = window.time[samples - 1];
-        const std::vector<double>* positions[3] = {&properties_.x, &properties_.y, &properties_.z};
+        const std::vector<double>* coordinates[3] = {&properties_.x, &properties_.y, &properties_.z};
         double reference[3];
         double most[3];
         for (int axis = 0; axis < 3; ++axis)
         {
-            const auto range = std::minmax_element(positions[axis]->begin(), positions[axis]->end());
+            const auto range = std::minmax_element(coordinates[axis]->begin(), coordinates[axis]->end());
             reference[axis] = 0.5 * (*range.first + *range.second);
             most[axis] = 0.0;
             for (size_t s = 0; s < samples; ++s)
