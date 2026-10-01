@@ -144,10 +144,10 @@ file of its own:
 | --- | --- |
 | `simplefft` | A two-dimensional Cartesian FFT of the lines in arrival order, one image per slice |
 | `cartesian` | A Cartesian FFT of the readouts placed by their encoding counters, partitions included; one image per slice, contrast, cardiac phase, set and repetition, averages summed |
-| `nufft` | Each coil's least-squares fit of bartorch's NUFFT to its samples, with a Tikhonov term; the same images as `cartesian`, for a radial or spiral trajectory or a stack of them. Needs the `coils` extra |
-| `pics` | `cartesian`'s images, each solved as `bart ecalib -m 1` and `bart pics -R W` with bartorch, for undersampled phase encodes with a fully sampled centre. Needs the `coils` extra |
+| `nufft` | The same images as `cartesian`, for a radial or spiral trajectory or a stack of them, each solved as `bart pics -t -R W` over `bart nlinv -t` sensitivities of the samples near the k-space centre. Needs the `coils` extra |
+| `pics` | `cartesian`'s images, its readouts cropped to the matrix as they arrive; each image solved as `bart pics -R W` over `bart nlinv` sensitivities of its low-resolution centre, then completed by `bart homodyne` along a partial-Fourier axis. Needs the `coils` extra |
 
-All but `pics` combine their coils as a root sum of squares. A volume is sent as one
+`simplefft` and `cartesian` combine their coils as a root sum of squares. A volume is sent as one
 image per partition. A plugin file that reexports one under another name,
 `from pulserver.recon.handlers.cartesian import PLUGIN`, is the same
 reconstruction.

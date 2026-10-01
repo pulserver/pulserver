@@ -681,13 +681,14 @@
 <span class="sd">        MRD trajectories are ``(samples, dimensions)`` and are stored transposed.</span>
 <span class="sd">        An acquisition may carry fewer trailing dimensions than its neighbours --</span>
 <span class="sd">        the centre partition of a slab traverses no kz -- and the rows it omits stay</span>
-<span class="sd">        0.</span>
+<span class="sd">        0. A trajectory whose samples are not those placed, as after a chain</span>
+<span class="sd">        resampled the readout, is not stored.</span>
 <span class="sd">        """</span>
         <span class="n">traj</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">acquisition</span><span class="p">,</span> <span class="s2">"traj"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">traj</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">return</span>
         <span class="n">traj</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">traj</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">traj</span><span class="o">.</span><span class="n">size</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">traj</span><span class="o">.</span><span class="n">size</span> <span class="o">==</span> <span class="mi">0</span> <span class="ow">or</span> <span class="n">traj</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">!=</span> <span class="n">readout</span><span class="o">.</span><span class="n">stop</span> <span class="o">-</span> <span class="n">readout</span><span class="o">.</span><span class="n">start</span><span class="p">:</span>
             <span class="k">return</span>
         <span class="n">dimensions</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">traj</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">trajectory</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>

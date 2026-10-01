@@ -687,15 +687,15 @@ file of its own:</p>
 <td><p>A Cartesian FFT of the readouts placed by their encoding counters, partitions included; one image per slice, contrast, cardiac phase, set and repetition, averages summed</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">nufft</span></code></p></td>
-<td><p>Each coil’s least-squares fit of bartorch’s NUFFT to its samples, with a Tikhonov term; the same images as <code class="docutils literal notranslate"><span class="pre">cartesian</span></code>, for a radial or spiral trajectory or a stack of them. Needs the <code class="docutils literal notranslate"><span class="pre">coils</span></code> extra</p></td>
+<td><p>The same images as <code class="docutils literal notranslate"><span class="pre">cartesian</span></code>, for a radial or spiral trajectory or a stack of them, each solved as <code class="docutils literal notranslate"><span class="pre">bart</span> <span class="pre">pics</span> <span class="pre">-t</span> <span class="pre">-R</span> <span class="pre">W</span></code> over <code class="docutils literal notranslate"><span class="pre">bart</span> <span class="pre">nlinv</span> <span class="pre">-t</span></code> sensitivities of the samples near the k-space centre. Needs the <code class="docutils literal notranslate"><span class="pre">coils</span></code> extra</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">pics</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">cartesian</span></code>’s images, each solved as <code class="docutils literal notranslate"><span class="pre">bart</span> <span class="pre">ecalib</span> <span class="pre">-m</span> <span class="pre">1</span></code> and <code class="docutils literal notranslate"><span class="pre">bart</span> <span class="pre">pics</span> <span class="pre">-R</span> <span class="pre">W</span></code> with bartorch, for undersampled phase encodes with a fully sampled centre. Needs the <code class="docutils literal notranslate"><span class="pre">coils</span></code> extra</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">cartesian</span></code>’s images, its readouts cropped to the matrix as they arrive; each image solved as <code class="docutils literal notranslate"><span class="pre">bart</span> <span class="pre">pics</span> <span class="pre">-R</span> <span class="pre">W</span></code> over <code class="docutils literal notranslate"><span class="pre">bart</span> <span class="pre">nlinv</span></code> sensitivities of its low-resolution centre, then completed by <code class="docutils literal notranslate"><span class="pre">bart</span> <span class="pre">homodyne</span></code> along a partial-Fourier axis. Needs the <code class="docutils literal notranslate"><span class="pre">coils</span></code> extra</p></td>
 </tr>
 </tbody>
 </table>
 </div>
-<p>All but <code class="docutils literal notranslate"><span class="pre">pics</span></code> combine their coils as a root sum of squares. A volume is sent as one
+<p><code class="docutils literal notranslate"><span class="pre">simplefft</span></code> and <code class="docutils literal notranslate"><span class="pre">cartesian</span></code> combine their coils as a root sum of squares. A volume is sent as one
 image per partition. A plugin file that reexports one under another name,
 <code class="docutils literal notranslate"><span class="pre">from</span> <span class="pre">pulserver.recon.handlers.cartesian</span> <span class="pre">import</span> <span class="pre">PLUGIN</span></code>, is the same
 reconstruction.</p>
