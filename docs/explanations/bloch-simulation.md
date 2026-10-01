@@ -147,6 +147,31 @@ the lattice points from the first window on. The engine takes each
 isochromat to the last sample itself, so a window leaves the same state
 wherever it is read.
 
+Every other window outside a run, which the engine would read by its own
+transform or sample by sample, is summed term by term on the device: the sum
+$s_c(t)$ above, at every sample. This covers a window under a held gradient,
+as a Cartesian line; one whose isochromats lie off any lattice, as a moving
+subject's or a scattered phantom's do; and one whose lattice has more points
+than a window is summed onto, as an oblique slab's can. A second
+Triton kernel takes the isochromats in blocks of 64, in the order of a
+Z-order curve through their positions, so that each block's lie close
+together. It forms each term's phase, in cycles, as its offset from the
+block's centre times $\mathbf{k}$ plus its off-resonance from the middle one
+times $t$, in the sums' precision, and adds the centre's phase
+$\mathbf{k}\cdot\mathbf{r}_{\text{centre}}$ and the middle off-resonance's,
+computed in double precision and reduced to one cycle. Each phase is then
+rounded in proportion to the block's extent rather than to the field of
+view. The sums are formed in single precision at a tolerance of $10^{-5}$
+or more, unless rounding the turn of the off-resonance farthest from the
+middle over the window would reach half the tolerance. The order, the blocks'
+centres and the sensitivities in that order are found once for each
+revision of the positions, so a moving subject's are found again at each
+block. The cost is proportional to the isochromats times the samples times
+the coils, as the engine's own reading sample by sample is. A window smaller
+than a least size, $2^{22}$ isochromats times samples times coils by default
+on a CUDA device, is left to the engine, which reads it before the device
+would have started.
+
 ## RF pulses
 
 During an RF pulse $b_1$ varies, and the field no longer points along $z$. The

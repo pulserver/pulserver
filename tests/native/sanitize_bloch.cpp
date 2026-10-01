@@ -10,7 +10,8 @@
  * computed on a grid of fields and drives, a window read sample by sample, one
  * read by the non-uniform FFT and one read on the isochromats' lattice, by the
  * engine and by a device, and again once they have moved, gradients turned
- * with steps in them -- and
+ * with steps in them, and windows off the lattice read by a device sample by
+ * sample -- and
  * repetitions of them, exact and to a tolerance, on one transmit channel and
  * on two, with AddressSanitizer and UndefinedBehaviorSanitizer on. It asserts
  * only that the windows meant for the lattice are read there; the sanitisers
@@ -530,7 +531,7 @@ namespace
         for (bool device : {false, true})
         {
             if (device)
-                spins.use_lattice_device({read_whole, nullptr});
+                spins.use_device({read_whole, nullptr, nullptr});
             for (double tolerance : {1e-7, 1e-4})
             {
                 signal.assign(spins.coils() * spiral.block.adc_samples, 0.0);
@@ -556,6 +557,85 @@ namespace
         spins.play(spiral.block, signal.data(), 1e-4);
         touch(signal);
         return spins.lattice_windows() - spins.device_windows() == 2 && spins.device_windows() == 3 ? 2 : 0;
+    }
+
+    /** A device that sums every isochromat's term at every sample, from
+     *  every array the engine hands it, as the engine would. */
+    bool sum_samples(const bloch::SampleWindowRead& w)
+    {
+        for (size_t c = 0; c < std::max<size_t>(w.coils, 1); ++c)
+            for (size_t s = 0; s < w.samples; ++s)
+            {
+                Complex sum = 0.0;
+                for (size_t i = 0; i < w.isochromats; ++i)
+                {
+                    const double cycles = w.x[i] * w.k[3 * s] + w.y[i] * w.k[3 * s + 1] +
+                        w.z[i] * w.k[3 * s + 2] + w.off_resonance[i] * w.time[s];
+                    const Complex term = Complex(w.mx[i], w.my[i]) *
+                        std::polar(std::exp(-w.rates[w.decay_of[i]] * w.time[s]), -2.0 * kPi * cycles);
+                    const Complex receive = w.receive_re == nullptr
+                        ? Complex(1.0)
+                        : Complex(w.receive_re[c * w.isochromats + i], w.receive_im[c * w.isochromats + i]);
+                    sum += receive * term;
+                }
+                w.out[c * w.samples + s] = sum;
+            }
+        return true;
+    }
+
+    /** Read a spiral's window and one under a held gradient on isochromats
+     *  turned off their lattice, by the engine and by a device summing them
+     *  sample by sample; whether the device read both, as the engine does. */
+    bool off_lattice(size_t coils)
+    {
+        std::vector<Complex> receive;
+        bloch::IsochromatProperties p = lattice(0, coils, receive);
+        for (size_t i = 0; i < p.x.size(); ++i)
+        {
+            const double x = p.x[i];
+            p.x[i] = std::cos(0.3) * x - std::sin(0.3) * p.y[i];
+            p.y[i] = std::sin(0.3) * x + std::cos(0.3) * p.y[i];
+        }
+        bloch::Isochromats engine(p, 2);
+        bloch::Isochromats device(p, 2);
+        device.use_device({nullptr, sum_samples, nullptr});
+
+        const std::vector<Complex> hard = sinc(50, 1, 300.0);
+        bloch::BlockEvents excite;
+        excite.duration = 0.6e-3;
+        excite.rf_start = 0.05e-3;
+        excite.rf_step = 1e-5;
+        excite.rf_steps = 50;
+        excite.rf_channels = 1;
+        excite.rf = hard.data();
+        const Spiral spiral;
+        const Axis held{{0.0, 1e-3}, {2e4, 2e4}};
+        std::vector<double> times;
+        for (int k = 0; k < 64; ++k)
+            times.push_back(0.1e-3 + 10e-6 * k);
+        bloch::BlockEvents line;
+        line.duration = 1e-3;
+        set(line, 0, held);
+        line.adc_times = times.data();
+        line.adc_samples = times.size();
+
+        double most = 0.0;
+        const bloch::BlockEvents* const played[] = {&excite, &spiral.block, &line};
+        for (const bloch::BlockEvents* block : played)
+        {
+            std::vector<Complex> read(engine.coils() * block->adc_samples), summed(read.size());
+            engine.play(*block, read.data());
+            device.play(*block, summed.data());
+            touch(summed);
+            for (size_t k = 0; k < read.size(); ++k)
+                most = std::max(most, std::abs(read[k] - summed[k]));
+        }
+        std::vector<double> left(3 * engine.size()), settled(3 * device.size());
+        engine.magnetization(left.data());
+        device.magnetization(settled.data());
+        for (size_t k = 0; k < left.size(); ++k)
+            most = std::max(most, std::abs(left[k] - settled[k]));
+        return device.device_windows() == 2 && device.lattice_windows() == 0 && most < 1e-9;
     }
 
 } // namespace
@@ -585,6 +665,12 @@ int main()
         if (many_coils(coils) != 2)
         {
             std::fprintf(stderr, "the windows of %zu coils were not read on the lattice by both\n", coils);
+            return 1;
+        }
+    for (size_t coils : {size_t{0}, size_t{3}})
+        if (!off_lattice(coils))
+        {
+            std::fprintf(stderr, "the windows of %zu coils off the lattice were not read by the device\n", coils);
             return 1;
         }
     std::printf("%g\n", sink);

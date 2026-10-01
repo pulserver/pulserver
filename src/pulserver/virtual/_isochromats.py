@@ -193,12 +193,13 @@ class Isochromats:
     threads : int, default=0
         Worker threads; 0 for every core.
     device : str or torch.device, default=None
-        A torch device the windows read on a lattice are summed and
-        transformed on: a CUDA device, on which a Triton kernel sums them and
-        cuFINUFFT transforms them, or the CPU, under Triton's interpreter
-        alone (``TRITON_INTERPRET=1`` before triton is first imported), on
-        which FINUFFT transforms them. Needs the ``gpu`` extra. By default
-        the engine reads them itself.
+        A torch device the ADC windows outside runs are read on: those whose
+        isochromats lie on a lattice summed onto it by a Triton kernel and
+        transformed by cuFINUFFT, and every other one summed sample by sample
+        by a second Triton kernel. A CUDA device, or the CPU under Triton's
+        interpreter alone (``TRITON_INTERPRET=1`` before triton is first
+        imported), on which FINUFFT transforms the lattice. Needs the ``gpu``
+        extra. By default the engine reads every window itself.
 
     Raises
     ------
@@ -287,11 +288,11 @@ class Isochromats:
             int(threads),
         )
         if device is not None:
-            from ._device import LatticeDevice
+            from ._device import WindowDevice
 
-            if not isinstance(device, LatticeDevice):
-                device = LatticeDevice(device)
-            self._native.use_lattice_device(device)
+            if not isinstance(device, WindowDevice):
+                device = WindowDevice(device)
+            self._native.use_device(device)
 
     def __len__(self) -> int:
         return self._native.size
@@ -313,7 +314,7 @@ class Isochromats:
 
     @property
     def device_windows(self) -> int:
-        """Of :attr:`lattice_windows`, those read on the ``device``."""
+        """ADC windows read on the ``device`` since construction, on a lattice or sample by sample."""
         return self._native.device_windows
 
     @property

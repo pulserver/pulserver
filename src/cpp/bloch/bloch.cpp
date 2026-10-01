@@ -12,6 +12,7 @@
 #include "bloch/simd.hpp"
 
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <cstring>
 #include <functional>
@@ -1444,6 +1445,21 @@ namespace bloch
          *  relative to the sum of the magnitudes of its terms. */
         constexpr double kExactError = 1e-11;
 
+        /** The least tolerance a device sums a window to sample by sample in
+         *  single precision, relative to the sum of the magnitudes of the
+         *  terms: each term's turn and decay, and the partial sums of a few
+         *  hundred terms, are rounded to well below it. */
+        constexpr double kSingleSamples = 1e-5;
+        /** Single precision's unit roundoff. */
+        constexpr double kSingleRoundoff = 0x1p-24;
+
+        /** A number no engine has drawn before. */
+        size_t fresh_revision()
+        {
+            static std::atomic<size_t> drawn{0};
+            return ++drawn;
+        }
+
         /** Lattice transforms and segmentations kept for reuse. */
         constexpr size_t kLatticeTransforms = 32;
         constexpr size_t kSegmentations = 64;
@@ -1944,6 +1960,8 @@ namespace bloch
     {
         check();
         threads_ = threads != 0 ? threads : std::max(1u, std::thread::hardware_concurrency());
+        engine_ = fresh_revision();
+        layout_ = fresh_revision();
         lay_out_receive();
         classify();
         reset();
@@ -2109,7 +2127,7 @@ namespace bloch
         for (std::unique_ptr<Lattice>& held : lattices_)
             held.reset();
         lattice_orders_.clear();
-        ++layout_;
+        layout_ = fresh_revision();
     }
 
     void Isochromats::positions(double* into) const
@@ -2524,17 +2542,14 @@ namespace bloch
         const SampleSteps steps = sample_steps(times, samples, areas);
         const double span = times[samples - 1] - times[0];
         const size_t width = tolerance > 0.0 ? Nufft::width_for(tolerance) : Nufft::width_of();
-        if (steps.uniform && samples > 1 &&
-            read_transformed(&steps.area[3], steps.time[1], samples, span, width, signal + first, block.adc_samples))
+        const double error = tolerance > 0.0 ? tolerance : kExactError;
+        std::complex<double>* into = signal + first;
+        if (!steps.uniform && read_on_lattice(steps.area, steps.time, samples, error, into, block.adc_samples))
             return;
-        if (!steps.uniform &&
-            read_on_lattice(
-                steps.area,
-                steps.time,
-                samples,
-                tolerance > 0.0 ? tolerance : kExactError,
-                signal + first,
-                block.adc_samples))
+        if (read_samples_on_device(steps.area, steps.time, samples, error, into, block.adc_samples))
+            return;
+        if (steps.uniform && samples > 1 &&
+            read_transformed(&steps.area[3], steps.time[1], samples, span, width, into, block.adc_samples))
             return;
         const Receive receive{receive_re_, receive_im_, coils_, count_};
 
@@ -2907,12 +2922,8 @@ namespace bloch
         return count;
     }
 
-    bool Isochromats::lattice_window(
-        const std::vector<double>& area,
-        const std::vector<double>& time,
-        size_t samples,
-        double error,
-        LatticeWindow& window)
+    void Isochromats::trace_window(
+        const std::vector<double>& area, const std::vector<double>& time, size_t samples, LatticeWindow& window)
     {
         window.k.assign(3 * samples, 0.0);
         window.time.assign(samples, 0.0);
@@ -2923,6 +2934,16 @@ namespace bloch
                 window.k[3 * s + axis] = window.k[3 * (s - 1) + axis] + area[3 * s + axis];
         }
         window.span = window.time[samples - 1];
+    }
+
+    bool Isochromats::lattice_window(
+        const std::vector<double>& area,
+        const std::vector<double>& time,
+        size_t samples,
+        double error,
+        LatticeWindow& window)
+    {
+        trace_window(area, time, samples, window);
         const std::vector<double>* coordinates[3] = {&properties_.x, &properties_.y, &properties_.z};
         double reference[3];
         double most[3];
@@ -3153,10 +3174,10 @@ namespace bloch
         }
     }
 
-    void Isochromats::use_lattice_device(LatticeDevice device)
+    void Isochromats::use_device(WindowDevice device)
     {
         const std::lock_guard<std::mutex> held(mutex_);
-        lattice_device_ = std::move(device);
+        device_ = std::move(device);
     }
 
     bool Isochromats::read_on_device(
@@ -3174,6 +3195,7 @@ namespace bloch
                 decay[d * count + l] = std::exp(-(decays_[d] - window.rate) * segments.nodes[l]);
         const bool sensitivities = !receive_re_.empty();
         LatticeWindowRead read;
+        read.engine = engine_;
         read.layout = layout_;
         read.axes = window.mask;
         read.dimensions = window.axes;
@@ -3201,7 +3223,60 @@ namespace bloch
         read.tolerance = tolerance;
         read.single = LatticeTransform::single_for(tolerance);
         read.out = out.data();
-        return lattice_device_.read(read);
+        return device_.lattice(read);
+    }
+
+    bool Isochromats::read_samples_on_device(
+        const std::vector<double>& area,
+        const std::vector<double>& time,
+        size_t samples,
+        double error,
+        std::complex<double>* signal,
+        size_t stride)
+    {
+        if (!device_.samples)
+            return false;
+        LatticeWindow window;
+        trace_window(area, time, samples, window);
+        const auto fields = std::minmax_element(properties_.off_resonance.begin(), properties_.off_resonance.end());
+        /* Each term's turn by its off-resonance from the middle one is
+         * rounded in proportion to the turn. */
+        const double turn = 0.5 * (*fields.second - *fields.first) * window.span;
+        const bool sensitivities = !receive_re_.empty();
+        SampleWindowRead read;
+        read.engine = engine_;
+        read.layout = layout_;
+        read.isochromats = count_;
+        read.x = properties_.x.data();
+        read.y = properties_.y.data();
+        read.z = properties_.z.data();
+        read.off_resonance = properties_.off_resonance.data();
+        read.decay_of = decay_of_.data();
+        read.decays = decays_.size();
+        read.rates = decays_.data();
+        read.coils = coils_;
+        read.receive_re = sensitivities ? receive_re_.data() : nullptr;
+        read.receive_im = sensitivities ? receive_im_.data() : nullptr;
+        read.mx = mx_.data();
+        read.my = my_.data();
+        read.samples = samples;
+        read.k = window.k.data();
+        read.time = window.time.data();
+        read.frequency = 0.5 * (*fields.first + *fields.second);
+        read.tolerance = error;
+        read.single = error >= kSingleSamples && 4.0 * kTwoPi * kSingleRoundoff * turn <= 0.5 * error;
+        std::vector<std::complex<double>> out(coils_ * samples, 0.0);
+        read.out = out.data();
+        if (!device_.samples(read))
+            return false;
+        /* The device reads the window while the isochromats move on. */
+        settle_after(window);
+        if (device_.finish)
+            device_.finish();
+        ++device_windows_;
+        for (size_t c = 0; c < coils_; ++c)
+            std::copy(&out[c * samples], &out[c * samples] + samples, signal + c * stride);
+        return true;
     }
 
     bool Isochromats::read_lattice_window(
@@ -3211,12 +3286,12 @@ namespace bloch
         double tolerance,
         std::vector<std::complex<double>>& out)
     {
-        if (lattice_device_.read && read_on_device(window, segments, x, tolerance, out))
+        if (device_.lattice && read_on_device(window, segments, x, tolerance, out))
         {
             /* The device reads the window while the isochromats move on. */
             settle_after(window);
-            if (lattice_device_.finish)
-                lattice_device_.finish();
+            if (device_.finish)
+                device_.finish();
             ++device_windows_;
             return true;
         }

@@ -166,6 +166,7 @@ namespace
         const auto segments = static_cast<py::ssize_t>(read.segments);
         const auto samples = static_cast<py::ssize_t>(read.samples);
         py::dict window;
+        window["engine"] = read.engine;
         window["layout"] = read.layout;
         window["axes"] = read.axes;
         window["modes"] = view(read.modes, {read.dimensions});
@@ -192,10 +193,41 @@ namespace
         return window;
     }
 
-    /** The engine's lattice device calling @p device, and its @c finish
-     *  where it has one; none for None. The last reference to @p device is
-     *  dropped holding the GIL, from whichever thread drops it. */
-    bloch::LatticeDevice lattice_device(const py::object& device)
+    /** The window read sample by sample as the device reads it: the
+     *  engine's arrays, viewed. */
+    py::dict sample_window(const bloch::SampleWindowRead& read)
+    {
+        const auto n = static_cast<py::ssize_t>(read.isochromats);
+        const auto coils = static_cast<py::ssize_t>(read.coils);
+        const auto samples = static_cast<py::ssize_t>(read.samples);
+        py::dict window;
+        window["engine"] = read.engine;
+        window["layout"] = read.layout;
+        window["x"] = view(read.x, {n});
+        window["y"] = view(read.y, {n});
+        window["z"] = view(read.z, {n});
+        window["off_resonance"] = view(read.off_resonance, {n});
+        window["decay_of"] = view(read.decay_of, {n});
+        window["rates"] = view(read.rates, {static_cast<py::ssize_t>(read.decays)});
+        window["coils"] = read.coils;
+        window["receive_re"] = read.receive_re != nullptr ? py::object(view(read.receive_re, {coils, n})) : py::none();
+        window["receive_im"] = read.receive_im != nullptr ? py::object(view(read.receive_im, {coils, n})) : py::none();
+        window["mx"] = view(read.mx, {n});
+        window["my"] = view(read.my, {n});
+        window["k"] = view(read.k, {samples, 3});
+        window["time"] = view(read.time, {samples});
+        window["frequency"] = read.frequency;
+        window["tolerance"] = read.tolerance;
+        window["single"] = read.single;
+        window["out"] = py::array_t<Complex>({coils, samples}, read.out, py::none());
+        return window;
+    }
+
+    /** The engine's device calling @p device's @c lattice, @c samples and
+     *  @c finish, each where it has one; none for None. The last reference
+     *  to @p device is dropped holding the GIL, from whichever thread drops
+     *  it. */
+    bloch::WindowDevice window_device(const py::object& device)
     {
         if (device.is_none())
             return {};
@@ -203,11 +235,17 @@ namespace
             py::gil_scoped_acquire acquired;
             delete object;
         });
-        bloch::LatticeDevice made;
-        made.read = [held](const bloch::LatticeWindowRead& read) {
-            py::gil_scoped_acquire acquired;
-            return py::cast<bool>((*held)(lattice_window(read)));
-        };
+        bloch::WindowDevice made;
+        if (py::hasattr(device, "lattice"))
+            made.lattice = [held](const bloch::LatticeWindowRead& read) {
+                py::gil_scoped_acquire acquired;
+                return py::cast<bool>(held->attr("lattice")(lattice_window(read)));
+            };
+        if (py::hasattr(device, "samples"))
+            made.samples = [held](const bloch::SampleWindowRead& read) {
+                py::gil_scoped_acquire acquired;
+                return py::cast<bool>(held->attr("samples")(sample_window(read)));
+            };
         if (py::hasattr(device, "finish"))
             made.finish = [held]() {
                 py::gil_scoped_acquire acquired;
@@ -216,11 +254,11 @@ namespace
         return made;
     }
 
-    void use_lattice_device(bloch::Isochromats& self, const py::object& device)
+    void use_device(bloch::Isochromats& self, const py::object& device)
     {
-        bloch::LatticeDevice made = lattice_device(device);
+        bloch::WindowDevice made = window_device(device);
         py::gil_scoped_release unlocked;
-        self.use_lattice_device(std::move(made));
+        self.use_device(std::move(made));
     }
 
     /** Point @p block at the corners each entry of @p gradients holds, kept
@@ -677,7 +715,7 @@ void bind_bloch(py::module_& module)
         .def("positions", &positions)
         .def("set_positions", &set_positions)
         .def("precess", &precess, py::arg("radians"))
-        .def("use_lattice_device", &use_lattice_device, py::arg("device"))
+        .def("use_device", &use_device, py::arg("device"))
         .def("play",
              &play,
              py::arg("duration"),

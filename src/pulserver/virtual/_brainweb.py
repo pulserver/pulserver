@@ -277,7 +277,7 @@ class BrainWeb:
         threads
             Worker threads of the simulation; 0 for every core.
         device
-            The device the windows read on a lattice are read on, as
+            The device the ADC windows outside runs are read on, as
             :class:`~pulserver.virtual.Isochromats` takes it; the engine
             reads them itself without one.
 
