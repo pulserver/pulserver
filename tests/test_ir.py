@@ -8,6 +8,7 @@ from pathlib import Path
 import numpy as np
 import pypulseqpp as pp
 import pytest
+from conftest import LABELS, VENDOR
 from pypulseqpp import sequences
 
 from pulserver import ir
@@ -37,8 +38,6 @@ SYSTEM = pp.Opts(
     adc_raster_time=1e-7,
     block_duration_raster=1e-5,
 )
-VENDOR = 5
-LABELS = (8, 7, 6)
 # The PULSEG_RF_USE_* code of each RF use pypulseqpp tags.
 RF_USES = {
     "excitation": 1,
@@ -400,46 +399,9 @@ def _repetition_lines(seq, count):
     return lines
 
 
-def _scanner_build(directory, program, name, *defines):
-    """``program`` linked with the C library as a scanner builds it: 32-bit, for one vendor."""
-    probe = directory / "probe.c"
-    probe.write_text("int main(void) { return 0; }\n")
-    toolchain = subprocess.run(
-        ["gcc", "-m32", str(probe), "-o", str(directory / "probe")],
-        capture_output=True,
-        check=False,
-    )
-    if toolchain.returncode != 0:
-        pytest.skip("no 32-bit C toolchain")
-    folders = ("pulseq", "core", "io", "structure", "cache", "playout")
-    sources = [
-        str(p) for folder in folders for p in sorted((C_SOURCES / folder).glob("*.c"))
-    ]
-    includes = [
-        f"-I{C_SOURCES / sub}"
-        for sub in ("", "include", "include/pulseg", "include/pulseq", "pulseq")
-    ]
-    output = directory / name
-    subprocess.run(
-        [
-            "gcc",
-            "-m32",
-            "-std=c89",
-            f"-DPULSEG_VENDOR={VENDOR}",
-            *defines,
-            *includes,
-            str(ROOT / "tests" / "native" / program),
-            *sources,
-            "-lm",
-            "-o",
-            str(output),
-        ],
-        check=True,
-    )
-    return output
-
-
-def test_every_public_initializer_fills_the_structure_it_is_for(tmp_path):
+def test_every_public_initializer_fills_the_structure_it_is_for(
+    tmp_path, scanner_build
+):
     """An initializer nothing expands is one nothing checks.
 
     Each is a list of values in a header, and a structure that gains, loses or
@@ -447,15 +409,15 @@ def test_every_public_initializer_fills_the_structure_it_is_for(tmp_path):
     until a translation unit finally writes one down. This writes them all
     down, with warnings as errors.
     """
-    _scanner_build(
+    scanner_build(
         tmp_path, "check_initializers.c", "check_initializers", "-Wall", "-Werror"
     )
 
 
 @pytest.fixture(name="scanner_reader", scope="module")
-def scanner_reader_fixture(tmp_path_factory):
+def scanner_reader_fixture(tmp_path_factory, scanner_build):
     """The cache reader compiled as a scanner builds it."""
-    return _scanner_build(
+    return scanner_build(
         tmp_path_factory.mktemp("reader"), "read_cache_summary.c", "read_cache_summary"
     )
 
@@ -627,12 +589,12 @@ SHORT_SAMPLES = (
 
 
 @pytest.fixture(name="sample_printers", scope="module")
-def sample_printers_fixture(tmp_path_factory):
+def sample_printers_fixture(tmp_path_factory, scanner_build):
     """The sample printer built with the default float samples, and with SHORT_SAMPLES."""
     directory = tmp_path_factory.mktemp("samples")
     return (
-        _scanner_build(directory, "print_wave_samples.c", "float_samples"),
-        _scanner_build(
+        scanner_build(directory, "print_wave_samples.c", "float_samples"),
+        scanner_build(
             directory, "print_wave_samples.c", "short_samples", *SHORT_SAMPLES
         ),
     )
@@ -859,9 +821,9 @@ def test_each_problem_of_a_chain_names_its_file():
 
 
 @pytest.fixture(name="replay_driver", scope="module")
-def replay_driver_fixture(tmp_path_factory):
+def replay_driver_fixture(tmp_path_factory, scanner_build):
     """A scan loop whose backend can ask for an instance again."""
-    return _scanner_build(
+    return scanner_build(
         tmp_path_factory.mktemp("replay"), "replay_an_instance.c", "replay_an_instance"
     )
 
