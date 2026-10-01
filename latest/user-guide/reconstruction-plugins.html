@@ -656,7 +656,7 @@ describe the encoded space and the receiver channels:</p>
 
 </pre></div>
 </div>
-<p>Three shipped plugins are complete reconstructions, each image scaled to the
+<p>Four shipped plugins are complete reconstructions, each image scaled to the
 header’s largest stored value. They are searched after every reconstruction
 plugin directory, so a sequence names one with <code class="docutils literal notranslate"><span class="pre">recon</span> <span class="pre">=</span> <span class="pre">&quot;nufft&quot;</span></code> and needs no
 file of its own:</p>
@@ -676,10 +676,13 @@ file of its own:</p>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">nufft</span></code></p></td>
 <td><p>Each coil’s least-squares fit of bartorch’s NUFFT to its samples, with a Tikhonov term; the same images as <code class="docutils literal notranslate"><span class="pre">cartesian</span></code>, for a radial or spiral trajectory or a stack of them. Needs the <code class="docutils literal notranslate"><span class="pre">coils</span></code> extra</p></td>
 </tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">pics</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">cartesian</span></code>’s images, each solved as <code class="docutils literal notranslate"><span class="pre">bart</span> <span class="pre">ecalib</span> <span class="pre">-m</span> <span class="pre">1</span></code> and <code class="docutils literal notranslate"><span class="pre">bart</span> <span class="pre">pics</span> <span class="pre">-R</span> <span class="pre">W</span></code> with bartorch, for undersampled phase encodes with a fully sampled centre. Needs the <code class="docutils literal notranslate"><span class="pre">coils</span></code> extra</p></td>
+</tr>
 </tbody>
 </table>
 </div>
-<p>Each combines its coils as a root sum of squares; a volume is sent as one
+<p>All but <code class="docutils literal notranslate"><span class="pre">pics</span></code> combine their coils as a root sum of squares. A volume is sent as one
 image per partition. A plugin file that reexports one under another name,
 <code class="docutils literal notranslate"><span class="pre">from</span> <span class="pre">pulserver.recon.handlers.cartesian</span> <span class="pre">import</span> <span class="pre">PLUGIN</span></code>, is the same
 reconstruction.</p>
