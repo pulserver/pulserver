@@ -8,10 +8,12 @@
  * a number. This plays blocks that reach every path of the engine -- a pulse
  * stepped for each group of isochromats, one reused turned by its phase, one
  * computed on a grid of fields and drives, a window read sample by sample, one
- * read by the non-uniform FFT and one read on the isochromats' lattice,
- * gradients turned with steps in them -- and repetitions of them, exact and to
- * a tolerance, on one transmit channel and on two, with AddressSanitizer and
- * UndefinedBehaviorSanitizer on. It asserts nothing. The sanitisers do.
+ * read by the non-uniform FFT and one read on the isochromats' lattice, by the
+ * engine and by a device, gradients turned with steps in them -- and
+ * repetitions of them, exact and to a tolerance, on one transmit channel and
+ * on two, with AddressSanitizer and UndefinedBehaviorSanitizer on. It asserts
+ * only that the windows meant for the lattice are read there; the sanitisers
+ * assert the rest.
  *
  * The lattice is transformed by a stand-in for FINUFFT's plans that sums each
  * point directly, handed to the engine as the finufft wheel's entry points
@@ -455,9 +457,39 @@ namespace
         }
     }
 
+    /** A device that reads every array the engine hands it, over the extents
+     *  the window states, and writes every value it is to write. */
+    bool read_whole(const bloch::LatticeWindowRead& w)
+    {
+        double sum = 0.0;
+        size_t points = 1;
+        for (int d = 0; d < w.dimensions; ++d)
+            points *= static_cast<size_t>(w.modes[d]);
+        sum += static_cast<double>(points == w.points);
+        for (size_t q = 0; q <= w.points; ++q)
+            sum += w.starts[q];
+        for (size_t k = 0; k < w.isochromats; ++k)
+            sum += w.order[k] + w.off_resonance[k] + w.decay[w.decay_of[k] * w.segments] + w.mx[k] + w.my[k];
+        if (w.receive_re != nullptr)
+            for (size_t k = 0; k < w.coils * w.isochromats; ++k)
+                sum += w.receive_re[k] + w.receive_im[k];
+        for (size_t l = 0; l < w.segments; ++l)
+            sum += w.nodes[l];
+        for (size_t k = 0; k < w.samples * w.segments; ++k)
+            sum += w.basis[k];
+        for (int d = 0; d < w.dimensions; ++d)
+            for (size_t k = 0; k < w.samples; ++k)
+                sum += w.x[d][k];
+        sum += w.frequency + w.tolerance;
+        for (size_t k = 0; k < w.coils * w.samples; ++k)
+            w.out[k] = sum;
+        return true;
+    }
+
     /** Excite isochromats many to a lattice point, read by @p coils coils or,
      *  for none, by one of unit sensitivity, and read the spiral's window in
-     *  double precision and in single; the windows read on the lattice. */
+     *  double precision and in single, by the engine and by a device; the
+     *  windows read on the lattice. */
     size_t many_coils(size_t coils)
     {
         bloch::IsochromatProperties p;
@@ -494,13 +526,18 @@ namespace
 
         const Spiral spiral;
         std::vector<Complex> signal;
-        for (double tolerance : {1e-7, 1e-4})
+        for (bool device : {false, true})
         {
-            signal.assign(spins.coils() * spiral.block.adc_samples, 0.0);
-            spins.play(spiral.block, signal.data(), tolerance);
-            touch(signal);
+            if (device)
+                spins.use_lattice_device(read_whole);
+            for (double tolerance : {1e-7, 1e-4})
+            {
+                signal.assign(spins.coils() * spiral.block.adc_samples, 0.0);
+                spins.play(spiral.block, signal.data(), tolerance);
+                touch(signal);
+            }
         }
-        return spins.lattice_windows();
+        return spins.lattice_windows() - spins.device_windows() == 2 && spins.device_windows() == 2 ? 2 : 0;
     }
 
 } // namespace
@@ -529,7 +566,7 @@ int main()
     for (size_t coils : {size_t{0}, size_t{37}})
         if (many_coils(coils) != 2)
         {
-            std::fprintf(stderr, "a window of %zu coils was not read on the lattice\n", coils);
+            std::fprintf(stderr, "the windows of %zu coils were not read on the lattice by both\n", coils);
             return 1;
         }
     std::printf("%g\n", sink);

@@ -3104,6 +3104,56 @@ namespace bloch
         }
     }
 
+    void Isochromats::use_lattice_device(LatticeDevice device)
+    {
+        const std::lock_guard<std::mutex> held(mutex_);
+        lattice_device_ = std::move(device);
+    }
+
+    bool Isochromats::read_on_device(
+        const LatticeWindow& window,
+        const Segments& segments,
+        const std::vector<std::vector<double>>& x,
+        double tolerance,
+        std::vector<std::complex<double>>& out)
+    {
+        const LatticeOrder& sorted = lattice_order(window.mask);
+        const size_t count = segments.count;
+        std::vector<double> decay(decays_.size() * count);
+        for (size_t d = 0; d < decays_.size(); ++d)
+            for (size_t l = 0; l < count; ++l)
+                decay[d * count + l] = std::exp(-(decays_[d] - window.rate) * segments.nodes[l]);
+        const bool sensitivities = !receive_re_.empty();
+        LatticeWindowRead read;
+        read.axes = window.mask;
+        read.dimensions = window.axes;
+        read.modes = window.modes;
+        read.points = window.points;
+        read.isochromats = count_;
+        read.order = sorted.order.data();
+        read.starts = sorted.starts.data();
+        read.off_resonance = sorted.off_resonance.data();
+        read.decay_of = sorted.decay_of.data();
+        read.coils = coils_;
+        read.receive_re = sensitivities ? receive_re_.data() : nullptr;
+        read.receive_im = sensitivities ? receive_im_.data() : nullptr;
+        read.mx = mx_.data();
+        read.my = my_.data();
+        read.frequency = window.frequency;
+        read.segments = count;
+        read.nodes = segments.nodes.data();
+        read.decays = decays_.size();
+        read.decay = decay.data();
+        read.samples = window.time.size();
+        read.basis = segments.basis.data();
+        for (size_t i = 0; i < x.size(); ++i)
+            read.x[i] = x[i].data();
+        read.tolerance = tolerance;
+        read.single = LatticeTransform::single_for(tolerance);
+        read.out = out.data();
+        return lattice_device_(read);
+    }
+
     bool Isochromats::read_on_lattice(
         const std::vector<double>& area,
         const std::vector<double>& time,
@@ -3137,8 +3187,6 @@ namespace bloch
         const auto decays = std::minmax_element(decays_.begin(), decays_.end());
         const double tolerance =
             0.25 * error / (lebesgue * std::exp((*decays.second - *decays.first) * window.span));
-        if (!lattice_pays(count_, samples, coils_, count, window.modes, window.axes, tolerance))
-            return false;
 
         std::vector<std::vector<double>> x(static_cast<size_t>(window.axes), std::vector<double>(samples));
         for (int i = 0; i < window.axes; ++i)
@@ -3151,7 +3199,11 @@ namespace bloch
             }
         }
         std::vector<std::complex<double>> out(coils_ * samples, 0.0);
-        if (LatticeTransform::single_for(tolerance))
+        if (lattice_device_ && read_on_device(window, segments, x, tolerance, out))
+            ++device_windows_;
+        else if (!lattice_pays(count_, samples, coils_, count, window.modes, window.axes, tolerance))
+            return false;
+        else if (LatticeTransform::single_for(tolerance))
             transform_lattice<float>(window, segments, x, tolerance, out);
         else
             transform_lattice<double>(window, segments, x, tolerance, out);

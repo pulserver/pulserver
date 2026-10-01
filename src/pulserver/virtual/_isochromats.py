@@ -181,12 +181,24 @@ class Isochromats:
         own layout, so that it is never copied whole into memory.
     threads : int, default=0
         Worker threads; 0 for every core.
+    device : str or torch.device, default=None
+        A torch device the windows read on a lattice are summed and
+        transformed on: a CUDA device, on which a Triton kernel sums them and
+        cuFINUFFT transforms them, or the CPU, under Triton's interpreter
+        alone (``TRITON_INTERPRET=1`` before triton is first imported), on
+        which FINUFFT transforms them. Needs the ``gpu`` extra. By default
+        the engine reads them itself.
 
     Raises
     ------
     ValueError
         If a property has the wrong shape or is not finite, or a relaxation
         time is not positive.
+    ImportError
+        If ``device`` is given without torch and Triton, or is a CUDA device
+        without cuFINUFFT.
+    RuntimeError
+        If ``device`` is the CPU outside Triton's interpreter.
 
     Notes
     -----
@@ -220,6 +232,7 @@ class Isochromats:
         transmit=None,
         receive=None,
         threads: int = 0,
+        device=None,
     ):
         positions = np.asarray(positions, dtype=float)
         if positions.ndim != 2 or positions.shape[1] != 3:
@@ -235,6 +248,12 @@ class Isochromats:
             _sensitivities(receive, count, "receive"),
             int(threads),
         )
+        if device is not None:
+            from ._device import LatticeDevice
+
+            if not isinstance(device, LatticeDevice):
+                device = LatticeDevice(device)
+            self._native.use_lattice_device(device)
 
     def __len__(self) -> int:
         return self._native.size
@@ -253,6 +272,11 @@ class Isochromats:
     def lattice_windows(self) -> int:
         """ADC windows read on a lattice by FINUFFT since construction."""
         return self._native.lattice_windows
+
+    @property
+    def device_windows(self) -> int:
+        """Of :attr:`lattice_windows`, those read on the ``device``."""
+        return self._native.device_windows
 
     @property
     def magnetization(self) -> np.ndarray:

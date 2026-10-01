@@ -79,6 +79,10 @@ class Console:
     speed
         Scan time elapsed per wall-clock second once the scan's simulation is
         far enough ahead of its clock; as fast as it is simulated without it.
+    device
+        Device a scan's windows read on a lattice are read on, as
+        :class:`~pulserver.virtual.Isochromats` takes it; the engine reads
+        them itself without one.
     """
 
     def __init__(
@@ -95,6 +99,7 @@ class Console:
         coil: str = "body",
         fields: Path | str | None = None,
         speed: float | None = None,
+        device: str | None = None,
     ) -> None:
         from ..host._blocks import parse_limits
         from ..proxy import LocalReconstruction
@@ -117,6 +122,7 @@ class Console:
         self.spacing = spacing
         self.max_isochromats = max_isochromats
         self.speed = speed
+        self.device = device
         self.field_t = float(parse_limits(limits)["B0"])
         self.fields = None if fields is None else Path(fields)
         self._coils = coils(self.fields, field_t=self.field_t)
@@ -257,6 +263,7 @@ class Console:
                 field_t=self.field_t,
                 region=region,
                 coil=self.coil,
+                device=self.device,
             )
         try:
             return self._scan(
@@ -624,6 +631,11 @@ def _parser() -> argparse.ArgumentParser:
         help="scan time per second, once the simulation is far enough ahead; "
         "as fast as it is simulated without it",
     )
+    parser.add_argument(
+        "--device",
+        help="torch device windows read on a lattice are read on, such as cuda "
+        "(the gpu extra); the engine reads them without it",
+    )
     return parser
 
 
@@ -646,6 +658,7 @@ def main(argv: list[str] | None = None) -> int:
         coil=args.coil,
         fields=args.fields,
         speed=args.speed,
+        device=args.device,
     )
     with contextlib.suppress(KeyboardInterrupt):
         asyncio.run(serve(console, args.host, args.port, args.origins))

@@ -114,6 +114,7 @@ class Phantom:
         region: Callable[[np.ndarray, np.ndarray], np.ndarray] | None = None,
         coil: Coil | None = None,
         threads: int = 0,
+        device=None,
     ) -> Isochromats:
         """Return the phantom sampled as isochromats, for :func:`~pulserver.virtual.simulate`.
 
@@ -145,6 +146,10 @@ class Phantom:
             The scanner's coil the phantom is scanned with.
         threads
             Worker threads of the simulation; 0 for every core.
+        device
+            The device the windows read on a lattice are read on, as
+            :class:`~pulserver.virtual.Isochromats` takes it; the engine
+            reads them itself without one.
 
         Raises
         ------
@@ -169,6 +174,7 @@ class Phantom:
             transmit=None if coil is None else coil.transmit(positions),
             receive=self._received(own) if coil is None else coil.receive(positions),
             threads=threads,
+            device=device,
         )
 
     def count(
