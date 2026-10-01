@@ -48,7 +48,8 @@ def simulate(
     phase encodings and turned readouts play from each isochromat's map over
     one repetition, as :meth:`Isochromats.repetitions` plays them to within
     ``tolerance``; at zero, their samples are those of the blocks played one
-    by one, to rounding. The other blocks read their ADC windows as
+    by one, to rounding. Isochromats that move or diffuse play every block
+    one by one. The other blocks read their ADC windows as
     :meth:`Isochromats.play` reads them to within ``tolerance``.
 
     :doc:`/explanations/virtual-scanner` states the signal model.
@@ -93,11 +94,15 @@ class Player:
         self._drive = _drive(playout, default_shim)
         self._isochromats = isochromats
         self._tolerance = tolerance
-        self.runs = runs(
-            self.played,
-            self._turn,
-            windows=_windows(isochromats),
-            rounded=tolerance > 0.0,
+        self.runs = (
+            []
+            if isochromats.moving
+            else runs(
+                self.played,
+                self._turn,
+                windows=_windows(isochromats),
+                rounded=tolerance > 0.0,
+            )
         )
         self._firsts = np.array([run.first for run in self.runs], dtype=int)
         # The run being played, its repetitions and the next to be played.

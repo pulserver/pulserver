@@ -12,6 +12,7 @@ import numpy as np
 import pypulseqpp as pp
 from scipy.special import j1
 
+from . import _voxels
 from ._coils import Coil
 from ._isochromats import Isochromats
 
@@ -25,7 +26,8 @@ class Ellipse:
     ellipse is infinitely thin, so its signal depends on the k-space location
     along z only through the phase of its plane. ``shift_ppm`` is the chemical
     shift of its spins from water, in ppm: -3.45 for the main fat resonance.
-    ``t1`` and ``t2``, in s, act in :meth:`Phantom.isochromats` alone.
+    ``t1``, ``t2`` and ``t2_prime``, in s, and ``diffusion``, the isotropic
+    diffusion coefficient in m²/s, act in :meth:`Phantom.isochromats` alone.
     """
 
     centre: tuple[float, float, float]
@@ -35,6 +37,8 @@ class Ellipse:
     shift_ppm: float = 0.0
     t1: float = math.inf
     t2: float = math.inf
+    t2_prime: float = math.inf
+    diffusion: float = 0.0
 
     def spectrum(self, k: np.ndarray) -> np.ndarray:
         """Return its magnetization's Fourier transform at ``(3, n)`` k-space locations in 1/m.
@@ -113,20 +117,29 @@ class Phantom:
         off_resonance_hz: float = 0.0,
         region: Callable[[np.ndarray, np.ndarray], np.ndarray] | None = None,
         coil: Coil | None = None,
+        spins: int = 1,
+        voxel: str = "point",
+        motion=None,
+        seed: int | None = None,
         threads: int = 0,
         device=None,
     ) -> Isochromats:
         """Return the phantom sampled as isochromats, for :func:`~pulserver.virtual.simulate`.
 
         Each ellipse is sampled at the points of a square grid, aligned with the
-        phantom's origin and axes, that lie inside it: each an isochromat of
-        proton density ``intensity * spacing**2`` relaxing with the ellipse's
-        ``t1`` and ``t2``, so that the sum over them approximates the
-        ellipse's transform below the grid's Nyquist frequency. Overlapping
-        ellipses are separate isochromats. The positions are placed in the
-        physical frame as the phantom is, and the receive sensitivities are the
-        phantom's coils', or ``coil``'s transmit and receive sensitivities
-        there.
+        phantom's origin and axes, that lie inside it: each a voxel of
+        ``spins`` isochromats of proton density ``intensity * spacing**2``
+        between them, relaxing with the ellipse's ``t1`` and ``t2``, so that
+        the sum over them approximates the ellipse's transform below the
+        grid's Nyquist frequency. A voxel's isochromats lie at its centre, or
+        over a square ``spacing`` wide in the ellipse's plane for a ``"box"``
+        ``voxel``, and precess at the quantiles of the Lorentzian line of the
+        ellipse's ``t2_prime`` (:doc:`/explanations/bloch-simulation`).
+        Overlapping ellipses are separate isochromats. The positions are placed
+        in the physical frame as the phantom is, and the receive sensitivities
+        are the phantom's coils', or ``coil``'s transmit and receive
+        sensitivities there. The isochromats diffuse with the ellipses'
+        ``diffusion``.
 
         Parameters
         ----------
@@ -144,6 +157,16 @@ class Phantom:
             :class:`~pulserver.virtual.Slabs` answers; every one without one.
         coil
             The scanner's coil the phantom is scanned with.
+        spins
+            Isochromats per voxel: a square number for a ``"box"``.
+        voxel
+            ``"point"`` or ``"box"``: where a voxel's isochromats lie.
+        motion
+            The phantom's motion, as :class:`~pulserver.virtual.Isochromats`
+            takes it.
+        seed
+            Seed of the frequencies of each voxel's isochromats and of their
+            Brownian walks.
         threads
             Worker threads of the simulation; 0 for every core.
         device
@@ -155,24 +178,32 @@ class Phantom:
         ------
         ValueError
             If an ellipse has a complex intensity, the phantom has a chemical
-            shift and ``field_t`` is not given, or it has coils of its own and
-            ``coil`` is given.
+            shift and ``field_t`` is not given, it has coils of its own and
+            ``coil`` is given, or ``spins`` do not fill a ``voxel``.
         """
         if coil is not None and self.coils > 1:
             raise ValueError(
                 "a phantom received by coils of its own is not scanned with a coil"
             )
-        own, positions, density, t1, t2, frequency = self._sampled(
+        own, _, density, t1, t2, frequency, t2_prime, diffusion = self._sampled(
             spacing, field_t, off_resonance_hz, region
         )
+        offsets, order = _voxels.stencil(spins, voxel, spacing, np.eye(3)[:2])
+        rng = np.random.default_rng(seed)
+        own = _voxels.spread(own, spins) + np.tile(offsets, (len(t1), 1))
+        positions = own @ self._rotation.T + self._position
         return Isochromats(
             positions,
-            proton_density=density,
-            t1=t1,
-            t2=t2,
-            off_resonance=frequency,
+            proton_density=_voxels.spread(density, spins) / spins,
+            t1=_voxels.spread(t1, spins),
+            t2=_voxels.spread(t2, spins),
+            off_resonance=_voxels.spread(frequency, spins)
+            + _voxels.frequencies(t2_prime, order, rng),
             transmit=None if coil is None else coil.transmit(positions),
             receive=self._received(own) if coil is None else coil.receive(positions),
+            diffusion=_voxels.spread(diffusion, spins),
+            motion=motion,
+            seed=rng,
             threads=threads,
             device=device,
         )
@@ -184,6 +215,7 @@ class Phantom:
         field_t: float | None = None,
         off_resonance_hz: float = 0.0,
         region: Callable[[np.ndarray, np.ndarray], np.ndarray] | None = None,
+        spins: int = 1,
     ) -> int:
         """Return how many isochromats :meth:`isochromats` samples the phantom as, with the same arguments.
 
@@ -193,7 +225,7 @@ class Phantom:
             If an ellipse has a complex intensity, or the phantom has a
             chemical shift and ``field_t`` is not given.
         """
-        return len(self._sampled(spacing, field_t, off_resonance_hz, region)[0])
+        return spins * len(self._sampled(spacing, field_t, off_resonance_hz, region)[0])
 
     def _sampled(
         self,
@@ -202,7 +234,7 @@ class Phantom:
         off_resonance_hz: float,
         region: Callable[[np.ndarray, np.ndarray], np.ndarray] | None,
     ) -> tuple[np.ndarray, ...]:
-        """Return the points along the phantom's axes, the physical positions, proton densities, T1, T2 and frequencies of its isochromats."""
+        """Return the points along the phantom's axes, the physical positions, proton densities, T1, T2, frequencies, T2' and diffusion coefficients of its voxels."""
         if field_t is None and any(self.shifts_ppm):
             raise ValueError("a phantom with a chemical shift is scanned at a field_t")
         per_ppm = 0.0 if field_t is None else 1e-6 * pp.Opts().gamma * field_t
@@ -214,23 +246,21 @@ class Phantom:
                 e.t1,
                 e.t2,
                 per_ppm * e.shift_ppm + off_resonance_hz,
+                e.t2_prime,
+                e.diffusion,
             )
             for e in self.ellipses
         ]
-        density, t1, t2, frequency = np.repeat(
-            np.array(tissues, dtype=float), [len(p) for p in points], axis=0
+        columns = np.repeat(
+            np.array(tissues, dtype=float).reshape(-1, 6),
+            [len(p) for p in points],
+            axis=0,
         ).T
         positions = own @ self._rotation.T + self._position
         if region is not None:
-            kept = region(positions, frequency)
-            own, positions = own[kept], positions[kept]
-            density, t1, t2, frequency = (
-                density[kept],
-                t1[kept],
-                t2[kept],
-                frequency[kept],
-            )
-        return own, positions, density, t1, t2, frequency
+            kept = region(positions, columns[3])
+            own, positions, columns = own[kept], positions[kept], columns[:, kept]
+        return (own, positions, *columns)
 
     def _received(self, points: np.ndarray) -> np.ndarray | None:
         """Return each coil's sensitivity at ``(n, 3)`` points along the phantom's axes; None for one coil."""

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import functools
 import os
+import time
 from collections import OrderedDict
 
 import numpy as np
@@ -94,6 +96,31 @@ if triton is not None:
                 tl.store(sums_ptr + out + 1, sum_im, mask=written)
 
 
+@functools.cache
+def _tuned_lattice_sums():
+    """Return the kernel autotuned on a CUDA device, the first window of each shape, over 4 or 1 lattice points per program and 4 or 8 warps."""
+    configs = [
+        triton.Config({"POINTS": points}, num_warps=warps)
+        for points in (4, 1)
+        for warps in (4, 8)
+    ]
+    return triton.autotune(configs=configs, key=["coils", "count"])(_lattice_sums)
+
+
+def _sum_onto_lattice(arguments: tuple, points: int, coils: int, nodes: int) -> None:
+    """Launch the lattice sums of ``coils`` coils: in the interpreter's configuration, or in the one autotuned for their shape on a CUDA device."""
+    constants = {"ISOCHROMATS": 16, "COILS": 16, "NODES": nodes}
+    if _interpreted():
+        programs = (triton.cdiv(points, 4), triton.cdiv(coils, 16))
+        _lattice_sums[programs](*arguments, POINTS=4, **constants)
+        return
+
+    def tuned(meta):
+        return (triton.cdiv(points, meta["POINTS"]), triton.cdiv(coils, 16))
+
+    _tuned_lattice_sums()[tuned](*arguments, **constants)
+
+
 def _interpreted() -> bool:
     try:
         return bool(triton.knobs.runtime.interpret)
@@ -161,6 +188,9 @@ class LatticeDevice:
         Most bytes a window's lattice sums take on the device at once;
         :data:`MEMORY` on the CPU, and a quarter of the memory free when the
         first window is read on a CUDA device, without it.
+    profile : bool, default=False
+        Time each stage of every window, waiting for the device between
+        them, into :attr:`stages`, in s.
 
     Raises
     ------
@@ -170,7 +200,7 @@ class LatticeDevice:
         On the CPU outside Triton's interpreter.
     """
 
-    def __init__(self, device="cuda", *, memory: int | None = None):
+    def __init__(self, device="cuda", *, memory: int | None = None, profile=False):
         if triton is None:
             raise ImportError(
                 "windows read on a device need torch and Triton: install the gpu extra"
@@ -199,18 +229,24 @@ class LatticeDevice:
             self._library = finufft
         else:
             raise ValueError(f"no lattice transforms on a {self.device.type} device")
-        self._lattices: dict[int, _Lattice] = {}
+        self._lattices: dict[tuple[int, int], _Lattice] = {}
         self._plans: OrderedDict = OrderedDict()
         self._staged: torch.Tensor | None = None
+        self._fetched: torch.Tensor | None = None
+        self._pending = None
+        self.stages: dict | None = {} if profile else None
 
     def __call__(self, window) -> bool:
-        """Read ``window``, as the engine hands it, into its ``out``; True, as every window is read."""
+        """Start reading ``window``, as the engine hands it; True, as every window is read.
+
+        The arrays the engine hands are read before this returns, and its
+        ``out`` is written by :meth:`finish`.
+        """
+        began = self._clock()
         single = bool(window["single"])
         real = torch.float32 if single else torch.float64
         complex_dtype = torch.complex64 if single else torch.complex128
-        lattice = self._lattices.get(window["axes"])
-        if lattice is None:
-            lattice = self._lattices[window["axes"]] = _Lattice(window, self.device)
+        lattice = self._lattice(window)
         receive = lattice.sensitivities(window, complex_dtype, self.device)
 
         magnetization = self._stage(window, real)[:, lattice.order].T.contiguous()
@@ -228,21 +264,16 @@ class LatticeDevice:
         x = [_host(axis).to(self.device).to(real) for axis in window["x"]]
         samples = len(window["basis"])
         coils = receive.shape[1]
-        out = window["out"]
+        began = self._lap("upload", began)
 
-        if self.memory is None:
-            self.memory = (
-                torch.cuda.mem_get_info(self.device)[0] // 4
-                if self.device.type == "cuda"
-                else MEMORY
-            )
-        per_coil = segments * points * 2 * receive.element_size()
-        at_once = max(1, min(coils, self.memory // max(per_coil, 1)))
+        at_once = self._coils_at_once(
+            coils, segments * points * 2 * receive.element_size()
+        )
+        read = torch.empty((coils, samples), dtype=complex_dtype, device=self.device)
         for first in range(0, coils, at_once):
             k = min(at_once, coils - first)
             sums = torch.empty((k, segments, points, 2), dtype=real, device=self.device)
-            grid = (triton.cdiv(points, 4), triton.cdiv(k, 16))
-            _lattice_sums[grid](
+            arguments = (
                 lattice.starts,
                 magnetization,
                 shift,
@@ -255,11 +286,9 @@ class LatticeDevice:
                 points,
                 k,
                 segments,
-                POINTS=4,
-                ISOCHROMATS=16,
-                COILS=16,
-                NODES=nodes_padded,
             )
+            _sum_onto_lattice(arguments, points, k, nodes_padded)
+            began = self._lap("sums", began)
             values = self._transform(
                 torch.view_as_complex(sums).reshape(k * segments, *modes[::-1]),
                 x,
@@ -267,9 +296,77 @@ class LatticeDevice:
                 float(window["tolerance"]),
                 complex_dtype,
             ).reshape(k, segments, samples)
-            read = (values * basis.T[None]).sum(dim=1)
-            out[first : first + k] = read.cpu().numpy()
+            began = self._lap("transform", began)
+            read[first : first + k] = (values * basis.T[None]).sum(dim=1)
+            began = self._lap("basis", began)
+        self._pending = (window["out"], self._fetch(read))
         return True
+
+    def _lattice(self, window) -> _Lattice:
+        """Return the lattice ``window`` is read on, held for the positions' revision it was found at."""
+        key = (window["layout"], window["axes"])
+        lattice = self._lattices.get(key)
+        if lattice is None:
+            # Lattices of positions since moved are not read again.
+            self._lattices = {
+                held: kept
+                for held, kept in self._lattices.items()
+                if held[0] == window["layout"]
+            }
+            lattice = self._lattices[key] = _Lattice(window, self.device)
+        return lattice
+
+    def _coils_at_once(self, coils: int, per_coil: int) -> int:
+        """Return how many of ``coils`` coils' lattice sums, ``per_coil`` bytes each, fit in :attr:`memory` together; at least one."""
+        if self.memory is None:
+            self.memory = (
+                torch.cuda.mem_get_info(self.device)[0] // 4
+                if self.device.type == "cuda"
+                else MEMORY
+            )
+        return max(1, min(coils, self.memory // max(per_coil, 1)))
+
+    def finish(self) -> None:
+        """Write the window :meth:`__call__` started reading into the ``out`` it was handed."""
+        began = self._clock()
+        out, (fetched, done) = self._pending
+        self._pending = None
+        if done is not None:
+            done.synchronize()
+        out[...] = fetched.numpy()
+        self._lap("download", began)
+        if self.stages is not None:
+            self.stages["windows"] = self.stages.get("windows", 0) + 1
+
+    def _fetch(self, read: torch.Tensor):
+        """Start copying ``read`` to the host: the copy, and the event that marks it done, if any."""
+        if self.device.type != "cuda":
+            return read, None
+        if (
+            self._fetched is None
+            or self._fetched.shape != read.shape
+            or self._fetched.dtype != read.dtype
+        ):
+            self._fetched = torch.empty(read.shape, dtype=read.dtype, pin_memory=True)
+        self._fetched.copy_(read, non_blocking=True)
+        done = torch.cuda.Event()
+        done.record()
+        return self._fetched, done
+
+    def _clock(self) -> float | None:
+        if self.stages is None:
+            return None
+        if self.device.type == "cuda":
+            torch.cuda.synchronize(self.device)
+        return time.perf_counter()
+
+    def _lap(self, stage: str, began: float | None) -> float | None:
+        """Add the time since ``began`` to ``stage``'s, where the stages are timed."""
+        if began is None:
+            return None
+        now = self._clock()
+        self.stages[stage] = self.stages.get(stage, 0.0) + now - began
+        return now
 
     def _stage(self, window, real) -> torch.Tensor:
         """Put the transverse magnetisation, (2, isochromats), on the device in ``real``.

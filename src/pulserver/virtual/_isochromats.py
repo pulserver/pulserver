@@ -9,6 +9,7 @@ import pypulseqpp as pp
 
 from .._accelerators import require
 from . import _finufft
+from ._motion import _Stretches, diffusion_phase, motion_phase
 
 __all__ = ["Isochromats", "Repetitions"]
 
@@ -179,6 +180,16 @@ class Isochromats:
         one coil of unit sensitivity. A C-contiguous complex128 array, a
         memory-mapped one included, is read in place into the isochromats'
         own layout, so that it is never copied whole into memory.
+    diffusion : float or array_like, default=0.0
+        Isotropic diffusion coefficient, in m²/s, per isochromat.
+    motion : callable, default=None
+        Where the isochromats lie as their subject moves: ``motion(t,
+        positions)`` returns the ``(n, 3)`` positions, in m, that the
+        ``positions`` at rest move to at time ``t``, in s on the isochromats'
+        clock (:attr:`elapsed`); :class:`~pulserver.virtual.RigidMotion` for a
+        rigid body. Every isochromat keeps its other properties as it moves.
+    seed : int or numpy.random.Generator, default=None
+        Seed, or generator, of the Brownian walks that ``diffusion`` drives.
     threads : int, default=0
         Worker threads; 0 for every core.
     device : str or torch.device, default=None
@@ -192,8 +203,8 @@ class Isochromats:
     Raises
     ------
     ValueError
-        If a property has the wrong shape or is not finite, or a relaxation
-        time is not positive.
+        If a property has the wrong shape or is not finite, a relaxation
+        time is not positive, or a diffusion coefficient is negative.
     ImportError
         If ``device`` is given without torch and Triton, or is a CUDA device
         without cuFINUFFT.
@@ -204,7 +215,21 @@ class Isochromats:
     -----
     Every isochromat starts at equilibrium, along ``+z``. The engine computes
     what the sequence does to these isochromats; it does not model the
-    scanner's hardware, diffusion, flow or motion.
+    scanner's hardware.
+
+    Isochromats that move or diffuse play block by block. Before each block,
+    ``motion`` places them where they are at its start, and they stay there
+    through the block; after it, each is turned by the phase the block's
+    gradient adds along its path within the block, from the end of the
+    block's RF pulse on, or from the start of a block without one. A
+    diffusing isochromat keeps its position and follows a Brownian walk of
+    its own, which turns it by the phase the gradient plays along the walk:
+    from the walk so far, and from its increments over the block, drawn with
+    the displacement they make, from their joint normal distribution. A
+    voxel's diffusion attenuation is the mean of its isochromats' phase
+    factors, which holds to about one over the square root of their number.
+    Samples within a block are read with every isochromat where it stood at
+    the block's start.
 
     Examples
     --------
@@ -231,6 +256,9 @@ class Isochromats:
         off_resonance=0.0,
         transmit=None,
         receive=None,
+        diffusion=0.0,
+        motion=None,
+        seed=None,
         threads: int = 0,
         device=None,
     ):
@@ -238,6 +266,16 @@ class Isochromats:
         if positions.ndim != 2 or positions.shape[1] != 3:
             raise ValueError(f"positions must be (n, 3), got shape {positions.shape}")
         count = positions.shape[0]
+        diffusion = _per_isochromat(diffusion, count, "diffusion")
+        if not np.all(np.isfinite(diffusion)) or np.any(diffusion < 0.0):
+            raise ValueError("diffusion coefficients must be finite and not negative")
+        # Where a motion places the isochromats from, and last placed them.
+        self._rest = None if motion is None else np.array(positions)
+        self._placed = self._rest
+        self._motion = motion
+        self._diffusion = diffusion if np.any(diffusion > 0.0) else None
+        self._walk = None if self._diffusion is None else np.zeros((count, 3))
+        self._rng = np.random.default_rng(seed)
         self._native = _kernels().Isochromats(
             np.ascontiguousarray(positions),
             _per_isochromat(proton_density, count, "proton_density"),
@@ -279,6 +317,34 @@ class Isochromats:
         return self._native.device_windows
 
     @property
+    def moving(self) -> bool:
+        """Whether the isochromats move or diffuse, and so play block by block."""
+        return self._motion is not None or self._diffusion is not None
+
+    @property
+    def positions(self) -> np.ndarray:
+        """``(n, 3)`` positions, in m, as the last block played them, a copy.
+
+        Assigning moves the isochromats there, once the free precession
+        pending has been applied where they stood; isochromats given a
+        ``motion`` or ``diffusion`` are placed by them alone.
+        """
+        return self._native.positions()
+
+    @positions.setter
+    def positions(self, value) -> None:
+        if self.moving:
+            raise ValueError(
+                "isochromats given a motion or diffusion are placed by them"
+            )
+        values = np.asarray(value, dtype=float)
+        if values.shape != (len(self), 3):
+            raise ValueError(
+                f"positions must be {(len(self), 3)}, got shape {values.shape}"
+            )
+        self._native.set_positions(np.ascontiguousarray(values))
+
+    @property
     def magnetization(self) -> np.ndarray:
         """``(n, 3)`` magnetisation, a copy; assigning replaces it."""
         return self._native.magnetization()
@@ -289,8 +355,10 @@ class Isochromats:
         self._native.set_magnetization(np.ascontiguousarray(values))
 
     def reset(self) -> None:
-        """Return every isochromat to equilibrium, along ``+z``, and the clock to zero."""
+        """Return every isochromat to equilibrium, along ``+z``, the clock to zero, and a diffusing one to the start of a new walk."""
         self._native.reset()
+        if self._walk is not None:
+            self._walk[:] = 0.0
 
     def play(
         self,
@@ -374,17 +442,62 @@ class Isochromats:
         """
         start, step, samples = _field(rf, system)
         times, receiver = _window(adc, system)
+        axes, turn = _axes(gradients), _rotation(rotation)
+        began = self.elapsed if self.moving else 0.0
+        if self._motion is not None:
+            self._place(began)
         signal = self._native.play(
             float(duration),
-            _axes(gradients),
-            _rotation(rotation),
+            axes,
+            turn,
             start,
             step,
             samples,
             times,
             float(tolerance),
         )
+        if self.moving:
+            pulse_end = 0.0 if samples is None else start + step * samples.shape[1]
+            self._move_on(began, float(duration), axes, turn, min(pulse_end, duration))
         return signal if receiver is None else signal * np.exp(1j * receiver)
+
+    def _place(self, t: float) -> None:
+        """Move the isochromats to where ``motion`` places them at ``t``."""
+        placed = np.asarray(self._motion(t, self._rest), dtype=float)
+        if placed.shape != self._rest.shape or not np.all(np.isfinite(placed)):
+            raise ValueError(
+                f"a motion must place every isochromat at finite (n, 3) positions, "
+                f"got shape {placed.shape} at {t} s"
+            )
+        if not np.array_equal(placed, self._placed):
+            self._native.set_positions(np.ascontiguousarray(placed))
+            self._placed = placed
+
+    def _move_on(self, began, duration, axes, turn, pulse_end) -> None:
+        """Turn each isochromat by the phase its motion and walk over the block add, and advance the walk."""
+        played = any(axis is not None for axis in axes)
+        stretches = (
+            _Stretches(axes, turn, pulse_end, duration)
+            if played and duration > pulse_end
+            else None
+        )
+        phase = None
+        if self._motion is not None and stretches is not None:
+            phase = motion_phase(
+                stretches, self._motion, self._rest, began, self._placed
+            )
+        if self._diffusion is not None:
+            walked = diffusion_phase(
+                stretches,
+                pulse_end,
+                duration - pulse_end,
+                self._diffusion,
+                self._walk,
+                self._rng,
+            )
+            phase = walked if phase is None else phase + walked
+        if phase is not None and np.any(phase):
+            self._native.precess(np.ascontiguousarray(phase))
 
     def repetitions(
         self,
@@ -473,8 +586,9 @@ class Isochromats:
         ------
         ValueError
             If the phases, ADC phases and areas do not describe one set of
-            repetitions, a window is not read under a held gradient, or a
-            block is one :meth:`play` would refuse.
+            repetitions, a window is not read under a held gradient, a block
+            is one :meth:`play` would refuse, or the isochromats move or
+            diffuse.
 
         Examples
         --------
@@ -492,25 +606,9 @@ class Isochromats:
         >>> scan.play().shape
         (4, 1, 1)
         """
-        conversions = []
-        receivers = []
-        for block in blocks:
-            start, step, samples = _field(block.get("rf"), system)
-            times, receiver = _window(block.get("adc"), system)
-            if times is not None and times.size:
-                receivers.append(np.zeros(times.size) if receiver is None else receiver)
-            conversions.append(
-                (
-                    float(block["duration"]),
-                    _axes(block.get("gradients")),
-                    _rotation(block.get("rotation")),
-                    start,
-                    step,
-                    samples,
-                    times,
-                    receiver,
-                )
-            )
+        if self.moving:
+            raise ValueError("isochromats that move or diffuse play block by block")
+        conversions, receivers = _converted(blocks, system)
         phases = np.ascontiguousarray(np.asarray(phases, dtype=float).ravel())
         count = phases.size
         adc_phases = (
@@ -555,6 +653,30 @@ class Isochromats:
             ),
             steady=steady,
         )
+
+
+def _converted(blocks, system) -> tuple[list, list]:
+    """Return each block as the engine plays it, and each ADC window's demodulation phase per sample, zero for plain times."""
+    conversions = []
+    receivers = []
+    for block in blocks:
+        start, step, samples = _field(block.get("rf"), system)
+        times, receiver = _window(block.get("adc"), system)
+        if times is not None and times.size:
+            receivers.append(np.zeros(times.size) if receiver is None else receiver)
+        conversions.append(
+            (
+                float(block["duration"]),
+                _axes(block.get("gradients")),
+                _rotation(block.get("rotation")),
+                start,
+                step,
+                samples,
+                times,
+                receiver,
+            )
+        )
+    return conversions, receivers
 
 
 def _per_window(given, name: str, count: int, windows: int) -> np.ndarray:

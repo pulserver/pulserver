@@ -9,6 +9,7 @@ from ._console import Console
 from ._export import export
 from ._isochromats import Isochromats, Repetitions
 from ._localizer import localizer
+from ._motion import RigidMotion
 from ._phantom import Ellipse, Phantom
 from ._region import Slabs, excited
 from ._scanner import acquire, trajectory
@@ -31,6 +32,7 @@ __all__ = [
     "Isochromats",
     "Phantom",
     "Repetitions",
+    "RigidMotion",
     "Scan",
     "Slabs",
     "acquire",

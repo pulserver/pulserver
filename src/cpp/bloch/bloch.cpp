@@ -2092,6 +2092,55 @@ namespace bloch
         pending_time_ = 0.0;
     }
 
+    void Isochromats::set_positions(const double* from)
+    {
+        const std::lock_guard<std::mutex> locked(mutex_);
+        flush();
+        IsochromatProperties& p = properties_;
+        for (size_t i = 0; i < count_; ++i)
+        {
+            p.x[i] = from[3 * i];
+            p.y[i] = from[3 * i + 1];
+            p.z[i] = from[3 * i + 2];
+        }
+        groupings_.clear();
+        held_.clear();
+        held_bytes_ = 0;
+        for (std::unique_ptr<Lattice>& held : lattices_)
+            held.reset();
+        lattice_orders_.clear();
+        ++layout_;
+    }
+
+    void Isochromats::positions(double* into) const
+    {
+        const std::lock_guard<std::mutex> held(mutex_);
+        const IsochromatProperties& p = properties_;
+        for (size_t i = 0; i < count_; ++i)
+        {
+            into[3 * i] = p.x[i];
+            into[3 * i + 1] = p.y[i];
+            into[3 * i + 2] = p.z[i];
+        }
+    }
+
+    void Isochromats::precess(const double* radians)
+    {
+        const std::lock_guard<std::mutex> held(mutex_);
+        flush();
+        parallel(count_, threads_, kChunk, [&](size_t, size_t first, size_t last) {
+            for (size_t i = first; i < last; ++i)
+            {
+                const double c = std::cos(radians[i]);
+                const double s = -std::sin(radians[i]);
+                const double x = mx_[i];
+                const double y = my_[i];
+                mx_[i] = c * x - s * y;
+                my_[i] = s * x + c * y;
+            }
+        });
+    }
+
     void Isochromats::advance(const GradientAreas& areas, double& now, double to)
     {
         double from_area[3];
@@ -2140,9 +2189,9 @@ namespace bloch
         if (known != groupings_.end())
             return *known;
 
-        const std::vector<std::array<double, 3>> positions = quantised(properties_, mode, direction);
+        const std::vector<std::array<double, 3>> along = quantised(properties_, mode, direction);
         const auto less = [&](uint32_t i, uint32_t j) {
-            return class_of_[i] != class_of_[j] ? class_of_[i] < class_of_[j] : positions[i] < positions[j];
+            return class_of_[i] != class_of_[j] ? class_of_[i] < class_of_[j] : along[i] < along[j];
         };
         std::vector<uint32_t> order(count_);
         std::iota(order.begin(), order.end(), 0u);
@@ -2874,12 +2923,12 @@ namespace bloch
                 window.k[3 * s + axis] = window.k[3 * (s - 1) + axis] + area[3 * s + axis];
         }
         window.span = window.time[samples - 1];
-        const std::vector<double>* positions[3] = {&properties_.x, &properties_.y, &properties_.z};
+        const std::vector<double>* coordinates[3] = {&properties_.x, &properties_.y, &properties_.z};
         double reference[3];
         double most[3];
         for (int axis = 0; axis < 3; ++axis)
         {
-            const auto range = std::minmax_element(positions[axis]->begin(), positions[axis]->end());
+            const auto range = std::minmax_element(coordinates[axis]->begin(), coordinates[axis]->end());
             reference[axis] = 0.5 * (*range.first + *range.second);
             most[axis] = 0.0;
             for (size_t s = 0; s < samples; ++s)
@@ -3125,6 +3174,7 @@ namespace bloch
                 decay[d * count + l] = std::exp(-(decays_[d] - window.rate) * segments.nodes[l]);
         const bool sensitivities = !receive_re_.empty();
         LatticeWindowRead read;
+        read.layout = layout_;
         read.axes = window.mask;
         read.dimensions = window.axes;
         read.modes = window.modes;
@@ -3151,7 +3201,33 @@ namespace bloch
         read.tolerance = tolerance;
         read.single = LatticeTransform::single_for(tolerance);
         read.out = out.data();
-        return lattice_device_(read);
+        return lattice_device_.read(read);
+    }
+
+    bool Isochromats::read_lattice_window(
+        const LatticeWindow& window,
+        const Segments& segments,
+        const std::vector<std::vector<double>>& x,
+        double tolerance,
+        std::vector<std::complex<double>>& out)
+    {
+        if (lattice_device_.read && read_on_device(window, segments, x, tolerance, out))
+        {
+            /* The device reads the window while the isochromats move on. */
+            settle_after(window);
+            if (lattice_device_.finish)
+                lattice_device_.finish();
+            ++device_windows_;
+            return true;
+        }
+        if (!lattice_pays(count_, window.time.size(), coils_, segments.count, window.modes, window.axes, tolerance))
+            return false;
+        if (LatticeTransform::single_for(tolerance))
+            transform_lattice<float>(window, segments, x, tolerance, out);
+        else
+            transform_lattice<double>(window, segments, x, tolerance, out);
+        settle_after(window);
+        return true;
     }
 
     bool Isochromats::read_on_lattice(
@@ -3199,14 +3275,8 @@ namespace bloch
             }
         }
         std::vector<std::complex<double>> out(coils_ * samples, 0.0);
-        if (lattice_device_ && read_on_device(window, segments, x, tolerance, out))
-            ++device_windows_;
-        else if (!lattice_pays(count_, samples, coils_, count, window.modes, window.axes, tolerance))
+        if (!read_lattice_window(window, segments, x, tolerance, out))
             return false;
-        else if (LatticeTransform::single_for(tolerance))
-            transform_lattice<float>(window, segments, x, tolerance, out);
-        else
-            transform_lattice<double>(window, segments, x, tolerance, out);
         for (size_t s = 0; s < samples; ++s)
         {
             double c = 0.0, sine = 0.0;
@@ -3215,7 +3285,6 @@ namespace bloch
             for (size_t coil = 0; coil < coils_; ++coil)
                 signal[coil * stride + s] = out[coil * samples + s] * factor;
         }
-        settle_after(window);
         ++lattice_windows_;
         return true;
     }

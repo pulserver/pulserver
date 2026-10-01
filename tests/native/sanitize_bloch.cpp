@@ -9,7 +9,8 @@
  * stepped for each group of isochromats, one reused turned by its phase, one
  * computed on a grid of fields and drives, a window read sample by sample, one
  * read by the non-uniform FFT and one read on the isochromats' lattice, by the
- * engine and by a device, gradients turned with steps in them -- and
+ * engine and by a device, and again once they have moved, gradients turned
+ * with steps in them -- and
  * repetitions of them, exact and to a tolerance, on one transmit channel and
  * on two, with AddressSanitizer and UndefinedBehaviorSanitizer on. It asserts
  * only that the windows meant for the lattice are read there; the sanitisers
@@ -529,7 +530,7 @@ namespace
         for (bool device : {false, true})
         {
             if (device)
-                spins.use_lattice_device(read_whole);
+                spins.use_lattice_device({read_whole, nullptr});
             for (double tolerance : {1e-7, 1e-4})
             {
                 signal.assign(spins.coils() * spiral.block.adc_samples, 0.0);
@@ -537,7 +538,24 @@ namespace
                 touch(signal);
             }
         }
-        return spins.lattice_windows() - spins.device_windows() == 2 && spins.device_windows() == 2 ? 2 : 0;
+        // Moved by a whole number of lattice steps, mirrored, and turned by
+        // a phase each: the lattice is found again.
+        std::vector<double> positions(3 * n);
+        spins.positions(positions.data());
+        for (size_t i = 0; i < n; ++i)
+        {
+            positions[3 * i] += 2e-3;
+            positions[3 * i + 1] = -positions[3 * i + 1];
+        }
+        spins.set_positions(positions.data());
+        std::vector<double> radians(n);
+        for (size_t i = 0; i < n; ++i)
+            radians[i] = 0.01 * static_cast<double>(i);
+        spins.precess(radians.data());
+        signal.assign(spins.coils() * spiral.block.adc_samples, 0.0);
+        spins.play(spiral.block, signal.data(), 1e-4);
+        touch(signal);
+        return spins.lattice_windows() - spins.device_windows() == 2 && spins.device_windows() == 3 ? 2 : 0;
     }
 
 } // namespace

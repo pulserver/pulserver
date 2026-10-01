@@ -366,6 +366,104 @@ kernel that holds it, carries the magnetisation in single precision from
 $10^{-4}$ on, and drops transients below it. The fixed points' samples are
 summed by the widest kernel at any tolerance.
 
+## Voxels, motion and diffusion
+
+### A voxel's isochromats
+
+A phantom's voxel is one isochromat by default, at the voxel's centre
+(`spins=1`). With several (`spins` of
+{meth}`Phantom.isochromats <pulserver.virtual.Phantom.isochromats>` and
+{meth}`BrainWeb.isochromats <pulserver.virtual.BrainWeb.isochromats>`), they
+share the voxel's proton density and differ in two respects.
+
+*Position.* A `"point"` voxel keeps them at its centre; a `"box"` voxel places
+them at the centres of a grid of cells filling it, $m$ to a side. A gradient
+that winds the phase through a whole number of cycles across a box voxel along
+one of its axes, and not a multiple of $m$, leaves the voxel no signal, as it
+leaves a uniform voxel none; a point voxel, and a lattice of them, keeps its
+signal under any such winding. The cells of all voxels lie on one lattice,
+$m$ times finer, on which windows under a changing gradient are still read.
+
+*Frequency.* T2′ is the decay of a voxel's signal by a static distribution of
+frequencies within it, which a spin echo refocuses. A Lorentzian line of half
+width $1/(2\pi T_2')$ gives the decay $e^{-|t|/T_2'}$ of the free induction and
+$e^{-|t - T_E|/T_2'}$ about a spin echo at $T_E$. The isochromats of a voxel
+take one frequency each from strata of equal probability of that line, the
+strata shifted together by one uniform draw per voxel: over many voxels the
+mean signal decays as $e^{-|t|/T_2'}$, while each voxel's own decay departs
+from it by a spread that falls with the number of isochromats. The line is cut
+at 32 half widths, which keeps a
+voxel's frequencies within $\pm 32/(2\pi T_2')$ of its own and takes 2% of
+the line, so that the decay starts quadratically for $|t| \lesssim T_2'/32$.
+One isochromat per voxel precesses at the voxel's frequency, whatever its T2′.
+BrainWeb's tissue classes take the T2′ that the T2 and T2* of BrainWeb's
+simulator leave at 1.5 T, $R_2' = R_2^* - R_2$, with $R_2'$ in proportion to
+the field, as in the static dephasing regime; their T1 grows with the field as
+measured for white and grey matter
+({meth}`BrainWeb.relaxation <pulserver.virtual.BrainWeb.relaxation>`).
+
+### Motion
+
+A subject moves as a function of the scan clock: `motion(t, positions)`
+returns where the positions at rest lie at time $t$,
+{class}`~pulserver.virtual.RigidMotion` for a rigid body. Each isochromat
+keeps its proton density, relaxation times, off-resonance and transmit and
+receive sensitivities as it moves, so that the sensitivities move with the
+subject rather than stay with the coils.
+
+Before each block the isochromats are placed where the motion puts them at the
+block's start, and they are read there through the block. After the block,
+each is turned by the phase the gradient adds along its path,
+
+$$
+\phi = 2\pi \int_{t_s}^{T} \mathbf{G}(t)\cdot\bigl(\mathbf{r}(t) - \mathbf{r}(0)\bigr)\,dt,
+$$
+
+from the end of the block's RF pulse $t_s$, or its start without one, to its
+end $T$, integrated by three Gauss–Legendre points on each stretch of at most
+0.5 ms on which the gradient is linear. A block without RF therefore leaves
+each isochromat exactly as its motion through the block would, the first
+moment of a bipolar gradient included; samples within a block, and the phase
+accrued before the end of a pulse, are those of the isochromats where they
+stood at the block's start.
+
+### Diffusion
+
+An isochromat with a diffusion coefficient $D$ follows a Brownian walk
+$\mathbf{w}(t)$ of its own, of independent increments of variance $2D\,dt$
+along each axis. The walk acts through the phase alone: the isochromat keeps
+its position, and after each block it is turned by
+$2\pi\int_{t_s}^{T}\mathbf{G}(t)\cdot\mathbf{w}(t)\,dt$. With $K(t)$ the area
+the gradient plays from $t$ to $T$, that phase is
+$2\pi\,K(t_s)\cdot\mathbf{w}(t_s) + 2\pi\int_{t_s}^{T} K(t)\cdot
+d\mathbf{w}(t)$; the second term and the walk's displacement over the block
+are jointly normal, of variances $2D\int K^2\,dt$ and $2D(T-t_s)$ and
+covariance $2D\int K\,dt$ per axis, and are drawn together. The phase is
+therefore exact in distribution, however the gradient is cut into blocks, and
+the mean over a voxel's isochromats of their transverse magnetisation after a
+diffusion encoding is $e^{-bD}$ times its value without one, with
+$b = \int (2\pi k(t))^2\,dt$. Its spread about that mean is about
+$1/\sqrt{2N}$ for $N$ isochromats, so that a voxel's attenuation needs
+many isochromats to be resolved. The walk does not carry magnetisation from
+one place to another.
+
+Isochromats that move or diffuse play block by block: runs of repetitions are
+not used for them.
+
+## Relation to MRzero
+
+MRzero computes the same signal from a phase distribution graph: each state of
+the magnetisation carries the time and the gradient area since it was
+dephased, from which it applies $e^{-|\tau|/T_2'}$, $e^{-bD}$ and a voxel's
+dephasing function exactly, and moving voxels accrue the phase of their path
+evaluated at each event. Its isochromat simulation, against which it checks
+the graph, spreads each voxel over isochromats at shared positions within a box
+and at shared quantiles of the Lorentzian line. Here the same voxel
+properties act through isochromats: T2′ and a box voxel through the isochromats
+of a voxel, motion through their positions and phases, and diffusion through
+each one's walk. Where a voxel holds many isochromats, the two agree to the
+spread of the voxel's isochromats about their mean.
+
 ## Relation to KomaMRI
 
 KomaMRI turns the magnetisation in the same sense, and plays a pulse's
@@ -383,9 +481,10 @@ phase of a pulse or of the demodulation differs between them.
 
 The engine computes the signal of an ideal system playing the sequence as
 written: no gradient delays, eddy currents, gradient nonlinearity, concomitant
-fields or receiver noise. Isochromats neither diffuse, flow nor move, and the
-decay of a voxel's signal by intravoxel dephasing appears only where several
-isochromats represent the voxel.
+fields or receiver noise. The decay of a voxel's signal by intravoxel
+dephasing and by T2′ appears only where several isochromats represent the
+voxel, and diffusion attenuates a voxel's signal only on average over its
+isochromats.
 
 ## See also
 

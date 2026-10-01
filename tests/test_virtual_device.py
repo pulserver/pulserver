@@ -248,3 +248,41 @@ def test_a_phantom_s_isochromats_read_their_windows_on_the_device_they_are_given
     assert spins.device_windows == 1
     # Each term is at most a sensitivity, 1 + depth = 1.5 for the phantom's coils.
     np.testing.assert_allclose(signal, alone, rtol=0, atol=2e-4 * 1.5 * len(spins))
+
+
+def test_a_profiled_device_times_each_stage_of_every_window(device):
+    positions, properties, start = _window("spiral", 3)
+    profiled = _lattice_device(device, profile=True)
+    spins = Isochromats(positions, **properties, device=profiled)
+    _play(spins, start, "spiral", 1e-4)
+
+    assert profiled.stages["windows"] == 1
+    assert set(profiled.stages) == {
+        "upload",
+        "sums",
+        "transform",
+        "basis",
+        "download",
+        "windows",
+    }
+    assert all(seconds >= 0.0 for seconds in profiled.stages.values())
+
+
+def test_a_device_reads_isochromats_moved_on_the_lattice_they_were_moved_onto(device):
+    """The lattice a device holds is that of the positions the window was read at."""
+    positions, properties, start = _window("spiral", 3)
+    spins = Isochromats(positions, **properties, device=_lattice_device(device))
+    alone = Isochromats(positions, **properties)
+    moved = positions * [1.0, -1.0, 1.0] + [1e-3, 0.0, 0.0]
+    read = []
+    for each in (spins, alone):
+        _play(each, start, "spiral", 1e-4)
+        each.positions = moved
+        read.append(_play(each, start, "spiral", 1e-4)[0])
+
+    assert spins.device_windows == 2
+    expected, terms = _signal(
+        moved, properties, start, *_play(alone, start, "spiral", 1e-4)[1:]
+    )
+    np.testing.assert_allclose(read[0], expected, rtol=0, atol=2e-4 * terms)
+    np.testing.assert_allclose(read[1], expected, rtol=0, atol=2e-4 * terms)

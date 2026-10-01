@@ -65,6 +65,10 @@ namespace bloch
      */
     struct LatticeWindowRead
     {
+        /** The positions' revision: the lattice of given axes, and the
+         *  isochromats' order on it, are the same for every window of one
+         *  revision. */
+        size_t layout = 0;
         /** The lattice axes, a bit per axis, the points along each, the
          *  lowest axis first and fastest, and the points in all. */
         unsigned axes = 0;
@@ -108,13 +112,24 @@ namespace bloch
         double tolerance = 0.0;
         bool single = false;
         /** Each coil's sum over the Chebyshev points of the basis times the
-         *  transform of its lattice sums, [coil][sample], zero on entry. */
+         *  transform of its lattice sums, [coil][sample], zero on entry and
+         *  held until the read is finished. */
         std::complex<double>* out = nullptr;
     };
 
-    /** Reads a window on the lattice in the engine's place and returns
-     *  true, or declines it and returns false. */
-    using LatticeDevice = std::function<bool(const LatticeWindowRead&)>;
+    /**
+     * Reads windows on the lattice in the engine's place. @c read starts
+     * reading a window and returns true, or declines it and returns false;
+     * the engine then takes the isochromats to the window's last sample
+     * while the device reads, and calls @c finish, which returns once
+     * @c out holds the window. Arrays other than @c out are read before
+     * @c read returns.
+     */
+    struct LatticeDevice
+    {
+        std::function<bool(const LatticeWindowRead&)> read;
+        std::function<void()> finish;
+    };
 
     /** The events one block plays, timed in s from the block's start. */
     struct BlockEvents
@@ -235,6 +250,18 @@ namespace bloch
 
         /** Replace the magnetisation with (size(), 3) row-major @p from. */
         void set_magnetization(const double* from);
+
+        /** Move the isochromats to (size(), 3) row-major positions @p from,
+         *  in m, once the free precession pending has been applied where
+         *  they stand. */
+        void set_positions(const double* from);
+
+        /** Write the positions, (size(), 3) row-major, to @p into. */
+        void positions(double* into) const;
+
+        /** Turn each isochromat's Mx + i My by exp(-i @p radians[i]), as
+         *  precession through that angle turns it. */
+        void precess(const double* radians);
 
         /**
          * Play @p block, writing what each coil receives at each ADC sample to
@@ -475,6 +502,17 @@ namespace bloch
             const std::vector<std::vector<double>>& x,
             double tolerance,
             std::vector<std::complex<double>>& out);
+        /** Read @p window into @p out, [coil][sample], on the lattice
+         *  device when it takes the window, else by lattice transforms when
+         *  they cost less than reading it sample by sample, and leave the
+         *  isochromats as they stand at its last sample; whether it was
+         *  read. */
+        bool read_lattice_window(
+            const LatticeWindow& window,
+            const Segments& segments,
+            const std::vector<std::vector<double>>& x,
+            double tolerance,
+            std::vector<std::complex<double>>& out);
         /** Hand the window to the lattice device; whether it read it. */
         bool read_on_device(
             const LatticeWindow& window,
@@ -621,6 +659,8 @@ namespace bloch
         std::vector<Segmentation> segmentations_;
         size_t lattice_windows_ = 0;
         size_t device_windows_ = 0;
+        /** Revision of the positions, counted from construction. */
+        size_t layout_ = 0;
         LatticeDevice lattice_device_;
         /** The lattice's sums and their transforms at the samples, in
          *  either precision, kept from one window to the next. */
