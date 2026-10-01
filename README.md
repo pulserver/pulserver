@@ -54,6 +54,7 @@ a reconstruction plugin reconstructs the series it acquires:
 from pypulseqpp.sequences.sequence.gre2D_sequence import Gre2DApp
 from pulserver.design import ScannerSequence, TimeParam, UIParam
 
+
 class Gre(ScannerSequence):
     app = Gre2DApp
     recon = "gre"
@@ -67,12 +68,14 @@ import bartorch.tools as bt
 from bartorch import apps, priors
 from pulserver import recon
 
+
 class Pics(recon.ReconPlugin):
     def recon(self, branch, context):
         kspace = torch.from_numpy(self.buffers[0].kspace)  # (coils, y, x)
         maps = bt.ecalib(kspace, maps=1)
         image = apps.pics(kspace, maps, regularizers=priors.Wavelet((-1, -2), 0.005))
         return recon.ReconResult(image.abs().numpy())
+
 
 PLUGIN = Pics()
 ```
