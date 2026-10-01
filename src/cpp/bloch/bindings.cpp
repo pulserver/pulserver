@@ -354,13 +354,18 @@ namespace
         return made;
     }
 
+    /** Whether @p device has the methods the engine calls to carry a run. */
+    bool carries_runs(const py::object& device)
+    {
+        return py::hasattr(device, "begin_run") && py::hasattr(device, "carry") && py::hasattr(device, "write_state");
+    }
+
     /** The engine's run device calling @p device's @c begin_run, @c carry,
      *  @c write_state and @c end_run, where it has the first three; none
      *  otherwise, or for None. */
     bloch::RunDevice run_device(const py::object& device)
     {
-        if (device.is_none() || !py::hasattr(device, "begin_run") || !py::hasattr(device, "carry") ||
-            !py::hasattr(device, "write_state"))
+        if (device.is_none() || !carries_runs(device))
             return {};
         std::shared_ptr<py::object> held(new py::object(device), [](py::object* object) {
             py::gil_scoped_acquire acquired;

@@ -763,7 +763,8 @@ namespace
                     advance(h, t, n, r, Complex(cosines[r], sines[r]), m);
                 }
                 const double size = m[0] * m[0] + m[1] * m[1] + m[2] * m[2];
-                if (t.drop && s.limits && size > 0.0 && !(size > value(h, n, s.limit_at)))
+                const bool limited = t.drop && s.limits;
+                if (limited && size > 0.0 && !(size > value(h, n, s.limit_at)))
                 {
                     m[0] = m[1] = m[2] = 0.0;
                     ++dropped;

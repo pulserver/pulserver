@@ -2383,9 +2383,9 @@ namespace bloch
          * them holds, as each spoke of a ZTE scan plays, is played from its
          * tables isochromat by isochromat rather than grouping them anew. */
         double along = 0.0;
-        if (gradient.mode == kOneDirection && groupings_.size() >= kGroupings &&
-            kept_grouping(gradient.mode, gradient.direction) == nullptr && held_gradient(gradient, along) &&
-            excite_each(block, gradient, along))
+        const bool ungrouped = gradient.mode == kOneDirection && groupings_.size() >= kGroupings &&
+            kept_grouping(gradient.mode, gradient.direction) == nullptr;
+        if (ungrouped && held_gradient(gradient, along) && excite_each(block, gradient, along))
             return;
         const Grouping& groups = grouping(gradient.mode, gradient.direction);
         std::complex<double> turn = 1.0;
