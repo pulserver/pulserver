@@ -83,8 +83,29 @@ worker processes that have already imported it.
 The series of one exam share a directory on the reconstruction computer. What
 a series stores in its exam cache is written there, and a later series of the
 exam reads it back, such as a coil calibration it need not compute again. The
-exam is the one the header names; the directory is deleted once a header names
-another exam and no series of the first is still reconstructed.
+exam is the one the header names, and the directory is the host's rather than
+one proxy's: a reconstruction computer runs one proxy per acquisition, so the
+series of an exam are reconstructed by different processes. It is deleted once
+no series of that exam is being reconstructed anywhere on the host.
+
+Three maps have names the series agree on, and a hook reaches them as
+attributes of its context: `b0_map` is off-resonance in Hz, `b1_map` the
+transmit field as a fraction of what was asked for, and `coil_sensitivities`
+the receive sensitivity of each coil. A calibration hook assigns what it
+measured and a later hook reads it, with `None` meaning no series of the exam
+has measured it yet.
+
+```python
+def __call__(self, bucket, context):
+    maps = context.coil_sensitivities  # measured by an earlier series
+    image, transmit = parallel_imaging_and_b1_fit(bucket, maps)
+    context.b1_map = transmit          # read by a later one
+    return image
+```
+
+Those three are the whole vocabulary, so a misspelt name raises rather than
+storing a map where nothing looks for it. An artifact a plugin carries for
+itself goes in `context.exam` under a key of its own.
 
 The number of series reconstructed concurrently is bounded by a number of
 slots, derived from the available memory unless it is specified. On a host with

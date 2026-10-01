@@ -2,6 +2,7 @@
 
 import json
 import os
+import runpy
 import shutil
 import socket
 import struct
@@ -28,7 +29,9 @@ from pulserver.proxy import (
     ReconServer,
     SequenceTable,
     _designs,
+    _held,
 )
+from pulserver.recon import load_plugin
 from pulserver.recon._runtime import concurrency
 from pulserver.recon._runtime.connection import Connection
 from pulserver.recon._runtime.mrd2dicom import DicomWithName
@@ -41,7 +44,7 @@ CHANNELS = 2
 DEADLINE = 180.0
 
 HEADER = """<?xml version="1.0"?>
-<ismrmrdHeader xmlns="http://www.ismrm.org/ISMRMRD">
+<ismrmrdHeader xmlns="http://www.ismrm.org/ISMRMRD">{measurement}
   <acquisitionSystemInformation><receiverChannels>{channels}</receiverChannels></acquisitionSystemInformation>
   <experimentalConditions><H1resonanceFrequency_Hz>63500000</H1resonanceFrequency_Hz></experimentalConditions>
   <encoding>
@@ -147,8 +150,12 @@ def _texts(connection, _stream):
     connection.send("forwarded")
 
 
-def header_xml(series, exam=None, design=None):
+def header_xml(series, exam=None, design=None, measurement=None):
     return HEADER.format(
+        measurement=""
+        if measurement is None
+        else f"<measurementInformation><measurementID>{measurement}</measurementID>"
+        "<patientPosition>HFS</patientPosition></measurementInformation>",
         channels=CHANNELS,
         design=series.design if design is None else design,
         exam=""
@@ -180,6 +187,8 @@ def stream(
     readouts=None,
     last=None,
     design=None,
+    measurement=None,
+    leave=False,
 ):
     """Play one series' readouts as the scanner client does; return what came back.
 
@@ -188,7 +197,9 @@ def stream(
     header's ``ExamID``; none by default. ``headers`` is how many times the
     header is sent, ``readouts`` how many readouts are, all of them by default,
     ``last`` the acquisition flagged ``LAST_IN_MEASUREMENT``, none by default,
-    and ``design`` the header's ``pulserver_design``, the series' by default.
+    ``design`` the header's ``pulserver_design``, the series' by default, and
+    ``measurement`` its ``measurementID``, none by default. With ``leave`` the
+    client closes its connection once it has sent the series, reading nothing.
     """
     stream = socket.create_connection(("127.0.0.1", port), timeout=DEADLINE)
     connection = Connection(stream)
@@ -196,7 +207,7 @@ def stream(
     if config is not None:
         connection.send_config(config)
     for _ in range(headers):
-        connection.send_header(header_xml(series, exam, design))
+        connection.send_header(header_xml(series, exam, design, measurement))
     for index in range(len(series.table) if readouts is None else readouts):
         acquisition = ismrmrd.Acquisition.from_array(data(series.table, index))
         if counters is not None:
@@ -205,6 +216,9 @@ def stream(
             acquisition.setFlag(ismrmrd.ACQ_LAST_IN_MEASUREMENT)
         connection.send(acquisition)
     connection.send_close()
+    if leave:
+        stream.close()
+        return []
     received = list(connection)
     connection.shutdown_close()
     return received
@@ -538,12 +552,17 @@ def test_the_series_of_one_exam_share_its_exam_cache(start_proxy, bucket):
     assert counts == [[1], [2], [1], [1]]
 
 
-def test_a_closed_proxy_leaves_no_exam_directory(tmp_path):
-    proxy = ReconProxy(tmp_path, tmp_path, slots=1, spares=1)
-    root = proxy._reconstruction._exam_root
+def test_a_closed_proxy_leaves_the_exam_root_for_the_proxies_still_running(tmp_path):
+    """The root is the host's: a proxy closing is not every proxy closing.
+
+    What a closing proxy takes with it is each exam nothing else is on, which
+    :mod:`tests.test_exam_sharing` states; the root it shares stays.
+    """
+    root = tmp_path / "exams"
+    proxy = ReconProxy(tmp_path, tmp_path, slots=1, spares=1, exam_directory=root)
     assert root.is_dir()
     proxy.close()
-    assert not root.exists()
+    assert root.is_dir()
 
 
 def test_a_reconstruction_may_start_processes_of_its_own(start_proxy, bucket):
@@ -566,6 +585,112 @@ def test_a_series_reads_the_gpu_its_slot_holds(
         for image in images(stream(port, series["raw"], config="device"))
     ]
     assert values == read
+
+
+def _published(path):
+    """Return the version and rotation of the pose a reader of ``path`` takes."""
+    from pulserver.proxy._motion import SLOTS, _check_of
+
+    raw = path.read_bytes()
+    poses = []
+    for slot in range(SLOTS):
+        at = 16 + slot * 48
+        words = list(struct.unpack("=12I", raw[at : at + 48]))
+        if words[0] and words[2] == _check_of(words):
+            rotation = struct.unpack("=9f", struct.pack("=9I", *words[3:]))
+            poses.append((words[0], rotation))
+    return max(poses)
+
+
+@pytest.mark.parametrize("forwarded", [False, True])
+def test_a_motion_corrected_series_publishes_its_poses_to_the_scan(
+    start_proxy, start_server, bucket, monkeypatch, forwarded
+):
+    """The scan reads the last pose stated, as stated: absolute, not composed."""
+    from pulserver.proxy._motion import FILENAME
+
+    poses = runpy.run_path(str(RECON_PLUGINS / "pose.py"))["POSES"]
+
+    monkeypatch.setattr(_designs, "_asks_for_motion_correction", lambda _: True)
+    root, series = bucket
+    path = Path(root) / series["raw"].design / FILENAME
+    path.unlink(missing_ok=True)
+    if forwarded:
+        server = start_server(slots=1)
+        proxy = start_proxy(forward=("127.0.0.1", server.port), forward_config="pose")
+    else:
+        proxy = start_proxy(slots=1)
+    received = stream(proxy.port, series["raw"], config="pose")
+
+    assert closed(received)
+    assert len(images(received)) == 1
+    assert not any(isinstance(item, ismrmrd.Waveform) for item in received)
+    version, rotation = _published(path)
+    assert version == len(poses)
+    assert rotation == pytest.approx(poses[-1])
+
+
+def test_a_series_not_corrected_for_motion_writes_no_pose_file(start_proxy, bucket):
+    from pulserver.proxy._motion import FILENAME
+
+    root, series = bucket
+    path = Path(root) / series["bound"].design / FILENAME
+    stream(start_proxy(slots=1).port, series["bound"])
+    assert not path.exists()
+
+
+def _at(position_m):
+    def data(table, index):
+        return point(table, index, position_m)
+
+    return data
+
+
+def test_images_whose_client_has_gone_reach_it_when_it_returns(
+    start_proxy, bucket, monkeypatch, tmp_path
+):
+    """Each returning client gets its own series, whichever order they return in."""
+    monkeypatch.setattr(_held, "DEFAULT_HELD_DIRECTORY", tmp_path)
+    _, series = bucket
+    port = start_proxy(slots=2).port
+    config = json.dumps({"parameters": {"config": "gre2d", "delay": 2.0}})
+    positions = {"M1": (0.004, -0.002, 0.0), "M2": (-0.006, 0.004, 0.0)}
+    for measurement, position in positions.items():
+        stream(
+            port,
+            series["raw"],
+            config=config,
+            data=_at(position),
+            measurement=measurement,
+            leave=True,
+        )
+    _wait_until(
+        lambda: len([p for p in tmp_path.iterdir() if p.suffix != ".part"]) == 2,
+        "the outputs of the series whose clients left were not held",
+    )
+    for measurement in reversed(positions):
+        received = stream(port, series["raw"], readouts=0, measurement=measurement)
+        assert closed(received)
+        (image,) = images(received)
+        (live,) = images(
+            stream(
+                port, series["raw"], config="gre2d", data=_at(positions[measurement])
+            )
+        )
+        np.testing.assert_array_equal(image.data, live.data)
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_a_client_that_stays_leaves_nothing_held(
+    start_proxy, bucket, monkeypatch, tmp_path
+):
+    monkeypatch.setattr(_held, "DEFAULT_HELD_DIRECTORY", tmp_path)
+    _, series = bucket
+    received = stream(
+        start_proxy(slots=1).port, series["raw"], config="gre2d", measurement="M3"
+    )
+    assert len(images(received)) == 1
+    assert list(tmp_path.iterdir()) == []
 
 
 def test_a_design_pushed_to_the_intake_is_reconstructed_from_its_store(tmp_path):
@@ -863,3 +988,27 @@ def test_a_terminated_server_process_exits_cleanly():
     finally:
         process.kill()
         process.stderr.close()
+
+
+def test_a_recorded_series_run_offline_against_its_store_gives_the_proxys_image(
+    bucket, tmp_path
+):
+    root, series = bucket
+    bound = series["bound"]
+
+    def kspace(table, index):
+        return point(table, index, (0.004, -0.002, 0.0))
+
+    path = str(tmp_path / "scan.h5")
+    dataset = ismrmrd.Dataset(path, "dataset", create_if_needed=True)
+    dataset.write_xml_header(header_xml(bound))
+    for index in range(len(bound.table)):
+        dataset.append_acquisition(
+            ismrmrd.Acquisition.from_array(kspace(bound.table, index))
+        )
+    dataset.close()
+
+    offline = load_plugin(RECON_PLUGINS / "gre2d.py").run(path, store=root)
+    _, received = _in_process(root, bound, data=kspace)
+
+    np.testing.assert_array_equal(images(offline)[0].data, images(received)[0].data)

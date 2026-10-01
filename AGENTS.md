@@ -35,6 +35,10 @@ The install compiles `pulserver._ext` and needs a C and C++ compiler and CMake.
 -pedantic-errors`, as the scanner builds it, so a C99 construct fails here
 before it reaches the interpreter.
 
+`pulserver._ext` is compiled at install and does not follow a branch. After
+switching to one that touches `src/cpp/` or `src/c/`, reinstall, or the tests
+run against the other branch's build and fail somewhere unrelated.
+
 Build and test steps are mandatory before reporting a change complete. Run them
 and report the exact output; do not assume success.
 
@@ -88,7 +92,13 @@ name states the invariant it protects, so a failure reads as a sentence.
 
 Anything numerical that can run on CPU and CUDA is parametrised over both, and
 the CUDA leg skips when no device is present. A check that passes on one device
-says nothing about the other.
+says nothing about the other. Some CUDA cases fail with a compilation error
+from Triton on some machines, independently of any change: confirm a failure
+against a clean tree before chasing it.
+
+A test module is not importable as a package where the suite runs, so one
+module importing another takes the whole suite down on every platform. A helper
+two modules share goes in `tests/conftest.py`.
 
 ## Comments
 

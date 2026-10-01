@@ -1,4 +1,4 @@
-"""The console image's sequences: each designs its default protocol under the console's limits, and images the vials."""
+"""The shipped sequences: each designs its default protocol under the console's limits, and images the vials with its shipped reconstruction."""
 
 import base64
 import io
@@ -9,26 +9,33 @@ import pydicom
 import pytest
 from _host import PLUGINS, value_block
 
+from pulserver._plugins import RECONSTRUCTIONS, SEQUENCES
 from pulserver.design import load_plugin
 from pulserver.protocol import FOV_OFFSET, FOV_ROTATION
 from pulserver.virtual._console import Console
 
 ROOT = Path(__file__).parents[1]
-CONSOLE_PLUGINS = ROOT / "docker" / "console" / "plugins"
-CONSOLE_RECON = ROOT / "docker" / "console" / "recon"
 CONSOLE_LIMITS = ROOT / "docker" / "limits" / "limits.txt"
 RECON_PLUGINS = Path(__file__).parent / "recon_plugins"
-# The image copies the gradient echo the other tests design beside its own.
-SHIPPED = sorted(["gre2d", *(path.stem for path in CONSOLE_PLUGINS.glob("*.py"))])
+SHIPPED = sorted(path.stem for path in SEQUENCES.glob("*.py"))
 
 # A matrix small enough to scan here, at the reference's field of view. The
 # balanced SSFP is read at a bandwidth whose readout outlasts the half of its
 # excitation that follows the pulse centre.
 SMALL = {"nx": 32, "ny": 32, "fov": 220.0, "phase_fov": 220.0}
+NONCARTESIAN = {"ny": None, "phase_fov": None}
 SMALLER = {
     "bssfp2d": {"bandwidth": 25e3},
-    "gre_radial2d": {"ny": None, "phase_fov": None},
-    "gre_spiral2d": {"ny": None, "phase_fov": None},
+    "gre_radial2d": NONCARTESIAN,
+    "gre_spiral2d": NONCARTESIAN,
+    "se_radial2d": NONCARTESIAN,
+    "se_spiral2d": NONCARTESIAN,
+    "gre3d": {"nslices": 8},
+    "se3d": {"nslices": 8},
+    "gre_stack_of_stars3d": {**NONCARTESIAN, "nslices": 8},
+    "gre_stack_of_spirals3d": {**NONCARTESIAN, "nslices": 8},
+    "se_stack_of_stars3d": {**NONCARTESIAN, "nslices": 8},
+    "se_stack_of_spirals3d": {**NONCARTESIAN, "nslices": 8},
 }
 # Normalised correlation with the Cartesian gradient echo's image of the same
 # vials: below it on a contrast of its own, a regularised NUFFT's residual
@@ -46,13 +53,14 @@ def _prescription(**values):
     )
 
 
-def _console(tmp_path, recon):
+def _console(tmp_path, plugins=(), recon=()):
+    """A console searching ``plugins`` and ``recon`` before the shipped plugins."""
     return Console(
-        plugins=[CONSOLE_PLUGINS, PLUGINS],
+        plugins=[*plugins, tmp_path / "plugins"],
         limits=CONSOLE_LIMITS.read_text(),
         store=tmp_path / "designs",
         spacing=2e-3,
-        recon_plugins=recon,
+        recon_plugins=[*recon, tmp_path / "recon"],
     )
 
 
@@ -84,7 +92,7 @@ def _correlation(a, b):
 @pytest.fixture(scope="module")
 def reference(tmp_path_factory):
     """The Cartesian gradient echo's image of the vials."""
-    console = _console(tmp_path_factory.mktemp("reference"), [RECON_PLUGINS])
+    console = _console(tmp_path_factory.mktemp("reference"), [PLUGINS], [RECON_PLUGINS])
     (image,) = _images(console, "gre2d", SMALL)
     return image.astype(float)
 
@@ -93,9 +101,7 @@ def reference(tmp_path_factory):
 def test_a_console_sequence_designs_its_default_protocol_under_the_console_limits(
     tmp_path, name
 ):
-    reply = _console(tmp_path, [CONSOLE_RECON]).design(
-        "generate", name, _prescription()
-    )
+    reply = _console(tmp_path).design("generate", name, _prescription())
 
     assert "design" in reply, reply
 
@@ -104,28 +110,54 @@ def test_a_console_sequence_designs_its_default_protocol_under_the_console_limit
 def test_a_console_sequence_images_the_vials_where_the_cartesian_gradient_echo_does(
     tmp_path, name, reference
 ):
-    plugin = CONSOLE_PLUGINS / f"{name}.py"
-    if plugin.exists() and load_plugin(plugin).recon == "nufft":
+    if load_plugin(SEQUENCES / f"{name}.py").recon == "nufft":
         pytest.importorskip("bartorch")
-    console = _console(tmp_path, [CONSOLE_RECON])
+    console = _console(tmp_path)
 
     images = _images(console, name, {**SMALL, **SMALLER.get(name, {})})
 
     assert images
+    if name.endswith("3d"):
+        # The vials lie in the partition at the slab's centre.
+        images = [images[len(images) // 2]]
     for image in images:
         assert _correlation(reference, image.astype(float)) > AGREEMENT
 
 
 def test_the_cartesian_reconstruction_of_a_gradient_echo_is_the_simple_fft(tmp_path):
     """Lines placed by their counters are the lines in arrival order when they arrive in order."""
-    cartesian = tmp_path / "cartesian"
-    cartesian.mkdir()
-    (cartesian / "gre2d.py").write_text(
-        "from pulserver.recon.handlers.cartesian import PLUGIN  # noqa: F401\n"
-    )
-
-    placed = _images(_console(tmp_path, [cartesian]), "gre2d", SMALL)
-    arrived = _images(_console(tmp_path, [RECON_PLUGINS]), "gre2d", SMALL)
+    placed = _images(_console(tmp_path), "gre2d", SMALL)
+    arrived = _images(_console(tmp_path, [PLUGINS], [RECON_PLUGINS]), "gre2d", SMALL)
 
     assert len(placed) == len(arrived) == 1
     np.testing.assert_array_equal(placed[0], arrived[0])
+
+
+def test_a_shipped_sequence_names_a_shipped_reconstruction():
+    shipped = {path.stem for path in RECONSTRUCTIONS.glob("*.py")}
+
+    for name in SHIPPED:
+        assert load_plugin(SEQUENCES / f"{name}.py").recon in shipped
+
+
+def test_no_shipped_reconstruction_shares_a_name_with_a_shipped_sequence():
+    assert not {p.stem for p in RECONSTRUCTIONS.glob("*.py")} & set(SHIPPED)
+
+
+def test_pics_images_the_vials_from_half_the_phase_encodes(tmp_path, reference):
+    pytest.importorskip("bartorch")
+    plugins = tmp_path / "accelerated"
+    plugins.mkdir()
+    (plugins / "gre2d_r2.py").write_text(
+        (SEQUENCES / "gre2d.py")
+        .read_text()
+        .replace('recon = "cartesian"', 'recon = "pics"')
+        .replace(
+            "    ui = {\n",
+            '    ui = {\n        UIParam.RY: IntParam("ry", range_min=1, range_max=4),\n',
+        )
+    )
+
+    (image,) = _images(_console(tmp_path, [plugins]), "gre2d_r2", {**SMALL, "Ry": 2})
+
+    assert _correlation(reference, image.astype(float)) > AGREEMENT

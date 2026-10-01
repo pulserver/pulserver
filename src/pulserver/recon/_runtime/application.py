@@ -5,6 +5,7 @@ from __future__ import annotations
 __all__ = ["run_application"]
 
 import ctypes
+import dataclasses
 from collections.abc import Iterable, Mapping
 from typing import Any
 
@@ -29,7 +30,9 @@ def run_application(
     go to :meth:`~pulserver.recon.ReconPlugin.receive` as they arrive; waveforms
     are collected, and each emitted unit carries all received so far; any other
     item is sent back unchanged. :class:`~pulserver.recon.ReconResult` outputs
-    become MRD images, or DICOM when requested. When the stream ends on
+    become MRD images, or DICOM when requested; a ``(z, y, x)`` volume becomes
+    one image per partition along ``slice_dir``, partition ``z // 2`` at
+    the volume's centre, as an FFT places it. When the stream ends on
     acquisitions that closed no branch, ``"imaging"`` is reconstructed once more.
     """
     app = plugin.spawn()
@@ -42,18 +45,19 @@ def run_application(
         nonlocal image_index, dicom_builder
         for item in _outputs(output):
             if isinstance(item, ReconResult):
-                emitted, image_index = _make_image(
+                images, image_index = _make_images(
                     item,
                     bucket,
                     context,
                     image_index,
                     type(app).__name__,
                 )
-                if item.dicom:
-                    if dicom_builder is None:
-                        dicom_builder = MrdDicomBuilder(context.header)
-                    emitted = dicom_builder(emitted)
-                connection.send(emitted)
+                for emitted in images:
+                    if item.dicom:
+                        if dicom_builder is None:
+                            dicom_builder = MrdDicomBuilder(context.header)
+                        emitted = dicom_builder(emitted)
+                    connection.send(emitted)
             else:
                 connection.send(item)
 
@@ -167,6 +171,46 @@ def _is_array(value: Any) -> bool:
     except ImportError:
         return False
     return isinstance(value, torch.Tensor)
+
+
+def _make_images(
+    result: ReconResult,
+    bucket: AcquisitionBucket,
+    context: ReconContext,
+    next_image_index: int,
+    app_name: str,
+) -> tuple[list[ismrmrd.Image], int]:
+    data = as_numpy(result.data)
+    if data.ndim != 3 or data.shape[0] == 1:
+        image, next_image_index = _make_image(
+            result, bucket, context, next_image_index, app_name
+        )
+        return [image], next_image_index
+    images = []
+    for partition, plane in enumerate(data):
+        image, next_image_index = _make_image(
+            dataclasses.replace(
+                result,
+                data=plane,
+                image_index=None
+                if result.image_index is None
+                else result.image_index + partition,
+            ),
+            bucket,
+            context,
+            next_image_index,
+            app_name,
+        )
+        thickness = float(image.field_of_view[2]) / len(data)
+        shift = (partition - len(data) // 2) * thickness
+        image.position = tuple(
+            float(image.position[axis]) + shift * float(image.slice_dir[axis])
+            for axis in range(3)
+        )
+        image.field_of_view = (*image.field_of_view[:2], thickness)
+        image.slice = partition
+        images.append(image)
+    return images, next_image_index
 
 
 def _make_image(

@@ -38,8 +38,8 @@ def test_the_image_serves_its_console_without_arguments(run):
 
     args = _parser().parse_args(options)
     assert command == "console"
-    assert args.plugins == [Path("/console/user/plugins"), Path("/console/plugins")]
-    assert args.recon_plugins == [Path("/console/user/recon"), Path("/console/recon")]
+    assert args.plugins == [Path("/console/user/plugins")]
+    assert args.recon_plugins == [Path("/console/user/recon")]
     assert (args.fields, args.port, args.speed) == (Path("/console/fields"), 8765, 1.0)
     assert ipaddress.ip_address(args.host).is_unspecified
 

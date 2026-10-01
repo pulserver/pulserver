@@ -7,10 +7,10 @@
 case "${1:-}" in
 "" | -*)
     set -- console \
-        --plugins=/console/user/plugins --plugins=/console/plugins \
+        --plugins=/console/user/plugins \
         --limits=/console/limits.txt --store=/console/designs \
         --fields=/console/fields \
-        --recon-plugins=/console/user/recon --recon-plugins=/console/recon \
+        --recon-plugins=/console/user/recon \
         --host=0.0.0.0 --port=8765 --speed=1 \
         --origin=https://pulserver.github.io --origin=http://localhost:8000 \
         --origin=http://127.0.0.1:8000 \

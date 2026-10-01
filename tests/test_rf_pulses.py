@@ -88,6 +88,23 @@ def test_the_pulses_of_a_design_reach_the_listing(tmp_path):
     assert read[0].definition == 1
 
 
+def test_a_design_stating_its_rf_is_received_by_another_store(tmp_path):
+    """The pulses are part of the design, published and pushed with it."""
+    from _host import generate
+
+    from pulserver.host._service import PULSES_FILE
+    from pulserver.host._store import DesignStore
+
+    plugins = _plugin(tmp_path, "follows = (UIParam.FLIP,)")
+    host = DesignStore(tmp_path / "host")
+    design = generate(host, "linked", {"flip": 20}, plugins=plugins)
+    assert PULSES_FILE in host.manifest(design)["files"]
+    recon = DesignStore(tmp_path / "recon")
+    assert recon.receive(host.pack(design)) == design
+    held = (recon.directory(design) / PULSES_FILE).read_text()
+    assert parse_pulses(held)[0] == design
+
+
 def test_a_sequence_no_design_has_been_made_of_states_no_rf(tmp_path):
     """Nothing is designed to answer a listing; the scanner costs it later."""
     from pulserver.host._service import list_protocol

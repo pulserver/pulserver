@@ -23,12 +23,17 @@ from .._plugins import NAME, PluginPath, directories, find
 from ..recon._runtime import constants
 from ..recon._runtime.concurrency import HostSlots, Slot, slot_devices
 from ..recon._runtime.connection import Connection
-from ..recon._runtime.exam import ExamCacheManager
+from ..recon._runtime.exam import (
+    DEFAULT_EXAM_DIRECTORY,
+    EXAM_DIRECTORY_MODE,
+    ExamCacheManager,
+)
 from ..recon._runtime.mrd2dicom import MrdDicomBuilder
 from ..recon._runtime.readers import deserialize_config, read_text
+from . import _held
 from ._designs import Design, DesignCache
 from ._enrich import enrich_acquisition, enrich_header
-from ._motion import Pose, pose_of
+from ._motion import FILENAME, MotionWriter, Pose, pose_of, pose_waveform
 from ._queue import QueueFile
 from ._workers import WorkerPool
 
@@ -43,6 +48,8 @@ _WORKER_TIMEOUT = 120.0
 _ACCEPT_POLL = 0.5
 # How long a refused client may send nothing before the proxy stops reading it.
 _DRAIN_IDLE = 30.0
+# How often the exams nothing has leased for a while are looked for.
+_EXPIRY_POLL = 60.0
 
 
 class _Listener:
@@ -168,7 +175,22 @@ class ReconProxy(_Listener):
     system's temporary directory, through which a reconstruction reads what an
     earlier series of the exam stored in its
     :class:`~pulserver.recon.ExamCache`. It is deleted once a header names
-    another exam and no series of the exam still runs.
+    another exam, or nothing has leased it for
+    :data:`~pulserver.recon._runtime.exam.EXAM_IDLE` seconds, and no series of
+    the exam still runs on any proxy.
+
+    A series whose sequence sets ``EnablePmc`` is corrected for motion while
+    it plays: the poses its reconstruction states are published into the
+    pose file the scan reads, ``motion.buf`` in the design's directory,
+    rather than sent to the client. A forwarded series publishes the poses the
+    server passes back.
+
+    What goes back to a client is also written to a directory under the
+    system's temporary directory, shared with every other proxy on this host,
+    and removed once the client has had all of it. When the client has gone,
+    it is kept: a client opening a series with the same ``measurementID`` is
+    sent it, after it is complete, in place of a new reconstruction. Kept
+    output nobody takes up is removed after a day.
 
     A forwarded series is sent on as it arrives; the server's own slots and
     queue determine when it is reconstructed. The server is sent a config file message naming
@@ -201,6 +223,13 @@ class ReconProxy(_Listener):
         host so they count against one set;
         :data:`~pulserver.recon._runtime.concurrency.DEFAULT_SLOT_DIRECTORY`
         when ``None``.
+    exam_directory
+        Directory the caches of an exam are held in, shared with every other
+        proxy on this host so a map one series measures reaches a series on
+        another;
+        :data:`~pulserver.recon._runtime.exam.DEFAULT_EXAM_DIRECTORY` when
+        ``None``. An exam's directory is removed when the last proxy on that
+        exam lets go of it.
     forward
         ``(host, port)`` of the MRD server that reconstructs every series;
         local workers when ``None``.
@@ -236,12 +265,14 @@ class ReconProxy(_Listener):
         recon_timeout: float | None = None,
         queue: Path | str | None = None,
         slot_directory: Path | str | None = None,
+        exam_directory: Path | str | None = None,
         forward: tuple[str, int] | None = None,
         forward_config: str | None = None,
         forward_dicom: bool = False,
     ) -> None:
         super().__init__(store)
         self.designs = DesignCache(store)
+        self.held = Path(_held.DEFAULT_HELD_DIRECTORY)
         self.workers = self.exams = self.queue = None
         if forward is not None:
             self._reconstruction: _Workers | _Remote = _Remote(
@@ -251,7 +282,14 @@ class ReconProxy(_Listener):
         if plugins is None:
             raise ValueError("a proxy that does not forward needs a plugin directory")
         local = self._reconstruction = _Workers(
-            plugins, slots, gpu_slots, spares, recon_timeout, queue, slot_directory
+            plugins,
+            slots,
+            gpu_slots,
+            spares,
+            recon_timeout,
+            queue,
+            slot_directory,
+            exam_directory,
         )
         self.workers, self.exams, self.queue = local.workers, local.exams, local.queue
 
@@ -261,6 +299,10 @@ class ReconProxy(_Listener):
         self._reconstruction.close()
 
     def _series(self, client: Connection, config: str, header: Any) -> None:
+        path, claimable = _held.held_path(self.held, header)
+        if claimable and _held.take_up(client, path):
+            _drain(client)
+            return
         design = self.designs.resolve(header)
         plugin = design.recon or _config_plugin(config)
         enrich_header(header, design.table)
@@ -270,14 +312,17 @@ class ReconProxy(_Listener):
             plugin,
             len(design.table),
         )
-        self._reconstruction.run(
-            client,
-            config,
-            header,
-            plugin,
-            _enriched(client, design),
-            motion_corrected=design.prospective_motion,
-        )
+        with _held.HeldClient(client, path) as held:
+            self._reconstruction.run(
+                held,
+                config,
+                header,
+                plugin,
+                _enriched(client, design),
+                motion=design.directory / FILENAME
+                if design.prospective_motion
+                else None,
+            )
 
 
 class ReconServer(_Listener):
@@ -314,6 +359,13 @@ class ReconServer(_Listener):
         host so they count against one set;
         :data:`~pulserver.recon._runtime.concurrency.DEFAULT_SLOT_DIRECTORY`
         when ``None``.
+    exam_directory
+        Directory the caches of an exam are held in, shared with every other
+        proxy on this host so a map one series measures reaches a series on
+        another;
+        :data:`~pulserver.recon._runtime.exam.DEFAULT_EXAM_DIRECTORY` when
+        ``None``. An exam's directory is removed when the last proxy on that
+        exam lets go of it.
 
     Attributes
     ----------
@@ -335,10 +387,18 @@ class ReconServer(_Listener):
         recon_timeout: float | None = None,
         queue: Path | str | None = None,
         slot_directory: Path | str | None = None,
+        exam_directory: Path | str | None = None,
     ) -> None:
         super().__init__(plugins)
         local = self._reconstruction = _Workers(
-            plugins, slots, gpu_slots, spares, recon_timeout, queue, slot_directory
+            plugins,
+            slots,
+            gpu_slots,
+            spares,
+            recon_timeout,
+            queue,
+            slot_directory,
+            exam_directory,
         )
         self.workers, self.exams, self.queue = local.workers, local.exams, local.queue
 
@@ -352,7 +412,16 @@ class ReconServer(_Listener):
         if not plugin:
             raise ValueError("the config names no reconstruction")
         _log.info("series: %s", plugin)
-        self._reconstruction.run(client, config, header, plugin, _received(client))
+        # The proxy that forwarded the series holds the scan's pose file, so a
+        # pose goes back to it rather than being taken here.
+        self._reconstruction.run(
+            client,
+            config,
+            header,
+            plugin,
+            _received(client),
+            poses=lambda pose: client.send(pose_waveform(pose)),
+        )
 
 
 class _Workers:
@@ -367,6 +436,7 @@ class _Workers:
         recon_timeout: float | None,
         queue: Path | str | None,
         slot_directory: Path | str | None = None,
+        exam_directory: Path | str | None = None,
     ) -> None:
         self._owns_queue = queue is None
         self.queue = (
@@ -378,8 +448,26 @@ class _Workers:
         self.plugins = directories(plugins)
         self.workers = WorkerPool(spares=spares)
         self.recon_timeout = recon_timeout
-        self._exam_root = Path(tempfile.mkdtemp(prefix="pulserver-exams-"))
+        # Shared across the proxies of the host, not private to this one: a
+        # map measured by a series on one proxy is wanted by a series on
+        # another, and an exam is the thing they have in common. Each exam
+        # holds its own directory under this, and keeps it until the last
+        # proxy on that exam lets go.
+        self._exam_root = Path(
+            DEFAULT_EXAM_DIRECTORY if exam_directory is None else exam_directory
+        )
+        # Readable by the owner alone: an exam's files are unpickled, so a
+        # directory another user can write to is code another user can run in
+        # a reconstruction worker. mkdir sets the mode only where it creates,
+        # and a umask may have narrowed it, so it is also set here -- which
+        # fails loudly on a directory this user does not own.
+        self._exam_root.mkdir(parents=True, exist_ok=True, mode=EXAM_DIRECTORY_MODE)
+        self._exam_root.chmod(EXAM_DIRECTORY_MODE)
         self.exams = ExamCacheManager(directory=self._exam_root)
+        self._closing = threading.Event()
+        threading.Thread(
+            target=self._expire_exams, daemon=True, name="exam-expiry"
+        ).start()
         self._slots = HostSlots(slot_devices(slots, gpu_slots), slot_directory)
         # One pose reaches the scan at a time, whatever else is reconstructing:
         # a pose is a statement about where the object is, and two
@@ -395,15 +483,19 @@ class _Workers:
         header: Any,
         plugin: str,
         items: Iterator[Any],
-        motion_corrected: bool = False,
+        motion: Path | None = None,
+        poses: Callable[[Pose], None] | None = None,
     ) -> None:
         """Reconstruct the series ``items`` streams on a worker, in a slot or from the queue.
 
-        A series whose scan is corrected for motion while it plays runs alone
-        among such series, wherever its proxy runs.
+        ``motion`` is the pose file of a scan corrected for motion while it
+        plays: the poses the reconstruction states are published into it,
+        created anew for the series. Such a series runs alone among such
+        series, wherever its proxy runs. Otherwise the poses go to ``poses``,
+        and are dropped where it is ``None``.
         """
         path = self._plugin_path(plugin)
-        if motion_corrected:
+        if motion is not None:
             # Waits rather than queueing: a pose is worth nothing once the scan
             # it described has moved on, so a series that would publish one
             # either runs now or runs behind the one that is.
@@ -411,9 +503,16 @@ class _Workers:
             try:
                 slot = self._slots.take(wait=True)
                 try:
-                    self._run(
-                        client, config, header, path, slot, lambda w: _send(items, w)
-                    )
+                    with MotionWriter(motion) as writer:
+                        self._run(
+                            client,
+                            config,
+                            header,
+                            path,
+                            slot,
+                            lambda w: _send(items, w),
+                            _publisher(writer),
+                        )
                 finally:
                     self._slots.release(slot)
             finally:
@@ -422,7 +521,15 @@ class _Workers:
         slot = self._slots.take(wait=False)
         if slot is not None:
             try:
-                self._run(client, config, header, path, slot, lambda w: _send(items, w))
+                self._run(
+                    client,
+                    config,
+                    header,
+                    path,
+                    slot,
+                    lambda w: _send(items, w),
+                    poses,
+                )
             finally:
                 self._slots.release(slot)
             return
@@ -439,6 +546,7 @@ class _Workers:
                     path,
                     slot,
                     lambda worker: _replay(queued, others, worker),
+                    poses,
                 )
             finally:
                 self._slots.release(slot)
@@ -446,11 +554,17 @@ class _Workers:
             queued.unlink()
 
     def close(self) -> None:
+        self._closing.set()
         self.workers.close()
+        # Closing the manager removes the directory of each exam nothing else
+        # is on; the root is the host's and stays.
         self.exams.close()
-        shutil.rmtree(self._exam_root, ignore_errors=True)
         if self._owns_queue:
             shutil.rmtree(self.queue, ignore_errors=True)
+
+    def _expire_exams(self) -> None:
+        while not self._closing.wait(_EXPIRY_POLL):
+            self.exams.expire()
 
     def _run(
         self,
@@ -460,6 +574,7 @@ class _Workers:
         plugin: Path,
         slot: Slot,
         feed: Callable[[Connection], None],
+        poses: Callable[[Pose], None] | None = None,
     ) -> None:
         """Give a worker the config, the header and whatever ``feed`` sends it."""
         with self.exams.lease(header) as exam:
@@ -474,6 +589,7 @@ class _Workers:
                     feed,
                     self.recon_timeout,
                     f"{plugin.stem} did not finish",
+                    poses=poses,
                 )
 
     def _plugin_path(self, plugin: str) -> Path:
@@ -502,13 +618,14 @@ class _Remote:
         header: Any,
         plugin: str,
         items: Iterator[Any],
-        motion_corrected: bool = False,  # noqa: ARG002 -- the server's to honour
+        motion: Path | None = None,
     ) -> None:
         """Stream the series ``items`` carries to the server and its outputs back.
 
-        A series whose scan is corrected while it plays is not held apart here:
-        the server that reconstructs it decides what may run beside it, and it
-        is the one that would publish a pose.
+        The poses the server passes back are published into ``motion``, the
+        scan's pose file, when there is one. A series whose scan is corrected
+        while it plays is not held apart here: the server decides what may run
+        beside it.
 
         The client's config text is not forwarded: the server is told the
         configured name, or else ``plugin``.
@@ -525,7 +642,13 @@ class _Remote:
                 f"the reconstruction server at {host}:{port} cannot be reached: {error}"
             ) from error
         channel = _RemoteChannel(stream)
-        with channel as server:
+        with contextlib.ExitStack() as stack:
+            server = stack.enter_context(channel)
+            poses = (
+                None
+                if motion is None
+                else _publisher(stack.enter_context(MotionWriter(motion)))
+            )
             server.send_config_file(name)
             server.send_header(header)
             _drive(
@@ -536,6 +659,7 @@ class _Remote:
                 self.recon_timeout,
                 f"the reconstruction server at {host}:{port} did not finish",
                 convert,
+                poses,
             )
 
     def close(self) -> None:
@@ -550,15 +674,17 @@ def _drive(
     timeout: float | None,
     late: str,
     convert: Callable[[Any], Any] | None = None,
+    poses: Callable[[Pose], None] | None = None,
 ) -> None:
     """Feed a reconstruction its series while its outputs are relayed to the client.
 
     ``late`` opens the text the client receives when the reconstruction is
-    still running ``timeout`` seconds after the series ended.
+    still running ``timeout`` seconds after the series ended. ``poses`` is
+    :func:`_relay`'s.
     """
     relay = threading.Thread(
         target=_relay,
-        args=(reconstruction, client, convert),
+        args=(reconstruction, client, convert, poses),
         daemon=True,
         name="relay",
     )
@@ -681,6 +807,11 @@ def _refuse(connection: Connection, error: Exception) -> None:
     """
     with contextlib.suppress(Exception):
         connection.send(f"pulserver: {error}")
+    _drain(connection)
+
+
+def _drain(connection: Connection) -> None:
+    """Send a CLOSE, then discard what the client still sends until it closes."""
     connection.send_close()
     raw = connection.socket.socket
     with contextlib.suppress(OSError):
@@ -831,6 +962,15 @@ def _replay(queued: QueueFile, others: list[Any], worker: Connection) -> None:
         worker.send(item)
     for item in queued:
         worker.send(item)
+
+
+def _publisher(writer: MotionWriter) -> Callable[[Pose], None]:
+    """Return what publishes each pose a reconstruction states into ``writer``."""
+
+    def publish(pose: Pose) -> None:
+        writer.publish(pose.rotation, rescan=pose.rescan)
+
+    return publish
 
 
 def _relay(

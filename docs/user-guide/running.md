@@ -156,8 +156,9 @@ records the plugin, the reconstruction plugin, the limits, the package versions
 and the SHA-256 of every file. The identifier is three 24-bit integers, each
 held exactly by a float32 scanner parameter. `prune` removes designs least recently used
 first: those unused for longer than `--max-age-days`, then others until the
-store holds at most `--max-bytes`. Nothing is removed otherwise, and a design a
-series still needs must not be: the proxy reads it by identifier. A store that
+store holds at most `--max-bytes`. A design used within the last day is kept
+whatever the limits, since a series may still be playing it or the proxy
+reading it by identifier. A store that
 receives pushed designs is pruned the same way, on the reconstruction computer.
 
 ### Pushing designs
@@ -204,7 +205,7 @@ permissions decide who may call.
 ## Reconstruction proxy
 
 ```bash
-python -m pulserver.proxy --store DIR --port N --plugins DIR [--host ADDR] [--intake-port N] [--queue DIR] [--slots N] [--gpu-slots 1] [--spares 1] [--recon-timeout S]
+python -m pulserver.proxy --store DIR --port N --plugins DIR [--host ADDR] [--intake-port N] [--queue DIR] [--exams DIR] [--slots N] [--gpu-slots 1] [--spares 1] [--recon-timeout S]
 python -m pulserver.proxy --store DIR --port N --forward HOST:PORT [--forward-config NAME] [--forward-dicom] [--host ADDR] [--intake-port N] [--recon-timeout S]
 ```
 
@@ -216,6 +217,7 @@ python -m pulserver.proxy --store DIR --port N --forward HOST:PORT [--forward-co
 | `--intake-port` | TCP port of the design intake, on the `--host` address; no intake when unset |
 | `--plugins` | Directory of reconstruction plugin files, `<plugin>.py`, repeatable, searched in order; required unless `--forward` is given |
 | `--queue` | Directory the series waiting for a slot are written to; a temporary directory, removed when the proxy stops, when unset |
+| `--exams` | Directory the proxies of this host share the caches of an exam in; a location under the system temporary directory when unset |
 | `--slots` | Series reconstructed at once; derived from available memory and the GPUs when unset |
 | `--gpu-slots` | Series reconstructed at once on each GPU when `--slots` is unset, default 1 |
 | `--spares` | Worker processes started ahead of a series, default 1 |
@@ -235,6 +237,16 @@ in {doc}`reconstruction-client`.
 A series that finds every slot busy is written to the queue directory as it
 arrives and reconstructed once a slot frees; the client stays connected
 meanwhile.
+
+A reconstruction computer runs one proxy per acquisition, so the series of one
+exam are reconstructed by different processes. What a calibration series
+measures is kept under `--exams`, in a directory of the exam's own, and read
+there by a later series whatever proxy takes it: a hook assigns
+`context.b0_map`, `context.b1_map` or `context.coil_sensitivities` and a later
+hook reads them ({class}`~pulserver.recon.ReconContext`). An exam's directory is removed
+once the last proxy on that exam has moved to another, so a proxy prescribing
+the next exam does not take the artifacts from one still reconstructing the
+last.
 
 With `--forward`, the proxy runs no workers: each series is enriched as it
 arrives and sent on to the MRD server at `HOST:PORT`, whose own slots and queue
