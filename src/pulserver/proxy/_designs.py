@@ -40,11 +40,16 @@ class Design:
         leaves the choice to the client's config.
     table
         The readouts of the design's sequence chain, in play order.
+    prospective_motion
+        Whether the scan asks to be corrected for motion while it plays, which
+        is what sends its series to the one reconstruction that may publish a
+        pose.
     """
 
     directory: Path
     recon: str
     table: SequenceTable
+    prospective_motion: bool = False
 
 
 class DesignCache:
@@ -106,6 +111,7 @@ class DesignCache:
                 directory=directory,
                 recon=str(manifest.get("recon", "")),
                 table=SequenceTable.read(directory / _ENTRY),
+                prospective_motion=_asks_for_motion_correction(directory / _ENTRY),
             )
             with self._lock:
                 self._designs[directory] = design
@@ -117,3 +123,27 @@ class DesignCache:
     def resolve(self, header: Any) -> Design:
         """Return the design a header names; see :meth:`locate` and :meth:`read`."""
         return self.read(self.locate(header))
+
+
+def _asks_for_motion_correction(entry: Path) -> bool:
+    """Whether a sequence file asks to be corrected for motion while it plays.
+
+    Read from the preamble rather than the cache: a design is resolved before
+    anything has been converted.
+    """
+    try:
+        with entry.open("r", errors="replace") as f:
+            inside = False
+            for line in f:
+                stripped = line.strip()
+                if stripped.startswith("["):
+                    if inside:
+                        return False
+                    inside = stripped.startswith("[DEFINITIONS]")
+                    continue
+                if inside and stripped.startswith("EnablePmc"):
+                    parts = stripped.split()
+                    return len(parts) > 1 and parts[1] not in ("0", "0.0")
+    except OSError:
+        return False
+    return False
