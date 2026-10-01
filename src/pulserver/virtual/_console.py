@@ -16,6 +16,7 @@ from typing import Any
 import numpy as np
 
 from .._plugins import PluginPath, directories, names
+from ._command import motion_arguments, subject_motion
 
 #: The design calls a console forwards, answered as ``pulserver design`` answers them.
 DESIGN_CALLS = ("list", "validate", "generate", "import")
@@ -83,6 +84,18 @@ class Console:
         Device a scan's ADC windows outside runs are read on, as
         :class:`~pulserver.virtual.Isochromats` takes it; the engine reads
         them itself without one.
+    spins
+        Isochromats per voxel, spread over the T2' line of its tissue.
+    voxel
+        Where a voxel's isochromats lie: ``"point"``, at its centre, or
+        ``"box"``, over it, as the phantom's ``isochromats`` places them.
+    diffusion
+        Whether BrainWeb's tissue classes diffuse, as
+        :attr:`~pulserver.virtual.BrainWeb.DIFFUSION` gives them.
+    motion
+        The subject's motion, as :class:`~pulserver.virtual.Isochromats`
+        takes it, on the clock of each scan; at rest without one. Moving
+        isochromats play every block alone.
     """
 
     def __init__(
@@ -100,6 +113,10 @@ class Console:
         fields: Path | str | None = None,
         speed: float | None = None,
         device: str | None = None,
+        spins: int = 1,
+        voxel: str = "point",
+        diffusion: bool = False,
+        motion: Any = None,
     ) -> None:
         from ..host._blocks import parse_limits
         from ..proxy import LocalReconstruction
@@ -123,6 +140,10 @@ class Console:
         self.max_isochromats = max_isochromats
         self.speed = speed
         self.device = device
+        self.spins = spins
+        self.voxel = voxel
+        self.diffusion = diffusion
+        self.motion = motion
         self.field_t = float(parse_limits(limits)["B0"])
         self.fields = None if fields is None else Path(fields)
         self._coils = coils(self.fields, field_t=self.field_t)
@@ -263,6 +284,10 @@ class Console:
                 field_t=self.field_t,
                 region=region,
                 coil=self.coil,
+                spins=self.spins,
+                voxel=self.voxel,
+                motion=self.motion,
+                seed=0,
                 device=self.device,
             )
         try:
@@ -286,7 +311,9 @@ class Console:
             return self.spacing
         for step in range(_COARSER):
             spacing = self.spacing + 1e-3 * step
-            kept = self.phantom.count(spacing, field_t=self.field_t, region=region)
+            kept = self.phantom.count(
+                spacing, field_t=self.field_t, region=region, spins=self.spins
+            )
             if kept <= self.max_isochromats:
                 return spacing
         raise ValueError(
@@ -316,7 +343,9 @@ class Console:
 
         if self.fields is not None or subject.strip().lower() == "brainweb":
             if self._brainweb is None:
-                self._brainweb = BrainWeb()
+                self._brainweb = BrainWeb(
+                    diffusion=BrainWeb.DIFFUSION if self.diffusion else None
+                )
             return self._brainweb
         return default_phantom()
 
@@ -636,6 +665,25 @@ def _parser() -> argparse.ArgumentParser:
         help="torch device the ADC windows outside runs are read on, such as "
         "cuda (the gpu extra); the engine reads them without it",
     )
+    parser.add_argument(
+        "--spins",
+        type=int,
+        default=1,
+        help="isochromats per voxel, spread over the T2' line of its tissue",
+    )
+    parser.add_argument(
+        "--voxel",
+        choices=("point", "box"),
+        default="point",
+        help="where a voxel's isochromats lie: at its centre, or over it, "
+        "--spins a square number for the vials and a cube for BrainWeb",
+    )
+    parser.add_argument(
+        "--diffusion",
+        action="store_true",
+        help="BrainWeb's tissue classes diffuse, as BrainWeb.DIFFUSION gives them",
+    )
+    motion_arguments(parser)
     return parser
 
 
@@ -659,6 +707,10 @@ def main(argv: list[str] | None = None) -> int:
         fields=args.fields,
         speed=args.speed,
         device=args.device,
+        spins=args.spins,
+        voxel=args.voxel,
+        diffusion=args.diffusion,
+        motion=subject_motion(args),
     )
     with contextlib.suppress(KeyboardInterrupt):
         asyncio.run(serve(console, args.host, args.port, args.origins))

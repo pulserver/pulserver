@@ -38,15 +38,20 @@ TISSUES = {
 #: The field, in T, at which BrainWeb's simulator gives :data:`TISSUES`.
 TISSUES_FIELD_T = 1.5
 
-#: Exponents ``b`` of the power laws ``T1 ~ B0**b`` that white matter and grey
-#: matter follow from 0.2 T to 7 T (Rooney et al., Magn Reson Med 57:308,
-#: 2007), by the tissue classes BrainWeb gives their relaxation. CSF's T1 does
-#: not change with the field there; the other classes keep BrainWeb's.
+#: Exponents ``b`` of the power laws ``T1 ~ B0**b``, by the tissue classes
+#: BrainWeb gives their relaxation: those white matter and grey matter follow
+#: from 0.2 T to 7 T (Rooney et al., Magn Reson Med 57:308, 2007), and those
+#: Bottomley et al. fit to skeletal muscle and adipose tissue from 1 MHz to
+#: 100 MHz (Med Phys 11:425, 1984). CSF's T1 does not change with the field
+#: from 0.2 T to 7 T, and neither does that of skin, to which BrainWeb gives
+#: CSF's relaxation; skull and background hold no protons.
 T1_EXPONENTS = {
     "white matter": 0.382,
     "connective tissue": 0.382,
     "grey matter": 0.376,
     "glial matter": 0.376,
+    "muscle and skin": 0.4203,
+    "fat": 0.1743,
 }
 
 #: Volume magnetic susceptibility, in ppm (SI), of air, and of water, which

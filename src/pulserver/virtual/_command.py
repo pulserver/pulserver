@@ -113,6 +113,7 @@ def _parser() -> argparse.ArgumentParser:
         help="BrainWeb's tissue classes diffuse, as BrainWeb.DIFFUSION gives them; "
         "a phantom of ellipses diffuses as its file gives it",
     )
+    motion_arguments(parser)
     receivers = parser.add_mutually_exclusive_group()
     receivers.add_argument(
         "--coils", type=int, default=4, help="receive coils of the phantom's own"
@@ -145,6 +146,54 @@ def _parser() -> argparse.ArgumentParser:
         help="directory the reconstruction's images are written to",
     )
     return parser
+
+
+def motion_arguments(parser: argparse.ArgumentParser) -> None:
+    """Add the options :func:`subject_motion` reads to ``parser``."""
+    parser.add_argument(
+        "--nod",
+        type=float,
+        nargs=2,
+        metavar=("DEGREES", "PERIOD"),
+        help="the subject turns about the physical x axis through the isocentre "
+        "by DEGREES times the sine of 2 pi t / PERIOD, PERIOD in s",
+    )
+    parser.add_argument(
+        "--drift",
+        type=float,
+        nargs=3,
+        metavar=("X", "Y", "Z"),
+        help="the subject drifts along the physical axes, in mm/min",
+    )
+
+
+def subject_motion(args: argparse.Namespace) -> Any:
+    """Return the :class:`~pulserver.virtual.RigidMotion` that ``--nod`` and ``--drift`` describe; None without either.
+
+    The time is the isochromats' clock, from the start of the scan.
+    """
+    from . import RigidMotion
+
+    if args.nod is None and args.drift is None:
+        return None
+    rotation = offset = None
+    if args.nod is not None:
+        amplitude, period = np.radians(args.nod[0]), args.nod[1]
+        if not period > 0.0:
+            raise ValueError(f"a nod's period is above zero, not {period} s")
+
+        def rotation(t: float) -> np.ndarray:
+            angle = amplitude * np.sin(2.0 * np.pi * t / period)
+            c, s = np.cos(angle), np.sin(angle)
+            return np.array([[1.0, 0.0, 0.0], [0.0, c, -s], [0.0, s, c]])
+
+    if args.drift is not None:
+        velocity = 1e-3 * np.asarray(args.drift, dtype=float) / 60.0
+
+        def offset(t: float) -> np.ndarray:
+            return velocity * t
+
+    return RigidMotion(rotation, offset)
 
 
 def default_phantom(coils: int = 1) -> Any:
@@ -344,6 +393,7 @@ def _scan(args: argparse.Namespace, store: Path, design: str) -> int:
             coil=coil,
             spins=args.spins,
             voxel=args.voxel,
+            motion=subject_motion(args),
             seed=0,
             device=args.device,
         ),

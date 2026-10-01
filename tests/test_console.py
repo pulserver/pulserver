@@ -399,6 +399,63 @@ def test_a_scan_no_spacing_keeps_within_the_consoles_isochromats_is_refused(tmp_
         _scanned(console, design, np.eye(3))
 
 
+def test_a_console_counts_its_spins_per_voxel_in_keeping_within_its_isochromats(
+    tmp_path,
+):
+    console = _console(tmp_path, spacing=1e-3, spins=4, voxel="box")
+    design = console.design("generate", "gre2d", _block(TE=5000, nx=32, ny=32))[
+        "design"
+    ]
+    console.exam("vials")
+    console.max_isochromats = console.phantom.count(
+        2e-3, field_t=console.field_t, spins=4
+    )
+    spacings = _builds(console)
+
+    _scanned(console, design, np.eye(3))
+
+    region, isochromats = console._isochromats
+    assert spacings == [pytest.approx(2e-3)]
+    single = console.phantom.count(2e-3, field_t=console.field_t, region=region)
+    assert len(isochromats) == 4 * single
+
+
+def test_a_console_moves_its_subject_from_rest_at_the_start_of_each_scan(tmp_path):
+    times = []
+
+    def still(t, positions):
+        times.append(t)
+        return positions
+
+    console = _console(tmp_path, motion=still)
+    design = console.design("generate", "gre2d", _block(TE=5000, nx=32, ny=32))[
+        "design"
+    ]
+    console.exam("vials")
+
+    _scanned(console, design, np.eye(3))
+    first = list(times)
+    times.clear()
+    _scanned(console, design, np.eye(3))
+
+    assert console._isochromats[1].moving
+    assert first[0] == times[0] == 0.0
+    assert times == first
+
+
+def test_a_console_examines_a_brainweb_whose_tissues_diffuse_when_asked(
+    tmp_path, brainweb
+):
+    still = _console(tmp_path)
+    diffusing = _console(tmp_path, diffusion=True)
+
+    still.exam("brainweb")
+    diffusing.exam("brainweb")
+
+    assert not still.phantom.diffusion
+    assert dict(diffusing.phantom.diffusion) == dict(virtual.BrainWeb.DIFFUSION)
+
+
 def test_a_console_reconstructs_through_a_proxy_or_in_process_not_both(tmp_path):
     with pytest.raises(ValueError, match="not both"):
         _console(tmp_path, recon=("127.0.0.1", 9), recon_plugins=RECON_PLUGINS)
@@ -693,6 +750,14 @@ def test_the_console_command_serves_a_console_of_its_options(tmp_path, monkeypat
             "head8/head32",
             "--origin",
             "https://pulserver.github.io",
+            "--spins",
+            "8",
+            "--voxel",
+            "box",
+            "--diffusion",
+            "--nod",
+            "2",
+            "4",
         ]
     )
 
@@ -706,6 +771,12 @@ def test_the_console_command_serves_a_console_of_its_options(tmp_path, monkeypat
     assert console.max_isochromats == 500_000
     assert console.coil is virtual.COILS["head8/head32"]
     assert console.field_t == ANY_ORIENTATION["B0"]
+    assert (console.spins, console.voxel, console.diffusion) == (8, "box", True)
+    turned = console.motion(1.0, np.array([[0.0, 0.1, 0.0]]))
+    angle = np.radians(2.0)
+    np.testing.assert_allclose(
+        turned, [[0.0, 0.1 * np.cos(angle), 0.1 * np.sin(angle)]]
+    )
 
 
 def test_the_console_command_scans_in_the_coils_of_the_field_maps_it_names(
