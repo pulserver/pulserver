@@ -1,118 +1,110 @@
-# What is open, and what can be done here
+# What is open, across the repositories
 
-This repository is the whole of what a reconstruction computer and a design
-service run. The scanner-side interpreter is a separate, private repository,
-and the work listed under *Needs a scanner* below cannot be checked without it
-and without the vendor's own tooling, which this repository neither contains
-nor depends on.
+The framework is five repositories: sequence design in `pypulseqpp`, the
+intermediate representation and the reconstruction computer here, the
+reconstruction engine in `bartorch`, simulation in `torchsim`, and the
+scanner-side interpreter in `pulserver-interpreter`, which is private. This
+page is the index of what is open in each and of which machine can finish it.
 
-Everything under *Can be done here* is Python and C in this repository, checked
-by `pytest -q`, `bash scripts/format_and_lint.sh --check` and
-`bash scripts/build_docs.sh`. Nothing in it needs a scanner, a vendor SDK or a
-licensed image.
+Every item is an issue in the repository that owns it. This page says what the
+work is for and what it depends on; the issue says how to do it.
 
-**A recurring failure to look for.** Almost every defect found in this area so
-far has had one shape: a value crosses a boundary and loses its reader. The
-conversion resolved the ADC's phase modulation and nobody played it; the
-caches of one exam were written where no other process could find them; a
-reconstruction's pose is intercepted and dropped. None failed a test, because
-each side passed its own. When picking up an item below, establish what
-already crosses before designing what to add.
+## Which machine
 
-## Can be done here
+Most of the work needs nothing but a checkout. Three things cannot be
+*finished* anywhere else, and each is marked **(laptop)** below:
 
-### A pose a reconstruction states reaches nothing
+| needs | why |
+|---|---|
+| the vendor environment | building the scanner binary and running its simulator; no other machine has the SDK or the licensed image |
+| a GPU | a reconstruction measured, rather than merely run, and the device lane of the numerical tests |
+| a scanner | nothing here. Every hardware claim is checked against the simulator, not against a magnet |
 
-`_relay` in `src/pulserver/proxy/_proxy.py` takes a `poses` callback and drops
-every pose when it is `None` — which is always, because no caller passes one.
-`MotionWriter` in `src/pulserver/proxy/_motion.py` publishes a pose and reads
-back the repetition the sequencer applied it at, and is constructed only in
-`tests/test_motion.py`. So prospective motion correction does nothing outside
-the tests: the sequencer reads a buffer nobody writes.
+An item not marked **(laptop)** is finished where it is written: `pytest -q`,
+`bash scripts/format_and_lint.sh --check` and `bash scripts/build_docs.sh` are
+the whole of its verification.
 
-What to do: a series whose design asks for motion correction
-(`Design.prospective_motion`, already read from the sequence) gets a
-`MotionWriter` at the path the sequencer reads, and `_relay` is given a `poses`
-that publishes to it. Admission is already handled — such a series takes a
-host-wide exclusive slot, so one publishes at a time.
+An item marked **(laptop)** can still be *written* anywhere. The split is
+between writing it and confirming it, and the issue says where the line falls,
+so the remote half is done first and the local pass is short.
 
-Two things the layout fixes and a test must hold to: a pose is **absolute**,
-not a delta, because a latest-value buffer drops versions; and the writer
-reads back which repetition the sequencer actually applied, because a rotation
-moves sample locations rather than adding a phase, so the receive side has to
-work in the frame that was played, not the one last sent.
+## pulserver
 
-Check with `tests/test_motion.py` plus a new test that drives a series end to
-end and asserts the buffer holds what the reconstruction emitted.
+| what | issue | machine |
+|---|---|---|
+| A pose a reconstruction states reaches nothing | [#160](https://github.com/pulserver/pulserver/issues/160) | anywhere |
+| The sequence description reaches no simulator | [#161](https://github.com/pulserver/pulserver/issues/161) | anywhere |
+| Throughput at the sizes that hurt | [#162](https://github.com/pulserver/pulserver/issues/162) | anywhere |
+| Name what breaks the cache location | [#163](https://github.com/pulserver/pulserver/issues/163) | anywhere |
 
-### The sequence description reaches no simulator
+#160 is the one to start with: prospective motion correction does nothing
+outside the tests today, because the relay drops every pose a reconstruction
+states and nothing constructs the writer the sequencer reads.
 
-`describe()` in `src/pulserver/proxy/_seqdesc.py` reads a sequence into the
-event stream a simulator needs — the pulse a block turns the magnetisation
-through, the readout it samples with, each timed as a simulation needs it —
-and `as_rows()` lays it out. Nothing sends it.
+## torchsim
 
-It belongs after the MRD XML header and before the first acquisition of a
-series, so a receiver has the description before any data. The receiver is
-`torchsim`, which today has no MRD surface at all: no reader, no header
-handling. The interpretation of the stream is hand-written on the
-reconstruction side, by picking the signal model — that is the intended use,
-not something to generate.
+| what | issue | machine |
+|---|---|---|
+| Read a sequence description off an MRD stream | [#22](https://github.com/pulserver/torchsim/issues/22) | anywhere |
 
-What to do: agree how the rows ride the stream, emit them in the proxy, and
-give torchsim the reader. Check by reading a written stream back into the rows
-it was built from.
+The other half of pulserver#161. The description is inferred from the sequence
+in the proxy and sent before any data; what the rows *mean* is hand-written
+here, by picking the signal model. That is the intended use, not a gap.
 
-### Throughput at the sizes that hurt
+## pulserver-interpreter (private)
 
-`scripts/check_throughput.py` measures designing and checking a sequence on the
-fly. At ordinary sizes the safety checks dominate: peripheral nerve stimulation
-is most of the cost and grows linearly in the block count, and checking costs
-far more than designing. What is not known is where that stops being linear.
+| what | issue | machine |
+|---|---|---|
+| Radiofrequency costing while the operator prescribes | [#1](https://github.com/pulserver/pulserver-interpreter/issues/1) | write anywhere, **(laptop)** to confirm |
+| Gradient heating on a dense repetition | [#2](https://github.com/pulserver/pulserver-interpreter/issues/2) | design anywhere, **(laptop)** to confirm |
+| Integer sample formats in the cache | [#3](https://github.com/pulserver/pulserver-interpreter/issues/3) | **(laptop)**: the measurement needs a sequencer |
 
-What to do: measure at sequence sizes well beyond the ordinary — the block
-counts a long three-dimensional acquisition reaches, not a single slice — and
-report where each term's cost turns over. The answer decides whether the
-checks need to move off the interactive path.
+The costing's two halves are already checked end to end — the design service
+states which control drives each pulse, and the scanner-side parser reads that
+statement. What has never run is the costing built on top, because it lives in
+a mode the simulator suite does not drive. Writing that lane is remote work;
+running it is not.
 
-### Naming what breaks the cache location
+Gradient heating is evaluated over a whole repetition, and whether that is
+right for a dense, short-repetition sequence is untested: in every fixture the
+squeezed core costs less than the whole repetition, so it never fails in
+isolation. Designing a candidate sequence is remote work -- it is a
+`pypulseqpp` sequence and nothing more; confirming it needs the vendor's own
+model.
 
-The IR cache is written beside its sequence under the process id, recorded in
-the header so other parts of a playout can find it. That is believed robust and
-has never been argued either way.
+Integer formats wait on a measurement of what a sequencer spends converting
+while it plays, which can only be made on one. The profile that carries format
+and scale per quantity is already in place. Note that only some quantities have
+a fixed scale: two depend on the prescription and on the scan, so they cannot
+be pre-scaled without tying a cache to one prescription.
 
-What to do: name what breaks it — a process that outlives another's id, a
-cleaner, a shared filesystem — and either show the scheme survives each, or
-replace it. This is reasoning and a test, not a measurement.
+## pypulseqpp and bartorch
 
-## Needs a scanner
+Nothing is open that this framework is waiting on. Both are engines this
+repository builds on rather than extends: work that belongs to one goes
+upstream into it instead of being copied here.
 
-These are listed so nobody starts them here. Each needs the private interpreter
-repository and vendor tooling that is not available in this environment.
+One known defect to be aware of rather than to fix here: a reconstruction that
+batches coil maps is refused on the device lane, which is why some numerical
+comparisons run on the host alone. It predates this work and blocks automatic
+device selection. **(laptop)** to reproduce.
 
-- **Radiofrequency costing while the operator prescribes.** The design service
-  states the pulses a design plays and the control that drives each, and the
-  scanner-side parser reads that statement — both are checked, end to end, in
-  the interpreter repository. What has never run is the costing built on it,
-  because it lives in a mode the test suite does not drive.
-- **Gradient heating on a dense repetition.** The model is evaluated over a
-  whole repetition. Whether that is right for a dense, short-repetition
-  sequence is untested: in every fixture the squeezed core costs less than the
-  whole repetition, so it never fails in isolation and the asymmetry the model
-  exists for is never reached. Adding fixtures did not help — the condition is
-  a property of the sequence. Designing a candidate sequence can be done here;
-  confirming it needs the scanner's own model.
-- **Integer sample formats in the cache.** The profile that would carry them is
-  in place and carries format and scale per quantity. The conversion waits on a
-  measurement of what a sequencer spends converting while it plays, which can
-  only be made on one. Note that only some quantities have a fixed scale: two
-  of them depend on the prescription and on the scan, so they cannot be
-  pre-scaled without tying a cache to one prescription.
+## A recurring failure, worth looking for in any of them
+
+Almost every defect found in this area so far has had one shape: a value
+crosses a boundary and loses its reader. The conversion resolved the ADC's
+phase modulation and nobody played it. The caches of one exam were written
+where no other process could find them. A reconstruction's pose is intercepted
+and dropped. None failed a test, because each side passed its own.
+
+When picking up an item, establish what already crosses before designing what
+to add. More than once an item written as "design this" turned out to be a
+defect to fix.
 
 ## Conventions worth knowing before starting
 
-- `src/c/` is C89 and is compiled as a scanner builds it — 32-bit, warnings as
-  errors — by `tests/test_ir.py`. A C99 construct fails here before it reaches
+- `src/c/` is C89 and is compiled as a scanner builds it -- 32-bit, warnings as
+  errors -- by `tests/test_ir.py`. A C99 construct fails here before it reaches
   any scanner.
 - A test module is **not** importable as a package where the suite runs. Share
   a helper through `tests/conftest.py`; `from tests.<module> import ...` takes
