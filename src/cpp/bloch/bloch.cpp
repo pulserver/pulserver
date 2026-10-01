@@ -519,6 +519,59 @@ namespace bloch
             return true;
         }
 
+        /**
+         * The waveform a pulse's tables hold: without transmit sensitivities,
+         * the channels' sum; with them, the waveform the channels share, and
+         * each channel's weight of it in @p weights, and in @p drive_spacing
+         * the spacing of the tables' drive rows, in Hz. An isochromat's
+         * transmit field is then its drive times the waveform, whose response
+         * the drive's magnitude scales and whose phase turns it about z, and
+         * the drive's grid turns the field over the pulse as finely as the
+         * field's grid turns the precession. False where the channels play
+         * more than one waveform.
+         */
+        bool table_waveform(
+            const BlockEvents& block,
+            const IsochromatProperties& p,
+            std::vector<std::complex<double>>& waveform,
+            std::vector<std::complex<double>>& weights,
+            double& drive_spacing)
+        {
+            drive_spacing = 0.0;
+            if (p.transmit_channels == 0)
+            {
+                waveform = channel_sum(block);
+                return true;
+            }
+            if (!one_waveform(block, waveform, weights))
+                return false;
+            const double integral = std::accumulate(
+                waveform.begin(), waveform.end(), 0.0, [](double sum, const std::complex<double>& value) {
+                    return sum + std::abs(value);
+                });
+            drive_spacing = 1.0 / (kGridPoints * block.rf_step * integral);
+            return true;
+        }
+
+        /** Isochromat @p i's drive of the waveform its transmit channels play
+         *  with @p weights, in Hz. */
+        std::complex<double> drive_of(
+            const IsochromatProperties& p, size_t i, const std::vector<std::complex<double>>& weights)
+        {
+            const size_t channels = p.transmit_channels;
+            std::complex<double> sum = 0.0;
+            for (size_t c = 0; c < channels; ++c)
+                sum += p.transmit[i * channels + c] * weights[c];
+            return sum;
+        }
+
+        /** The field along z isochromat @p i sees under a gradient of @p along,
+         *  in Hz/m, along @p direction, in Hz. */
+        double held_field(const IsochromatProperties& p, size_t i, double along, const double direction[3])
+        {
+            return p.off_resonance[i] + along * (p.x[i] * direction[0] + p.y[i] * direction[1] + p.z[i] * direction[2]);
+        }
+
         /** Rows below and above an isochromat's drive its map is interpolated
          *  from: along the drive, where the map turns as fast as it does
          *  across the field, a quintic reaches the accuracy a cubic reaches
@@ -526,6 +579,41 @@ namespace bloch
         constexpr long long kRowsBelow = 2;
         constexpr long long kRowsAbove = 3;
         constexpr size_t kRows = static_cast<size_t>(kRowsBelow + kRowsAbove + 1);
+
+        /** The first and last rows and columns of a table that hold no point. */
+        constexpr std::array<long long, 4> kNoPoints = {
+            std::numeric_limits<long long>::max(), std::numeric_limits<long long>::min(),
+            std::numeric_limits<long long>::max(), std::numeric_limits<long long>::min()};
+
+        /**
+         * Widen the first and last rows and columns @p b of a table of
+         * @p spacing, in Hz, and @p drive_spacing to those the interpolation
+         * around @p field and, where @p driven, the drive's @p magnitude
+         * reads; row 0 alone without a drive.
+         */
+        void widen(
+            std::array<long long, 4>& b,
+            double field,
+            double magnitude,
+            bool driven,
+            double spacing,
+            double drive_spacing)
+        {
+            long long row = 0;
+            long long before = 0;
+            long long after = 0;
+            if (driven)
+            {
+                row = static_cast<long long>(std::floor(magnitude / drive_spacing));
+                before = kRowsBelow;
+                after = kRowsAbove;
+            }
+            const long long column = static_cast<long long>(std::floor(field / spacing));
+            b[0] = std::min(b[0], row - before);
+            b[1] = std::max(b[1], row + after);
+            b[2] = std::min(b[2], column - 1);
+            b[3] = std::max(b[3], column + 2);
+        }
 
         /**
          * Per class, the first and last rows and columns of a table of
@@ -541,27 +629,11 @@ namespace bloch
             double drive_spacing,
             std::vector<std::array<long long, 4>>& bounds)
         {
-            for (std::array<long long, 4>& b : bounds)
-                b = {std::numeric_limits<long long>::max(), std::numeric_limits<long long>::min(),
-                     std::numeric_limits<long long>::max(), std::numeric_limits<long long>::min()};
+            std::fill(bounds.begin(), bounds.end(), kNoPoints);
+            const bool driven = !drive.empty();
             for (size_t i = 0; i < field.size(); ++i)
-            {
-                std::array<long long, 4>& b = bounds[class_of[i]];
-                long long row = 0;
-                long long before = 0;
-                long long after = 0;
-                if (!drive.empty())
-                {
-                    row = static_cast<long long>(std::floor(std::abs(drive[i]) / drive_spacing));
-                    before = kRowsBelow;
-                    after = kRowsAbove;
-                }
-                const long long column = static_cast<long long>(std::floor(field[i] / spacing));
-                b[0] = std::min(b[0], row - before);
-                b[1] = std::max(b[1], row + after);
-                b[2] = std::min(b[2], column - 1);
-                b[3] = std::max(b[3], column + 2);
-            }
+                widen(
+                    bounds[class_of[i]], field[i], driven ? std::abs(drive[i]) : 0.0, driven, spacing, drive_spacing);
         }
 
         /** Rows first_row to last_row and columns first to last of a table;
@@ -2192,12 +2264,17 @@ namespace bloch
         pending_time_ = 0.0;
     }
 
-    const Isochromats::Grouping& Isochromats::grouping(int mode, const double direction[3])
+    const Isochromats::Grouping* Isochromats::kept_grouping(int mode, const double direction[3]) const
     {
         const auto known = std::find_if(groupings_.begin(), groupings_.end(), [&](const Grouping& held) {
             return held.mode == mode && same_bits(held.direction, direction);
         });
-        if (known != groupings_.end())
+        return known == groupings_.end() ? nullptr : &*known;
+    }
+
+    const Isochromats::Grouping& Isochromats::grouping(int mode, const double direction[3])
+    {
+        if (const Grouping* known = kept_grouping(mode, direction))
             return *known;
 
         const std::vector<std::array<double, 3>> along = quantised(properties_, mode, direction);
@@ -2302,12 +2379,19 @@ namespace bloch
     void Isochromats::excite(const BlockEvents& block, const GradientAreas& areas)
     {
         const PulseGradient gradient = pulse_gradient(block, areas);
+        /* Once the groupings kept are full, a pulse under a direction none of
+         * them holds, as each spoke of a ZTE scan plays, is played from its
+         * tables isochromat by isochromat rather than grouping them anew. */
+        double along = 0.0;
+        if (gradient.mode == kOneDirection && groupings_.size() >= kGroupings &&
+            kept_grouping(gradient.mode, gradient.direction) == nullptr && held_gradient(gradient, along) &&
+            excite_each(block, gradient, along))
+            return;
         const Grouping& groups = grouping(gradient.mode, gradient.direction);
         std::complex<double> turn = 1.0;
         const auto held = find_held(block, gradient, turn);
         if (held == held_.end())
         {
-            double along = 0.0;
             if (!(held_gradient(gradient, along) && hold_on_grid(block, gradient, along, groups)))
                 hold(block, gradient, groups);
             turn = 1.0;
@@ -2374,105 +2458,72 @@ namespace bloch
         double duration,
         std::vector<double>& maps)
     {
-        /* Each map, the cubic through the four points around its field, and
-         * the quintic through six such around its drive's magnitude, turned
-         * by its own precession over half the pulse on either side, by its
-         * drive's phase and by the pulse's phase against its table's. */
         parallel(field.size(), threads_, kChunk, [&](size_t, size_t first, size_t last) {
             for (size_t g = first; g < last; ++g)
             {
                 const uint32_t c = class_of[g];
-                const PulseTable& held = *table[c];
-                const double at = field[g] / held.spacing;
-                const double point = std::floor(at);
-                const size_t column = static_cast<size_t>(static_cast<long long>(point) - 1 - held.first);
-                double across[4];
-                cubic_weights(at - point, across);
-                double map[12];
-                std::complex<double> phase = turn[c];
-                if (drive.empty())
-                    cubic(&held.maps[12 * column], across, map);
-                else
-                {
-                    const double magnitude = std::abs(drive[g]);
-                    const double on = magnitude / held.drive_spacing;
-                    const double row = std::floor(on);
-                    double down[kRows];
-                    row_weights(on - row, down);
-                    const size_t top =
-                        static_cast<size_t>(static_cast<long long>(row) - kRowsBelow - held.first_row);
-                    std::fill(map, map + 12, 0.0);
-                    for (size_t r = 0; r < kRows; ++r)
-                    {
-                        double along[12];
-                        cubic(&held.maps[12 * ((top + r) * static_cast<size_t>(held.columns) + column)], across, along);
-                        for (int e = 0; e < 12; ++e)
-                            map[e] += down[r] * along[e];
-                    }
-                    if (magnitude > 0.0)
-                        phase *= drive[g] / magnitude;
-                }
-                const std::complex<double> precession = std::polar(1.0, -0.5 * kTwoPi * field[g] * duration);
-                turned(map, precession * std::conj(phase), precession * phase, &maps[12 * g]);
+                table_map(*table[c], field[g], drive.empty() ? nullptr : &drive[g], turn[c], duration, &maps[12 * g]);
             }
         });
     }
 
-    bool Isochromats::hold_on_grid(
-        const BlockEvents& block, const PulseGradient& gradient, double along, const Grouping& groups)
+    void Isochromats::table_map(
+        const PulseTable& table,
+        double field,
+        const std::complex<double>* drive,
+        std::complex<double> turn,
+        double duration,
+        double* out)
     {
-        const double duration = block.rf_step * static_cast<double>(block.rf_steps);
-        const double spacing = 1.0 / (kGridPoints * duration);
-        const std::vector<uint32_t>& chosen = groups.representative;
-        const size_t count = chosen.size();
-        const IsochromatProperties& p = properties_;
-
-        /* With transmit sensitivities, the waveform the channels share, and
-         * each group's drive of it: its transmit field is the drive times the
-         * waveform, whose response the drive's magnitude scales and whose
-         * phase turns it about z. The drive's grid turns the field over the
-         * pulse as finely as the field's grid turns the precession. */
-        std::vector<std::complex<double>> waveform;
-        std::vector<std::complex<double>> drive;
-        double drive_spacing = 0.0;
-        if (p.transmit_channels == 0)
-            waveform = channel_sum(block);
+        /* The cubic through the four points around the field, and the quintic
+         * through six such around the drive's magnitude, turned by the
+         * precession over half the pulse on either side, by the drive's phase
+         * and by the pulse's phase against the table's. */
+        const double at = field / table.spacing;
+        const double point = std::floor(at);
+        const size_t column = static_cast<size_t>(static_cast<long long>(point) - 1 - table.first);
+        double across[4];
+        cubic_weights(at - point, across);
+        double map[12];
+        std::complex<double> phase = turn;
+        if (drive == nullptr)
+            cubic(&table.maps[12 * column], across, map);
         else
         {
-            std::vector<std::complex<double>> weights;
-            if (!one_waveform(block, waveform, weights))
-                return false;
-            const size_t channels = p.transmit_channels;
-            drive.resize(count);
-            for (size_t g = 0; g < count; ++g)
+            const double magnitude = std::abs(*drive);
+            const double on = magnitude / table.drive_spacing;
+            const double row = std::floor(on);
+            double down[kRows];
+            row_weights(on - row, down);
+            const size_t top = static_cast<size_t>(static_cast<long long>(row) - kRowsBelow - table.first_row);
+            std::fill(map, map + 12, 0.0);
+            for (size_t r = 0; r < kRows; ++r)
             {
-                std::complex<double> sum = 0.0;
-                for (size_t c = 0; c < channels; ++c)
-                    sum += p.transmit[chosen[g] * channels + c] * weights[c];
-                drive[g] = sum;
+                double along[12];
+                cubic(&table.maps[12 * ((top + r) * static_cast<size_t>(table.columns) + column)], across, along);
+                for (int e = 0; e < 12; ++e)
+                    map[e] += down[r] * along[e];
             }
-            const double integral = std::accumulate(
-                waveform.begin(), waveform.end(), 0.0, [](double sum, const std::complex<double>& value) {
-                    return sum + std::abs(value);
-                });
-            drive_spacing = 1.0 / (kGridPoints * block.rf_step * integral);
+            if (magnitude > 0.0)
+                phase *= *drive / magnitude;
         }
+        const std::complex<double> precession = std::polar(1.0, -0.5 * kTwoPi * field * duration);
+        turned(map, precession * std::conj(phase), precession * phase, out);
+    }
 
-        const double* direction = gradient.direction;
-        std::vector<double> field(count);
-        std::vector<uint32_t> class_of(count);
-        for (size_t g = 0; g < count; ++g)
-        {
-            const size_t i = chosen[g];
-            field[g] = p.off_resonance[i] + along * (p.x[i] * direction[0] + p.y[i] * direction[1] + p.z[i] * direction[2]);
-            class_of[g] = relaxation_of_[i];
-        }
+    bool Isochromats::tables_for(
+        const BlockEvents& block,
+        double spacing,
+        double drive_spacing,
+        const std::vector<std::complex<double>>& waveform,
+        const std::vector<std::array<long long, 4>>& bounds,
+        size_t most,
+        std::vector<std::list<PulseTable>::iterator>& table,
+        std::vector<std::complex<double>>& turn)
+    {
         const size_t classes = relaxations_.size();
-        std::vector<std::array<long long, 4>> bounds(classes);
-        grid_bounds(field, drive, class_of, spacing, drive_spacing, bounds);
-
-        std::vector<std::list<PulseTable>::iterator> table(classes);
-        std::vector<std::complex<double>> turn(classes, 1.0);
+        table.assign(classes, tables_.end());
+        turn.assign(classes, 1.0);
         size_t missing = 0;
         for (size_t c = 0; c < classes; ++c)
         {
@@ -2483,7 +2534,7 @@ namespace bloch
             const Points wanted{bounds[c][0], bounds[c][1], bounds[c][2], bounds[c][3]};
             missing += static_cast<size_t>(covering(held, wanted).count() - held.count());
         }
-        if (missing >= count)
+        if (missing >= most)
             return false;
 
         for (size_t c = 0; c < classes; ++c)
@@ -2503,10 +2554,107 @@ namespace bloch
             }
             extend(*table[c], bounds[c]);
         }
+        return true;
+    }
+
+    bool Isochromats::hold_on_grid(
+        const BlockEvents& block, const PulseGradient& gradient, double along, const Grouping& groups)
+    {
+        const double duration = block.rf_step * static_cast<double>(block.rf_steps);
+        const double spacing = 1.0 / (kGridPoints * duration);
+        const std::vector<uint32_t>& chosen = groups.representative;
+        const size_t count = chosen.size();
+        const IsochromatProperties& p = properties_;
+        std::vector<std::complex<double>> waveform;
+        std::vector<std::complex<double>> weights;
+        double drive_spacing = 0.0;
+        if (!table_waveform(block, p, waveform, weights, drive_spacing))
+            return false;
+
+        std::vector<double> field(count);
+        std::vector<std::complex<double>> drive(p.transmit_channels == 0 ? 0 : count);
+        std::vector<uint32_t> class_of(count);
+        for (size_t g = 0; g < count; ++g)
+        {
+            const size_t i = chosen[g];
+            field[g] = held_field(p, i, along, gradient.direction);
+            if (!drive.empty())
+                drive[g] = drive_of(p, i, weights);
+            class_of[g] = relaxation_of_[i];
+        }
+        std::vector<std::array<long long, 4>> bounds(relaxations_.size());
+        grid_bounds(field, drive, class_of, spacing, drive_spacing, bounds);
+
+        std::vector<std::list<PulseTable>::iterator> table;
+        std::vector<std::complex<double>> turn;
+        if (!tables_for(block, spacing, drive_spacing, waveform, bounds, count, table, turn))
+            return false;
         HeldPulse made = held_pulse(block, gradient, groups);
         table_maps(field, drive, class_of, table, turn, duration, made.maps);
         keep(table);
         keep_held(std::move(made));
+        return true;
+    }
+
+    bool Isochromats::excite_each(const BlockEvents& block, const PulseGradient& gradient, double along)
+    {
+        const double duration = block.rf_step * static_cast<double>(block.rf_steps);
+        const double spacing = 1.0 / (kGridPoints * duration);
+        const IsochromatProperties& p = properties_;
+        std::vector<std::complex<double>> waveform;
+        std::vector<std::complex<double>> weights;
+        double drive_spacing = 0.0;
+        if (!table_waveform(block, p, waveform, weights, drive_spacing))
+            return false;
+        const bool driven = p.transmit_channels > 0;
+        const double* direction = gradient.direction;
+
+        /* Each worker's bounds, per class, merged into the tables'. */
+        const size_t classes = relaxations_.size();
+        std::vector<std::vector<std::array<long long, 4>>> reached(
+            workers_for(count_, threads_, kChunk), std::vector<std::array<long long, 4>>(classes, kNoPoints));
+        parallel(count_, threads_, kChunk, [&](size_t worker, size_t first, size_t last) {
+            std::vector<std::array<long long, 4>>& bounds = reached[worker];
+            for (size_t i = first; i < last; ++i)
+                widen(
+                    bounds[relaxation_of_[i]],
+                    held_field(p, i, along, direction),
+                    driven ? std::abs(drive_of(p, i, weights)) : 0.0,
+                    driven,
+                    spacing,
+                    drive_spacing);
+        });
+        /* The maps are made from each isochromat's field and drive worked out
+         * again, which a compiler that contracts multiply-adds differently in
+         * the two loops rounds an ulp apart: a point more on every side keeps
+         * each one's interpolation inside its table. */
+        std::vector<std::array<long long, 4>> bounds(classes, kNoPoints);
+        for (const std::vector<std::array<long long, 4>>& part : reached)
+            for (size_t c = 0; c < classes; ++c)
+            {
+                bounds[c][0] = std::min(bounds[c][0], part[c][0] - (driven ? 1 : 0));
+                bounds[c][1] = std::max(bounds[c][1], part[c][1] + (driven ? 1 : 0));
+                bounds[c][2] = std::min(bounds[c][2], part[c][2] - 1);
+                bounds[c][3] = std::max(bounds[c][3], part[c][3] + 1);
+            }
+
+        std::vector<std::list<PulseTable>::iterator> table;
+        std::vector<std::complex<double>> turn;
+        if (!tables_for(block, spacing, drive_spacing, waveform, bounds, count_, table, turn))
+            return false;
+        parallel(count_, threads_, kChunk, [&](size_t, size_t first, size_t last) {
+            for (size_t i = first; i < last; ++i)
+            {
+                const uint32_t c = relaxation_of_[i];
+                const std::complex<double> drive = driven ? drive_of(p, i, weights) : 0.0;
+                double map[12];
+                table_map(
+                    *table[c], held_field(p, i, along, direction), driven ? &drive : nullptr, turn[c], duration, map);
+                apply(i, map, 1.0, 1.0);
+            }
+        });
+        keep(table);
+        ++ungrouped_pulses_;
         return true;
     }
 

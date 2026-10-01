@@ -437,6 +437,15 @@ namespace bloch
             return device_windows_;
         }
 
+        /** RF pulses played isochromat by isochromat from their tables since
+         *  construction: once kGroupings groupings are kept, those under a
+         *  gradient held along a direction none of them is made for. */
+        size_t ungrouped_pulses() const
+        {
+            const std::lock_guard<std::mutex> held(mutex_);
+            return ungrouped_pulses_;
+        }
+
         /** Offer @p device every window read on the lattice, and every other
          *  window outside a run before the engine reads it by its own
          *  transform or sample by sample; an empty one offers none. */
@@ -760,6 +769,8 @@ namespace bloch
          *  @p window. */
         void settle_after(const LatticeWindow& window);
         const Grouping& grouping(int mode, const double direction[3]);
+        /** The grouping kept for @p mode and @p direction, or null. */
+        const Grouping* kept_grouping(int mode, const double direction[3]) const;
 
         IsochromatProperties properties_;
         size_t count_ = 0;
@@ -817,6 +828,25 @@ namespace bloch
          *  Hz/m, unless their new points outnumber the groups; return whether
          *  it did. */
         bool hold_on_grid(const BlockEvents& block, const PulseGradient& gradient, double along, const Grouping& groups);
+        /** Play the pulse on each isochromat from its tables, made or extended
+         *  as needed, under a gradient held at @p along, in Hz/m, without
+         *  grouping or holding: unless the channels play more than one
+         *  waveform or the tables' new points outnumber the isochromats;
+         *  return whether it did. */
+        bool excite_each(const BlockEvents& block, const PulseGradient& gradient, double along);
+        /** Find, or make, each class's table of @p waveform, @p spacing and
+         *  @p drive_spacing, and the turn of the pulse against it, and extend
+         *  it over @p bounds; false, leaving the tables as they are, where
+         *  their new points would be @p most or more. */
+        bool tables_for(
+            const BlockEvents& block,
+            double spacing,
+            double drive_spacing,
+            const std::vector<std::complex<double>>& waveform,
+            const std::vector<std::array<long long, 4>>& bounds,
+            size_t most,
+            std::vector<std::list<PulseTable>::iterator>& table,
+            std::vector<std::complex<double>>& turn);
         /** The table of @p rf, @p step, @p spacing and @p drive_spacing for
          *  the class relaxing as @p relaxation, but for a phase written to
          *  @p turn, or tables_.end(). */
@@ -843,6 +873,16 @@ namespace bloch
             const std::vector<std::complex<double>>& turn,
             double duration,
             std::vector<double>& maps);
+        /** The map at @p field and, where not null, the magnitude of
+         *  @p drive from @p table, turned by @p turn and the drive's phase,
+         *  to @p out. */
+        static void table_map(
+            const PulseTable& table,
+            double field,
+            const std::complex<double>* drive,
+            std::complex<double> turn,
+            double duration,
+            double* out);
         /** Make the @p played tables the most recent, and let the least
          *  recent others go beyond kPulseTables or kTableBytes. */
         void keep(const std::vector<std::list<PulseTable>::iterator>& played);
@@ -879,6 +919,7 @@ namespace bloch
         };
         std::vector<Segmentation> segmentations_;
         size_t lattice_windows_ = 0;
+        size_t ungrouped_pulses_ = 0;
         size_t device_windows_ = 0;
         /** The engine's identity, and the revision of its positions, drawn
          *  from one count shared by every engine. */

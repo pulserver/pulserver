@@ -856,6 +856,9 @@ void bind_bloch(py::module_& module)
         .def_property_readonly(
             "device_windows",
             py::cpp_function(&bloch::Isochromats::device_windows, py::call_guard<py::gil_scoped_release>()))
+        .def_property_readonly(
+            "ungrouped_pulses",
+            py::cpp_function(&bloch::Isochromats::ungrouped_pulses, py::call_guard<py::gil_scoped_release>()))
         .def("reset", &bloch::Isochromats::reset, py::call_guard<py::gil_scoped_release>())
         .def("magnetization", &magnetization)
         .def("set_magnetization", &set_magnetization)

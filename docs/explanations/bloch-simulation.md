@@ -242,6 +242,14 @@ precession, none of which can be taken out along $|d|$, so it is interpolated
 there with a quintic through six points, which keeps the agreement with the
 stepped map at about $10^{-7}$ of $M_0$.
 
+Groups are made for one gradient direction, and the engine keeps those of four
+directions. Once it holds four, a pulse under a direction none of them is made
+for, as each spoke of a ZTE scan plays under its own readout gradient, is
+played from the grid isochromat by isochromat: each map is interpolated at the
+isochromat's own $\nu$ and $|d_j|$ and applied at once, with no grouping along
+the new direction and no maps kept for a later pulse. A pulse the grid cannot
+serve with fewer new points than there are isochromats is grouped instead.
+
 ## Pulseq events as fields
 
 {meth}`~pulserver.virtual.Isochromats.play` plays one block's events as

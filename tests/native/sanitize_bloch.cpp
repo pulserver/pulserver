@@ -7,16 +7,18 @@
  * happened to be there, which the numerical tests catch only when it changes
  * a number. This plays blocks that reach every path of the engine -- a pulse
  * stepped for each group of isochromats, one reused turned by its phase, one
- * computed on a grid of fields and drives, a window read sample by sample, one
- * read by the non-uniform FFT and one read on the isochromats' lattice, by the
- * engine and by a device, and again once they have moved, gradients turned
- * with steps in them, and windows off the lattice read by a device sample by
- * sample -- and
- * repetitions of them, exact and to a tolerance, on one transmit channel and
- * on two, by the engine and by a run device that carries them in plain loops,
- * with AddressSanitizer and UndefinedBehaviorSanitizer on. It asserts that the
- * windows meant for the lattice are read there and that the devices read what
- * the engine reads; the sanitisers assert the rest.
+ * computed on a grid of fields and drives, one played isochromat by isochromat
+ * from its tables under a direction past the groupings kept, a window read
+ * sample by sample, one read by the non-uniform FFT and one read on the
+ * isochromats' lattice, by the engine and by a device, and again once they
+ * have moved, gradients turned with steps in them, and windows off the
+ * lattice read by a device sample by sample -- and repetitions of them, exact
+ * and to a tolerance, on one transmit channel and on two, by the engine and
+ * by a run device that carries them in plain loops, with AddressSanitizer and
+ * UndefinedBehaviorSanitizer on. It asserts that the windows meant for the
+ * lattice are read there, that the pulses past the groupings kept are played
+ * isochromat by isochromat, and that the devices read what the engine reads;
+ * the sanitisers assert the rest.
  *
  * The lattice is transformed by a stand-in for FINUFFT's plans that sums each
  * point directly, handed to the engine as the finufft wheel's entry points
@@ -990,6 +992,64 @@ namespace
         return agree;
     }
 
+    /** Play a pulse under slab gradients along six directions, on
+     *  @p channels transmit channels; whether the two past the groupings the
+     *  engine keeps are played isochromat by isochromat from its tables. */
+    bool ungrouped(size_t channels)
+    {
+        bloch::IsochromatProperties p;
+        for (int i = 0; i < 16; ++i)
+            for (int j = 0; j < 16; ++j)
+                for (int k = 0; k < 8; ++k)
+                {
+                    p.x.push_back(2e-3 * (i - 8));
+                    p.y.push_back(2e-3 * (j - 8));
+                    p.z.push_back(2e-3 * (k - 4));
+                }
+        const size_t n = p.x.size();
+        for (size_t i = 0; i < n; ++i)
+        {
+            p.proton_density.push_back(1.0);
+            p.t1.push_back(i % 2 == 0 ? 0.8 : 1.2);
+            p.t2.push_back(0.07);
+            p.off_resonance.push_back(40.0 * std::sin(1.3 * i));
+        }
+        // Drives within a few rows of a table: a phase the channels share.
+        p.transmit_channels = channels;
+        for (size_t i = 0; i < n; ++i)
+            for (size_t c = 0; c < channels; ++c)
+                p.transmit.push_back(std::polar(1.0 + 0.05 * std::cos(0.7 * i + c), 0.3 * i));
+        bloch::Isochromats spins(p, 2);
+
+        const std::vector<Complex> selective = sinc(200, channels ? channels : 1, 800.0);
+        for (int k = 0; k < 6; ++k)
+        {
+            const double polar = std::acos(1.0 - (2.0 * k + 1.0) / 6.0);
+            const double azimuth = kPi * (1.0 + std::sqrt(5.0)) * (k + 0.5);
+            const double direction[3] = {
+                std::sin(polar) * std::cos(azimuth), std::sin(polar) * std::sin(azimuth), std::cos(polar)};
+            Axis slab[3];
+            bloch::BlockEvents excite;
+            excite.duration = 2.3e-3;
+            for (int axis = 0; axis < 3; ++axis)
+            {
+                const double held = 2e3 * direction[axis];
+                slab[axis] = {{0.0, 0.1e-3, 2.1e-3, 2.2e-3}, {0.0, held, held, 0.0}};
+                set(excite, axis, slab[axis]);
+            }
+            excite.rf_start = 0.1e-3;
+            excite.rf_step = 1e-5;
+            excite.rf_steps = 200;
+            excite.rf_channels = channels ? channels : 1;
+            excite.rf = selective.data();
+            spins.play(excite, nullptr);
+        }
+        std::vector<double> magnetization(3 * n);
+        spins.magnetization(magnetization.data());
+        sink = std::accumulate(magnetization.begin(), magnetization.end(), sink);
+        return spins.ungrouped_pulses() == 2;
+    }
+
 } // namespace
 
 int main()
@@ -1023,6 +1083,12 @@ int main()
         if (!off_lattice(coils))
         {
             std::fprintf(stderr, "the windows of %zu coils off the lattice were not read by the device\n", coils);
+            return 1;
+        }
+    for (size_t channels : {size_t{0}, size_t{2}})
+        if (!ungrouped(channels))
+        {
+            std::fprintf(stderr, "the pulses past the groupings kept on %zu channels were grouped\n", channels);
             return 1;
         }
     for (size_t coils : {size_t{0}, size_t{3}})

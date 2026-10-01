@@ -321,6 +321,16 @@ class Isochromats:
         return self._native.device_windows
 
     @property
+    def ungrouped_pulses(self) -> int:
+        """RF pulses played isochromat by isochromat from their tables since construction.
+
+        The engine keeps groupings of isochromats for four gradient
+        directions; once it holds four, a pulse under a gradient held along
+        another direction, such as a ZTE spoke's, is played ungrouped.
+        """
+        return self._native.ungrouped_pulses
+
+    @property
     def moving(self) -> bool:
         """Whether the isochromats move or diffuse, and so play block by block."""
         return self._motion is not None or self._diffusion is not None
