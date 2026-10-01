@@ -127,7 +127,11 @@ $\varepsilon/4$ for every rate on the boundary of the rectangle the rates
 span, where the error of the interpolation is largest. FINUFFT is given
 $\varepsilon/4$ divided by the Lebesgue constant of the points and by the most
 the sums grow over the window from the middle rate, and works in single
-precision where that lies above $2 \times 10^{-6}$. The cost is proportional
+precision where that lies above $2 \times 10^{-6}$. Where it does, the lattice
+sums are formed from the sensitivities rounded to single precision, read from
+a copy in the order of the lattice points that is made at the first such window
+and kept: 8 bytes per isochromat and coil, beside the 16 the sensitivities take
+in double precision. The cost is proportional
 to the isochromats times the coils and $L$, and to the coils times $L$ times
 the lattice points, rather than to the isochromats times the coils and the
 samples; a window is read this way where that costs less. Either way, the

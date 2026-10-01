@@ -712,15 +712,16 @@ def _changing(trajectory: str, duration: float) -> list[np.ndarray | None]:
     ]
 
 
-def _on_lattice(trajectory: str) -> np.ndarray:
-    """Positions on a lattice 4 mm apart along the axes ``_changing``'s k moves along, anywhere along the others."""
+def _on_lattice(trajectory: str, copies: int | None = None) -> np.ndarray:
+    """Positions on a lattice 4 mm apart along the axes ``_changing``'s k moves along, anywhere along the others, ``copies`` per lattice point."""
     shape = {"ramps along x": (40, 1, 1), "spiral": (16, 16, 1), "cone": (12, 12, 12)}[
         trajectory
     ]
     index = np.indices(shape).reshape(3, -1).T - np.array(shape) // 2
     positions = 4e-3 * index.astype(float)
     free = np.array(shape) == 1
-    copies = {"ramps along x": 50, "spiral": 8, "cone": 1}[trajectory]
+    if copies is None:
+        copies = {"ramps along x": 50, "spiral": 8, "cone": 1}[trajectory]
     positions = np.repeat(positions, copies, axis=0)
     positions[:, free] = RNG.uniform(-0.02, 0.02, size=(len(positions), free.sum()))
     return positions
@@ -736,23 +737,32 @@ def _window_terms(positions, t2, off_resonance, start, gradients, times):
 
 
 @pytest.mark.parametrize(
-    ("trajectory", "tolerance"),
+    ("trajectory", "tolerance", "coils"),
     [
-        ("ramps along x", 0.0),
-        ("ramps along x", 1e-4),
-        ("spiral", 0.0),
-        ("spiral", 1e-7),
-        ("spiral", 1e-4),
-        ("cone", 1e-4),
+        ("ramps along x", 0.0, 4),
+        ("ramps along x", 1e-4, 4),
+        ("spiral", 0.0, 4),
+        ("spiral", 1e-7, 4),
+        ("spiral", 1e-4, 4),
+        ("cone", 1e-4, 4),
+        ("spiral", 1e-7, 37),
+        ("spiral", 1e-4, 37),
+        ("spiral", 0.0, None),
+        ("spiral", 1e-4, None),
     ],
 )
 def test_a_window_under_a_changing_gradient_is_read_on_the_lattice_its_k_moves_along(
-    trajectory, tolerance
+    trajectory, tolerance, coils
 ):
-    """Read by FINUFFT, in double precision or, far enough above its rounding, in single, to within the tolerance of the terms."""
-    positions = _on_lattice(trajectory)
-    n, coils, duration = len(positions), 4, 2e-3
-    receive = RNG.normal(size=(n, coils)) + 1j * RNG.normal(size=(n, coils))
+    """Read by FINUFFT, in double precision or, far enough above its rounding, in single, to within the tolerance of the terms, by any number of coils or one of unit sensitivity."""
+    # Many coils are read on the lattice where its points hold many isochromats.
+    positions = _on_lattice(trajectory, None if coils in (4, None) else 32)
+    n, duration = len(positions), 2e-3
+    receive = (
+        None
+        if coils is None
+        else RNG.normal(size=(n, coils)) + 1j * RNG.normal(size=(n, coils))
+    )
     t2 = RNG.choice([0.03, 0.08, 0.3], n)
     off_resonance = RNG.uniform(-100.0, 100.0, n)
     start = RNG.normal(size=n) + 1j * RNG.normal(size=n)
@@ -765,11 +775,12 @@ def test_a_window_under_a_changing_gradient_is_read_on_the_lattice_its_k_moves_a
     signal = spins.play(duration, gradients=gradients, adc=adc, tolerance=tolerance)
 
     assert spins.lattice_windows == 1
-    terms = np.abs(start) @ np.abs(receive)
+    sensitivities = np.ones((n, 1)) if receive is None else receive
+    terms = np.abs(start) @ np.abs(sensitivities)
     transverse = _window_terms(positions, t2, off_resonance, start, gradients, adc)
     np.testing.assert_allclose(
         signal,
-        (transverse @ receive).T,
+        (transverse @ sensitivities).T,
         rtol=0,
         atol=max(tolerance, 1e-11) * terms.max(),
     )

@@ -301,17 +301,23 @@ namespace bloch
         /** The isochromats in order of their point on the lattice of the
          *  axes in @p axes, a bit per axis, the lowest axis's index fastest,
          *  where each point's start in that order, one more than the
-         *  points, and the most isochromats at one point. */
+         *  points, and the most isochromats at one point; and, in that
+         *  order, each isochromat's off-resonance and T2 and, from the first
+         *  window summed in single precision on, its sensitivities, the
+         *  coils of an isochromat together. */
         struct LatticeOrder
         {
             unsigned axes = 0;
             std::vector<uint32_t> order;
             std::vector<uint32_t> starts;
             size_t fullest = 0;
+            std::vector<double> off_resonance;
+            std::vector<uint32_t> decay_of;
+            std::vector<std::complex<float>> receive;
         };
         /** The lattice of the positions along @p axis, found on first use. */
         const Lattice& lattice(int axis);
-        const LatticeOrder& lattice_order(unsigned axes);
+        LatticeOrder& lattice_order(unsigned axes);
         /** Chebyshev points across a window of @p span s at which each
          *  isochromat's decay and precession, interpolated between them,
          *  hold to within @p error of their magnitude throughout the window;

@@ -1431,7 +1431,7 @@ namespace bloch
          *  summed onto; and the bytes the sums may take at once. */
         constexpr size_t kLatticeAxisPoints = size_t(1) << 16;
         constexpr size_t kLatticePoints = size_t(1) << 22;
-        constexpr size_t kLatticeBytes = size_t(1) << 27;
+        constexpr size_t kLatticeBytes = size_t(1) << 28;
 
         /** Largest distance of a position from its lattice point, relative to
          *  the lattice's spacing, at which it is taken to lie on the point. */
@@ -1539,29 +1539,51 @@ namespace bloch
 
         /** Isochromats a lattice sum holds the factors of at once, unless one
          *  lattice point has more. */
-        constexpr size_t kSumIsochromats = 256;
+        constexpr size_t kSumIsochromats = 768;
 
         /** Sums a lattice sum holds per tile of lattice points before writing
-         *  them out, at least one point's. */
-        constexpr size_t kSumValues = size_t(1) << 14;
+         *  them out, at least a group's. */
+        constexpr size_t kSumValues = size_t(1) << 15;
+
+        /** Lattice points summed together before their sums are laid out in
+         *  the tile's rows. */
+        constexpr size_t kSumGroup = 8;
+
+        /** Most coils summed together, sharing each read of an isochromat's
+         *  factors, and the coils summed together L Chebyshev points at a
+         *  time: as many as keep their sums in the registers L lanes come
+         *  with. */
+        constexpr size_t kSumCoils = 4;
+        template <size_t L>
+        constexpr size_t kCoilsTogether = L >= 8 ? kSumCoils : kSumCoils / 2;
+
+        /** Coils a tile sums at once, sharing its factors. */
+        constexpr size_t kTileCoils = 16;
 
         /** What summing the isochromats of a range of lattice points reads
-         *  and writes. */
+         *  and writes. Positions count the isochromats in lattice order. */
         struct LatticeSum
         {
+            /** The isochromat at each position, and each point's first
+             *  position. */
             const uint32_t* order;
             const uint32_t* starts;
             const double* mx;
             const double* my;
-            /** The chunk's receive sensitivities, coil-major from its first
-             *  coil, count per coil; none for one coil of unit sensitivity. */
+            /** Each position's off-resonance, in Hz, and T2. */
+            const double* off_resonance;
+            const uint32_t* decay_of;
+            /** The chunk's receive sensitivities from its first coil: each
+             *  position's coils together, @c stride apart, where @c sorted
+             *  holds them; otherwise coil-major, @c count per coil. None for
+             *  one coil of unit sensitivity. */
+            const std::complex<float>* sorted;
+            size_t stride;
             const double* re;
             const double* im;
             size_t count;
             size_t coils;
-            const double* off_resonance;
             double frequency;
-            const uint32_t* decay_of;
             /** Each T2's decay at each Chebyshev point, [T2][padded], and the
              *  points, both zero past the last point. */
             const double* decay;
@@ -1569,33 +1591,41 @@ namespace bloch
             size_t segments;
             size_t padded;
             size_t points;
-            /** Isochromats in a tile, at least those of the fullest point, and
-             *  lattice points in a tile. */
+            /** Isochromats in a tile, at least those of the fullest point,
+             *  lattice points in a tile, and coils a tile sums at once. */
             size_t tile_isochromats;
             size_t tile_points;
+            size_t tile_coils;
             /** [coil][Chebyshev point][lattice point], complex<float> where
              *  single, complex<double> otherwise. */
             void* sums;
             bool single;
         };
 
-        /** A worker's tile of lattice points: each isochromat's index, its
-         *  factors at the Chebyshev points [isochromat][padded], its coil
-         *  factors [coil][isochromat], and the tile's sums
-         *  [point][coil][padded], real and imaginary parts apart. */
+        /** A worker's tile of lattice points: its isochromats' factors at the
+         *  Chebyshev points [isochromat][padded], zero past the last point,
+         *  their magnetisation, and their sensitivities to the coils it sums
+         *  at once [isochromat][coil]; a group's sums [point][coil][padded];
+         *  and the tile's sums of those coils [coil][Chebyshev point][point],
+         *  in the precision they are written in. Real and imaginary parts lie
+         *  apart. */
         struct SumTile
         {
-            std::vector<uint32_t> index;
-            std::vector<double> fr, fi, hr, hi, sr, si;
+            std::vector<double> fr, fi, hr, hi, gr, gi, mr, mi;
+            std::vector<std::complex<float>> single_rows;
+            std::vector<std::complex<double>> double_rows;
 
             explicit SumTile(const LatticeSum& s)
-                : index(s.tile_isochromats),
-                  fr(s.tile_isochromats * s.padded),
+                : fr(s.tile_isochromats * s.padded),
                   fi(s.tile_isochromats * s.padded),
-                  hr(s.coils * s.tile_isochromats),
-                  hi(s.coils * s.tile_isochromats),
-                  sr(s.tile_points * s.coils * s.padded),
-                  si(s.tile_points * s.coils * s.padded)
+                  hr(s.tile_isochromats * s.tile_coils),
+                  hi(s.tile_isochromats * s.tile_coils),
+                  gr(kSumGroup * kSumCoils * s.padded),
+                  gi(kSumGroup * kSumCoils * s.padded),
+                  mr(s.tile_isochromats),
+                  mi(s.tile_isochromats),
+                  single_rows(s.single ? s.tile_coils * s.segments * s.tile_points : 0),
+                  double_rows(s.single ? 0 : s.tile_coils * s.segments * s.tile_points)
             {
             }
         };
@@ -1603,17 +1633,18 @@ namespace bloch
         /** Sum the isochromats of lattice points [@p first, @p last). */
         using SumPoints = void (*)(const LatticeSum& s, size_t first, size_t last, SumTile& tile);
 
-        /** The factors of the tile's first @p n isochromats: each one's decay
-         *  at each Chebyshev point times its turn there, relative to the
-         *  window's middle rate and frequency. */
-        BLOCH_INLINE void point_factors(const LatticeSum& s, size_t n, SumTile& t)
+        /** The factors of the @p n isochromats from position @p base: each
+         *  one's transverse magnetisation times its decay and turn at each
+         *  Chebyshev point, relative to the window's middle rate and
+         *  frequency. */
+        BLOCH_INLINE void point_factors(const LatticeSum& s, size_t base, size_t n, SumTile& t)
         {
             const size_t padded = s.padded;
             for (size_t i = 0; i < n; ++i)
             {
-                const size_t j = t.index[i];
-                const double shift = s.frequency - s.off_resonance[j];
-                const double* d = s.decay + s.decay_of[j] * padded;
+                const size_t j = s.order[base + i];
+                const double shift = s.frequency - s.off_resonance[base + i];
+                const double* d = s.decay + s.decay_of[base + i] * padded;
                 double* cycles = &t.fr[i * padded];
                 double* decay = &t.fi[i * padded];
                 BLOCH_INDEPENDENT
@@ -1622,6 +1653,8 @@ namespace bloch
                     cycles[l] = shift * s.nodes[l];
                     decay[l] = d[l];
                 }
+                t.mr[i] = s.mx[j];
+                t.mi[i] = s.my[j];
             }
             double* fr = t.fr.data();
             double* fi = t.fi.data();
@@ -1635,47 +1668,69 @@ namespace bloch
                 fr[u] = d * c;
                 fi[u] = d * sine;
             }
-        }
-
-        /** The coil factors of the tile's first @p n isochromats: each one's
-         *  transverse magnetisation times each coil's sensitivity there. */
-        BLOCH_INLINE void coil_factors(const LatticeSum& s, size_t n, SumTile& t)
-        {
-            for (size_t c = 0; c < s.coils; ++c)
+            /* Each factor carries its isochromat's magnetisation. */
+            for (size_t i = 0; i < n; ++i)
             {
-                const double* re = s.re != nullptr ? s.re + c * s.count : nullptr;
-                const double* im = s.im != nullptr ? s.im + c * s.count : nullptr;
-                double* hr = &t.hr[c * s.tile_isochromats];
-                double* hi = &t.hi[c * s.tile_isochromats];
-                for (size_t i = 0; i < n; ++i)
+                const double mr = t.mr[i], mi = t.mi[i];
+                double* re = &fr[i * padded];
+                double* im = &fi[i * padded];
+                BLOCH_INDEPENDENT
+                for (size_t l = 0; l < padded; ++l)
                 {
-                    const size_t j = t.index[i];
-                    const double gr = re != nullptr ? re[j] : 1.0;
-                    const double gi = im != nullptr ? im[j] : 0.0;
-                    hr[i] = gr * s.mx[j] - gi * s.my[j];
-                    hi[i] = gr * s.my[j] + gi * s.mx[j];
+                    const double a = re[l], b = im[l];
+                    re[l] = mr * a - mi * b;
+                    im[l] = mr * b + mi * a;
                 }
             }
         }
 
-        /** Sum the tile's isochromats [@p begin, @p end), those of its point
-         *  @p at, into the sums of K coils from @p first at every Chebyshev
-         *  point, L points at a time. The products of the real and the
-         *  imaginary parts accumulate apart, so that no sum waits on the one
-         *  before it. */
+        /** The sensitivities of the @p n isochromats from position @p base to
+         *  the @p k coils from @p first, [isochromat][coil]: read in lattice
+         *  order where the sum holds them so, gathered from their coils' rows
+         *  otherwise. */
+        BLOCH_INLINE void coil_factors(const LatticeSum& s, size_t base, size_t n, size_t first, size_t k, SumTile& t)
+        {
+            const size_t coils = s.tile_coils;
+            if (s.sorted != nullptr)
+            {
+                for (size_t i = 0; i < n; ++i)
+                {
+                    const std::complex<float>* g = s.sorted + (base + i) * s.stride + first;
+                    double* hr = &t.hr[i * coils];
+                    double* hi = &t.hi[i * coils];
+                    for (size_t c = 0; c < k; ++c)
+                    {
+                        hr[c] = g[c].real();
+                        hi[c] = g[c].imag();
+                    }
+                }
+                return;
+            }
+            for (size_t c = 0; c < k; ++c)
+            {
+                const double* re = s.re != nullptr ? s.re + (first + c) * s.count : nullptr;
+                const double* im = s.im != nullptr ? s.im + (first + c) * s.count : nullptr;
+                for (size_t i = 0; i < n; ++i)
+                {
+                    const size_t j = s.order[base + i];
+                    t.hr[i * coils + c] = re != nullptr ? re[j] : 1.0;
+                    t.hi[i * coils + c] = im != nullptr ? im[j] : 0.0;
+                }
+            }
+        }
+
+        /** Sum the tile's isochromats [@p begin, @p end), those of the
+         *  group's point @p at, into the group's sums of K coils from
+         *  @p first at every Chebyshev point, L points at a time. The
+         *  products of the real and the imaginary parts accumulate apart, so
+         *  that no sum waits on the one before it. */
         template <size_t L, size_t K>
         BLOCH_INLINE void sum_coils(
             const LatticeSum& s, size_t begin, size_t end, size_t at, size_t first, SumTile& t)
         {
             using Vector = typename Lanes<double, L>::Vector;
             const size_t padded = s.padded;
-            const double* hr[K];
-            const double* hi[K];
-            for (size_t k = 0; k < K; ++k)
-            {
-                hr[k] = &t.hr[(first + k) * s.tile_isochromats];
-                hi[k] = &t.hi[(first + k) * s.tile_isochromats];
-            }
+            const size_t coils = s.tile_coils;
             for (size_t v = 0; v < padded; v += L)
             {
                 Vector rr[K], ii[K], ri[K], ir[K];
@@ -1685,60 +1740,82 @@ namespace bloch
                 {
                     const Vector fr = *reinterpret_cast<const Vector*>(&t.fr[i * padded + v]);
                     const Vector fi = *reinterpret_cast<const Vector*>(&t.fi[i * padded + v]);
+                    const double* hr = &t.hr[i * coils + first];
+                    const double* hi = &t.hi[i * coils + first];
                     for (size_t k = 0; k < K; ++k)
                     {
-                        rr[k] += hr[k][i] * fr;
-                        ii[k] += hi[k][i] * fi;
-                        ri[k] += hr[k][i] * fi;
-                        ir[k] += hi[k][i] * fr;
+                        rr[k] += hr[k] * fr;
+                        ii[k] += hi[k] * fi;
+                        ri[k] += hr[k] * fi;
+                        ir[k] += hi[k] * fr;
                     }
                 }
                 for (size_t k = 0; k < K; ++k)
                 {
-                    const size_t row = (at * s.coils + first + k) * padded + v;
-                    *reinterpret_cast<Vector*>(&t.sr[row]) = rr[k] - ii[k];
-                    *reinterpret_cast<Vector*>(&t.si[row]) = ri[k] + ir[k];
+                    const size_t row = (at * kSumCoils + k) * padded + v;
+                    *reinterpret_cast<Vector*>(&t.gr[row]) = rr[k] - ii[k];
+                    *reinterpret_cast<Vector*>(&t.gi[row]) = ri[k] + ir[k];
                 }
             }
         }
 
-        /** Sum the tile's isochromats [@p begin, @p end), those of its point
-         *  @p at, into each coil's sums at every Chebyshev point, K coils at
-         *  a time. */
-        template <size_t L, size_t K>
-        BLOCH_INLINE void sum_point(const LatticeSum& s, size_t begin, size_t end, size_t at, SumTile& t)
-        {
-            size_t c = 0;
-            for (; c + K <= s.coils; c += K)
-                sum_coils<L, K>(s, begin, end, at, c, t);
-            for (; c < s.coils; ++c)
-                sum_coils<L, 1>(s, begin, end, at, c, t);
-        }
-
+        /** Lay the group's sums of @p k coils from @p first, its @p m points
+         *  from the tile's point @p at, into the tile's rows. */
         template <typename Real>
-        BLOCH_INLINE void write_rows(
-            const LatticeSum& s, size_t first, size_t last, const SumTile& t, std::complex<Real>* sums)
+        BLOCH_INLINE void stage_rows(
+            const LatticeSum& s, size_t at, size_t m, size_t first, size_t k, const SumTile& t, std::complex<Real>* rows)
         {
-            for (size_t c = 0; c < s.coils; ++c)
+            for (size_t c = 0; c < k; ++c)
                 for (size_t l = 0; l < s.segments; ++l)
                 {
-                    std::complex<Real>* row = sums + (c * s.segments + l) * s.points;
-                    for (size_t q = first; q < last; ++q)
+                    std::complex<Real>* row = rows + ((first + c) * s.segments + l) * s.tile_points + at;
+                    for (size_t p = 0; p < m; ++p)
                     {
-                        const size_t at = ((q - first) * s.coils + c) * s.padded + l;
-                        row[q] = std::complex<Real>(static_cast<Real>(t.sr[at]), static_cast<Real>(t.si[at]));
+                        const size_t from = (p * kSumCoils + c) * s.padded + l;
+                        row[p] = std::complex<Real>(static_cast<Real>(t.gr[from]), static_cast<Real>(t.gi[from]));
                     }
                 }
         }
 
-        /** Write the sums of the tile's points, lattice points [@p first,
-         *  @p last), into each coil's and Chebyshev point's row. */
-        BLOCH_INLINE void write_sums(const LatticeSum& s, size_t first, size_t last, const SumTile& t)
+        /** Sum the group of lattice points [@p g0, @p g1) of the tile from
+         *  point @p q0, whose first isochromat is at position @p base, for
+         *  the @p k coils the tile sums at once. */
+        template <size_t L>
+        BLOCH_INLINE void sum_group(
+            const LatticeSum& s, size_t q0, size_t g0, size_t g1, size_t base, size_t k, SumTile& t)
         {
-            if (s.single)
-                write_rows(s, first, last, t, static_cast<std::complex<float>*>(s.sums));
-            else
-                write_rows(s, first, last, t, static_cast<std::complex<double>*>(s.sums));
+            constexpr size_t K = kCoilsTogether<L>;
+            size_t c = 0;
+            for (; c + K <= k; c += K)
+            {
+                for (size_t q = g0; q < g1; ++q)
+                    sum_coils<L, K>(s, s.starts[q] - base, s.starts[q + 1] - base, q - g0, c, t);
+                if (s.single)
+                    stage_rows(s, g0 - q0, g1 - g0, c, K, t, t.single_rows.data());
+                else
+                    stage_rows(s, g0 - q0, g1 - g0, c, K, t, t.double_rows.data());
+            }
+            for (; c < k; ++c)
+            {
+                for (size_t q = g0; q < g1; ++q)
+                    sum_coils<L, 1>(s, s.starts[q] - base, s.starts[q + 1] - base, q - g0, c, t);
+                if (s.single)
+                    stage_rows(s, g0 - q0, g1 - g0, c, 1, t, t.single_rows.data());
+                else
+                    stage_rows(s, g0 - q0, g1 - g0, c, 1, t, t.double_rows.data());
+            }
+        }
+
+        /** Write the tile's rows of the @p k coils from @p coil, lattice
+         *  points [@p first, @p last), into those coils' rows of the sums. */
+        template <typename Real>
+        BLOCH_INLINE void write_rows(
+            const LatticeSum& s, size_t first, size_t last, size_t coil, size_t k, const std::complex<Real>* rows)
+        {
+            std::complex<Real>* sums = static_cast<std::complex<Real>*>(s.sums) + coil * s.segments * s.points;
+            const size_t n = last - first;
+            for (size_t row = 0; row < k * s.segments; ++row)
+                std::copy(rows + row * s.tile_points, rows + row * s.tile_points + n, sums + row * s.points + first);
         }
 
         template <size_t L>
@@ -1751,12 +1828,18 @@ namespace bloch
                     ++q1;
                 const size_t base = s.starts[q0];
                 const size_t n = s.starts[q1] - base;
-                std::copy(s.order + base, s.order + base + n, t.index.begin());
-                point_factors(s, n, t);
-                coil_factors(s, n, t);
-                for (size_t q = q0; q < q1; ++q)
-                    sum_point<L, L >= 8 ? 4 : 2>(s, s.starts[q] - base, s.starts[q + 1] - base, q - q0, t);
-                write_sums(s, q0, q1, t);
+                point_factors(s, base, n, t);
+                for (size_t coil = 0; coil < s.coils; coil += s.tile_coils)
+                {
+                    const size_t k = std::min(s.tile_coils, s.coils - coil);
+                    coil_factors(s, base, n, coil, k, t);
+                    for (size_t g0 = q0; g0 < q1; g0 += kSumGroup)
+                        sum_group<L>(s, q0, g0, std::min(q1, g0 + kSumGroup), base, k, t);
+                    if (s.single)
+                        write_rows(s, q0, q1, coil, k, t.single_rows.data());
+                    else
+                        write_rows(s, q0, q1, coil, k, t.double_rows.data());
+                }
                 q0 = q1;
             }
         }
@@ -2716,7 +2799,7 @@ namespace bloch
         return made;
     }
 
-    const Isochromats::LatticeOrder& Isochromats::lattice_order(unsigned axes)
+    Isochromats::LatticeOrder& Isochromats::lattice_order(unsigned axes)
     {
         for (const std::unique_ptr<LatticeOrder>& made : lattice_orders_)
             if (made->axes == axes)
@@ -2744,6 +2827,13 @@ namespace bloch
             made->order[next[key[i]]++] = static_cast<uint32_t>(i);
         for (size_t q = 0; q < points; ++q)
             made->fullest = std::max<size_t>(made->fullest, made->starts[q + 1] - made->starts[q]);
+        made->off_resonance.resize(count_);
+        made->decay_of.resize(count_);
+        for (size_t k = 0; k < count_; ++k)
+        {
+            made->off_resonance[k] = properties_.off_resonance[made->order[k]];
+            made->decay_of[k] = decay_of_[made->order[k]];
+        }
         lattice_orders_.push_back(std::move(made));
         return *lattice_orders_.back();
     }
@@ -2828,7 +2918,7 @@ namespace bloch
         size_t coils,
         std::complex<Real>* sums)
     {
-        const LatticeOrder& sorted = lattice_order(window.mask);
+        LatticeOrder& sorted = lattice_order(window.mask);
         const LatticeKernel kernel = fastest_sum_points();
         const size_t count = segments.count;
         const size_t padded = (count + kernel.lanes - 1) / kernel.lanes * kernel.lanes;
@@ -2842,27 +2932,49 @@ namespace bloch
             for (size_t l = 0; l < count; ++l)
                 decay[d * padded + l] = std::exp(-(decays_[d] - window.rate) * nodes[l]);
         const bool sensitivities = !receive_re_.empty();
+        /* Sums in single precision read the sensitivities from a copy in
+         * lattice order, in single precision, half the memory of the coils'
+         * rows; sums in double precision gather them from those rows. */
+        const bool single = std::is_same<Real, float>::value;
+        if (single && sensitivities && sorted.receive.empty())
+        {
+            sorted.receive.resize(count_ * coils_);
+            parallel(count_, threads_, kChunk, [&](size_t, size_t begin, size_t end) {
+                for (size_t k = begin; k < end; ++k)
+                {
+                    const size_t j = sorted.order[k];
+                    std::complex<float>* row = &sorted.receive[k * coils_];
+                    for (size_t c = 0; c < coils_; ++c)
+                        row[c] = std::complex<float>(
+                            static_cast<float>(receive_re_[c * count_ + j]), static_cast<float>(receive_im_[c * count_ + j]));
+                }
+            });
+        }
+        const bool gathered = sensitivities && !single;
         const LatticeSum sum{
             sorted.order.data(),
             sorted.starts.data(),
             mx_.data(),
             my_.data(),
-            sensitivities ? receive_re_.data() + first_coil * count_ : nullptr,
-            sensitivities ? receive_im_.data() + first_coil * count_ : nullptr,
+            sorted.off_resonance.data(),
+            sorted.decay_of.data(),
+            sensitivities && single ? sorted.receive.data() + first_coil : nullptr,
+            coils_,
+            gathered ? receive_re_.data() + first_coil * count_ : nullptr,
+            gathered ? receive_im_.data() + first_coil * count_ : nullptr,
             count_,
             coils,
-            properties_.off_resonance.data(),
             window.frequency,
-            decay_of_.data(),
             decay.data(),
             nodes.data(),
             count,
             padded,
             points,
             std::max(kSumIsochromats, sorted.fullest),
-            std::max<size_t>(1, kSumValues / (coils * padded)),
+            std::max(kSumGroup, kSumValues / (std::min(coils, kTileCoils) * count) / kSumGroup * kSumGroup),
+            std::min(coils, kTileCoils),
             sums,
-            std::is_same<Real, float>::value};
+            single};
         const auto starts_end = sorted.starts.begin() + static_cast<std::ptrdiff_t>(points);
         parallel(count_, threads_, kChunk, [&](size_t, size_t begin, size_t end) {
             /* A worker sums the points whose first isochromat it was given. */
