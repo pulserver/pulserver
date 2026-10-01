@@ -128,6 +128,11 @@ B0_MAP = "b0_map"
 B1_MAP = "b1_map"
 COIL_SENSITIVITIES = "coil_sensitivities"
 
+#: The names a :class:`ReconContext` reads and writes as attributes of itself.
+#: Each is its own key in the exam cache, so a hook reaching one by attribute
+#: and a hook reaching it through :attr:`ReconContext.exam` reach the same map.
+EXAM_ARTIFACTS = (B0_MAP, B1_MAP, COIL_SENSITIVITIES)
+
 
 class ExamCache(MutableMapping[Hashable, Any]):
     """Thread-safe store of artifacts shared by the series of one exam.
@@ -384,16 +389,30 @@ class ExamCache(MutableMapping[Hashable, Any]):
         return written
 
 
-@dataclass(frozen=True)
+@dataclass
 class ReconContext:
     """Scan context passed to every hook of a plugin.
+
+    The maps the series of an exam share are attributes of the context: a hook
+    reads :attr:`b0_map`, :attr:`b1_map` and :attr:`coil_sensitivities` from it
+    and assigns to them what it measures, and a later series of the exam reads
+    what was assigned, whichever proxy reconstructs it. Each is ``None`` until
+    some series of the exam has measured it.
+
+    Those three names are the whole vocabulary, so a misspelt one raises
+    instead of being stored where nothing looks for it. A plugin carrying an
+    artifact of its own puts it in :attr:`exam` under a key it chooses.
+
+    The scan context itself does not change once built: assigning to
+    :attr:`header`, :attr:`exam`, :attr:`config` or :attr:`device` raises.
 
     Parameters
     ----------
     header
         Parsed MRD XML header; offline, ``None`` or any header-like object.
     exam
-        Artifact cache shared by the series of the exam.
+        Artifact cache shared by the series of the exam, for artifacts the
+        three names do not cover.
     config
         Configuration payload the client sent with the stream.
     device
@@ -402,22 +421,44 @@ class ReconContext:
 
     Examples
     --------
-    >>> from types import SimpleNamespace
     >>> import pulserver.recon as recon
-    >>> matrix = SimpleNamespace(matrixSize=SimpleNamespace(x=8, y=4, z=1))
-    >>> header = SimpleNamespace(
-    ...     encoding=[SimpleNamespace(encodedSpace=matrix, reconSpace=matrix)],
-    ...     acquisitionSystemInformation=SimpleNamespace(receiverChannels=2),
-    ... )
-    >>> context = recon.ReconContext.offline(header)
-    >>> isinstance(context.exam, recon.ExamCache)
+    >>> context = recon.ReconContext.offline()
+    >>> context.b1_map is None
     True
+    >>> context.b1_map = [1.0, 0.9]
+    >>> context.b1_map
+    [1.0, 0.9]
+    >>> context.exam[recon.B1_MAP]
+    [1.0, 0.9]
+    >>> context.b1_mpa = [1.0]
+    Traceback (most recent call last):
+    AttributeError: ReconContext has no attribute 'b1_mpa'
     """
 
     header: Any
     exam: ExamCache
     config: Any = None
     device: str | None = None
+
+    def __getattr__(self, name: str) -> Any:
+        # Reached only where normal lookup failed, so never for a field.
+        if name in EXAM_ARTIFACTS:
+            exam = self.__dict__.get("exam")
+            return None if exam is None else exam.get(name)
+        raise AttributeError(f"{type(self).__name__} has no attribute {name!r}")
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        if name in EXAM_ARTIFACTS:
+            self.exam[name] = value
+            return
+        if name in self.__dataclass_fields__ and name not in self.__dict__:
+            object.__setattr__(self, name, value)
+            return
+        if name in self.__dataclass_fields__:
+            raise AttributeError(
+                f"{type(self).__name__}.{name} is the scan's, not a hook's"
+            )
+        raise AttributeError(f"{type(self).__name__} has no attribute {name!r}")
 
     @classmethod
     def offline(

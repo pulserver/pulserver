@@ -23,7 +23,11 @@ from .._plugins import NAME, PluginPath, directories, find
 from ..recon._runtime import constants
 from ..recon._runtime.concurrency import HostSlots, Slot, slot_devices
 from ..recon._runtime.connection import Connection
-from ..recon._runtime.exam import ExamCacheManager
+from ..recon._runtime.exam import (
+    DEFAULT_EXAM_DIRECTORY,
+    EXAM_DIRECTORY_MODE,
+    ExamCacheManager,
+)
 from ..recon._runtime.mrd2dicom import MrdDicomBuilder
 from ..recon._runtime.readers import deserialize_config, read_text
 from ._designs import Design, DesignCache
@@ -201,6 +205,13 @@ class ReconProxy(_Listener):
         host so they count against one set;
         :data:`~pulserver.recon._runtime.concurrency.DEFAULT_SLOT_DIRECTORY`
         when ``None``.
+    exam_directory
+        Directory the caches of an exam are held in, shared with every other
+        proxy on this host so a map one series measures reaches a series on
+        another;
+        :data:`~pulserver.recon._runtime.exam.DEFAULT_EXAM_DIRECTORY` when
+        ``None``. An exam's directory is removed when the last proxy on that
+        exam lets go of it.
     forward
         ``(host, port)`` of the MRD server that reconstructs every series;
         local workers when ``None``.
@@ -236,6 +247,7 @@ class ReconProxy(_Listener):
         recon_timeout: float | None = None,
         queue: Path | str | None = None,
         slot_directory: Path | str | None = None,
+        exam_directory: Path | str | None = None,
         forward: tuple[str, int] | None = None,
         forward_config: str | None = None,
         forward_dicom: bool = False,
@@ -251,7 +263,14 @@ class ReconProxy(_Listener):
         if plugins is None:
             raise ValueError("a proxy that does not forward needs a plugin directory")
         local = self._reconstruction = _Workers(
-            plugins, slots, gpu_slots, spares, recon_timeout, queue, slot_directory
+            plugins,
+            slots,
+            gpu_slots,
+            spares,
+            recon_timeout,
+            queue,
+            slot_directory,
+            exam_directory,
         )
         self.workers, self.exams, self.queue = local.workers, local.exams, local.queue
 
@@ -314,6 +333,13 @@ class ReconServer(_Listener):
         host so they count against one set;
         :data:`~pulserver.recon._runtime.concurrency.DEFAULT_SLOT_DIRECTORY`
         when ``None``.
+    exam_directory
+        Directory the caches of an exam are held in, shared with every other
+        proxy on this host so a map one series measures reaches a series on
+        another;
+        :data:`~pulserver.recon._runtime.exam.DEFAULT_EXAM_DIRECTORY` when
+        ``None``. An exam's directory is removed when the last proxy on that
+        exam lets go of it.
 
     Attributes
     ----------
@@ -335,10 +361,18 @@ class ReconServer(_Listener):
         recon_timeout: float | None = None,
         queue: Path | str | None = None,
         slot_directory: Path | str | None = None,
+        exam_directory: Path | str | None = None,
     ) -> None:
         super().__init__(plugins)
         local = self._reconstruction = _Workers(
-            plugins, slots, gpu_slots, spares, recon_timeout, queue, slot_directory
+            plugins,
+            slots,
+            gpu_slots,
+            spares,
+            recon_timeout,
+            queue,
+            slot_directory,
+            exam_directory,
         )
         self.workers, self.exams, self.queue = local.workers, local.exams, local.queue
 
@@ -367,6 +401,7 @@ class _Workers:
         recon_timeout: float | None,
         queue: Path | str | None,
         slot_directory: Path | str | None = None,
+        exam_directory: Path | str | None = None,
     ) -> None:
         self._owns_queue = queue is None
         self.queue = (
@@ -378,7 +413,21 @@ class _Workers:
         self.plugins = directories(plugins)
         self.workers = WorkerPool(spares=spares)
         self.recon_timeout = recon_timeout
-        self._exam_root = Path(tempfile.mkdtemp(prefix="pulserver-exams-"))
+        # Shared across the proxies of the host, not private to this one: a
+        # map measured by a series on one proxy is wanted by a series on
+        # another, and an exam is the thing they have in common. Each exam
+        # holds its own directory under this, and keeps it until the last
+        # proxy on that exam lets go.
+        self._exam_root = Path(
+            DEFAULT_EXAM_DIRECTORY if exam_directory is None else exam_directory
+        )
+        # Readable by the owner alone: an exam's files are unpickled, so a
+        # directory another user can write to is code another user can run in
+        # a reconstruction worker. mkdir sets the mode only where it creates,
+        # and a umask may have narrowed it, so it is also set here -- which
+        # fails loudly on a directory this user does not own.
+        self._exam_root.mkdir(parents=True, exist_ok=True, mode=EXAM_DIRECTORY_MODE)
+        self._exam_root.chmod(EXAM_DIRECTORY_MODE)
         self.exams = ExamCacheManager(directory=self._exam_root)
         self._slots = HostSlots(slot_devices(slots, gpu_slots), slot_directory)
         # One pose reaches the scan at a time, whatever else is reconstructing:
@@ -447,8 +496,9 @@ class _Workers:
 
     def close(self) -> None:
         self.workers.close()
+        # Closing the manager removes the directory of each exam nothing else
+        # is on; the root is the host's and stays.
         self.exams.close()
-        shutil.rmtree(self._exam_root, ignore_errors=True)
         if self._owns_queue:
             shutil.rmtree(self.queue, ignore_errors=True)
 

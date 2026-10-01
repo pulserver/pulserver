@@ -31,6 +31,7 @@ described in {doc}`../user-guide/reconstruction-plugins`.
 | {obj}`~pulserver.recon.B0_MAP` | Where a calibration scan leaves the off-resonance map, in Hz, for the series that follow. |
 | {obj}`~pulserver.recon.B1_MAP` | Where a calibration scan leaves the transmit field map, as a fraction of what was asked for. |
 | {obj}`~pulserver.recon.COIL_SENSITIVITIES` | Where a calibration scan leaves each receive coil's sensitivity. |
+| {obj}`~pulserver.recon.EXAM_ARTIFACTS` | The maps a context carries as attributes of itself, each its own key in the exam cache. |
 
 ## Buffers and results
 
