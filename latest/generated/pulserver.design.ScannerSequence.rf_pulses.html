@@ -534,11 +534,11 @@
 <dt class="sig sig-object py" id="pulserver.design.ScannerSequence.rf_pulses">
 <span class="sig-prename descclassname"><span class="pre">ScannerSequence.</span></span><span class="sig-name descname"><span class="pre">rf_pulses</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pulserver/design/_scanner.html#ScannerSequence.rf_pulses"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.design.ScannerSequence.rf_pulses" title="Link to this definition">#</a></dt>
 <dd><p>Return the RF a design plays, as a scanner costs it while prescribing.</p>
-<p>Read off the sequence a design wrote, so nothing is designed to find
-them. A pulse whose kind <a class="reference internal" href="pulserver.design.ScannerSequence.follows.html#pulserver.design.ScannerSequence.follows" title="pulserver.design.ScannerSequence.follows"><code class="xref py py-attr docutils literal notranslate"><span class="pre">follows</span></code></a> names takes a share of its
-parameter: the angle it was designed at over the value the parameter
-was designed with, so a refocusing train whose angles vary gets one
-share each without any of them being written down.</p>
+<p>The pulses and their angles are read off the sequence a design wrote,
+so nothing is designed to find them; which control drives each is
+<a class="reference internal" href="pulserver.design.ScannerSequence.follows.html#pulserver.design.ScannerSequence.follows" title="pulserver.design.ScannerSequence.follows"><code class="xref py py-attr docutils literal notranslate"><span class="pre">follows</span></code></a>, declared. A pulse takes a share of its parameter: the
+angle it was designed at over the value the parameter was designed
+with, so a refocusing train whose angles vary gets one share each.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
@@ -548,12 +548,17 @@ names: <code class="docutils literal notranslate"><span class="pre">SequenceApp.
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>One entry per distinct shape and angle, with how many times the
-sequence plays it. Empty where <a class="reference internal" href="pulserver.design.ScannerSequence.follows.html#pulserver.design.ScannerSequence.follows" title="pulserver.design.ScannerSequence.follows"><code class="xref py py-attr docutils literal notranslate"><span class="pre">follows</span></code></a> names nothing, which
-leaves a scanner to cost the RF only once it has the design itself.</p>
+<dd class="field-even"><p>One entry per distinct pulse and angle. Empty where
+<a class="reference internal" href="pulserver.design.ScannerSequence.follows.html#pulserver.design.ScannerSequence.follows" title="pulserver.design.ScannerSequence.follows"><code class="xref py py-attr docutils literal notranslate"><span class="pre">follows</span></code></a> declares nothing, which leaves a scanner to cost
+the RF only once it has the design itself.</p>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p>list of <a class="reference internal" href="pulserver.protocol.RfPulse.html#pulserver.protocol.RfPulse" title="pulserver.protocol.RfPulse">RfPulse</a></p>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#list" title="(in Python v3.14)">list</a> of <a class="reference internal" href="pulserver.protocol.RfPulse.html#pulserver.protocol.RfPulse" title="pulserver.protocol.RfPulse">RfPulse</a></p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – When the sequence does not play as many distinct pulses as
+    <a class="reference internal" href="pulserver.design.ScannerSequence.follows.html#pulserver.design.ScannerSequence.follows" title="pulserver.design.ScannerSequence.follows"><code class="xref py py-attr docutils literal notranslate"><span class="pre">follows</span></code></a> declares, which would silently cost pulses against
+    the wrong controls.</p>
 </dd>
 </dl>
 </dd></dl>

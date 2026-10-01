@@ -47,6 +47,7 @@ from.
    CheckLimits
    sar_ratios
    SarRatio
+   played_rf
    summary
    play
    plan_waves

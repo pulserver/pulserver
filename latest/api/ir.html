@@ -552,43 +552,46 @@ passes and the cache layout are described in <a class="reference internal" href=
 <tr class="row-odd"><td><p><a class="reference internal" href="../generated/pulserver.ir.SarRatio.html#pulserver.ir.SarRatio" title="pulserver.ir.SarRatio"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SarRatio</span></code></a></p></td>
 <td><p>The local and global SAR ratios of one subsequence, as the cache carries them.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.ir.summary.html#pulserver.ir.summary" title="pulserver.ir.summary"><code class="xref py py-obj docutils literal notranslate"><span class="pre">summary</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.ir.played_rf.html#pulserver.ir.played_rf" title="pulserver.ir.played_rf"><code class="xref py py-obj docutils literal notranslate"><span class="pre">played_rf</span></code></a></p></td>
+<td><p>The definition and designed flip angle of each RF row a sequence plays, definitions numbered as the cache numbers them.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="../generated/pulserver.ir.summary.html#pulserver.ir.summary" title="pulserver.ir.summary"><code class="xref py py-obj docutils literal notranslate"><span class="pre">summary</span></code></a></p></td>
 <td><p>Subsequences, segments, readouts, readout labels and RF spectral statistics of a sequence, from the chain or from its cache.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="../generated/pulserver.ir.play.html#pulserver.ir.play" title="pulserver.ir.play"><code class="xref py py-obj docutils literal notranslate"><span class="pre">play</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.ir.play.html#pulserver.ir.play" title="pulserver.ir.play"><code class="xref py py-obj docutils literal notranslate"><span class="pre">play</span></code></a></p></td>
 <td><p>Every block a cache plays, resolved as the scanner’s playout resolves it, with its gradient waveforms on request.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.ir.plan_waves.html#pulserver.ir.plan_waves" title="pulserver.ir.plan_waves"><code class="xref py py-obj docutils literal notranslate"><span class="pre">plan_waves</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="../generated/pulserver.ir.plan_waves.html#pulserver.ir.plan_waves" title="pulserver.ir.plan_waves"><code class="xref py py-obj docutils literal notranslate"><span class="pre">plan_waves</span></code></a></p></td>
 <td><p>Where a playout holds a cache’s waves in its waveform memory, all at once or a ring of slots per position, and whether it loads them in time: the layout the cache carries, or one for another budget.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="../generated/pulserver.ir.WaveBudget.html#pulserver.ir.WaveBudget" title="pulserver.ir.WaveBudget"><code class="xref py py-obj docutils literal notranslate"><span class="pre">WaveBudget</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.ir.WaveBudget.html#pulserver.ir.WaveBudget" title="pulserver.ir.WaveBudget"><code class="xref py py-obj docutils literal notranslate"><span class="pre">WaveBudget</span></code></a></p></td>
 <td><p>The waveform memory, gradient raster, load rate and slots per position a playout affords the waves, which a cache is converted for.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.ir.VendorProfile.html#pulserver.ir.VendorProfile" title="pulserver.ir.VendorProfile"><code class="xref py py-obj docutils literal notranslate"><span class="pre">VendorProfile</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="../generated/pulserver.ir.VendorProfile.html#pulserver.ir.VendorProfile" title="pulserver.ir.VendorProfile"><code class="xref py py-obj docutils literal notranslate"><span class="pre">VendorProfile</span></code></a></p></td>
 <td><p>What a cache holds its numbers as, for the machine that reads it: a sequencer that plays integers is given integers, already scaled, so it converts nothing while it plays.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="../generated/pulserver.ir.Quantity.html#pulserver.ir.Quantity" title="pulserver.ir.Quantity"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Quantity</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.ir.Quantity.html#pulserver.ir.Quantity" title="pulserver.ir.Quantity"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Quantity</span></code></a></p></td>
 <td><p>The format one quantity is stored in, and the SI value of one integer step.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.ir.Format.html#pulserver.ir.Format" title="pulserver.ir.Format"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Format</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="../generated/pulserver.ir.Format.html#pulserver.ir.Format" title="pulserver.ir.Format"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Format</span></code></a></p></td>
 <td><p>Whether a quantity is stored as a float in its SI unit or as an integer.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="../generated/pulserver.ir.sample_wave.html#pulserver.ir.sample_wave" title="pulserver.ir.sample_wave"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sample_wave</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.ir.sample_wave.html#pulserver.ir.sample_wave" title="pulserver.ir.sample_wave"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sample_wave</span></code></a></p></td>
 <td><p>A cache’s wave on a playout’s gradient raster, as loaded into a region of its waveform memory.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.ir.playout.html#pulserver.ir.playout" title="pulserver.ir.playout"><code class="xref py py-obj docutils literal notranslate"><span class="pre">playout</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="../generated/pulserver.ir.playout.html#pulserver.ir.playout" title="pulserver.ir.playout"><code class="xref py py-obj docutils literal notranslate"><span class="pre">playout</span></code></a></p></td>
 <td><p>Both stages of a segmented playout of a cache, the scan or its receive-gain prescan, recorded: what each position prepares, the registers of each block, what each wave reads from waveform memory and, on request, the waveforms each block plays.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="../generated/pulserver.ir.Prescan.html#pulserver.ir.Prescan" title="pulserver.ir.Prescan"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Prescan</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.ir.Prescan.html#pulserver.ir.Prescan" title="pulserver.ir.Prescan"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Prescan</span></code></a></p></td>
 <td><p>The receive-gain calibration a playout plays instead of the scan: one subsequence, to the instance completing its readouts.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.ir.repetition_gradients.html#pulserver.ir.repetition_gradients" title="pulserver.ir.repetition_gradients"><code class="xref py py-obj docutils literal notranslate"><span class="pre">repetition_gradients</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="../generated/pulserver.ir.repetition_gradients.html#pulserver.ir.repetition_gradients" title="pulserver.ir.repetition_gradients"><code class="xref py py-obj docutils literal notranslate"><span class="pre">repetition_gradients</span></code></a></p></td>
 <td><p>The gradients of a subsequence’s repetition of most gradient energy, as corner points and on a raster: what a scanner’s heating and acoustic models are evaluated on.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="../generated/pulserver.ir.chain.html#pulserver.ir.chain" title="pulserver.ir.chain"><code class="xref py py-obj docutils literal notranslate"><span class="pre">chain</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.ir.chain.html#pulserver.ir.chain" title="pulserver.ir.chain"><code class="xref py py-obj docutils literal notranslate"><span class="pre">chain</span></code></a></p></td>
 <td><p>Files of the <code class="docutils literal notranslate"><span class="pre">NextSequence</span></code> chain starting at a sequence file, in play order.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.ir.cache_path.html#pulserver.ir.cache_path" title="pulserver.ir.cache_path"><code class="xref py py-obj docutils literal notranslate"><span class="pre">cache_path</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="../generated/pulserver.ir.cache_path.html#pulserver.ir.cache_path" title="pulserver.ir.cache_path"><code class="xref py py-obj docutils literal notranslate"><span class="pre">cache_path</span></code></a></p></td>
 <td><p>Cache file of a sequence file.</p></td>
 </tr>
 </tbody>

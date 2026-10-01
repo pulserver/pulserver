@@ -455,7 +455,6 @@
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
-<span class="kn">import</span><span class="w"> </span><span class="nn">dataclasses</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">importlib.util</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">inspect</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">math</span>
@@ -470,6 +469,7 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">pypulseqpp</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pp</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">pypulseqpp</span><span class="w"> </span><span class="kn">import</span> <span class="n">sequences</span>
 
+<span class="kn">from</span><span class="w"> </span><span class="nn">..</span><span class="w"> </span><span class="kn">import</span> <span class="n">ir</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..protocol</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">FOV_OFFSET</span><span class="p">,</span>
     <span class="n">FOV_ROTATION</span><span class="p">,</span>
@@ -482,32 +482,6 @@
     <span class="n">prescribed_rotation</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..protocol._keys</span><span class="w"> </span><span class="kn">import</span> <span class="n">WIRE_NAMES</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">..proxy._seqdesc</span><span class="w"> </span><span class="kn">import</span> <span class="n">EventType</span><span class="p">,</span> <span class="n">RfUse</span><span class="p">,</span> <span class="n">describe</span>
-
-<span class="c1">#: What a pulse's use is called where a sequence names the knob that drives it.</span>
-<span class="n">_USE_NAMES</span> <span class="o">=</span> <span class="p">{</span>
-    <span class="n">RfUse</span><span class="o">.</span><span class="n">EXCITATION</span><span class="p">:</span> <span class="s2">"excitation"</span><span class="p">,</span>
-    <span class="n">RfUse</span><span class="o">.</span><span class="n">REFOCUSING</span><span class="p">:</span> <span class="s2">"refocusing"</span><span class="p">,</span>
-    <span class="n">RfUse</span><span class="o">.</span><span class="n">INVERSION</span><span class="p">:</span> <span class="s2">"inversion"</span><span class="p">,</span>
-    <span class="n">RfUse</span><span class="o">.</span><span class="n">SATURATION</span><span class="p">:</span> <span class="s2">"saturation"</span><span class="p">,</span>
-    <span class="n">RfUse</span><span class="o">.</span><span class="n">PREPARATION</span><span class="p">:</span> <span class="s2">"preparation"</span><span class="p">,</span>
-    <span class="n">RfUse</span><span class="o">.</span><span class="n">OTHER</span><span class="p">:</span> <span class="s2">"other"</span><span class="p">,</span>
-<span class="p">}</span>
-
-
-<span class="k">def</span><span class="w"> </span><span class="nf">_flip_of</span><span class="p">(</span><span class="n">shape</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">amplitude_hz</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">raster_s</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""Return the angle a pulse turns through, in degrees.</span>
-
-<span class="sd">    The envelope is complex: a sinc's negative lobes subtract, and summing the</span>
-<span class="sd">    magnitude alone would have them add.</span>
-<span class="sd">    """</span>
-    <span class="n">envelope</span> <span class="o">=</span> <span class="p">(</span>
-        <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">shape</span><span class="o">.</span><span class="n">magnitude</span><span class="o">.</span><span class="n">samples</span><span class="p">)</span>
-        <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="mi">2</span><span class="n">j</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">shape</span><span class="o">.</span><span class="n">phase</span><span class="o">.</span><span class="n">samples</span><span class="p">))</span>
-        <span class="o">*</span> <span class="n">amplitude_hz</span>
-    <span class="p">)</span>
-    <span class="k">return</span> <span class="nb">float</span><span class="p">(</span><span class="mf">360.0</span> <span class="o">*</span> <span class="nb">abs</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">envelope</span><span class="p">))</span> <span class="o">*</span> <span class="n">raster_s</span><span class="p">)</span>
-
 
 <span class="n">Preset</span> <span class="o">=</span> <span class="nb">float</span> <span class="o">|</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">pp</span><span class="o">.</span><span class="n">Opts</span><span class="p">],</span> <span class="nb">float</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span>
 <span class="c1">#: Range of each prescription entry, in mm either side of the isocentre.</span>
@@ -767,16 +741,22 @@
 <span class="sd">        Reconstruction plugin the data of this sequence is reconstructed with,</span>
 <span class="sd">        recorded in every design generated from it. Empty leaves the choice</span>
 <span class="sd">        to the reconstruction client.</span>
-<span class="sd">    follows : Mapping[str, str]</span>
-<span class="sd">        Which protocol parameter drives the flip angle of each kind of pulse:</span>
-<span class="sd">        ``{"excitation": UIParam.FLIP}``. A kind the mapping does not name is</span>
-<span class="sd">        played at the angle it was designed at, whatever the operator does.</span>
+<span class="sd">    follows : tuple of str</span>
+<span class="sd">        Which protocol parameter drives the angle of each pulse the sequence</span>
+<span class="sd">        plays: one entry per distinct pulse, in the order the sequence first</span>
+<span class="sd">        plays them, ``""`` for one the operator does not move. A sequence that</span>
+<span class="sd">        excites and then refocuses under the one control declares</span>
+<span class="sd">        ``(UIParam.FLIP, UIParam.FLIP)``.</span>
 
-<span class="sd">        Nothing else is stated. The pulses, their shapes and their angles are</span>
-<span class="sd">        read from a design at the application's defaults, and a pulse's share</span>
-<span class="sd">        of its parameter is the angle it was designed at over the value that</span>
-<span class="sd">        parameter was designed with -- so a refocusing train whose angles vary</span>
-<span class="sd">        gets one share each without any of them being written down.</span>
+<span class="sd">        It is declared rather than worked out: which control drives a pulse is</span>
+<span class="sd">        not a property of the pulse. Empty leaves a scanner to cost the RF when</span>
+<span class="sd">        it has the design, which is what it does with any sequence.</span>
+
+<span class="sd">        The angles are not declared. They are read from a design at the</span>
+<span class="sd">        application's defaults, and a pulse's share of its parameter is the</span>
+<span class="sd">        angle it was designed at over the value that parameter was designed</span>
+<span class="sd">        with -- so a refocusing train whose angles vary gets one share each</span>
+<span class="sd">        without any of them being written down.</span>
 
 <span class="sd">    Raises</span>
 <span class="sd">    ------</span>
@@ -789,7 +769,7 @@
     <span class="n">app</span><span class="p">:</span> <span class="n">ClassVar</span><span class="p">[</span><span class="nb">type</span><span class="p">[</span><span class="n">sequences</span><span class="o">.</span><span class="n">SequenceApp</span><span class="p">]]</span>
     <span class="n">ui</span><span class="p">:</span> <span class="n">ClassVar</span><span class="p">[</span><span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Entry</span><span class="p">]]</span>
     <span class="n">recon</span><span class="p">:</span> <span class="n">ClassVar</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="s2">""</span>
-    <span class="n">follows</span><span class="p">:</span> <span class="n">ClassVar</span><span class="p">[</span><span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="n">follows</span><span class="p">:</span> <span class="n">ClassVar</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">]]</span> <span class="o">=</span> <span class="p">()</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">__init_subclass__</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">__init_subclass__</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
@@ -847,11 +827,11 @@
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">RfPulse</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">"""Return the RF a design plays, as a scanner costs it while prescribing.</span>
 
-<span class="sd">        Read off the sequence a design wrote, so nothing is designed to find</span>
-<span class="sd">        them. A pulse whose kind :attr:`follows` names takes a share of its</span>
-<span class="sd">        parameter: the angle it was designed at over the value the parameter</span>
-<span class="sd">        was designed with, so a refocusing train whose angles vary gets one</span>
-<span class="sd">        share each without any of them being written down.</span>
+<span class="sd">        The pulses and their angles are read off the sequence a design wrote,</span>
+<span class="sd">        so nothing is designed to find them; which control drives each is</span>
+<span class="sd">        :attr:`follows`, declared. A pulse takes a share of its parameter: the</span>
+<span class="sd">        angle it was designed at over the value the parameter was designed</span>
+<span class="sd">        with, so a refocusing train whose angles vary gets one share each.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
@@ -864,44 +844,52 @@
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
 <span class="sd">        list of RfPulse</span>
-<span class="sd">            One entry per distinct shape and angle, with how many times the</span>
-<span class="sd">            sequence plays it. Empty where :attr:`follows` names nothing, which</span>
-<span class="sd">            leaves a scanner to cost the RF only once it has the design itself.</span>
+<span class="sd">            One entry per distinct pulse and angle. Empty where</span>
+<span class="sd">            :attr:`follows` declares nothing, which leaves a scanner to cost</span>
+<span class="sd">            the RF only once it has the design itself.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            When the sequence does not play as many distinct pulses as</span>
+<span class="sd">            :attr:`follows` declares, which would silently cost pulses against</span>
+<span class="sd">            the wrong controls.</span>
 <span class="sd">        """</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">follows</span><span class="p">:</span>
             <span class="k">return</span> <span class="p">[]</span>
-        <span class="n">described</span> <span class="o">=</span> <span class="n">describe</span><span class="p">(</span><span class="n">pp</span><span class="o">.</span><span class="n">io</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="n">seq_path</span><span class="p">)))</span>
-        <span class="n">found</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="o">...</span><span class="p">],</span> <span class="n">RfPulse</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
-        <span class="n">counts</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="o">...</span><span class="p">],</span> <span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
-        <span class="k">for</span> <span class="n">event</span> <span class="ow">in</span> <span class="n">described</span><span class="o">.</span><span class="n">events</span><span class="p">:</span>
-            <span class="k">if</span> <span class="n">event</span><span class="o">.</span><span class="n">type</span> <span class="o">!=</span> <span class="n">EventType</span><span class="o">.</span><span class="n">RF</span><span class="p">:</span>
-                <span class="k">continue</span>
-            <span class="n">use</span> <span class="o">=</span> <span class="n">RfUse</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">event</span><span class="o">.</span><span class="n">params</span><span class="p">[</span><span class="mi">1</span><span class="p">]))</span>
-            <span class="n">shape</span> <span class="o">=</span> <span class="n">described</span><span class="o">.</span><span class="n">rf_definitions</span><span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">event</span><span class="o">.</span><span class="n">params</span><span class="p">[</span><span class="mi">0</span><span class="p">])]</span>
-            <span class="n">envelope</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span>
-                <span class="nb">round</span><span class="p">(</span><span class="nb">float</span><span class="p">(</span><span class="n">v</span><span class="p">),</span> <span class="mi">6</span><span class="p">)</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">shape</span><span class="o">.</span><span class="n">magnitude</span><span class="o">.</span><span class="n">samples</span><span class="p">)</span>
+        <span class="n">played</span> <span class="o">=</span> <span class="n">ir</span><span class="o">.</span><span class="n">played_rf</span><span class="p">(</span><span class="n">pp</span><span class="o">.</span><span class="n">io</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="n">seq_path</span><span class="p">)))</span>
+        <span class="n">order</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">definition</span><span class="p">,</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">played</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">definition</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">order</span><span class="p">:</span>
+                <span class="n">order</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">definition</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">order</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">follows</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> declares </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">follows</span><span class="p">)</span><span class="si">}</span><span class="s2"> pulses but its "</span>
+                <span class="sa">f</span><span class="s2">"sequence plays </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">order</span><span class="p">)</span><span class="si">}</span><span class="s2"> distinct ones"</span>
             <span class="p">)</span>
-            <span class="n">angle</span> <span class="o">=</span> <span class="n">_flip_of</span><span class="p">(</span><span class="n">shape</span><span class="p">,</span> <span class="nb">float</span><span class="p">(</span><span class="n">event</span><span class="o">.</span><span class="n">params</span><span class="p">[</span><span class="mi">2</span><span class="p">]),</span> <span class="n">described</span><span class="o">.</span><span class="n">rf_raster_time_s</span><span class="p">)</span>
-            <span class="c1"># One entry per distinct shape and angle. A sequence spoiling its RF</span>
-            <span class="c1"># gives every repetition its own definition, differing only in a</span>
-            <span class="c1"># phase the cost does not read.</span>
-            <span class="n">key</span> <span class="o">=</span> <span class="p">(</span><span class="n">use</span><span class="p">,</span> <span class="n">envelope</span><span class="p">,</span> <span class="nb">round</span><span class="p">(</span><span class="n">angle</span><span class="p">,</span> <span class="mi">4</span><span class="p">))</span>
-            <span class="n">counts</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">counts</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span>
+        <span class="n">driving</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">parameter</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">follows</span><span class="p">:</span>
+            <span class="n">entry</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">ui</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">parameter</span> <span class="ow">or</span> <span class="s2">""</span><span class="p">))</span>
+            <span class="n">driving</span><span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">parameter</span> <span class="ow">or</span> <span class="s2">""</span><span class="p">)]</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="nb">float</span><span class="p">(</span><span class="n">designed</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">entry</span><span class="o">.</span><span class="n">argument</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span> <span class="ow">or</span> <span class="mf">0.0</span><span class="p">)</span> <span class="k">if</span> <span class="n">entry</span> <span class="k">else</span> <span class="mf">0.0</span>
+            <span class="p">)</span>
+
+        <span class="n">found</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">],</span> <span class="n">RfPulse</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">definition</span><span class="p">,</span> <span class="n">angle</span> <span class="ow">in</span> <span class="n">played</span><span class="p">:</span>
+            <span class="c1"># One entry per angle: a definition played at several angles is a</span>
+            <span class="c1"># train, and each of its pulses is costed at its own.</span>
+            <span class="n">key</span> <span class="o">=</span> <span class="p">(</span><span class="n">definition</span><span class="p">,</span> <span class="nb">round</span><span class="p">(</span><span class="n">angle</span> <span class="o">*</span> <span class="mf">1e3</span><span class="p">))</span>
             <span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">found</span><span class="p">:</span>
                 <span class="k">continue</span>
-            <span class="n">parameter</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">follows</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">_USE_NAMES</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">use</span><span class="p">,</span> <span class="s2">""</span><span class="p">),</span> <span class="s2">""</span><span class="p">)</span> <span class="ow">or</span> <span class="s2">""</span><span class="p">)</span>
-            <span class="n">entry</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">ui</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">parameter</span><span class="p">)</span>
-            <span class="n">driving</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">designed</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">entry</span><span class="o">.</span><span class="n">argument</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span> <span class="ow">or</span> <span class="mf">0.0</span><span class="p">)</span> <span class="k">if</span> <span class="n">entry</span> <span class="k">else</span> <span class="mf">0.0</span>
+            <span class="n">parameter</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">follows</span><span class="p">[</span><span class="n">order</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="n">definition</span><span class="p">)]</span> <span class="ow">or</span> <span class="s2">""</span><span class="p">)</span>
+            <span class="n">drives</span> <span class="o">=</span> <span class="n">driving</span><span class="p">[</span><span class="n">parameter</span><span class="p">]</span>
             <span class="n">found</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">RfPulse</span><span class="p">(</span>
+                <span class="n">definition</span><span class="o">=</span><span class="n">definition</span><span class="p">,</span>
                 <span class="n">flip_deg</span><span class="o">=</span><span class="n">angle</span><span class="p">,</span>
-                <span class="n">follows</span><span class="o">=</span><span class="n">parameter</span> <span class="k">if</span> <span class="n">driving</span> <span class="k">else</span> <span class="s2">""</span><span class="p">,</span>
-                <span class="n">factor</span><span class="o">=</span><span class="n">angle</span> <span class="o">/</span> <span class="n">driving</span> <span class="k">if</span> <span class="n">driving</span> <span class="k">else</span> <span class="mf">1.0</span><span class="p">,</span>
-                <span class="n">use</span><span class="o">=</span><span class="n">_USE_NAMES</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">use</span><span class="p">,</span> <span class="s2">""</span><span class="p">),</span>
+                <span class="n">follows</span><span class="o">=</span><span class="n">parameter</span> <span class="k">if</span> <span class="n">drives</span> <span class="k">else</span> <span class="s2">""</span><span class="p">,</span>
+                <span class="n">factor</span><span class="o">=</span><span class="n">angle</span> <span class="o">/</span> <span class="n">drives</span> <span class="k">if</span> <span class="n">drives</span> <span class="k">else</span> <span class="mf">1.0</span><span class="p">,</span>
             <span class="p">)</span>
-        <span class="k">return</span> <span class="p">[</span>
-            <span class="n">dataclasses</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="n">pulse</span><span class="p">,</span> <span class="n">count</span><span class="o">=</span><span class="n">counts</span><span class="p">[</span><span class="n">key</span><span class="p">])</span>
-            <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">pulse</span> <span class="ow">in</span> <span class="n">found</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
-        <span class="p">]</span></div>
+        <span class="k">return</span> <span class="nb">list</span><span class="p">(</span><span class="n">found</span><span class="o">.</span><span class="n">values</span><span class="p">())</span></div>
 
 
 <div class="viewcode-block" id="ScannerSequence.validate">

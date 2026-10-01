@@ -16,8 +16,7 @@
    :toctree:
    :nosignatures:
 
-   ~RfPulse.count
    ~RfPulse.factor
    ~RfPulse.follows
-   ~RfPulse.use
+   ~RfPulse.definition
    ~RfPulse.flip_deg

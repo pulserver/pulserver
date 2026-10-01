@@ -533,29 +533,32 @@
 <dl class="py class">
 <dt class="sig sig-object py" id="pulserver.protocol.RfPulse">
 <span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">pulserver.protocol.</span></span><span class="sig-name descname"><span class="pre">RfPulse</span></span><a class="reference internal" href="../_modules/pulserver/protocol/_wire.html#RfPulse"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.protocol.RfPulse" title="Link to this definition">#</a></dt>
-<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/builtins/functions.html#object" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
 <p>One pulse a sequence plays, and what its flip angle follows.</p>
-<p>The scanner costs its RF before a scan from the pulses the sequence will
-play. Which pulses those are, and the shape of each, is settled by the
-design; what the operator moves is an angle. So a pulse states where its
-angle comes from, and the scanner reads the angle from there for as long as
-the sequence is prescribed.</p>
+<p>The scanner costs the RF of a scan before it runs it. What the operator
+moves between one costing and the next is a flip angle, and sometimes the
+structure: another echo in the train, another line of the matrix, so a
+repetition holding a different number of pulses in a different order.</p>
+<p><strong>A pulse is a definition of the design it was read from.</strong> Which knob
+drives a pulse is not a property of the pulse, so it is stated by the
+sequence’s author and not worked out here: an angle is the thing being
+moved, a position moves when another echo joins a train, and what a pulse
+is for is shared by pulses that are not the same. <a class="reference internal" href="pulserver.protocol.RfPulse.definition.html#pulserver.protocol.RfPulse.definition" title="pulserver.protocol.RfPulse.definition"><code class="xref py py-attr docutils literal notranslate"><span class="pre">definition</span></code></a> is the
+design’s own identity for it, and a scanner reads the same number from that
+design’s cache.</p>
 <p>The shape does not travel. It is in the design’s own cache, which the
 scanner reads, and every statistic a pulse is costed from is computed from
 that shape at unit peak and does not move with the angle.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Attributes<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
+<li><p><strong>definition</strong> (<em>int</em>) – The design’s RF definition this pulse is an instance of.</p></li>
 <li><p><strong>flip_deg</strong> (<em>float</em>) – The angle it was designed at. The angle played where <code class="docutils literal notranslate"><span class="pre">follows</span></code> is
 empty.</p></li>
 <li><p><strong>follows</strong> (<em>str</em>) – Protocol parameter whose value the angle takes; empty is a pulse whose
 angle the operator does not move.</p></li>
 <li><p><strong>factor</strong> (<em>float</em>) – What that value is scaled by: an inversion at twice the excitation, a
 refocusing at four fifths of it.</p></li>
-<li><p><strong>use</strong> (<em>str</em>) – What the pulse is for, as Pulseq tags it: <code class="docutils literal notranslate"><span class="pre">excitation</span></code>,
-<code class="docutils literal notranslate"><span class="pre">refocusing</span></code>, <code class="docutils literal notranslate"><span class="pre">inversion</span></code>, <code class="docutils literal notranslate"><span class="pre">saturation</span></code>, <code class="docutils literal notranslate"><span class="pre">preparation</span></code> or
-<code class="docutils literal notranslate"><span class="pre">other</span></code>.</p></li>
-<li><p><strong>count</strong> (<em>int</em>) – How many times the sequence plays it.</p></li>
 </ul>
 </dd>
 </dl>
@@ -564,19 +567,16 @@ refocusing at four fifths of it.</p></li>
 <p class="rubric">Attributes</p>
 <div class="pst-scrollable-table-container"><table class="autosummary longtable table">
 <tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.protocol.RfPulse.count.html#pulserver.protocol.RfPulse.count" title="pulserver.protocol.RfPulse.count"><code class="xref py py-obj docutils literal notranslate"><span class="pre">count</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.protocol.RfPulse.factor.html#pulserver.protocol.RfPulse.factor" title="pulserver.protocol.RfPulse.factor"><code class="xref py py-obj docutils literal notranslate"><span class="pre">factor</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pulserver.protocol.RfPulse.factor.html#pulserver.protocol.RfPulse.factor" title="pulserver.protocol.RfPulse.factor"><code class="xref py py-obj docutils literal notranslate"><span class="pre">factor</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pulserver.protocol.RfPulse.follows.html#pulserver.protocol.RfPulse.follows" title="pulserver.protocol.RfPulse.follows"><code class="xref py py-obj docutils literal notranslate"><span class="pre">follows</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.protocol.RfPulse.follows.html#pulserver.protocol.RfPulse.follows" title="pulserver.protocol.RfPulse.follows"><code class="xref py py-obj docutils literal notranslate"><span class="pre">follows</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.protocol.RfPulse.definition.html#pulserver.protocol.RfPulse.definition" title="pulserver.protocol.RfPulse.definition"><code class="xref py py-obj docutils literal notranslate"><span class="pre">definition</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pulserver.protocol.RfPulse.use.html#pulserver.protocol.RfPulse.use" title="pulserver.protocol.RfPulse.use"><code class="xref py py-obj docutils literal notranslate"><span class="pre">use</span></code></a></p></td>
-<td><p></p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.protocol.RfPulse.flip_deg.html#pulserver.protocol.RfPulse.flip_deg" title="pulserver.protocol.RfPulse.flip_deg"><code class="xref py py-obj docutils literal notranslate"><span class="pre">flip_deg</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pulserver.protocol.RfPulse.flip_deg.html#pulserver.protocol.RfPulse.flip_deg" title="pulserver.protocol.RfPulse.flip_deg"><code class="xref py py-obj docutils literal notranslate"><span class="pre">flip_deg</span></code></a></p></td>
 <td><p></p></td>
 </tr>
 </tbody>
