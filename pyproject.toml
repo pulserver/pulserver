@@ -32,13 +32,13 @@ console = ["websockets>=13"]
 # Triton kernel, the transforms by cuFINUFFT.
 gpu = ["torch>=2.4", "triton>=3.0", "cufinufft>=2.3"]
 dev = [
-  "pytest>=8",
-  "pytest-cov>=5",
-  "coverage>=7.10",
+  "pytest>=9.1.1",
+  "pytest-cov>=7.1.0",
+  "coverage>=7.16.2",
   # Pinned, not ranged: a formatter that differs between a contributor and
   # CI makes "one entry point" a lie. Dependabot proposes the bumps.
-  "ruff==0.16.5",
-  "pre-commit>=4",
+  "ruff==0.16.9",
+  "pre-commit>=4.6.2",
   "build",
   "websockets>=13",
 ]
