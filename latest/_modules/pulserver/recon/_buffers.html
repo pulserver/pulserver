@@ -462,6 +462,7 @@
 
 <span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"ReconBuffer"</span><span class="p">,</span> <span class="s2">"ReconData"</span><span class="p">]</span>
 
+<span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Iterator</span><span class="p">,</span> <span class="n">Mapping</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">ClassVar</span>
 
@@ -552,6 +553,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">center_sample</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">sample_time</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">headers</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_overwrote</span> <span class="o">=</span> <span class="kc">False</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">axes</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">]:</span>
@@ -609,7 +611,8 @@
 <span class="w">        </span><span class="sd">"""Place one acquisition where its counters say it belongs.</span>
 
 <span class="sd">        Also records its trajectory, and ``center_sample`` and dwell when not yet</span>
-<span class="sd">        known.</span>
+<span class="sd">        known. A readout placed where one already is replaces it, with a warning</span>
+<span class="sd">        the first time: the sequence labels neither apart.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
@@ -643,6 +646,15 @@
         <span class="c1"># Right-aligned, which is where a partial echo's acquired window ends.</span>
         <span class="n">offset</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">readout</span> <span class="o">-</span> <span class="n">samples</span>
         <span class="n">readout</span> <span class="o">=</span> <span class="nb">slice</span><span class="p">(</span><span class="n">offset</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">readout</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_overwrote</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">mask</span><span class="p">[(</span><span class="o">*</span><span class="n">where</span><span class="p">,</span> <span class="n">readout</span><span class="p">)]</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_overwrote</span> <span class="o">=</span> <span class="kc">True</span>
+            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"a readout replaced one already placed at </span><span class="si">{</span><span class="nb">dict</span><span class="p">(</span><span class="nb">zip</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">axes</span><span class="p">[</span><span class="mi">1</span><span class="p">:</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span><span class="w"> </span><span class="n">where</span><span class="p">,</span><span class="w"> </span><span class="n">strict</span><span class="o">=</span><span class="kc">False</span><span class="p">))</span><span class="si">}</span><span class="s2"> "</span>
+                <span class="sa">f</span><span class="s2">"of encoding space </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">space</span><span class="o">.</span><span class="n">index</span><span class="si">}</span><span class="s2">: readouts that share their "</span>
+                <span class="s2">"encoding counters overwrite each other; label each with its line, "</span>
+                <span class="s2">"partition, slice, average or repetition (pypulseqpp.make_label)"</span><span class="p">,</span>
+                <span class="n">stacklevel</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+            <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">kspace</span><span class="p">[(</span><span class="nb">slice</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">coils</span><span class="p">),</span> <span class="o">*</span><span class="n">where</span><span class="p">,</span> <span class="n">readout</span><span class="p">)]</span> <span class="o">=</span> <span class="n">data</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">mask</span><span class="p">[(</span><span class="o">*</span><span class="n">where</span><span class="p">,</span> <span class="n">readout</span><span class="p">)]</span> <span class="o">=</span> <span class="kc">True</span>
         <span class="k">if</span> <span class="n">has_acquisition_flag</span><span class="p">(</span>

@@ -534,7 +534,10 @@
 <dt class="sig sig-object py" id="pulserver.recon.ReconPlugin.run">
 <span class="sig-prename descclassname"><span class="pre">ReconPlugin.</span></span><span class="sig-name descname"><span class="pre">run</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pulserver/recon/plugin.html#ReconPlugin.run"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.recon.ReconPlugin.run" title="Link to this definition">#</a></dt>
 <dd><p>Reconstruct one ISMRMRD HDF5 file in this process, through the same hooks.</p>
-<p>The file’s waveforms are delivered before its acquisitions.</p>
+<p>The file’s waveforms are delivered before its acquisitions. With
+<code class="docutils literal notranslate"><span class="pre">store</span></code>, the file is a series as the scanner sends it, such as
+<a class="reference internal" href="pulserver.virtual.record.html#pulserver.virtual.record" title="pulserver.virtual.record"><code class="xref py py-func docutils literal notranslate"><span class="pre">pulserver.virtual.record()</span></code></a> writes, and is enriched from its design
+in that store as the proxy enriches it.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
@@ -542,6 +545,7 @@
 <li><p><strong>group</strong> – HDF5 group holding the scan.</p></li>
 <li><p><strong>exam_id</strong> – Identifier of the exam cache; <code class="docutils literal notranslate"><span class="pre">path</span></code> when not given.</p></li>
 <li><p><strong>config</strong> – Configuration payload, as a stream would carry it.</p></li>
+<li><p><strong>store</strong> – Directory of designs, as the design calls write it.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>

@@ -31,5 +31,5 @@
 
    ~ScannerSequence.follows
    ~ScannerSequence.recon
-   ~ScannerSequence.app
    ~ScannerSequence.ui
+   ~ScannerSequence.app

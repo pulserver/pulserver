@@ -535,7 +535,8 @@
 <span class="sig-prename descclassname"><span class="pre">ReconBuffer.</span></span><span class="sig-name descname"><span class="pre">add</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pulserver/recon/_buffers.html#ReconBuffer.add"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.recon.ReconBuffer.add" title="Link to this definition">#</a></dt>
 <dd><p>Place one acquisition where its counters say it belongs.</p>
 <p>Also records its trajectory, and <code class="docutils literal notranslate"><span class="pre">center_sample</span></code> and dwell when not yet
-known.</p>
+known. A readout placed where one already is replaces it, with a warning
+the first time: the sequence labels neither apart.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
