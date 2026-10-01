@@ -883,25 +883,19 @@ class Run:
         self._group()
 
     def write(self, state: dict) -> None:
-        """Write the magnetisation into the engine's packs, zero for the slots dropped."""
-        pack = state["pack"]
+        """Write the magnetisation into the engine's ``state["m"]``, zero for the slots dropped."""
+        m = self.rows["m"]
         n = int(state["slots"])
-        m = np.zeros((3, n), dtype=pack.dtype)
-        m[:, self.ids.cpu().numpy()] = self.rows["m"].cpu().numpy()
-        lanes = pack.shape[2]
-        for k in range(3):
-            row = pack[:, k, :].reshape(-1)
-            row[:n] = m[k]
-            pack[:, k, :] = row.reshape(-1, lanes)
+        if self.slots != n:
+            m = torch.zeros((3, n), dtype=m.dtype, device=m.device).index_copy_(
+                1, self.ids, m
+            )
+        torch.from_numpy(state["m"]).copy_(m)
 
     def load(self, state: dict) -> None:
-        """Take the magnetisation in the engine's packs as the slots'."""
-        pack = np.asarray(state["pack"])
-        n = int(state["slots"])
-        m = pack[:, :3, :].transpose(1, 0, 2).reshape(3, -1)[:, :n]
-        self.rows["m"].copy_(
-            torch.from_numpy(np.ascontiguousarray(m)).to(self.device)[:, self.ids]
-        )
+        """Take the magnetisation in the engine's ``state["m"]`` as the slots'."""
+        m = torch.from_numpy(state["m"]).to(self.device)
+        self.rows["m"].copy_(m if self.slots == int(state["slots"]) else m[:, self.ids])
 
     def nbytes(self) -> int:
         """Bytes the run holds on the device."""

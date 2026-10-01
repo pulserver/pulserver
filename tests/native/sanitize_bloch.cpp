@@ -967,11 +967,11 @@ namespace
             for (size_t n = 0; n < state.slots; ++n)
                 for (size_t k = 0; k < 3; ++k)
                 {
-                    const size_t at = (n / state.lanes * state.width + k) * state.lanes + n % state.lanes;
+                    const size_t at = k * state.slots + n;
                     if (state.single)
-                        static_cast<float*>(state.pack)[at] = static_cast<float>(value(h, n, k));
+                        static_cast<float*>(state.m)[at] = static_cast<float>(value(h, n, k));
                     else
-                        static_cast<double*>(state.pack)[at] = value(h, n, k);
+                        static_cast<double*>(state.m)[at] = value(h, n, k);
                 }
         }
 
@@ -981,9 +981,9 @@ namespace
             for (size_t n = 0; n < state.slots; ++n)
                 for (size_t k = 0; k < 3; ++k)
                 {
-                    const size_t at = (n / state.lanes * state.width + k) * state.lanes + n % state.lanes;
-                    value(h, n, k) = state.single ? static_cast<const float*>(state.pack)[at]
-                                                  : static_cast<const double*>(state.pack)[at];
+                    const size_t at = k * state.slots + n;
+                    value(h, n, k) = state.single ? static_cast<const float*>(state.m)[at]
+                                                  : static_cast<const double*>(state.m)[at];
                 }
         }
     };

@@ -363,6 +363,14 @@ namespace bloch
          *  the slots. */
         template <typename Real>
         void resume_slots(double c, double sn);
+        /** Fetch the magnetisation of the isochromat of @p slot, where it
+         *  is before @p end, ahead of a read or, with @p Write 1, a write. */
+        template <int Write, typename SlotsOf>
+        void fetch_isochromat(const SlotsOf& slots, size_t slot, size_t end) const;
+        /** Hand the run device the slots' magnetisation to take as its own
+         *  where @p load, or have it write its own back into the slots. */
+        template <typename Real>
+        void exchange_state(bool load);
 
         Isochromats& isochromats_;
         std::vector<OwnedBlock> blocks_;

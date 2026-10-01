@@ -343,16 +343,15 @@ namespace bloch
         void* grid = nullptr;
     };
 
-    /** Where a device writes a run's magnetisation back: @c pack as in
-     *  RunSet, of which it writes the first three values of each slot. */
+    /** A run's magnetisation as a device writes it back or loads it: @c m,
+     *  three rows over the slots, [k * slots + slot], in the run's
+     *  precision. */
     struct RunState
     {
         size_t run = 0;
         bool single = false;
         size_t slots = 0;
-        size_t lanes = 0;
-        size_t width = 0;
-        void* pack = nullptr;
+        void* m = nullptr;
     };
 
     /**

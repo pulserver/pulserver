@@ -388,14 +388,14 @@ namespace
         return carries && py::hasattr(device, "write_state") && py::hasattr(device, "load_state");
     }
 
-    /** A run's magnetisation as the device writes or loads it: the run's
-     *  packs, viewed, writable where it writes them. */
-    py::dict run_state(const bloch::RunState& state, bool writable)
+    /** A run's magnetisation as the device writes or loads it, viewed:
+     *  (3, slots). */
+    py::dict run_state(const bloch::RunState& state)
     {
         py::dict made;
         made["run"] = state.run;
         made["slots"] = state.slots;
-        made["pack"] = packs(state.pack, state.single, state.slots, state.lanes, state.width, writable);
+        made["m"] = reals(state.m, state.single, {3, static_cast<py::ssize_t>(state.slots)}, true);
         return made;
     }
 
@@ -421,11 +421,11 @@ namespace
         };
         made.state = [held](const bloch::RunState& state) {
             py::gil_scoped_acquire acquired;
-            held->attr("write_state")(run_state(state, true));
+            held->attr("write_state")(run_state(state));
         };
         made.load = [held](const bloch::RunState& state) {
             py::gil_scoped_acquire acquired;
-            held->attr("load_state")(run_state(state, false));
+            held->attr("load_state")(run_state(state));
         };
         if (py::hasattr(device, "end_run"))
             /* Called from the run's destructor, which must not throw. */

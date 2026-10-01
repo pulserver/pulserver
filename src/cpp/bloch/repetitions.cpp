@@ -35,6 +35,10 @@ namespace bloch
 
         /** Isochromats a worker takes at the least. */
         constexpr size_t kLeast = 4096;
+        /** Slots ahead of the one handled whose isochromats a loop over the
+         *  slots in their order fetches, the isochromats lying elsewhere in
+         *  memory. */
+        constexpr size_t kAhead = 32;
 
         /** Largest difference, in rad, between two repetitions' turns from
          *  the one before at which they are taken as one step: a sequence
@@ -318,10 +322,36 @@ namespace bloch
             double spacing = 0.0;
             double before = 0.0;
             double after = 0.0;
+            /** For a run device, the slots' magnetisation as three rows over
+             *  the slots, [k * size + slot]. */
+            std::vector<Real> staged;
 
             size_t packs() const
             {
                 return (size + lanes - 1) / lanes;
+            }
+
+            /** Copy the slots' magnetisation from the packs to staged, or
+             *  from staged back to the packs where @p back, over @p threads
+             *  workers. */
+            void stage(size_t threads, bool back)
+            {
+                staged.resize(3 * size);
+                parallel(packs(), threads, std::max<size_t>(1, kLeast / lanes), [&](size_t, size_t begin, size_t end) {
+                    for (size_t p = begin; p < end; ++p)
+                    {
+                        const size_t count = std::min(lanes, size - p * lanes);
+                        for (size_t k = 0; k < 3; ++k)
+                        {
+                            Real* in_pack = pack.data() + (p * width + k) * lanes;
+                            Real* in_rows = staged.data() + k * size + p * lanes;
+                            if (back)
+                                std::copy(in_rows, in_rows + count, in_pack);
+                            else
+                                std::copy(in_pack, in_pack + count, in_rows);
+                        }
+                    }
+                });
             }
 
             Real& value(size_t slot, size_t at)
@@ -411,17 +441,6 @@ namespace bloch
                 return out;
             }
         };
-
-        /** Where @p slots hold the magnetisation, for a run device to write it
-         *  back. */
-        template <typename Real>
-        void describe_state(Slots<Real>& slots, RunState& state)
-        {
-            state.slots = slots.size;
-            state.lanes = slots.lanes;
-            state.width = slots.width;
-            state.pack = slots.pack.data();
-        }
 
         /** Tables held at the most: phase-encoding areas take few values over
          *  a scan, and past this many the tables are made anew. */
@@ -2709,17 +2728,10 @@ namespace bloch
         else
             play_tiles<double>(count, signal);
         next_ += count;
-        if (set_->on_device)
-        {
-            RunState state;
-            state.run = run_;
-            state.single = set_->single;
-            if (set_->single)
-                describe_state(set_->single_slots, state);
-            else
-                describe_state(set_->double_slots, state);
-            s.run_device_.state(state);
-        }
+        if (set_->on_device && set_->single)
+            exchange_state<float>(false);
+        else if (set_->on_device)
+            exchange_state<double>(false);
         if (set_->single)
             settle<float>(next_);
         else
@@ -3201,16 +3213,33 @@ namespace bloch
             resume_slots<float>(c, sn);
         else
             resume_slots<double>(c, sn);
-        if (!set_->on_device)
-            return;
+        if (set_->on_device && set_->single)
+            exchange_state<float>(true);
+        else if (set_->on_device)
+            exchange_state<double>(true);
+    }
+
+    template <typename Real>
+    void Repetitions::exchange_state(bool load)
+    {
+        Isochromats& s = isochromats_;
+        Slots<Real>& slots = set_->template slots<Real>();
+        if (load)
+            slots.stage(s.threads_, false);
+        else
+            slots.staged.resize(3 * slots.size);
         RunState state;
         state.run = run_;
         state.single = set_->single;
-        if (set_->single)
-            describe_state(set_->single_slots, state);
-        else
-            describe_state(set_->double_slots, state);
-        s.run_device_.load(state);
+        state.slots = slots.size;
+        state.m = slots.staged.data();
+        if (load)
+        {
+            s.run_device_.load(state);
+            return;
+        }
+        s.run_device_.state(state);
+        slots.stage(s.threads_, true);
     }
 
     template <typename Real>
@@ -3221,12 +3250,25 @@ namespace bloch
         parallel(slots.size, s.threads_, kLeast, [&](size_t, size_t begin, size_t end) {
             for (size_t slot = begin; slot < end; ++slot)
             {
+                fetch_isochromat<0>(slots, slot + kAhead, end);
                 const size_t i = slots.id[slot];
                 slots.value(slot, 0) = static_cast<Real>(c * s.mx_[i] + sn * s.my_[i]);
                 slots.value(slot, 1) = static_cast<Real>(-sn * s.mx_[i] + c * s.my_[i]);
                 slots.value(slot, 2) = static_cast<Real>(s.mz_[i]);
             }
         });
+    }
+
+    template <int Write, typename SlotsOf>
+    void Repetitions::fetch_isochromat(const SlotsOf& slots, size_t slot, size_t end) const
+    {
+        if (slot >= end)
+            return;
+        const Isochromats& s = isochromats_;
+        const size_t i = slots.id[slot];
+        BLOCH_PREFETCH(s.mx_.data() + i, Write);
+        BLOCH_PREFETCH(s.my_.data() + i, Write);
+        BLOCH_PREFETCH(s.mz_.data() + i, Write);
     }
 
     template <typename Real>
@@ -3253,6 +3295,7 @@ namespace bloch
         parallel(slots.size, s.threads_, kLeast, [&](size_t, size_t begin, size_t end) {
             for (size_t slot = begin; slot < end; ++slot)
             {
+                fetch_isochromat<1>(slots, slot + kAhead, end);
                 const size_t i = slots.id[slot];
                 double x = slots.value(slot, 0), y = slots.value(slot, 1), z = slots.value(slot, 2);
                 if (divided_)

@@ -812,13 +812,13 @@ class Device:
         return dropped
 
     def write_state(self, state) -> None:
-        """Write the run's magnetisation into the engine's slots, ``state["pack"]``."""
+        """Write the run's magnetisation into the engine's ``state["m"]``, ``(3, slots)``."""
         began = self._clock()
         self._runs[state["run"]].write(state)
         self._lap("state", began)
 
     def load_state(self, state) -> None:
-        """Take the magnetisation in the engine's slots, ``state["pack"]``, as the run's, where the run resumes after blocks played between its repetitions."""
+        """Take the magnetisation in the engine's ``state["m"]``, ``(3, slots)``, as the run's, where the run resumes after blocks played between its repetitions."""
         began = self._clock()
         self._runs[state["run"]].load(state)
         self._lap("state", began)
