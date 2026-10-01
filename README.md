@@ -90,7 +90,7 @@ pulserver scan --plugins sequences --plugin gre --limits limits.txt \
 ```
 
 The shipped sequences and reconstructions are found by name after the given
-directories, so `--plugin gre_radial2d` needs no file of its own. On a scanner,
+directories, so `--plugin gre_radial2d` or `recon = "pics"` needs no file of its own. On a scanner,
 the interpreter makes the same design calls and streams to the same proxy.
 
 ## Documentation
