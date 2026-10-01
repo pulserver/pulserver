@@ -248,3 +248,21 @@ def test_a_phantom_s_isochromats_read_their_windows_on_the_device_they_are_given
     assert spins.device_windows == 1
     # Each term is at most a sensitivity, 1 + depth = 1.5 for the phantom's coils.
     np.testing.assert_allclose(signal, alone, rtol=0, atol=2e-4 * 1.5 * len(spins))
+
+
+def test_a_profiled_device_times_each_stage_of_every_window(device):
+    positions, properties, start = _window("spiral", 3)
+    profiled = _lattice_device(device, profile=True)
+    spins = Isochromats(positions, **properties, device=profiled)
+    _play(spins, start, "spiral", 1e-4)
+
+    assert profiled.stages["windows"] == 1
+    assert set(profiled.stages) == {
+        "upload",
+        "sums",
+        "transform",
+        "basis",
+        "download",
+        "windows",
+    }
+    assert all(seconds >= 0.0 for seconds in profiled.stages.values())

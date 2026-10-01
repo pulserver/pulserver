@@ -4,9 +4,11 @@ The isochromats lie on a square lattice 1 mm apart, several to a point at
 positions of their own through the slab, at off-resonances and T2s spread as
 over a head at 3 T, and are received by coils of smooth sensitivities. Each
 window starts from the same magnetisation; the times are the best of the
-repeats, after one window that plans the transforms::
+repeats, after one window that plans the transforms and, on a CUDA device,
+times the kernel's configurations; ``--profile`` waits for the device between
+stages to time each::
 
-    python scripts/benchmark_lattice_device.py --device cuda --coils 48
+    python scripts/benchmark_lattice_device.py --device cuda --coils 48 --profile
 """
 
 from __future__ import annotations
@@ -60,6 +62,9 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument(
         "--threads", type=int, default=0, help="engine threads; 0 for every core"
     )
+    parser.add_argument(
+        "--profile", action="store_true", help="time each stage of the device's windows"
+    )
     args = parser.parse_args(argv)
 
     rng = np.random.default_rng(0)
@@ -71,8 +76,11 @@ def main(argv: list[str] | None = None) -> None:
     start = rng.normal(size=n) + 1j * rng.normal(size=n)
     magnetization = np.column_stack([start.real, start.imag, np.full(n, 0.2)])
 
+    from pulserver.virtual._device import LatticeDevice
+
+    reader = LatticeDevice(args.device, profile=args.profile)
     signals = {}
-    for name, device in (("engine", None), (args.device, args.device)):
+    for name, device in (("engine", None), (args.device, reader)):
         spins = Isochromats(
             positions, **properties, threads=args.threads, device=device
         )
@@ -89,6 +97,13 @@ def main(argv: list[str] | None = None) -> None:
             f"{name:>8}: {1e3 * min(times[1:]):8.1f} ms per window ({read}), "
             f"{1e3 * times[0]:.0f} ms the first"
         )
+    if args.profile:
+        windows = reader.stages.pop("windows")
+        stages = ", ".join(
+            f"{stage} {1e3 * seconds / windows:.2f} ms"
+            for stage, seconds in reader.stages.items()
+        )
+        print(f"  {args.device} per window, waiting between stages: {stages}")
     terms = (np.abs(start) @ np.abs(properties["receive"])).max()
     difference = np.abs(signals["engine"] - signals[args.device]).max() / terms
     print(

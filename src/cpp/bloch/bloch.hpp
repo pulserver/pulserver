@@ -108,13 +108,24 @@ namespace bloch
         double tolerance = 0.0;
         bool single = false;
         /** Each coil's sum over the Chebyshev points of the basis times the
-         *  transform of its lattice sums, [coil][sample], zero on entry. */
+         *  transform of its lattice sums, [coil][sample], zero on entry and
+         *  held until the read is finished. */
         std::complex<double>* out = nullptr;
     };
 
-    /** Reads a window on the lattice in the engine's place and returns
-     *  true, or declines it and returns false. */
-    using LatticeDevice = std::function<bool(const LatticeWindowRead&)>;
+    /**
+     * Reads windows on the lattice in the engine's place. @c read starts
+     * reading a window and returns true, or declines it and returns false;
+     * the engine then takes the isochromats to the window's last sample
+     * while the device reads, and calls @c finish, which returns once
+     * @c out holds the window. Arrays other than @c out are read before
+     * @c read returns.
+     */
+    struct LatticeDevice
+    {
+        std::function<bool(const LatticeWindowRead&)> read;
+        std::function<void()> finish;
+    };
 
     /** The events one block plays, timed in s from the block's start. */
     struct BlockEvents

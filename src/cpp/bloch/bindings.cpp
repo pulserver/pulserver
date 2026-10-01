@@ -160,9 +160,9 @@ namespace
         return window;
     }
 
-    /** The engine's lattice device calling @p device, or none for None. The
-     *  last reference to @p device is dropped holding the GIL, from whichever
-     *  thread drops it. */
+    /** The engine's lattice device calling @p device, and its @c finish
+     *  where it has one; none for None. The last reference to @p device is
+     *  dropped holding the GIL, from whichever thread drops it. */
     bloch::LatticeDevice lattice_device(const py::object& device)
     {
         if (device.is_none())
@@ -171,10 +171,17 @@ namespace
             py::gil_scoped_acquire acquired;
             delete object;
         });
-        return [held](const bloch::LatticeWindowRead& read) {
+        bloch::LatticeDevice made;
+        made.read = [held](const bloch::LatticeWindowRead& read) {
             py::gil_scoped_acquire acquired;
             return py::cast<bool>((*held)(lattice_window(read)));
         };
+        if (py::hasattr(device, "finish"))
+            made.finish = [held]() {
+                py::gil_scoped_acquire acquired;
+                held->attr("finish")();
+            };
+        return made;
     }
 
     void use_lattice_device(bloch::Isochromats& self, const py::object& device)

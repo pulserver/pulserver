@@ -3151,7 +3151,7 @@ namespace bloch
         read.tolerance = tolerance;
         read.single = LatticeTransform::single_for(tolerance);
         read.out = out.data();
-        return lattice_device_(read);
+        return lattice_device_.read(read);
     }
 
     bool Isochromats::read_on_lattice(
@@ -3199,14 +3199,24 @@ namespace bloch
             }
         }
         std::vector<std::complex<double>> out(coils_ * samples, 0.0);
-        if (lattice_device_ && read_on_device(window, segments, x, tolerance, out))
+        if (lattice_device_.read && read_on_device(window, segments, x, tolerance, out))
+        {
+            /* The device reads the window while the isochromats move on. */
+            settle_after(window);
+            if (lattice_device_.finish)
+                lattice_device_.finish();
             ++device_windows_;
+        }
         else if (!lattice_pays(count_, samples, coils_, count, window.modes, window.axes, tolerance))
             return false;
-        else if (LatticeTransform::single_for(tolerance))
-            transform_lattice<float>(window, segments, x, tolerance, out);
         else
-            transform_lattice<double>(window, segments, x, tolerance, out);
+        {
+            if (LatticeTransform::single_for(tolerance))
+                transform_lattice<float>(window, segments, x, tolerance, out);
+            else
+                transform_lattice<double>(window, segments, x, tolerance, out);
+            settle_after(window);
+        }
         for (size_t s = 0; s < samples; ++s)
         {
             double c = 0.0, sine = 0.0;
@@ -3215,7 +3225,6 @@ namespace bloch
             for (size_t coil = 0; coil < coils_; ++coil)
                 signal[coil * stride + s] = out[coil * samples + s] * factor;
         }
-        settle_after(window);
         ++lattice_windows_;
         return true;
     }

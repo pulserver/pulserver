@@ -529,7 +529,7 @@ namespace
         for (bool device : {false, true})
         {
             if (device)
-                spins.use_lattice_device(read_whole);
+                spins.use_lattice_device({read_whole, nullptr});
             for (double tolerance : {1e-7, 1e-4})
             {
                 signal.assign(spins.coils() * spiral.block.adc_samples, 0.0);
