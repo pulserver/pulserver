@@ -21,13 +21,14 @@ SHIPPED = sorted(path.stem for path in SEQUENCES.glob("*.py"))
 
 # A matrix small enough to scan here, at the reference's field of view. The
 # balanced SSFP is read at a bandwidth whose readout outlasts the half of its
-# excitation that follows the pulse centre.
+# excitation that follows the pulse centre. The gradient-echo spiral is read in
+# enough interleaves that its image is not limited by undersampling.
 SMALL = {"nx": 32, "ny": 32, "fov": 220.0, "phase_fov": 220.0}
 NONCARTESIAN = {"ny": None, "phase_fov": None}
 SMALLER = {
     "bssfp2d": {"bandwidth": 25e3},
     "gre_radial2d": NONCARTESIAN,
-    "gre_spiral2d": NONCARTESIAN,
+    "gre_spiral2d": {**NONCARTESIAN, "num_shots": 32},
     "se_radial2d": NONCARTESIAN,
     "se_spiral2d": NONCARTESIAN,
     "gre3d": {"nslices": 8},
@@ -110,7 +111,7 @@ def test_a_console_sequence_designs_its_default_protocol_under_the_console_limit
 def test_a_console_sequence_images_the_vials_where_the_cartesian_gradient_echo_does(
     tmp_path, name, reference
 ):
-    if load_plugin(SEQUENCES / f"{name}.py").recon == "nufft":
+    if load_plugin(SEQUENCES / f"{name}.py").recon != "cartesian":
         pytest.importorskip("bartorch")
     console = _console(tmp_path)
 
@@ -126,7 +127,14 @@ def test_a_console_sequence_images_the_vials_where_the_cartesian_gradient_echo_d
 
 def test_the_cartesian_reconstruction_of_a_gradient_echo_is_the_simple_fft(tmp_path):
     """Lines placed by their counters are the lines in arrival order when they arrive in order."""
-    placed = _images(_console(tmp_path), "gre2d", SMALL)
+    plugins = tmp_path / "fft"
+    plugins.mkdir()
+    (plugins / "gre2d_fft.py").write_text(
+        (SEQUENCES / "gre2d.py")
+        .read_text()
+        .replace('recon = "pics"', 'recon = "cartesian"')
+    )
+    placed = _images(_console(tmp_path, [plugins]), "gre2d_fft", SMALL)
     arrived = _images(_console(tmp_path, [PLUGINS], [RECON_PLUGINS]), "gre2d", SMALL)
 
     assert len(placed) == len(arrived) == 1
@@ -146,18 +154,7 @@ def test_no_shipped_reconstruction_shares_a_name_with_a_shipped_sequence():
 
 def test_pics_images_the_vials_from_half_the_phase_encodes(tmp_path, reference):
     pytest.importorskip("bartorch")
-    plugins = tmp_path / "accelerated"
-    plugins.mkdir()
-    (plugins / "gre2d_r2.py").write_text(
-        (SEQUENCES / "gre2d.py")
-        .read_text()
-        .replace('recon = "cartesian"', 'recon = "pics"')
-        .replace(
-            "    ui = {\n",
-            '    ui = {\n        UIParam.RY: IntParam("ry", range_min=1, range_max=4),\n',
-        )
-    )
 
-    (image,) = _images(_console(tmp_path, [plugins]), "gre2d_r2", {**SMALL, "Ry": 2})
+    (image,) = _images(_console(tmp_path), "gre2d", {**SMALL, "Ry": 2})
 
     assert _correlation(reference, image.astype(float)) > AGREEMENT

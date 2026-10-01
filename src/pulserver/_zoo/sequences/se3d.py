@@ -1,4 +1,4 @@
-"""pypulseqpp's 3D spin echo bound to the scanner UI, reconstructed by the Cartesian FFT, its partitions counted by the number of slices."""
+"""pypulseqpp's 3D spin echo bound to the scanner UI, reconstructed by pics, its partitions counted by the number of slices."""
 
 from pypulseqpp.sequences.sequence.se3D_sequence import Se3DApp
 
@@ -8,7 +8,7 @@ from pulserver.protocol import TEPreset, TRPreset, UIParam
 
 class Se3D(ScannerSequence):
     app = Se3DApp
-    recon = "cartesian"
+    recon = "pics"
     ui = {
         UIParam.TE: TimeParam(
             "te",
@@ -35,4 +35,6 @@ class Se3D(ScannerSequence):
         UIParam.NX: IntParam("n_x", range_min=32, range_max=512, range_incr=2),
         UIParam.NY: IntParam("n_y", range_min=32, range_max=512, range_incr=2),
         UIParam.NSLICES: IntParam("n_z", range_min=4, range_max=256),
+        UIParam.RY: IntParam("ry", range_min=1, range_max=4),
+        UIParam.RZ: IntParam("rz", range_min=1, range_max=4),
     }
