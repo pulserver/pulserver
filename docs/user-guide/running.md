@@ -240,9 +240,9 @@ meanwhile.
 A reconstruction computer runs one proxy per acquisition, so the series of one
 exam are reconstructed by different processes. What a calibration series
 measures is kept under `--exams`, in a directory of the exam's own, and read
-there by a later series whatever proxy takes it: the names to store it under
-are {data}`~pulserver.recon.B0_MAP`, {data}`~pulserver.recon.B1_MAP` and
-{data}`~pulserver.recon.COIL_SENSITIVITIES`. An exam's directory is removed
+there by a later series whatever proxy takes it: a hook assigns
+`context.b0_map`, `context.b1_map` or `context.coil_sensitivities` and a later
+hook reads them ({class}`~pulserver.recon.ReconContext`). An exam's directory is removed
 once the last proxy on that exam has moved to another, so a proxy prescribing
 the next exam does not take the artifacts from one still reconstructing the
 last.
