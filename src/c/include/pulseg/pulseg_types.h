@@ -190,6 +190,48 @@ typedef struct pulseg_vendor_profile
 /* clang-format on */
 
 /**
+ * @brief How a repetition's blocks become the units a machine plays.
+ *
+ * Every machine plays units, and grouping is how they are made: a repetition's
+ * blocks cut into contiguous runs, each run one unit the hardware builds and
+ * replays. One machine calls a unit a segment and builds it with its pulse
+ * generator; another calls it a block and merges several of these into one.
+ * Neither can decline to group; what differs is where the boundaries fall.
+ *
+ * Three kinds of statement, and a machine's own values arrive with its other
+ * limits:
+ *
+ * - where a boundary **may** go. @c boundary_gradient_hz_per_m: a machine that
+ *   begins a unit by setting the gradients permits a boundary only where they
+ *   rest, and states how near rest that is.
+ * - where a boundary **must** go. @c split_by_pulses, @c split_by_readouts and
+ *   @c split_navigators: runs that play different pulses, digitise with
+ *   different readouts, or carry a navigator readout, are different units.
+ * - whether few boundaries are preferred or many, where the first two leave a
+ *   choice. @c split_edge_delays: a block at the edge of a unit that does
+ *   nothing but wait is a unit of its own, rather than carried in the unit
+ *   beside it. A machine that inserts transmit-to-receive switching time at
+ *   every unit wants as few as it can have and states 0.
+ */
+typedef struct pulseg_grouping
+{
+    float boundary_gradient_hz_per_m; /**< how near rest the gradients must be
+                                       *   where a boundary falls           */
+    int split_by_pulses;              /**< cut where the pulses differ      */
+    int split_by_readouts;            /**< cut where the readouts differ    */
+    int split_navigators;             /**< a navigator readout is its own unit */
+    int split_edge_delays;            /**< a wait at a unit's edge is its own
+                                       *   unit                             */
+} pulseg_grouping;
+
+/* What a machine that begins a unit by setting its gradients wants: a boundary
+ * only where they rest, a unit per distinct pulse and readout, a navigator of
+ * its own, and an edge delay of its own. */
+/* clang-format off */
+#define PULSEG_GROUPING_INIT {100.0f, 1, 1, 1, 1}
+/* clang-format on */
+
+/**
  * @brief What a playout's waveform memory affords the waves.
  *
  * A property of the playout, not of the sequence.
@@ -300,6 +342,12 @@ typedef struct pulseg_opts
      * read the cache has stated a format and a step for it.
      */
     pulseg_vendor_profile profile;
+    /**
+     * @brief How the blocks of a repetition become the units played.
+     *
+     * The default is a machine that begins a unit by setting its gradients.
+     */
+    pulseg_grouping grouping;
 } pulseg_opts;
 
 /* clang-format off */
@@ -307,7 +355,8 @@ typedef struct pulseg_opts
     { \
     0, 0.0f, 0.0f, 0.0f, 0.0f, NULL, NULL, {0, 1, 2}, \
     PULSEG_CACHE_EXT_DEFAULT, NULL, NULL, 1, 0, 0, \
-    PULSEG_VENDOR_PROFILE_INIT \
+    PULSEG_VENDOR_PROFILE_INIT, \
+    PULSEG_GROUPING_INIT \
     }
 /* clang-format on */
 

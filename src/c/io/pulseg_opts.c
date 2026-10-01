@@ -35,6 +35,13 @@ void pulseg_opts_init(
     opts->allow_variable_rf_amplitude = 1;
     opts->structure_only = 0;
     opts->borrow_buffer_shapes = 0;
+    /* A zeroed grouping would permit a boundary only where the gradients are
+     * exactly zero and cut nowhere else, so the default is stated here rather
+     * than left to the caller's memset. */
+    {
+        const pulseg_grouping grouping = PULSEG_GROUPING_INIT;
+        opts->grouping = grouping;
+    }
 }
 
 void pulseg_opts_get_design_raster(pulseq_raster *raster, const pulseg_opts *opts)
