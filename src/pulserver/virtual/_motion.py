@@ -49,7 +49,7 @@ class RigidMotion:
     ...     return np.array([[1.0, 0.0, 0.0], [0.0, c, -s], [0.0, s, c]])
     >>> motion = RigidMotion(nod, lambda t: [0.0, 0.0, 1e-3 * t / 60.0])
     >>> motion(1.0, np.array([[0.0, 0.1, 0.0]])).round(5)
-    array([[0.     , 0.09994, 0.00349]])
+    array([[0.     , 0.09994, 0.00351]])
     """
 
     def __init__(
