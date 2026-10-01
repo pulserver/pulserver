@@ -1,10 +1,12 @@
 """The spectral statistics of each RF definition, as the IR cache carries them."""
 
+import subprocess
+
 import numpy as np
 import pypulseqpp as pp
 import pytest
 
-from pulserver.ir import convert, play, summary
+from pulserver.ir import convert, play, played_rf, summary
 
 SYSTEM = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
 
@@ -192,3 +194,46 @@ def test_a_zero_flip_pulse_converts_with_no_energy_and_the_fallback_bandwidth(tm
     assert silent["b1sq_integral_s"] == 0.0
     assert silent["bandwidth_hz"] == pytest.approx(3.12 / 2e-3, rel=1e-6)
     assert played["b1sq_integral_s"] == pytest.approx(_b1sq_integral(sinc), rel=1e-5)
+
+
+def test_the_definitions_a_design_states_are_the_ones_a_scanner_reads(tmp_path):
+    """A pulse is named by one number on both sides, or it is costed as another pulse.
+
+    ``played_rf`` numbers the definitions for a design service answering a
+    listing; the scanner reads them out of that design's cache. The two
+    numberings are arrived at independently, in different languages.
+    """
+    from tests.test_ir import LABELS, VENDOR, _scanner_build
+
+    sinc, _, hard = _pulses()
+    half = pp.make_sinc_pulse(
+        np.pi / 12, duration=2e-3, time_bw_product=4, system=SYSTEM
+    )
+    path = _written(tmp_path, [sinc, half, hard])
+    cache = convert(
+        path, SYSTEM, vendor=VENDOR, label_column_map=LABELS, cache_ext=".cache"
+    )
+    reader = _scanner_build(tmp_path, "read_rf_definitions.c", "read_rf_definitions")
+
+    printed = subprocess.run(
+        [str(reader), str(cache), str(path.stat().st_size)],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    read = [
+        (int(parts[1]), float(parts[2]))
+        for parts in (line.split() for line in printed.splitlines())
+        if parts[0] == "rf"
+    ]
+    stated = played_rf(pp.io.read(path))
+
+    assert read, "the canonical repetition plays no RF"
+    # The sinc and the half-angle sinc share a definition; the hard pulse does
+    # not, so a numbering that collapsed or split them would differ here.
+    assert len({definition for definition, _ in stated}) == 2
+    for definition, angle in read:
+        assert any(
+            definition == named and angle == pytest.approx(stated_angle, rel=1e-3)
+            for named, stated_angle in stated
+        ), f"the scanner reads ({definition}, {angle}) which no design states"

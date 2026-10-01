@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import dataclasses
 import importlib.util
 import inspect
 import math
@@ -17,6 +16,7 @@ import numpy as np
 import pypulseqpp as pp
 from pypulseqpp import sequences
 
+from .. import ir
 from ..protocol import (
     FOV_OFFSET,
     FOV_ROTATION,
@@ -29,32 +29,6 @@ from ..protocol import (
     prescribed_rotation,
 )
 from ..protocol._keys import WIRE_NAMES
-from ..proxy._seqdesc import EventType, RfUse, describe
-
-#: What a pulse's use is called where a sequence names the knob that drives it.
-_USE_NAMES = {
-    RfUse.EXCITATION: "excitation",
-    RfUse.REFOCUSING: "refocusing",
-    RfUse.INVERSION: "inversion",
-    RfUse.SATURATION: "saturation",
-    RfUse.PREPARATION: "preparation",
-    RfUse.OTHER: "other",
-}
-
-
-def _flip_of(shape: Any, amplitude_hz: float, raster_s: float) -> float:
-    """Return the angle a pulse turns through, in degrees.
-
-    The envelope is complex: a sinc's negative lobes subtract, and summing the
-    magnitude alone would have them add.
-    """
-    envelope = (
-        np.asarray(shape.magnitude.samples)
-        * np.exp(2j * np.pi * np.asarray(shape.phase.samples))
-        * amplitude_hz
-    )
-    return float(360.0 * abs(np.sum(envelope)) * raster_s)
-
 
 Preset = float | Callable[[pp.Opts], float] | None
 #: Range of each prescription entry, in mm either side of the isocentre.
@@ -291,16 +265,22 @@ class ScannerSequence:
         Reconstruction plugin the data of this sequence is reconstructed with,
         recorded in every design generated from it. Empty leaves the choice
         to the reconstruction client.
-    follows : Mapping[str, str]
-        Which protocol parameter drives the flip angle of each kind of pulse:
-        ``{"excitation": UIParam.FLIP}``. A kind the mapping does not name is
-        played at the angle it was designed at, whatever the operator does.
+    follows : tuple of str
+        Which protocol parameter drives the angle of each pulse the sequence
+        plays: one entry per distinct pulse, in the order the sequence first
+        plays them, ``""`` for one the operator does not move. A sequence that
+        excites and then refocuses under the one control declares
+        ``(UIParam.FLIP, UIParam.FLIP)``.
 
-        Nothing else is stated. The pulses, their shapes and their angles are
-        read from a design at the application's defaults, and a pulse's share
-        of its parameter is the angle it was designed at over the value that
-        parameter was designed with -- so a refocusing train whose angles vary
-        gets one share each without any of them being written down.
+        It is declared rather than worked out: which control drives a pulse is
+        not a property of the pulse. Empty leaves a scanner to cost the RF when
+        it has the design, which is what it does with any sequence.
+
+        The angles are not declared. They are read from a design at the
+        application's defaults, and a pulse's share of its parameter is the
+        angle it was designed at over the value that parameter was designed
+        with -- so a refocusing train whose angles vary gets one share each
+        without any of them being written down.
 
     Raises
     ------
@@ -313,7 +293,7 @@ class ScannerSequence:
     app: ClassVar[type[sequences.SequenceApp]]
     ui: ClassVar[Mapping[str, Entry]]
     recon: ClassVar[str] = ""
-    follows: ClassVar[Mapping[str, str]] = {}
+    follows: ClassVar[tuple[str, ...]] = ()
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
@@ -366,11 +346,11 @@ class ScannerSequence:
     ) -> list[RfPulse]:
         """Return the RF a design plays, as a scanner costs it while prescribing.
 
-        Read off the sequence a design wrote, so nothing is designed to find
-        them. A pulse whose kind :attr:`follows` names takes a share of its
-        parameter: the angle it was designed at over the value the parameter
-        was designed with, so a refocusing train whose angles vary gets one
-        share each without any of them being written down.
+        The pulses and their angles are read off the sequence a design wrote,
+        so nothing is designed to find them; which control drives each is
+        :attr:`follows`, declared. A pulse takes a share of its parameter: the
+        angle it was designed at over the value the parameter was designed
+        with, so a refocusing train whose angles vary gets one share each.
 
         Parameters
         ----------
@@ -383,44 +363,52 @@ class ScannerSequence:
         Returns
         -------
         list of RfPulse
-            One entry per distinct shape and angle, with how many times the
-            sequence plays it. Empty where :attr:`follows` names nothing, which
-            leaves a scanner to cost the RF only once it has the design itself.
+            One entry per distinct pulse and angle. Empty where
+            :attr:`follows` declares nothing, which leaves a scanner to cost
+            the RF only once it has the design itself.
+
+        Raises
+        ------
+        ValueError
+            When the sequence does not play as many distinct pulses as
+            :attr:`follows` declares, which would silently cost pulses against
+            the wrong controls.
         """
         if not self.follows:
             return []
-        described = describe(pp.io.read(Path(seq_path)))
-        found: dict[tuple[Any, ...], RfPulse] = {}
-        counts: dict[tuple[Any, ...], int] = {}
-        for event in described.events:
-            if event.type != EventType.RF:
-                continue
-            use = RfUse(int(event.params[1]))
-            shape = described.rf_definitions[int(event.params[0])]
-            envelope = tuple(
-                round(float(v), 6) for v in np.asarray(shape.magnitude.samples)
+        played = ir.played_rf(pp.io.read(Path(seq_path)))
+        order: list[int] = []
+        for definition, _ in played:
+            if definition not in order:
+                order.append(definition)
+        if len(order) != len(self.follows):
+            raise ValueError(
+                f"{type(self).__name__} declares {len(self.follows)} pulses but its "
+                f"sequence plays {len(order)} distinct ones"
             )
-            angle = _flip_of(shape, float(event.params[2]), described.rf_raster_time_s)
-            # One entry per distinct shape and angle. A sequence spoiling its RF
-            # gives every repetition its own definition, differing only in a
-            # phase the cost does not read.
-            key = (use, envelope, round(angle, 4))
-            counts[key] = counts.get(key, 0) + 1
+        driving = {}
+        for parameter in self.follows:
+            entry = self.ui.get(str(parameter or ""))
+            driving[str(parameter or "")] = (
+                float(designed.get(entry.argument, 0.0) or 0.0) if entry else 0.0
+            )
+
+        found: dict[tuple[int, int], RfPulse] = {}
+        for definition, angle in played:
+            # One entry per angle: a definition played at several angles is a
+            # train, and each of its pulses is costed at its own.
+            key = (definition, round(angle * 1e3))
             if key in found:
                 continue
-            parameter = str(self.follows.get(_USE_NAMES.get(use, ""), "") or "")
-            entry = self.ui.get(parameter)
-            driving = float(designed.get(entry.argument, 0.0) or 0.0) if entry else 0.0
+            parameter = str(self.follows[order.index(definition)] or "")
+            drives = driving[parameter]
             found[key] = RfPulse(
+                definition=definition,
                 flip_deg=angle,
-                follows=parameter if driving else "",
-                factor=angle / driving if driving else 1.0,
-                use=_USE_NAMES.get(use, ""),
+                follows=parameter if drives else "",
+                factor=angle / drives if drives else 1.0,
             )
-        return [
-            dataclasses.replace(pulse, count=counts[key])
-            for key, pulse in found.items()
-        ]
+        return list(found.values())
 
     def validate(self, system: pp.Opts, request: Mapping[str, Any]) -> Validation:
         """Resolve a request into the protocol the application will play.
