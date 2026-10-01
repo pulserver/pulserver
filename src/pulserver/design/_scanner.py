@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import dataclasses
 import importlib.util
 import inspect
 import math
 import sys
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from decimal import Decimal
 from pathlib import Path
@@ -28,6 +29,32 @@ from ..protocol import (
     prescribed_rotation,
 )
 from ..protocol._keys import WIRE_NAMES
+from ..proxy._seqdesc import EventType, RfUse, describe
+
+#: What a pulse's use is called where a sequence names the knob that drives it.
+_USE_NAMES = {
+    RfUse.EXCITATION: "excitation",
+    RfUse.REFOCUSING: "refocusing",
+    RfUse.INVERSION: "inversion",
+    RfUse.SATURATION: "saturation",
+    RfUse.PREPARATION: "preparation",
+    RfUse.OTHER: "other",
+}
+
+
+def _flip_of(shape: Any, amplitude_hz: float, raster_s: float) -> float:
+    """Return the angle a pulse turns through, in degrees.
+
+    The envelope is complex: a sinc's negative lobes subtract, and summing the
+    magnitude alone would have them add.
+    """
+    envelope = (
+        np.asarray(shape.magnitude.samples)
+        * np.exp(2j * np.pi * np.asarray(shape.phase.samples))
+        * amplitude_hz
+    )
+    return float(360.0 * abs(np.sum(envelope)) * raster_s)
+
 
 Preset = float | Callable[[pp.Opts], float] | None
 #: Range of each prescription entry, in mm either side of the isocentre.
@@ -264,12 +291,16 @@ class ScannerSequence:
         Reconstruction plugin the data of this sequence is reconstructed with,
         recorded in every design generated from it. Empty leaves the choice
         to the reconstruction client.
-    pulses : Sequence[RfPulse]
-        The RF the sequence plays, stated once so a scanner can cost it while
-        the operator is still prescribing. A pulse says what its flip angle
-        follows, and the scanner reads the angle from there rather than asking
-        for a design at every interaction. Empty leaves the scanner to cost the
-        RF only once a sequence has been designed.
+    follows : Mapping[str, str]
+        Which protocol parameter drives the flip angle of each kind of pulse:
+        ``{"excitation": UIParam.FLIP}``. A kind the mapping does not name is
+        played at the angle it was designed at, whatever the operator does.
+
+        Nothing else is stated. The pulses, their shapes and their angles are
+        read from a design at the application's defaults, and a pulse's share
+        of its parameter is the angle it was designed at over the value that
+        parameter was designed with -- so a refocusing train whose angles vary
+        gets one share each without any of them being written down.
 
     Raises
     ------
@@ -282,7 +313,7 @@ class ScannerSequence:
     app: ClassVar[type[sequences.SequenceApp]]
     ui: ClassVar[Mapping[str, Entry]]
     recon: ClassVar[str] = ""
-    pulses: ClassVar[Sequence[RfPulse]] = ()
+    follows: ClassVar[Mapping[str, str]] = {}
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
@@ -329,6 +360,69 @@ class ScannerSequence:
                 Kind.FLOAT, float(value), InputMode.OFF, -1.0, 1.0, 1e-6, ""
             )
         return listing
+
+    def rf_pulses(
+        self, seq_path: Path | str, designed: Mapping[str, Any]
+    ) -> list[RfPulse]:
+        """Return the RF a design plays, as a scanner costs it while prescribing.
+
+        Read off the sequence a design wrote, so nothing is designed to find
+        them. A pulse whose kind :attr:`follows` names takes a share of its
+        parameter: the angle it was designed at over the value the parameter
+        was designed with, so a refocusing train whose angles vary gets one
+        share each without any of them being written down.
+
+        Parameters
+        ----------
+        seq_path
+            The design's first sequence file.
+        designed
+            The prescription as designed, by the application's own argument
+            names: ``SequenceApp.resolved``.
+
+        Returns
+        -------
+        list of RfPulse
+            One entry per distinct shape and angle, with how many times the
+            sequence plays it. Empty where :attr:`follows` names nothing, which
+            leaves a scanner to cost the RF only once it has the design itself.
+        """
+        if not self.follows:
+            return []
+        described = describe(pp.io.read(Path(seq_path)))
+        found: dict[tuple[Any, ...], RfPulse] = {}
+        counts: dict[tuple[Any, ...], int] = {}
+        for event in described.events:
+            if event.type != EventType.RF:
+                continue
+            use = RfUse(int(event.params[1]))
+            shape = described.rf_definitions[int(event.params[0])]
+            envelope = tuple(
+                round(float(v), 6) for v in np.asarray(shape.magnitude.samples)
+            )
+            angle = _flip_of(shape, float(event.params[2]), described.rf_raster_time_s)
+            # One entry per distinct shape and angle. A sequence spoiling its RF
+            # gives every repetition its own definition, differing only in a
+            # phase the cost does not read.
+            key = (use, envelope, round(angle, 4))
+            counts[key] = counts.get(key, 0) + 1
+            if key in found:
+                continue
+            parameter = str(self.follows.get(_USE_NAMES.get(use, ""), "") or "")
+            entry = self.ui.get(parameter)
+            driving = float(designed.get(entry.argument, 0.0) or 0.0) if entry else 0.0
+            found[key] = RfPulse(
+                envelope=envelope,
+                duration_us=float(shape.time.samples[-1] - shape.time.samples[0]),
+                flip_deg=angle,
+                follows=parameter if driving else "",
+                factor=angle / driving if driving else 1.0,
+                bandwidth_hz=float(shape.bandwidth_hz),
+            )
+        return [
+            dataclasses.replace(pulse, count=counts[key])
+            for key, pulse in found.items()
+        ]
 
     def validate(self, system: pp.Opts, request: Mapping[str, Any]) -> Validation:
         """Resolve a request into the protocol the application will play.

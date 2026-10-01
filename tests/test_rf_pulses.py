@@ -59,13 +59,13 @@ def test_text_without_a_block_states_no_pulses():
 
 
 def test_an_envelope_shorter_than_it_says_is_refused():
-    text = "[RfPulses]\nflip_angle 1 30 2000 0 8 1 1 1\n[RfPulses End]\n"
+    text = "[RfPulses]\nflip_angle 1 30 2000 0 1 8 1 1 1\n[RfPulses End]\n"
     with pytest.raises(ValueError, match="states 8 samples"):
         parse_pulses(text)
 
 
 def test_a_line_too_short_to_be_a_pulse_is_refused():
-    with pytest.raises(ValueError, match="at least six values"):
+    with pytest.raises(ValueError, match="at least seven values"):
         parse_pulses("[RfPulses]\nflip_angle 1 30\n[RfPulses End]\n")
 
 
@@ -75,24 +75,50 @@ def test_the_envelope_is_normalised_to_a_peak_of_one():
     assert max(read.envelope) == pytest.approx(1.0, abs=1e-6)
 
 
-def test_the_pulses_a_plugin_states_reach_the_listing(tmp_path):
-    """The whole point: the scanner is told the RF without asking for a design."""
-    from pulserver.host._service import list_protocol
+def test_the_pulses_of_a_design_reach_the_listing(tmp_path):
+    """The whole point: a scanner is told the RF without asking for a design."""
+    from pulserver.host._service import PULSES_FILE, list_protocol
+    from pulserver.host._store import DesignStore
 
-    plugin = tmp_path / "stated.py"
-    plugin.write_text(
-        "from pulserver.design import ScannerSequence\n"
-        "from pulserver.protocol import RfPulse\n"
+    plugins = tmp_path / "plugins"
+    plugins.mkdir()
+    (plugins / "linked.py").write_text(
         "from pypulseqpp.sequences.sequence.gre2D_sequence import Gre2DApp\n"
-        "class Stated(ScannerSequence):\n"
+        "from pulserver.design import FloatParam, ScannerSequence\n"
+        "from pulserver.protocol import UIParam\n"
+        "class Linked(ScannerSequence):\n"
         "    app = Gre2DApp\n"
-        "    ui = {}\n"
-        "    pulses = (RfPulse(envelope=(0.0, 1.0, 0.0), duration_us=2000.0,\n"
-        "                      flip_deg=30.0, follows='flip_angle'),)\n"
-        "PLUGIN = Stated()\n"
+        "    ui = {UIParam.FLIP: FloatParam('flip_angle_deg', unit='deg',\n"
+        "                                   range_min=1.0, range_max=180.0)}\n"
+        "    follows = {'excitation': UIParam.FLIP}\n"
+        "PLUGIN = Linked()\n"
     )
-    reply = list_protocol(tmp_path, "stated")
-    read = parse_pulses(reply)
+    store = DesignStore(tmp_path / "store")
+    staged = store.stage()
+    (staged / PULSES_FILE).write_text(format_pulses([excitation(count=144)]))
+    store.commit("identity-1", staged, {"plugin": "linked"})
+
+    read = parse_pulses(list_protocol(plugins, "linked", store))
     assert len(read) == 1
     assert read[0].follows == "flip_angle"
-    assert read[0].flip_deg == pytest.approx(30.0)
+    assert read[0].count == 144
+
+
+def test_a_sequence_no_design_has_been_made_of_states_no_rf(tmp_path):
+    """Nothing is designed to answer a listing; the scanner costs it later."""
+    from pulserver.host._service import list_protocol
+    from pulserver.host._store import DesignStore
+
+    plugins = tmp_path / "plugins"
+    plugins.mkdir()
+    (plugins / "bare.py").write_text(
+        "from pypulseqpp.sequences.sequence.gre2D_sequence import Gre2DApp\n"
+        "from pulserver.design import ScannerSequence\n"
+        "class Bare(ScannerSequence):\n"
+        "    app = Gre2DApp\n"
+        "    ui = {}\n"
+        "PLUGIN = Bare()\n"
+    )
+    assert (
+        parse_pulses(list_protocol(plugins, "bare", DesignStore(tmp_path / "s"))) == []
+    )

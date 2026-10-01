@@ -11,7 +11,7 @@ import datetime
 import hashlib
 import inspect
 import shutil
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -23,7 +23,6 @@ from .._plugins import PluginPath
 from ..design import ScannerSequence, load_plugin
 from ..protocol import (
     Parameter,
-    RfPulse,
     Validation,
     format_listing,
     format_pulses,
@@ -40,6 +39,11 @@ from ._store import DesignStore, design_identity
 
 # The file name the interpreter loads in a design.
 _ENTRY = "sequence.seq"
+
+
+#: Where a design records the RF it plays, for a scanner costing it while
+#: the operator prescribes.
+PULSES_FILE = "pulses.rf"
 
 
 class CallError(Exception):
@@ -60,7 +64,9 @@ def plugin_path(plugins: PluginPath, plugin: str) -> Path:
         raise CallError(str(error)) from None
 
 
-def list_protocol(plugins: PluginPath, plugin: str) -> str:
+def list_protocol(
+    plugins: PluginPath, plugin: str, store: DesignStore | None = None
+) -> str:
     """Reply ``PROTOCOL``, the plugin's listing block, and the RF it plays.
 
     The listing depends on the plugin file and the installed packages only.
@@ -70,9 +76,7 @@ def list_protocol(plugins: PluginPath, plugin: str) -> str:
     """
     path = str(plugin_path(plugins, plugin))
     listing = _listing(path)
-    pulses = _pulses(path)
-    reply = "PROTOCOL\n" + format_listing(listing)
-    return reply + format_pulses(pulses) if pulses else reply
+    return "PROTOCOL\n" + format_listing(listing) + _stated_pulses(store, plugin)
 
 
 def validate(
@@ -150,6 +154,11 @@ def generate(
         (staged / "resolved.protocol").write_text(
             format_values(validation.values, listing)
         )
+        # The RF a scanner costs while the operator prescribes, read off the
+        # sequence just written rather than designed again for the purpose.
+        pulses = scanner.rf_pulses(paths[0], app.resolved)
+        if pulses:
+            (staged / PULSES_FILE).write_text(format_pulses(pulses))
         manifest = {
             **_record(limits),
             "plugin": plugin,
@@ -319,9 +328,26 @@ def _listing(path: str) -> dict[str, Parameter]:
     return _plugin(path).listing()
 
 
-def _pulses(path: str) -> Sequence[RfPulse]:
-    """Return the RF a plugin states it plays; empty where it states none."""
-    return tuple(getattr(_plugin(path), "pulses", ()) or ())
+def _stated_pulses(store: DesignStore | None, plugin: str) -> str:
+    """Return the RF block of the newest design of ``plugin``, or empty where there is none.
+
+    Nothing is designed to answer this. A sequence the store has never designed
+    states no RF, and a scanner costs it once it has a design of its own.
+    """
+    if store is None:
+        return ""
+    newest = ""
+    when = -1.0
+    for design in store:
+        if store.manifest(design).get("plugin") != plugin:
+            continue
+        held = store.directory(design) / PULSES_FILE
+        if not held.is_file():
+            continue
+        stamped = held.stat().st_mtime
+        if stamped > when:
+            newest, when = held.read_text(), stamped
+    return newest
 
 
 def _source(path: str) -> str:

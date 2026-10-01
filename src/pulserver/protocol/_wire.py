@@ -242,6 +242,8 @@ class RfPulse:
         refocusing at four fifths of it.
     bandwidth_hz
         Bandwidth at half the spectral peak; 0 where it is not stated.
+    count
+        How many times the sequence plays it.
     """
 
     envelope: tuple[float, ...]
@@ -250,6 +252,7 @@ class RfPulse:
     follows: str = ""
     factor: float = 1.0
     bandwidth_hz: float = 0.0
+    count: int = 1
 
 
 def format_pulses(pulses: Sequence[RfPulse]) -> str:
@@ -258,7 +261,8 @@ def format_pulses(pulses: Sequence[RfPulse]) -> str:
     for pulse in pulses:
         head = (
             f"{pulse.follows or '-'} {pulse.factor:.7g} {pulse.flip_deg:.7g} "
-            f"{pulse.duration_us:.7g} {pulse.bandwidth_hz:.7g} {len(pulse.envelope)}"
+            f"{pulse.duration_us:.7g} {pulse.bandwidth_hz:.7g} {pulse.count:d} "
+            f"{len(pulse.envelope)}"
         )
         samples = " ".join(f"{v:.6g}" for v in pulse.envelope)
         lines.append(f"{head} {samples}".rstrip())
@@ -290,12 +294,13 @@ def parse_pulses(text: str) -> list[RfPulse]:
         if not stripped:
             continue
         parts = stripped.split()
-        if len(parts) < 6:
-            raise ValueError(f"an RF pulse is at least six values: {stripped!r}")
+        if len(parts) < 7:
+            raise ValueError(f"an RF pulse is at least seven values: {stripped!r}")
         follows = "" if parts[0] == "-" else parts[0]
         factor, flip, duration, bandwidth = (float(v) for v in parts[1:5])
-        count = int(parts[5])
-        samples = tuple(float(v) for v in parts[6 : 6 + count])
+        played = int(parts[5])
+        count = int(parts[6])
+        samples = tuple(float(v) for v in parts[7 : 7 + count])
         if len(samples) != count:
             raise ValueError(
                 f"an RF pulse states {count} samples and carries {len(samples)}"
@@ -308,6 +313,7 @@ def parse_pulses(text: str) -> list[RfPulse]:
                 follows=follows,
                 factor=factor,
                 bandwidth_hz=bandwidth,
+                count=played,
             )
         )
     return found
