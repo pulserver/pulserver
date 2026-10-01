@@ -35,6 +35,20 @@ TISSUES = {
     "connective tissue": (0.5, 0.07, 0.061, 0.77),
 }
 
+#: The field, in T, at which BrainWeb's simulator gives :data:`TISSUES`.
+TISSUES_FIELD_T = 1.5
+
+#: Exponents ``b`` of the power laws ``T1 ~ B0**b`` that white matter and grey
+#: matter follow from 0.2 T to 7 T (Rooney et al., Magn Reson Med 57:308,
+#: 2007), by the tissue classes BrainWeb gives their relaxation. CSF's T1 does
+#: not change with the field there; the other classes keep BrainWeb's.
+T1_EXPONENTS = {
+    "white matter": 0.382,
+    "connective tissue": 0.382,
+    "grey matter": 0.376,
+    "glial matter": 0.376,
+}
+
 #: Volume magnetic susceptibility, in ppm (SI), of air, and of water, which
 #: every tissue class of the head is taken to have (Schenck, Med Phys 23:815,
 #: 1996).
@@ -59,13 +73,13 @@ class BrainWeb:
     lying head first and supine, with the origin of its MNI coordinates, the
     anterior commissure, at the isocentre: the physical x axis points to the
     subject's left, y posterior and z superior. Each tissue class relaxes with
-    the T1 and T2 and has the proton density BrainWeb's simulator gives it at
-    1.5 T (Kwan et al., IEEE Trans Med Imaging 18:1085, 1999), at any field,
-    and the T2' its T2 and T2* there give, ``1 / (1/T2* - 1/T2)``, which acts
-    where a voxel holds several isochromats; fat precesses at pypulseqpp's fat
-    shift, and every isochromat at the field :attr:`field_ppm` its head adds.
-    The coils are those of :class:`~pulserver.virtual.Phantom`, fixed in the
-    physical frame.
+    the T1, T2 and T2' :meth:`relaxation` derives at the field it is scanned
+    at from the parameters BrainWeb's simulator gives it at 1.5 T (Kwan et
+    al., IEEE Trans Med Imaging 18:1085, 1999), and has the proton density
+    the simulator gives it; T2' acts where a voxel holds several isochromats.
+    Fat precesses at pypulseqpp's fat shift, and every isochromat at the field
+    :attr:`field_ppm` its head adds. The coils are those of
+    :class:`~pulserver.virtual.Phantom`, fixed in the physical frame.
 
     Parameters
     ----------
@@ -81,7 +95,8 @@ class BrainWeb:
     susceptibility
         Whether the field the head's susceptibility adds acts on it.
     t2_prime
-        T2', in s, by tissue class, in place of the one its T2 and T2* give.
+        T2', in s, by tissue class, in place of the one :meth:`relaxation`
+        derives, at any field.
     diffusion
         Isotropic diffusion coefficient, in m²/s, by tissue class, as
         :attr:`DIFFUSION` gives them; a class without one does not diffuse.
@@ -123,11 +138,7 @@ class BrainWeb:
         self.coils = coils
         self.directory = directory
         self.susceptibility = susceptibility
-        self.t2_prime = {
-            name: _t2_prime(t2, t2_star)
-            for name, (_, t2, t2_star, _) in TISSUES.items()
-        }
-        self.t2_prime.update(t2_prime or {})
+        self.t2_prime = dict(t2_prime or {})
         self.diffusion = dict(diffusion or {})
 
     @functools.cached_property
@@ -172,6 +183,31 @@ class BrainWeb:
         over the voxels at least half head are then removed.
         """
         return _susceptibility_field(self.fractions[..., 0])
+
+    def relaxation(self, field_t: float) -> dict[str, tuple[float, float, float]]:
+        """Return the T1, T2 and T2', in s, of each tissue class at ``field_t`` T.
+
+        T1 is BrainWeb's, at 1.5 T, times ``(field_t / 1.5)**b`` with the
+        class's exponent in :data:`T1_EXPONENTS`, or BrainWeb's without one; T2
+        is BrainWeb's. T2' is the one BrainWeb's T2 and T2* leave at 1.5 T,
+        ``1 / (1/T2* - 1/T2)``, times ``1.5 / field_t``, as the static
+        dephasing regime makes R2' proportional to the field (Yablonskiy and
+        Haacke, Magn Reson Med 32:749, 1994), or the one :attr:`t2_prime`
+        gives the class; infinite for a class without T2 or T2*.
+
+        Raises
+        ------
+        ValueError
+            If ``field_t`` is not above zero.
+        """
+        if not field_t > 0.0:
+            raise ValueError(f"tissues relax at a field above zero, not {field_t} T")
+        ratio = field_t / TISSUES_FIELD_T
+        relaxed = {}
+        for name, (t1, t2, t2_star, _) in TISSUES.items():
+            t2_prime = self.t2_prime.get(name, _t2_prime(t2, t2_star) / ratio)
+            relaxed[name] = (t1 * ratio ** T1_EXPONENTS.get(name, 0.0), t2, t2_prime)
+        return relaxed
 
     def proton_density(
         self, points: np.ndarray, *, normal: np.ndarray, thickness: float
@@ -351,8 +387,10 @@ class BrainWeb:
             voxel[:, axis] + _FIRST_VOXEL_MM[name] for axis, name in enumerate("zyx")
         )
         positions = 1e-3 * np.column_stack([-x, -y, z])
+        relaxed = self.relaxation(field_t)
         points, rows = [], []
-        for tissue, (name, (t1, t2, _, density)) in enumerate(TISSUES.items()):
+        for tissue, (name, (*_, density)) in enumerate(TISSUES.items()):
+            t1, t2, t2_prime = relaxed[name]
             fraction = fractions[:, tissue]
             kept = np.flatnonzero((fraction > 0.0) & (density > 0.0))
             shift = shifts[tissue]
@@ -368,7 +406,7 @@ class BrainWeb:
                         np.full(kept.size, t1),
                         np.full(kept.size, t2),
                         frequency,
-                        np.full(kept.size, self.t2_prime[name]),
+                        np.full(kept.size, t2_prime),
                         np.full(kept.size, self.diffusion.get(name, 0.0)),
                     ]
                 )

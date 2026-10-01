@@ -61,7 +61,8 @@ def test_each_tissue_of_a_voxel_is_an_isochromat_where_a_head_first_supine_head_
         brain.positions, 1e-3 * np.array([[left, posterior, superior]] * 2)
     )
     np.testing.assert_allclose(brain.proton_density, [0.86 * 0.25e-9, 0.77 * 0.75e-9])
-    np.testing.assert_allclose(brain.t1, [0.833, 0.5])
+    # BrainWeb's T1 at 1.5 T, scaled to 3 T by the power laws of grey and white matter.
+    np.testing.assert_allclose(brain.t1, [0.833 * 2**0.376, 0.5 * 2**0.382])
     np.testing.assert_allclose(brain.t2, [0.083, 0.07])
     np.testing.assert_allclose(brain.off_resonance, 0.0)
     assert brain.receive is None
@@ -147,7 +148,7 @@ def test_a_region_keeps_the_isochromats_it_answers_for_from_their_positions_and_
     assert np.all(
         (kept.positions[:, 0] >= x[5] - 1e-4) & (kept.positions[:, 0] <= x[3] + 1e-4)
     )
-    np.testing.assert_allclose(kept.t1, _brainweb.TISSUES["white matter"][0])
+    np.testing.assert_allclose(kept.t1, brain.relaxation(3.0)["white matter"][0])
 
 
 @pytest.mark.parametrize("spacing", [1e-3, 2e-3])
@@ -287,20 +288,36 @@ def test_each_tissue_of_a_voxel_is_spread_over_its_spins_with_its_t2_prime_and_d
     np.testing.assert_allclose(spins.diffusion, np.repeat([0.89e-9, 0.70e-9], 8))
     for line, t2_prime in zip(
         np.split(spins.off_resonance, 2),
-        (0.05, brain.t2_prime["white matter"]),
+        (0.05, brain.relaxation(3.0)["white matter"][2]),
         strict=True,
     ):
         assert len(np.unique(line)) == 8
         assert np.abs(line).max() <= 32.0 / (2.0 * np.pi * t2_prime)
 
 
-def test_each_tissue_takes_the_t2_prime_its_t2_and_t2_star_in_brainweb_s_simulator_give():
-    brain = virtual.BrainWeb(t2_prime={"white matter": 0.2})
+def test_each_tissue_relaxes_at_1_5_t_as_brainweb_s_simulator_gives_it():
+    relaxed = virtual.BrainWeb().relaxation(1.5)
 
+    for name, (t1, t2, *_) in _brainweb.TISSUES.items():
+        assert relaxed[name][:2] == (t1, t2)
     # R2' = R2* - R2 at BrainWeb's T2 and T2*, 83 ms and 69 ms for grey matter.
-    assert brain.t2_prime["grey matter"] == pytest.approx(
-        1.0 / (1.0 / 0.069 - 1.0 / 0.083)
+    assert relaxed["grey matter"][2] == pytest.approx(1.0 / (1.0 / 0.069 - 1.0 / 0.083))
+    assert relaxed["CSF"][2] == pytest.approx(1.0 / (1.0 / 0.058 - 1.0 / 0.329))
+    assert relaxed["skull"][2] == math.inf
+
+
+def test_t1_follows_its_power_law_and_r2_prime_the_field_while_t2_and_csf_s_t1_hold():
+    brain = virtual.BrainWeb(t2_prime={"white matter": 0.2})
+    low, high = brain.relaxation(1.5), brain.relaxation(7.0)
+
+    ratio = 7.0 / 1.5
+    assert high["grey matter"][0] == pytest.approx(low["grey matter"][0] * ratio**0.376)
+    assert high["connective tissue"][0] == pytest.approx(
+        low["connective tissue"][0] * ratio**0.382
     )
-    assert brain.t2_prime["CSF"] == pytest.approx(1.0 / (1.0 / 0.058 - 1.0 / 0.329))
-    assert brain.t2_prime["white matter"] == 0.2
-    assert brain.t2_prime["skull"] == math.inf
+    assert high["CSF"][0] == low["CSF"][0]
+    assert all(high[name][1] == low[name][1] for name in _brainweb.TISSUES)
+    assert high["grey matter"][2] == pytest.approx(low["grey matter"][2] / ratio)
+    assert high["white matter"][2] == low["white matter"][2] == 0.2
+    with pytest.raises(ValueError, match="above zero"):
+        brain.relaxation(0.0)
