@@ -43,13 +43,51 @@ the checks pypulseqpp provides does not establish scanner or patient safety.
 ## Quick start
 
 ```bash
-pip install pulserver
+pip install pulserver bartorch
 ```
 
-```bash
-pulserver design serve --plugins sequences/ --socket /tmp/pulserver.sock
-python -m pulserver.proxy --store /srv/pulserver/designs --port 9002 --plugins recon/
+A sequence plugin binds a pypulseqpp `SequenceApp` to the scanner protocol, and
+a reconstruction plugin reconstructs the series it acquires:
+
+```python
+# sequences/gre.py
+from pypulseqpp.sequences.sequence.gre2D_sequence import Gre2DApp
+from pulserver.design import ScannerSequence, TimeParam, UIParam
+
+class Gre(ScannerSequence):
+    app = Gre2DApp
+    recon = "gre"
+    ui = {UIParam.TE: TimeParam("te", range_min=3000, range_max=20000)}  # µs
 ```
+
+```python
+# recon/gre.py
+import torch
+import bartorch.tools as bt
+from bartorch import apps, priors
+from pulserver import recon
+
+class Pics(recon.ReconPlugin):
+    def recon(self, branch, context):
+        kspace = torch.from_numpy(self.buffers[0].kspace)  # (coils, y, x)
+        maps = bt.ecalib(kspace, maps=1)
+        image = apps.pics(kspace, maps, regularizers=priors.Wavelet((-1, -2), 0.005))
+        return recon.ReconResult(image.abs().numpy())
+
+PLUGIN = Pics()
+```
+
+Scan a phantom on the virtual scanner and reconstruct it:
+
+```bash
+printf '[Limits]\nB0: 3.0\n[Limits End]\n' > limits.txt
+python -m pulserver.proxy --store designs --port 9002 --plugins recon &
+pulserver scan --plugins sequences --plugin gre --limits limits.txt \
+  --store designs --recon 127.0.0.1:9002 --output images
+```
+
+On a scanner, the interpreter makes the same design calls and streams to the
+same proxy.
 
 ## Documentation
 

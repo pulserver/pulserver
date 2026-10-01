@@ -1,25 +1,37 @@
 # Scanner sequences
 
-A scanner sequence is a plugin file in one of the `--plugins` directories of the
-design calls; a name is the plugin of the first directory holding `<name>.py`,
-and a symbolic link is a plugin named after the link. It defines one {class}`~pulserver.design.ScannerSequence` subclass, which binds
-a pypulseqpp {class}`~pypulseqpp.sequences.SequenceApp` to the entries of the
-scanner protocol. A design call loads the file by its stem: `gre2d.py` is the
-plugin an interpreter host process names with `--plugin gre2d`.
+A scanner sequence is a plugin file, `<name>.py` in a `--plugins` directory,
+that binds a pypulseqpp {class}`~pypulseqpp.sequences.SequenceApp` to the
+scanner protocol with one {class}`~pulserver.design.ScannerSequence` subclass:
+
+```python
+# sequences/gre.py
+from pypulseqpp.sequences.sequence.gre2D_sequence import Gre2DApp
+from pulserver.design import ScannerSequence
+
+class Gre(ScannerSequence):
+    app = Gre2DApp
+```
+
+The interpreter names it `--plugin gre`. Without `ui`, the protocol is the
+application's defaults. A PyPulseq script becomes a `SequenceApp` by moving
+what precedes its loop into `init_sequence` and the loop body into `kernel`
+([from a PyPulseq script](https://pulserver.github.io/pypulseqpp/latest/user-guide/from-pypulseq.html)).
+`MAX_GRAD` (mT/m) and `MAX_SLEW` (T/m/s) are required on every application:
+they cap the scanner's limits, which the design call passes in.
 
 ## Binding the protocol
 
-`app` is the sequence application and `ui` maps parameters of the interpreter's
-table, named by {class}`~pulserver.protocol.UIParam` members, to entries. A name
-outside that table is refused when the class is defined, because the
-interpreter's parser would drop it. An entry names the `init_sequence` argument
-it sets and how the scanner UI shows it; the application's own defaults are the
-protocol's initial values, except where an entry sets its `default`.
+`ui` maps {class}`~pulserver.protocol.UIParam` members, the parameters of the
+interpreter's table, to entries; a name outside that table is refused when the
+class is defined. An entry names the `init_sequence` argument it sets. `recon`
+names the reconstruction plugin of the sequence's data
+({doc}`reconstruction-plugins`).
 
 ```pycon
 >>> from pypulseqpp.sequences.sequence.gre2D_sequence import Gre2DApp
->>> from pulserver.design import FloatParam, IntParam, ScannerSequence, TimeParam
->>> from pulserver.protocol import TEPreset, TRPreset, UIParam
+>>> from pulserver.design import (FloatParam, IntParam, ScannerSequence, TEPreset,
+...                               TimeParam, TRPreset, UIParam)
 >>> class Gre2D(ScannerSequence):
 ...     app = Gre2DApp
 ...     recon = "gre2d"
@@ -52,20 +64,11 @@ The options of the four string-list parameters are
 {class}`~pulserver.protocol.TriggerType`, which
 {class}`~pulserver.design.StringListParam` takes as they are.
 
-A preset is a negative value the interpreter sends in place of a time.
-`{TEPreset.MINIMUM: None}` passes `None` to the application, which designs its
-shortest echo time; a preset can also map to a time in seconds or to a function
-of the scanner limits.
-
-An entry's `default` is its initial value in the UI's units, in place of the
-application's default: microseconds or a preset for a time, `unit` for a float.
-It is how a sequence offers a protocol its scanner's limits can play when the
-application's defaults assume stronger gradients, such as
-`TimeParam("te", presets={TEPreset.MINIMUM: None}, default=TEPreset.MINIMUM)`
-for the shortest echo time.
-
-`recon` names the reconstruction plugin the data of this sequence is
-reconstructed with (see {doc}`reconstruction-plugins`).
+A preset is a negative value the interpreter sends in place of a time;
+`{TEPreset.MINIMUM: None}` passes `None`, for which the application designs its
+shortest echo time. An entry's `default` replaces the application's default as
+the initial value, in UI units: `default=TEPreset.MINIMUM` offers a protocol a
+scanner with weaker gradients than the application assumes can play.
 
 ## Resolving a protocol
 
@@ -116,14 +119,11 @@ request omits keep their initial values:
 
 ```
 
-The values also carry the prescription entries as they were requested.
-
-The resolved `TE` is the echo time the design achieved: the value the
-application records with {meth}`~pypulseqpp.sequences.SequenceApp.resolve` in
-`init_sequence`, as {attr}`~pypulseqpp.sequences.SequenceApp.resolved` reports
-it. An entry whose argument the application does not record keeps the
-requested value. Resolved values are reported at the precision a scanner
-parameter stores, so a resolved protocol sent back resolves to itself.
+The resolved `TE` is the echo time the design achieved, as `init_sequence`
+records it with {meth}`~pypulseqpp.sequences.SequenceApp.resolve`; an argument
+the application does not record keeps the requested value. Values are rounded
+to the precision a scanner parameter stores, so a resolved protocol sent back
+resolves to itself.
 
 A protocol the design refuses is invalid, and the error the application raised
 is the reply's `info`:
@@ -136,16 +136,13 @@ is the reply's `info`:
 ```
 
 `duration` is the scan time in seconds,
-{meth}`~pypulseqpp.sequences.SequenceApp.scan_time`: the `duration` the
-application states in `init_sequence`, which is reported without playing the
-scan, and otherwise the summed duration of the designed prescans and main
-sequence. An error the design raises while its scan time is computed makes the
-reply invalid, as an error raised by construction does.
+{meth}`~pypulseqpp.sequences.SequenceApp.scan_time`: the `duration`
+`init_sequence` states, otherwise the summed duration of the designed prescans
+and main sequence.
 
 {meth}`~pulserver.design.ScannerSequence.generate` writes the design as signed
-binary Pulseq, prescans first, and the `generate` call converts it to the IR
-cache the scanner loads and stores it as a design, described in
-{doc}`../explanations/designs`.
+binary Pulseq, prescans first; the `generate` design call converts it to the IR
+cache and stores it ({doc}`../explanations/designs`).
 
 ## See also
 
