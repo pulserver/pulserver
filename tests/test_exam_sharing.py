@@ -108,3 +108,60 @@ def test_the_default_root_is_named_for_the_user_it_belongs_to(tmp_path):
     import os
 
     assert str(os.getuid()) in DEFAULT_EXAM_DIRECTORY.name
+
+
+def test_an_exam_nothing_has_leased_for_a_while_is_flushed(tmp_path):
+    """No message ends an exam, so going unused for long enough does."""
+    manager = ExamCacheManager(directory=tmp_path)
+    with manager.lease(exam_header("exam-1")) as cache:
+        cache[recon.B1_MAP] = [1.0]
+        directory = cache.directory
+    manager.expire()
+    assert directory.is_dir(), "an exam between two series was flushed"
+    manager.expire(idle=0.0)
+    assert not directory.exists()
+    assert list(tmp_path.iterdir()) == []
+    manager.close()
+
+
+def test_an_exam_is_not_flushed_under_a_series_still_reconstructing(tmp_path):
+    manager = ExamCacheManager(directory=tmp_path)
+    with manager.lease(exam_header("exam-1")) as cache:
+        cache[recon.B0_MAP] = [7.0]
+        manager.expire(idle=0.0)
+        assert cache.directory.is_dir()
+        assert cache[recon.B0_MAP] == [7.0]
+    manager.close()
+
+
+def test_an_idle_exam_is_left_to_the_proxy_still_on_it(tmp_path):
+    """Another proxy's idle exam is that proxy's to expire."""
+    staying = ExamCacheManager(directory=tmp_path)
+    sweeping = ExamCacheManager(directory=tmp_path)
+    with staying.lease(exam_header("exam-1")) as cache:
+        cache[recon.B1_MAP] = [1.0]
+        directory = cache.directory
+    sweeping.expire(idle=0.0, now=float("inf"))
+    assert directory.is_dir()
+    staying.close()
+    sweeping.close()
+
+
+def test_the_exam_of_a_proxy_that_died_is_swept_once_idle(tmp_path):
+    """A proxy that died holds no lock, and leaves its exam on disk."""
+    import os
+
+    directory = tmp_path / "abandoned"
+    directory.mkdir()
+    (directory / "map").write_bytes(b"1")
+    lock = tmp_path / "abandoned.lock"
+    lock.touch()
+    manager = ExamCacheManager(directory=tmp_path)
+    manager.expire()
+    assert directory.is_dir(), "a recent exam was swept"
+    for path in (directory, lock):
+        os.utime(path, (0, 0))
+    manager.expire()
+    assert not directory.exists()
+    assert not lock.exists()
+    manager.close()
