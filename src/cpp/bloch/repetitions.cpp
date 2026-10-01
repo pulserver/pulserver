@@ -16,6 +16,7 @@
 #include <numeric>
 #include <stdexcept>
 #include <string>
+#include <type_traits>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -45,6 +46,7 @@ namespace bloch
         /** Repetitions an isochromat is carried through before the next: the
          *  length of the vectors a grid point accumulates. */
         constexpr size_t kTile = 16;
+        static_assert(kTile == RunTile::kRepetitions, "a run device carries the tiles the engine does");
 
         /** Distinct coordinates along an axis beyond which a phase-encoding
          *  phase is computed per isochromat rather than tabulated. */
@@ -141,9 +143,9 @@ namespace bloch
         /** How a slot's phase-encoding phase along an axis is found. */
         enum class Encoding
         {
-            none,
-            tabulated,
-            computed
+            none = 0,
+            tabulated = 1,
+            computed = 2
         };
 
         /** Bytes the widest vectors the carry uses hold, and the alignment of
@@ -319,6 +321,17 @@ namespace bloch
                 return out;
             }
         };
+
+        /** Where @p slots hold the magnetisation, for a run device to write it
+         *  back. */
+        template <typename Real>
+        void describe_state(Slots<Real>& slots, RunState& state)
+        {
+            state.slots = slots.size;
+            state.lanes = slots.lanes;
+            state.width = slots.width;
+            state.pack = slots.pack.data();
+        }
 
         /** Tables held at the most: phase-encoding areas take few values over
          *  a scan, and past this many the tables are made anew. */
@@ -1769,6 +1782,10 @@ namespace bloch
         Tables<double> double_tables;
         /** Slots dropped since the last compaction. */
         size_t dropped = 0;
+        /** Whether the slots were offered to the run device, and whether it
+         *  took them: it then carries them, and they are never compacted. */
+        bool offered = false;
+        bool on_device = false;
 
         template <typename Real>
         Slots<Real>& slots();
@@ -1856,7 +1873,8 @@ namespace bloch
           adc_phases_(std::move(adc_phases)),
           areas_(std::move(areas)),
           nets_(std::move(nets)),
-          tolerance_(tolerance)
+          tolerance_(tolerance),
+          run_(fresh_revision())
     {
         if (!(tolerance >= 0.0) || !std::isfinite(tolerance))
             throw std::invalid_argument("the tolerance must be finite and not negative");
@@ -1909,7 +1927,12 @@ namespace bloch
         }
     }
 
-    Repetitions::~Repetitions() = default;
+    Repetitions::~Repetitions()
+    {
+        const RunDevice& device = isochromats_.run_device_;
+        if (set_ && set_->on_device && device.release)
+            device.release(run_);
+    }
 
     void Repetitions::read_windows()
     {
@@ -2263,17 +2286,25 @@ namespace bloch
                 gather<double>();
         }
         if (set_->single)
-        {
             play_tiles<float>(count, signal);
-            next_ += count;
-            settle<float>(next_);
-        }
         else
-        {
             play_tiles<double>(count, signal);
-            next_ += count;
-            settle<double>(next_);
+        next_ += count;
+        if (set_->on_device)
+        {
+            RunState state;
+            state.run = run_;
+            state.single = set_->single;
+            if (set_->single)
+                describe_state(set_->single_slots, state);
+            else
+                describe_state(set_->double_slots, state);
+            s.run_device_.state(state);
         }
+        if (set_->single)
+            settle<float>(next_);
+        else
+            settle<double>(next_);
         s.elapsed_ += static_cast<double>(count) * duration_;
     }
 
@@ -2295,6 +2326,11 @@ namespace bloch
         grids.resize(threads * tile.region.back());
         scratch.resize(threads * scratch_per_worker(tile, slots.lanes));
         tile.grids = grids.data();
+        if (!set_->offered)
+        {
+            set_->offered = true;
+            set_->on_device = offer_device(tile);
+        }
         const CarryRange<Real> range = fastest_carry<Real>(slots.offsets).range;
         std::vector<std::complex<double>> partial;
         for (size_t done = 0; done < count; done += kTile)
@@ -2302,7 +2338,8 @@ namespace bloch
             const size_t first = next_ + done;
             tile.count = std::min(kTile, count - done);
             prepare_tile(tile, first);
-            const size_t dropped = carry_tile(tile, slots, range, scratch.data(), threads);
+            const size_t dropped =
+                set_->on_device ? carry_on_device(tile) : carry_tile(tile, slots, range, scratch.data(), threads);
             std::complex<double>* out = signal + done * length;
             for (size_t w = 0; w < tile.windows; ++w)
             {
@@ -2315,12 +2352,93 @@ namespace bloch
             }
             demodulate(first, tile.count, out);
             set_->dropped += dropped;
-            if (tile.drop && static_cast<double>(set_->dropped) > kCompactAt * static_cast<double>(slots.size))
+            if (!set_->on_device && tile.drop &&
+                static_cast<double>(set_->dropped) > kCompactAt * static_cast<double>(slots.size))
             {
                 compact(slots, threads);
                 set_->dropped = 0;
             }
         }
+    }
+
+    template <typename TileOf>
+    bool Repetitions::offer_device(const TileOf& tile)
+    {
+        using Real = typename TileOf::Value;
+        const RunDevice& device = isochromats_.run_device_;
+        if (!device.begin || !device.tile || !device.state)
+            return false;
+        const Slots<Real>& s = set_->template slots<Real>();
+        RunSet set;
+        set.run = run_;
+        set.single = std::is_same<Real, float>::value;
+        set.slots = s.size;
+        set.pack = s.pack.data();
+        set.lanes = s.lanes;
+        set.width = s.width;
+        set.u_at = s.u_at;
+        set.u_width = s.u_width;
+        set.limit_at = s.limit_at;
+        set.offsets = s.offsets;
+        set.limits = s.limits;
+        set.windows = s.windows;
+        set.coils = s.coils;
+        set.taps = s.taps;
+        set.classes = tile.classes;
+        set.cells = tile.cells.data();
+        set.region = tile.region.data();
+        set.turned = tile.turned.data();
+        set.origin = s.origin.empty() ? nullptr : s.origin.data();
+        set.place = s.place.empty() ? nullptr : s.place.data();
+        set.start = s.start.data();
+        set.weight = s.weight.data();
+        set.factor = s.factor.data();
+        set.decay = s.decay.data();
+        for (int axis = 0; axis < 3; ++axis)
+        {
+            set.index[axis] = s.index[axis].empty() ? nullptr : s.index[axis].data();
+            set.lattice[axis] = lattice_[axis].values.size();
+            set.coordinate[axis] = s.coordinate[axis].empty() ? nullptr : s.coordinate[axis].data();
+        }
+        return device.begin(set);
+    }
+
+    template <typename TileOf>
+    size_t Repetitions::carry_on_device(TileOf& tile)
+    {
+        std::vector<unsigned char> encoding(tile.encoding.size());
+        std::transform(tile.encoding.begin(), tile.encoding.end(), encoding.begin(), [](Encoding along) {
+            return static_cast<unsigned char>(along);
+        });
+        const std::vector<const void*> table_re(tile.table_re.begin(), tile.table_re.end());
+        const std::vector<const void*> table_im(tile.table_im.begin(), tile.table_im.end());
+        RunTile carried;
+        carried.run = run_;
+        carried.single = std::is_same<typename TileOf::Value, float>::value;
+        carried.windows = tile.windows;
+        carried.taps = tile.taps;
+        carried.count = tile.count;
+        carried.turn_cos = tile.turn_cos;
+        carried.turn_sin = tile.turn_sin;
+        carried.netted = tile.netted;
+        carried.drop = tile.drop;
+        carried.sets = tile.encoding.size() / 3;
+        for (int axis = 0; axis < 3; ++axis)
+            carried.lattice[axis] = lattice_[axis].values.size();
+        carried.encoding = encoding.data();
+        carried.table_re = table_re.data();
+        carried.table_im = table_im.data();
+        carried.angle = tile.angle.data();
+        carried.delta = tile.delta.data();
+        carried.powers = tile.powers;
+        carried.polynomials = tile.polynomials.data();
+        carried.grid_size = tile.region.back();
+        carried.grid = tile.grids;
+        const size_t dropped = isochromats_.run_device_.tile(carried);
+        tile.ran.assign(1, 1);
+        tile.first_class.assign(1, 0);
+        tile.last_class.assign(1, tile.classes);
+        return dropped;
     }
 
     template <typename TileOf>

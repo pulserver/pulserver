@@ -13,9 +13,10 @@
  * with steps in them, and windows off the lattice read by a device sample by
  * sample -- and
  * repetitions of them, exact and to a tolerance, on one transmit channel and
- * on two, with AddressSanitizer and UndefinedBehaviorSanitizer on. It asserts
- * only that the windows meant for the lattice are read there; the sanitisers
- * assert the rest.
+ * on two, by the engine and by a run device that carries them in plain loops,
+ * with AddressSanitizer and UndefinedBehaviorSanitizer on. It asserts that the
+ * windows meant for the lattice are read there and that the devices read what
+ * the engine reads; the sanitisers assert the rest.
  *
  * The lattice is transformed by a stand-in for FINUFFT's plans that sums each
  * point directly, handed to the engine as the finufft wheel's entry points
@@ -33,6 +34,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <map>
 #include <numeric>
 #include <vector>
 
@@ -638,6 +640,308 @@ namespace
         return device.device_windows() == 2 && device.lattice_windows() == 0 && most < 1e-9;
     }
 
+
+    /** A run device that carries a run's slots in plain loops, from every
+     *  array the engine hands it, as RunSet and RunTile state the carry. */
+    class CarryDevice
+    {
+    public:
+        size_t begun = 0;
+        size_t tiles = 0;
+        size_t released = 0;
+
+        bloch::RunDevice device()
+        {
+            bloch::RunDevice made;
+            made.begin = [this](const bloch::RunSet& set) { return begin(set); };
+            made.tile = [this](const bloch::RunTile& tile) { return carry(tile); };
+            made.state = [this](const bloch::RunState& state) { write(state); };
+            made.release = [this](size_t run) { released += runs_.erase(run); };
+            return made;
+        }
+
+    private:
+        struct Held
+        {
+            bloch::RunSet set;
+            std::vector<double> values;
+            std::vector<size_t> cells, region;
+            std::vector<uint32_t> start, decay, index[3];
+            std::vector<double> weight, factor, coordinate[3];
+            std::vector<unsigned char> turned;
+            std::vector<double> origin, place;
+        };
+        std::map<size_t, Held> runs_;
+
+        static std::vector<double> doubles(const void* data, size_t count, bool single)
+        {
+            if (single)
+            {
+                const float* from = static_cast<const float*>(data);
+                return std::vector<double>(from, from + count);
+            }
+            const double* from = static_cast<const double*>(data);
+            return std::vector<double>(from, from + count);
+        }
+
+        bool begin(const bloch::RunSet& s)
+        {
+            Held held;
+            held.set = s;
+            const size_t packs = (s.slots + s.lanes - 1) / s.lanes;
+            held.values = doubles(s.pack, packs * s.width * s.lanes, s.single);
+            held.cells.assign(s.cells, s.cells + s.windows);
+            held.region.assign(s.region, s.region + s.windows + 1);
+            held.start.assign(s.start, s.start + s.slots * s.windows);
+            held.decay.assign(s.decay, s.decay + s.slots);
+            held.weight = doubles(s.weight, s.slots * s.windows * s.taps, s.single);
+            held.factor = doubles(s.factor, s.slots * s.windows * s.coils * 2, s.single);
+            for (int axis = 0; axis < 3; ++axis)
+            {
+                if (s.index[axis] != nullptr)
+                    held.index[axis].assign(s.index[axis], s.index[axis] + s.slots);
+                if (s.coordinate[axis] != nullptr)
+                    held.coordinate[axis] = doubles(s.coordinate[axis], s.slots, s.single);
+            }
+            held.turned.assign(s.turned, s.turned + s.windows);
+            if (s.origin != nullptr)
+            {
+                held.origin.assign(s.origin, s.origin + s.slots * s.windows);
+                held.place.assign(s.place, s.place + s.slots * 3);
+            }
+            runs_[s.run] = std::move(held);
+            ++begun;
+            return true;
+        }
+
+        static double& value(Held& h, size_t slot, size_t at)
+        {
+            const size_t lanes = h.set.lanes;
+            return h.values[(slot / lanes * h.set.width + at) * lanes + slot % lanes];
+        }
+
+        /** Set @p set's phase-encoding phase of slot @p n at repetition @p r. */
+        static Complex phase(const Held& h, const bloch::RunTile& t, size_t set, size_t n, size_t r)
+        {
+            constexpr size_t T = bloch::RunTile::kRepetitions;
+            Complex turn(1.0, 0.0);
+            for (size_t axis = 0; axis < 3; ++axis)
+            {
+                const size_t at = set * 3 + axis;
+                if (t.encoding[at] == 1)
+                {
+                    const size_t row = static_cast<size_t>(h.index[axis][n]) * T + r;
+                    const double re = t.single ? static_cast<const float*>(t.table_re[at])[row]
+                                               : static_cast<const double*>(t.table_re[at])[row];
+                    const double im = t.single ? static_cast<const float*>(t.table_im[at])[row]
+                                               : static_cast<const double*>(t.table_im[at])[row];
+                    turn *= Complex(re, im);
+                }
+                else if (t.encoding[at] == 2)
+                    turn *= std::polar(1.0, t.angle[at * T + r] * h.coordinate[axis][n]);
+            }
+            return turn;
+        }
+
+        size_t carry(const bloch::RunTile& t)
+        {
+            constexpr size_t T = bloch::RunTile::kRepetitions;
+            Held& h = runs_.at(t.run);
+            const bloch::RunSet& s = h.set;
+            std::vector<double> grid(t.grid_size, 0.0);
+            const std::vector<double> cosines = doubles(t.turn_cos, T, t.single);
+            const std::vector<double> sines = doubles(t.turn_sin, T, t.single);
+            size_t dropped = 0;
+            for (size_t n = 0; n < s.slots; ++n)
+            {
+                double m[3] = {value(h, n, 0), value(h, n, 1), value(h, n, 2)};
+                for (size_t r = 0; r < t.count; ++r)
+                {
+                    for (size_t w = 0; w < s.windows; ++w)
+                    {
+                        const size_t u = s.u_at + w * s.u_width;
+                        Complex q(
+                            value(h, n, u) * m[0] + value(h, n, u + 1) * m[1] + value(h, n, u + 2) * m[2],
+                            value(h, n, u + 3) * m[0] + value(h, n, u + 4) * m[1] + value(h, n, u + 5) * m[2]);
+                        if (s.offsets)
+                            q += Complex(value(h, n, u + 6), value(h, n, u + 7));
+                        if (h.turned[w])
+                            spread_turned(h, t, n, w, r, q * phase(h, t, w, n, r), grid);
+                        else
+                            spread(h, n, w, r, q * phase(h, t, w, n, r), grid);
+                    }
+                    double next[3];
+                    for (size_t k = 0; k < 3; ++k)
+                        next[k] = value(h, n, 3 + 3 * k) * m[0] + value(h, n, 4 + 3 * k) * m[1] +
+                            value(h, n, 5 + 3 * k) * m[2];
+                    if (s.offsets)
+                    {
+                        Complex turn(cosines[r], sines[r]);
+                        if (t.netted)
+                            turn *= phase(h, t, s.windows, n, r);
+                        const Complex transverse =
+                            turn * Complex(next[0] + value(h, n, 12), next[1] + value(h, n, 13));
+                        next[0] = transverse.real();
+                        next[1] = transverse.imag();
+                        next[2] += value(h, n, 14);
+                    }
+                    std::copy(next, next + 3, m);
+                }
+                const double size = m[0] * m[0] + m[1] * m[1] + m[2] * m[2];
+                if (t.drop && s.limits && size > 0.0 && !(size > value(h, n, s.limit_at)))
+                {
+                    m[0] = m[1] = m[2] = 0.0;
+                    ++dropped;
+                }
+                for (size_t k = 0; k < 3; ++k)
+                    value(h, n, k) = m[k];
+            }
+            for (size_t k = 0; k < t.grid_size; ++k)
+                if (t.single)
+                    static_cast<float*>(t.grid)[k] = static_cast<float>(grid[k]);
+                else
+                    static_cast<double*>(t.grid)[k] = grid[k];
+            ++tiles;
+            return dropped;
+        }
+
+        /** Slot @p n's coefficient @p q of window @p w at repetition @p r
+         *  times each coil's factor, onto the window's grid points. */
+        static void spread(const Held& h, size_t n, size_t w, size_t r, Complex q, std::vector<double>& grid)
+        {
+            constexpr size_t T = bloch::RunTile::kRepetitions;
+            const bloch::RunSet& s = h.set;
+            const size_t cells = h.cells[w];
+            for (size_t c = 0; c < s.coils; ++c)
+            {
+                const size_t f = ((n * s.windows + w) * s.coils + c) * 2;
+                const Complex term = Complex(h.factor[f], h.factor[f + 1]) * q;
+                if (cells == 0)
+                {
+                    grid[h.region[w] + c * 2 * T + r] += term.real();
+                    grid[h.region[w] + c * 2 * T + T + r] += term.imag();
+                    continue;
+                }
+                for (size_t j = 0; j < s.taps; ++j)
+                {
+                    const double weight = h.weight[(n * s.windows + w) * s.taps + j];
+                    const size_t g = h.start[n * s.windows + w] + j;
+                    const size_t at = h.region[w] + ((h.decay[n] * s.coils + c) * (cells + s.taps) + g) * 2 * T;
+                    grid[at + r] += weight * term.real();
+                    grid[at + T + r] += weight * term.imag();
+                }
+            }
+        }
+
+        /** As spread(), for a turned window: onto the grid points repetition
+         *  @p r reaches, [T2 class][repetition][grid point][coil][Re, Im]. */
+        static void spread_turned(
+            const Held& h, const bloch::RunTile& t, size_t n, size_t w, size_t r, Complex q, std::vector<double>& grid)
+        {
+            constexpr size_t T = bloch::RunTile::kRepetitions;
+            const bloch::RunSet& s = h.set;
+            const size_t cells = h.cells[w];
+            const size_t taps = s.taps;
+            double u = h.origin[n * s.windows + w];
+            for (size_t axis = 0; axis < 3; ++axis)
+                u += t.delta[(w * 3 + axis) * T + r] * h.place[n * 3 + axis];
+            const double y = static_cast<double>(cells) * (u - std::nearbyint(u)) - 0.5 * static_cast<double>(taps) + 0.5;
+            double first = std::nearbyint(y);
+            const double offset = y - first;
+            if (first < 0.0)
+                first += static_cast<double>(cells);
+            const std::vector<double> polynomials = doubles(t.polynomials, s.windows * t.powers * taps, t.single);
+            for (size_t j = 0; j < taps; ++j)
+            {
+                double weight = 0.0;
+                for (size_t power = t.powers; power-- > 0;)
+                    weight = weight * offset + polynomials[(w * t.powers + power) * taps + j];
+                const size_t g = static_cast<size_t>(first) + j;
+                for (size_t c = 0; c < s.coils; ++c)
+                {
+                    const size_t f = ((n * s.windows + w) * s.coils + c) * 2;
+                    const Complex term = weight * Complex(h.factor[f], h.factor[f + 1]) * q;
+                    const size_t at = h.region[w] + (((h.decay[n] * T + r) * (cells + taps) + g) * s.coils + c) * 2;
+                    grid[at] += term.real();
+                    grid[at + 1] += term.imag();
+                }
+            }
+        }
+
+        void write(const bloch::RunState& state)
+        {
+            Held& h = runs_.at(state.run);
+            for (size_t n = 0; n < state.slots; ++n)
+                for (size_t k = 0; k < 3; ++k)
+                {
+                    const size_t at = (n / state.lanes * state.width + k) * state.lanes + n % state.lanes;
+                    if (state.single)
+                        static_cast<float*>(state.pack)[at] = static_cast<float>(value(h, n, k));
+                    else
+                        static_cast<double*>(state.pack)[at] = value(h, n, k);
+                }
+        }
+    };
+
+    /** Play repetitions by the engine and by a CarryDevice, exact and to a
+     *  tolerance, split, with net areas, and read along turned readouts;
+     *  whether the device carried every one and read and left what the
+     *  engine read and left. */
+    bool carried(size_t coils)
+    {
+        std::vector<Complex> receive;
+        const bloch::IsochromatProperties p = lattice(0, coils, receive);
+        bool agree = true;
+        for (double tolerance : {0.0, 1e-4})
+            for (bool netted : {false, true})
+                for (bool turned : {false, true})
+                {
+                    bloch::Isochromats engine(p, 2);
+                    bloch::Isochromats device(p, 2);
+                    CarryDevice carry;
+                    device.use_run_device(carry.device());
+                    const size_t count = 40;
+                    std::vector<double> phases, areas, readouts, nets;
+                    schedule(count, tolerance, true, phases, areas);
+                    for (size_t n = 0; n < count && netted; ++n)
+                        nets.insert(nets.end(), {0.0, 0.0, 15.0 * static_cast<double>(n % 3)});
+                    for (size_t n = 0; n < count && turned; ++n)
+                        readouts.insert(
+                            readouts.end(),
+                            {0.0, 1e3 * std::sin(0.1 * static_cast<double>(n)), 5e2 * std::cos(0.3 * static_cast<double>(n))});
+                    std::vector<Complex> mine, theirs;
+                    {
+                        bloch::Repetitions a(engine, repetition(1, true), phases, phases, areas, readouts, nets, tolerance);
+                        bloch::Repetitions b(device, repetition(1, true), phases, phases, areas, readouts, nets, tolerance);
+                        if (tolerance > 0.0 && !netted)
+                            agree = agree && a.split() == b.split();
+                        const size_t per = a.coils() * a.samples();
+                        mine.resize(count * per);
+                        theirs.resize(count * per);
+                        a.play(count / 2, mine.data());
+                        b.play(count / 2, theirs.data());
+                        a.play(count - count / 2, mine.data() + count / 2 * per);
+                        b.play(count - count / 2, theirs.data() + count / 2 * per);
+                    }
+                    double scale = 0.0, most = 0.0;
+                    for (size_t k = 0; k < mine.size(); ++k)
+                    {
+                        scale = std::max(scale, std::abs(mine[k]));
+                        most = std::max(most, std::abs(mine[k] - theirs[k]));
+                    }
+                    std::vector<double> left(3 * engine.size()), settled(3 * device.size());
+                    engine.magnetization(left.data());
+                    device.magnetization(settled.data());
+                    double moved = 0.0;
+                    for (size_t k = 0; k < left.size(); ++k)
+                        moved = std::max(moved, std::abs(left[k] - settled[k]));
+                    const double within = tolerance > 0.0 ? 1e-5 : 1e-12;
+                    agree = agree && carry.begun == 1 && carry.tiles == 4 && carry.released == 1 &&
+                        most <= within * scale && moved <= within;
+                }
+        return agree;
+    }
+
 } // namespace
 
 int main()
@@ -671,6 +975,12 @@ int main()
         if (!off_lattice(coils))
         {
             std::fprintf(stderr, "the windows of %zu coils off the lattice were not read by the device\n", coils);
+            return 1;
+        }
+    for (size_t coils : {size_t{0}, size_t{3}})
+        if (!carried(coils))
+        {
+            std::fprintf(stderr, "the repetitions of %zu coils were not carried as the engine carries them\n", coils);
             return 1;
         }
     std::printf("%g\n", sink);

@@ -391,6 +391,35 @@ kernel that holds it, carries the magnetisation in single precision from
 $10^{-4}$ on, and drops transients below it. The fixed points' samples are
 summed by the widest kernel at any tolerance.
 
+### Runs carried on a device
+
+Isochromats given a CUDA device carry a run there from its first play. The
+engine hands the device, for each isochromat it carries, the magnetisation,
+the maps, each window's coefficients, the limit below which its transient is
+dropped, the coordinates its phase encodings depend on, and the grid points
+and weights by which each window's non-uniform FFT spreads it, in the
+precision the engine carries them in. For each tile of 16 repetitions, a
+Triton kernel carries every isochromat through the tile and writes its
+transverse magnetisation at each window's first sample, times the phase
+encoding, at every repetition. A second kernel spreads these onto each
+window's grid. For each grid point, T2 class and block of coils, it sums the
+isochromats of that class whose kernel reaches the point, grouped by the first
+grid point they spread onto, as products of a matrix of their weights times
+their sensitivities, a row per coil, by one of their transverse
+magnetisations, a column per repetition. A turned window spreads each
+isochromat onto grid points found anew for every repetition, from its
+position and the repetition's readout as the engine finds them, in double
+precision. At each repetition the isochromats are sorted by T2 class and the
+first grid point they reach, and each block of 32 grid points sums those that
+reach it as products of a matrix of their weights times their transverse
+magnetisations, a row per grid point, by one of their sensitivities, a column
+per coil. The engine reads the grids as it reads its own, and the device
+writes the magnetisation back to the engine at the end of each play.
+Transients are dropped as the engine drops them, and once more than a quarter
+have been dropped the device keeps only the rest. A run of fewer than
+$2^{18}$ isochromats times coils, by default, and one whose arrays would take
+more than half the memory free on the device, are carried by the engine.
+
 ## Voxels, motion and diffusion
 
 ### A voxel's isochromats

@@ -81,9 +81,9 @@ class Console:
         Scan time elapsed per wall-clock second once the scan's simulation is
         far enough ahead of its clock; as fast as it is simulated without it.
     device
-        Device a scan's ADC windows outside runs are read on, as
-        :class:`~pulserver.virtual.Isochromats` takes it; the engine reads
-        them itself without one.
+        Device a scan's ADC windows are read and its runs of repetitions
+        carried on, as :class:`~pulserver.virtual.Isochromats` takes it; the
+        engine does both itself without one.
     spins
         Isochromats per voxel, spread over the T2' line of its tissue.
     voxel
@@ -662,8 +662,8 @@ def _parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--device",
-        help="torch device the ADC windows outside runs are read on, such as "
-        "cuda (the gpu extra); the engine reads them without it",
+        help="torch device the ADC windows are read and the runs of repetitions "
+        "carried on, such as cuda (the gpu extra); the engine does both without it",
     )
     parser.add_argument(
         "--spins",

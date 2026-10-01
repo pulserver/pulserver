@@ -209,15 +209,17 @@ line, is written to standard output, and the scan clock to standard error.
 - `--speed` plays the scan that many times as fast as a scanner, once the
   simulation is far enough ahead, writing the time left before it is to
   standard error; without it, the scan runs as fast as the simulation.
-- `--device cuda` reads the ADC windows outside runs of repetitions on the
-  CUDA device. A window under a changing gradient, such as a spiral's, whose
-  isochromats lie on a lattice along the axes its k moves along, as a
-  phantom's do, is summed onto the lattice by a Triton kernel and transformed
-  by cuFINUFFT; every other one, under a held gradient or with its
-  isochromats off any lattice, as a moving subject's are, is summed sample by
-  sample by a second Triton kernel. The `gpu` extra installs both
-  (`pip install 'pulserver[gpu]'`). The rest of the scan is simulated on the
-  CPU.
+- `--device cuda` reads the ADC windows and carries the runs of repetitions
+  on the CUDA device. A window outside a run under a changing gradient, such
+  as a spiral's, whose isochromats lie on a lattice along the axes its k
+  moves along, as a phantom's do, is summed onto the lattice by a Triton
+  kernel and transformed by cuFINUFFT; every other one, under a held gradient
+  or with its isochromats off any lattice, as a moving subject's are, is
+  summed sample by sample by a second Triton kernel. A run of repetitions,
+  Cartesian or radial, is carried and spread onto its windows' grids by more
+  Triton kernels, a tile of repetitions at a time. The `gpu` extra
+  installs all of them (`pip install 'pulserver[gpu]'`). The rest of the scan
+  is simulated on the CPU.
 
 ## Prescribe an orientation
 

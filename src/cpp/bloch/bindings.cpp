@@ -254,11 +254,158 @@ namespace
         return made;
     }
 
+    /** A view of a run's array of reals, float in single precision and
+     *  double otherwise; read-only unless @p writable. */
+    py::array reals(const void* data, bool single, std::vector<py::ssize_t> shape, bool writable = false)
+    {
+        py::array made(
+            single ? py::dtype::of<float>() : py::dtype::of<double>(), std::move(shape), {}, data, py::none());
+        if (!writable)
+            py::detail::array_proxy(made.ptr())->flags &= ~py::detail::npy_api::NPY_ARRAY_WRITEABLE_;
+        return made;
+    }
+
+    /** A run's packs, (packs, width, lanes). */
+    py::array packs(const void* data, bool single, size_t slots, size_t lanes, size_t width, bool writable)
+    {
+        const size_t count = lanes == 0 ? 0 : (slots + lanes - 1) / lanes;
+        return reals(
+            data,
+            single,
+            {static_cast<py::ssize_t>(count), static_cast<py::ssize_t>(width), static_cast<py::ssize_t>(lanes)},
+            writable);
+    }
+
+    /** The run's carried slots as the device takes them: the run's arrays,
+     *  viewed. */
+    py::dict run_set(const bloch::RunSet& set)
+    {
+        const auto n = static_cast<py::ssize_t>(set.slots);
+        const auto windows = static_cast<py::ssize_t>(set.windows);
+        py::dict made;
+        made["run"] = set.run;
+        made["single"] = set.single;
+        made["slots"] = set.slots;
+        made["pack"] = packs(set.pack, set.single, set.slots, set.lanes, set.width, false);
+        made["u_at"] = set.u_at;
+        made["u_width"] = set.u_width;
+        made["limit_at"] = set.limit_at;
+        made["offsets"] = set.offsets;
+        made["limits"] = set.limits;
+        made["coils"] = set.coils;
+        made["taps"] = set.taps;
+        made["classes"] = set.classes;
+        made["cells"] = view(set.cells, {windows});
+        made["region"] = view(set.region, {windows + 1});
+        made["turned"] = view(set.turned, {windows});
+        made["start"] = view(set.start, {n, windows});
+        made["weight"] = reals(set.weight, set.single, {n, windows, static_cast<py::ssize_t>(set.taps)});
+        made["factor"] = reals(set.factor, set.single, {n, windows, static_cast<py::ssize_t>(set.coils), 2});
+        made["decay"] = view(set.decay, {n});
+        py::list index, coordinate;
+        for (int axis = 0; axis < 3; ++axis)
+        {
+            index.append(set.index[axis] != nullptr ? py::object(view(set.index[axis], {n})) : py::none());
+            coordinate.append(
+                set.coordinate[axis] != nullptr ? py::object(reals(set.coordinate[axis], set.single, {n})) : py::none());
+        }
+        made["index"] = index;
+        made["lattice"] = py::make_tuple(set.lattice[0], set.lattice[1], set.lattice[2]);
+        made["coordinate"] = coordinate;
+        made["origin"] = set.origin != nullptr ? py::object(view(set.origin, {n, windows})) : py::none();
+        made["place"] = set.place != nullptr ? py::object(view(set.place, {n, 3})) : py::none();
+        return made;
+    }
+
+    /** A tile of a run as the device carries it: the run's arrays, viewed,
+     *  and its grid, written. */
+    py::dict run_tile(const bloch::RunTile& tile)
+    {
+        constexpr auto T = static_cast<py::ssize_t>(bloch::RunTile::kRepetitions);
+        py::dict made;
+        made["run"] = tile.run;
+        made["count"] = tile.count;
+        made["turn_cos"] = reals(tile.turn_cos, tile.single, {T});
+        made["turn_sin"] = reals(tile.turn_sin, tile.single, {T});
+        made["netted"] = tile.netted;
+        made["drop"] = tile.drop;
+        const auto sets = static_cast<py::ssize_t>(tile.sets);
+        made["encoding"] = view(tile.encoding, {sets, 3});
+        py::list tables;
+        for (size_t at = 0; at < tile.sets * 3; ++at)
+        {
+            const auto values = static_cast<py::ssize_t>(tile.lattice[at % 3]);
+            tables.append(
+                tile.encoding[at] == 1
+                    ? py::object(py::make_tuple(
+                          reals(tile.table_re[at], tile.single, {values, T}),
+                          reals(tile.table_im[at], tile.single, {values, T})))
+                    : py::none());
+        }
+        made["tables"] = tables;
+        made["angle"] = view(tile.angle, {sets, 3, T});
+        const auto windows = static_cast<py::ssize_t>(tile.windows);
+        made["delta"] = view(tile.delta, {windows, 3, T});
+        made["polynomials"] = reals(
+            tile.polynomials,
+            tile.single,
+            {windows, static_cast<py::ssize_t>(tile.powers), static_cast<py::ssize_t>(tile.taps)});
+        made["grid"] = reals(tile.grid, tile.single, {static_cast<py::ssize_t>(tile.grid_size)}, true);
+        return made;
+    }
+
+    /** The engine's run device calling @p device's @c begin_run, @c carry,
+     *  @c write_state and @c end_run, where it has the first three; none
+     *  otherwise, or for None. */
+    bloch::RunDevice run_device(const py::object& device)
+    {
+        if (device.is_none() || !py::hasattr(device, "begin_run") || !py::hasattr(device, "carry") ||
+            !py::hasattr(device, "write_state"))
+            return {};
+        std::shared_ptr<py::object> held(new py::object(device), [](py::object* object) {
+            py::gil_scoped_acquire acquired;
+            delete object;
+        });
+        bloch::RunDevice made;
+        made.begin = [held](const bloch::RunSet& set) {
+            py::gil_scoped_acquire acquired;
+            return py::cast<bool>(held->attr("begin_run")(run_set(set)));
+        };
+        made.tile = [held](const bloch::RunTile& tile) {
+            py::gil_scoped_acquire acquired;
+            return py::cast<size_t>(held->attr("carry")(run_tile(tile)));
+        };
+        made.state = [held](const bloch::RunState& state) {
+            py::gil_scoped_acquire acquired;
+            py::dict made_state;
+            made_state["run"] = state.run;
+            made_state["slots"] = state.slots;
+            made_state["pack"] = packs(state.pack, state.single, state.slots, state.lanes, state.width, true);
+            held->attr("write_state")(made_state);
+        };
+        if (py::hasattr(device, "end_run"))
+            /* Called from the run's destructor, which must not throw. */
+            made.release = [held](size_t run) {
+                py::gil_scoped_acquire acquired;
+                try
+                {
+                    held->attr("end_run")(run);
+                }
+                catch (py::error_already_set& error)
+                {
+                    error.discard_as_unraisable("freeing a run of repetitions on a device");
+                }
+            };
+        return made;
+    }
+
     void use_device(bloch::Isochromats& self, const py::object& device)
     {
-        bloch::WindowDevice made = window_device(device);
+        bloch::WindowDevice windows = window_device(device);
+        bloch::RunDevice runs = run_device(device);
         py::gil_scoped_release unlocked;
-        self.use_device(std::move(made));
+        self.use_device(std::move(windows));
+        self.use_run_device(std::move(runs));
     }
 
     /** Point @p block at the corners each entry of @p gradients holds, kept

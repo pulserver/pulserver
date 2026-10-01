@@ -68,6 +68,10 @@ namespace bloch
      *
      * The first play() moves the maps into the arrays the repetitions are
      * played from and frees them: split() and column_sums() come before it.
+     * It also offers those arrays to the isochromats' run device; a device
+     * that takes them carries them through every repetition and spreads them
+     * onto the windows' grids, which the repetitions then read as they read
+     * their own.
      */
     class Repetitions
     {
@@ -275,6 +279,14 @@ namespace bloch
         std::vector<double> decays(const Window& window) const;
         template <typename Real>
         void play_tiles(size_t count, std::complex<double>* signal);
+        /** Offer the carried slots to the run device, whose grids are laid
+         *  out as @p tile's; whether it took them. */
+        template <typename Tile>
+        bool offer_device(const Tile& tile);
+        /** The tile carried and spread on the run device onto the first of
+         *  its grids, read as one worker's; the transients dropped. */
+        template <typename Tile>
+        size_t carry_on_device(Tile& tile);
         /** What reading the windows of a tile reads, and its arrays sized. */
         template <typename Tile>
         void plan_tile(Tile& tile, size_t taps) const;
@@ -338,6 +350,8 @@ namespace bloch
         std::vector<std::vector<std::complex<double>>> receivers_;
         /** The isochromats carried, from the first play() on. */
         std::unique_ptr<Set> set_;
+        /** This run, among every engine's and run's identities. */
+        size_t run_ = 0;
     };
 
 } // namespace bloch

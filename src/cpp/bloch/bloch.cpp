@@ -1453,13 +1453,6 @@ namespace bloch
         /** Single precision's unit roundoff. */
         constexpr double kSingleRoundoff = 0x1p-24;
 
-        /** A number no engine has drawn before. */
-        size_t fresh_revision()
-        {
-            static std::atomic<size_t> drawn{0};
-            return ++drawn;
-        }
-
         /** Lattice transforms and segmentations kept for reuse. */
         constexpr size_t kLatticeTransforms = 32;
         constexpr size_t kSegmentations = 64;
@@ -3174,10 +3167,22 @@ namespace bloch
         }
     }
 
+    size_t fresh_revision()
+    {
+        static std::atomic<size_t> drawn{0};
+        return ++drawn;
+    }
+
     void Isochromats::use_device(WindowDevice device)
     {
         const std::lock_guard<std::mutex> held(mutex_);
         device_ = std::move(device);
+    }
+
+    void Isochromats::use_run_device(RunDevice device)
+    {
+        const std::lock_guard<std::mutex> held(mutex_);
+        run_device_ = std::move(device);
     }
 
     bool Isochromats::read_on_device(

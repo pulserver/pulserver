@@ -193,13 +193,16 @@ class Isochromats:
     threads : int, default=0
         Worker threads; 0 for every core.
     device : str or torch.device, default=None
-        A torch device the ADC windows outside runs are read on: those whose
-        isochromats lie on a lattice summed onto it by a Triton kernel and
+        A torch device the ADC windows are read and the runs of
+        :meth:`repetitions` carried on. A window outside a run whose
+        isochromats lie on a lattice is summed onto it by a Triton kernel and
         transformed by cuFINUFFT, and every other one summed sample by sample
-        by a second Triton kernel. A CUDA device, or the CPU under Triton's
-        interpreter alone (``TRITON_INTERPRET=1`` before triton is first
-        imported), on which FINUFFT transforms the lattice. Needs the ``gpu``
-        extra. By default the engine reads every window itself.
+        by a second Triton kernel; a run is carried and spread onto its
+        windows' grids by more. A CUDA
+        device, or the CPU under Triton's interpreter alone
+        (``TRITON_INTERPRET=1`` before triton is first imported), on which
+        FINUFFT transforms the lattice. Needs the ``gpu`` extra. By default
+        the engine does all of it itself.
 
     Raises
     ------
@@ -288,10 +291,10 @@ class Isochromats:
             int(threads),
         )
         if device is not None:
-            from ._device import WindowDevice
+            from ._device import Device
 
-            if not isinstance(device, WindowDevice):
-                device = WindowDevice(device)
+            if not isinstance(device, Device):
+                device = Device(device)
             self._native.use_device(device)
 
     def __len__(self) -> int:
