@@ -193,13 +193,16 @@ class Isochromats:
     threads : int, default=0
         Worker threads; 0 for every core.
     device : str or torch.device, default=None
-        A torch device the ADC windows outside runs are read on: those whose
-        isochromats lie on a lattice summed onto it by a Triton kernel and
+        A torch device the ADC windows are read and the runs of
+        :meth:`repetitions` carried on. A window outside a run whose
+        isochromats lie on a lattice is summed onto it by a Triton kernel and
         transformed by cuFINUFFT, and every other one summed sample by sample
-        by a second Triton kernel. A CUDA device, or the CPU under Triton's
-        interpreter alone (``TRITON_INTERPRET=1`` before triton is first
-        imported), on which FINUFFT transforms the lattice. Needs the ``gpu``
-        extra. By default the engine reads every window itself.
+        by a second Triton kernel; a run is carried and spread onto its
+        windows' grids by more. A CUDA
+        device, or the CPU under Triton's interpreter alone
+        (``TRITON_INTERPRET=1`` before triton is first imported), on which
+        FINUFFT transforms the lattice. Needs the ``gpu`` extra. By default
+        the engine does all of it itself.
 
     Raises
     ------
@@ -288,10 +291,10 @@ class Isochromats:
             int(threads),
         )
         if device is not None:
-            from ._device import WindowDevice
+            from ._device import Device
 
-            if not isinstance(device, WindowDevice):
-                device = WindowDevice(device)
+            if not isinstance(device, Device):
+                device = Device(device)
             self._native.use_device(device)
 
     def __len__(self) -> int:
@@ -316,6 +319,16 @@ class Isochromats:
     def device_windows(self) -> int:
         """ADC windows read on the ``device`` since construction, on a lattice or sample by sample."""
         return self._native.device_windows
+
+    @property
+    def ungrouped_pulses(self) -> int:
+        """RF pulses played isochromat by isochromat from their tables since construction.
+
+        The engine keeps groupings of isochromats for four gradient
+        directions; once it holds four, a pulse under a gradient held along
+        another direction, such as a ZTE spoke's, is played ungrouped.
+        """
+        return self._native.ungrouped_pulses
 
     @property
     def moving(self) -> bool:
@@ -509,8 +522,10 @@ class Isochromats:
         adc_phases=None,
         readouts=None,
         nets=None,
+        pulse_gradients=None,
         system=None,
         tolerance: float = 0.0,
+        split: bool = True,
     ) -> Repetitions:
         """Repetitions of a sequence of blocks, from the magnetisation where it stands.
 
@@ -560,6 +575,17 @@ class Isochromats:
             any, each isochromat's transverse magnetisation is turned by its
             own phase at the end of each repetition, and the magnetisation is
             not split.
+        pulse_gradients : array_like, default=None
+            ``(repetitions, 3)`` gradient, in Hz/m along the same axes, by
+            which the gradient held through the first block, under its RF
+            pulse, exceeds that block's own; none by default. With any, each
+            isochromat's map of the first block is read off the pulse's
+            tables at the field it sees under each repetition's gradient,
+            with the block's free precession at that field; the four plays
+            play the blocks after it, ``areas`` and ``nets`` are what the
+            difference leaves over those blocks, and the magnetisation is not
+            split. The first block must hold its gradient through it and read
+            no ADC window.
         system : Opts, default=None
             As :meth:`play` takes it.
         tolerance : float, default=0.0
@@ -576,6 +602,10 @@ class Isochromats:
             coordinates along those axes, and an isochromat whose transient
             falls below ``tolerance`` times its proton density stands at its
             fixed point from then on.
+        split : bool, default=True
+            Whether the magnetisation may be split so; repetitions that
+            :meth:`Repetitions.resume` after blocks played between them are
+            not.
 
         Returns
         -------
@@ -588,8 +618,11 @@ class Isochromats:
         ValueError
             If the phases, ADC phases and areas do not describe one set of
             repetitions, a window is not read under a held gradient, a block
-            is one :meth:`play` would refuse, or the isochromats move or
-            diffuse.
+            is one :meth:`play` would refuse, the isochromats move or
+            diffuse, or, with ``pulse_gradients``, the first block holds no
+            gradient through it, reads a window, or plays a pulse whose
+            channels play more than one waveform or whose tables would take
+            more points than the isochromats over every repetition.
 
         Examples
         --------
@@ -624,11 +657,8 @@ class Isochromats:
         windows = len(receivers)
         encoded = _per_window(areas, "areas", count, windows)
         turned = _per_window(readouts, "readouts", count, windows)
-        left = np.zeros((count, 3)) if nets is None else np.asarray(nets, dtype=float)
-        if left.shape != (count, 3):
-            raise ValueError(
-                f"nets must be (repetitions, 3), {(count, 3)}, got {left.shape}"
-            )
+        left = _per_repetition(nets, "nets", count)
+        held = _per_repetition(pulse_gradients, "pulse_gradients", count)
         native = _kernels().Repetitions(
             self._native,
             conversions,
@@ -637,11 +667,12 @@ class Isochromats:
             np.ascontiguousarray(encoded).ravel(),
             np.ascontiguousarray(turned).ravel(),
             np.ascontiguousarray(left).ravel(),
+            np.ascontiguousarray(held).ravel(),
             float(tolerance),
         )
         steady = (
             _steady(native, encoded, float(tolerance), [r.size for r in receivers])
-            if tolerance
+            if tolerance and split
             else None
         )
         return Repetitions(
@@ -697,6 +728,22 @@ def _per_window(given, name: str, count: int, windows: int) -> np.ndarray:
         raise ValueError(
             f"{name} must be (repetitions, windows, 3), {(count, windows, 3)}, "
             f"got {values.shape}"
+        )
+    return values
+
+
+def _per_repetition(given, name: str, count: int) -> np.ndarray:
+    """Return ``given`` as ``(repetitions, 3)``, zero where None.
+
+    Raises
+    ------
+    ValueError
+        If it holds another shape.
+    """
+    values = np.zeros((count, 3)) if given is None else np.asarray(given, dtype=float)
+    if values.shape != (count, 3):
+        raise ValueError(
+            f"{name} must be (repetitions, 3), {(count, 3)}, got {values.shape}"
         )
     return values
 
@@ -843,7 +890,8 @@ class Repetitions:
     Made by :meth:`Isochromats.repetitions`, which states what each repetition
     plays. The isochromats hold the magnetisation at the start of the next
     repetition to be played; blocks played on them in between break the
-    repetitions that follow.
+    repetitions that follow, unless :meth:`resume` takes what they leave as
+    the start of the next.
     """
 
     def __init__(
@@ -907,3 +955,13 @@ class Repetitions:
     def carried(self) -> int:
         """Isochromats carried through the next repetition; the rest stand at their fixed points."""
         return self._native.carried
+
+    def resume(self) -> None:
+        """Take the magnetisation the isochromats hold, after blocks played on them since the last :meth:`play`, as that at the start of the next repetition.
+
+        Raises
+        ------
+        RuntimeError
+            If the magnetisation was split into fixed points and transients.
+        """
+        self._native.resume()

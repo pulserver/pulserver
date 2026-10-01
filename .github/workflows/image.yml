@@ -42,6 +42,8 @@ jobs:
         run: >-
           docker run --rm --network none --entrypoint python pulserver -c
           "from pulserver.virtual import BrainWeb; print(BrainWeb().fractions.shape)"
+      - name: Give its console options after the image's name
+        run: docker run --rm pulserver --help | grep -e --spins
       - name: Publish
         if: github.event_name == 'push'
         run: |

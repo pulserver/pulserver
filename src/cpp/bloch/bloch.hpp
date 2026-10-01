@@ -180,6 +180,198 @@ namespace bloch
         std::function<void()> finish;
     };
 
+    /** A number not drawn before, by any engine or run: their identities,
+     *  and the revisions of an engine's positions. */
+    size_t fresh_revision();
+
+    /**
+     * The isochromats a run of repetitions carries, as Repetitions hands
+     * them to a device at the run's first play. Every array is the run's
+     * own, valid during the call; values are float in single precision and
+     * double otherwise.
+     */
+    struct RunSet
+    {
+        /** The run, unique across runs and engines. */
+        size_t run = 0;
+        bool single = false;
+        size_t slots = 0;
+        /** Per slot, packed [pack][value][lane], @c width values of @c lanes
+         *  slots each: the magnetisation (3) at the start of the next
+         *  repetition, the map's A (9, row-major) and, with @c offsets, b
+         *  (3); from @c u_at on, per window, @c u_width values: u, Re x, y,
+         *  z then Im x, y, z, and, with @c offsets, v, Re and Im; and, with
+         *  @c limits, at @c limit_at, the squared magnitude at or below which
+         *  a transient is dropped. */
+        const void* pack = nullptr;
+        size_t lanes = 0;
+        size_t width = 0;
+        size_t u_at = 0;
+        size_t u_width = 0;
+        size_t limit_at = 0;
+        bool offsets = true;
+        bool limits = false;
+        size_t windows = 0;
+        size_t coils = 0;
+        size_t taps = 0;
+        size_t classes = 0;
+        /** Per window, its grid points, none for a window of one sample; and
+         *  where its part of the grid starts, one offset more than the
+         *  windows. */
+        const size_t* cells = nullptr;
+        const size_t* region = nullptr;
+        /** Per window, whether it is turned: each repetition reads it along
+         *  its own direction. */
+        const unsigned char* turned = nullptr;
+        /** [slot][window]: the first grid point spread onto;
+         *  [slot][window][tap]: the kernel's weights; [slot][window][coil]
+         *  [Re, Im]: the receive sensitivity times the kernel's shift;
+         *  [slot]: the T2 class. */
+        const uint32_t* start = nullptr;
+        const void* weight = nullptr;
+        const void* factor = nullptr;
+        const uint32_t* decay = nullptr;
+        /** Per axis, [slot]: the index of the slot's coordinate among the
+         *  axis's @c lattice values where its phase-encoding phases are
+         *  tabulated, or its coordinate, in m, where they are computed; null
+         *  where neither. */
+        const uint32_t* index[3] = {nullptr, nullptr, nullptr};
+        size_t lattice[3] = {0, 0, 0};
+        const void* coordinate[3] = {nullptr, nullptr, nullptr};
+        /** With a turned window, [slot][window]: the phase, in cycles, the
+         *  slot turns by from one sample to the next of the window as the
+         *  first repetition reads it; and, with a turned window or a pulse
+         *  read off tables, [slot][axis]: its coordinates, in m. Null
+         *  otherwise. */
+        const double* origin = nullptr;
+        const double* place = nullptr;
+        /**
+         * Whether the first block's pulse is read off tables, each
+         * repetition's map of that block at each slot interpolated from its
+         * class's table, A row-major then the constant term in
+         * table_values values per point of which the first 12 are the map:
+         * per slot, the field, in Hz, it sees under the first block's own
+         * gradient, its class of T1 and T2, the first of the @c rows rows
+         * its map is read from and [slot][row] each one's weight, its
+         * drive's turn [slot][Re, Im] and its proton density; per class,
+         * where its table starts among @c maps, its first column and its
+         * columns, and [class][4] the transverse and longitudinal decays
+         * over the block before the pulse and after it. A slot's map at
+         * repetition r is read at the field plus delta . place, as
+         * RunTile::pulse_delta gives delta, @c spacing Hz to a column, and
+         * turned by the precession at that field over @c before s before it
+         * and @c after s after it.
+         */
+        bool pulsed = false;
+        size_t rows = 0;
+        size_t table_values = 0;
+        size_t pulse_classes = 0;
+        size_t maps_size = 0;
+        const double* field = nullptr;
+        const uint32_t* pulse_class = nullptr;
+        const uint32_t* row = nullptr;
+        const void* row_weight = nullptr;
+        const void* drive_turn = nullptr;
+        const void* density = nullptr;
+        const void* maps = nullptr;
+        const size_t* table_at = nullptr;
+        const long long* table_first = nullptr;
+        const size_t* table_columns = nullptr;
+        const void* relax = nullptr;
+        double spacing = 0.0;
+        double before = 0.0;
+        double after = 0.0;
+    };
+
+    /**
+     * The repetitions of one tile of a run, which a device carries the
+     * run's slots through and spreads onto the windows' grids as the engine
+     * does. Arrays other than @c grid are valid during the call.
+     */
+    struct RunTile
+    {
+        /** Repetitions a tile holds at the most, and the length of every
+         *  per-repetition array of a tile. */
+        static constexpr size_t kRepetitions = 16;
+
+        size_t run = 0;
+        bool single = false;
+        size_t windows = 0;
+        size_t taps = 0;
+        /** Repetitions in the tile; per repetition, the turn from its frame
+         *  to the next one's. */
+        size_t count = 0;
+        const void* turn_cos = nullptr;
+        const void* turn_sin = nullptr;
+        /** Whether the net areas' encodings follow the windows' as one more
+         *  set, turning each slot by its own phase. */
+        bool netted = false;
+        /** Whether transients at or below their limit are dropped. */
+        bool drop = false;
+        /** Per set and axis, [set * 3 + axis]: 0 for no phase-encoding phase,
+         *  1 for one tabulated per lattice value and repetition,
+         *  [value][repetition] in @c table_re and @c table_im, 2 for one
+         *  computed per slot as exp(i angle x), -2 pi times the area per
+         *  repetition, [(set * 3 + axis) * kRepetitions + r] in @c angle.
+         *  The sets are the windows' and, where netted, the net areas'. */
+        size_t sets = 0;
+        size_t lattice[3] = {0, 0, 0};
+        const unsigned char* encoding = nullptr;
+        const void* const* table_re = nullptr;
+        const void* const* table_im = nullptr;
+        const double* angle = nullptr;
+        /** Per window, axis and repetition, [(w * 3 + axis) * kRepetitions +
+         *  r]: how much a turned window's area from one sample to the next
+         *  exceeds the first repetition's, in 1/m. A slot at x is spread at
+         *  repetition r as the term at origin + delta . x of its window's
+         *  transform, onto the grid points from the first Nufft::locate()
+         *  gives on, by the polynomials of its place: [w][power][tap],
+         *  @c powers of each. */
+        const double* delta = nullptr;
+        size_t powers = 0;
+        const void* polynomials = nullptr;
+        /** With a pulse read off tables, per repetition and axis,
+         *  [r * 3 + axis]: how much the gradient held through the first
+         *  block exceeds the block's own, in Hz/m. Null otherwise. */
+        const double* pulse_delta = nullptr;
+        /** The grids, the run's region.back() values: per window, per T2
+         *  class, coil and grid point (the cells and then the taps folded
+         *  onto the first), [Re, Im][repetition]; per T2 class, repetition,
+         *  grid point and coil, [Re, Im], for a turned window; or per coil
+         *  for a window of one sample. Written by the call. */
+        size_t grid_size = 0;
+        void* grid = nullptr;
+    };
+
+    /** A run's magnetisation as a device writes it back or loads it: @c m,
+     *  three rows over the slots, [k * slots + slot], in the run's
+     *  precision. */
+    struct RunState
+    {
+        size_t run = 0;
+        bool single = false;
+        size_t slots = 0;
+        void* m = nullptr;
+    };
+
+    /**
+     * Carries the slots of runs in the engine's place. @c begin takes a run's
+     * set and returns true, or declines it and returns false, the engine then
+     * carrying it; @c tile carries a taken run's slots through a tile and
+     * returns how many transients it dropped; @c state writes their
+     * magnetisation back; @c load takes the magnetisation RunState holds as
+     * theirs, where blocks were played on the isochromats between two of the
+     * run's repetitions; @c release frees the run.
+     */
+    struct RunDevice
+    {
+        std::function<bool(const RunSet&)> begin;
+        std::function<size_t(const RunTile&)> tile;
+        std::function<void(const RunState&)> state;
+        std::function<void(const RunState&)> load;
+        std::function<void(size_t)> release;
+    };
+
     /** The events one block plays, timed in s from the block's start. */
     struct BlockEvents
     {
@@ -288,10 +480,23 @@ namespace bloch
             return device_windows_;
         }
 
+        /** RF pulses played isochromat by isochromat from their tables since
+         *  construction: once kGroupings groupings are kept, those under a
+         *  gradient held along a direction none of them is made for. */
+        size_t ungrouped_pulses() const
+        {
+            const std::lock_guard<std::mutex> held(mutex_);
+            return ungrouped_pulses_;
+        }
+
         /** Offer @p device every window read on the lattice, and every other
          *  window outside a run before the engine reads it by its own
          *  transform or sample by sample; an empty one offers none. */
         void use_device(WindowDevice device);
+
+        /** Offer @p device the slots of every run of repetitions on these
+         *  isochromats; an empty one offers none. */
+        void use_run_device(RunDevice device);
 
         /** Put every isochromat at equilibrium, along +z, and the clock at zero. */
         void reset();
@@ -607,6 +812,8 @@ namespace bloch
          *  @p window. */
         void settle_after(const LatticeWindow& window);
         const Grouping& grouping(int mode, const double direction[3]);
+        /** The grouping kept for @p mode and @p direction, or null. */
+        const Grouping* kept_grouping(int mode, const double direction[3]) const;
 
         IsochromatProperties properties_;
         size_t count_ = 0;
@@ -664,6 +871,51 @@ namespace bloch
          *  Hz/m, unless their new points outnumber the groups; return whether
          *  it did. */
         bool hold_on_grid(const BlockEvents& block, const PulseGradient& gradient, double along, const Grouping& groups);
+        /** Play the pulse on each isochromat from its tables, made or extended
+         *  as needed, under a gradient held at @p along, in Hz/m, without
+         *  grouping or holding: unless the channels play more than one
+         *  waveform or the tables' new points outnumber the isochromats;
+         *  return whether it did. */
+        bool excite_each(const BlockEvents& block, const PulseGradient& gradient, double along);
+        /** A pulse's tables as a run of repetitions reads them: per class of
+         *  T1 and T2, a copy of its table's maps, laid out as PulseTable lays
+         *  them out, and the turn of the pulse against it; and each
+         *  isochromat's drive, none without transmit sensitivities. */
+        struct RunTables
+        {
+            double spacing = 0.0;
+            double drive_spacing = 0.0;
+            struct Class
+            {
+                long long first_row = 0;
+                long long first = 0;
+                long long rows = 0;
+                long long columns = 0;
+                std::vector<double> maps;
+                std::complex<double> turn = 1.0;
+            };
+            std::vector<Class> classes;
+            std::vector<std::complex<double>> drives;
+        };
+        /** The tables of @p block's pulse, made or extended over every field
+         *  an isochromat sees under a gradient of at most @p strongest, in
+         *  Hz/m, along any direction, into @p out: unless the channels play
+         *  more than one waveform or the tables' new points would be @p most
+         *  or more; return whether it made them. */
+        bool run_tables(const BlockEvents& block, double strongest, size_t most, RunTables& out);
+        /** Find, or make, each class's table of @p waveform, @p spacing and
+         *  @p drive_spacing, and the turn of the pulse against it, and extend
+         *  it over @p bounds; false, leaving the tables as they are, where
+         *  their new points would be @p most or more. */
+        bool tables_for(
+            const BlockEvents& block,
+            double spacing,
+            double drive_spacing,
+            const std::vector<std::complex<double>>& waveform,
+            const std::vector<std::array<long long, 4>>& bounds,
+            size_t most,
+            std::vector<std::list<PulseTable>::iterator>& table,
+            std::vector<std::complex<double>>& turn);
         /** The table of @p rf, @p step, @p spacing and @p drive_spacing for
          *  the class relaxing as @p relaxation, but for a phase written to
          *  @p turn, or tables_.end(). */
@@ -690,6 +942,16 @@ namespace bloch
             const std::vector<std::complex<double>>& turn,
             double duration,
             std::vector<double>& maps);
+        /** The map at @p field and, where not null, the magnitude of
+         *  @p drive from @p table, turned by @p turn and the drive's phase,
+         *  to @p out. */
+        static void table_map(
+            const PulseTable& table,
+            double field,
+            const std::complex<double>* drive,
+            std::complex<double> turn,
+            double duration,
+            double* out);
         /** Make the @p played tables the most recent, and let the least
          *  recent others go beyond kPulseTables or kTableBytes. */
         void keep(const std::vector<std::list<PulseTable>::iterator>& played);
@@ -726,12 +988,14 @@ namespace bloch
         };
         std::vector<Segmentation> segmentations_;
         size_t lattice_windows_ = 0;
+        size_t ungrouped_pulses_ = 0;
         size_t device_windows_ = 0;
         /** The engine's identity, and the revision of its positions, drawn
          *  from one count shared by every engine. */
         size_t engine_ = 0;
         size_t layout_ = 0;
         WindowDevice device_;
+        RunDevice run_device_;
         /** The lattice's sums and their transforms at the samples, in
          *  either precision, kept from one window to the next. */
         std::vector<std::complex<double>> lattice_sums_, lattice_values_;

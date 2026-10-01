@@ -68,6 +68,10 @@ def simulate(
 class Player:
     """The blocks the cache beside a sequence file plays, played on isochromats in turn, as :func:`simulate` plays them.
 
+    A run whose repetitions other blocks play between keeps its repetitions
+    until its last has played, and resumes each time from the magnetisation
+    those blocks leave.
+
     Attributes
     ----------
     played
@@ -104,9 +108,13 @@ class Player:
                 rounded=tolerance > 0.0,
             )
         )
-        self._firsts = np.array([run.first for run in self.runs], dtype=int)
-        # The run being played, its repetitions and the next to be played.
-        self._playing: tuple[Run, Repetitions, int] | None = None
+        self._index()
+        # Per run being played, by its place in runs: its repetitions, the
+        # next to be played, and the plays on the isochromats when it last
+        # played.
+        self._live: dict[int, tuple[Repetitions, int, int]] = {}
+        # Blocks and runs played on the isochromats so far.
+        self._plays = 0
 
     @property
     def blocks(self) -> int:
@@ -115,8 +123,11 @@ class Player:
 
     def boundary(self, block: int) -> int:
         """Return the first block from ``block`` on that starts a repetition of a run or lies outside every run."""
-        run = self._run(block)
-        return block if run is None else block + (run.first - block) % run.size
+        if block >= self.blocks or self._owner[block] < 0:
+            return block
+        run = self.runs[self._owner[block]]
+        start = int(run.starts[self._repetition[block]])
+        return block if block == start else start + run.size
 
     def readouts(self, first: int, last: int) -> Iterator[np.ndarray]:
         """Play the blocks from ``first`` to before ``last`` and yield each readout, as :func:`simulate` returns them.
@@ -126,14 +137,18 @@ class Player:
         """
         block = first
         while block < last:
-            run = self._run(block)
-            aligned = run is not None and (block - run.first) % run.size == 0
-            count = (min(last, run.stop) - block) // run.size if aligned else 0
-            if count > 0:
-                yield from self._repeated(run, (block - run.first) // run.size, count)
-                block += count * run.size
+            at = int(self._owner[block])
+            index = int(self._repetition[block])
+            count = self._following(at, index, block, last) if at >= 0 else 0
+            repetitions = self._resumed(at, index) if count > 0 else None
+            if repetitions is not None:
+                yield from self._repeated(at, repetitions, index, count)
+                block += count * self.runs[at].size
                 continue
-            self._playing = None
+            if count > 0:
+                self._drop(at)
+                continue
+            self._release_consecutive()
             readout = _played(
                 self.played,
                 block,
@@ -142,29 +157,80 @@ class Player:
                 self._drive,
                 self._tolerance,
             )
+            self._plays += 1
             if readout is not None:
                 yield readout
             block += 1
 
-    def _run(self, block: int) -> Run | None:
-        at = int(np.searchsorted(self._firsts, block, side="right")) - 1
-        return self.runs[at] if at >= 0 and block < self.runs[at].stop else None
+    def _index(self) -> None:
+        """Find, per block, the run whose repetition plays it and which repetition, -1 for neither where none does."""
+        self._owner = np.full(self.blocks, -1, dtype=np.int64)
+        self._repetition = np.full(self.blocks, -1, dtype=np.int64)
+        for at, run in enumerate(self.runs):
+            covered = run.starts[:, None] + np.arange(run.size)
+            self._owner[covered] = at
+            self._repetition[covered] = np.arange(run.count)[:, None]
 
-    def _repeated(self, run: Run, index: int, count: int) -> Iterator[np.ndarray]:
-        """Play ``count`` repetitions of ``run`` from repetition ``index``; yield their readouts."""
-        playing = self._playing
-        if playing is None or playing[0] is not run or playing[2] != index:
-            # The maps of the run played before are freed before these are made.
-            self._playing = playing = None
-            playing = (run, self._repetitions(run, index), index)
-        done = index + count == run.count
-        self._playing = None if done else (run, playing[1], index + count)
+    def _following(self, at: int, index: int, block: int, last: int) -> int:
+        """Return how many of run ``at``'s repetitions from ``index`` on start at ``block`` and follow one another, the last ending by ``last``."""
+        run = self.runs[at]
+        fit = min((last - block) // run.size, run.count - index)
+        if fit <= 0 or run.starts[index] != block:
+            return 0
+        follows = run.starts[index : index + fit] == block + run.size * np.arange(fit)
+        return int(fit if follows.all() else np.argmin(follows))
+
+    def _resumed(self, at: int, index: int) -> Repetitions | None:
+        """Return the repetitions of run ``at`` from repetition ``index`` on: those being played, resumed from where the isochromats stand if anything has played on them since, or new ones; None where the engine cannot read the first block's pulse off tables."""
+        live = self._live.pop(at, None)
+        if live is not None and live[1] == index:
+            repetitions, _, plays = live
+            if plays != self._plays:
+                repetitions.resume()
+            self._live[at] = live
+            return repetitions
+        # The maps of runs whose repetitions follow one another are freed
+        # before these are made.
+        self._release_consecutive()
+        run = self.runs[at]
+        try:
+            return self._repetitions(run, index)
+        except ValueError:
+            if not np.any(run.pulse_gradients):
+                raise
+            return None
+
+    def _release_consecutive(self) -> None:
+        """Free the repetitions of the runs being played whose repetitions follow one another, which any other block played on the isochromats leaves behind."""
+        for at in [at for at in self._live if not self.runs[at].apart]:
+            del self._live[at]
+
+    def _drop(self, at: int) -> None:
+        """Play run ``at``'s blocks one by one."""
+        del self.runs[at]
+        self._live = {
+            other - (other > at): live
+            for other, live in self._live.items()
+            if other != at
+        }
+        self._index()
+
+    def _repeated(
+        self, at: int, repetitions: Repetitions, index: int, count: int
+    ) -> Iterator[np.ndarray]:
+        """Play ``count`` repetitions of run ``at`` from repetition ``index`` on ``repetitions``; yield their readouts."""
+        run = self.runs[at]
+        signal = repetitions.play(count).astype(np.complex64)
+        self._plays += 1
+        if index + count == run.count:
+            self._live.pop(at, None)
+        else:
+            self._live[at] = (repetitions, index + count, self._plays)
         windows = [
             int(self.played["adc_samples"][block])
             for block in range(run.first, run.first + run.size)
             if self.played["adc"][block]
         ]
-        signal = playing[1].play(count).astype(np.complex64)
         if not windows:
             return
         for samples in signal:
@@ -192,18 +258,20 @@ class Player:
             adc_phases=run.adc_phases[index:],
             readouts=run.readouts[index:],
             nets=run.nets[index:],
+            pulse_gradients=run.pulse_gradients[index:],
             tolerance=self._tolerance,
+            split=not run.apart,
         )
 
 
 def _windows(isochromats: Isochromats) -> int:
     """Return the most ADC windows a repetition may hold for its maps on the isochromats to take at most :data:`MEMORY` bytes; negative where none fits."""
     # Per isochromat, its map and the slot it is played from, in double
-    # precision, with its coordinates; per window, the map of the transverse
-    # magnetisation at its first sample and the slot's kernel weights,
-    # receive factors and phase step.
+    # precision, with its coordinates and what reading a pulse off tables
+    # takes; per window, the map of the transverse magnetisation at its first
+    # sample and the slot's kernel weights, receive factors and phase step.
     per_window = 244 + 16 * isochromats.coils
-    return (MEMORY // max(len(isochromats), 1) - 288) // per_window
+    return (MEMORY // max(len(isochromats), 1) - 376) // per_window
 
 
 def _drive(

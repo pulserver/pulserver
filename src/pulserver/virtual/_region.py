@@ -35,6 +35,11 @@ _EXCITATION = 1
 # at which it is held.
 _HELD = 1e-6
 
+# Gradients excitations may play under beyond which they excite every
+# isochromat: between them, the slabs of a pulse per spoke, as a ZTE scan
+# plays, leave out next to none of the object.
+_GRADIENTS = 16
+
 
 @dataclass(frozen=True)
 class Slabs:
@@ -84,7 +89,8 @@ def excited(
     amplitude or twice it: the pulse is played on a line of isochromats along
     its gradient, turned by ``rotation`` as
     :func:`~pulserver.virtual.simulate` turns it. A pulse played without a
-    gradient, or under one that changes during it, excites every isochromat.
+    gradient, or under one that changes during it, excites every isochromat,
+    and so do pulses played under more than 16 gradients, as a ZTE scan's are.
     Only the pulses the cache labels excitations are counted: what the others
     tip into the transverse plane outside the slabs, such as the free
     induction decay of an imperfect refocusing pulse, is left out of a scan
@@ -103,6 +109,8 @@ def excited(
             return None
         gradient = turn @ held if played["rotate"][block] else held
         if not np.any(gradient):
+            return None
+        if tuple(gradient.tolist()) not in slabs and len(slabs) == _GRADIENTS:
             return None
         key = (gradient.tobytes(), played["rf_waveform_hz"][start:stop].tobytes())
         if key not in profiles:

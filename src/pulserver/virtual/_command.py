@@ -131,8 +131,8 @@ def _parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--device",
-        help="torch device the ADC windows outside runs are read on, such as "
-        "cuda (the gpu extra); the engine reads them without it",
+        help="torch device the ADC windows are read and the runs of repetitions "
+        "carried on, such as cuda (the gpu extra); the engine does both without it",
     )
     parser.add_argument("--mrd", type=Path, help="ISMRMRD file to write the series to")
     parser.add_argument("--sound", type=Path, help="WAV file to write the sound to")

@@ -62,12 +62,26 @@ namespace bloch
      * gradient with, and must be one; a window whose readouts are not zero is
      * turned, read along each repetition's own gradient.
      *
+     * A first block that plays its pulse under a gradient held through
+     * the block, larger by pulse_gradients[n] than the block's own in
+     * repetition n, applies a map that differs from one repetition to the
+     * next by more than a turn about z: each isochromat's is read off the
+     * pulse's tables at the field it sees under that repetition's gradient,
+     * with the block's free precession at that field before and after the
+     * pulse. The four plays then play the blocks after the first, and the
+     * areas and nets are what the waveform leaves over them.
+     *
      * The isochromats hold the magnetisation at the start of the next
-     * repetition to be played; blocks played on them in between break the
-     * repetitions.
+     * repetition to be played. Blocks played on them in between break the
+     * repetitions, unless resume() takes what they leave as the start of
+     * the next.
      *
      * The first play() moves the maps into the arrays the repetitions are
      * played from and frees them: split() and column_sums() come before it.
+     * It also offers those arrays to the isochromats' run device; a device
+     * that takes them carries them through every repetition and spreads them
+     * onto the windows' grids, which the repetitions then read as they read
+     * their own.
      */
     class Repetitions
     {
@@ -80,9 +94,14 @@ namespace bloch
          * and split() drop transients below it.
          *
          * @throws std::invalid_argument if the phases, ADC phases, areas,
-         *         readouts and nets, the last two possibly none, are not one
-         *         per repetition, a window is not read under a held gradient,
-         *         or a block is one the isochromats cannot play.
+         *         readouts, nets and pulse gradients, the last three possibly
+         *         none, are not one per repetition, a window is not read
+         *         under a held gradient, a block is one the isochromats
+         *         cannot play, or, with pulse gradients, the first block
+         *         plays no pulse, reads a window or holds no gradient through
+         *         it, or its pulse cannot be read off tables: its channels
+         *         play more than one waveform, or its tables would take more
+         *         points than the isochromats over every repetition.
          */
         Repetitions(
             Isochromats& isochromats,
@@ -92,6 +111,7 @@ namespace bloch
             std::vector<double> areas,
             std::vector<double> readouts,
             std::vector<double> nets,
+            std::vector<double> pulse_gradients,
             double tolerance = 0.0);
         ~Repetitions();
         Repetitions(const Repetitions&) = delete;
@@ -130,8 +150,9 @@ namespace bloch
          * play() then writes the transients' samples alone, and
          * column_sums() gives what the fixed points send.
          * Return false, splitting nothing, unless the pulses turn by one step
-         * each, no window is turned and the repetitions leave no net area. A
-         * tolerance of zero drops no transient.
+         * each, no window is turned, the repetitions leave no net area and
+         * the first block's pulse plays under the block's own gradient in
+         * every one. A tolerance of zero drops no transient.
          *
          * @throws std::logic_error after the first play().
          */
@@ -185,6 +206,15 @@ namespace bloch
          */
         void play(size_t count, std::complex<double>* signal);
 
+        /**
+         * Take the magnetisation the isochromats hold, after blocks played on
+         * them since the last play(), as that at the start of the next
+         * repetition.
+         *
+         * @throws std::logic_error after split().
+         */
+        void resume();
+
     private:
         struct Set;
 
@@ -231,6 +261,19 @@ namespace bloch
          *  windows whose readouts are not zero. */
         void turn_windows(const std::vector<double>& readouts);
         bool turned() const;
+        /** Check one ADC phase per repetition, and three pulse gradients
+         *  and net areas each or none; forget those that are all zero. */
+        void check_repetitions();
+        /** Whether the first block's pulse is read off tables. */
+        bool pulsed() const
+        {
+            return !pulse_gradients_.empty();
+        }
+        /** Check the first block plays a pulse under a gradient held through
+         *  it, and reads no window; keep that gradient. */
+        void hold_pulse();
+        /** Make the tables the first block's pulse is read from. */
+        void tabulate_pulse();
         /** Phase-encoding area @p at of repetition @p n: [window][axis] of
          *  its windows' areas, then [axis] of its net area. */
         double encoding_area(size_t n, size_t at) const;
@@ -267,6 +310,14 @@ namespace bloch
         /** Write isochromat @p i to slot @p n of @p slots. */
         template <typename Slots>
         void fill_slot(Slots& slots, size_t n, size_t i, double* weights) const;
+        /** Write the tables the first block's pulse is read off, per class,
+         *  to @p slots. */
+        template <typename Slots>
+        void table_slots(Slots& slots) const;
+        /** Write what reading isochromat @p i's map of the first block off
+         *  the tables takes to slot @p n of @p slots. */
+        template <typename Slots>
+        void fill_pulse(Slots& slots, size_t n, size_t i) const;
         /** Write what window @p w reads of isochromat @p i to slot @p n. */
         template <typename Slots>
         void fill_window(Slots& slots, size_t w, size_t n, size_t i, double* weights) const;
@@ -275,6 +326,14 @@ namespace bloch
         std::vector<double> decays(const Window& window) const;
         template <typename Real>
         void play_tiles(size_t count, std::complex<double>* signal);
+        /** Offer the carried slots to the run device, whose grids are laid
+         *  out as @p tile's; whether it took them. */
+        template <typename Tile>
+        bool offer_device(const Tile& tile);
+        /** The tile carried and spread on the run device onto the first of
+         *  its grids, read as one worker's; the transients dropped. */
+        template <typename Tile>
+        size_t carry_on_device(Tile& tile);
         /** What reading the windows of a tile reads, and its arrays sized. */
         template <typename Tile>
         void plan_tile(Tile& tile, size_t taps) const;
@@ -299,6 +358,19 @@ namespace bloch
          *  laboratory frame, to the isochromats. */
         template <typename Real>
         void settle(size_t n);
+        /** Write the isochromats' magnetisation, turned into the frame of
+         *  the next repetition's pulses, of cosine @p c and sine @p sn, to
+         *  the slots. */
+        template <typename Real>
+        void resume_slots(double c, double sn);
+        /** Fetch the magnetisation of the isochromat of @p slot, where it
+         *  is before @p end, ahead of a read or, with @p Write 1, a write. */
+        template <int Write, typename SlotsOf>
+        void fetch_isochromat(const SlotsOf& slots, size_t slot, size_t end) const;
+        /** Hand the run device the slots' magnetisation to take as its own
+         *  where @p load, or have it write its own back into the slots. */
+        template <typename Real>
+        void exchange_state(bool load);
 
         Isochromats& isochromats_;
         std::vector<OwnedBlock> blocks_;
@@ -312,6 +384,14 @@ namespace bloch
         /** Per repetition and axis, the area it leaves, in 1/m; empty where
          *  none leaves any. */
         std::vector<double> nets_;
+        /** Per repetition and axis, how much the gradient held through the
+         *  first block exceeds the block's own, in Hz/m; empty where the
+         *  first block's pulse is played as the other blocks' are. */
+        std::vector<double> pulse_gradients_;
+        /** The first block's own gradient, held through it, in Hz/m, and
+         *  the tables its pulse is read off. */
+        double held_[3] = {0.0, 0.0, 0.0};
+        Isochromats::RunTables pulse_tables_;
         std::vector<Window> windows_;
         size_t samples_ = 0;
         double duration_ = 0.0;
@@ -338,6 +418,8 @@ namespace bloch
         std::vector<std::vector<std::complex<double>>> receivers_;
         /** The isochromats carried, from the first play() on. */
         std::unique_ptr<Set> set_;
+        /** This run, among every engine's and run's identities. */
+        size_t run_ = 0;
     };
 
 } // namespace bloch

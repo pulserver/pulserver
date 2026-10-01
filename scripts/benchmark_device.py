@@ -106,9 +106,9 @@ def main(argv: list[str] | None = None) -> None:
     start = rng.normal(size=n) + 1j * rng.normal(size=n)
     magnetization = np.column_stack([start.real, start.imag, np.full(n, 0.2)])
 
-    from pulserver.virtual._device import WindowDevice
+    from pulserver.virtual._device import Device
 
-    reader = WindowDevice(args.device, profile=args.profile)
+    reader = Device(args.device, profile=args.profile)
     signals = {}
     for name, device in (("engine", None), (args.device, reader)):
         spins = Isochromats(

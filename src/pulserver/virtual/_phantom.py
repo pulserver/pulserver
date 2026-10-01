@@ -170,9 +170,9 @@ class Phantom:
         threads
             Worker threads of the simulation; 0 for every core.
         device
-            The device the ADC windows outside runs are read on, as
-            :class:`~pulserver.virtual.Isochromats` takes it; the engine
-            reads them itself without one.
+            The device the ADC windows are read and the runs of repetitions
+            carried on, as :class:`~pulserver.virtual.Isochromats` takes it;
+            the engine does both itself without one.
 
         Raises
         ------
