@@ -21,9 +21,11 @@ from pulserver.proxy import ReconProxy
 from pulserver.virtual._bloch import TOLERANCE
 from pulserver.virtual._command import (
     ORIENTATIONS,
+    _parser,
     default_phantom,
     main,
     read_phantom,
+    subject_motion,
 )
 
 RECON_PLUGINS = Path(__file__).parent / "recon_plugins"
@@ -237,3 +239,77 @@ def test_a_phantom_file_lists_the_fields_of_its_ellipses(tmp_path):
 def test_the_command_without_a_known_subcommand_prints_its_usage(capsys):
     assert _cli.main(["simulate"]) == 2
     assert "pulserver scan" in capsys.readouterr().err
+
+
+def _motion(*options):
+    return subject_motion(
+        _parser().parse_args(["--seq", "x", "--limits", "l", *options])
+    )
+
+
+def test_a_nod_turns_the_subject_about_x_by_its_amplitude_at_a_quarter_period():
+    motion = _motion("--nod", "3", "8")
+    point = np.array([[0.0, 0.1, 0.0]])
+
+    angle = np.radians(3.0)
+    np.testing.assert_allclose(
+        motion(2.0, point), [[0.0, 0.1 * np.cos(angle), 0.1 * np.sin(angle)]]
+    )
+    np.testing.assert_allclose(motion(4.0, point), point, atol=1e-15)
+    np.testing.assert_allclose(motion(0.0, point), point)
+
+
+def test_a_drift_moves_the_subject_by_its_millimetres_per_minute():
+    motion = _motion("--drift", "1", "-2", "0.5")
+
+    np.testing.assert_allclose(
+        motion(30.0, np.zeros((1, 3))), [[0.5e-3, -1e-3, 0.25e-3]]
+    )
+
+
+def test_a_subject_without_a_nod_or_a_drift_is_at_rest():
+    assert _motion() is None
+    with pytest.raises(ValueError, match="period"):
+        _motion("--nod", "2", "0")
+
+
+def test_a_headless_scan_samples_moves_and_diffuses_the_subject_as_its_options_say(
+    tmp_path, capsys, monkeypatch
+):
+    shutil.copytree(FIXTURES, tmp_path, dirs_exist_ok=True)
+    built = {}
+    build = virtual.Phantom.isochromats
+
+    def isochromats(self, spacing, **options):
+        built.update(options)
+        return build(self, spacing, **options)
+
+    monkeypatch.setattr(virtual.Phantom, "isochromats", isochromats)
+    status = main(
+        [
+            "--seq",
+            str(tmp_path / "gre_2d_3sl.seq"),
+            "--limits",
+            str(_limits(tmp_path / "limits.txt", FIXTURE_LIMITS)),
+            "--store",
+            str(tmp_path / "designs"),
+            "--spacing",
+            "4",
+            "--coils",
+            "1",
+            "--spins",
+            "4",
+            "--voxel",
+            "box",
+            "--drift",
+            "0",
+            "0",
+            "1",
+        ]
+    )
+
+    assert status == 0
+    assert (built["spins"], built["voxel"], built["seed"]) == (4, "box", 0)
+    np.testing.assert_allclose(
+        built["motion"](60.0, np.zeros((1, 3))), [[0.0, 0.0, 1e-3]]
+    )

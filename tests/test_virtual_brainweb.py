@@ -316,6 +316,11 @@ def test_t1_follows_its_power_law_and_r2_prime_the_field_while_t2_and_csf_s_t1_h
         low["connective tissue"][0] * ratio**0.382
     )
     assert high["CSF"][0] == low["CSF"][0]
+    assert high["skin"][0] == low["skin"][0]
+    assert high["muscle and skin"][0] == pytest.approx(
+        low["muscle and skin"][0] * ratio**0.4203
+    )
+    assert high["fat"][0] == pytest.approx(low["fat"][0] * ratio**0.1743)
     assert all(high[name][1] == low[name][1] for name in _brainweb.TISSUES)
     assert high["grey matter"][2] == pytest.approx(low["grey matter"][2] / ratio)
     assert high["white matter"][2] == low["white matter"][2] == 0.2

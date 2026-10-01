@@ -424,8 +424,8 @@ One isochromat per voxel precesses at the voxel's frequency, whatever its T2′.
 BrainWeb's tissue classes take the T2′ that the T2 and T2* of BrainWeb's
 simulator leave at 1.5 T, $R_2' = R_2^* - R_2$, with $R_2'$ in proportion to
 the field, as in the static dephasing regime; their T1 grows with the field as
-measured for white and grey matter
-({meth}`BrainWeb.relaxation <pulserver.virtual.BrainWeb.relaxation>`).
+measured for white and grey matter, skeletal muscle and adipose tissue, and
+CSF's holds ({meth}`BrainWeb.relaxation <pulserver.virtual.BrainWeb.relaxation>`).
 
 ### Motion
 
