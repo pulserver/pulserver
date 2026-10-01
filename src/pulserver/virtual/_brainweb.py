@@ -154,6 +154,7 @@ class BrainWeb:
         region: Callable[[np.ndarray, np.ndarray], np.ndarray] | None = None,
         coil: Coil | None = None,
         threads: int = 0,
+        device=None,
     ) -> Isochromats:
         """Return the brain sampled as isochromats, for :func:`~pulserver.virtual.simulate`.
 
@@ -182,6 +183,10 @@ class BrainWeb:
             phantom's coils.
         threads
             Worker threads of the simulation; 0 for every core.
+        device
+            The device the windows read on a lattice are read on, as
+            :class:`~pulserver.virtual.Isochromats` takes it; the engine
+            reads them itself without one.
 
         Raises
         ------
@@ -207,6 +212,7 @@ class BrainWeb:
             transmit=None if coil is None else coil.transmit(own),
             receive=self._coils._received(own) if coil is None else coil.receive(own),
             threads=threads,
+            device=device,
         )
 
     def count(

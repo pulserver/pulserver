@@ -19,6 +19,7 @@
 #include <complex>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <list>
 #include <memory>
 #include <mutex>
@@ -55,6 +56,65 @@ namespace bloch
         size_t coils = 0;
         const std::complex<double>* receive = nullptr;
     };
+
+    /**
+     * A window under a changing gradient whose isochromats lie on a lattice
+     * along each axis its k moves along, as the engine hands it to a device
+     * that sums it onto the lattice and transforms it to the samples in its
+     * place. Every array is the engine's own, valid during the call.
+     */
+    struct LatticeWindowRead
+    {
+        /** The lattice axes, a bit per axis, the points along each, the
+         *  lowest axis first and fastest, and the points in all. */
+        unsigned axes = 0;
+        int dimensions = 0;
+        const int64_t* modes = nullptr;
+        size_t points = 0;
+        /** The isochromats in order of their point on the lattice, each
+         *  point's first position in that order, one more than the points;
+         *  and, in that order, each isochromat's off-resonance, in Hz, and
+         *  T2 class. */
+        size_t isochromats = 0;
+        const uint32_t* order = nullptr;
+        const uint32_t* starts = nullptr;
+        const double* off_resonance = nullptr;
+        const uint32_t* decay_of = nullptr;
+        /** The receive sensitivities, coil-major in the isochromats' own
+         *  order; none for one coil of unit sensitivity. */
+        size_t coils = 0;
+        const double* receive_re = nullptr;
+        const double* receive_im = nullptr;
+        /** The transverse magnetisation at the first sample, in the
+         *  isochromats' own order. */
+        const double* mx = nullptr;
+        const double* my = nullptr;
+        /** The window's middle off-resonance, in Hz; its Chebyshev points,
+         *  in s from the first sample; each T2 class's decay at them
+         *  relative to the window's middle rate, [class][point]; and the
+         *  Lagrange basis at each sample, [sample][point]. */
+        double frequency = 0.0;
+        size_t segments = 0;
+        const double* nodes = nullptr;
+        size_t decays = 0;
+        const double* decay = nullptr;
+        size_t samples = 0;
+        const double* basis = nullptr;
+        /** Each sample's coordinate along each lattice axis, in radians in
+         *  [-pi, pi), lowest axis first. */
+        const double* x[3] = {nullptr, nullptr, nullptr};
+        /** The tolerance the transform is planned to, and whether it is
+         *  computed in single precision. */
+        double tolerance = 0.0;
+        bool single = false;
+        /** Each coil's sum over the Chebyshev points of the basis times the
+         *  transform of its lattice sums, [coil][sample], zero on entry. */
+        std::complex<double>* out = nullptr;
+    };
+
+    /** Reads a window on the lattice in the engine's place and returns
+     *  true, or declines it and returns false. */
+    using LatticeDevice = std::function<bool(const LatticeWindowRead&)>;
 
     /** The events one block plays, timed in s from the block's start. */
     struct BlockEvents
@@ -155,6 +215,17 @@ namespace bloch
             const std::lock_guard<std::mutex> held(mutex_);
             return lattice_windows_;
         }
+
+        /** Of those, the windows a device read. */
+        size_t device_windows() const
+        {
+            const std::lock_guard<std::mutex> held(mutex_);
+            return device_windows_;
+        }
+
+        /** Offer every window read on the lattice to @p device before the
+         *  engine reads it; an empty one offers none. */
+        void use_lattice_device(LatticeDevice device);
 
         /** Put every isochromat at equilibrium, along +z, and the clock at zero. */
         void reset();
@@ -404,6 +475,13 @@ namespace bloch
             const std::vector<std::vector<double>>& x,
             double tolerance,
             std::vector<std::complex<double>>& out);
+        /** Hand the window to the lattice device; whether it read it. */
+        bool read_on_device(
+            const LatticeWindow& window,
+            const Segments& segments,
+            const std::vector<std::vector<double>>& x,
+            double tolerance,
+            std::vector<std::complex<double>>& out);
         /** Worker @p worker's lattice transform of @p modes along @p axes
          *  axes, of @p vectors vectors at once, to within @p tolerance. */
         LatticeTransform& lattice_transform(
@@ -542,6 +620,8 @@ namespace bloch
         };
         std::vector<Segmentation> segmentations_;
         size_t lattice_windows_ = 0;
+        size_t device_windows_ = 0;
+        LatticeDevice lattice_device_;
         /** The lattice's sums and their transforms at the samples, in
          *  either precision, kept from one window to the next. */
         std::vector<std::complex<double>> lattice_sums_, lattice_values_;
