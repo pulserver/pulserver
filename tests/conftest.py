@@ -3,6 +3,7 @@
 import os
 import subprocess
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -36,6 +37,14 @@ if not _cuda_available():
 def device(request):
     """Device name, ``"cpu"`` or ``"cuda"``; the CUDA leg is skipped without a device."""
     return request.param
+
+
+def exam_header(exam):
+    """A header naming an exam, as the proxies of a host read it."""
+    return SimpleNamespace(
+        studyInformation=SimpleNamespace(studyInstanceUID=exam, studyID=None),
+        userParameters=None,
+    )
 
 
 #: The vendor the C library is compiled for where a test builds it as a scanner

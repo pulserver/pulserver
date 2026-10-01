@@ -1,28 +1,19 @@
 """The caches of one exam, held by the proxies of a host rather than by one of them."""
 
-from types import SimpleNamespace
-
 import pytest
+from conftest import exam_header
 
 import pulserver.recon as recon
 from pulserver.recon._runtime.exam import DEFAULT_EXAM_DIRECTORY, ExamCacheManager
-
-
-def _header(exam):
-    """A header naming an exam, as the proxies of a host read it."""
-    return SimpleNamespace(
-        studyInformation=SimpleNamespace(studyInstanceUID=exam, studyID=None),
-        userParameters=None,
-    )
 
 
 def test_two_proxies_on_one_exam_read_each_others_maps(tmp_path):
     """The point of a shared location: one proxy per acquisition, one exam between them."""
     first = ExamCacheManager(directory=tmp_path)
     second = ExamCacheManager(directory=tmp_path)
-    with first.lease(_header("exam-1")) as cache:
+    with first.lease(exam_header("exam-1")) as cache:
         cache[recon.B1_MAP] = [1.0, 0.9, 0.8]
-    with second.lease(_header("exam-1")) as cache:
+    with second.lease(exam_header("exam-1")) as cache:
         assert cache[recon.B1_MAP] == [1.0, 0.9, 0.8]
     first.close()
     second.close()
@@ -32,13 +23,13 @@ def test_a_proxy_moving_on_does_not_take_the_exam_from_one_still_on_it(tmp_path)
     """Retiring an exam removes its artifacts; another proxy's series still wants them."""
     staying = ExamCacheManager(directory=tmp_path)
     moving = ExamCacheManager(directory=tmp_path)
-    with moving.lease(_header("exam-1")) as cache:
+    with moving.lease(exam_header("exam-1")) as cache:
         cache[recon.B0_MAP] = [7.0]
 
-    with staying.lease(_header("exam-1")) as held:
+    with staying.lease(exam_header("exam-1")) as held:
         # The other proxy's next series is a different exam, which retires the
         # first -- while this one is still reconstructing under it.
-        with moving.lease(_header("exam-2")):
+        with moving.lease(exam_header("exam-2")):
             pass
         assert held[recon.B0_MAP] == [7.0]
         directory = held.directory
@@ -52,11 +43,11 @@ def test_a_proxy_moving_on_does_not_take_the_exam_from_one_still_on_it(tmp_path)
 def test_the_last_proxy_off_an_exam_takes_its_artifacts_with_it(tmp_path):
     """Nothing holds the exam, so nothing wants what was measured under it."""
     manager = ExamCacheManager(directory=tmp_path)
-    with manager.lease(_header("exam-1")) as cache:
+    with manager.lease(exam_header("exam-1")) as cache:
         cache[recon.B1_MAP] = [1.0]
         directory = cache.directory
     assert directory.is_dir()
-    with manager.lease(_header("exam-2")):
+    with manager.lease(exam_header("exam-2")):
         pass
     assert not directory.exists()
     manager.close()
@@ -65,11 +56,11 @@ def test_the_last_proxy_off_an_exam_takes_its_artifacts_with_it(tmp_path):
 def test_an_exam_in_memory_is_nobody_elses(tmp_path):
     """Without a directory there is nothing to share and nothing to lock."""
     manager = ExamCacheManager()
-    with manager.lease(_header("exam-1")) as cache:
+    with manager.lease(exam_header("exam-1")) as cache:
         cache[recon.B1_MAP] = [1.0]
         assert cache.directory is None
     other = ExamCacheManager()
-    with other.lease(_header("exam-1")) as cache:
+    with other.lease(exam_header("exam-1")) as cache:
         assert recon.B1_MAP not in cache
     manager.close()
     other.close()
@@ -86,9 +77,9 @@ def test_a_shared_name_survives_the_crossing(tmp_path, name):
     value = [1.5, 2.5]
     writer = ExamCacheManager(directory=tmp_path)
     reader = ExamCacheManager(directory=tmp_path)
-    with writer.lease(_header("exam-9")) as cache:
+    with writer.lease(exam_header("exam-9")) as cache:
         cache[getattr(recon, name)] = value
-    with reader.lease(_header("exam-9")) as cache:
+    with reader.lease(exam_header("exam-9")) as cache:
         assert cache[getattr(recon, name)] == value
     writer.close()
     reader.close()

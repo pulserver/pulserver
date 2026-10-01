@@ -1,10 +1,10 @@
 """The maps the series of an exam share, as a hook reads and writes them."""
 
 import pytest
+from conftest import exam_header
 
 import pulserver.recon as recon
 from pulserver.recon._runtime.exam import ExamCacheManager
-from tests.test_exam_sharing import _header
 
 
 def test_a_hook_reads_a_map_as_an_attribute_of_its_context():
@@ -57,9 +57,9 @@ def test_a_map_one_series_measures_reaches_the_next_through_the_exam(tmp_path):
     """End to end, across the proxies of a host: the point of the three names."""
     calibration = ExamCacheManager(directory=tmp_path)
     imaging = ExamCacheManager(directory=tmp_path)
-    with calibration.lease(_header("exam-7")) as cache:
+    with calibration.lease(exam_header("exam-7")) as cache:
         recon.ReconContext(header=None, exam=cache).b1_map = [1.0, 0.8]
-    with imaging.lease(_header("exam-7")) as cache:
+    with imaging.lease(exam_header("exam-7")) as cache:
         assert recon.ReconContext(header=None, exam=cache).b1_map == [1.0, 0.8]
     calibration.close()
     imaging.close()
