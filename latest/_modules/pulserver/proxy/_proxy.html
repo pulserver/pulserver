@@ -483,6 +483,7 @@
 <span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..recon._runtime.mrd2dicom</span><span class="w"> </span><span class="kn">import</span> <span class="n">MrdDicomBuilder</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..recon._runtime.readers</span><span class="w"> </span><span class="kn">import</span> <span class="n">deserialize_config</span><span class="p">,</span> <span class="n">read_text</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.</span><span class="w"> </span><span class="kn">import</span> <span class="n">_held</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">._designs</span><span class="w"> </span><span class="kn">import</span> <span class="n">Design</span><span class="p">,</span> <span class="n">DesignCache</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">._enrich</span><span class="w"> </span><span class="kn">import</span> <span class="n">enrich_acquisition</span><span class="p">,</span> <span class="n">enrich_header</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">._motion</span><span class="w"> </span><span class="kn">import</span> <span class="n">FILENAME</span><span class="p">,</span> <span class="n">MotionWriter</span><span class="p">,</span> <span class="n">Pose</span><span class="p">,</span> <span class="n">pose_of</span><span class="p">,</span> <span class="n">pose_waveform</span>
@@ -635,6 +636,13 @@
 <span class="sd">    rather than sent to the client. A forwarded series publishes the poses the</span>
 <span class="sd">    server passes back.</span>
 
+<span class="sd">    What goes back to a client is also written to a directory under the</span>
+<span class="sd">    system's temporary directory, shared with every other proxy on this host,</span>
+<span class="sd">    and removed once the client has had all of it. When the client has gone,</span>
+<span class="sd">    it is kept: a client opening a series with the same ``measurementID`` is</span>
+<span class="sd">    sent it, after it is complete, in place of a new reconstruction. Kept</span>
+<span class="sd">    output nobody takes up is removed after a day.</span>
+
 <span class="sd">    A forwarded series is sent on as it arrives; the server's own slots and</span>
 <span class="sd">    queue determine when it is reconstructed. The server is sent a config file message naming</span>
 <span class="sd">    ``forward_config``, or else the series' reconstruction plugin; the client's</span>
@@ -715,6 +723,7 @@
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">store</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">designs</span> <span class="o">=</span> <span class="n">DesignCache</span><span class="p">(</span><span class="n">store</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">held</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">_held</span><span class="o">.</span><span class="n">DEFAULT_HELD_DIRECTORY</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">workers</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">exams</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">queue</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="k">if</span> <span class="n">forward</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_reconstruction</span><span class="p">:</span> <span class="n">_Workers</span> <span class="o">|</span> <span class="n">_Remote</span> <span class="o">=</span> <span class="n">_Remote</span><span class="p">(</span>
@@ -744,6 +753,10 @@
 
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_series</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">client</span><span class="p">:</span> <span class="n">Connection</span><span class="p">,</span> <span class="n">config</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">header</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">path</span><span class="p">,</span> <span class="n">claimable</span> <span class="o">=</span> <span class="n">_held</span><span class="o">.</span><span class="n">held_path</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">held</span><span class="p">,</span> <span class="n">header</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">claimable</span> <span class="ow">and</span> <span class="n">_held</span><span class="o">.</span><span class="n">take_up</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="n">path</span><span class="p">):</span>
+            <span class="n">_drain</span><span class="p">(</span><span class="n">client</span><span class="p">)</span>
+            <span class="k">return</span>
         <span class="n">design</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">designs</span><span class="o">.</span><span class="n">resolve</span><span class="p">(</span><span class="n">header</span><span class="p">)</span>
         <span class="n">plugin</span> <span class="o">=</span> <span class="n">design</span><span class="o">.</span><span class="n">recon</span> <span class="ow">or</span> <span class="n">_config_plugin</span><span class="p">(</span><span class="n">config</span><span class="p">)</span>
         <span class="n">enrich_header</span><span class="p">(</span><span class="n">header</span><span class="p">,</span> <span class="n">design</span><span class="o">.</span><span class="n">table</span><span class="p">)</span>
@@ -753,14 +766,17 @@
             <span class="n">plugin</span><span class="p">,</span>
             <span class="nb">len</span><span class="p">(</span><span class="n">design</span><span class="o">.</span><span class="n">table</span><span class="p">),</span>
         <span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_reconstruction</span><span class="o">.</span><span class="n">run</span><span class="p">(</span>
-            <span class="n">client</span><span class="p">,</span>
-            <span class="n">config</span><span class="p">,</span>
-            <span class="n">header</span><span class="p">,</span>
-            <span class="n">plugin</span><span class="p">,</span>
-            <span class="n">_enriched</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="n">design</span><span class="p">),</span>
-            <span class="n">motion</span><span class="o">=</span><span class="n">design</span><span class="o">.</span><span class="n">directory</span> <span class="o">/</span> <span class="n">FILENAME</span> <span class="k">if</span> <span class="n">design</span><span class="o">.</span><span class="n">prospective_motion</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="p">)</span></div>
+        <span class="k">with</span> <span class="n">_held</span><span class="o">.</span><span class="n">HeldClient</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="n">path</span><span class="p">)</span> <span class="k">as</span> <span class="n">held</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_reconstruction</span><span class="o">.</span><span class="n">run</span><span class="p">(</span>
+                <span class="n">held</span><span class="p">,</span>
+                <span class="n">config</span><span class="p">,</span>
+                <span class="n">header</span><span class="p">,</span>
+                <span class="n">plugin</span><span class="p">,</span>
+                <span class="n">_enriched</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="n">design</span><span class="p">),</span>
+                <span class="n">motion</span><span class="o">=</span><span class="n">design</span><span class="o">.</span><span class="n">directory</span> <span class="o">/</span> <span class="n">FILENAME</span>
+                <span class="k">if</span> <span class="n">design</span><span class="o">.</span><span class="n">prospective_motion</span>
+                <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
+            <span class="p">)</span></div>
 
 
 
@@ -1243,6 +1259,11 @@
 <span class="sd">    """</span>
     <span class="k">with</span> <span class="n">contextlib</span><span class="o">.</span><span class="n">suppress</span><span class="p">(</span><span class="ne">Exception</span><span class="p">):</span>
         <span class="n">connection</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="sa">f</span><span class="s2">"pulserver: </span><span class="si">{</span><span class="n">error</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+    <span class="n">_drain</span><span class="p">(</span><span class="n">connection</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_drain</span><span class="p">(</span><span class="n">connection</span><span class="p">:</span> <span class="n">Connection</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Send a CLOSE, then discard what the client still sends until it closes."""</span>
     <span class="n">connection</span><span class="o">.</span><span class="n">send_close</span><span class="p">()</span>
     <span class="n">raw</span> <span class="o">=</span> <span class="n">connection</span><span class="o">.</span><span class="n">socket</span><span class="o">.</span><span class="n">socket</span>
     <span class="k">with</span> <span class="n">contextlib</span><span class="o">.</span><span class="n">suppress</span><span class="p">(</span><span class="ne">OSError</span><span class="p">):</span>

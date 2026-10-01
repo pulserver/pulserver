@@ -570,6 +570,12 @@ it plays: the poses its reconstruction states are published into the
 pose file the scan reads, <code class="docutils literal notranslate"><span class="pre">motion.buf</span></code> in the design’s directory,
 rather than sent to the client. A forwarded series publishes the poses the
 server passes back.</p>
+<p>What goes back to a client is also written to a directory under the
+system’s temporary directory, shared with every other proxy on this host,
+and removed once the client has had all of it. When the client has gone,
+it is kept: a client opening a series with the same <code class="docutils literal notranslate"><span class="pre">measurementID</span></code> is
+sent it, after it is complete, in place of a new reconstruction. Kept
+output nobody takes up is removed after a day.</p>
 <p>A forwarded series is sent on as it arrives; the server’s own slots and
 queue determine when it is reconstructed. The server is sent a config file message naming
 <code class="docutils literal notranslate"><span class="pre">forward_config</span></code>, or else the series’ reconstruction plugin; the client’s
