@@ -15,6 +15,7 @@
    :nosignatures:
 
    ~Repetitions.play
+   ~Repetitions.resume
 
 
 

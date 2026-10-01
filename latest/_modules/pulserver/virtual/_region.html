@@ -488,6 +488,11 @@
 <span class="c1"># at which it is held.</span>
 <span class="n">_HELD</span> <span class="o">=</span> <span class="mf">1e-6</span>
 
+<span class="c1"># Gradients excitations may play under beyond which they excite every</span>
+<span class="c1"># isochromat: between them, the slabs of a pulse per spoke, as a ZTE scan</span>
+<span class="c1"># plays, leave out next to none of the object.</span>
+<span class="n">_GRADIENTS</span> <span class="o">=</span> <span class="mi">16</span>
+
 
 <div class="viewcode-block" id="Slabs">
 <a class="viewcode-back" href="../../../generated/pulserver.virtual.Slabs.html#pulserver.virtual.Slabs">[docs]</a>
@@ -542,7 +547,8 @@
 <span class="sd">    amplitude or twice it: the pulse is played on a line of isochromats along</span>
 <span class="sd">    its gradient, turned by ``rotation`` as</span>
 <span class="sd">    :func:`~pulserver.virtual.simulate` turns it. A pulse played without a</span>
-<span class="sd">    gradient, or under one that changes during it, excites every isochromat.</span>
+<span class="sd">    gradient, or under one that changes during it, excites every isochromat,</span>
+<span class="sd">    and so do pulses played under more than 16 gradients, as a ZTE scan's are.</span>
 <span class="sd">    Only the pulses the cache labels excitations are counted: what the others</span>
 <span class="sd">    tip into the transverse plane outside the slabs, such as the free</span>
 <span class="sd">    induction decay of an imperfect refocusing pulse, is left out of a scan</span>
@@ -561,6 +567,8 @@
             <span class="k">return</span> <span class="kc">None</span>
         <span class="n">gradient</span> <span class="o">=</span> <span class="n">turn</span> <span class="o">@</span> <span class="n">held</span> <span class="k">if</span> <span class="n">played</span><span class="p">[</span><span class="s2">"rotate"</span><span class="p">][</span><span class="n">block</span><span class="p">]</span> <span class="k">else</span> <span class="n">held</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">gradient</span><span class="p">):</span>
+            <span class="k">return</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">gradient</span><span class="o">.</span><span class="n">tolist</span><span class="p">())</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">slabs</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">slabs</span><span class="p">)</span> <span class="o">==</span> <span class="n">_GRADIENTS</span><span class="p">:</span>
             <span class="k">return</span> <span class="kc">None</span>
         <span class="n">key</span> <span class="o">=</span> <span class="p">(</span><span class="n">gradient</span><span class="o">.</span><span class="n">tobytes</span><span class="p">(),</span> <span class="n">played</span><span class="p">[</span><span class="s2">"rf_waveform_hz"</span><span class="p">][</span><span class="n">start</span><span class="p">:</span><span class="n">stop</span><span class="p">]</span><span class="o">.</span><span class="n">tobytes</span><span class="p">())</span>
         <span class="k">if</span> <span class="n">key</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">profiles</span><span class="p">:</span>

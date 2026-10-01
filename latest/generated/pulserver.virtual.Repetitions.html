@@ -538,7 +538,8 @@
 <p>Made by <a class="reference internal" href="pulserver.virtual.Isochromats.repetitions.html#pulserver.virtual.Isochromats.repetitions" title="pulserver.virtual.Isochromats.repetitions"><code class="xref py py-meth docutils literal notranslate"><span class="pre">Isochromats.repetitions()</span></code></a>, which states what each repetition
 plays. The isochromats hold the magnetisation at the start of the next
 repetition to be played; blocks played on them in between break the
-repetitions that follow.</p>
+repetitions that follow, unless <a class="reference internal" href="pulserver.virtual.Repetitions.resume.html#pulserver.virtual.Repetitions.resume" title="pulserver.virtual.Repetitions.resume"><code class="xref py py-meth docutils literal notranslate"><span class="pre">resume()</span></code></a> takes what they leave as
+the start of the next.</p>
 </dd></dl>
 
 <p class="rubric">Methods</p>
@@ -546,6 +547,9 @@ repetitions that follow.</p>
 <tbody>
 <tr class="row-odd"><td><p><a class="reference internal" href="pulserver.virtual.Repetitions.play.html#pulserver.virtual.Repetitions.play" title="pulserver.virtual.Repetitions.play"><code class="xref py py-obj docutils literal notranslate"><span class="pre">play</span></code></a></p></td>
 <td><p>Play the next <code class="docutils literal notranslate"><span class="pre">count</span></code> repetitions and return what each coil receives.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pulserver.virtual.Repetitions.resume.html#pulserver.virtual.Repetitions.resume" title="pulserver.virtual.Repetitions.resume"><code class="xref py py-obj docutils literal notranslate"><span class="pre">resume</span></code></a></p></td>
+<td><p>Take the magnetisation the isochromats hold, after blocks played on them since the last <code class="xref py py-meth docutils literal notranslate"><span class="pre">play()</span></code>, as that at the start of the next repetition.</p></td>
 </tr>
 </tbody>
 </table>

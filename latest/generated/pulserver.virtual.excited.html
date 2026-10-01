@@ -539,7 +539,8 @@ rest by at least <code class="docutils literal notranslate"><span class="pre">th
 amplitude or twice it: the pulse is played on a line of isochromats along
 its gradient, turned by <code class="docutils literal notranslate"><span class="pre">rotation</span></code> as
 <a class="reference internal" href="pulserver.virtual.simulate.html#pulserver.virtual.simulate" title="pulserver.virtual.simulate"><code class="xref py py-func docutils literal notranslate"><span class="pre">simulate()</span></code></a> turns it. A pulse played without a
-gradient, or under one that changes during it, excites every isochromat.
+gradient, or under one that changes during it, excites every isochromat,
+and so do pulses played under more than 16 gradients, as a ZTE scan’s are.
 Only the pulses the cache labels excitations are counted: what the others
 tip into the transverse plane outside the slabs, such as the free
 induction decay of an imperfect refocusing pulse, is left out of a scan

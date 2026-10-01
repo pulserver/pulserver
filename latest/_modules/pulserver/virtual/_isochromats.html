@@ -648,13 +648,16 @@
 <span class="sd">    threads : int, default=0</span>
 <span class="sd">        Worker threads; 0 for every core.</span>
 <span class="sd">    device : str or torch.device, default=None</span>
-<span class="sd">        A torch device the ADC windows outside runs are read on: those whose</span>
-<span class="sd">        isochromats lie on a lattice summed onto it by a Triton kernel and</span>
+<span class="sd">        A torch device the ADC windows are read and the runs of</span>
+<span class="sd">        :meth:`repetitions` carried on. A window outside a run whose</span>
+<span class="sd">        isochromats lie on a lattice is summed onto it by a Triton kernel and</span>
 <span class="sd">        transformed by cuFINUFFT, and every other one summed sample by sample</span>
-<span class="sd">        by a second Triton kernel. A CUDA device, or the CPU under Triton's</span>
-<span class="sd">        interpreter alone (``TRITON_INTERPRET=1`` before triton is first</span>
-<span class="sd">        imported), on which FINUFFT transforms the lattice. Needs the ``gpu``</span>
-<span class="sd">        extra. By default the engine reads every window itself.</span>
+<span class="sd">        by a second Triton kernel; a run is carried and spread onto its</span>
+<span class="sd">        windows' grids by more. A CUDA</span>
+<span class="sd">        device, or the CPU under Triton's interpreter alone</span>
+<span class="sd">        (``TRITON_INTERPRET=1`` before triton is first imported), on which</span>
+<span class="sd">        FINUFFT transforms the lattice. Needs the ``gpu`` extra. By default</span>
+<span class="sd">        the engine does all of it itself.</span>
 
 <span class="sd">    Raises</span>
 <span class="sd">    ------</span>
@@ -743,10 +746,10 @@
             <span class="nb">int</span><span class="p">(</span><span class="n">threads</span><span class="p">),</span>
         <span class="p">)</span>
         <span class="k">if</span> <span class="n">device</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="kn">from</span><span class="w"> </span><span class="nn">._device</span><span class="w"> </span><span class="kn">import</span> <span class="n">WindowDevice</span>
+            <span class="kn">from</span><span class="w"> </span><span class="nn">._device</span><span class="w"> </span><span class="kn">import</span> <span class="n">Device</span>
 
-            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">device</span><span class="p">,</span> <span class="n">WindowDevice</span><span class="p">):</span>
-                <span class="n">device</span> <span class="o">=</span> <span class="n">WindowDevice</span><span class="p">(</span><span class="n">device</span><span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">device</span><span class="p">,</span> <span class="n">Device</span><span class="p">):</span>
+                <span class="n">device</span> <span class="o">=</span> <span class="n">Device</span><span class="p">(</span><span class="n">device</span><span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_native</span><span class="o">.</span><span class="n">use_device</span><span class="p">(</span><span class="n">device</span><span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__len__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
@@ -771,6 +774,16 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">device_windows</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">"""ADC windows read on the ``device`` since construction, on a lattice or sample by sample."""</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_native</span><span class="o">.</span><span class="n">device_windows</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">ungrouped_pulses</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""RF pulses played isochromat by isochromat from their tables since construction.</span>
+
+<span class="sd">        The engine keeps groupings of isochromats for four gradient</span>
+<span class="sd">        directions; once it holds four, a pulse under a gradient held along</span>
+<span class="sd">        another direction, such as a ZTE spoke's, is played ungrouped.</span>
+<span class="sd">        """</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_native</span><span class="o">.</span><span class="n">ungrouped_pulses</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">moving</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
@@ -972,8 +985,10 @@
         <span class="n">adc_phases</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">readouts</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">nets</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">pulse_gradients</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">system</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">tolerance</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">,</span>
+        <span class="n">split</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Repetitions</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">"""Repetitions of a sequence of blocks, from the magnetisation where it stands.</span>
 
@@ -1023,6 +1038,17 @@
 <span class="sd">            any, each isochromat's transverse magnetisation is turned by its</span>
 <span class="sd">            own phase at the end of each repetition, and the magnetisation is</span>
 <span class="sd">            not split.</span>
+<span class="sd">        pulse_gradients : array_like, default=None</span>
+<span class="sd">            ``(repetitions, 3)`` gradient, in Hz/m along the same axes, by</span>
+<span class="sd">            which the gradient held through the first block, under its RF</span>
+<span class="sd">            pulse, exceeds that block's own; none by default. With any, each</span>
+<span class="sd">            isochromat's map of the first block is read off the pulse's</span>
+<span class="sd">            tables at the field it sees under each repetition's gradient,</span>
+<span class="sd">            with the block's free precession at that field; the four plays</span>
+<span class="sd">            play the blocks after it, ``areas`` and ``nets`` are what the</span>
+<span class="sd">            difference leaves over those blocks, and the magnetisation is not</span>
+<span class="sd">            split. The first block must hold its gradient through it and read</span>
+<span class="sd">            no ADC window.</span>
 <span class="sd">        system : Opts, default=None</span>
 <span class="sd">            As :meth:`play` takes it.</span>
 <span class="sd">        tolerance : float, default=0.0</span>
@@ -1039,6 +1065,10 @@
 <span class="sd">            coordinates along those axes, and an isochromat whose transient</span>
 <span class="sd">            falls below ``tolerance`` times its proton density stands at its</span>
 <span class="sd">            fixed point from then on.</span>
+<span class="sd">        split : bool, default=True</span>
+<span class="sd">            Whether the magnetisation may be split so; repetitions that</span>
+<span class="sd">            :meth:`Repetitions.resume` after blocks played between them are</span>
+<span class="sd">            not.</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
@@ -1051,8 +1081,11 @@
 <span class="sd">        ValueError</span>
 <span class="sd">            If the phases, ADC phases and areas do not describe one set of</span>
 <span class="sd">            repetitions, a window is not read under a held gradient, a block</span>
-<span class="sd">            is one :meth:`play` would refuse, or the isochromats move or</span>
-<span class="sd">            diffuse.</span>
+<span class="sd">            is one :meth:`play` would refuse, the isochromats move or</span>
+<span class="sd">            diffuse, or, with ``pulse_gradients``, the first block holds no</span>
+<span class="sd">            gradient through it, reads a window, or plays a pulse whose</span>
+<span class="sd">            channels play more than one waveform or whose tables would take</span>
+<span class="sd">            more points than the isochromats over every repetition.</span>
 
 <span class="sd">        Examples</span>
 <span class="sd">        --------</span>
@@ -1087,11 +1120,8 @@
         <span class="n">windows</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">receivers</span><span class="p">)</span>
         <span class="n">encoded</span> <span class="o">=</span> <span class="n">_per_window</span><span class="p">(</span><span class="n">areas</span><span class="p">,</span> <span class="s2">"areas"</span><span class="p">,</span> <span class="n">count</span><span class="p">,</span> <span class="n">windows</span><span class="p">)</span>
         <span class="n">turned</span> <span class="o">=</span> <span class="n">_per_window</span><span class="p">(</span><span class="n">readouts</span><span class="p">,</span> <span class="s2">"readouts"</span><span class="p">,</span> <span class="n">count</span><span class="p">,</span> <span class="n">windows</span><span class="p">)</span>
-        <span class="n">left</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">count</span><span class="p">,</span> <span class="mi">3</span><span class="p">))</span> <span class="k">if</span> <span class="n">nets</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">nets</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">left</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="p">(</span><span class="n">count</span><span class="p">,</span> <span class="mi">3</span><span class="p">):</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">"nets must be (repetitions, 3), </span><span class="si">{</span><span class="p">(</span><span class="n">count</span><span class="p">,</span><span class="w"> </span><span class="mi">3</span><span class="p">)</span><span class="si">}</span><span class="s2">, got </span><span class="si">{</span><span class="n">left</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">"</span>
-            <span class="p">)</span>
+        <span class="n">left</span> <span class="o">=</span> <span class="n">_per_repetition</span><span class="p">(</span><span class="n">nets</span><span class="p">,</span> <span class="s2">"nets"</span><span class="p">,</span> <span class="n">count</span><span class="p">)</span>
+        <span class="n">held</span> <span class="o">=</span> <span class="n">_per_repetition</span><span class="p">(</span><span class="n">pulse_gradients</span><span class="p">,</span> <span class="s2">"pulse_gradients"</span><span class="p">,</span> <span class="n">count</span><span class="p">)</span>
         <span class="n">native</span> <span class="o">=</span> <span class="n">_kernels</span><span class="p">()</span><span class="o">.</span><span class="n">Repetitions</span><span class="p">(</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_native</span><span class="p">,</span>
             <span class="n">conversions</span><span class="p">,</span>
@@ -1100,11 +1130,12 @@
             <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">encoded</span><span class="p">)</span><span class="o">.</span><span class="n">ravel</span><span class="p">(),</span>
             <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">turned</span><span class="p">)</span><span class="o">.</span><span class="n">ravel</span><span class="p">(),</span>
             <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">left</span><span class="p">)</span><span class="o">.</span><span class="n">ravel</span><span class="p">(),</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">held</span><span class="p">)</span><span class="o">.</span><span class="n">ravel</span><span class="p">(),</span>
             <span class="nb">float</span><span class="p">(</span><span class="n">tolerance</span><span class="p">),</span>
         <span class="p">)</span>
         <span class="n">steady</span> <span class="o">=</span> <span class="p">(</span>
             <span class="n">_steady</span><span class="p">(</span><span class="n">native</span><span class="p">,</span> <span class="n">encoded</span><span class="p">,</span> <span class="nb">float</span><span class="p">(</span><span class="n">tolerance</span><span class="p">),</span> <span class="p">[</span><span class="n">r</span><span class="o">.</span><span class="n">size</span> <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">receivers</span><span class="p">])</span>
-            <span class="k">if</span> <span class="n">tolerance</span>
+            <span class="k">if</span> <span class="n">tolerance</span> <span class="ow">and</span> <span class="n">split</span>
             <span class="k">else</span> <span class="kc">None</span>
         <span class="p">)</span>
         <span class="k">return</span> <span class="n">Repetitions</span><span class="p">(</span>
@@ -1162,6 +1193,22 @@
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
             <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2"> must be (repetitions, windows, 3), </span><span class="si">{</span><span class="p">(</span><span class="n">count</span><span class="p">,</span><span class="w"> </span><span class="n">windows</span><span class="p">,</span><span class="w"> </span><span class="mi">3</span><span class="p">)</span><span class="si">}</span><span class="s2">, "</span>
             <span class="sa">f</span><span class="s2">"got </span><span class="si">{</span><span class="n">values</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">"</span>
+        <span class="p">)</span>
+    <span class="k">return</span> <span class="n">values</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_per_repetition</span><span class="p">(</span><span class="n">given</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">count</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return ``given`` as ``(repetitions, 3)``, zero where None.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If it holds another shape.</span>
+<span class="sd">    """</span>
+    <span class="n">values</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">count</span><span class="p">,</span> <span class="mi">3</span><span class="p">))</span> <span class="k">if</span> <span class="n">given</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">given</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">values</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="p">(</span><span class="n">count</span><span class="p">,</span> <span class="mi">3</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2"> must be (repetitions, 3), </span><span class="si">{</span><span class="p">(</span><span class="n">count</span><span class="p">,</span><span class="w"> </span><span class="mi">3</span><span class="p">)</span><span class="si">}</span><span class="s2">, got </span><span class="si">{</span><span class="n">values</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">"</span>
         <span class="p">)</span>
     <span class="k">return</span> <span class="n">values</span>
 
@@ -1310,7 +1357,8 @@
 <span class="sd">    Made by :meth:`Isochromats.repetitions`, which states what each repetition</span>
 <span class="sd">    plays. The isochromats hold the magnetisation at the start of the next</span>
 <span class="sd">    repetition to be played; blocks played on them in between break the</span>
-<span class="sd">    repetitions that follow.</span>
+<span class="sd">    repetitions that follow, unless :meth:`resume` takes what they leave as</span>
+<span class="sd">    the start of the next.</span>
 <span class="sd">    """</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
@@ -1376,7 +1424,20 @@
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">carried</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">"""Isochromats carried through the next repetition; the rest stand at their fixed points."""</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_native</span><span class="o">.</span><span class="n">carried</span></div>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_native</span><span class="o">.</span><span class="n">carried</span>
+
+<div class="viewcode-block" id="Repetitions.resume">
+<a class="viewcode-back" href="../../../generated/pulserver.virtual.Repetitions.resume.html#pulserver.virtual.Repetitions.resume">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">resume</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Take the magnetisation the isochromats hold, after blocks played on them since the last :meth:`play`, as that at the start of the next repetition.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        RuntimeError</span>
+<span class="sd">            If the magnetisation was split into fixed points and transients.</span>
+<span class="sd">        """</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_native</span><span class="o">.</span><span class="n">resume</span><span class="p">()</span></div>
+</div>
 
 </pre></div>
 

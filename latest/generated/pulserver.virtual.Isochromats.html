@@ -591,13 +591,16 @@ clock (<a class="reference internal" href="pulserver.virtual.Isochromats.elapsed
 rigid body. Every isochromat keeps its other properties as it moves.</p></li>
 <li><p><strong>seed</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em> or </em><a class="reference external" href="https://numpy.org/doc/stable/reference/random/generator.html#numpy.random.Generator" title="(in NumPy v2.5)"><em>numpy.random.Generator</em></a><em>, </em><em>default=None</em>) – Seed, or generator, of the Brownian walks that <code class="docutils literal notranslate"><span class="pre">diffusion</span></code> drives.</p></li>
 <li><p><strong>threads</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em>, </em><em>default=0</em>) – Worker threads; 0 for every core.</p></li>
-<li><p><strong>device</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em> or </em><em>torch.device</em><em>, </em><em>default=None</em>) – A torch device the ADC windows outside runs are read on: those whose
-isochromats lie on a lattice summed onto it by a Triton kernel and
+<li><p><strong>device</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em> or </em><em>torch.device</em><em>, </em><em>default=None</em>) – A torch device the ADC windows are read and the runs of
+<a class="reference internal" href="pulserver.virtual.Isochromats.repetitions.html#pulserver.virtual.Isochromats.repetitions" title="pulserver.virtual.Isochromats.repetitions"><code class="xref py py-meth docutils literal notranslate"><span class="pre">repetitions()</span></code></a> carried on. A window outside a run whose
+isochromats lie on a lattice is summed onto it by a Triton kernel and
 transformed by cuFINUFFT, and every other one summed sample by sample
-by a second Triton kernel. A CUDA device, or the CPU under Triton’s
-interpreter alone (<code class="docutils literal notranslate"><span class="pre">TRITON_INTERPRET=1</span></code> before triton is first
-imported), on which FINUFFT transforms the lattice. Needs the <code class="docutils literal notranslate"><span class="pre">gpu</span></code>
-extra. By default the engine reads every window itself.</p></li>
+by a second Triton kernel; a run is carried and spread onto its
+windows’ grids by more. A CUDA
+device, or the CPU under Triton’s interpreter alone
+(<code class="docutils literal notranslate"><span class="pre">TRITON_INTERPRET=1</span></code> before triton is first imported), on which
+FINUFFT transforms the lattice. Needs the <code class="docutils literal notranslate"><span class="pre">gpu</span></code> extra. By default
+the engine does all of it itself.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Raises<span class="colon">:</span></dt>
@@ -681,6 +684,9 @@ to <code class="docutils literal notranslate"><span class="pre">+y</span></code>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="pulserver.virtual.Isochromats.positions.html#pulserver.virtual.Isochromats.positions" title="pulserver.virtual.Isochromats.positions"><code class="xref py py-obj docutils literal notranslate"><span class="pre">positions</span></code></a></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">(n,</span> <span class="pre">3)</span></code> positions, in m, as the last block played them, a copy.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pulserver.virtual.Isochromats.ungrouped_pulses.html#pulserver.virtual.Isochromats.ungrouped_pulses" title="pulserver.virtual.Isochromats.ungrouped_pulses"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ungrouped_pulses</span></code></a></p></td>
+<td><p>RF pulses played isochromat by isochromat from their tables since construction.</p></td>
 </tr>
 </tbody>
 </table>

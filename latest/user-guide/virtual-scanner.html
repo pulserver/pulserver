@@ -759,15 +759,17 @@ ends the command with status 1.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">--speed</span></code> plays the scan that many times as fast as a scanner, once the
 simulation is far enough ahead, writing the time left before it is to
 standard error; without it, the scan runs as fast as the simulation.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">--device</span> <span class="pre">cuda</span></code> reads the ADC windows outside runs of repetitions on the
-CUDA device. A window under a changing gradient, such as a spiral’s, whose
-isochromats lie on a lattice along the axes its k moves along, as a
-phantom’s do, is summed onto the lattice by a Triton kernel and transformed
-by cuFINUFFT; every other one, under a held gradient or with its
-isochromats off any lattice, as a moving subject’s are, is summed sample by
-sample by a second Triton kernel. The <code class="docutils literal notranslate"><span class="pre">gpu</span></code> extra installs both
-(<code class="docutils literal notranslate"><span class="pre">pip</span> <span class="pre">install</span> <span class="pre">'pulserver[gpu]'</span></code>). The rest of the scan is simulated on the
-CPU.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--device</span> <span class="pre">cuda</span></code> reads the ADC windows and carries the runs of repetitions
+on the CUDA device. A window outside a run under a changing gradient, such
+as a spiral’s, whose isochromats lie on a lattice along the axes its k
+moves along, as a phantom’s do, is summed onto the lattice by a Triton
+kernel and transformed by cuFINUFFT; every other one, under a held gradient
+or with its isochromats off any lattice, as a moving subject’s are, is
+summed sample by sample by a second Triton kernel. A run of repetitions,
+Cartesian, radial or of ZTE spokes, is carried and spread onto its windows’
+grids by more Triton kernels, a tile of repetitions at a time. The <code class="docutils literal notranslate"><span class="pre">gpu</span></code> extra
+installs all of them (<code class="docutils literal notranslate"><span class="pre">pip</span> <span class="pre">install</span> <span class="pre">'pulserver[gpu]'</span></code>). The rest of the scan
+is simulated on the CPU.</p></li>
 </ul>
 </section>
 <section id="prescribe-an-orientation">
@@ -840,6 +842,16 @@ reconstructions. It serves the pages of <code class="docutils literal notranslat
 computer, and plays each scan at the scanner’s speed, <code class="docutils literal notranslate"><span class="pre">--speed=1</span></code>:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>docker<span class="w"> </span>run<span class="w"> </span>-d<span class="w"> </span>--restart<span class="w"> </span>unless-stopped<span class="w"> </span>--name<span class="w"> </span>pulserver<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>-p<span class="w"> </span><span class="m">127</span>.0.0.1:8765:8765<span class="w"> </span>ghcr.io/pulserver/pulserver
+</pre></div>
+</div>
+<p>Options after the image’s name are added to its console’s: an option of one
+value takes the value given last, and <code class="docutils literal notranslate"><span class="pre">--plugins</span></code>, <code class="docutils literal notranslate"><span class="pre">--recon-plugins</span></code> and
+<code class="docutils literal notranslate"><span class="pre">--origin</span></code> add to the image’s. A console whose scans spread each voxel over
+four isochromats, in tissue that diffuses, of a subject that nods through ±2°
+with a period of 8 s:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>docker<span class="w"> </span>run<span class="w"> </span>-d<span class="w"> </span>--restart<span class="w"> </span>unless-stopped<span class="w"> </span>--name<span class="w"> </span>pulserver<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-p<span class="w"> </span><span class="m">127</span>.0.0.1:8765:8765<span class="w"> </span>ghcr.io/pulserver/pulserver<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--spins<span class="w"> </span><span class="m">4</span><span class="w"> </span>--diffusion<span class="w"> </span>--nod<span class="w"> </span><span class="m">2</span><span class="w"> </span><span class="m">8</span>
 </pre></div>
 </div>
 <p>Its sequences are pypulseqpp’s, reconstructed by the built-in plugins of

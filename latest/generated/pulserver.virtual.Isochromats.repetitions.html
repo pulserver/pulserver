@@ -573,6 +573,16 @@ repetition, in 1/m, along the same axes; none by default. With
 any, each isochromat’s transverse magnetisation is turned by its
 own phase at the end of each repetition, and the magnetisation is
 not split.</p></li>
+<li><p><strong>pulse_gradients</strong> (<em>array_like</em><em>, </em><em>default=None</em>) – <code class="docutils literal notranslate"><span class="pre">(repetitions,</span> <span class="pre">3)</span></code> gradient, in Hz/m along the same axes, by
+which the gradient held through the first block, under its RF
+pulse, exceeds that block’s own; none by default. With any, each
+isochromat’s map of the first block is read off the pulse’s
+tables at the field it sees under each repetition’s gradient,
+with the block’s free precession at that field; the four plays
+play the blocks after it, <code class="docutils literal notranslate"><span class="pre">areas</span></code> and <code class="docutils literal notranslate"><span class="pre">nets</span></code> are what the
+difference leaves over those blocks, and the magnetisation is not
+split. The first block must hold its gradient through it and read
+no ADC window.</p></li>
 <li><p><strong>system</strong> (<em>Opts</em><em>, </em><em>default=None</em>) – As <a class="reference internal" href="pulserver.virtual.Isochromats.play.html#pulserver.virtual.Isochromats.play" title="pulserver.virtual.Isochromats.play"><code class="xref py py-meth docutils literal notranslate"><span class="pre">play()</span></code></a> takes it.</p></li>
 <li><p><strong>tolerance</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.14)"><em>float</em></a><em>, </em><em>default=0.0</em>) – Accuracy of the samples, relative to the sum of the magnitudes of
 the terms each sums; exact to rounding at zero. Above zero, the
@@ -587,6 +597,9 @@ are summed over the columns of isochromats that share their
 coordinates along those axes, and an isochromat whose transient
 falls below <code class="docutils literal notranslate"><span class="pre">tolerance</span></code> times its proton density stands at its
 fixed point from then on.</p></li>
+<li><p><strong>split</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a><em>, </em><em>default=True</em>) – Whether the magnetisation may be split so; repetitions that
+<a class="reference internal" href="pulserver.virtual.Repetitions.resume.html#pulserver.virtual.Repetitions.resume" title="pulserver.virtual.Repetitions.resume"><code class="xref py py-meth docutils literal notranslate"><span class="pre">Repetitions.resume()</span></code></a> after blocks played between them are
+not.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
@@ -599,8 +612,11 @@ magnetisation at the start of the next to be played.</p>
 <dt class="field-even">Raises<span class="colon">:</span></dt>
 <dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If the phases, ADC phases and areas do not describe one set of
     repetitions, a window is not read under a held gradient, a block
-    is one <a class="reference internal" href="pulserver.virtual.Isochromats.play.html#pulserver.virtual.Isochromats.play" title="pulserver.virtual.Isochromats.play"><code class="xref py py-meth docutils literal notranslate"><span class="pre">play()</span></code></a> would refuse, or the isochromats move or
-    diffuse.</p>
+    is one <a class="reference internal" href="pulserver.virtual.Isochromats.play.html#pulserver.virtual.Isochromats.play" title="pulserver.virtual.Isochromats.play"><code class="xref py py-meth docutils literal notranslate"><span class="pre">play()</span></code></a> would refuse, the isochromats move or
+    diffuse, or, with <code class="docutils literal notranslate"><span class="pre">pulse_gradients</span></code>, the first block holds no
+    gradient through it, reads a window, or plays a pulse whose
+    channels play more than one waveform or whose tables would take
+    more points than the isochromats over every repetition.</p>
 </dd>
 </dl>
 <p class="rubric">Examples</p>

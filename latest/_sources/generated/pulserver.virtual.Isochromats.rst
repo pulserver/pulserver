@@ -33,3 +33,4 @@
    ~Isochromats.magnetization
    ~Isochromats.moving
    ~Isochromats.positions
+   ~Isochromats.ungrouped_pulses

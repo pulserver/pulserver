@@ -726,7 +726,9 @@ isochromat at <span class="math notranslate nohighlight">\(\mathbf{r}\)</span> p
 <span class="math notranslate nohighlight">\(\mathbf{g}\)</span>, so a chemical shift or the subject’s field moves an isochromat’s
 slab as it moves the slice, and each slice of a multislice scan is a slab of
 its own. A pulse played without a gradient, or under one that changes during
-it, excites the whole phantom, as a volumetric excitation does. What other
+it, excites the whole phantom, as a volumetric excitation does. So do pulses
+played under more than 16 gradients, as a ZTE scan plays one under each
+spoke’s: between them, their slabs leave out next to none of the object. What other
 pulses tip into the transverse plane outside the slabs, such as the free
 induction decay of an imperfect refocusing pulse, is left out. The phantoms’
 <code class="docutils literal notranslate"><span class="pre">isochromats</span></code> keep those a region, such as <a class="reference internal" href="../generated/pulserver.virtual.Slabs.html#pulserver.virtual.Slabs" title="pulserver.virtual.Slabs"><code class="xref py py-class docutils literal notranslate"><span class="pre">Slabs</span></code></a>,
@@ -761,9 +763,20 @@ wave’s corners fall at the first repetition’s times; the waveforms of a
 repetition leave no area by any of its pulses, so that they turn only the
 samples of its windows and, by the area they leave over it, each
 isochromat’s magnetization at its end;</p></li>
+<li><p>or, in the first block, a gradient held through the block, under its pulse,
+varies across the repetitions, as each spoke of a ZTE scan plays its pulse
+under its own readout gradient; the block then reads no ADC window;</p></li>
 <li><p>each ADC window is read under a gradient held throughout it.</p></li>
 </ul>
-<p>A run ends where one of these stops holding. An interleaved multislice scan
+<p>A run ends where one of these stops holding. Runs of the same blocks join into
+one run whose repetitions other blocks play between, as far as their
+gradients differ from the first repetition’s as the list states: the spokes of
+a ZTE scan’s shells are one run, with each shell’s closing spoke and the ramp
+onto the next shell’s first spoke between them. The run resumes from the
+magnetization those blocks leave, so its maps are made once rather than for
+every shell. Stretches of blocks between runs that repeat one another at least
+eight times are the repetitions of a run of their own, as those between a ZTE
+scan’s shells are. An interleaved multislice scan
 whose RF spoiling steps each slice’s pulse by its own increment, a spin echo
 phase-encoded before its refocusing pulse, and spiral readouts, whose
 gradients vary during the windows, play block by block; a spiral’s windows are
@@ -978,11 +991,15 @@ one by one sample; a balanced SSFP plays as runs of one repetition but for
 its preparation, and to a tolerance of <span class="math notranslate nohighlight">\(10^{-4}\)</span> samples within a thousandth
 of its exact samples, with its fixed points summed by columns and without.
 An interleaved multislice scan whose pulses step unevenly, a spin echo
-phase-encoded before its refocusing pulse, and radial readouts play block by
+phase-encoded before its refocusing pulse, and spiral readouts play block by
 block, and so do the echoes of a three-echo gradient echo where the maps of
 one window fit and those of three do not. A balanced gradient echo whose
 rewinders are off by a few millionths plays as one run to a tolerance. A run
 played across spans samples what it samples played whole.</p></li>
+<li><p>The spokes of a ZTE scan of ten shells play as one run, each spoke’s pulse
+read off its tables, resumed after the blocks between its shells, which play
+as a run of their own; the scan samples what its blocks played one by one
+sample, played whole and in spans that end within a shell.</p></li>
 <li><p>The phantom sampled as isochromats, posed where an axial, an oblique or a
 reflected prescription places the field of view and scanned by a
 single-shot EPI, is acquired as the analytic phantom is: a 90° excitation

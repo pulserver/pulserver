@@ -527,6 +527,8 @@
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#repeated-blocks">Repeated blocks</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#fixed-points-and-transients">Fixed points and transients</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#tolerance">Tolerance</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#blocks-played-between-repetitions">Blocks played between repetitions</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#runs-carried-on-a-device">Runs carried on a device</a></li>
 </ul>
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#voxels-motion-and-diffusion">Voxels, motion and diffusion</a><ul class="nav section-nav flex-column">
@@ -775,6 +777,13 @@ precession over the pulse, <span class="math notranslate nohighlight">\(2\pi/64\
 precession, none of which can be taken out along <span class="math notranslate nohighlight">\(|d|\)</span>, so it is interpolated
 there with a quintic through six points, which keeps the agreement with the
 stepped map at about <span class="math notranslate nohighlight">\(10^{-7}\)</span> of <span class="math notranslate nohighlight">\(M_0\)</span>.</p>
+<p>Groups are made for one gradient direction, and the engine keeps those of four
+directions. Once it holds four, a pulse under a direction none of them is made
+for, as each spoke of a ZTE scan plays under its own readout gradient, is
+played from the grid isochromat by isochromat: each map is interpolated at the
+isochromat’s own <span class="math notranslate nohighlight">\(\nu\)</span> and <span class="math notranslate nohighlight">\(|d_j|\)</span> and applied at once, with no grouping along
+the new direction and no maps kept for a later pulse. A pulse the grid cannot
+serve with fewer new points than there are isochromats is grouped instead.</p>
 </section>
 <section id="pulseq-events-as-fields">
 <h2>Pulseq events as fields<a class="headerlink" href="#pulseq-events-as-fields" title="Link to this heading">#</a></h2>
@@ -870,6 +879,18 @@ repetition, and from one sample to the next it turns isochromat <span class="mat
 <span class="math notranslate nohighlight">\(\Delta t\)</span> the dwell time: each repetition reads the window along its own
 direction. The non-uniform FFT a window is read with then spreads each
 isochromat onto grid points found anew for every repetition.</p>
+<p>A first block that plays its pulse under a gradient held through the block,
+larger by <span class="math notranslate nohighlight">\(\Delta\mathbf{g}_n\)</span> than the first repetition’s, as each spoke of a
+ZTE scan plays its pulse under its own readout gradient, gives isochromat <span class="math notranslate nohighlight">\(j\)</span>
+the field <span class="math notranslate nohighlight">\(\nu_j + \Delta\mathbf{g}_n\cdot\mathbf{r}_j\)</span> through the block, and
+a map that differs from one repetition to the next by more than a turn about
+<span class="math notranslate nohighlight">\(z\)</span>. Each repetition then applies the block’s map read off the pulse’s grid at
+that field and <span class="math notranslate nohighlight">\(|d_j|\)</span>, as a pulse past the groupings kept is, with the free
+precession at that field before and after the pulse. The four plays give the
+maps of the blocks after it, and the areas the difference leaves are those
+over these blocks. The grid spans the fields of every repetition; a pulse it
+cannot serve with fewer points than the isochromats times the repetitions is
+refused.</p>
 <section id="fixed-points-and-transients">
 <h3>Fixed points and transients<a class="headerlink" href="#fixed-points-and-transients" title="Link to this heading">#</a></h3>
 <p>Where the phase offsets step by one increment, <span class="math notranslate nohighlight">\(\theta_{n+1} - \theta_n =
@@ -912,6 +933,50 @@ of the terms a sample sums, reads the transients’ windows by the narrowest
 kernel that holds it, carries the magnetisation in single precision from
 <span class="math notranslate nohighlight">\(10^{-4}\)</span> on, and drops transients below it. The fixed points’ samples are
 summed by the widest kernel at any tolerance.</p>
+</section>
+<section id="blocks-played-between-repetitions">
+<h3>Blocks played between repetitions<a class="headerlink" href="#blocks-played-between-repetitions" title="Link to this heading">#</a></h3>
+<p>Blocks played between two repetitions of a run leave a magnetisation the run
+did not carry, as each shell’s closing spoke and the ramp onto the next
+shell’s first spoke do between the spokes of a ZTE scan’s shells. The run
+resumes from it, turned into the frame of its next repetition’s pulses,
+<span class="math notranslate nohighlight">\(\mathbf{m} = R_z(-\theta_n)\,\mathbf{M}\)</span>. Its maps depend on the blocks of a
+repetition alone, so they hold, and the scan pays for them once rather than
+for every shell. A run split into fixed points and transients does not
+resume: an isochromat whose transient was dropped no longer carries one.</p>
+</section>
+<section id="runs-carried-on-a-device">
+<h3>Runs carried on a device<a class="headerlink" href="#runs-carried-on-a-device" title="Link to this heading">#</a></h3>
+<p>Isochromats given a CUDA device carry a run there from its first play. The
+engine hands the device, for each isochromat it carries, the magnetisation,
+the maps, each window’s coefficients, the limit below which its transient is
+dropped, the coordinates its phase encodings depend on, and the grid points
+and weights by which each window’s non-uniform FFT spreads it, in the
+precision the engine carries them in; where the first block’s pulse is read
+off its grid, it hands the grid, each isochromat’s field and position, and the
+weights of the grid’s rows around its drive. For each tile of 16 repetitions,
+a Triton kernel carries every isochromat through the tile, reading such a
+pulse’s map off the grid at each repetition, and writes its transverse
+magnetisation at each window’s first sample, times the phase encoding, at
+every repetition. A second kernel spreads these onto each
+window’s grid. For each grid point, T2 class and block of coils, it sums the
+isochromats of that class whose kernel reaches the point, grouped by the first
+grid point they spread onto, as products of a matrix of their weights times
+their sensitivities, a row per coil, by one of their transverse
+magnetisations, a column per repetition. A turned window spreads each
+isochromat onto grid points found anew for every repetition, from its
+position and the repetition’s readout as the engine finds them, in double
+precision. At each repetition the isochromats are sorted by T2 class and the
+first grid point they reach, and each block of 32 grid points sums those that
+reach it as products of a matrix of their weights times their transverse
+magnetisations, a row per grid point, by one of their sensitivities, a column
+per coil. The engine reads the grids as it reads its own, and the device
+writes the magnetisation back to the engine at the end of each play and takes
+the engine’s where the run resumes.
+Transients are dropped as the engine drops them, and once more than a quarter
+have been dropped the device keeps only the rest. A run of fewer than
+<span class="math notranslate nohighlight">\(2^{18}\)</span> isochromats times coils, by default, and one whose arrays would take
+more than half the memory free on the device, are carried by the engine.</p>
 </section>
 </section>
 <section id="voxels-motion-and-diffusion">
@@ -1096,6 +1161,8 @@ simulation of the blocks a cache plays.</p></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#repeated-blocks">Repeated blocks</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#fixed-points-and-transients">Fixed points and transients</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#tolerance">Tolerance</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#blocks-played-between-repetitions">Blocks played between repetitions</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#runs-carried-on-a-device">Runs carried on a device</a></li>
 </ul>
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#voxels-motion-and-diffusion">Voxels, motion and diffusion</a><ul class="nav section-nav flex-column">
