@@ -535,23 +535,33 @@
                   
   <section class="tex2jax_ignore mathjax_ignore" id="scanner-sequences">
 <h1>Scanner sequences<a class="headerlink" href="#scanner-sequences" title="Link to this heading">#</a></h1>
-<p>A scanner sequence is a plugin file in one of the <code class="docutils literal notranslate"><span class="pre">--plugins</span></code> directories of the
-design calls; a name is the plugin of the first directory holding <code class="docutils literal notranslate"><span class="pre">&lt;name&gt;.py</span></code>,
-and a symbolic link is a plugin named after the link. It defines one <a class="reference internal" href="../generated/pulserver.design.ScannerSequence.html#pulserver.design.ScannerSequence" title="pulserver.design.ScannerSequence"><code class="xref py py-class docutils literal notranslate"><span class="pre">ScannerSequence</span></code></a> subclass, which binds
-a pypulseqpp <a class="reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.sequences.SequenceApp.html#pypulseqpp.sequences.SequenceApp" title="(in pypulseqpp latest)"><code class="xref py py-class docutils literal notranslate"><span class="pre">SequenceApp</span></code></a> to the entries of the
-scanner protocol. A design call loads the file by its stem: <code class="docutils literal notranslate"><span class="pre">gre2d.py</span></code> is the
-plugin an interpreter host process names with <code class="docutils literal notranslate"><span class="pre">--plugin</span> <span class="pre">gre2d</span></code>.</p>
+<p>A scanner sequence is a plugin file, <code class="docutils literal notranslate"><span class="pre">&lt;name&gt;.py</span></code> in a <code class="docutils literal notranslate"><span class="pre">--plugins</span></code> directory,
+that binds a pypulseqpp <a class="reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.sequences.SequenceApp.html#pypulseqpp.sequences.SequenceApp" title="(in pypulseqpp latest)"><code class="xref py py-class docutils literal notranslate"><span class="pre">SequenceApp</span></code></a> to the
+scanner protocol with one <a class="reference internal" href="../generated/pulserver.design.ScannerSequence.html#pulserver.design.ScannerSequence" title="pulserver.design.ScannerSequence"><code class="xref py py-class docutils literal notranslate"><span class="pre">ScannerSequence</span></code></a> subclass:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># sequences/gre.py</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pypulseqpp.sequences.sequence.gre2D_sequence</span><span class="w"> </span><span class="kn">import</span> <span class="n">Gre2DApp</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pulserver.design</span><span class="w"> </span><span class="kn">import</span> <span class="n">ScannerSequence</span>
+
+<span class="k">class</span><span class="w"> </span><span class="nc">Gre</span><span class="p">(</span><span class="n">ScannerSequence</span><span class="p">):</span>
+    <span class="n">app</span> <span class="o">=</span> <span class="n">Gre2DApp</span>
+</pre></div>
+</div>
+<p>The interpreter names it <code class="docutils literal notranslate"><span class="pre">--plugin</span> <span class="pre">gre</span></code>. Without <code class="docutils literal notranslate"><span class="pre">ui</span></code>, the protocol is the
+application’s defaults. A PyPulseq script becomes a <code class="docutils literal notranslate"><span class="pre">SequenceApp</span></code> by moving
+what precedes its loop into <code class="docutils literal notranslate"><span class="pre">init_sequence</span></code> and the loop body into <code class="docutils literal notranslate"><span class="pre">kernel</span></code>
+(<a class="reference external" href="https://pulserver.github.io/pypulseqpp/latest/user-guide/from-pypulseq.html">from a PyPulseq script</a>).
+<code class="docutils literal notranslate"><span class="pre">MAX_GRAD</span></code> (mT/m) and <code class="docutils literal notranslate"><span class="pre">MAX_SLEW</span></code> (T/m/s) are required on every application:
+they cap the scanner’s limits, which the design call passes in.</p>
 <section id="binding-the-protocol">
 <h2>Binding the protocol<a class="headerlink" href="#binding-the-protocol" title="Link to this heading">#</a></h2>
-<p><code class="docutils literal notranslate"><span class="pre">app</span></code> is the sequence application and <code class="docutils literal notranslate"><span class="pre">ui</span></code> maps parameters of the interpreter’s
-table, named by <a class="reference internal" href="../generated/pulserver.protocol.UIParam.html#pulserver.protocol.UIParam" title="pulserver.protocol.UIParam"><code class="xref py py-class docutils literal notranslate"><span class="pre">UIParam</span></code></a> members, to entries. A name
-outside that table is refused when the class is defined, because the
-interpreter’s parser would drop it. An entry names the <code class="docutils literal notranslate"><span class="pre">init_sequence</span></code> argument
-it sets and how the scanner UI shows it; the application’s own defaults are the
-protocol’s initial values, except where an entry sets its <code class="docutils literal notranslate"><span class="pre">default</span></code>.</p>
+<p><code class="docutils literal notranslate"><span class="pre">ui</span></code> maps <a class="reference internal" href="../generated/pulserver.protocol.UIParam.html#pulserver.protocol.UIParam" title="pulserver.protocol.UIParam"><code class="xref py py-class docutils literal notranslate"><span class="pre">UIParam</span></code></a> members, the parameters of the
+interpreter’s table, to entries; a name outside that table is refused when the
+class is defined. An entry names the <code class="docutils literal notranslate"><span class="pre">init_sequence</span></code> argument it sets. <code class="docutils literal notranslate"><span class="pre">recon</span></code>
+names the reconstruction plugin of the sequence’s data
+(<a class="reference internal" href="reconstruction-plugins.html"><span class="doc">Reconstruction plugins</span></a>).</p>
 <div class="highlight-pycon notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">pypulseqpp.sequences.sequence.gre2D_sequence</span><span class="w"> </span><span class="kn">import</span> <span class="n">Gre2DApp</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">pulserver.design</span><span class="w"> </span><span class="kn">import</span> <span class="n">FloatParam</span><span class="p">,</span> <span class="n">IntParam</span><span class="p">,</span> <span class="n">ScannerSequence</span><span class="p">,</span> <span class="n">TimeParam</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">pulserver.protocol</span><span class="w"> </span><span class="kn">import</span> <span class="n">TEPreset</span><span class="p">,</span> <span class="n">TRPreset</span><span class="p">,</span> <span class="n">UIParam</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">pulserver.design</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span><span class="n">FloatParam</span><span class="p">,</span> <span class="n">IntParam</span><span class="p">,</span> <span class="n">ScannerSequence</span><span class="p">,</span> <span class="n">TEPreset</span><span class="p">,</span>
+<span class="gp">... </span>                              <span class="n">TimeParam</span><span class="p">,</span> <span class="n">TRPreset</span><span class="p">,</span> <span class="n">UIParam</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">Gre2D</span><span class="p">(</span><span class="n">ScannerSequence</span><span class="p">):</span>
 <span class="gp">... </span>    <span class="n">app</span> <span class="o">=</span> <span class="n">Gre2DApp</span>
 <span class="gp">... </span>    <span class="n">recon</span> <span class="o">=</span> <span class="s2">"gre2d"</span>
@@ -612,18 +622,11 @@ protocol’s initial values, except where an entry sets its <code class="docutil
 <a class="reference internal" href="../generated/pulserver.protocol.PreparationType.html#pulserver.protocol.PreparationType" title="pulserver.protocol.PreparationType"><code class="xref py py-class docutils literal notranslate"><span class="pre">PreparationType</span></code></a> and
 <a class="reference internal" href="../generated/pulserver.protocol.TriggerType.html#pulserver.protocol.TriggerType" title="pulserver.protocol.TriggerType"><code class="xref py py-class docutils literal notranslate"><span class="pre">TriggerType</span></code></a>, which
 <a class="reference internal" href="../generated/pulserver.design.StringListParam.html#pulserver.design.StringListParam" title="pulserver.design.StringListParam"><code class="xref py py-class docutils literal notranslate"><span class="pre">StringListParam</span></code></a> takes as they are.</p>
-<p>A preset is a negative value the interpreter sends in place of a time.
-<code class="docutils literal notranslate"><span class="pre">{TEPreset.MINIMUM:</span> <span class="pre">None}</span></code> passes <code class="docutils literal notranslate"><span class="pre">None</span></code> to the application, which designs its
-shortest echo time; a preset can also map to a time in seconds or to a function
-of the scanner limits.</p>
-<p>An entry’s <code class="docutils literal notranslate"><span class="pre">default</span></code> is its initial value in the UI’s units, in place of the
-application’s default: microseconds or a preset for a time, <code class="docutils literal notranslate"><span class="pre">unit</span></code> for a float.
-It is how a sequence offers a protocol its scanner’s limits can play when the
-application’s defaults assume stronger gradients, such as
-<code class="docutils literal notranslate"><span class="pre">TimeParam(&quot;te&quot;,</span> <span class="pre">presets={TEPreset.MINIMUM:</span> <span class="pre">None},</span> <span class="pre">default=TEPreset.MINIMUM)</span></code>
-for the shortest echo time.</p>
-<p><code class="docutils literal notranslate"><span class="pre">recon</span></code> names the reconstruction plugin the data of this sequence is
-reconstructed with (see <a class="reference internal" href="reconstruction-plugins.html"><span class="doc">Reconstruction plugins</span></a>).</p>
+<p>A preset is a negative value the interpreter sends in place of a time;
+<code class="docutils literal notranslate"><span class="pre">{TEPreset.MINIMUM:</span> <span class="pre">None}</span></code> passes <code class="docutils literal notranslate"><span class="pre">None</span></code>, for which the application designs its
+shortest echo time. An entry’s <code class="docutils literal notranslate"><span class="pre">default</span></code> replaces the application’s default as
+the initial value, in UI units: <code class="docutils literal notranslate"><span class="pre">default=TEPreset.MINIMUM</span></code> offers a protocol a
+scanner with weaker gradients than the application assumes can play.</p>
 </section>
 <section id="shipped-sequences">
 <h2>Shipped sequences<a class="headerlink" href="#shipped-sequences" title="Link to this heading">#</a></h2>
@@ -694,13 +697,11 @@ request omits keep their initial values:</p>
 
 </pre></div>
 </div>
-<p>The values also carry the prescription entries as they were requested.</p>
-<p>The resolved <code class="docutils literal notranslate"><span class="pre">TE</span></code> is the echo time the design achieved: the value the
-application records with <a class="reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.sequences.SequenceApp.resolve.html#pypulseqpp.sequences.SequenceApp.resolve" title="(in pypulseqpp latest)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">resolve()</span></code></a> in
-<code class="docutils literal notranslate"><span class="pre">init_sequence</span></code>, as <a class="reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.sequences.SequenceApp.resolved.html#pypulseqpp.sequences.SequenceApp.resolved" title="(in pypulseqpp latest)"><code class="xref py py-attr docutils literal notranslate"><span class="pre">resolved</span></code></a> reports
-it. An entry whose argument the application does not record keeps the
-requested value. Resolved values are reported at the precision a scanner
-parameter stores, so a resolved protocol sent back resolves to itself.</p>
+<p>The resolved <code class="docutils literal notranslate"><span class="pre">TE</span></code> is the echo time the design achieved, as <code class="docutils literal notranslate"><span class="pre">init_sequence</span></code>
+records it with <a class="reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.sequences.SequenceApp.resolve.html#pypulseqpp.sequences.SequenceApp.resolve" title="(in pypulseqpp latest)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">resolve()</span></code></a>; an argument
+the application does not record keeps the requested value. Values are rounded
+to the precision a scanner parameter stores, so a resolved protocol sent back
+resolves to itself.</p>
 <p>A protocol the design refuses is invalid, and the error the application raised
 is the reply’s <code class="docutils literal notranslate"><span class="pre">info</span></code>:</p>
 <div class="highlight-pycon notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">reply</span> <span class="o">=</span> <span class="n">Gre2D</span><span class="p">()</span><span class="o">.</span><span class="n">validate</span><span class="p">(</span><span class="n">system</span><span class="p">,</span> <span class="p">{</span><span class="s2">"TE"</span><span class="p">:</span> <span class="mi">1000</span><span class="p">})</span>
@@ -710,15 +711,12 @@ is the reply’s <code class="docutils literal notranslate"><span class="pre">in
 </pre></div>
 </div>
 <p><code class="docutils literal notranslate"><span class="pre">duration</span></code> is the scan time in seconds,
-<a class="reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.sequences.SequenceApp.scan_time.html#pypulseqpp.sequences.SequenceApp.scan_time" title="(in pypulseqpp latest)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">scan_time()</span></code></a>: the <code class="docutils literal notranslate"><span class="pre">duration</span></code> the
-application states in <code class="docutils literal notranslate"><span class="pre">init_sequence</span></code>, which is reported without playing the
-scan, and otherwise the summed duration of the designed prescans and main
-sequence. An error the design raises while its scan time is computed makes the
-reply invalid, as an error raised by construction does.</p>
+<a class="reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.sequences.SequenceApp.scan_time.html#pypulseqpp.sequences.SequenceApp.scan_time" title="(in pypulseqpp latest)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">scan_time()</span></code></a>: the <code class="docutils literal notranslate"><span class="pre">duration</span></code>
+<code class="docutils literal notranslate"><span class="pre">init_sequence</span></code> states, otherwise the summed duration of the designed prescans
+and main sequence.</p>
 <p><a class="reference internal" href="../generated/pulserver.design.ScannerSequence.generate.html#pulserver.design.ScannerSequence.generate" title="pulserver.design.ScannerSequence.generate"><code class="xref py py-meth docutils literal notranslate"><span class="pre">generate()</span></code></a> writes the design as signed
-binary Pulseq, prescans first, and the <code class="docutils literal notranslate"><span class="pre">generate</span></code> call converts it to the IR
-cache the scanner loads and stores it as a design, described in
-<a class="reference internal" href="../explanations/designs.html"><span class="doc">Designs and the design store</span></a>.</p>
+binary Pulseq, prescans first; the <code class="docutils literal notranslate"><span class="pre">generate</span></code> design call converts it to the IR
+cache and stores it (<a class="reference internal" href="../explanations/designs.html"><span class="doc">Designs and the design store</span></a>).</p>
 </section>
 <section id="see-also">
 <h2>See also<a class="headerlink" href="#see-also" title="Link to this heading">#</a></h2>

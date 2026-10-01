@@ -578,13 +578,50 @@ stream, an ISMRMRD file or an assembled acquisition bucket.</p></li>
 </section>
 <section id="quick-start">
 <h2>Quick start<a class="headerlink" href="#quick-start" title="Link to this heading">#</a></h2>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span>pulserver
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span>pulserver<span class="w"> </span>bartorch
 </pre></div>
 </div>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pulserver<span class="w"> </span>design<span class="w"> </span>serve<span class="w"> </span>--plugins<span class="w"> </span>sequences/<span class="w"> </span>--socket<span class="w"> </span>/tmp/pulserver.sock
-python<span class="w"> </span>-m<span class="w"> </span>pulserver.proxy<span class="w"> </span>--store<span class="w"> </span>/srv/pulserver/designs<span class="w"> </span>--port<span class="w"> </span><span class="m">9002</span><span class="w"> </span>--plugins<span class="w"> </span>recon/
+<p>A sequence plugin binds a pypulseqpp <code class="docutils literal notranslate"><span class="pre">SequenceApp</span></code> to the scanner protocol, and
+a reconstruction plugin reconstructs the series it acquires:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># sequences/gre.py</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pypulseqpp.sequences.sequence.gre2D_sequence</span><span class="w"> </span><span class="kn">import</span> <span class="n">Gre2DApp</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pulserver.design</span><span class="w"> </span><span class="kn">import</span> <span class="n">ScannerSequence</span><span class="p">,</span> <span class="n">TimeParam</span><span class="p">,</span> <span class="n">UIParam</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">Gre</span><span class="p">(</span><span class="n">ScannerSequence</span><span class="p">):</span>
+    <span class="n">app</span> <span class="o">=</span> <span class="n">Gre2DApp</span>
+    <span class="n">recon</span> <span class="o">=</span> <span class="s2">"gre"</span>
+    <span class="n">ui</span> <span class="o">=</span> <span class="p">{</span><span class="n">UIParam</span><span class="o">.</span><span class="n">TE</span><span class="p">:</span> <span class="n">TimeParam</span><span class="p">(</span><span class="s2">"te"</span><span class="p">,</span> <span class="n">range_min</span><span class="o">=</span><span class="mi">3000</span><span class="p">,</span> <span class="n">range_max</span><span class="o">=</span><span class="mi">20000</span><span class="p">)}</span>  <span class="c1"># µs</span>
 </pre></div>
 </div>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># recon/gre.py</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">bartorch.tools</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">bt</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">bartorch</span><span class="w"> </span><span class="kn">import</span> <span class="n">apps</span><span class="p">,</span> <span class="n">priors</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pulserver</span><span class="w"> </span><span class="kn">import</span> <span class="n">recon</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">Pics</span><span class="p">(</span><span class="n">recon</span><span class="o">.</span><span class="n">ReconPlugin</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">recon</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">branch</span><span class="p">,</span> <span class="n">context</span><span class="p">):</span>
+        <span class="n">kspace</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">buffers</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">kspace</span><span class="p">)</span>  <span class="c1"># (coils, y, x)</span>
+        <span class="n">maps</span> <span class="o">=</span> <span class="n">bt</span><span class="o">.</span><span class="n">ecalib</span><span class="p">(</span><span class="n">kspace</span><span class="p">,</span> <span class="n">maps</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">image</span> <span class="o">=</span> <span class="n">apps</span><span class="o">.</span><span class="n">pics</span><span class="p">(</span><span class="n">kspace</span><span class="p">,</span> <span class="n">maps</span><span class="p">,</span> <span class="n">regularizers</span><span class="o">=</span><span class="n">priors</span><span class="o">.</span><span class="n">Wavelet</span><span class="p">((</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">2</span><span class="p">),</span> <span class="mf">0.005</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">recon</span><span class="o">.</span><span class="n">ReconResult</span><span class="p">(</span><span class="n">image</span><span class="o">.</span><span class="n">abs</span><span class="p">()</span><span class="o">.</span><span class="n">numpy</span><span class="p">())</span>
+
+
+<span class="n">PLUGIN</span> <span class="o">=</span> <span class="n">Pics</span><span class="p">()</span>
+</pre></div>
+</div>
+<p>Scan a phantom on the virtual scanner and reconstruct it:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">printf</span><span class="w"> </span><span class="s1">'[Limits]\nB0: 3.0\n[Limits End]\n'</span><span class="w"> </span>&gt;<span class="w"> </span>limits.txt
+python<span class="w"> </span>-m<span class="w"> </span>pulserver.proxy<span class="w"> </span>--store<span class="w"> </span>designs<span class="w"> </span>--port<span class="w"> </span><span class="m">9002</span><span class="w"> </span>--plugins<span class="w"> </span>recon<span class="w"> </span><span class="p">&amp;</span>
+pulserver<span class="w"> </span>scan<span class="w"> </span>--plugins<span class="w"> </span>sequences<span class="w"> </span>--plugin<span class="w"> </span>gre<span class="w"> </span>--limits<span class="w"> </span>limits.txt<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--store<span class="w"> </span>designs<span class="w"> </span>--recon<span class="w"> </span><span class="m">127</span>.0.0.1:9002<span class="w"> </span>--output<span class="w"> </span>images
+</pre></div>
+</div>
+<p>The shipped sequences and reconstructions are found by name after the given
+directories, so <code class="docutils literal notranslate"><span class="pre">--plugin</span> <span class="pre">gre_radial2d</span></code> or <code class="docutils literal notranslate"><span class="pre">recon</span> <span class="pre">=</span> <span class="pre">&quot;pics&quot;</span></code> needs no file of its own. On a scanner,
+the interpreter makes the same design calls and streams to the same proxy.</p>
 </section>
 <section id="documentation">
 <h2>Documentation<a class="headerlink" href="#documentation" title="Link to this heading">#</a></h2>

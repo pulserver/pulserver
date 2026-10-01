@@ -535,13 +535,32 @@
                   
   <section class="tex2jax_ignore mathjax_ignore" id="reconstruction-plugins">
 <h1>Reconstruction plugins<a class="headerlink" href="#reconstruction-plugins" title="Link to this heading">#</a></h1>
-<p>A reconstruction plugin is a file in one of the reconstruction proxy’s
-<code class="docutils literal notranslate"><span class="pre">--plugins</span></code> directories; a name is the plugin of the first directory holding
-<code class="docutils literal notranslate"><span class="pre">&lt;name&gt;.py</span></code>, and a symbolic link is a plugin named after the link. It defines a <a class="reference internal" href="../generated/pulserver.recon.ReconPlugin.html#pulserver.recon.ReconPlugin" title="pulserver.recon.ReconPlugin"><code class="xref py py-class docutils literal notranslate"><span class="pre">ReconPlugin</span></code></a> subclass and a
-module-level <code class="docutils literal notranslate"><span class="pre">PLUGIN</span></code> instance of it. The proxy runs the plugin in a worker
-process, one per series, over an MRD stream whose header and acquisitions carry
-what the sequence states about its readouts (see
-<a class="reference internal" href="../explanations/reconstruction.html"><span class="doc">Raw-data enrichment and routing</span></a>).</p>
+<p>A reconstruction plugin is a file, <code class="docutils literal notranslate"><span class="pre">&lt;name&gt;.py</span></code> in a <code class="docutils literal notranslate"><span class="pre">--plugins</span></code> directory of the
+reconstruction proxy, holding a <a class="reference internal" href="../generated/pulserver.recon.ReconPlugin.html#pulserver.recon.ReconPlugin" title="pulserver.recon.ReconPlugin"><code class="xref py py-class docutils literal notranslate"><span class="pre">ReconPlugin</span></code></a> subclass
+and a module-level <code class="docutils literal notranslate"><span class="pre">PLUGIN</span></code> instance. This one is <code class="docutils literal notranslate"><span class="pre">bart</span> <span class="pre">pics</span></code> on ESPIRiT maps:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># recon/gre.py</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">bartorch.tools</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">bt</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">bartorch</span><span class="w"> </span><span class="kn">import</span> <span class="n">apps</span><span class="p">,</span> <span class="n">priors</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pulserver</span><span class="w"> </span><span class="kn">import</span> <span class="n">recon</span>
+
+<span class="k">class</span><span class="w"> </span><span class="nc">Pics</span><span class="p">(</span><span class="n">recon</span><span class="o">.</span><span class="n">ReconPlugin</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">recon</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">branch</span><span class="p">,</span> <span class="n">context</span><span class="p">):</span>
+        <span class="n">kspace</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">buffers</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">kspace</span><span class="p">)</span>  <span class="c1"># (coils, y, x)</span>
+        <span class="n">maps</span> <span class="o">=</span> <span class="n">bt</span><span class="o">.</span><span class="n">ecalib</span><span class="p">(</span><span class="n">kspace</span><span class="p">,</span> <span class="n">maps</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">image</span> <span class="o">=</span> <span class="n">apps</span><span class="o">.</span><span class="n">pics</span><span class="p">(</span><span class="n">kspace</span><span class="p">,</span> <span class="n">maps</span><span class="p">,</span> <span class="n">regularizers</span><span class="o">=</span><span class="n">priors</span><span class="o">.</span><span class="n">Wavelet</span><span class="p">((</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">2</span><span class="p">),</span> <span class="mf">0.005</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">recon</span><span class="o">.</span><span class="n">ReconResult</span><span class="p">(</span><span class="n">image</span><span class="o">.</span><span class="n">abs</span><span class="p">()</span><span class="o">.</span><span class="n">numpy</span><span class="p">())</span>
+
+<span class="n">PLUGIN</span> <span class="o">=</span> <span class="n">Pics</span><span class="p">()</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">self.buffers[0].kspace</span></code> is the first encoding space, <code class="docutils literal notranslate"><span class="pre">(coils,</span> <span class="pre">...,</span> <span class="pre">readout)</span></code>,
+with the axes <code class="docutils literal notranslate"><span class="pre">buffers[0].axes</span></code> names. Readouts are placed by their encoding
+counters, which a sequence sets with <code class="docutils literal notranslate"><span class="pre">self.labels(LIN=line)</span></code> in its kernel or
+<code class="docutils literal notranslate"><span class="pre">pp.make_label</span></code> as in PyPulseq; a readout placed over another is warned about.
+The proxy runs the plugin in a worker process, one per series, over an MRD
+stream enriched from the sequence’s design
+(<a class="reference internal" href="../explanations/reconstruction.html"><span class="doc">Raw-data enrichment and routing</span></a>).</p>
 <section id="hooks">
 <h2>Hooks<a class="headerlink" href="#hooks" title="Link to this heading">#</a></h2>
 <p>The runtime calls three hooks over one stream:</p>
@@ -593,19 +612,13 @@ branch to reconstruct.</p>
 geometry and timing come from a reference acquisition, so a plugin builds no
 image header; <code class="docutils literal notranslate"><span class="pre">dicom=True</span></code> sends it as DICOM instead.</p>
 <p>Each series runs on its own copy of <code class="docutils literal notranslate"><span class="pre">PLUGIN</span></code>
-(<a class="reference internal" href="../generated/pulserver.recon.ReconPlugin.spawn.html#pulserver.recon.ReconPlugin.spawn" title="pulserver.recon.ReconPlugin.spawn"><code class="xref py py-meth docutils literal notranslate"><span class="pre">spawn()</span></code></a>), so state set in the hooks belongs
-to one series. <code class="docutils literal notranslate"><span class="pre">context.exam</span></code>, an <a class="reference internal" href="../generated/pulserver.recon.ExamCache.html#pulserver.recon.ExamCache" title="pulserver.recon.ExamCache"><code class="xref py py-class docutils literal notranslate"><span class="pre">ExamCache</span></code></a>, is shared
-by the series of one exam: a coil calibration computed in one series can be
-stored there and read by the next. Under the proxy each series runs in a process
-of its own, so a stored value reaches the next series pickled, through the
-exam’s directory: it comes back as a copy, without its <code class="docutils literal notranslate"><span class="pre">cleanup</span></code>, and a value
-that cannot be pickled stays with its series.</p>
-<p><code class="docutils literal notranslate"><span class="pre">context.device</span></code> is the GPU the proxy gave the series, such as <code class="docutils literal notranslate"><span class="pre">&quot;cuda:0&quot;</span></code>, and
-<code class="docutils literal notranslate"><span class="pre">None</span></code> on a host without one and offline; a reconstruction puts its tensors
-there. A reconstruction may start processes of its own. A child started with
-the <code class="docutils literal notranslate"><span class="pre">spawn</span></code> method imports what it runs by module name, which a plugin file
-loaded from a path does not have, so the functions it runs come from importable
-modules.</p>
+(<a class="reference internal" href="../generated/pulserver.recon.ReconPlugin.spawn.html#pulserver.recon.ReconPlugin.spawn" title="pulserver.recon.ReconPlugin.spawn"><code class="xref py py-meth docutils literal notranslate"><span class="pre">spawn()</span></code></a>). <code class="docutils literal notranslate"><span class="pre">context.exam</span></code>, an
+<a class="reference internal" href="../generated/pulserver.recon.ExamCache.html#pulserver.recon.ExamCache" title="pulserver.recon.ExamCache"><code class="xref py py-class docutils literal notranslate"><span class="pre">ExamCache</span></code></a>, is shared by the series of one exam, such
+as for a coil calibration; under the proxy a stored value reaches the next
+series pickled, as a copy without its <code class="docutils literal notranslate"><span class="pre">cleanup</span></code>.</p>
+<p><code class="docutils literal notranslate"><span class="pre">context.device</span></code> is the GPU the proxy gave the series, such as <code class="docutils literal notranslate"><span class="pre">&quot;cuda:0&quot;</span></code>, or
+<code class="docutils literal notranslate"><span class="pre">None</span></code>. A child process started with the <code class="docutils literal notranslate"><span class="pre">spawn</span></code> method runs functions from
+importable modules, not from the plugin file.</p>
 </section>
 <section id="non-cartesian-data">
 <h2>Non-Cartesian data<a class="headerlink" href="#non-cartesian-data" title="Link to this heading">#</a></h2>
@@ -631,10 +644,10 @@ transformed with an FFT before the in-plane NUFFT.</p>
 </section>
 <section id="running-a-plugin-offline">
 <h2>Running a plugin offline<a class="headerlink" href="#running-a-plugin-offline" title="Link to this heading">#</a></h2>
-<p>The same hooks run outside the proxy.
-<a class="reference internal" href="../generated/pulserver.recon.ReconPlugin.run.html#pulserver.recon.ReconPlugin.run" title="pulserver.recon.ReconPlugin.run"><code class="xref py py-meth docutils literal notranslate"><span class="pre">run()</span></code></a> reconstructs an ISMRMRD HDF5 file in
-the calling process:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">images</span> <span class="o">=</span> <span class="n">PLUGIN</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="s2">"scan.h5"</span><span class="p">)</span>
+<p><a class="reference internal" href="../generated/pulserver.recon.ReconPlugin.run.html#pulserver.recon.ReconPlugin.run" title="pulserver.recon.ReconPlugin.run"><code class="xref py py-meth docutils literal notranslate"><span class="pre">run()</span></code></a> reconstructs an ISMRMRD HDF5 file in
+the calling process. A file recorded as the scanner sends it, such as
+<code class="docutils literal notranslate"><span class="pre">pulserver</span> <span class="pre">scan</span> <span class="pre">--mrd</span> <span class="pre">raw.h5</span></code> writes, is enriched from its design store first:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">images</span> <span class="o">=</span> <span class="n">PLUGIN</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="s2">"raw.h5"</span><span class="p">,</span> <span class="n">store</span><span class="o">=</span><span class="s2">"designs"</span><span class="p">)</span>
 </pre></div>
 </div>
 <p>Calling the plugin on an <a class="reference internal" href="../generated/pulserver.mrd.AcquisitionBucket.html#pulserver.mrd.AcquisitionBucket" title="pulserver.mrd.AcquisitionBucket"><code class="xref py py-class docutils literal notranslate"><span class="pre">AcquisitionBucket</span></code></a> runs
