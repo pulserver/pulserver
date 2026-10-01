@@ -63,7 +63,8 @@ pulseg_opts make_opts(
     int vendor,
     const std::array<int, 3> &label_column_map,
     const std::string &cache_ext,
-    const std::optional<std::array<float, 12>> &profile)
+    const std::optional<std::array<float, 12>> &profile,
+    const std::optional<std::array<float, 5>> &grouping)
 {
     pulseg_opts opts;
     std::memset(&opts, 0, sizeof(opts));
@@ -91,6 +92,15 @@ pulseg_opts make_opts(
             held[i]->format = static_cast<int>((*profile)[2 * i]);
             held[i]->step = (*profile)[2 * i + 1];
         }
+    }
+    if (grouping)
+    {
+        // In the order pulseg_grouping declares the rule.
+        opts.grouping.boundary_gradient_hz_per_m = (*grouping)[0];
+        opts.grouping.split_by_pulses = static_cast<int>((*grouping)[1]);
+        opts.grouping.split_by_readouts = static_cast<int>((*grouping)[2]);
+        opts.grouping.split_navigators = static_cast<int>((*grouping)[3]);
+        opts.grouping.split_edge_delays = static_cast<int>((*grouping)[4]);
     }
     return opts;
 }
@@ -661,7 +671,8 @@ PYBIND11_MODULE(_ext, module)
            const std::array<int, 3> &label_column_map,
            const std::string &cache_ext,
            const std::optional<Budget> &wave_budget,
-           const std::optional<std::array<float, 12>> &profile)
+           const std::optional<std::array<float, 12>> &profile,
+           const std::optional<std::array<float, 5>> &grouping)
         {
             const pulseg_opts opts = make_opts(
                 rf_raster_us,
@@ -671,7 +682,8 @@ PYBIND11_MODULE(_ext, module)
                 vendor,
                 label_column_map,
                 cache_ext,
-                profile);
+                profile,
+                grouping);
             const Collection coll = convert(chain, opts);
             const pulseg_wave_budget budget = budget_for(coll.get(), wave_budget);
             pulseg_diagnostic diag = PULSEG_DIAGNOSTIC_INIT;
@@ -701,6 +713,7 @@ PYBIND11_MODULE(_ext, module)
                 0,
                 label_column_map,
                 PULSEG_CACHE_EXT_DEFAULT,
+                std::nullopt,
                 std::nullopt);
             return summarize(convert(chain, opts).get());
         },

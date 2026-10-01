@@ -26,6 +26,7 @@ int main(void)
     pulseg_corner_point_stream corners = PULSEG_CORNER_POINT_STREAM_INIT;
     pulseg_cursor_info cursor = PULSEG_CURSOR_INFO_INIT;
     pulseg_diagnostic diagnostic = PULSEG_DIAGNOSTIC_INIT;
+    pulseg_grouping grouping = PULSEG_GROUPING_INIT;
     pulseg_opts opts = PULSEG_OPTS_INIT;
     pulseg_playout_options playout = PULSEG_PLAYOUT_OPTIONS_INIT;
     pulseg_rf_shim_def shim = PULSEG_RF_SHIM_DEF_INIT;
@@ -42,13 +43,13 @@ int main(void)
 
     /* Read one field of each, so none is optimised away unexamined. */
     printf(
-        "%d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d\n",
+        "%d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d\n",
         adc.num_samples, block.duration_us, instance.duration_us,
         collection.num_subsequences, corners.num_points, cursor.scan_pos,
         diagnostic.code, opts.vendor, playout.prescan_subsequence,
         shim.num_channels, (int)rf.flip_angle_rad, (int)scan_time.total_duration_us,
         segment.num_blocks, layout.num_blocks, flags.enable_sar_burst_mode,
         subsequence.num_trs, text.capacity, (int)budget.max_samples,
-        plan.mode, shape.num_samples);
+        plan.mode, shape.num_samples, grouping.split_by_pulses);
     return 0;
 }

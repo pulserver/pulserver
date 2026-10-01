@@ -83,6 +83,53 @@ class VendorProfile:
 
 
 @dataclass(frozen=True)
+class Grouping:
+    """How a repetition's blocks become the units a machine plays.
+
+    Every machine plays units, and grouping is how they are made: a
+    repetition's blocks cut into contiguous runs, each run one unit the
+    hardware builds and replays. One machine calls a unit a segment and builds
+    it with its pulse generator; another calls it a block and merges several of
+    these into one. Neither can decline to group; what differs is where the
+    boundaries fall.
+
+    The default is a machine that begins a unit by setting its gradients, so a
+    boundary falls only where they rest.
+
+    Attributes
+    ----------
+    boundary_gradient_hz_per_m
+        How near rest the gradients must be where a boundary falls. A machine
+        that can begin a unit under a gradient states a large value.
+    split_by_pulses, split_by_readouts
+        Whether runs that play different pulses, or digitise with different
+        readouts, are different units.
+    split_navigators
+        Whether a navigator readout is a unit of its own.
+    split_edge_delays
+        Whether a block at the edge of a unit that does nothing but wait is a
+        unit of its own. A machine that inserts transmit-to-receive switching
+        time at every unit wants as few as it can have, and sets this False.
+    """
+
+    boundary_gradient_hz_per_m: float = 100.0
+    split_by_pulses: bool = True
+    split_by_readouts: bool = True
+    split_navigators: bool = True
+    split_edge_delays: bool = True
+
+    def as_values(self) -> tuple[float, ...]:
+        """Return the rule as the extension takes it, in the order C declares it."""
+        return (
+            float(self.boundary_gradient_hz_per_m),
+            float(self.split_by_pulses),
+            float(self.split_by_readouts),
+            float(self.split_navigators),
+            float(self.split_edge_delays),
+        )
+
+
+@dataclass(frozen=True)
 class WaveBudget:
     """What a playout's waveform memory affords the waves.
 
@@ -171,6 +218,7 @@ def convert(
     sar_ratios: Sequence[SarRatio] | None = None,
     wave_budget: WaveBudget | None = None,
     profile: VendorProfile | None = None,
+    grouping: Grouping | None = None,
 ) -> Path:
     """Segment a sequence file and write its IR cache beside it.
 
@@ -210,6 +258,10 @@ def convert(
     profile
         What the cache holds its numbers as; every quantity a float in its SI
         unit when left out.
+    grouping
+        How the blocks of a repetition become the units played. Left out, a
+        boundary falls only where the gradients rest, which is what a machine
+        that begins a unit by setting them permits.
     wave_budget
         The waveform memory of the playout the cache is for, which the cache
         lays the waves out in (:func:`plan_waves`); None holds every wave at
@@ -251,6 +303,7 @@ def convert(
         cache_ext,
         _held(wave_budget),
         None if profile is None else profile.as_pairs(),
+        None if grouping is None else grouping.as_values(),
     )
     if not target.is_file():
         raise OSError(f"no cache was written for {seq_path}")

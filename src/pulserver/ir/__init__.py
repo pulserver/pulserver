@@ -3,6 +3,7 @@
 from ._checks import CheckLimits, SarRatio, check, sar_ratios
 from ._convert import (
     Format,
+    Grouping,
     Quantity,
     VendorProfile,
     WaveBudget,
@@ -19,6 +20,7 @@ from ._waves import plan_waves, repetition_gradients, sample_wave
 __all__ = [
     "CheckLimits",
     "Format",
+    "Grouping",
     "Prescan",
     "Quantity",
     "SarRatio",

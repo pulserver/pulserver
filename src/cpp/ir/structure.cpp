@@ -39,14 +39,22 @@ extern "C"
 #define SEGSTATE_SEEKING_BOUNDARY 1
 #define SEGSTATE_OPTIMIZED_MODE 2
 
-/* Fixed threshold (Hz/m) for treating a gradient boundary value as zero.
- * Segment boundaries are structural: they require gradients to be zero at
- * the split point.  This must NOT depend on runtime system parameters
- * (max_slew) so that segment detection is hardware-independent.  The value
- * is generous enough to absorb floating-point noise from shape
- * decompression while remaining far below the smallest real non-zero
- * gradient boundary in practice (~4 600 Hz/m).                          */
+/* How near rest the gradients must be where a boundary falls, when the caller
+ * has stated nothing.  The grouping a machine states carries its own value --
+ * see pulseg_grouping -- and this is what a machine that begins a unit by
+ * setting its gradients asks for: generous enough to absorb the floating-point
+ * noise of shape decompression, far below the smallest real non-zero gradient
+ * boundary in practice (~4 600 Hz/m), and not a function of any runtime system
+ * parameter, so a unit is the same on every machine that states the same rule. */
 #define SEG_ZERO_GRAD_THRESHOLD_HZ_PER_M 100.0f
+
+/* The rule a caller stated, or what a machine that sets its gradients wants. */
+static float boundary_tolerance(const pulseg_opts *opts)
+{
+    if (!opts || opts->grouping.boundary_gradient_hz_per_m < 0.0f)
+        return SEG_ZERO_GRAD_THRESHOLD_HZ_PER_M;
+    return opts->grouping.boundary_gradient_hz_per_m;
+}
 
 /* ================================================================== */
 /*  Tiny helpers                                                      */
@@ -1937,8 +1945,7 @@ static int find_segments_on_exec_stream(
     int has_rf, has_adc, is_cand;
     int nb, n, i;
 
-    (void)opts;
-    max_allowed = SEG_ZERO_GRAD_THRESHOLD_HZ_PER_M;
+    max_allowed = boundary_tolerance(opts);
     nb = pat_size;
 
     seg_starts = (int *)PULSEG_ALLOC(nb * sizeof(int));
@@ -2251,6 +2258,51 @@ static int strip_pure_delays_scan(
     return num_out;
 }
 
+/* Copy segments through unchanged, for a machine that keeps a unit whole
+ * rather than peeling the waits at its edges into units of their own. The
+ * caller frees the sources' index arrays, so each is copied. */
+static int keep_segments_whole(
+    const pulseg_virtual_segment *raw_segs,
+    int num_raw,
+    pulseg_virtual_segment *out,
+    int max_out)
+{
+    int num_out = 0;
+    int s, i;
+
+    for (s = 0; s < num_raw; ++s)
+    {
+        if (raw_segs[s].num_blocks == 0 || !raw_segs[s].unique_block_indices)
+            continue;
+        if (num_out >= max_out)
+            return -1;
+        out[num_out] = raw_segs[s];
+        out[num_out].unique_block_indices =
+            (int *)PULSEG_ALLOC((size_t)raw_segs[s].num_blocks * sizeof(int));
+        if (!out[num_out].unique_block_indices)
+            return -1;
+        for (i = 0; i < raw_segs[s].num_blocks; ++i)
+            out[num_out].unique_block_indices[i] = raw_segs[s].unique_block_indices[i];
+        num_out++;
+    }
+    return num_out;
+}
+
+/* Where the boundaries the grouping leaves to a preference fall. */
+static int grouped_segments(
+    const pulseg_opts *opts,
+    const pulseg_virtual_segment *raw_segs,
+    int num_raw,
+    pulseg_virtual_segment *out,
+    int max_out,
+    const pulseg_block_table_element *bt,
+    const int *scan_block_idx)
+{
+    if (opts && !opts->grouping.split_edge_delays)
+        return keep_segments_whole(raw_segs, num_raw, out, max_out);
+    return strip_pure_delays_scan(raw_segs, num_raw, out, max_out, bt, scan_block_idx);
+}
+
 /* ================================================================== */
 /*  Scan-table boundary pre-check for segmentation retry              */
 /* ================================================================== */
@@ -2360,7 +2412,7 @@ int pulseg__get_exec_stream_segments(
     pass_size = scan_len;
 
     tr_size = desc->tr_descriptor.tr_size;
-    max_allowed = SEG_ZERO_GRAD_THRESHOLD_HZ_PER_M;
+    max_allowed = boundary_tolerance(opts);
 
     /* max_mult: maximum number of TRs a segmentation retry can absorb.
      * The entire stream is the upper bound. */
@@ -2516,7 +2568,8 @@ int pulseg__get_exec_stream_segments(
     offset = 0;
     if (n_prep_raw > 0)
     {
-        n_prep = strip_pure_delays_scan(
+        n_prep = grouped_segments(
+            opts,
             raw_segs,
             n_prep_raw,
             exp_segs + offset,
@@ -2533,7 +2586,8 @@ int pulseg__get_exec_stream_segments(
 
     if (n_main_raw > 0)
     {
-        n_main = strip_pure_delays_scan(
+        n_main = grouped_segments(
+            opts,
             raw_segs + n_prep_raw,
             n_main_raw,
             exp_segs + offset,
@@ -2550,7 +2604,8 @@ int pulseg__get_exec_stream_segments(
 
     if (n_cool_raw > 0)
     {
-        n_cool = strip_pure_delays_scan(
+        n_cool = grouped_segments(
+            opts,
             raw_segs + n_prep_raw + n_main_raw,
             n_cool_raw,
             exp_segs + offset,
@@ -2582,7 +2637,7 @@ int pulseg__get_exec_stream_segments(
     }
 
     /* ---- 5. NAV-aware split and merge (per section, PMC only) ---- */
-    if (desc->enable_pmc)
+    if (desc->enable_pmc && opts->grouping.split_navigators)
     {
         pulseg_virtual_segment *nav_segs;
         int nav_total = 0, r;
@@ -2971,8 +3026,10 @@ int pulseg__get_exec_stream_segments(
 
     /* Refine by the pulses, then by the readouts, each repetition plays. */
     {
-        int rc = split_segments_by_pulses(desc, diag);
-        if (PULSEG_SUCCEEDED(rc))
+        int rc = opts->grouping.split_by_pulses
+            ? split_segments_by_pulses(desc, diag)
+            : PULSEG_SUCCESS;
+        if (PULSEG_SUCCEEDED(rc) && opts->grouping.split_by_readouts)
             rc = split_segments_by_adc(desc, diag);
         if (PULSEG_FAILED(rc))
         {
