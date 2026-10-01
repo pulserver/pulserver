@@ -591,12 +591,13 @@ clock (<a class="reference internal" href="pulserver.virtual.Isochromats.elapsed
 rigid body. Every isochromat keeps its other properties as it moves.</p></li>
 <li><p><strong>seed</strong> (<em>int</em><em> or </em><a class="reference external" href="https://numpy.org/doc/stable/reference/random/generator.html#numpy.random.Generator" title="(in NumPy v2.5)"><em>numpy.random.Generator</em></a><em>, </em><em>default=None</em>) – Seed, or generator, of the Brownian walks that <code class="docutils literal notranslate"><span class="pre">diffusion</span></code> drives.</p></li>
 <li><p><strong>threads</strong> (<em>int</em><em>, </em><em>default=0</em>) – Worker threads; 0 for every core.</p></li>
-<li><p><strong>device</strong> (<em>str</em><em> or </em><em>torch.device</em><em>, </em><em>default=None</em>) – A torch device the windows read on a lattice are summed and
-transformed on: a CUDA device, on which a Triton kernel sums them and
-cuFINUFFT transforms them, or the CPU, under Triton’s interpreter
-alone (<code class="docutils literal notranslate"><span class="pre">TRITON_INTERPRET=1</span></code> before triton is first imported), on
-which FINUFFT transforms them. Needs the <code class="docutils literal notranslate"><span class="pre">gpu</span></code> extra. By default
-the engine reads them itself.</p></li>
+<li><p><strong>device</strong> (<em>str</em><em> or </em><em>torch.device</em><em>, </em><em>default=None</em>) – A torch device the ADC windows outside runs are read on: those whose
+isochromats lie on a lattice summed onto it by a Triton kernel and
+transformed by cuFINUFFT, and every other one summed sample by sample
+by a second Triton kernel. A CUDA device, or the CPU under Triton’s
+interpreter alone (<code class="docutils literal notranslate"><span class="pre">TRITON_INTERPRET=1</span></code> before triton is first
+imported), on which FINUFFT transforms the lattice. Needs the <code class="docutils literal notranslate"><span class="pre">gpu</span></code>
+extra. By default the engine reads every window itself.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Raises<span class="colon">:</span></dt>
@@ -664,7 +665,7 @@ to <code class="docutils literal notranslate"><span class="pre">+y</span></code>
 <td><p>Number of receive coils; one without receive sensitivities.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="pulserver.virtual.Isochromats.device_windows.html#pulserver.virtual.Isochromats.device_windows" title="pulserver.virtual.Isochromats.device_windows"><code class="xref py py-obj docutils literal notranslate"><span class="pre">device_windows</span></code></a></p></td>
-<td><p>Of <code class="xref py py-attr docutils literal notranslate"><span class="pre">lattice_windows</span></code>, those read on the <code class="docutils literal notranslate"><span class="pre">device</span></code>.</p></td>
+<td><p>ADC windows read on the <code class="docutils literal notranslate"><span class="pre">device</span></code> since construction, on a lattice or sample by sample.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="pulserver.virtual.Isochromats.elapsed.html#pulserver.virtual.Isochromats.elapsed" title="pulserver.virtual.Isochromats.elapsed"><code class="xref py py-obj docutils literal notranslate"><span class="pre">elapsed</span></code></a></p></td>
 <td><p>Time played since construction or the last <code class="xref py py-meth docutils literal notranslate"><span class="pre">reset()</span></code>, in s.</p></td>

@@ -535,7 +535,7 @@
 <span class="sd">        Scan time elapsed per wall-clock second once the scan's simulation is</span>
 <span class="sd">        far enough ahead of its clock; as fast as it is simulated without it.</span>
 <span class="sd">    device</span>
-<span class="sd">        Device a scan's windows read on a lattice are read on, as</span>
+<span class="sd">        Device a scan's ADC windows outside runs are read on, as</span>
 <span class="sd">        :class:`~pulserver.virtual.Isochromats` takes it; the engine reads</span>
 <span class="sd">        them itself without one.</span>
 <span class="sd">    """</span>
@@ -1107,8 +1107,8 @@
     <span class="p">)</span>
     <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span>
         <span class="s2">"--device"</span><span class="p">,</span>
-        <span class="n">help</span><span class="o">=</span><span class="s2">"torch device windows read on a lattice are read on, such as cuda "</span>
-        <span class="s2">"(the gpu extra); the engine reads them without it"</span><span class="p">,</span>
+        <span class="n">help</span><span class="o">=</span><span class="s2">"torch device the ADC windows outside runs are read on, such as "</span>
+        <span class="s2">"cuda (the gpu extra); the engine reads them without it"</span><span class="p">,</span>
     <span class="p">)</span>
     <span class="k">return</span> <span class="n">parser</span>
 

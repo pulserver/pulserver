@@ -648,12 +648,13 @@
 <span class="sd">    threads : int, default=0</span>
 <span class="sd">        Worker threads; 0 for every core.</span>
 <span class="sd">    device : str or torch.device, default=None</span>
-<span class="sd">        A torch device the windows read on a lattice are summed and</span>
-<span class="sd">        transformed on: a CUDA device, on which a Triton kernel sums them and</span>
-<span class="sd">        cuFINUFFT transforms them, or the CPU, under Triton's interpreter</span>
-<span class="sd">        alone (``TRITON_INTERPRET=1`` before triton is first imported), on</span>
-<span class="sd">        which FINUFFT transforms them. Needs the ``gpu`` extra. By default</span>
-<span class="sd">        the engine reads them itself.</span>
+<span class="sd">        A torch device the ADC windows outside runs are read on: those whose</span>
+<span class="sd">        isochromats lie on a lattice summed onto it by a Triton kernel and</span>
+<span class="sd">        transformed by cuFINUFFT, and every other one summed sample by sample</span>
+<span class="sd">        by a second Triton kernel. A CUDA device, or the CPU under Triton's</span>
+<span class="sd">        interpreter alone (``TRITON_INTERPRET=1`` before triton is first</span>
+<span class="sd">        imported), on which FINUFFT transforms the lattice. Needs the ``gpu``</span>
+<span class="sd">        extra. By default the engine reads every window itself.</span>
 
 <span class="sd">    Raises</span>
 <span class="sd">    ------</span>
@@ -742,11 +743,11 @@
             <span class="nb">int</span><span class="p">(</span><span class="n">threads</span><span class="p">),</span>
         <span class="p">)</span>
         <span class="k">if</span> <span class="n">device</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="kn">from</span><span class="w"> </span><span class="nn">._device</span><span class="w"> </span><span class="kn">import</span> <span class="n">LatticeDevice</span>
+            <span class="kn">from</span><span class="w"> </span><span class="nn">._device</span><span class="w"> </span><span class="kn">import</span> <span class="n">WindowDevice</span>
 
-            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">device</span><span class="p">,</span> <span class="n">LatticeDevice</span><span class="p">):</span>
-                <span class="n">device</span> <span class="o">=</span> <span class="n">LatticeDevice</span><span class="p">(</span><span class="n">device</span><span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_native</span><span class="o">.</span><span class="n">use_lattice_device</span><span class="p">(</span><span class="n">device</span><span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">device</span><span class="p">,</span> <span class="n">WindowDevice</span><span class="p">):</span>
+                <span class="n">device</span> <span class="o">=</span> <span class="n">WindowDevice</span><span class="p">(</span><span class="n">device</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_native</span><span class="o">.</span><span class="n">use_device</span><span class="p">(</span><span class="n">device</span><span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__len__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_native</span><span class="o">.</span><span class="n">size</span>
@@ -768,7 +769,7 @@
 
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">device_windows</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""Of :attr:`lattice_windows`, those read on the ``device``."""</span>
+<span class="w">        </span><span class="sd">"""ADC windows read on the ``device`` since construction, on a lattice or sample by sample."""</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_native</span><span class="o">.</span><span class="n">device_windows</span>
 
     <span class="nd">@property</span>

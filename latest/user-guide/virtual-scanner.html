@@ -754,12 +754,15 @@ ends the command with status 1.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">--speed</span></code> plays the scan that many times as fast as a scanner, once the
 simulation is far enough ahead, writing the time left before it is to
 standard error; without it, the scan runs as fast as the simulation.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">--device</span> <span class="pre">cuda</span></code> reads the ADC windows under a changing gradient, such as a
-spiral’s, on the CUDA device wherever the isochromats lie on a lattice
-along the axes the window’s k moves along, as they do for a phantom: a
-Triton kernel sums them onto the lattice and cuFINUFFT transforms the sums,
-both of which the <code class="docutils literal notranslate"><span class="pre">gpu</span></code> extra installs (<code class="docutils literal notranslate"><span class="pre">pip</span> <span class="pre">install</span> <span class="pre">'pulserver[gpu]'</span></code>).
-The rest of the scan is simulated on the CPU.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--device</span> <span class="pre">cuda</span></code> reads the ADC windows outside runs of repetitions on the
+CUDA device. A window under a changing gradient, such as a spiral’s, whose
+isochromats lie on a lattice along the axes its k moves along, as a
+phantom’s do, is summed onto the lattice by a Triton kernel and transformed
+by cuFINUFFT; every other one, under a held gradient or with its
+isochromats off any lattice, as a moving subject’s are, is summed sample by
+sample by a second Triton kernel. The <code class="docutils literal notranslate"><span class="pre">gpu</span></code> extra installs both
+(<code class="docutils literal notranslate"><span class="pre">pip</span> <span class="pre">install</span> <span class="pre">'pulserver[gpu]'</span></code>). The rest of the scan is simulated on the
+CPU.</p></li>
 </ul>
 </section>
 <section id="prescribe-an-orientation">
