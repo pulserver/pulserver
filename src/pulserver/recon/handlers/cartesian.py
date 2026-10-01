@@ -56,7 +56,7 @@ class CartesianRecon(ReconPlugin):
         if not last_average(buffer, self.closing):
             return None
         kspace = loop_position(buffer, self.closing)
-        image = transformed(kspace, buffer.image_shape)
+        image = self.image(kspace, buffer.image_shape, context.device)
         peak = float(image.max(initial=0.0))
         if peak > 0.0:
             image *= max_stored_value(context.header) / peak
@@ -68,6 +68,13 @@ class CartesianRecon(ReconPlugin):
                 "WindowWidth": str(max_stored_value(context.header) + 1),
             },
         )
+
+    def image(
+        self, kspace: np.ndarray, shape: tuple[int, ...], device: str | None
+    ) -> np.ndarray:
+        """Return the magnitude image of ``(coils, [partitions,] phase encodes, readout)`` k-space, cropped to ``shape``."""
+        del device
+        return transformed(kspace, shape)
 
 
 PLUGIN = CartesianRecon()
