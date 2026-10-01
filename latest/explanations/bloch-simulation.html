@@ -661,7 +661,11 @@ Chebyshev point. <span class="math notranslate nohighlight">\(L\)</span> is the 
 span, where the error of the interpolation is largest. FINUFFT is given
 <span class="math notranslate nohighlight">\(\varepsilon/4\)</span> divided by the Lebesgue constant of the points and by the most
 the sums grow over the window from the middle rate, and works in single
-precision where that lies above <span class="math notranslate nohighlight">\(2 \times 10^{-6}\)</span>. The cost is proportional
+precision where that lies above <span class="math notranslate nohighlight">\(2 \times 10^{-6}\)</span>. Where it does, the lattice
+sums are formed from the sensitivities rounded to single precision, read from
+a copy in the order of the lattice points that is made at the first such window
+and kept: 8 bytes per isochromat and coil, beside the 16 the sensitivities take
+in double precision. The cost is proportional
 to the isochromats times the coils and <span class="math notranslate nohighlight">\(L\)</span>, and to the coils times <span class="math notranslate nohighlight">\(L\)</span> times
 the lattice points, rather than to the isochromats times the coils and the
 samples; a window is read this way where that costs less. Either way, the
