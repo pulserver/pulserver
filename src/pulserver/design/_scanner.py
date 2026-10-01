@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import difflib
 import importlib.util
 import inspect
 import math
@@ -247,8 +248,9 @@ def _parameter(name: str, entry: Entry, defaults: Mapping[str, Any]) -> Paramete
 class ScannerSequence:
     """A pypulseqpp application exposed to the scanner UI.
 
-    A subclass sets :attr:`app` and :attr:`ui`, whose keys are the
-    interpreter's parameter names: members of
+    A subclass sets :attr:`app` and, for the arguments the operator edits,
+    :attr:`ui`; without ``ui`` the application plays its defaults. The keys of
+    ``ui`` are the interpreter's parameter names: members of
     :class:`~pulserver.protocol.UIParam` or :class:`~pulserver.protocol.ConfigKey`,
     or user-entry keys. They are stored as plain strings. Entries a request
     omits keep their initial values, the entry's ``default`` or else the
@@ -291,7 +293,7 @@ class ScannerSequence:
     """
 
     app: ClassVar[type[sequences.SequenceApp]]
-    ui: ClassVar[Mapping[str, Entry]]
+    ui: ClassVar[Mapping[str, Entry]] = {}
     recon: ClassVar[str] = ""
     follows: ClassVar[tuple[str, ...]] = ()
 
@@ -301,9 +303,18 @@ class ScannerSequence:
             return
         unknown = sorted(str(name) for name in cls.ui if name not in WIRE_NAMES)
         if unknown:
+            names = {str(name).lower(): str(name) for name in WIRE_NAMES}
+            close = sorted(
+                {
+                    names[m]
+                    for n in unknown
+                    for m in difflib.get_close_matches(n.lower(), names)
+                }
+            )
+            hint = f"; did you mean {close}?" if close else ""
             raise ValueError(
                 f"{cls.__name__} declares entries the interpreter does not know: "
-                f"{unknown}"
+                f"{unknown}{hint}"
             )
         reserved = sorted(str(name) for name in cls.ui if str(name) in PRESCRIPTION)
         if reserved:

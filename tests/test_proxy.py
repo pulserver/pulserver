@@ -29,6 +29,7 @@ from pulserver.proxy import (
     SequenceTable,
     _designs,
 )
+from pulserver.recon import load_plugin
 from pulserver.recon._runtime import concurrency
 from pulserver.recon._runtime.connection import Connection
 from pulserver.recon._runtime.mrd2dicom import DicomWithName
@@ -868,3 +869,27 @@ def test_a_terminated_server_process_exits_cleanly():
     finally:
         process.kill()
         process.stderr.close()
+
+
+def test_a_recorded_series_run_offline_against_its_store_gives_the_proxys_image(
+    bucket, tmp_path
+):
+    root, series = bucket
+    bound = series["bound"]
+
+    def kspace(table, index):
+        return point(table, index, (0.004, -0.002, 0.0))
+
+    path = str(tmp_path / "scan.h5")
+    dataset = ismrmrd.Dataset(path, "dataset", create_if_needed=True)
+    dataset.write_xml_header(header_xml(bound))
+    for index in range(len(bound.table)):
+        dataset.append_acquisition(
+            ismrmrd.Acquisition.from_array(kspace(bound.table, index))
+        )
+    dataset.close()
+
+    offline = load_plugin(RECON_PLUGINS / "gre2d.py").run(path, store=root)
+    _, received = _in_process(root, bound, data=kspace)
+
+    np.testing.assert_array_equal(images(offline)[0].data, images(received)[0].data)

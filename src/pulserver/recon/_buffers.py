@@ -9,6 +9,7 @@ from __future__ import annotations
 
 __all__ = ["ReconBuffer", "ReconData"]
 
+import warnings
 from collections.abc import Iterator, Mapping
 from typing import Any, ClassVar
 
@@ -97,6 +98,7 @@ class ReconBuffer:
         self.center_sample: int | None = None
         self.sample_time: float | None = None
         self.headers: list[Any] = []
+        self._overwrote = False
 
     @property
     def axes(self) -> tuple[str, ...]:
@@ -149,7 +151,8 @@ class ReconBuffer:
         """Place one acquisition where its counters say it belongs.
 
         Also records its trajectory, and ``center_sample`` and dwell when not yet
-        known.
+        known. A readout placed where one already is replaces it, with a warning
+        the first time: the sequence labels neither apart.
 
         Parameters
         ----------
@@ -183,6 +186,15 @@ class ReconBuffer:
         # Right-aligned, which is where a partial echo's acquired window ends.
         offset = self.readout - samples
         readout = slice(offset, self.readout)
+        if not self._overwrote and self.mask[(*where, readout)].any():
+            self._overwrote = True
+            warnings.warn(
+                f"a readout replaced one already placed at {dict(zip(self.axes[1:-1], where, strict=False))} "
+                f"of encoding space {self.space.index}: readouts that share their "
+                "encoding counters overwrite each other; label each with its line, "
+                "partition, slice, average or repetition (pypulseqpp.make_label)",
+                stacklevel=2,
+            )
         self.kspace[(slice(0, coils), *where, readout)] = data
         self.mask[(*where, readout)] = True
         if has_acquisition_flag(
