@@ -72,6 +72,5 @@ def test_a_plugin_no_directory_holds_names_every_directory_searched(path):
         _plugins.find(path, "absent")
 
     assert str(refused.value) == (
-        f"no plugin 'absent' in {first}, {second}, "
-        f"{_plugins.SEQUENCES}, {_plugins.RECONSTRUCTIONS}"
+        f"no plugin 'absent' in {first}, {second} or among the shipped plugins"
     )

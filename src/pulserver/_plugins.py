@@ -39,13 +39,14 @@ def find(plugins: PluginPath, name: str) -> Path:
     """
     if not NAME.fullmatch(name):
         raise ValueError(f"invalid plugin name {name!r}")
-    searched = (*directories(plugins), SEQUENCES, RECONSTRUCTIONS)
-    for directory in searched:
+    given = directories(plugins)
+    for directory in (*given, SEQUENCES, RECONSTRUCTIONS):
         path = directory / f"{name}.py"
         if path.is_file():
             return path
     raise FileNotFoundError(
-        f"no plugin {name!r} in {', '.join(str(d) for d in searched)}"
+        f"no plugin {name!r} in {', '.join(str(d) for d in given)}"
+        " or among the shipped plugins"
     )
 
 

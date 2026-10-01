@@ -486,7 +486,7 @@ def test_the_command_names_an_unknown_plugin(limits_file):
     unknown = _command("list", "--plugins", str(PLUGINS), "--plugin", "absent")
     assert (unknown.returncode, unknown.stdout) == (
         1,
-        f"ERROR no plugin 'absent' in {PLUGINS}\n",
+        f"ERROR no plugin 'absent' in {PLUGINS} or among the shipped plugins\n",
     )
 
 
