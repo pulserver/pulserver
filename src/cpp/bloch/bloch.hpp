@@ -502,6 +502,17 @@ namespace bloch
             const std::vector<std::vector<double>>& x,
             double tolerance,
             std::vector<std::complex<double>>& out);
+        /** Read @p window into @p out, [coil][sample], on the lattice
+         *  device when it takes the window, else by lattice transforms when
+         *  they cost less than reading it sample by sample, and leave the
+         *  isochromats as they stand at its last sample; whether it was
+         *  read. */
+        bool read_lattice_window(
+            const LatticeWindow& window,
+            const Segments& segments,
+            const std::vector<std::vector<double>>& x,
+            double tolerance,
+            std::vector<std::complex<double>>& out);
         /** Hand the window to the lattice device; whether it read it. */
         bool read_on_device(
             const LatticeWindow& window,

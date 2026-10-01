@@ -3204,6 +3204,32 @@ namespace bloch
         return lattice_device_.read(read);
     }
 
+    bool Isochromats::read_lattice_window(
+        const LatticeWindow& window,
+        const Segments& segments,
+        const std::vector<std::vector<double>>& x,
+        double tolerance,
+        std::vector<std::complex<double>>& out)
+    {
+        if (lattice_device_.read && read_on_device(window, segments, x, tolerance, out))
+        {
+            /* The device reads the window while the isochromats move on. */
+            settle_after(window);
+            if (lattice_device_.finish)
+                lattice_device_.finish();
+            ++device_windows_;
+            return true;
+        }
+        if (!lattice_pays(count_, window.time.size(), coils_, segments.count, window.modes, window.axes, tolerance))
+            return false;
+        if (LatticeTransform::single_for(tolerance))
+            transform_lattice<float>(window, segments, x, tolerance, out);
+        else
+            transform_lattice<double>(window, segments, x, tolerance, out);
+        settle_after(window);
+        return true;
+    }
+
     bool Isochromats::read_on_lattice(
         const std::vector<double>& area,
         const std::vector<double>& time,
@@ -3249,24 +3275,8 @@ namespace bloch
             }
         }
         std::vector<std::complex<double>> out(coils_ * samples, 0.0);
-        if (lattice_device_.read && read_on_device(window, segments, x, tolerance, out))
-        {
-            /* The device reads the window while the isochromats move on. */
-            settle_after(window);
-            if (lattice_device_.finish)
-                lattice_device_.finish();
-            ++device_windows_;
-        }
-        else if (!lattice_pays(count_, samples, coils_, count, window.modes, window.axes, tolerance))
+        if (!read_lattice_window(window, segments, x, tolerance, out))
             return false;
-        else
-        {
-            if (LatticeTransform::single_for(tolerance))
-                transform_lattice<float>(window, segments, x, tolerance, out);
-            else
-                transform_lattice<double>(window, segments, x, tolerance, out);
-            settle_after(window);
-        }
         for (size_t s = 0; s < samples; ++s)
         {
             double c = 0.0, sine = 0.0;
