@@ -7,7 +7,7 @@ The block grammar is the one ``pulseg_protocol_parse`` reads: listings carry
 from __future__ import annotations
 
 import math
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
 from ._schema import InputMode, Kind, Parameter
@@ -205,3 +205,104 @@ def parse_validation(text: str, listing: Mapping[str, Parameter]) -> Validation:
         info=info.removeprefix("INFO").strip(),
         values=parse_values(block, listing),
     )
+
+
+PULSES_BEGIN = "[RfPulses]"
+PULSES_END = "[RfPulses End]"
+
+
+@dataclass(frozen=True)
+class RfPulse:
+    """One pulse a sequence plays, and what its flip angle follows.
+
+    The scanner costs its RF before a scan from the pulses the sequence will
+    play. Which pulses those are, and the shape of each, is settled by the
+    design; what the operator moves is an angle. So a pulse states where its
+    angle comes from, and the scanner reads the angle from there for as long as
+    the sequence is prescribed.
+
+    The shape does not travel. It is in the design's own cache, which the
+    scanner reads, and every statistic a pulse is costed from is computed from
+    that shape at unit peak and does not move with the angle.
+
+    Attributes
+    ----------
+    flip_deg
+        The angle it was designed at. The angle played where ``follows`` is
+        empty.
+    follows
+        Protocol parameter whose value the angle takes; empty is a pulse whose
+        angle the operator does not move.
+    factor
+        What that value is scaled by: an inversion at twice the excitation, a
+        refocusing at four fifths of it.
+    use
+        What the pulse is for, as Pulseq tags it: ``excitation``,
+        ``refocusing``, ``inversion``, ``saturation``, ``preparation`` or
+        ``other``.
+    count
+        How many times the sequence plays it.
+    """
+
+    flip_deg: float
+    follows: str = ""
+    factor: float = 1.0
+    use: str = ""
+    count: int = 1
+
+
+def format_pulses(pulses: Sequence[RfPulse], design: str = "") -> str:
+    """Format the RF a design plays, as the ``list`` design call replies it.
+
+    ``design`` names the design whose cache holds the shapes, which is what a
+    scanner reads them from.
+    """
+    lines = [PULSES_BEGIN, f"design {design or '-'}"]
+    for pulse in pulses:
+        lines.append(
+            f"{pulse.follows or '-'} {pulse.factor:.7g} {pulse.flip_deg:.7g} "
+            f"{pulse.use or '-'} {pulse.count:d}"
+        )
+    lines.append(PULSES_END)
+    return "\n".join(lines) + "\n"
+
+
+def parse_pulses(text: str) -> tuple[str, list[RfPulse]]:
+    """Read the design and the RF it plays from a listing.
+
+    Returns an empty design and no pulses where the text holds no block, which
+    is a sequence the scanner is not given the RF of in advance.
+
+    Raises
+    ------
+    ValueError
+        If a line is not a pulse, or states a value that is not a number.
+    """
+    found: list[RfPulse] = []
+    design = ""
+    inside = False
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not inside:
+            inside = stripped == PULSES_BEGIN
+            continue
+        if stripped == PULSES_END:
+            break
+        if not stripped:
+            continue
+        parts = stripped.split()
+        if parts[0] == "design":
+            design = "" if len(parts) < 2 or parts[1] == "-" else parts[1]
+            continue
+        if len(parts) < 5:
+            raise ValueError(f"an RF pulse is five values: {stripped!r}")
+        found.append(
+            RfPulse(
+                flip_deg=float(parts[2]),
+                follows="" if parts[0] == "-" else parts[0],
+                factor=float(parts[1]),
+                use="" if parts[3] == "-" else parts[3],
+                count=int(parts[4]),
+            )
+        )
+    return design, found

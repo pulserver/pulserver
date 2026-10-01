@@ -25,6 +25,7 @@ from ..protocol import (
     Parameter,
     Validation,
     format_listing,
+    format_pulses,
     format_validation,
     format_values,
     parse_values,
@@ -38,6 +39,11 @@ from ._store import DesignStore, design_identity
 
 # The file name the interpreter loads in a design.
 _ENTRY = "sequence.seq"
+
+
+#: Where a design records the RF it plays, for a scanner costing it while
+#: the operator prescribes.
+PULSES_FILE = "pulses.rf"
 
 
 class CallError(Exception):
@@ -58,13 +64,19 @@ def plugin_path(plugins: PluginPath, plugin: str) -> Path:
         raise CallError(str(error)) from None
 
 
-def list_protocol(plugins: PluginPath, plugin: str) -> str:
-    """Reply ``PROTOCOL`` and the plugin's listing block.
+def list_protocol(
+    plugins: PluginPath, plugin: str, store: DesignStore | None = None
+) -> str:
+    """Reply ``PROTOCOL``, the plugin's listing block, and the RF it plays.
 
     The listing depends on the plugin file and the installed packages only.
+    The pulses follow it where the plugin states them, so a scanner can cost
+    the RF while the operator is still prescribing, without asking for a
+    design at every interaction.
     """
-    listing = _listing(str(plugin_path(plugins, plugin)))
-    return "PROTOCOL\n" + format_listing(listing)
+    path = str(plugin_path(plugins, plugin))
+    listing = _listing(path)
+    return "PROTOCOL\n" + format_listing(listing) + _stated_pulses(store, plugin)
 
 
 def validate(
@@ -142,6 +154,9 @@ def generate(
         (staged / "resolved.protocol").write_text(
             format_values(validation.values, listing)
         )
+        # The RF a scanner costs while the operator prescribes, read off the
+        # sequence just written rather than designed again for the purpose.
+        pulses = scanner.rf_pulses(paths[0], app.resolved)
         manifest = {
             **_record(limits),
             "plugin": plugin,
@@ -150,6 +165,12 @@ def generate(
             "scan_time": validation.duration,
         }
         design = store.commit(identity, staged, manifest)
+        # The RF a scanner costs while the operator prescribes. Written after
+        # the commit, because it names the design it was read from.
+        if pulses:
+            (store.directory(design) / PULSES_FILE).write_text(
+                format_pulses(pulses, design)
+            )
     except BaseException:
         store.discard(staged)
         raise
@@ -309,6 +330,28 @@ def _plugin(path: str) -> ScannerSequence:
 
 def _listing(path: str) -> dict[str, Parameter]:
     return _plugin(path).listing()
+
+
+def _stated_pulses(store: DesignStore | None, plugin: str) -> str:
+    """Return the RF block of the newest design of ``plugin``, or empty where there is none.
+
+    Nothing is designed to answer this. A sequence the store has never designed
+    states no RF, and a scanner costs it once it has a design of its own.
+    """
+    if store is None:
+        return ""
+    newest = ""
+    when = -1.0
+    for design in store:
+        if store.manifest(design).get("plugin") != plugin:
+            continue
+        held = store.directory(design) / PULSES_FILE
+        if not held.is_file():
+            continue
+        stamped = held.stat().st_mtime
+        if stamped > when:
+            newest, when = held.read_text(), stamped
+    return newest
 
 
 def _source(path: str) -> str:
