@@ -207,6 +207,36 @@ namespace
         set(block, axis, g.times, g.values);
     }
 
+    /** A window on a spiral in the xy plane, which the block points into. */
+    struct Spiral
+    {
+        Axis x, y;
+        std::vector<double> times;
+        bloch::BlockEvents block;
+
+        Spiral()
+        {
+            for (int k = 0; k <= 80; ++k)
+            {
+                const double t = 5e-3 * k / 80.0;
+                const Complex g = std::polar(3e4 * t / 5e-3, 6.0 * kPi * t / 5e-3);
+                x.times.push_back(t);
+                x.values.push_back(g.real());
+                y.times.push_back(t);
+                y.values.push_back(g.imag());
+            }
+            for (int k = 0; k < 400; ++k)
+                times.push_back(0.05e-3 + 12e-6 * k);
+            block.duration = 5e-3;
+            set(block, 0, x);
+            set(block, 1, y);
+            block.adc_times = times.data();
+            block.adc_samples = times.size();
+        }
+        Spiral(const Spiral&) = delete;
+        Spiral& operator=(const Spiral&) = delete;
+    };
+
     /** One of each kind of block, played in turn. */
     void blocks(bloch::Isochromats& spins, size_t channels)
     {
@@ -294,29 +324,11 @@ namespace
 
         // A window on a spiral, read on the lattice in single precision and
         // in double.
-        Axis spiral_x, spiral_y;
-        for (int k = 0; k <= 80; ++k)
-        {
-            const double t = 5e-3 * k / 80.0;
-            const Complex g = std::polar(3e4 * t / 5e-3, 6.0 * kPi * t / 5e-3);
-            spiral_x.times.push_back(t);
-            spiral_x.values.push_back(g.real());
-            spiral_y.times.push_back(t);
-            spiral_y.values.push_back(g.imag());
-        }
-        std::vector<double> spiral_times;
-        for (int k = 0; k < 400; ++k)
-            spiral_times.push_back(0.05e-3 + 12e-6 * k);
-        bloch::BlockEvents spiral;
-        spiral.duration = 5e-3;
-        set(spiral, 0, spiral_x);
-        set(spiral, 1, spiral_y);
-        spiral.adc_times = spiral_times.data();
-        spiral.adc_samples = spiral_times.size();
+        const Spiral spiral;
         for (double tolerance : {1e-4, 1e-7})
         {
-            signal.assign(spins.coils() * spiral.adc_samples, 0.0);
-            spins.play(spiral, signal.data(), tolerance);
+            signal.assign(spins.coils() * spiral.block.adc_samples, 0.0);
+            spins.play(spiral.block, signal.data(), tolerance);
             touch(signal);
         }
 
@@ -443,6 +455,54 @@ namespace
         }
     }
 
+    /** Excite isochromats many to a lattice point, read by @p coils coils or,
+     *  for none, by one of unit sensitivity, and read the spiral's window in
+     *  double precision and in single; the windows read on the lattice. */
+    size_t many_coils(size_t coils)
+    {
+        bloch::IsochromatProperties p;
+        for (int i = 0; i < 12; ++i)
+            for (int j = 0; j < 10; ++j)
+                for (int k = 0; k < 32; ++k)
+                {
+                    p.x.push_back(3e-3 * (i - 6));
+                    p.y.push_back(3e-3 * (j - 5));
+                    p.z.push_back(0.25e-3 * (k - 16));
+                }
+        const size_t n = p.x.size();
+        for (size_t i = 0; i < n; ++i)
+        {
+            p.t2.push_back(i % 2 == 0 ? 0.05 : 0.09);
+            p.off_resonance.push_back(40.0 * std::sin(1.3 * i));
+        }
+        std::vector<Complex> receive;
+        for (size_t i = 0; i < n * coils; ++i)
+            receive.push_back(std::polar(1.0 + 0.1 * std::sin(0.3 * i), 0.07 * i));
+        p.coils = coils;
+        p.receive = coils ? receive.data() : nullptr;
+        bloch::Isochromats spins(p, 2);
+
+        const std::vector<Complex> hard = sinc(50, 1, 300.0);
+        bloch::BlockEvents excite;
+        excite.duration = 0.6e-3;
+        excite.rf_start = 0.05e-3;
+        excite.rf_step = 1e-5;
+        excite.rf_steps = 50;
+        excite.rf_channels = 1;
+        excite.rf = hard.data();
+        spins.play(excite, nullptr);
+
+        const Spiral spiral;
+        std::vector<Complex> signal;
+        for (double tolerance : {1e-7, 1e-4})
+        {
+            signal.assign(spins.coils() * spiral.block.adc_samples, 0.0);
+            spins.play(spiral.block, signal.data(), tolerance);
+            touch(signal);
+        }
+        return spins.lattice_windows();
+    }
+
 } // namespace
 
 int main()
@@ -464,6 +524,14 @@ int main()
         sink = std::accumulate(magnetization.begin(), magnetization.end(), sink);
         sink += static_cast<double>(spins.lattice_windows());
     }
+    // More coils than a tile sums at once, and not a multiple of those
+    // summed together.
+    for (size_t coils : {size_t{0}, size_t{37}})
+        if (many_coils(coils) != 2)
+        {
+            std::fprintf(stderr, "a window of %zu coils was not read on the lattice\n", coils);
+            return 1;
+        }
     std::printf("%g\n", sink);
     return 0;
 }
