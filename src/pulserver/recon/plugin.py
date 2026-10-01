@@ -731,10 +731,14 @@ class ReconPlugin(ABC):
         group: str = "dataset",
         exam_id: Hashable | None = None,
         config: Any = None,
+        store: str | None = None,
     ) -> list[Any]:
         """Reconstruct one ISMRMRD HDF5 file in this process, through the same hooks.
 
-        The file's waveforms are delivered before its acquisitions.
+        The file's waveforms are delivered before its acquisitions. With
+        ``store``, the file is a series as the scanner sends it, such as
+        :func:`pulserver.virtual.record` writes, and is enriched from its design
+        in that store as the proxy enriches it.
 
         Parameters
         ----------
@@ -746,6 +750,8 @@ class ReconPlugin(ABC):
             Identifier of the exam cache; ``path`` when not given.
         config
             Configuration payload, as a stream would carry it.
+        store
+            Directory of designs, as the design calls write it.
 
         Returns
         -------
@@ -762,7 +768,9 @@ class ReconPlugin(ABC):
         """
         from ._runtime.offline import reconstruct_file
 
-        return reconstruct_file(self, path, group=group, exam_id=exam_id, config=config)
+        return reconstruct_file(
+            self, path, group=group, exam_id=exam_id, config=config, store=store
+        )
 
     def __call__(self, bucket: AcquisitionBucket, context: ReconContext) -> Any:
         """Reconstruct an assembled bucket on a new :meth:`spawn`.

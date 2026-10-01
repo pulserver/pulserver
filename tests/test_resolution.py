@@ -278,3 +278,19 @@ def test_a_scanner_sequence_may_not_bind_a_prescription_entry(tiny):
             (ScannerSequence,),
             {"app": type(tiny).app, "ui": {FloatKey.FOV_OFFSET_X: FloatParam("te")}},
         )
+
+
+def test_a_sequence_without_ui_plays_its_application_s_defaults():
+    class Bare(ScannerSequence):
+        app = StatedApp
+
+    assert set(Bare().listing()) == set(PRESCRIPTION)
+    assert Bare().validate(SYSTEM, {}).valid
+
+
+def test_an_entry_the_interpreter_does_not_know_is_refused_with_the_names_it_resembles():
+    with pytest.raises(ValueError, match=r"did you mean \['TE'"):
+
+        class Lowercase(ScannerSequence):
+            app = StatedApp
+            ui = {"te": TimeParam("te")}

@@ -608,3 +608,20 @@ def test_a_trajectory_without_its_field_of_view_is_refused():
     data.add(acquisition)
     with pytest.raises(ValueError, match="field of view"):
         data[0].grid_trajectory()
+
+
+def test_a_readout_placed_over_another_warns_that_the_sequence_does_not_label_them():
+    buffer = ReconBuffer(EncodingSpace.from_header(header(space())))
+    buffer.add(acquire(kspace_encode_step_1=0))
+    with pytest.warns(UserWarning, match="make_label"):
+        buffer.add(acquire(kspace_encode_step_1=0))
+
+
+def test_readouts_at_distinct_lines_place_without_a_warning():
+    import warnings
+
+    buffer = ReconBuffer(EncodingSpace.from_header(header(space())))
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        for line in range(N_X):
+            buffer.add(acquire(kspace_encode_step_1=line))
