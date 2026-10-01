@@ -11,7 +11,7 @@ import datetime
 import hashlib
 import inspect
 import shutil
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -23,8 +23,10 @@ from .._plugins import PluginPath
 from ..design import ScannerSequence, load_plugin
 from ..protocol import (
     Parameter,
+    RfPulse,
     Validation,
     format_listing,
+    format_pulses,
     format_validation,
     format_values,
     parse_values,
@@ -59,12 +61,18 @@ def plugin_path(plugins: PluginPath, plugin: str) -> Path:
 
 
 def list_protocol(plugins: PluginPath, plugin: str) -> str:
-    """Reply ``PROTOCOL`` and the plugin's listing block.
+    """Reply ``PROTOCOL``, the plugin's listing block, and the RF it plays.
 
     The listing depends on the plugin file and the installed packages only.
+    The pulses follow it where the plugin states them, so a scanner can cost
+    the RF while the operator is still prescribing, without asking for a
+    design at every interaction.
     """
-    listing = _listing(str(plugin_path(plugins, plugin)))
-    return "PROTOCOL\n" + format_listing(listing)
+    path = str(plugin_path(plugins, plugin))
+    listing = _listing(path)
+    pulses = _pulses(path)
+    reply = "PROTOCOL\n" + format_listing(listing)
+    return reply + format_pulses(pulses) if pulses else reply
 
 
 def validate(
@@ -309,6 +317,11 @@ def _plugin(path: str) -> ScannerSequence:
 
 def _listing(path: str) -> dict[str, Parameter]:
     return _plugin(path).listing()
+
+
+def _pulses(path: str) -> Sequence[RfPulse]:
+    """Return the RF a plugin states it plays; empty where it states none."""
+    return tuple(getattr(_plugin(path), "pulses", ()) or ())
 
 
 def _source(path: str) -> str:

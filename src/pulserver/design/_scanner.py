@@ -6,7 +6,7 @@ import importlib.util
 import inspect
 import math
 import sys
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from decimal import Decimal
 from pathlib import Path
@@ -23,6 +23,7 @@ from ..protocol import (
     InputMode,
     Kind,
     Parameter,
+    RfPulse,
     Validation,
     prescribed_rotation,
 )
@@ -263,6 +264,12 @@ class ScannerSequence:
         Reconstruction plugin the data of this sequence is reconstructed with,
         recorded in every design generated from it. Empty leaves the choice
         to the reconstruction client.
+    pulses : Sequence[RfPulse]
+        The RF the sequence plays, stated once so a scanner can cost it while
+        the operator is still prescribing. A pulse says what its flip angle
+        follows, and the scanner reads the angle from there rather than asking
+        for a design at every interaction. Empty leaves the scanner to cost the
+        RF only once a sequence has been designed.
 
     Raises
     ------
@@ -275,6 +282,7 @@ class ScannerSequence:
     app: ClassVar[type[sequences.SequenceApp]]
     ui: ClassVar[Mapping[str, Entry]]
     recon: ClassVar[str] = ""
+    pulses: ClassVar[Sequence[RfPulse]] = ()
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)

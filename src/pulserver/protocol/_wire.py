@@ -7,7 +7,7 @@ The block grammar is the one ``pulseg_protocol_parse`` reads: listings carry
 from __future__ import annotations
 
 import math
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
 from ._schema import InputMode, Kind, Parameter
@@ -205,3 +205,109 @@ def parse_validation(text: str, listing: Mapping[str, Parameter]) -> Validation:
         info=info.removeprefix("INFO").strip(),
         values=parse_values(block, listing),
     )
+
+
+PULSES_BEGIN = "[RfPulses]"
+PULSES_END = "[RfPulses End]"
+
+
+@dataclass(frozen=True)
+class RfPulse:
+    """One pulse a sequence plays, and what its flip angle follows.
+
+    The scanner costs its RF before a scan from the pulses the sequence will
+    play. Which pulses those are, and the shape of each, is settled by the
+    design; what the operator moves is an angle. So a pulse travels once, and
+    the scanner reads the angle from wherever ``follows`` names for as long as
+    the sequence is prescribed.
+
+    The envelope is the magnitude normalised to a peak of one. Every statistic
+    a scanner costs a pulse from is computed from that shape alone and does not
+    move with the angle, which is why one envelope serves every prescription.
+
+    Attributes
+    ----------
+    envelope
+        Magnitude, normalised to a peak of one, on the RF raster.
+    duration_us
+        How long the pulse plays.
+    flip_deg
+        The angle it is designed at. The angle played where ``follows`` is
+        empty.
+    follows
+        Protocol parameter whose value the angle takes; empty is a pulse whose
+        angle the operator does not move.
+    factor
+        What that value is scaled by: an inversion at twice the excitation, a
+        refocusing at four fifths of it.
+    bandwidth_hz
+        Bandwidth at half the spectral peak; 0 where it is not stated.
+    """
+
+    envelope: tuple[float, ...]
+    duration_us: float
+    flip_deg: float
+    follows: str = ""
+    factor: float = 1.0
+    bandwidth_hz: float = 0.0
+
+
+def format_pulses(pulses: Sequence[RfPulse]) -> str:
+    """Format the pulses a sequence plays, as the ``list`` design call replies them."""
+    lines = [PULSES_BEGIN]
+    for pulse in pulses:
+        head = (
+            f"{pulse.follows or '-'} {pulse.factor:.7g} {pulse.flip_deg:.7g} "
+            f"{pulse.duration_us:.7g} {pulse.bandwidth_hz:.7g} {len(pulse.envelope)}"
+        )
+        samples = " ".join(f"{v:.6g}" for v in pulse.envelope)
+        lines.append(f"{head} {samples}".rstrip())
+    lines.append(PULSES_END)
+    return "\n".join(lines) + "\n"
+
+
+def parse_pulses(text: str) -> list[RfPulse]:
+    """Read the pulses a sequence plays from a listing.
+
+    Returns an empty list where the text holds no block, which is a sequence
+    whose RF the scanner is not given in advance.
+
+    Raises
+    ------
+    ValueError
+        If a line states fewer samples than it carries, or a value that is not
+        a number.
+    """
+    found: list[RfPulse] = []
+    inside = False
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not inside:
+            inside = stripped == PULSES_BEGIN
+            continue
+        if stripped == PULSES_END:
+            break
+        if not stripped:
+            continue
+        parts = stripped.split()
+        if len(parts) < 6:
+            raise ValueError(f"an RF pulse is at least six values: {stripped!r}")
+        follows = "" if parts[0] == "-" else parts[0]
+        factor, flip, duration, bandwidth = (float(v) for v in parts[1:5])
+        count = int(parts[5])
+        samples = tuple(float(v) for v in parts[6 : 6 + count])
+        if len(samples) != count:
+            raise ValueError(
+                f"an RF pulse states {count} samples and carries {len(samples)}"
+            )
+        found.append(
+            RfPulse(
+                envelope=samples,
+                duration_us=duration,
+                flip_deg=flip,
+                follows=follows,
+                factor=factor,
+                bandwidth_hz=bandwidth,
+            )
+        )
+    return found
