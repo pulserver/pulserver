@@ -301,6 +301,18 @@ docker run -d --restart unless-stopped --name pulserver \
   -p 127.0.0.1:8765:8765 ghcr.io/pulserver/pulserver
 ```
 
+Options after the image's name are added to its console's: an option of one
+value takes the value given last, and `--plugins`, `--recon-plugins` and
+`--origin` add to the image's. A console whose scans spread each voxel over
+four isochromats, in tissue that diffuses, of a subject that nods through ±2°
+with a period of 8 s:
+
+```bash
+docker run -d --restart unless-stopped --name pulserver \
+  -p 127.0.0.1:8765:8765 ghcr.io/pulserver/pulserver \
+  --spins 4 --diffusion --nod 2 8
+```
+
 Its sequences are pypulseqpp's, reconstructed by the built-in plugins of
 {doc}`reconstruction-plugins`, and each protocol starts at values the image's
 limits play:
