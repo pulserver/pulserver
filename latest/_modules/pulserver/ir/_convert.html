@@ -547,6 +547,59 @@
 
 
 
+<div class="viewcode-block" id="Grouping">
+<a class="viewcode-back" href="../../../generated/pulserver.ir.Grouping.html#pulserver.ir.Grouping">[docs]</a>
+<span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">Grouping</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""How a repetition's blocks become the units a machine plays.</span>
+
+<span class="sd">    Every machine plays units, and grouping is how they are made: a</span>
+<span class="sd">    repetition's blocks cut into contiguous runs, each run one unit the</span>
+<span class="sd">    hardware builds and replays. One machine calls a unit a segment and builds</span>
+<span class="sd">    it with its pulse generator; another calls it a block and merges several of</span>
+<span class="sd">    these into one. Neither can decline to group; what differs is where the</span>
+<span class="sd">    boundaries fall.</span>
+
+<span class="sd">    The default is a machine that begins a unit by setting its gradients, so a</span>
+<span class="sd">    boundary falls only where they rest.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    boundary_gradient_hz_per_m</span>
+<span class="sd">        How near rest the gradients must be where a boundary falls. A machine</span>
+<span class="sd">        that can begin a unit under a gradient states a large value.</span>
+<span class="sd">    split_by_pulses, split_by_readouts</span>
+<span class="sd">        Whether runs that play different pulses, or digitise with different</span>
+<span class="sd">        readouts, are different units.</span>
+<span class="sd">    split_navigators</span>
+<span class="sd">        Whether a navigator readout is a unit of its own.</span>
+<span class="sd">    split_edge_delays</span>
+<span class="sd">        Whether a block at the edge of a unit that does nothing but wait is a</span>
+<span class="sd">        unit of its own. A machine that inserts transmit-to-receive switching</span>
+<span class="sd">        time at every unit wants as few as it can have, and sets this False.</span>
+<span class="sd">    """</span>
+
+    <span class="n">boundary_gradient_hz_per_m</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">100.0</span>
+    <span class="n">split_by_pulses</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
+    <span class="n">split_by_readouts</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
+    <span class="n">split_navigators</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
+    <span class="n">split_edge_delays</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
+
+<div class="viewcode-block" id="Grouping.as_values">
+<a class="viewcode-back" href="../../../generated/pulserver.ir.Grouping.as_values.html#pulserver.ir.Grouping.as_values">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">as_values</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="o">...</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""Return the rule as the extension takes it, in the order C declares it."""</span>
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="nb">float</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">boundary_gradient_hz_per_m</span><span class="p">),</span>
+            <span class="nb">float</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">split_by_pulses</span><span class="p">),</span>
+            <span class="nb">float</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">split_by_readouts</span><span class="p">),</span>
+            <span class="nb">float</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">split_navigators</span><span class="p">),</span>
+            <span class="nb">float</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">split_edge_delays</span><span class="p">),</span>
+        <span class="p">)</span></div>
+</div>
+
+
+
 <div class="viewcode-block" id="WaveBudget">
 <a class="viewcode-back" href="../../../generated/pulserver.ir.WaveBudget.html#pulserver.ir.WaveBudget">[docs]</a>
 <span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
@@ -647,6 +700,7 @@
     <span class="n">sar_ratios</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">SarRatio</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">wave_budget</span><span class="p">:</span> <span class="n">WaveBudget</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">profile</span><span class="p">:</span> <span class="n">VendorProfile</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">grouping</span><span class="p">:</span> <span class="n">Grouping</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Path</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Segment a sequence file and write its IR cache beside it.</span>
 
@@ -686,6 +740,10 @@
 <span class="sd">    profile</span>
 <span class="sd">        What the cache holds its numbers as; every quantity a float in its SI</span>
 <span class="sd">        unit when left out.</span>
+<span class="sd">    grouping</span>
+<span class="sd">        How the blocks of a repetition become the units played. Left out, a</span>
+<span class="sd">        boundary falls only where the gradients rest, which is what a machine</span>
+<span class="sd">        that begins a unit by setting them permits.</span>
 <span class="sd">    wave_budget</span>
 <span class="sd">        The waveform memory of the playout the cache is for, which the cache</span>
 <span class="sd">        lays the waves out in (:func:`plan_waves`); None holds every wave at</span>
@@ -727,6 +785,7 @@
         <span class="n">cache_ext</span><span class="p">,</span>
         <span class="n">_held</span><span class="p">(</span><span class="n">wave_budget</span><span class="p">),</span>
         <span class="kc">None</span> <span class="k">if</span> <span class="n">profile</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">profile</span><span class="o">.</span><span class="n">as_pairs</span><span class="p">(),</span>
+        <span class="kc">None</span> <span class="k">if</span> <span class="n">grouping</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">grouping</span><span class="o">.</span><span class="n">as_values</span><span class="p">(),</span>
     <span class="p">)</span>
     <span class="k">if</span> <span class="ow">not</span> <span class="n">target</span><span class="o">.</span><span class="n">is_file</span><span class="p">():</span>
         <span class="k">raise</span> <span class="ne">OSError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"no cache was written for </span><span class="si">{</span><span class="n">seq_path</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>

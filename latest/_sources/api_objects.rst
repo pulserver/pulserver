@@ -52,6 +52,7 @@ from.
    play
    plan_waves
    WaveBudget
+   Grouping
    VendorProfile
    Quantity
    sample_wave
