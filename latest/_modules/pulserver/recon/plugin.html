@@ -584,6 +584,11 @@
 <span class="n">B1_MAP</span> <span class="o">=</span> <span class="s2">"b1_map"</span>
 <span class="n">COIL_SENSITIVITIES</span> <span class="o">=</span> <span class="s2">"coil_sensitivities"</span>
 
+<span class="c1">#: The names a :class:`ReconContext` reads and writes as attributes of itself.</span>
+<span class="c1">#: Each is its own key in the exam cache, so a hook reaching one by attribute</span>
+<span class="c1">#: and a hook reaching it through :attr:`ReconContext.exam` reach the same map.</span>
+<span class="n">EXAM_ARTIFACTS</span> <span class="o">=</span> <span class="p">(</span><span class="n">B0_MAP</span><span class="p">,</span> <span class="n">B1_MAP</span><span class="p">,</span> <span class="n">COIL_SENSITIVITIES</span><span class="p">)</span>
+
 
 <div class="viewcode-block" id="ExamCache">
 <a class="viewcode-back" href="../../../generated/pulserver.recon.ExamCache.html#pulserver.recon.ExamCache">[docs]</a>
@@ -860,16 +865,30 @@
 
 <div class="viewcode-block" id="ReconContext">
 <a class="viewcode-back" href="../../../generated/pulserver.recon.ReconContext.html#pulserver.recon.ReconContext">[docs]</a>
-<span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="nd">@dataclass</span>
 <span class="k">class</span><span class="w"> </span><span class="nc">ReconContext</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Scan context passed to every hook of a plugin.</span>
+
+<span class="sd">    The maps the series of an exam share are attributes of the context: a hook</span>
+<span class="sd">    reads :attr:`b0_map`, :attr:`b1_map` and :attr:`coil_sensitivities` from it</span>
+<span class="sd">    and assigns to them what it measures, and a later series of the exam reads</span>
+<span class="sd">    what was assigned, whichever proxy reconstructs it. Each is ``None`` until</span>
+<span class="sd">    some series of the exam has measured it.</span>
+
+<span class="sd">    Those three names are the whole vocabulary, so a misspelt one raises</span>
+<span class="sd">    instead of being stored where nothing looks for it. A plugin carrying an</span>
+<span class="sd">    artifact of its own puts it in :attr:`exam` under a key it chooses.</span>
+
+<span class="sd">    The scan context itself does not change once built: assigning to</span>
+<span class="sd">    :attr:`header`, :attr:`exam`, :attr:`config` or :attr:`device` raises.</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
 <span class="sd">    header</span>
 <span class="sd">        Parsed MRD XML header; offline, ``None`` or any header-like object.</span>
 <span class="sd">    exam</span>
-<span class="sd">        Artifact cache shared by the series of the exam.</span>
+<span class="sd">        Artifact cache shared by the series of the exam, for artifacts the</span>
+<span class="sd">        three names do not cover.</span>
 <span class="sd">    config</span>
 <span class="sd">        Configuration payload the client sent with the stream.</span>
 <span class="sd">    device</span>
@@ -878,22 +897,44 @@
 
 <span class="sd">    Examples</span>
 <span class="sd">    --------</span>
-<span class="sd">    &gt;&gt;&gt; from types import SimpleNamespace</span>
 <span class="sd">    &gt;&gt;&gt; import pulserver.recon as recon</span>
-<span class="sd">    &gt;&gt;&gt; matrix = SimpleNamespace(matrixSize=SimpleNamespace(x=8, y=4, z=1))</span>
-<span class="sd">    &gt;&gt;&gt; header = SimpleNamespace(</span>
-<span class="sd">    ...     encoding=[SimpleNamespace(encodedSpace=matrix, reconSpace=matrix)],</span>
-<span class="sd">    ...     acquisitionSystemInformation=SimpleNamespace(receiverChannels=2),</span>
-<span class="sd">    ... )</span>
-<span class="sd">    &gt;&gt;&gt; context = recon.ReconContext.offline(header)</span>
-<span class="sd">    &gt;&gt;&gt; isinstance(context.exam, recon.ExamCache)</span>
+<span class="sd">    &gt;&gt;&gt; context = recon.ReconContext.offline()</span>
+<span class="sd">    &gt;&gt;&gt; context.b1_map is None</span>
 <span class="sd">    True</span>
+<span class="sd">    &gt;&gt;&gt; context.b1_map = [1.0, 0.9]</span>
+<span class="sd">    &gt;&gt;&gt; context.b1_map</span>
+<span class="sd">    [1.0, 0.9]</span>
+<span class="sd">    &gt;&gt;&gt; context.exam[recon.B1_MAP]</span>
+<span class="sd">    [1.0, 0.9]</span>
+<span class="sd">    &gt;&gt;&gt; context.b1_mpa = [1.0]</span>
+<span class="sd">    Traceback (most recent call last):</span>
+<span class="sd">    AttributeError: ReconContext has no attribute 'b1_mpa'</span>
 <span class="sd">    """</span>
 
     <span class="n">header</span><span class="p">:</span> <span class="n">Any</span>
     <span class="n">exam</span><span class="p">:</span> <span class="n">ExamCache</span>
     <span class="n">config</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">device</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__getattr__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+        <span class="c1"># Reached only where normal lookup failed, so never for a field.</span>
+        <span class="k">if</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">EXAM_ARTIFACTS</span><span class="p">:</span>
+            <span class="n">exam</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"exam"</span><span class="p">)</span>
+            <span class="k">return</span> <span class="kc">None</span> <span class="k">if</span> <span class="n">exam</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">exam</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">name</span><span class="p">)</span>
+        <span class="k">raise</span> <span class="ne">AttributeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> has no attribute </span><span class="si">{</span><span class="n">name</span><span class="si">!r}</span><span class="s2">"</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__setattr__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">EXAM_ARTIFACTS</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">exam</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
+            <span class="k">return</span>
+        <span class="k">if</span> <span class="n">name</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">__dataclass_fields__</span> <span class="ow">and</span> <span class="n">name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="p">:</span>
+            <span class="nb">object</span><span class="o">.</span><span class="fm">__setattr__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
+            <span class="k">return</span>
+        <span class="k">if</span> <span class="n">name</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">__dataclass_fields__</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">AttributeError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">.</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2"> is the scan's, not a hook's"</span>
+            <span class="p">)</span>
+        <span class="k">raise</span> <span class="ne">AttributeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> has no attribute </span><span class="si">{</span><span class="n">name</span><span class="si">!r}</span><span class="s2">"</span><span class="p">)</span>
 
 <div class="viewcode-block" id="ReconContext.offline">
 <a class="viewcode-back" href="../../../generated/pulserver.recon.ReconContext.offline.html#pulserver.recon.ReconContext.offline">[docs]</a>

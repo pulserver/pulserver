@@ -559,6 +559,12 @@ removed on <a class="reference internal" href="pulserver.proxy.ReconServer.close
 host so they count against one set;
 <code class="xref py py-data docutils literal notranslate"><span class="pre">DEFAULT_SLOT_DIRECTORY</span></code>
 when <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
+<li><p><strong>exam_directory</strong> – Directory the caches of an exam are held in, shared with every other
+proxy on this host so a map one series measures reaches a series on
+another;
+<code class="xref py py-data docutils literal notranslate"><span class="pre">DEFAULT_EXAM_DIRECTORY</span></code> when
+<code class="docutils literal notranslate"><span class="pre">None</span></code>. An exam’s directory is removed when the last proxy on that
+exam lets go of it.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Attributes<span class="colon">:</span></dt>

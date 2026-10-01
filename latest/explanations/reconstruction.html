@@ -614,8 +614,26 @@ worker processes that have already imported it.</p>
 <p>The series of one exam share a directory on the reconstruction computer. What
 a series stores in its exam cache is written there, and a later series of the
 exam reads it back, such as a coil calibration it need not compute again. The
-exam is the one the header names; the directory is deleted once a header names
-another exam and no series of the first is still reconstructed.</p>
+exam is the one the header names, and the directory is the host’s rather than
+one proxy’s: a reconstruction computer runs one proxy per acquisition, so the
+series of an exam are reconstructed by different processes. It is deleted once
+no series of that exam is being reconstructed anywhere on the host.</p>
+<p>Three maps have names the series agree on, and a hook reaches them as
+attributes of its context: <code class="docutils literal notranslate"><span class="pre">b0_map</span></code> is off-resonance in Hz, <code class="docutils literal notranslate"><span class="pre">b1_map</span></code> the
+transmit field as a fraction of what was asked for, and <code class="docutils literal notranslate"><span class="pre">coil_sensitivities</span></code>
+the receive sensitivity of each coil. A calibration hook assigns what it
+measured and a later hook reads it, with <code class="docutils literal notranslate"><span class="pre">None</span></code> meaning no series of the exam
+has measured it yet.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">bucket</span><span class="p">,</span> <span class="n">context</span><span class="p">):</span>
+    <span class="n">maps</span> <span class="o">=</span> <span class="n">context</span><span class="o">.</span><span class="n">coil_sensitivities</span>  <span class="c1"># measured by an earlier series</span>
+    <span class="n">image</span><span class="p">,</span> <span class="n">transmit</span> <span class="o">=</span> <span class="n">parallel_imaging_and_b1_fit</span><span class="p">(</span><span class="n">bucket</span><span class="p">,</span> <span class="n">maps</span><span class="p">)</span>
+    <span class="n">context</span><span class="o">.</span><span class="n">b1_map</span> <span class="o">=</span> <span class="n">transmit</span>          <span class="c1"># read by a later one</span>
+    <span class="k">return</span> <span class="n">image</span>
+</pre></div>
+</div>
+<p>Those three are the whole vocabulary, so a misspelt name raises rather than
+storing a map where nothing looks for it. An artifact a plugin carries for
+itself goes in <code class="docutils literal notranslate"><span class="pre">context.exam</span></code> under a key of its own.</p>
 <p>The number of series reconstructed concurrently is bounded by a number of
 slots, derived from the available memory unless it is specified. On a host with
 GPUs, which the proxy finds from <code class="docutils literal notranslate"><span class="pre">CUDA_VISIBLE_DEVICES</span></code> or <code class="docutils literal notranslate"><span class="pre">nvidia-smi</span></code> without

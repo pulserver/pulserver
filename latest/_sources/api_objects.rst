@@ -176,6 +176,7 @@ from.
    B0_MAP
    B1_MAP
    COIL_SENSITIVITIES
+   EXAM_ARTIFACTS
    ReconData
    ReconBuffer
    ReconResult

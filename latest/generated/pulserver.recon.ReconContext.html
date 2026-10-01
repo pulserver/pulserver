@@ -535,11 +535,22 @@
 <span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">pulserver.recon.</span></span><span class="sig-name descname"><span class="pre">ReconContext</span></span><a class="reference internal" href="../_modules/pulserver/recon/plugin.html#ReconContext"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.recon.ReconContext" title="Link to this definition">#</a></dt>
 <dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/builtins/functions.html#object" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
 <p>Scan context passed to every hook of a plugin.</p>
+<p>The maps the series of an exam share are attributes of the context: a hook
+reads <code class="xref py py-attr docutils literal notranslate"><span class="pre">b0_map</span></code>, <code class="xref py py-attr docutils literal notranslate"><span class="pre">b1_map</span></code> and <code class="xref py py-attr docutils literal notranslate"><span class="pre">coil_sensitivities</span></code> from it
+and assigns to them what it measures, and a later series of the exam reads
+what was assigned, whichever proxy reconstructs it. Each is <code class="docutils literal notranslate"><span class="pre">None</span></code> until
+some series of the exam has measured it.</p>
+<p>Those three names are the whole vocabulary, so a misspelt one raises
+instead of being stored where nothing looks for it. A plugin carrying an
+artifact of its own puts it in <a class="reference internal" href="pulserver.recon.ReconContext.exam.html#pulserver.recon.ReconContext.exam" title="pulserver.recon.ReconContext.exam"><code class="xref py py-attr docutils literal notranslate"><span class="pre">exam</span></code></a> under a key it chooses.</p>
+<p>The scan context itself does not change once built: assigning to
+<a class="reference internal" href="pulserver.recon.ReconContext.header.html#pulserver.recon.ReconContext.header" title="pulserver.recon.ReconContext.header"><code class="xref py py-attr docutils literal notranslate"><span class="pre">header</span></code></a>, <a class="reference internal" href="pulserver.recon.ReconContext.exam.html#pulserver.recon.ReconContext.exam" title="pulserver.recon.ReconContext.exam"><code class="xref py py-attr docutils literal notranslate"><span class="pre">exam</span></code></a>, <a class="reference internal" href="pulserver.recon.ReconContext.config.html#pulserver.recon.ReconContext.config" title="pulserver.recon.ReconContext.config"><code class="xref py py-attr docutils literal notranslate"><span class="pre">config</span></code></a> or <a class="reference internal" href="pulserver.recon.ReconContext.device.html#pulserver.recon.ReconContext.device" title="pulserver.recon.ReconContext.device"><code class="xref py py-attr docutils literal notranslate"><span class="pre">device</span></code></a> raises.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>header</strong> (<em>Any</em>) – Parsed MRD XML header; offline, <code class="docutils literal notranslate"><span class="pre">None</span></code> or any header-like object.</p></li>
-<li><p><strong>exam</strong> (<a class="reference internal" href="pulserver.recon.ExamCache.html#pulserver.recon.ExamCache" title="pulserver.recon.plugin.ExamCache"><em>pulserver.recon.plugin.ExamCache</em></a>) – Artifact cache shared by the series of the exam.</p></li>
+<li><p><strong>exam</strong> (<a class="reference internal" href="pulserver.recon.ExamCache.html#pulserver.recon.ExamCache" title="pulserver.recon.plugin.ExamCache"><em>pulserver.recon.plugin.ExamCache</em></a>) – Artifact cache shared by the series of the exam, for artifacts the
+three names do not cover.</p></li>
 <li><p><strong>config</strong> (<em>Any</em>) – Configuration payload the client sent with the stream.</p></li>
 <li><p><strong>device</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em> | </em><em>None</em>) – The GPU the proxy gave this series, as a torch device such as
 <code class="docutils literal notranslate"><span class="pre">&quot;cuda:0&quot;</span></code>; <code class="docutils literal notranslate"><span class="pre">None</span></code> on the host, and offline.</p></li>
@@ -547,16 +558,18 @@
 </dd>
 </dl>
 <p class="rubric">Examples</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">types</span><span class="w"> </span><span class="kn">import</span> <span class="n">SimpleNamespace</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">pulserver.recon</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">recon</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">matrix</span> <span class="o">=</span> <span class="n">SimpleNamespace</span><span class="p">(</span><span class="n">matrixSize</span><span class="o">=</span><span class="n">SimpleNamespace</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="mi">8</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span> <span class="n">z</span><span class="o">=</span><span class="mi">1</span><span class="p">))</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">header</span> <span class="o">=</span> <span class="n">SimpleNamespace</span><span class="p">(</span>
-<span class="gp">... </span>    <span class="n">encoding</span><span class="o">=</span><span class="p">[</span><span class="n">SimpleNamespace</span><span class="p">(</span><span class="n">encodedSpace</span><span class="o">=</span><span class="n">matrix</span><span class="p">,</span> <span class="n">reconSpace</span><span class="o">=</span><span class="n">matrix</span><span class="p">)],</span>
-<span class="gp">... </span>    <span class="n">acquisitionSystemInformation</span><span class="o">=</span><span class="n">SimpleNamespace</span><span class="p">(</span><span class="n">receiverChannels</span><span class="o">=</span><span class="mi">2</span><span class="p">),</span>
-<span class="gp">... </span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">context</span> <span class="o">=</span> <span class="n">recon</span><span class="o">.</span><span class="n">ReconContext</span><span class="o">.</span><span class="n">offline</span><span class="p">(</span><span class="n">header</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="nb">isinstance</span><span class="p">(</span><span class="n">context</span><span class="o">.</span><span class="n">exam</span><span class="p">,</span> <span class="n">recon</span><span class="o">.</span><span class="n">ExamCache</span><span class="p">)</span>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">pulserver.recon</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">recon</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">context</span> <span class="o">=</span> <span class="n">recon</span><span class="o">.</span><span class="n">ReconContext</span><span class="o">.</span><span class="n">offline</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">context</span><span class="o">.</span><span class="n">b1_map</span> <span class="ow">is</span> <span class="kc">None</span>
 <span class="go">True</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">context</span><span class="o">.</span><span class="n">b1_map</span> <span class="o">=</span> <span class="p">[</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">0.9</span><span class="p">]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">context</span><span class="o">.</span><span class="n">b1_map</span>
+<span class="go">[1.0, 0.9]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">context</span><span class="o">.</span><span class="n">exam</span><span class="p">[</span><span class="n">recon</span><span class="o">.</span><span class="n">B1_MAP</span><span class="p">]</span>
+<span class="go">[1.0, 0.9]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">context</span><span class="o">.</span><span class="n">b1_mpa</span> <span class="o">=</span> <span class="p">[</span><span class="mf">1.0</span><span class="p">]</span>
+<span class="gt">Traceback (most recent call last):</span>
+<span class="gr">AttributeError</span>: <span class="n">ReconContext has no attribute 'b1_mpa'</span>
 </pre></div>
 </div>
 </dd></dl>
