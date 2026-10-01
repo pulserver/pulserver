@@ -25,8 +25,13 @@ __all__ = [
     "SequenceDescription",
     "SequenceEvent",
     "describe",
+    "is_message",
+    "message",
 ]
 
+import base64
+import json
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from enum import IntEnum
 from typing import Any
@@ -35,6 +40,9 @@ import numpy as np
 
 #: Band offset slots every RF definition carries, filled or not.
 BANDS = 8
+
+#: The key an MRD text message carrying descriptions opens with.
+MESSAGE_KEY = "pulserver_sequence_description"
 
 
 class EventType(IntEnum):
@@ -90,7 +98,8 @@ class RfDefinition:
 
     ``magnitude`` is normalised to a peak of one and scaled by the amplitude of
     the event that plays it, so one definition serves every instance of a pulse
-    whatever angle it turns through. ``phase`` is in turns, not radians.
+    whatever angle it turns through. ``phase`` is in turns, not radians, and
+    ``time`` holds each sample's centre in units of the RF raster.
     """
 
     id: int
@@ -170,7 +179,9 @@ def describe(seq: Any, *, subsequence_index: int = 0) -> SequenceDescription:
         pulse = seq.get_block(int(block)).rf
         definition = _definition_id(seq, int(block))
         if definition not in definitions:
-            definitions[definition] = _definition_of(definition, pulse)
+            definitions[definition] = _definition_of(
+                definition, pulse, float(seq.rf_raster_time)
+            )
         rows[int(block)] = SequenceEvent(
             EventType.RF,
             float(pulses.t[at]) * 1e6,
@@ -233,14 +244,14 @@ def _shim_id(seq: Any, block: int) -> int:
     return int(held.get(block, 0)) if isinstance(held, dict) else 0
 
 
-def _definition_of(definition: int, pulse: Any) -> RfDefinition:
+def _definition_of(definition: int, pulse: Any, raster_s: float) -> RfDefinition:
     """Read a pulse into a definition, its magnitude normalised to a peak of one."""
     signal = np.asarray(pulse.signal)
     peak = float(np.max(np.abs(signal))) or 1.0
     magnitude = RfShape(signal.size, np.abs(signal) / peak)
     # Turns, not radians: what reads this applies its own factor of 2 pi.
     phase = RfShape(signal.size, np.angle(signal) / (2.0 * np.pi))
-    time = RfShape(signal.size, np.asarray(pulse.t) * 1e6)
+    time = RfShape(signal.size, np.asarray(pulse.t) / raster_s)
     return RfDefinition(
         id=definition,
         bandwidth_hz=0.0,
@@ -262,7 +273,9 @@ def as_rows(description: SequenceDescription) -> dict[str, np.ndarray]:
     """
     count = len(description.events)
     kinds = np.empty(count, dtype=np.int32)
-    times = np.empty(count, dtype=np.float32)
+    # Microseconds from the start of the sequence outgrow float32's 24-bit
+    # mantissa within seconds.
+    times = np.empty(count, dtype=np.float64)
     params = np.zeros((count, 7), dtype=np.float32)
     for at, event in enumerate(description.events):
         kinds[at] = int(event.type)
@@ -270,3 +283,63 @@ def as_rows(description: SequenceDescription) -> dict[str, np.ndarray]:
         for column, value in enumerate(event.params):
             params[at, column] = float(value)
     return {"type": kinds, "timestamp_us": times, "params": params}
+
+
+def message(descriptions: Sequence[SequenceDescription]) -> str:
+    """Return the MRD text message carrying the descriptions of a chain.
+
+    A JSON object holding one entry under :data:`MESSAGE_KEY`: a list with one
+    object per subsequence, carrying ``subsequence_index``,
+    ``tr_duration_us``, ``rf_raster_time_s``, the rows of :func:`as_rows` and
+    ``rf_definitions``. Arrays are base64 of their little-endian bytes:
+    ``type`` int32, ``timestamp_us`` float64, ``params`` float32 ``(n, 7)``
+    row-major, and each shape's ``samples`` float32 beside its
+    ``num_uncompressed``. A definition's ``phase`` and ``time`` may be
+    ``null``.
+    """
+    return json.dumps({MESSAGE_KEY: [_subsequence(each) for each in descriptions]})
+
+
+def is_message(item: Any) -> bool:
+    """Whether a stream item is the text message :func:`message` writes."""
+    return isinstance(item, str) and item.startswith('{"' + MESSAGE_KEY + '"')
+
+
+def _subsequence(description: SequenceDescription) -> dict[str, Any]:
+    rows = as_rows(description)
+    return {
+        "subsequence_index": description.subsequence_index,
+        "tr_duration_us": description.tr_duration_us,
+        "rf_raster_time_s": description.rf_raster_time_s,
+        "type": _packed(rows["type"], "<i4"),
+        "timestamp_us": _packed(rows["timestamp_us"], "<f8"),
+        "params": _packed(rows["params"], "<f4"),
+        "rf_definitions": [
+            {
+                "id": definition.id,
+                "bandwidth_hz": definition.bandwidth_hz,
+                "num_bands": definition.num_bands,
+                "band_frequency_offsets_hz": list(definition.band_frequency_offsets_hz),
+                "band_bandwidth_hz": definition.band_bandwidth_hz,
+                "magnitude": _shape(definition.magnitude),
+                "phase": _shape(definition.phase),
+                "time": _shape(definition.time),
+            }
+            for definition in description.rf_definitions.values()
+        ],
+    }
+
+
+def _shape(shape: RfShape | None) -> dict[str, Any] | None:
+    if shape is None:
+        return None
+    return {
+        "num_uncompressed": shape.num_uncompressed,
+        "samples": _packed(shape.samples, "<f4"),
+    }
+
+
+def _packed(values: np.ndarray, dtype: str) -> str:
+    return base64.b64encode(np.ascontiguousarray(values, dtype=dtype).tobytes()).decode(
+        "ascii"
+    )

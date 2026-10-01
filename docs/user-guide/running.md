@@ -256,6 +256,15 @@ selects its pipeline by. The client's config text is not forwarded. What the
 server returns is relayed to the client; a message the proxy has no reader for
 ends the relay, and the client receives a `pulserver:` text naming its type.
 
+Whether forwarded or reconstructed by a worker, the series carries, after its
+header and before its first acquisition, one `TEXT` message (5) describing the
+sequence chain to a simulation: a JSON object under the key
+`pulserver_sequence_description`, holding per file of the chain one row per
+block, RF at the pulse centre and ADC at the sample nearest the centre of
+k-space, and the pulses the RF rows name. It is meant for a reconstruction
+server that simulates the signal, which chooses the signal model the rows
+drive, and is not relayed back to the client.
+
 With `--intake-port`, the proxy runs a design intake beside it
 ({class}`~pulserver.proxy.DesignIntake`), an HTTP endpoint that writes the
 designs pushed to it into `--store`: `HEAD /designs/<id>` answers 200 when the

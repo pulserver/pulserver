@@ -9,12 +9,15 @@ import re
 import threading
 from collections import OrderedDict
 from dataclasses import dataclass
+from functools import cached_property
 from pathlib import Path
 from typing import Any
 
 from ..host._store import ID_DIGITS, MANIFEST
 from ..mrd._metadata import user_parameter
+from ..mrd._sequence import read_chain
 from ._enrich import SequenceTable
+from ._seqdesc import describe, message
 
 #: Header user parameter naming the design a stream was played from: its
 #: identifier, as ``GENERATED`` or ``IMPORTED`` replied it.
@@ -50,6 +53,20 @@ class Design:
     recon: str
     table: SequenceTable
     prospective_motion: bool = False
+
+    @cached_property
+    def description(self) -> str:
+        """The MRD text message describing the chain to a simulation.
+
+        See :func:`~pulserver.proxy._seqdesc.message`. Built on first use and
+        kept with the design.
+        """
+        return message(
+            [
+                describe(seq, subsequence_index=index)
+                for index, (_, seq) in enumerate(read_chain(self.directory / _ENTRY))
+            ]
+        )
 
 
 class DesignCache:
