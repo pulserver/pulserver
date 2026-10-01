@@ -216,7 +216,7 @@ class LatticeDevice:
             self._library = finufft
         else:
             raise ValueError(f"no lattice transforms on a {self.device.type} device")
-        self._lattices: dict[int, _Lattice] = {}
+        self._lattices: dict[tuple[int, int], _Lattice] = {}
         self._plans: OrderedDict = OrderedDict()
         self._staged: torch.Tensor | None = None
         self._fetched: torch.Tensor | None = None
@@ -233,9 +233,16 @@ class LatticeDevice:
         single = bool(window["single"])
         real = torch.float32 if single else torch.float64
         complex_dtype = torch.complex64 if single else torch.complex128
-        lattice = self._lattices.get(window["axes"])
+        key = (window["layout"], window["axes"])
+        lattice = self._lattices.get(key)
         if lattice is None:
-            lattice = self._lattices[window["axes"]] = _Lattice(window, self.device)
+            # Lattices of positions since moved are not read again.
+            self._lattices = {
+                held: kept
+                for held, kept in self._lattices.items()
+                if held[0] == window["layout"]
+            }
+            lattice = self._lattices[key] = _Lattice(window, self.device)
         receive = lattice.sensitivities(window, complex_dtype, self.device)
 
         magnetization = self._stage(window, real)[:, lattice.order].T.contiguous()

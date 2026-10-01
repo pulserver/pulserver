@@ -94,6 +94,25 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--spacing", type=float, default=1.0, help="isochromat spacing, in mm"
     )
+    parser.add_argument(
+        "--spins",
+        type=int,
+        default=1,
+        help="isochromats per voxel, spread over the T2' line of its tissue",
+    )
+    parser.add_argument(
+        "--voxel",
+        choices=("point", "box"),
+        default="point",
+        help="where a voxel's isochromats lie: at its centre, or over it, "
+        "--spins a square number for a phantom of ellipses and a cube for BrainWeb",
+    )
+    parser.add_argument(
+        "--diffusion",
+        action="store_true",
+        help="BrainWeb's tissue classes diffuse, as BrainWeb.DIFFUSION gives them; "
+        "a phantom of ellipses diffuses as its file gives it",
+    )
     receivers = parser.add_mutually_exclusive_group()
     receivers.add_argument(
         "--coils", type=int, default=4, help="receive coils of the phantom's own"
@@ -323,6 +342,9 @@ def _scan(args: argparse.Namespace, store: Path, design: str) -> int:
             field_t=field,
             region=excited(sequence, rotation),
             coil=coil,
+            spins=args.spins,
+            voxel=args.voxel,
+            seed=0,
             device=args.device,
         ),
         rotation=rotation,
@@ -365,7 +387,9 @@ def _phantom(args: argparse.Namespace) -> Any:
     if args.phantom is None:
         return default_phantom(coils)
     if str(args.phantom) == "brainweb":
-        return BrainWeb(coils=coils)
+        return BrainWeb(
+            coils=coils, diffusion=BrainWeb.DIFFUSION if args.diffusion else None
+        )
     return read_phantom(args.phantom, coils)
 
 

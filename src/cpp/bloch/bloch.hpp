@@ -65,6 +65,10 @@ namespace bloch
      */
     struct LatticeWindowRead
     {
+        /** The positions' revision: the lattice of given axes, and the
+         *  isochromats' order on it, are the same for every window of one
+         *  revision. */
+        size_t layout = 0;
         /** The lattice axes, a bit per axis, the points along each, the
          *  lowest axis first and fastest, and the points in all. */
         unsigned axes = 0;
@@ -246,6 +250,18 @@ namespace bloch
 
         /** Replace the magnetisation with (size(), 3) row-major @p from. */
         void set_magnetization(const double* from);
+
+        /** Move the isochromats to (size(), 3) row-major @p positions, in m,
+         *  once the free precession pending has been applied where they
+         *  stand. */
+        void set_positions(const double* positions);
+
+        /** Write the positions, (size(), 3) row-major, to @p into. */
+        void positions(double* into) const;
+
+        /** Turn each isochromat's Mx + i My by exp(-i @p radians[i]), as
+         *  precession through that angle turns it. */
+        void precess(const double* radians);
 
         /**
          * Play @p block, writing what each coil receives at each ADC sample to
@@ -632,6 +648,8 @@ namespace bloch
         std::vector<Segmentation> segmentations_;
         size_t lattice_windows_ = 0;
         size_t device_windows_ = 0;
+        /** Revision of the positions, counted from construction. */
+        size_t layout_ = 0;
         LatticeDevice lattice_device_;
         /** The lattice's sums and their transforms at the samples, in
          *  either precision, kept from one window to the next. */

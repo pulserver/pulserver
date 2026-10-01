@@ -118,6 +118,37 @@ namespace
         self.set_magnetization(values.data());
     }
 
+    py::array_t<double> positions(bloch::Isochromats& self)
+    {
+        py::array_t<double> out({static_cast<py::ssize_t>(self.size()), static_cast<py::ssize_t>(3)});
+        double* into = out.mutable_data();
+        {
+            py::gil_scoped_release unlocked;
+            self.positions(into);
+        }
+        return out;
+    }
+
+    void set_positions(bloch::Isochromats& self, const Doubles& values)
+    {
+        if (values.ndim() != 2 || static_cast<size_t>(values.shape(0)) != self.size() || values.shape(1) != 3)
+            throw std::invalid_argument("the positions must be (isochromats, 3)");
+        const double* data = values.data();
+        for (size_t i = 0; i < 3 * self.size(); ++i)
+            if (!std::isfinite(data[i]))
+                throw std::invalid_argument("the positions must be finite");
+        py::gil_scoped_release unlocked;
+        self.set_positions(data);
+    }
+
+    void precess(bloch::Isochromats& self, const Doubles& radians)
+    {
+        if (radians.ndim() != 1 || static_cast<size_t>(radians.shape(0)) != self.size())
+            throw std::invalid_argument("precess takes one angle per isochromat");
+        py::gil_scoped_release unlocked;
+        self.precess(radians.data());
+    }
+
     /** A read-only view of an array the engine owns, valid during a call. */
     template <typename T>
     py::array view(const T* data, std::vector<py::ssize_t> shape)
@@ -135,6 +166,7 @@ namespace
         const auto segments = static_cast<py::ssize_t>(read.segments);
         const auto samples = static_cast<py::ssize_t>(read.samples);
         py::dict window;
+        window["layout"] = read.layout;
         window["axes"] = read.axes;
         window["modes"] = view(read.modes, {read.dimensions});
         window["order"] = view(read.order, {n});
@@ -642,6 +674,9 @@ void bind_bloch(py::module_& module)
         .def("reset", &bloch::Isochromats::reset, py::call_guard<py::gil_scoped_release>())
         .def("magnetization", &magnetization)
         .def("set_magnetization", &set_magnetization)
+        .def("positions", &positions)
+        .def("set_positions", &set_positions)
+        .def("precess", &precess, py::arg("radians"))
         .def("use_lattice_device", &use_lattice_device, py::arg("device"))
         .def("play",
              &play,

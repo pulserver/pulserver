@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import functools
 import math
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from pathlib import Path
+from types import MappingProxyType
 
 import numpy as np
 import pypulseqpp as pp
 
+from . import _voxels
 from ._coils import Coil
 from ._isochromats import Isochromats
 from ._phantom import Phantom
@@ -74,7 +76,29 @@ class BrainWeb:
         without one.
     susceptibility
         Whether the field the head's susceptibility adds acts on it.
+    t2_prime
+        T2', in s, by tissue class; a class without one has none.
+    diffusion
+        Isotropic diffusion coefficient, in m²/s, by tissue class, as
+        :attr:`DIFFUSION` gives them; a class without one does not diffuse.
     """
+
+    #: Isotropic diffusion coefficients, in m²/s, of the tissue classes whose
+    #: water diffusion is measured: the apparent diffusion coefficients of
+    #: cortical grey matter and of white matter in adults (Helenius et al.,
+    #: AJNR Am J Neuroradiol 23:194, 2002), which glial matter and connective
+    #: tissue take as BrainWeb gives them those tissues' relaxation, and that
+    #: of free water at 37 degrees C for CSF (Holz et al., Phys Chem Chem Phys
+    #: 2:4740, 2000).
+    DIFFUSION = MappingProxyType(
+        {
+            "CSF": 3.0e-9,
+            "grey matter": 0.89e-9,
+            "white matter": 0.70e-9,
+            "glial matter": 0.89e-9,
+            "connective tissue": 0.70e-9,
+        }
+    )
 
     def __init__(
         self,
@@ -84,11 +108,19 @@ class BrainWeb:
         depth: float = 0.5,
         directory: Path | str | None = None,
         susceptibility: bool = True,
+        t2_prime: Mapping[str, float] | None = None,
+        diffusion: Mapping[str, float] | None = None,
     ) -> None:
+        for given in (t2_prime, diffusion):
+            unknown = set(given or ()) - set(TISSUES)
+            if unknown:
+                raise ValueError(f"BrainWeb has no tissue class {sorted(unknown)}")
         self._coils = Phantom((), coils=coils, period=period, depth=depth)
         self.coils = coils
         self.directory = directory
         self.susceptibility = susceptibility
+        self.t2_prime = dict(t2_prime or {})
+        self.diffusion = dict(diffusion or {})
 
     @functools.cached_property
     def fractions(self) -> np.ndarray:
@@ -153,15 +185,22 @@ class BrainWeb:
         off_resonance_hz: float = 0.0,
         region: Callable[[np.ndarray, np.ndarray], np.ndarray] | None = None,
         coil: Coil | None = None,
+        spins: int = 1,
+        voxel: str = "point",
+        motion=None,
+        seed: int | None = None,
         threads: int = 0,
         device=None,
     ) -> Isochromats:
         """Return the brain sampled as isochromats, for :func:`~pulserver.virtual.simulate`.
 
         The voxels are averaged in cubes ``spacing`` wide. Each tissue a cube
-        holds is an isochromat at the cube's centre, of proton density the
+        holds is ``spins`` isochromats of proton density, between them, the
         tissue's times the fraction of the cube it fills times the cube's
-        volume in m³, precessing at the cube's mean :attr:`field_ppm`.
+        volume in m³, precessing at the cube's mean :attr:`field_ppm`: at the
+        cube's centre, or over the cube for a ``"box"`` ``voxel``, and at the
+        quantiles of the Lorentzian line of the tissue's T2'
+        (:doc:`/explanations/bloch-simulation`).
 
         Parameters
         ----------
@@ -181,6 +220,16 @@ class BrainWeb:
         coil
             The scanner's coil the brain is scanned with, in place of the
             phantom's coils.
+        spins
+            Isochromats per tissue of a cube: a cube number for a ``"box"``.
+        voxel
+            ``"point"`` or ``"box"``: where a cube's isochromats lie.
+        motion
+            The head's motion, as :class:`~pulserver.virtual.Isochromats`
+            takes it.
+        seed
+            Seed of the frequencies of each voxel's isochromats and of their
+            Brownian walks.
         threads
             Worker threads of the simulation; 0 for every core.
         device
@@ -192,25 +241,32 @@ class BrainWeb:
         ------
         ValueError
             If ``spacing`` is not a whole number of millimetres, ``field_t``
-            is not given, or the brain has coils of its own and ``coil`` is
-            given.
+            is not given, the brain has coils of its own and ``coil`` is
+            given, or ``spins`` do not fill a ``voxel``.
         """
         _whole_millimetres(spacing)
         if coil is not None and self.coils > 1:
             raise ValueError(
                 "a phantom received by coils of its own is not scanned with a coil"
             )
-        own, proton_density, t1, t2, frequency = self._sampled(
+        centres, proton_density, t1, t2, frequency, t2_prime, diffusion = self._sampled(
             spacing, field_t, off_resonance_hz, region
         )
+        offsets, order = _voxels.stencil(spins, voxel, spacing, np.eye(3))
+        rng = np.random.default_rng(seed)
+        own = _voxels.spread(centres, spins) + np.tile(offsets, (len(t1), 1))
         return Isochromats(
             own,
-            proton_density=proton_density,
-            t1=t1,
-            t2=t2,
-            off_resonance=frequency,
+            proton_density=_voxels.spread(proton_density, spins) / spins,
+            t1=_voxels.spread(t1, spins),
+            t2=_voxels.spread(t2, spins),
+            off_resonance=_voxels.spread(frequency, spins)
+            + _voxels.frequencies(t2_prime, order, rng),
             transmit=None if coil is None else coil.transmit(own),
             receive=self._coils._received(own) if coil is None else coil.receive(own),
+            diffusion=_voxels.spread(diffusion, spins),
+            motion=motion,
+            seed=rng,
             threads=threads,
             device=device,
         )
@@ -222,6 +278,7 @@ class BrainWeb:
         field_t: float | None = None,
         off_resonance_hz: float = 0.0,
         region: Callable[[np.ndarray, np.ndarray], np.ndarray] | None = None,
+        spins: int = 1,
     ) -> int:
         """Return how many isochromats :meth:`isochromats` samples the brain as, with the same arguments.
 
@@ -233,14 +290,15 @@ class BrainWeb:
         """
         _whole_millimetres(spacing)
         if region is not None:
-            return len(self._sampled(spacing, field_t, off_resonance_hz, region)[0])
+            sampled = self._sampled(spacing, field_t, off_resonance_hz, region)
+            return spins * len(sampled[0])
         if field_t is None:
             raise ValueError(
                 "BrainWeb's fat has a chemical shift: scan it at a field_t"
             )
         cubes = _cubes(self.fractions, round(spacing / 1e-3))
         dense = [density > 0.0 for _, _, density in TISSUES.values()]
-        return int(np.count_nonzero(cubes[..., dense] > 0.0))
+        return spins * int(np.count_nonzero(cubes[..., dense] > 0.0))
 
     def _sampled(
         self,
@@ -249,7 +307,7 @@ class BrainWeb:
         off_resonance_hz: float,
         region: Callable[[np.ndarray, np.ndarray], np.ndarray] | None,
     ) -> tuple[np.ndarray, ...]:
-        """Return the positions, proton densities, T1, T2 and frequencies of the isochromats :meth:`isochromats` makes."""
+        """Return the centres, proton densities, T1, T2, frequencies, T2' and diffusion coefficients of the tissues of the cubes :meth:`isochromats` spreads into isochromats."""
         from pypulseqpp.sequences.preparation.fatsat import FAT_SHIFT_PPM
 
         if field_t is None:
@@ -286,7 +344,7 @@ class BrainWeb:
         )
         positions = 1e-3 * np.column_stack([-x, -y, z])
         points, rows = [], []
-        for tissue, (t1, t2, density) in enumerate(TISSUES.values()):
+        for tissue, (name, (t1, t2, density)) in enumerate(TISSUES.items()):
             fraction = fractions[:, tissue]
             kept = np.flatnonzero((fraction > 0.0) & (density > 0.0))
             shift = shifts[tissue]
@@ -302,11 +360,12 @@ class BrainWeb:
                         np.full(kept.size, t1),
                         np.full(kept.size, t2),
                         frequency,
+                        np.full(kept.size, self.t2_prime.get(name, math.inf)),
+                        np.full(kept.size, self.diffusion.get(name, 0.0)),
                     ]
                 )
             )
-        proton_density, t1, t2, frequency = np.concatenate(rows).T
-        return np.concatenate(points), proton_density, t1, t2, frequency
+        return (np.concatenate(points), *np.concatenate(rows).T)
 
 
 def _reached(

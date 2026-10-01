@@ -250,10 +250,41 @@ def test_without_brainweb_dl_the_brain_names_the_extra_that_downloads_it(monkeyp
         virtual.BrainWeb().isochromats(field_t=3.0)
 
 
-def test_the_scan_command_scans_brainweb_by_name():
-    args = argparse.Namespace(phantom=Path("brainweb"), coils=3, coil=None)
+@pytest.mark.parametrize("diffusion", [False, True])
+def test_the_scan_command_scans_brainweb_by_name(diffusion):
+    args = argparse.Namespace(
+        phantom=Path("brainweb"), coils=3, coil=None, diffusion=diffusion
+    )
 
     brain = _command._phantom(args)
 
     assert isinstance(brain, virtual.BrainWeb)
     assert brain.coils == 3
+    assert brain.diffusion == (dict(virtual.BrainWeb.DIFFUSION) if diffusion else {})
+
+
+def test_each_tissue_of_a_voxel_is_spread_over_its_spins_with_its_t2_prime_and_diffusion(
+    model, made
+):
+    model.fractions[2, 3, 1, GREY] = 0.25
+    model.fractions[2, 3, 1, WHITE] = 0.75
+    brain = virtual.BrainWeb(
+        susceptibility=False,
+        t2_prime={"grey matter": 0.05},
+        diffusion=virtual.BrainWeb.DIFFUSION,
+    )
+
+    brain.isochromats(field_t=3.0, spins=8, voxel="box", seed=0)
+
+    (spins,) = made
+    centre = 1e-3 * np.array([-(1 - 90.0), -(3 - 126.0), 2 - 72.0])
+    offsets = spins.positions - centre
+    np.testing.assert_allclose(np.unique(np.round(offsets, 12)), [-2.5e-4, 2.5e-4])
+    np.testing.assert_allclose(
+        spins.proton_density, np.repeat([0.86 * 0.25e-9, 0.77 * 0.75e-9], 8) / 8
+    )
+    np.testing.assert_allclose(spins.diffusion, np.repeat([0.89e-9, 0.70e-9], 8))
+    grey, white = spins.off_resonance[:8], spins.off_resonance[8:]
+    assert np.all(white == 0.0)
+    assert len(np.unique(grey)) == 8
+    assert np.abs(grey).max() <= 32.0 / (2.0 * np.pi * 0.05)

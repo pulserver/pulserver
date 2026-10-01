@@ -2092,6 +2092,55 @@ namespace bloch
         pending_time_ = 0.0;
     }
 
+    void Isochromats::set_positions(const double* positions)
+    {
+        const std::lock_guard<std::mutex> held(mutex_);
+        flush();
+        IsochromatProperties& p = properties_;
+        for (size_t i = 0; i < count_; ++i)
+        {
+            p.x[i] = positions[3 * i];
+            p.y[i] = positions[3 * i + 1];
+            p.z[i] = positions[3 * i + 2];
+        }
+        groupings_.clear();
+        held_.clear();
+        held_bytes_ = 0;
+        for (std::unique_ptr<Lattice>& lattice : lattices_)
+            lattice.reset();
+        lattice_orders_.clear();
+        ++layout_;
+    }
+
+    void Isochromats::positions(double* into) const
+    {
+        const std::lock_guard<std::mutex> held(mutex_);
+        const IsochromatProperties& p = properties_;
+        for (size_t i = 0; i < count_; ++i)
+        {
+            into[3 * i] = p.x[i];
+            into[3 * i + 1] = p.y[i];
+            into[3 * i + 2] = p.z[i];
+        }
+    }
+
+    void Isochromats::precess(const double* radians)
+    {
+        const std::lock_guard<std::mutex> held(mutex_);
+        flush();
+        parallel(count_, threads_, kChunk, [&](size_t, size_t first, size_t last) {
+            for (size_t i = first; i < last; ++i)
+            {
+                const double c = std::cos(radians[i]);
+                const double s = -std::sin(radians[i]);
+                const double x = mx_[i];
+                const double y = my_[i];
+                mx_[i] = c * x - s * y;
+                my_[i] = s * x + c * y;
+            }
+        });
+    }
+
     void Isochromats::advance(const GradientAreas& areas, double& now, double to)
     {
         double from_area[3];
@@ -3125,6 +3174,7 @@ namespace bloch
                 decay[d * count + l] = std::exp(-(decays_[d] - window.rate) * segments.nodes[l]);
         const bool sensitivities = !receive_re_.empty();
         LatticeWindowRead read;
+        read.layout = layout_;
         read.axes = window.mask;
         read.dimensions = window.axes;
         read.modes = window.modes;
