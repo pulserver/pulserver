@@ -1,6 +1,7 @@
 """BrainWeb's normal brain as isochromats: its tissues, where the head lies, and its download."""
 
 import argparse
+import math
 import sys
 import types
 from pathlib import Path
@@ -284,7 +285,22 @@ def test_each_tissue_of_a_voxel_is_spread_over_its_spins_with_its_t2_prime_and_d
         spins.proton_density, np.repeat([0.86 * 0.25e-9, 0.77 * 0.75e-9], 8) / 8
     )
     np.testing.assert_allclose(spins.diffusion, np.repeat([0.89e-9, 0.70e-9], 8))
-    grey, white = spins.off_resonance[:8], spins.off_resonance[8:]
-    assert np.all(white == 0.0)
-    assert len(np.unique(grey)) == 8
-    assert np.abs(grey).max() <= 32.0 / (2.0 * np.pi * 0.05)
+    for line, t2_prime in zip(
+        np.split(spins.off_resonance, 2),
+        (0.05, brain.t2_prime["white matter"]),
+        strict=True,
+    ):
+        assert len(np.unique(line)) == 8
+        assert np.abs(line).max() <= 32.0 / (2.0 * np.pi * t2_prime)
+
+
+def test_each_tissue_takes_the_t2_prime_its_t2_and_t2_star_in_brainweb_s_simulator_give():
+    brain = virtual.BrainWeb(t2_prime={"white matter": 0.2})
+
+    # R2' = R2* - R2 at BrainWeb's T2 and T2*, 83 ms and 69 ms for grey matter.
+    assert brain.t2_prime["grey matter"] == pytest.approx(
+        1.0 / (1.0 / 0.069 - 1.0 / 0.083)
+    )
+    assert brain.t2_prime["CSF"] == pytest.approx(1.0 / (1.0 / 0.058 - 1.0 / 0.329))
+    assert brain.t2_prime["white matter"] == 0.2
+    assert brain.t2_prime["skull"] == math.inf

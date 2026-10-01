@@ -18,19 +18,21 @@ from ._phantom import Phantom
 from ._region import Slabs
 
 #: The tissue classes of BrainWeb's normal brain, in the order of the fuzzy
-#: model brainweb-dl returns for its subject 0, each with the T1 and T2, in s,
-#: and the proton density BrainWeb's MRI simulator gives it at 1.5 T.
+#: model brainweb-dl returns for its subject 0, each with the T1, T2 and T2*,
+#: in s, and the proton density BrainWeb's MRI simulator gives it at 1.5 T, as
+#: its tissue MR parameters list them
+#: (https://brainweb.bic.mni.mcgill.ca/brainweb/tissue_mr_parameters.txt).
 TISSUES = {
-    "background": (0.0, 0.0, 0.0),
-    "CSF": (2.569, 0.329, 1.0),
-    "grey matter": (0.833, 0.083, 0.86),
-    "white matter": (0.5, 0.07, 0.77),
-    "fat": (0.35, 0.07, 1.0),
-    "muscle and skin": (0.9, 0.047, 1.0),
-    "skin": (2.569, 0.329, 1.0),
-    "skull": (0.0, 0.0, 0.0),
-    "glial matter": (0.833, 0.083, 0.86),
-    "connective tissue": (0.5, 0.07, 0.77),
+    "background": (0.0, 0.0, 0.0, 0.0),
+    "CSF": (2.569, 0.329, 0.058, 1.0),
+    "grey matter": (0.833, 0.083, 0.069, 0.86),
+    "white matter": (0.5, 0.07, 0.061, 0.77),
+    "fat": (0.35, 0.07, 0.058, 1.0),
+    "muscle and skin": (0.9, 0.047, 0.030, 1.0),
+    "skin": (2.569, 0.329, 0.058, 1.0),
+    "skull": (0.0, 0.0, 0.0, 0.0),
+    "glial matter": (0.833, 0.083, 0.069, 0.86),
+    "connective tissue": (0.5, 0.07, 0.061, 0.77),
 }
 
 #: Volume magnetic susceptibility, in ppm (SI), of air, and of water, which
@@ -58,10 +60,12 @@ class BrainWeb:
     anterior commissure, at the isocentre: the physical x axis points to the
     subject's left, y posterior and z superior. Each tissue class relaxes with
     the T1 and T2 and has the proton density BrainWeb's simulator gives it at
-    1.5 T (Kwan et al., IEEE Trans Med Imaging 18:1085, 1999), at any field; fat
-    precesses at pypulseqpp's fat shift, and every isochromat at the field
-    :attr:`field_ppm` its head adds. The coils are those of
-    :class:`~pulserver.virtual.Phantom`, fixed in the physical frame.
+    1.5 T (Kwan et al., IEEE Trans Med Imaging 18:1085, 1999), at any field,
+    and the T2' its T2 and T2* there give, ``1 / (1/T2* - 1/T2)``, which acts
+    where a voxel holds several isochromats; fat precesses at pypulseqpp's fat
+    shift, and every isochromat at the field :attr:`field_ppm` its head adds.
+    The coils are those of :class:`~pulserver.virtual.Phantom`, fixed in the
+    physical frame.
 
     Parameters
     ----------
@@ -77,7 +81,7 @@ class BrainWeb:
     susceptibility
         Whether the field the head's susceptibility adds acts on it.
     t2_prime
-        T2', in s, by tissue class; a class without one has none.
+        T2', in s, by tissue class, in place of the one its T2 and T2* give.
     diffusion
         Isotropic diffusion coefficient, in m²/s, by tissue class, as
         :attr:`DIFFUSION` gives them; a class without one does not diffuse.
@@ -119,7 +123,11 @@ class BrainWeb:
         self.coils = coils
         self.directory = directory
         self.susceptibility = susceptibility
-        self.t2_prime = dict(t2_prime or {})
+        self.t2_prime = {
+            name: _t2_prime(t2, t2_star)
+            for name, (_, t2, t2_star, _) in TISSUES.items()
+        }
+        self.t2_prime.update(t2_prime or {})
         self.diffusion = dict(diffusion or {})
 
     @functools.cached_property
@@ -297,7 +305,7 @@ class BrainWeb:
                 "BrainWeb's fat has a chemical shift: scan it at a field_t"
             )
         cubes = _cubes(self.fractions, round(spacing / 1e-3))
-        dense = [density > 0.0 for _, _, density in TISSUES.values()]
+        dense = [density > 0.0 for *_, density in TISSUES.values()]
         return spins * int(np.count_nonzero(cubes[..., dense] > 0.0))
 
     def _sampled(
@@ -344,7 +352,7 @@ class BrainWeb:
         )
         positions = 1e-3 * np.column_stack([-x, -y, z])
         points, rows = [], []
-        for tissue, (name, (t1, t2, density)) in enumerate(TISSUES.items()):
+        for tissue, (name, (t1, t2, _, density)) in enumerate(TISSUES.items()):
             fraction = fractions[:, tissue]
             kept = np.flatnonzero((fraction > 0.0) & (density > 0.0))
             shift = shifts[tissue]
@@ -360,7 +368,7 @@ class BrainWeb:
                         np.full(kept.size, t1),
                         np.full(kept.size, t2),
                         frequency,
-                        np.full(kept.size, self.t2_prime.get(name, math.inf)),
+                        np.full(kept.size, self.t2_prime[name]),
                         np.full(kept.size, self.diffusion.get(name, 0.0)),
                     ]
                 )
@@ -393,6 +401,13 @@ def _reached(
     return np.flatnonzero(reached)
 
 
+def _t2_prime(t2: float, t2_star: float) -> float:
+    """Return the T2' that T2 and T2*, in s, leave, R2' = R2* - R2; infinite for a tissue without either."""
+    if not 0.0 < t2_star < t2:
+        return math.inf
+    return 1.0 / (1.0 / t2_star - 1.0 / t2)
+
+
 def _whole_millimetres(spacing: float) -> None:
     step = round(spacing / 1e-3)
     if step < 1 or not math.isclose(step * 1e-3, spacing, rel_tol=1e-6):
@@ -403,7 +418,7 @@ def _slab_density(
     fractions: np.ndarray, points: np.ndarray, normal: np.ndarray, thickness: float
 ) -> np.ndarray:
     """Return the proton density at ``(n, 3)`` physical points, averaged over 1 mm steps across the slab."""
-    densities = np.array([density for _, _, density in TISSUES.values()])
+    densities = np.array([density for *_, density in TISSUES.values()])
     first = np.array([_FIRST_VOXEL_MM[axis] for axis in "xyz"])
     size = np.array(fractions.shape[2::-1])
     steps = max(1, round(thickness / 1e-3))

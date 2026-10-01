@@ -396,6 +396,8 @@ at 32 half widths, which keeps a
 voxel's frequencies within $\pm 32/(2\pi T_2')$ of its own and takes 2% of
 the line, so that the decay starts quadratically for $|t| \lesssim T_2'/32$.
 One isochromat per voxel precesses at the voxel's frequency, whatever its T2′.
+BrainWeb's tissue classes take the T2′ that the T2 and T2* of BrainWeb's
+simulator leave, $R_2' = R_2^* - R_2$.
 
 ### Motion
 
