@@ -62,6 +62,13 @@ def main(argv: list[str] | None = None) -> None:
         "temporary directory when unset",
     )
     parser.add_argument(
+        "--exams",
+        type=Path,
+        default=None,
+        help="directory the proxies of this host share the caches of an exam "
+        "in; a location under the system temporary directory when unset",
+    )
+    parser.add_argument(
         "--recon-timeout",
         type=float,
         default=None,
@@ -100,6 +107,7 @@ def main(argv: list[str] | None = None) -> None:
         spares=args.spares,
         recon_timeout=args.recon_timeout,
         queue=args.queue,
+        exam_directory=args.exams,
         forward=args.forward,
         forward_config=args.forward_config,
         forward_dicom=args.forward_dicom,

@@ -204,7 +204,7 @@ permissions decide who may call.
 ## Reconstruction proxy
 
 ```bash
-python -m pulserver.proxy --store DIR --port N --plugins DIR [--host ADDR] [--intake-port N] [--queue DIR] [--slots N] [--gpu-slots 1] [--spares 1] [--recon-timeout S]
+python -m pulserver.proxy --store DIR --port N --plugins DIR [--host ADDR] [--intake-port N] [--queue DIR] [--exams DIR] [--slots N] [--gpu-slots 1] [--spares 1] [--recon-timeout S]
 python -m pulserver.proxy --store DIR --port N --forward HOST:PORT [--forward-config NAME] [--forward-dicom] [--host ADDR] [--intake-port N] [--recon-timeout S]
 ```
 
@@ -216,6 +216,7 @@ python -m pulserver.proxy --store DIR --port N --forward HOST:PORT [--forward-co
 | `--intake-port` | TCP port of the design intake, on the `--host` address; no intake when unset |
 | `--plugins` | Directory of reconstruction plugin files, `<plugin>.py`, repeatable, searched in order; required unless `--forward` is given |
 | `--queue` | Directory the series waiting for a slot are written to; a temporary directory, removed when the proxy stops, when unset |
+| `--exams` | Directory the proxies of this host share the caches of an exam in; a location under the system temporary directory when unset |
 | `--slots` | Series reconstructed at once; derived from available memory and the GPUs when unset |
 | `--gpu-slots` | Series reconstructed at once on each GPU when `--slots` is unset, default 1 |
 | `--spares` | Worker processes started ahead of a series, default 1 |
@@ -235,6 +236,16 @@ in {doc}`reconstruction-client`.
 A series that finds every slot busy is written to the queue directory as it
 arrives and reconstructed once a slot frees; the client stays connected
 meanwhile.
+
+A reconstruction computer runs one proxy per acquisition, so the series of one
+exam are reconstructed by different processes. What a calibration series
+measures is kept under `--exams`, in a directory of the exam's own, and read
+there by a later series whatever proxy takes it: the names to store it under
+are {data}`~pulserver.recon.B0_MAP`, {data}`~pulserver.recon.B1_MAP` and
+{data}`~pulserver.recon.COIL_SENSITIVITIES`. An exam's directory is removed
+once the last proxy on that exam has moved to another, so a proxy prescribing
+the next exam does not take the artifacts from one still reconstructing the
+last.
 
 With `--forward`, the proxy runs no workers: each series is enriched as it
 arrives and sent on to the MRD server at `HOST:PORT`, whose own slots and queue

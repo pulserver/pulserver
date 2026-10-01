@@ -538,12 +538,17 @@ def test_the_series_of_one_exam_share_its_exam_cache(start_proxy, bucket):
     assert counts == [[1], [2], [1], [1]]
 
 
-def test_a_closed_proxy_leaves_no_exam_directory(tmp_path):
-    proxy = ReconProxy(tmp_path, tmp_path, slots=1, spares=1)
-    root = proxy._reconstruction._exam_root
+def test_a_closed_proxy_leaves_the_exam_root_for_the_proxies_still_running(tmp_path):
+    """The root is the host's: a proxy closing is not every proxy closing.
+
+    What a closing proxy takes with it is each exam nothing else is on, which
+    :mod:`tests.test_exam_sharing` states; the root it shares stays.
+    """
+    root = tmp_path / "exams"
+    proxy = ReconProxy(tmp_path, tmp_path, slots=1, spares=1, exam_directory=root)
     assert root.is_dir()
     proxy.close()
-    assert not root.exists()
+    assert root.is_dir()
 
 
 def test_a_reconstruction_may_start_processes_of_its_own(start_proxy, bucket):
