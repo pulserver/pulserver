@@ -108,6 +108,20 @@ if triton is not None:
     )
 
 
+def _sum_onto_lattice(arguments: tuple, points: int, coils: int, nodes: int) -> None:
+    """Launch the lattice sums of ``coils`` coils: in the interpreter's configuration, or in the one autotuned for their shape on a CUDA device."""
+    constants = {"ISOCHROMATS": 16, "COILS": 16, "NODES": nodes}
+    if _interpreted():
+        grid = (triton.cdiv(points, 4), triton.cdiv(coils, 16))
+        _lattice_sums[grid](*arguments, POINTS=4, **constants)
+        return
+
+    def grid(meta):
+        return (triton.cdiv(points, meta["POINTS"]), triton.cdiv(coils, 16))
+
+    _lattice_sums_tuned[grid](*arguments, **constants)
+
+
 def _interpreted() -> bool:
     try:
         return bool(triton.knobs.runtime.interpret)
@@ -233,16 +247,7 @@ class LatticeDevice:
         single = bool(window["single"])
         real = torch.float32 if single else torch.float64
         complex_dtype = torch.complex64 if single else torch.complex128
-        key = (window["layout"], window["axes"])
-        lattice = self._lattices.get(key)
-        if lattice is None:
-            # Lattices of positions since moved are not read again.
-            self._lattices = {
-                held: kept
-                for held, kept in self._lattices.items()
-                if held[0] == window["layout"]
-            }
-            lattice = self._lattices[key] = _Lattice(window, self.device)
+        lattice = self._lattice(window)
         receive = lattice.sensitivities(window, complex_dtype, self.device)
 
         magnetization = self._stage(window, real)[:, lattice.order].T.contiguous()
@@ -262,14 +267,9 @@ class LatticeDevice:
         coils = receive.shape[1]
         began = self._lap("upload", began)
 
-        if self.memory is None:
-            self.memory = (
-                torch.cuda.mem_get_info(self.device)[0] // 4
-                if self.device.type == "cuda"
-                else MEMORY
-            )
-        per_coil = segments * points * 2 * receive.element_size()
-        at_once = max(1, min(coils, self.memory // max(per_coil, 1)))
+        at_once = self._coils_at_once(
+            coils, segments * points * 2 * receive.element_size()
+        )
         read = torch.empty((coils, samples), dtype=complex_dtype, device=self.device)
         for first in range(0, coils, at_once):
             k = min(at_once, coils - first)
@@ -288,16 +288,7 @@ class LatticeDevice:
                 k,
                 segments,
             )
-            constants = {"ISOCHROMATS": 16, "COILS": 16, "NODES": nodes_padded}
-            if _interpreted():
-                grid = (triton.cdiv(points, 4), triton.cdiv(k, 16))
-                _lattice_sums[grid](*arguments, POINTS=4, **constants)
-            else:
-
-                def grid(meta, k=k):
-                    return (triton.cdiv(points, meta["POINTS"]), triton.cdiv(k, 16))
-
-                _lattice_sums_tuned[grid](*arguments, **constants)
+            _sum_onto_lattice(arguments, points, k, nodes_padded)
             began = self._lap("sums", began)
             values = self._transform(
                 torch.view_as_complex(sums).reshape(k * segments, *modes[::-1]),
@@ -311,6 +302,30 @@ class LatticeDevice:
             began = self._lap("basis", began)
         self._pending = (window["out"], self._fetch(read))
         return True
+
+    def _lattice(self, window) -> _Lattice:
+        """Return the lattice ``window`` is read on, held for the positions' revision it was found at."""
+        key = (window["layout"], window["axes"])
+        lattice = self._lattices.get(key)
+        if lattice is None:
+            # Lattices of positions since moved are not read again.
+            self._lattices = {
+                held: kept
+                for held, kept in self._lattices.items()
+                if held[0] == window["layout"]
+            }
+            lattice = self._lattices[key] = _Lattice(window, self.device)
+        return lattice
+
+    def _coils_at_once(self, coils: int, per_coil: int) -> int:
+        """Return how many of ``coils`` coils' lattice sums, ``per_coil`` bytes each, fit in :attr:`memory` together; at least one."""
+        if self.memory is None:
+            self.memory = (
+                torch.cuda.mem_get_info(self.device)[0] // 4
+                if self.device.type == "cuda"
+                else MEMORY
+            )
+        return max(1, min(coils, self.memory // max(per_coil, 1)))
 
     def finish(self) -> None:
         """Write the window :meth:`__call__` started reading into the ``out`` it was handed."""
