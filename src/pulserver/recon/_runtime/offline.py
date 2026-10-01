@@ -17,11 +17,19 @@ from .application import run_application
 class _FileConnection:
     """Connection reading a dataset and keeping what is sent."""
 
-    def __init__(self, dataset: Any) -> None:
+    def __init__(self, dataset: Any, design: Any = None) -> None:
         self._dataset = dataset
+        self._design = design
         self.sent: list[Any] = []
 
     def __iter__(self) -> Any:
+        if self._design is None:
+            return self._items()
+        from ...proxy._proxy import _enriched
+
+        return _enriched(self._items(), self._design)
+
+    def _items(self) -> Any:
         # Waveforms first, so every emitted unit carries all of them.
         for index in range(_count(self._dataset.number_of_waveforms)):
             yield self._dataset.read_waveform(index)
@@ -39,6 +47,7 @@ def reconstruct_file(
     group: str = "dataset",
     exam_id: Any = None,
     config: Any = None,
+    store: Any = None,
 ) -> list[Any]:
     """Drive ``plugin`` over one ISMRMRD HDF5 file and return what it emitted.
 
@@ -53,12 +62,20 @@ def reconstruct_file(
                 f"{path} carries no MRD XML header; a reconstruction needs the "
                 "header the scanner sends ahead of the data"
             )
+        header = ismrmrd.xsd.CreateFromDocument(document)
+        design = None
+        if store is not None:
+            from ...proxy._designs import DesignCache
+            from ...proxy._enrich import enrich_header
+
+            design = DesignCache(store).resolve(header)
+            enrich_header(header, design.table)
         context = ReconContext(
-            header=ismrmrd.xsd.CreateFromDocument(document),
+            header=header,
             exam=ExamCache(path if exam_id is None else exam_id),
             config=config,
         )
-        connection = _FileConnection(dataset)
+        connection = _FileConnection(dataset, design)
         run_application(plugin, connection, context)
         return connection.sent
     finally:
