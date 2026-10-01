@@ -319,10 +319,10 @@ limits play:
 
 | Plugin | Sequence | Reconstruction |
 | --- | --- | --- |
-| `gre2d` | 2D gradient echo | `simplefft` |
-| `gre_multiecho2d` | 2D multi-echo gradient echo, one image per echo | `cartesian` |
-| `se2d` | 2D spin echo | `cartesian` |
-| `bssfp2d` | 2D balanced SSFP | `cartesian` |
+| `gre2d` | 2D gradient echo | `pics` |
+| `gre_multiecho2d` | 2D multi-echo gradient echo, one image per echo | `pics` |
+| `se2d` | 2D spin echo | `pics` |
+| `bssfp2d` | 2D balanced SSFP | `pics` |
 | `gre_radial2d` | 2D radial gradient echo | `nufft` |
 | `gre_spiral2d` | 2D spiral gradient echo | `nufft` |
 
