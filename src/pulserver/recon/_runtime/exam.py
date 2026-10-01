@@ -5,6 +5,7 @@ from __future__ import annotations
 __all__ = [
     "DEFAULT_EXAM_DIRECTORY",
     "EXAM_DIRECTORY_MODE",
+    "EXAM_IDLE",
     "ExamCacheManager",
     "resolve_exam_id",
 ]
@@ -16,6 +17,7 @@ import itertools
 import os
 import shutil
 import tempfile
+import time
 from collections.abc import Callable, Hashable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
@@ -39,6 +41,11 @@ DEFAULT_EXAM_DIRECTORY = Path(tempfile.gettempdir()) / f"pulserver-exams-{os.get
 #: What an exam root is created as: the owner alone, for the reason above.
 EXAM_DIRECTORY_MODE = 0o700
 
+#: Seconds an exam nobody leases is kept before :meth:`ExamCacheManager.expire`
+#: ends it. No message says an exam is over, and this is longer than the gap
+#: between two series of one exam.
+EXAM_IDLE = 2 * 3600.0
+
 
 @dataclass
 class _Generation:
@@ -48,6 +55,8 @@ class _Generation:
     #: Descriptor whose shared lock states that this process is on this exam,
     #: so another proxy does not delete the directory under it. -1 in memory.
     held: int = -1
+    #: When its last lease ended, as ``time.time()``.
+    idle_since: float = 0.0
 
 
 class ExamCacheManager:
@@ -143,12 +152,46 @@ class ExamCacheManager:
         if close_now is not None:
             _discard(close_now.cache, close_now.held)
 
+    def expire(self, idle: float = EXAM_IDLE, now: float | None = None) -> None:
+        """End every exam nothing has leased for ``idle`` seconds.
+
+        The current exam is retired when none of its leases has been open for
+        that long, and every exam under the directory no proxy is on is
+        removed once it is as old: those of a proxy that died with them. An
+        exam another proxy is on, idle or not, is left to that proxy.
+        """
+        now = time.time() if now is None else now
+        close_now: _Generation | None = None
+        with self._lock:
+            current = self._current
+            if (
+                current is not None
+                and current.leases == 0
+                and now - current.idle_since >= idle
+            ):
+                current.retired = True
+                self._current = None
+                close_now = current
+        if close_now is not None:
+            _discard(close_now.cache, close_now.held)
+        if self._directory is not None and self._directory.is_dir():
+            for lock in self._directory.glob("*.lock"):
+                directory = lock.with_name(lock.name[: -len(".lock")])
+                with contextlib.suppress(OSError):
+                    if (
+                        max(p.stat().st_mtime for p in (lock, directory) if p.exists())
+                        < now - idle
+                    ):
+                        _remove_unheld(directory)
+
     def _release(self, generation: _Generation) -> None:
         close_now = False
         with self._lock:
             generation.leases -= 1
             if generation.leases < 0:
                 raise RuntimeError("exam cache generation lease underflow")
+            if generation.leases == 0:
+                generation.idle_since = time.time()
             close_now = generation.retired and generation.leases == 0
         if close_now:
             _discard(generation.cache, generation.held)
@@ -195,7 +238,12 @@ def _discard(cache: ExamCache, held: int = -1) -> None:
     if held < 0:
         shutil.rmtree(cache.directory, ignore_errors=True)
         return
-    lock = _lock_path(cache.directory)
+    _remove_unheld(cache.directory)
+
+
+def _remove_unheld(directory: Path) -> None:
+    """Remove an exam's directory and its lock unless a proxy is on the exam."""
+    lock = _lock_path(directory)
     try:
         fd = os.open(lock, os.O_CREAT | os.O_RDWR, 0o666)
     except OSError:
@@ -208,7 +256,7 @@ def _discard(cache: ExamCache, held: int = -1) -> None:
     except OSError:
         os.close(fd)
         return
-    shutil.rmtree(cache.directory, ignore_errors=True)
+    shutil.rmtree(directory, ignore_errors=True)
     with contextlib.suppress(OSError):
         lock.unlink()
     with contextlib.suppress(OSError):

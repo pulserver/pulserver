@@ -48,6 +48,8 @@ _WORKER_TIMEOUT = 120.0
 _ACCEPT_POLL = 0.5
 # How long a refused client may send nothing before the proxy stops reading it.
 _DRAIN_IDLE = 30.0
+# How often the exams nothing has leased for a while are looked for.
+_EXPIRY_POLL = 60.0
 
 
 class _Listener:
@@ -173,7 +175,9 @@ class ReconProxy(_Listener):
     system's temporary directory, through which a reconstruction reads what an
     earlier series of the exam stored in its
     :class:`~pulserver.recon.ExamCache`. It is deleted once a header names
-    another exam and no series of the exam still runs.
+    another exam, or nothing has leased it for
+    :data:`~pulserver.recon._runtime.exam.EXAM_IDLE` seconds, and no series of
+    the exam still runs on any proxy.
 
     A series whose sequence sets ``EnablePmc`` is corrected for motion while
     it plays: the poses its reconstruction states are published into the
@@ -460,6 +464,10 @@ class _Workers:
         self._exam_root.mkdir(parents=True, exist_ok=True, mode=EXAM_DIRECTORY_MODE)
         self._exam_root.chmod(EXAM_DIRECTORY_MODE)
         self.exams = ExamCacheManager(directory=self._exam_root)
+        self._closing = threading.Event()
+        threading.Thread(
+            target=self._expire_exams, daemon=True, name="exam-expiry"
+        ).start()
         self._slots = HostSlots(slot_devices(slots, gpu_slots), slot_directory)
         # One pose reaches the scan at a time, whatever else is reconstructing:
         # a pose is a statement about where the object is, and two
@@ -546,12 +554,17 @@ class _Workers:
             queued.unlink()
 
     def close(self) -> None:
+        self._closing.set()
         self.workers.close()
         # Closing the manager removes the directory of each exam nothing else
         # is on; the root is the host's and stays.
         self.exams.close()
         if self._owns_queue:
             shutil.rmtree(self.queue, ignore_errors=True)
+
+    def _expire_exams(self) -> None:
+        while not self._closing.wait(_EXPIRY_POLL):
+            self.exams.expire()
 
     def _run(
         self,
