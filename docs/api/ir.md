@@ -23,6 +23,7 @@ passes and the cache layout are described in {doc}`../explanations/ir-cache`.
 | {obj}`~pulserver.ir.CheckLimits` | The nerve model and forbidden bands a chain is checked against, and the VOPs of its SAR ratios, besides the gradient limits. |
 | {obj}`~pulserver.ir.sar_ratios` | The RF energy of each subsequence of a chain at the VOPs, against the same repetitions of a hard, 180°, 1 ms reference pulse. |
 | {obj}`~pulserver.ir.SarRatio` | The local and global SAR ratios of one subsequence, as the cache carries them. |
+| {obj}`~pulserver.ir.played_rf` | The definition and designed flip angle of each RF row a sequence plays, definitions numbered as the cache numbers them. |
 | {obj}`~pulserver.ir.summary` | Subsequences, segments, readouts, readout labels and RF spectral statistics of a sequence, from the chain or from its cache. |
 | {obj}`~pulserver.ir.play` | Every block a cache plays, resolved as the scanner's playout resolves it, with its gradient waveforms on request. |
 | {obj}`~pulserver.ir.plan_waves` | Where a playout holds a cache's waves in its waveform memory, all at once or a ring of slots per position, and whether it loads them in time: the layout the cache carries, or one for another budget. |
