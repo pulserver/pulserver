@@ -724,7 +724,7 @@ namespace
         static Complex phase(const Held& h, const bloch::RunTile& t, size_t set, size_t n, size_t r)
         {
             constexpr size_t T = bloch::RunTile::kRepetitions;
-            Complex turn(1.0, 0.0);
+            Complex factor(1.0, 0.0);
             for (size_t axis = 0; axis < 3; ++axis)
             {
                 const size_t at = set * 3 + axis;
@@ -735,12 +735,12 @@ namespace
                                                : static_cast<const double*>(t.table_re[at])[row];
                     const double im = t.single ? static_cast<const float*>(t.table_im[at])[row]
                                                : static_cast<const double*>(t.table_im[at])[row];
-                    turn *= Complex(re, im);
+                    factor *= Complex(re, im);
                 }
                 else if (t.encoding[at] == 2)
-                    turn *= std::polar(1.0, t.angle[at * T + r] * h.coordinate[axis][n]);
+                    factor *= std::polar(1.0, t.angle[at * T + r] * h.coordinate[axis][n]);
             }
-            return turn;
+            return factor;
         }
 
         size_t carry(const bloch::RunTile& t)
@@ -757,35 +757,8 @@ namespace
                 double m[3] = {value(h, n, 0), value(h, n, 1), value(h, n, 2)};
                 for (size_t r = 0; r < t.count; ++r)
                 {
-                    for (size_t w = 0; w < s.windows; ++w)
-                    {
-                        const size_t u = s.u_at + w * s.u_width;
-                        Complex q(
-                            value(h, n, u) * m[0] + value(h, n, u + 1) * m[1] + value(h, n, u + 2) * m[2],
-                            value(h, n, u + 3) * m[0] + value(h, n, u + 4) * m[1] + value(h, n, u + 5) * m[2]);
-                        if (s.offsets)
-                            q += Complex(value(h, n, u + 6), value(h, n, u + 7));
-                        if (h.turned[w])
-                            spread_turned(h, t, n, w, r, q * phase(h, t, w, n, r), grid);
-                        else
-                            spread(h, n, w, r, q * phase(h, t, w, n, r), grid);
-                    }
-                    double next[3];
-                    for (size_t k = 0; k < 3; ++k)
-                        next[k] = value(h, n, 3 + 3 * k) * m[0] + value(h, n, 4 + 3 * k) * m[1] +
-                            value(h, n, 5 + 3 * k) * m[2];
-                    if (s.offsets)
-                    {
-                        Complex turn(cosines[r], sines[r]);
-                        if (t.netted)
-                            turn *= phase(h, t, s.windows, n, r);
-                        const Complex transverse =
-                            turn * Complex(next[0] + value(h, n, 12), next[1] + value(h, n, 13));
-                        next[0] = transverse.real();
-                        next[1] = transverse.imag();
-                        next[2] += value(h, n, 14);
-                    }
-                    std::copy(next, next + 3, m);
+                    read(h, t, n, r, m, grid);
+                    advance(h, t, n, r, Complex(cosines[r], sines[r]), m);
                 }
                 const double size = m[0] * m[0] + m[1] * m[1] + m[2] * m[2];
                 if (t.drop && s.limits && size > 0.0 && !(size > value(h, n, s.limit_at)))
@@ -796,13 +769,61 @@ namespace
                 for (size_t k = 0; k < 3; ++k)
                     value(h, n, k) = m[k];
             }
+            store(t, grid);
+            ++tiles;
+            return dropped;
+        }
+
+        /** Each window's coefficient of slot @p n's magnetisation @p m at
+         *  repetition @p r, phase-encoded, onto @p grid. */
+        static void read(
+            Held& h, const bloch::RunTile& t, size_t n, size_t r, const double m[3], std::vector<double>& grid)
+        {
+            const bloch::RunSet& s = h.set;
+            for (size_t w = 0; w < s.windows; ++w)
+            {
+                const size_t u = s.u_at + w * s.u_width;
+                Complex q(
+                    value(h, n, u) * m[0] + value(h, n, u + 1) * m[1] + value(h, n, u + 2) * m[2],
+                    value(h, n, u + 3) * m[0] + value(h, n, u + 4) * m[1] + value(h, n, u + 5) * m[2]);
+                if (s.offsets)
+                    q += Complex(value(h, n, u + 6), value(h, n, u + 7));
+                if (h.turned[w])
+                    spread_turned(h, t, n, w, r, q * phase(h, t, w, n, r), grid);
+                else
+                    spread(h, n, w, r, q * phase(h, t, w, n, r), grid);
+            }
+        }
+
+        /** Slot @p n's magnetisation @p m carried through repetition @p r,
+         *  turned by @p turn and, where netted, by its net area's phase. */
+        static void advance(Held& h, const bloch::RunTile& t, size_t n, size_t r, Complex turn, double m[3])
+        {
+            const bloch::RunSet& s = h.set;
+            double next[3];
+            for (size_t k = 0; k < 3; ++k)
+                next[k] =
+                    value(h, n, 3 + 3 * k) * m[0] + value(h, n, 4 + 3 * k) * m[1] + value(h, n, 5 + 3 * k) * m[2];
+            if (s.offsets)
+            {
+                if (t.netted)
+                    turn *= phase(h, t, s.windows, n, r);
+                const Complex transverse = turn * Complex(next[0] + value(h, n, 12), next[1] + value(h, n, 13));
+                next[0] = transverse.real();
+                next[1] = transverse.imag();
+                next[2] += value(h, n, 14);
+            }
+            std::copy(next, next + 3, m);
+        }
+
+        /** @p grid into the tile's grids, in the tile's precision. */
+        static void store(const bloch::RunTile& t, const std::vector<double>& grid)
+        {
             for (size_t k = 0; k < t.grid_size; ++k)
                 if (t.single)
                     static_cast<float*>(t.grid)[k] = static_cast<float>(grid[k]);
                 else
                     static_cast<double*>(t.grid)[k] = grid[k];
-            ++tiles;
-            return dropped;
         }
 
         /** Slot @p n's coefficient @p q of window @p w at repetition @p r
@@ -883,10 +904,80 @@ namespace
         }
     };
 
-    /** Play repetitions by the engine and by a CarryDevice, exact and to a
-     *  tolerance, split, with net areas, and read along turned readouts;
-     *  whether the device carried every one and read and left what the
-     *  engine read and left. */
+    /** Whether @p theirs differs from @p mine by at most @p within of the
+     *  largest of @p mine. */
+    bool read_alike(const std::vector<Complex>& mine, const std::vector<Complex>& theirs, double within)
+    {
+        double scale = 0.0, most = 0.0;
+        for (size_t k = 0; k < mine.size(); ++k)
+        {
+            scale = std::max(scale, std::abs(mine[k]));
+            most = std::max(most, std::abs(mine[k] - theirs[k]));
+        }
+        return most <= within * scale;
+    }
+
+    /** Whether @p a and @p b hold magnetisations at most @p within apart. */
+    bool left_alike(bloch::Isochromats& a, bloch::Isochromats& b, double within)
+    {
+        std::vector<double> left(3 * a.size()), settled(3 * b.size());
+        a.magnetization(left.data());
+        b.magnetization(settled.data());
+        double moved = 0.0;
+        for (size_t k = 0; k < left.size(); ++k)
+            moved = std::max(moved, std::abs(left[k] - settled[k]));
+        return moved <= within;
+    }
+
+    /** Net areas along z of @p count repetitions, and readouts turned about
+     *  x, where asked for. */
+    void netted_and_turned(
+        size_t count, bool netted, bool turned, std::vector<double>& nets, std::vector<double>& readouts)
+    {
+        for (size_t n = 0; n < count && netted; ++n)
+            nets.insert(nets.end(), {0.0, 0.0, 15.0 * static_cast<double>(n % 3)});
+        for (size_t n = 0; n < count && turned; ++n)
+            readouts.insert(
+                readouts.end(),
+                {0.0, 1e3 * std::sin(0.1 * static_cast<double>(n)), 5e2 * std::cos(0.3 * static_cast<double>(n))});
+    }
+
+    /** Play repetitions by the engine and by a CarryDevice to @p tolerance,
+     *  split, with net areas where @p netted, and read along readouts turned
+     *  where @p turned; whether the device carried them and read and left
+     *  what the engine read and left. */
+    bool carried_as_engine(const bloch::IsochromatProperties& p, double tolerance, bool netted, bool turned)
+    {
+        bloch::Isochromats engine(p, 2);
+        bloch::Isochromats device(p, 2);
+        CarryDevice carry;
+        device.use_run_device(carry.device());
+        const size_t count = 40;
+        std::vector<double> phases, areas, readouts, nets;
+        schedule(count, tolerance, true, phases, areas);
+        netted_and_turned(count, netted, turned, nets, readouts);
+        bool split = true;
+        std::vector<Complex> mine, theirs;
+        {
+            bloch::Repetitions a(engine, repetition(1, true), phases, phases, areas, readouts, nets, tolerance);
+            bloch::Repetitions b(device, repetition(1, true), phases, phases, areas, readouts, nets, tolerance);
+            if (tolerance > 0.0 && !netted)
+                split = a.split() == b.split();
+            const size_t per = a.coils() * a.samples();
+            mine.resize(count * per);
+            theirs.resize(count * per);
+            a.play(count / 2, mine.data());
+            b.play(count / 2, theirs.data());
+            a.play(count - count / 2, mine.data() + count / 2 * per);
+            b.play(count - count / 2, theirs.data() + count / 2 * per);
+        }
+        const double within = tolerance > 0.0 ? 1e-5 : 1e-12;
+        return split && carry.begun == 1 && carry.tiles == 4 && carry.released == 1 &&
+            read_alike(mine, theirs, within) && left_alike(engine, device, within);
+    }
+
+    /** Whether a CarryDevice carries repetitions as the engine does, exact
+     *  and to a tolerance, with and without net areas and turned readouts. */
     bool carried(size_t coils)
     {
         std::vector<Complex> receive;
@@ -895,50 +986,7 @@ namespace
         for (double tolerance : {0.0, 1e-4})
             for (bool netted : {false, true})
                 for (bool turned : {false, true})
-                {
-                    bloch::Isochromats engine(p, 2);
-                    bloch::Isochromats device(p, 2);
-                    CarryDevice carry;
-                    device.use_run_device(carry.device());
-                    const size_t count = 40;
-                    std::vector<double> phases, areas, readouts, nets;
-                    schedule(count, tolerance, true, phases, areas);
-                    for (size_t n = 0; n < count && netted; ++n)
-                        nets.insert(nets.end(), {0.0, 0.0, 15.0 * static_cast<double>(n % 3)});
-                    for (size_t n = 0; n < count && turned; ++n)
-                        readouts.insert(
-                            readouts.end(),
-                            {0.0, 1e3 * std::sin(0.1 * static_cast<double>(n)), 5e2 * std::cos(0.3 * static_cast<double>(n))});
-                    std::vector<Complex> mine, theirs;
-                    {
-                        bloch::Repetitions a(engine, repetition(1, true), phases, phases, areas, readouts, nets, tolerance);
-                        bloch::Repetitions b(device, repetition(1, true), phases, phases, areas, readouts, nets, tolerance);
-                        if (tolerance > 0.0 && !netted)
-                            agree = agree && a.split() == b.split();
-                        const size_t per = a.coils() * a.samples();
-                        mine.resize(count * per);
-                        theirs.resize(count * per);
-                        a.play(count / 2, mine.data());
-                        b.play(count / 2, theirs.data());
-                        a.play(count - count / 2, mine.data() + count / 2 * per);
-                        b.play(count - count / 2, theirs.data() + count / 2 * per);
-                    }
-                    double scale = 0.0, most = 0.0;
-                    for (size_t k = 0; k < mine.size(); ++k)
-                    {
-                        scale = std::max(scale, std::abs(mine[k]));
-                        most = std::max(most, std::abs(mine[k] - theirs[k]));
-                    }
-                    std::vector<double> left(3 * engine.size()), settled(3 * device.size());
-                    engine.magnetization(left.data());
-                    device.magnetization(settled.data());
-                    double moved = 0.0;
-                    for (size_t k = 0; k < left.size(); ++k)
-                        moved = std::max(moved, std::abs(left[k] - settled[k]));
-                    const double within = tolerance > 0.0 ? 1e-5 : 1e-12;
-                    agree = agree && carry.begun == 1 && carry.tiles == 4 && carry.released == 1 &&
-                        most <= within * scale && moved <= within;
-                }
+                    agree = carried_as_engine(p, tolerance, netted, turned) && agree;
         return agree;
     }
 
