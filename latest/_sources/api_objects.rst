@@ -168,6 +168,9 @@ from.
    load_plugin
    ReconContext
    ExamCache
+   B0_MAP
+   B1_MAP
+   COIL_SENSITIVITIES
    ReconData
    ReconBuffer
    ReconResult

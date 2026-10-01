@@ -495,11 +495,16 @@
 <span class="sd">        leaves the choice to the client's config.</span>
 <span class="sd">    table</span>
 <span class="sd">        The readouts of the design's sequence chain, in play order.</span>
+<span class="sd">    prospective_motion</span>
+<span class="sd">        Whether the scan asks to be corrected for motion while it plays, which</span>
+<span class="sd">        is what sends its series to the one reconstruction that may publish a</span>
+<span class="sd">        pose.</span>
 <span class="sd">    """</span>
 
     <span class="n">directory</span><span class="p">:</span> <span class="n">Path</span>
     <span class="n">recon</span><span class="p">:</span> <span class="nb">str</span>
-    <span class="n">table</span><span class="p">:</span> <span class="n">SequenceTable</span></div>
+    <span class="n">table</span><span class="p">:</span> <span class="n">SequenceTable</span>
+    <span class="n">prospective_motion</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span></div>
 
 
 
@@ -569,6 +574,7 @@
                 <span class="n">directory</span><span class="o">=</span><span class="n">directory</span><span class="p">,</span>
                 <span class="n">recon</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">manifest</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"recon"</span><span class="p">,</span> <span class="s2">""</span><span class="p">)),</span>
                 <span class="n">table</span><span class="o">=</span><span class="n">SequenceTable</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">directory</span> <span class="o">/</span> <span class="n">_ENTRY</span><span class="p">),</span>
+                <span class="n">prospective_motion</span><span class="o">=</span><span class="n">_asks_for_motion_correction</span><span class="p">(</span><span class="n">directory</span> <span class="o">/</span> <span class="n">_ENTRY</span><span class="p">),</span>
             <span class="p">)</span>
             <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_lock</span><span class="p">:</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_designs</span><span class="p">[</span><span class="n">directory</span><span class="p">]</span> <span class="o">=</span> <span class="n">design</span>
@@ -585,6 +591,30 @@
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">locate</span><span class="p">(</span><span class="n">header</span><span class="p">))</span></div>
 </div>
 
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_asks_for_motion_correction</span><span class="p">(</span><span class="n">entry</span><span class="p">:</span> <span class="n">Path</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Whether a sequence file asks to be corrected for motion while it plays.</span>
+
+<span class="sd">    Read from the preamble rather than the cache: a design is resolved before</span>
+<span class="sd">    anything has been converted.</span>
+<span class="sd">    """</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">with</span> <span class="n">entry</span><span class="o">.</span><span class="n">open</span><span class="p">(</span><span class="s2">"r"</span><span class="p">,</span> <span class="n">errors</span><span class="o">=</span><span class="s2">"replace"</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+            <span class="n">inside</span> <span class="o">=</span> <span class="kc">False</span>
+            <span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="n">f</span><span class="p">:</span>
+                <span class="n">stripped</span> <span class="o">=</span> <span class="n">line</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
+                <span class="k">if</span> <span class="n">stripped</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">"["</span><span class="p">):</span>
+                    <span class="k">if</span> <span class="n">inside</span><span class="p">:</span>
+                        <span class="k">return</span> <span class="kc">False</span>
+                    <span class="n">inside</span> <span class="o">=</span> <span class="n">stripped</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">"[DEFINITIONS]"</span><span class="p">)</span>
+                    <span class="k">continue</span>
+                <span class="k">if</span> <span class="n">inside</span> <span class="ow">and</span> <span class="n">stripped</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">"EnablePmc"</span><span class="p">):</span>
+                    <span class="n">parts</span> <span class="o">=</span> <span class="n">stripped</span><span class="o">.</span><span class="n">split</span><span class="p">()</span>
+                    <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="n">parts</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span> <span class="ow">and</span> <span class="n">parts</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"0"</span><span class="p">,</span> <span class="s2">"0.0"</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">OSError</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">False</span>
+    <span class="k">return</span> <span class="kc">False</span>
 </pre></div>
 
                 </article>

@@ -570,6 +570,21 @@
 
 
 
+<span class="c1">#: What a calibration scan leaves in the exam cache for the series that follow.</span>
+<span class="c1">#:</span>
+<span class="c1">#: A map is measured once and read by every later series of the exam, so the</span>
+<span class="c1">#: two have to mean the same thing by it. These are the names they agree on;</span>
+<span class="c1">#: a plugin storing a map under one of its own is storing it for itself alone.</span>
+<span class="c1">#:</span>
+<span class="c1">#: ``B0_MAP`` is off-resonance in Hz, ``B1_MAP`` the transmit field as a</span>
+<span class="c1">#: fraction of what was asked for, and ``COIL_SENSITIVITIES`` the receive</span>
+<span class="c1">#: sensitivity of each coil. Each is stored in the frame it was measured in;</span>
+<span class="c1">#: a series at another prescription resamples it.</span>
+<span class="n">B0_MAP</span> <span class="o">=</span> <span class="s2">"b0_map"</span>
+<span class="n">B1_MAP</span> <span class="o">=</span> <span class="s2">"b1_map"</span>
+<span class="n">COIL_SENSITIVITIES</span> <span class="o">=</span> <span class="s2">"coil_sensitivities"</span>
+
+
 <div class="viewcode-block" id="ExamCache">
 <a class="viewcode-back" href="../../../generated/pulserver.recon.ExamCache.html#pulserver.recon.ExamCache">[docs]</a>
 <span class="k">class</span><span class="w"> </span><span class="nc">ExamCache</span><span class="p">(</span><span class="n">MutableMapping</span><span class="p">[</span><span class="n">Hashable</span><span class="p">,</span> <span class="n">Any</span><span class="p">]):</span>

@@ -16,6 +16,7 @@
    :toctree:
    :nosignatures:
 
+   ~Design.prospective_motion
    ~Design.directory
    ~Design.recon
    ~Design.table
