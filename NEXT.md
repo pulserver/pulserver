@@ -21,30 +21,6 @@ already crosses before designing what to add.
 
 ## Can be done here
 
-### A pose a reconstruction states reaches nothing
-
-`_relay` in `src/pulserver/proxy/_proxy.py` takes a `poses` callback and drops
-every pose when it is `None` — which is always, because no caller passes one.
-`MotionWriter` in `src/pulserver/proxy/_motion.py` publishes a pose and reads
-back the repetition the sequencer applied it at, and is constructed only in
-`tests/test_motion.py`. So prospective motion correction does nothing outside
-the tests: the sequencer reads a buffer nobody writes.
-
-What to do: a series whose design asks for motion correction
-(`Design.prospective_motion`, already read from the sequence) gets a
-`MotionWriter` at the path the sequencer reads, and `_relay` is given a `poses`
-that publishes to it. Admission is already handled — such a series takes a
-host-wide exclusive slot, so one publishes at a time.
-
-Two things the layout fixes and a test must hold to: a pose is **absolute**,
-not a delta, because a latest-value buffer drops versions; and the writer
-reads back which repetition the sequencer actually applied, because a rotation
-moves sample locations rather than adding a phase, so the receive side has to
-work in the frame that was played, not the one last sent.
-
-Check with `tests/test_motion.py` plus a new test that drives a series end to
-end and asserts the buffer holds what the reconstruction emitted.
-
 ### The sequence description reaches no simulator
 
 `describe()` in `src/pulserver/proxy/_seqdesc.py` reads a sequence into the

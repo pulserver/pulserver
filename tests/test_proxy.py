@@ -2,6 +2,7 @@
 
 import json
 import os
+import runpy
 import shutil
 import socket
 import struct
@@ -571,6 +572,58 @@ def test_a_series_reads_the_gpu_its_slot_holds(
         for image in images(stream(port, series["raw"], config="device"))
     ]
     assert values == read
+
+
+def _published(path):
+    """Return the version and rotation of the pose a reader of ``path`` takes."""
+    from pulserver.proxy._motion import SLOTS, _check_of
+
+    raw = path.read_bytes()
+    poses = []
+    for slot in range(SLOTS):
+        at = 16 + slot * 48
+        words = list(struct.unpack("=12I", raw[at : at + 48]))
+        if words[0] and words[2] == _check_of(words):
+            rotation = struct.unpack("=9f", struct.pack("=9I", *words[3:]))
+            poses.append((words[0], rotation))
+    return max(poses)
+
+
+@pytest.mark.parametrize("forwarded", [False, True])
+def test_a_motion_corrected_series_publishes_its_poses_to_the_scan(
+    start_proxy, start_server, bucket, monkeypatch, forwarded
+):
+    """The scan reads the last pose stated, as stated: absolute, not composed."""
+    from pulserver.proxy._motion import FILENAME
+
+    poses = runpy.run_path(str(RECON_PLUGINS / "pose.py"))["POSES"]
+
+    monkeypatch.setattr(_designs, "_asks_for_motion_correction", lambda _: True)
+    root, series = bucket
+    path = Path(root) / series["raw"].design / FILENAME
+    path.unlink(missing_ok=True)
+    if forwarded:
+        server = start_server(slots=1)
+        proxy = start_proxy(forward=("127.0.0.1", server.port), forward_config="pose")
+    else:
+        proxy = start_proxy(slots=1)
+    received = stream(proxy.port, series["raw"], config="pose")
+
+    assert closed(received)
+    assert len(images(received)) == 1
+    assert not any(isinstance(item, ismrmrd.Waveform) for item in received)
+    version, rotation = _published(path)
+    assert version == len(poses)
+    assert rotation == pytest.approx(poses[-1])
+
+
+def test_a_series_not_corrected_for_motion_writes_no_pose_file(start_proxy, bucket):
+    from pulserver.proxy._motion import FILENAME
+
+    root, series = bucket
+    path = Path(root) / series["bound"].design / FILENAME
+    stream(start_proxy(slots=1).port, series["bound"])
+    assert not path.exists()
 
 
 def test_a_design_pushed_to_the_intake_is_reconstructed_from_its_store(tmp_path):
