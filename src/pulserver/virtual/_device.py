@@ -787,11 +787,11 @@ class Device:
     def begin_run(self, run) -> bool:
         """Take the slots of ``run``, as the engine hands them at its first play; whether they were taken.
 
-        A run without windows, one smaller than :attr:`smallest_run`, and one
-        that does not fit in half the memory free on a CUDA device are left
-        to the engine.
+        A run without windows, unless its first block's pulse is read off
+        tables, one smaller than :attr:`smallest_run`, and one that does not
+        fit in half the memory free on a CUDA device are left to the engine.
         """
-        if not len(run["cells"]):
+        if not len(run["cells"]) and run.get("pulse") is None:
             return False
         if int(run["slots"]) * max(int(run["coils"]), 1) < self.smallest_run:
             return False
@@ -815,6 +815,12 @@ class Device:
         """Write the run's magnetisation into the engine's slots, ``state["pack"]``."""
         began = self._clock()
         self._runs[state["run"]].write(state)
+        self._lap("state", began)
+
+    def load_state(self, state) -> None:
+        """Take the magnetisation in the engine's slots, ``state["pack"]``, as the run's, where the run resumes after blocks played between its repetitions."""
+        began = self._clock()
+        self._runs[state["run"]].load(state)
         self._lap("state", began)
 
     def end_run(self, run: int) -> None:

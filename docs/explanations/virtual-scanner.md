@@ -198,9 +198,20 @@ blocks is a run of its own or plays block by block. Within a run:
   repetition leave no area by any of its pulses, so that they turn only the
   samples of its windows and, by the area they leave over it, each
   isochromat's magnetization at its end;
+- or, in the first block, a gradient held through the block, under its pulse,
+  varies across the repetitions, as each spoke of a ZTE scan plays its pulse
+  under its own readout gradient; the block then reads no ADC window;
 - each ADC window is read under a gradient held throughout it.
 
-A run ends where one of these stops holding. An interleaved multislice scan
+A run ends where one of these stops holding. Runs of the same blocks join into
+one run whose repetitions other blocks play between, as far as their
+gradients differ from the first repetition's as the list states: the spokes of
+a ZTE scan's shells are one run, with each shell's closing spoke and the ramp
+onto the next shell's first spoke between them. The run resumes from the
+magnetization those blocks leave, so its maps are made once rather than for
+every shell. Stretches of blocks between runs that repeat one another at least
+eight times are the repetitions of a run of their own, as those between a ZTE
+scan's shells are. An interleaved multislice scan
 whose RF spoiling steps each slice's pulse by its own increment, a spin echo
 phase-encoded before its refocusing pulse, and spiral readouts, whose
 gradients vary during the windows, play block by block; a spiral's windows are
@@ -423,11 +434,15 @@ virtual scanner's simulation of the cache on the same spins.
   its preparation, and to a tolerance of $10^{-4}$ samples within a thousandth
   of its exact samples, with its fixed points summed by columns and without.
   An interleaved multislice scan whose pulses step unevenly, a spin echo
-  phase-encoded before its refocusing pulse, and radial readouts play block by
+  phase-encoded before its refocusing pulse, and spiral readouts play block by
   block, and so do the echoes of a three-echo gradient echo where the maps of
   one window fit and those of three do not. A balanced gradient echo whose
   rewinders are off by a few millionths plays as one run to a tolerance. A run
   played across spans samples what it samples played whole.
+- The spokes of a ZTE scan of ten shells play as one run, each spoke's pulse
+  read off its tables, resumed after the blocks between its shells, which play
+  as a run of their own; the scan samples what its blocks played one by one
+  sample, played whole and in spans that end within a shell.
 - The phantom sampled as isochromats, posed where an axial, an oblique or a
   reflected prescription places the field of view and scanned by a
   single-shot EPI, is acquired as the analytic phantom is: a 90° excitation

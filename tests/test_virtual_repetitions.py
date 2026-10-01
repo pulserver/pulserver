@@ -1,5 +1,7 @@
 """Repetitions of a sequence of blocks against the same blocks played one by one."""
 
+from types import SimpleNamespace
+
 import numpy as np
 import pypulseqpp as pp
 import pytest
@@ -47,6 +49,11 @@ SPOKE = np.column_stack(
 OPEN_SPOKE = np.column_stack([_HEAD, [[PRE + _SPAN + 0.05e-3], [0.0]]])
 #: The spoke's area at the first sample, in 1/m.
 SPOKE_FIRST = _area(*_HEAD[:, :4]) + READOUT * DWELL / 2
+
+#: A ZTE spoke's pulse block, the readout held after it, and the turn onto
+#: the next spoke, in s; and its first sample, from its window's block.
+ZTE_HOLD, ZTE_READ, ZTE_TURN = 60e-6, 0.7e-3, 0.2e-3
+ZTE_FIRST = 20e-6 + DWELL / 2
 
 
 def _properties(positions, coils=2, transmit=None):
@@ -138,6 +145,49 @@ def _spoke(angle, rf_phase=0.0, adc_phase=0.0, spoke=SPOKE):
     pulse, readout, pause = _repetition(rf_phase=rf_phase, adc_phase=adc_phase)
     along = [spoke * [[1.0], [np.cos(angle)]], spoke * [[1.0], [np.sin(angle)]], None]
     return [pulse, {**readout, "duration": SPOKE[0, -1], "gradients": along}, pause]
+
+
+def _directions(count):
+    """``count`` spokes' directions and the next one's, on a spiral over a hemisphere."""
+    n = np.arange(count + 1)
+    z = 1.0 - (n + 0.5) / (count + 1)
+    angle = n * np.pi * (3.0 - np.sqrt(5.0))
+    return np.column_stack(
+        [np.sqrt(1 - z * z) * np.cos(angle), np.sqrt(1 - z * z) * np.sin(angle), z]
+    )
+
+
+def _zte_spoke(along, after, rf_phase=0.0, weights=None):
+    """A ZTE spoke along ``along``: a hard pulse on the readout gradient, held through its block, then the window under it and the turn onto ``after``; the pulse on channels of ``weights`` where given."""
+    rf = pp.make_block_pulse(
+        np.deg2rad(10.0),
+        duration=10e-6,
+        delay=10e-6,
+        phase_offset=rf_phase,
+        system=SYSTEM,
+    )
+    if weights is not None:
+        rf = SimpleNamespace(
+            signal=np.outer(weights, rf.signal).ravel(),
+            t=np.tile(rf.t, len(weights)),
+            delay=rf.delay,
+            freq_offset=rf.freq_offset,
+            phase_offset=rf.phase_offset,
+        )
+    hold = [np.array([[0.0, ZTE_HOLD], [READOUT * a] * 2]) for a in along]
+    read = [
+        np.array(
+            [[0.0, ZTE_READ, ZTE_READ + ZTE_TURN], [READOUT * a] * 2 + [READOUT * b]]
+        )
+        for a, b in zip(along, after, strict=True)
+    ]
+    adc = pp.make_adc(
+        SAMPLES, dwell=DWELL, delay=20e-6, phase_offset=rf_phase, system=SYSTEM
+    )
+    return [
+        {"duration": ZTE_HOLD, "rf": rf, "gradients": hold},
+        {"duration": ZTE_READ + ZTE_TURN, "adc": adc, "gradients": read},
+    ]
 
 
 def _phases(kind, count):
@@ -283,6 +333,250 @@ def test_spokes_turned_by_each_repetition_answer_as_their_blocks_played_one_by_o
         rtol=0,
         atol=1e-11 if tolerance == 0.0 else tolerance,
     )
+
+
+@pytest.mark.parametrize("tolerance", [0.0, 1e-4])
+@pytest.mark.parametrize("transmit", [None, "map", "channels"])
+def test_spokes_whose_pulses_play_under_their_own_gradients_answer_as_their_blocks_played_one_by_one(
+    transmit, tolerance
+):
+    """Each spoke's pulse, under its own held gradient, read off the pulse's tables at each isochromat's field; without transmit sensitivities, with a map, and on two channels."""
+    count = 20
+    positions = RNG.uniform(-0.1, 0.1, size=(200, 3))
+    weights = None
+    sensitivities = {
+        None: None,
+        "map": RNG.uniform(0.7, 1.2, len(positions)),
+        "channels": RNG.uniform(0.4, 0.7, (len(positions), 2))
+        * np.exp(1j * RNG.uniform(-0.5, 0.5, (len(positions), 2))),
+    }[transmit]
+    if transmit == "channels":
+        weights = np.array([1.0, np.exp(0.7j)])
+    reference, repeated = _engines(_properties(positions, transmit=sensitivities))
+    along = _directions(count)
+    rf_phases = _phases("quadratic", count)
+    expected = []
+    for k, phase in enumerate(rf_phases):
+        for block in _zte_spoke(along[k], along[k + 1], phase, weights):
+            signal = reference.play(**block)
+            if signal.shape[1]:
+                expected.append(signal)
+    change = READOUT * (along[:-1] - along[0])
+    turned = READOUT * (along[1:] - along[1])
+
+    scan = repeated.repetitions(
+        _zte_spoke(along[0], along[1], weights=weights),
+        rf_phases,
+        ZTE_FIRST * change[:, None],
+        readouts=change[:, None],
+        nets=ZTE_READ * change + ZTE_TURN * (change + turned) / 2,
+        pulse_gradients=change,
+        tolerance=tolerance,
+    )
+    got = np.concatenate([scan.play(3), scan.play()])
+
+    # The tables against the pulses stepped for each group of isochromats.
+    error = np.abs(got - np.stack(expected)).max() / np.abs(expected).max()
+    assert error < (1e-6 if tolerance == 0.0 else 1e-3)
+    np.testing.assert_allclose(
+        repeated.magnetization,
+        reference.magnetization,
+        rtol=0,
+        atol=1e-6 if tolerance == 0.0 else tolerance,
+    )
+    assert scan._native.divided is False
+    assert repeated.ungrouped_pulses == 0
+
+
+def _saturation():
+    """A pulse of 60 degrees, then a spoiler along z and a pause, played between the repetitions of a run."""
+    pulse = pp.make_block_pulse(np.pi / 3, duration=0.2e-3, system=SYSTEM)
+    spoiler = np.array([[0.0, 0.1e-3, 0.9e-3, 1.0e-3], [0.0, 4e3, 4e3, 0.0]])
+    return [
+        {"duration": 0.3e-3, "rf": pulse},
+        {"duration": 1.0e-3, "gradients": [None, None, spoiler]},
+        {"duration": 2.5e-3},
+    ]
+
+
+@pytest.mark.parametrize("tolerance", [0.0, 1e-4])
+@pytest.mark.parametrize("phases", ["quadratic", "alternating"])
+def test_repetitions_resumed_after_blocks_played_between_them_answer_as_their_blocks_played_one_by_one(
+    phases, tolerance
+):
+    """A saturation played between two halves of a run, which resumes from the magnetisation it leaves; alternating phases on a lattice would split it, which ``split`` declines."""
+    count = 16
+    half = count // 2
+    reference, repeated = _engines(_properties(_grid()))
+    rf_phases = _phases(phases, count)
+    adc_phases = rf_phases + RNG.uniform(-0.3, 0.3, count)
+    encodings = _lines(count)
+    expected = [
+        _played(reference, encodings[:half], rf_phases[:half], adc_phases[:half])
+    ]
+    for block in _saturation():
+        reference.play(**block)
+    expected.append(
+        _played(reference, encodings[half:], rf_phases[half:], adc_phases[half:])
+    )
+    areas = np.zeros((count, 1, 3))
+    areas[:, 0, 1:] = encodings
+
+    scan = repeated.repetitions(
+        _repetition(),
+        rf_phases,
+        areas,
+        adc_phases=adc_phases,
+        tolerance=tolerance,
+        split=False,
+    )
+    got = [scan.play(half)]
+    for block in _saturation():
+        repeated.play(**block)
+    scan.resume()
+    got.append(scan.play())
+
+    expected, got = np.concatenate(expected), np.concatenate(got)
+    error = np.abs(got - expected).max() / np.abs(expected).max()
+    assert error < (1e-10 if tolerance == 0.0 else 1e-3)
+    assert scan._steady is None
+    np.testing.assert_allclose(
+        repeated.magnetization,
+        reference.magnetization,
+        rtol=0,
+        atol=1e-11 if tolerance == 0.0 else tolerance,
+    )
+    assert repeated.elapsed == pytest.approx(reference.elapsed)
+
+
+def _turned_about(axis, angle):
+    """The rotation by ``angle`` about the unit vector ``axis``."""
+    k = np.array(
+        [[0.0, -axis[2], axis[1]], [axis[2], 0.0, -axis[0]], [-axis[1], axis[0], 0.0]]
+    )
+    return np.eye(3) + np.sin(angle) * k + (1.0 - np.cos(angle)) * k @ k
+
+
+@pytest.mark.parametrize("tolerance", [0.0, 1e-4])
+def test_the_spokes_of_two_shells_resumed_after_the_blocks_between_them_answer_as_their_blocks_played_one_by_one(
+    tolerance,
+):
+    """The spokes of two ZTE shells as one run of repetitions; between them the closing spoke, its gradient ramped to zero, and the ramp onto the next shell's first spoke, played alone."""
+    count = 10
+    positions = RNG.uniform(-0.1, 0.1, size=(200, 3))
+    transmit = RNG.uniform(0.7, 1.2, len(positions))
+    reference, repeated = _engines(_properties(positions, transmit=transmit))
+    first = _directions(count)
+    second = first @ _turned_about(np.array([0.6, 0.0, 0.8]), 0.9).T
+    rf_phases = _phases("quadratic", 2 * count + 1)
+    closing = _zte_spoke(first[count], np.zeros(3), rf_phases[count])
+    ramp = {
+        "duration": ZTE_TURN,
+        "gradients": [
+            np.array([[0.0, ZTE_TURN], [0.0, READOUT * b]]) for b in second[0]
+        ],
+    }
+    between = [*closing, ramp]
+    spokes = [(first[k], first[k + 1]) for k in range(count)]
+    spokes += [(second[k], second[k + 1]) for k in range(count)]
+    phases = np.delete(rf_phases, count)
+    expected = []
+    for k, (along, after) in enumerate(spokes):
+        if k == count:
+            for block in between:
+                signal = reference.play(**block)
+                if signal.shape[1]:
+                    expected.append(signal)
+        for block in _zte_spoke(along, after, phases[k]):
+            signal = reference.play(**block)
+            if signal.shape[1]:
+                expected.append(signal)
+    along = np.array([a for a, _ in spokes])
+    after = np.array([b for _, b in spokes])
+    change = READOUT * (along - along[0])
+    turned = READOUT * (after - after[0])
+
+    scan = repeated.repetitions(
+        _zte_spoke(along[0], after[0]),
+        phases,
+        ZTE_FIRST * change[:, None],
+        readouts=change[:, None],
+        nets=ZTE_READ * change + ZTE_TURN * (change + turned) / 2,
+        pulse_gradients=change,
+        tolerance=tolerance,
+        split=False,
+    )
+    got = [scan.play(count)]
+    for block in between:
+        signal = repeated.play(**block)
+        if signal.shape[1]:
+            got.append(signal[None])
+    scan.resume()
+    got.append(scan.play())
+
+    expected, got = np.stack(expected), np.concatenate(got)
+    error = np.abs(got - expected).max() / np.abs(expected).max()
+    assert error < (1e-6 if tolerance == 0.0 else 1e-3)
+    np.testing.assert_allclose(
+        repeated.magnetization,
+        reference.magnetization,
+        rtol=0,
+        atol=1e-6 if tolerance == 0.0 else tolerance,
+    )
+
+
+def test_repetitions_split_into_fixed_points_cannot_resume():
+    count = 300
+    _, repeated = _engines(_properties(_grid()))
+    rf_phases = _phases("alternating", count)
+    _, scan = _repeated(repeated, _lines(count, 32), rf_phases, rf_phases, 1e-4)
+
+    assert scan._steady is not None
+    with pytest.raises(RuntimeError, match="cannot resume"):
+        scan.resume()
+
+
+@pytest.mark.parametrize(
+    ("change", "message"),
+    [
+        ("no pulse", "plays no pulse"),
+        ("window", "read no window"),
+        ("ramp", "held through it"),
+        ("tables", "cannot be read off tables"),
+    ],
+)
+def test_pulse_gradients_need_a_first_block_whose_pulse_tables_can_serve(
+    change, message
+):
+    """The first block must play the pulse and no window, hold its gradient through it, and need fewer table points than stepping the pulse would cost."""
+    count = 4
+    along = _directions(count)
+    tr = _zte_spoke(along[0], along[1])
+    spins = Isochromats(_slab(4))
+    if change == "no pulse":
+        tr[0].pop("rf")
+    elif change == "window":
+        tr[0]["adc"] = pp.make_adc(4, dwell=DWELL, delay=35e-6, system=SYSTEM)
+        tr[0]["duration"] = 0.2e-3
+        for corners in tr[0]["gradients"]:
+            corners[0, -1] = 0.2e-3
+    elif change == "ramp":
+        tr[0]["gradients"][2] = np.array([[0.0, 30e-6, ZTE_HOLD], [0.0, 2e5, 2e5]])
+    else:
+        # Four isochromats spread over a metre, under a gradient a hundred
+        # times as strong: more points than stepping the pulses would take.
+        spins = Isochromats(
+            np.column_stack([np.linspace(-0.5, 0.5, 4), np.zeros(4), np.zeros(4)])
+        )
+        along = along * 100.0
+    change_of = READOUT * (along[:-1] - along[0])
+    with pytest.raises(ValueError, match=message):
+        spins.repetitions(
+            tr,
+            np.zeros(count),
+            np.zeros((count, 1 if change != "window" else 2, 3)),
+            pulse_gradients=change_of,
+        )
 
 
 @pytest.mark.parametrize("tolerance", [0.0, 1e-4])

@@ -216,8 +216,8 @@ line, is written to standard output, and the scan clock to standard error.
   kernel and transformed by cuFINUFFT; every other one, under a held gradient
   or with its isochromats off any lattice, as a moving subject's are, is
   summed sample by sample by a second Triton kernel. A run of repetitions,
-  Cartesian or radial, is carried and spread onto its windows' grids by more
-  Triton kernels, a tile of repetitions at a time. The `gpu` extra
+  Cartesian, radial or of ZTE spokes, is carried and spread onto its windows'
+  grids by more Triton kernels, a tile of repetitions at a time. The `gpu` extra
   installs all of them (`pip install 'pulserver[gpu]'`). The rest of the scan
   is simulated on the CPU.
 

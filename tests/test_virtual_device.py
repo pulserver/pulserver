@@ -654,6 +654,132 @@ def test_a_run_whose_windows_turn_is_carried_on_a_device_as_the_engine_carries_i
     np.testing.assert_allclose(settled, left, rtol=0, atol=within)
 
 
+def _spoke(along, after, window=True):
+    """A ZTE spoke along ``along``: a hard pulse on the readout gradient, held through its block, then the window under it, where given, and the turn onto ``after``."""
+    import pypulseqpp as pp
+
+    readout = 1.0 / (0.24 * 10e-6)
+    rf = pp.make_block_pulse(np.deg2rad(10.0), duration=10e-6, delay=10e-6)
+    hold = [np.array([[0.0, 60e-6], [readout * a] * 2]) for a in along]
+    read = [
+        np.array([[0.0, 0.6e-3, 0.8e-3], [readout * a] * 2 + [readout * b]])
+        for a, b in zip(along, after, strict=True)
+    ]
+    second = {"duration": 0.8e-3, "gradients": read}
+    if window:
+        second["adc"] = pp.make_adc(48, dwell=10e-6, delay=20e-6)
+    return [{"duration": 60e-6, "rf": rf, "gradients": hold}, second]
+
+
+def _saturate(spins):
+    """Play a pulse of 60 degrees, then a spoiler along z, on ``spins``."""
+    import pypulseqpp as pp
+
+    spoiler = np.array([[0.0, 0.1e-3, 0.9e-3, 1.0e-3], [0.0, 4e3, 4e3, 0.0]])
+    spins.play(0.3e-3, rf=pp.make_block_pulse(np.pi / 3, duration=0.2e-3))
+    spins.play(1.0e-3, gradients=[None, None, spoiler])
+
+
+def _spokes(spins, tolerance, window=True, between=False):
+    """A run of ZTE spokes on a spiral over a hemisphere, played in two parts; with ``between``, a saturation played between them and the run resumed after it."""
+    readout = 1.0 / (0.24 * 10e-6)
+    n = np.arange(RUN + 1)
+    z = 1.0 - (n + 0.5) / (RUN + 1)
+    angle = n * np.pi * (3.0 - np.sqrt(5.0))
+    along = np.column_stack(
+        [np.sqrt(1 - z * z) * np.cos(angle), np.sqrt(1 - z * z) * np.sin(angle), z]
+    )
+    change = readout * (along[:-1] - along[0])
+    turned = readout * (along[1:] - along[1])
+    k = np.arange(RUN)
+    run = spins.repetitions(
+        _spoke(along[0], along[1], window),
+        np.deg2rad(117.0) * k * (k + 1) / 2,
+        25e-6 * change[:, None] if window else np.zeros((RUN, 0, 3)),
+        readouts=change[:, None] if window else None,
+        nets=0.6e-3 * change + 0.1e-3 * (change + turned),
+        pulse_gradients=change,
+        tolerance=tolerance,
+        split=False,
+    )
+    first = run.play(7)
+    if between:
+        _saturate(spins)
+        run.resume()
+    signal = np.concatenate([first, run.play()])
+    return signal, spins.magnetization.copy()
+
+
+@pytest.mark.parametrize(
+    ("coils", "transmit", "tolerance", "window"),
+    [
+        (3, False, 1e-4, True),
+        (20, True, 1e-4, True),
+        (3, True, 0.0, True),
+        (None, False, 1e-4, True),
+        (3, True, 1e-4, False),
+    ],
+)
+def test_a_run_whose_pulses_play_under_their_own_gradients_is_carried_on_a_device_as_the_engine_carries_it(
+    device, coils, transmit, tolerance, window
+):
+    """ZTE spokes: each pulse read off its tables at each slot's field under its spoke's gradient, with a transmit map or without, exact or in single precision; a run of them without windows is taken too."""
+    positions, properties = _lattice_spins(coils, scattered=True)
+    if transmit:
+        properties["transmit"] = RNG.uniform(0.7, 1.2, len(positions))
+    carrier = _window_device(device, profile=True)
+    on_device = Isochromats(positions, **properties, device=carrier)
+    alone = Isochromats(positions, **properties)
+    signal, settled = _spokes(on_device, tolerance, window)
+    expected, left = _spokes(alone, tolerance, window)
+
+    assert carrier.stages["tiles"] == 2
+    within = 1e-5 if tolerance > 0.0 else 1e-12
+    if window:
+        scale = np.abs(expected).max()
+        np.testing.assert_allclose(signal, expected, rtol=0, atol=within * scale)
+    np.testing.assert_allclose(settled, left, rtol=0, atol=within)
+
+
+def _resumed(spins, tolerance):
+    """A run played in two parts, a saturation played between them and the run resumed after it."""
+    phases, areas, nets = _schedule("spoiled")
+    run = spins.repetitions(
+        _repetition(), phases, areas, nets=nets, tolerance=tolerance, split=False
+    )
+    first = run.play(7)
+    _saturate(spins)
+    run.resume()
+    signal = np.concatenate([first, run.play()])
+    return signal, spins.magnetization.copy()
+
+
+@pytest.mark.parametrize(
+    ("kind", "coils", "tolerance"),
+    [("spoiled", 20, 1e-4), ("spoiled", 3, 0.0), ("spokes", 3, 1e-4)],
+)
+def test_a_run_resumed_after_blocks_played_between_its_repetitions_is_carried_on_a_device_as_the_engine_carries_it(
+    device, kind, coils, tolerance
+):
+    """The device takes the magnetisation the blocks leave as its slots' before carrying the repetitions after them."""
+    positions, properties = _lattice_spins(coils, scattered=kind == "spokes")
+    carrier = _window_device(device, profile=True)
+    on_device = Isochromats(positions, **properties, device=carrier)
+    alone = Isochromats(positions, **properties)
+    if kind == "spokes":
+        signal, settled = _spokes(on_device, tolerance, between=True)
+        expected, left = _spokes(alone, tolerance, between=True)
+    else:
+        signal, settled = _resumed(on_device, tolerance)
+        expected, left = _resumed(alone, tolerance)
+
+    assert carrier.stages["tiles"] == 2
+    within = 1e-5 if tolerance > 0.0 else 1e-12
+    scale = np.abs(expected).max()
+    np.testing.assert_allclose(signal, expected, rtol=0, atol=within * scale)
+    np.testing.assert_allclose(settled, left, rtol=0, atol=within)
+
+
 def test_a_run_without_windows_is_carried_by_the_engine(device):
     positions, properties = _lattice_spins(3)
     carrier = _window_device(device, profile=True)
@@ -687,7 +813,10 @@ def test_an_error_in_carrying_a_run_reaches_the_caller():
     spins = Isochromats(positions, **properties)
     spins._native.use_device(
         SimpleNamespace(
-            begin_run=lambda run: True, carry=carry, write_state=lambda state: None
+            begin_run=lambda run: True,
+            carry=carry,
+            write_state=lambda state: None,
+            load_state=lambda state: None,
         )
     )
     with pytest.raises(RuntimeError, match="the device failed"):
@@ -708,6 +837,7 @@ def test_an_error_in_freeing_a_run_is_reported_rather_than_raised(monkeypatch):
             begin_run=lambda run: True,
             carry=lambda tile: 0,
             write_state=lambda state: None,
+            load_state=lambda state: None,
             end_run=end_run,
         )
     )
@@ -735,13 +865,17 @@ def test_a_device_handed_a_run_reads_what_the_engine_hands_it():
             "lattice": run["lattice"],
             "turned": run["turned"].tolist(),
             "place": run["place"],
+            "pulse": run["pulse"],
         }
         return False
 
     spins = Isochromats(positions, **properties)
     spins._native.use_device(
         SimpleNamespace(
-            begin_run=begin_run, carry=lambda tile: 0, write_state=lambda state: None
+            begin_run=begin_run,
+            carry=lambda tile: 0,
+            write_state=lambda state: None,
+            load_state=lambda state: None,
         )
     )
     _carried(spins, "spoiled", 1e-4)
@@ -756,8 +890,9 @@ def test_a_device_handed_a_run_reads_what_the_engine_hands_it():
     assert run["decay"] == (n,)
     # Tabulated along y and z, which the phase encodings run along.
     assert run["lattice"] == (0, 4, 3)
-    # No window turns, so no slot needs where it lies.
-    assert (run["turned"], run["place"]) == ([0], None)
+    # No window turns and no pulse is read off tables, so no slot needs
+    # where it lies.
+    assert (run["turned"], run["place"], run["pulse"]) == ([0], None, None)
 
 
 def test_a_profiled_device_times_each_stage_of_a_run(device):

@@ -276,6 +276,31 @@ namespace
             writable);
     }
 
+    /** What reading a run's first pulse off tables takes, as the device
+     *  takes it: the run's arrays, viewed. */
+    py::dict run_pulse(const bloch::RunSet& set)
+    {
+        const auto n = static_cast<py::ssize_t>(set.slots);
+        const auto classes = static_cast<py::ssize_t>(set.pulse_classes);
+        py::dict made;
+        made["field"] = view(set.field, {n});
+        made["pulse_class"] = view(set.pulse_class, {n});
+        made["row"] = view(set.row, {n});
+        made["row_weight"] = reals(set.row_weight, set.single, {n, static_cast<py::ssize_t>(set.rows)});
+        made["drive_turn"] = reals(set.drive_turn, set.single, {n, 2});
+        made["density"] = reals(set.density, set.single, {n});
+        made["maps"] = reals(set.maps, set.single, {static_cast<py::ssize_t>(set.maps_size)});
+        made["table_values"] = set.table_values;
+        made["table_at"] = view(set.table_at, {classes});
+        made["table_first"] = view(set.table_first, {classes});
+        made["table_columns"] = view(set.table_columns, {classes});
+        made["relax"] = reals(set.relax, set.single, {classes, 4});
+        made["spacing"] = set.spacing;
+        made["before"] = set.before;
+        made["after"] = set.after;
+        return made;
+    }
+
     /** The run's carried slots as the device takes them: the run's arrays,
      *  viewed. */
     py::dict run_set(const bloch::RunSet& set)
@@ -314,6 +339,7 @@ namespace
         made["coordinate"] = coordinate;
         made["origin"] = set.origin != nullptr ? py::object(view(set.origin, {n, windows})) : py::none();
         made["place"] = set.place != nullptr ? py::object(view(set.place, {n, 3})) : py::none();
+        made["pulse"] = set.pulsed ? py::object(run_pulse(set)) : py::none();
         return made;
     }
 
@@ -351,18 +377,31 @@ namespace
             tile.single,
             {windows, static_cast<py::ssize_t>(tile.powers), static_cast<py::ssize_t>(tile.taps)});
         made["grid"] = reals(tile.grid, tile.single, {static_cast<py::ssize_t>(tile.grid_size)}, true);
+        made["pulse_delta"] = tile.pulse_delta != nullptr ? py::object(view(tile.pulse_delta, {T, 3})) : py::none();
         return made;
     }
 
     /** Whether @p device has the methods the engine calls to carry a run. */
     bool carries_runs(const py::object& device)
     {
-        return py::hasattr(device, "begin_run") && py::hasattr(device, "carry") && py::hasattr(device, "write_state");
+        const bool carries = py::hasattr(device, "begin_run") && py::hasattr(device, "carry");
+        return carries && py::hasattr(device, "write_state") && py::hasattr(device, "load_state");
+    }
+
+    /** A run's magnetisation as the device writes or loads it: the run's
+     *  packs, viewed, writable where it writes them. */
+    py::dict run_state(const bloch::RunState& state, bool writable)
+    {
+        py::dict made;
+        made["run"] = state.run;
+        made["slots"] = state.slots;
+        made["pack"] = packs(state.pack, state.single, state.slots, state.lanes, state.width, writable);
+        return made;
     }
 
     /** The engine's run device calling @p device's @c begin_run, @c carry,
-     *  @c write_state and @c end_run, where it has the first three; none
-     *  otherwise, or for None. */
+     *  @c write_state, @c load_state and @c end_run, where it has the first
+     *  four; none otherwise, or for None. */
     bloch::RunDevice run_device(const py::object& device)
     {
         if (device.is_none() || !carries_runs(device))
@@ -382,11 +421,11 @@ namespace
         };
         made.state = [held](const bloch::RunState& state) {
             py::gil_scoped_acquire acquired;
-            py::dict made_state;
-            made_state["run"] = state.run;
-            made_state["slots"] = state.slots;
-            made_state["pack"] = packs(state.pack, state.single, state.slots, state.lanes, state.width, true);
-            held->attr("write_state")(made_state);
+            held->attr("write_state")(run_state(state, true));
+        };
+        made.load = [held](const bloch::RunState& state) {
+            py::gil_scoped_acquire acquired;
+            held->attr("load_state")(run_state(state, false));
         };
         if (py::hasattr(device, "end_run"))
             /* Called from the run's destructor, which must not throw. */
@@ -616,6 +655,7 @@ namespace
         const Doubles& areas,
         const Doubles& readouts,
         const Doubles& nets,
+        const Doubles& pulse_gradients,
         double tolerance)
     {
         std::vector<bloch::OwnedBlock> owned;
@@ -628,6 +668,7 @@ namespace
         std::vector<double> encoded = values_of(areas);
         std::vector<double> read = values_of(readouts);
         std::vector<double> left = values_of(nets);
+        std::vector<double> held = values_of(pulse_gradients);
         py::gil_scoped_release unlocked;
         return new bloch::Repetitions(
             isochromats,
@@ -637,6 +678,7 @@ namespace
             std::move(encoded),
             std::move(read),
             std::move(left),
+            std::move(held),
             tolerance);
     }
 
@@ -891,6 +933,7 @@ void bind_bloch(py::module_& module)
              py::arg("areas"),
              py::arg("readouts"),
              py::arg("nets"),
+             py::arg("pulse_gradients"),
              py::arg("tolerance") = 0.0,
              py::keep_alive<1, 2>())
         .def_property_readonly("count", &bloch::Repetitions::count)
@@ -904,7 +947,8 @@ void bind_bloch(py::module_& module)
         .def("split", &bloch::Repetitions::split, py::call_guard<py::gil_scoped_release>())
         .def("column_sums", &column_sums_of, py::arg("window"), py::arg("axes"), py::arg("encoding"))
         .def("lattice", &lattice_of, py::arg("axis"))
-        .def("play", &play_repetitions, py::arg("count"));
+        .def("play", &play_repetitions, py::arg("count"))
+        .def("resume", &bloch::Repetitions::resume, py::call_guard<py::gil_scoped_release>());
 
     module.def(
         "pulse_steps",

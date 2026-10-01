@@ -174,7 +174,7 @@ def test_repetitions_hold_no_more_windows_than_their_maps_have_memory_for(
     path = _designed("gre_multiecho2D_sequence", tmp_path_factory)
     spins = _isochromats()
     assert max(_windows_held(_bloch.Player(path, spins))) == 3
-    monkeypatch.setattr(_bloch, "MEMORY", len(spins) * (288 + 244 + 16 * spins.coils))
+    monkeypatch.setattr(_bloch, "MEMORY", len(spins) * (376 + 244 + 16 * spins.coils))
     assert _bloch._windows(spins) == 1
     assert max(_windows_held(_bloch.Player(path, spins)), default=0) <= 1
 
@@ -186,7 +186,7 @@ def test_a_run_keeps_no_maps_once_its_last_repetition_has_played(tmp_path_factor
     assert len(player.runs) > 1
     for run in player.runs:
         list(player.readouts(run.first, run.stop))
-        assert player._playing is None
+        assert not player._live
 
 
 @pytest.mark.parametrize("memory", [_engine.MEMORY, 0], ids=["columns", "no-room"])
@@ -225,6 +225,87 @@ def test_radial_spokes_play_as_one_run_each_read_along_its_own_direction(
     np.testing.assert_allclose(
         repeated, one_by_one, rtol=0, atol=1e-6 * np.abs(one_by_one).max()
     )
+
+
+def test_the_spokes_of_a_zte_shell_play_as_one_run_each_pulse_read_off_tables(
+    tmp_path_factory, monkeypatch
+):
+    """Each spoke's pulse plays under its own readout gradient, held through the pulse's block; the spokes of a shell differ in their waves alone, at their own positions of one segment."""
+    path = _designed("zte3D_sequence", tmp_path_factory)
+    played = ir.playout(path)["blocks"]
+    runs = _bloch.Player(path, _isochromats()).runs
+    assert runs and all(np.any(run.pulse_gradients) for run in runs)
+    # All but each shell's ramp up and closing spoke.
+    assert sum(run.count * run.size for run in runs) >= 0.99 * played["adc"].size
+    repeated = np.concatenate(virtual.simulate(path, _isochromats()), axis=1)
+    one_by_one = np.concatenate(_one_by_one(path, monkeypatch), axis=1)
+    np.testing.assert_allclose(
+        repeated, one_by_one, rtol=0, atol=1e-6 * np.abs(one_by_one).max()
+    )
+
+
+@pytest.fixture(scope="module")
+def shells(tmp_path_factory):
+    """A ZTE scan of ten shells."""
+    path = tmp_path_factory.mktemp("shells") / "scan.seq"
+    sequences.zte3D_sequence(n=16, n_shots=10, n_dummy=0).write(str(path))
+    ir.convert(path, pp.Opts())
+    return path
+
+
+def test_the_spokes_of_a_zte_scan_play_as_one_run_resumed_after_the_blocks_between_its_shells(
+    shells, monkeypatch
+):
+    """Each shell's closing spoke and the ramp onto the next shell's first spoke play between the shells' spokes, and repeat as a run of their own."""
+    player = _bloch.Player(shells, _isochromats())
+    spokes, between = player.runs
+    assert spokes.apart and np.any(spokes.pulse_gradients)
+    assert between.apart and between.count == 9
+    assert (
+        spokes.count * spokes.size + between.count * between.size > 0.99 * player.blocks
+    )
+    one_by_one = np.concatenate(_one_by_one(shells, monkeypatch), axis=1)
+    resumed = []
+    resume = _engine.Repetitions.resume
+    monkeypatch.setattr(
+        _engine.Repetitions, "resume", lambda self: resumed.append(resume(self))
+    )
+    repeated = np.concatenate(list(player.readouts(0, player.blocks)), axis=1)
+
+    # The spokes after each of the nine, and the eight after the first.
+    assert len(resumed) == 9 + 8
+    assert not player._live
+    np.testing.assert_allclose(
+        repeated, one_by_one, rtol=0, atol=1e-6 * np.abs(one_by_one).max()
+    )
+
+
+def test_runs_resumed_across_spans_sample_what_they_sample_played_whole(shells):
+    """Spans that end within a shell continue its spokes where they stopped."""
+    scan = virtual.Scan(shells, _isochromats())
+    chunks = list(scan.chunks(5e-3))
+    assert len(chunks) > 2 * 10
+    streamed = [readout for chunk in chunks for readout in chunk.readouts]
+    whole = virtual.simulate(shells, _isochromats())
+    assert len(streamed) == len(whole)
+    assert all(np.array_equal(a, b) for a, b in zip(streamed, whole, strict=True))
+
+
+def test_a_run_whose_pulse_the_engine_cannot_read_off_tables_plays_block_by_block(
+    tmp_path_factory, monkeypatch
+):
+    path = _designed("zte3D_sequence", tmp_path_factory)
+    player = _bloch.Player(path, _isochromats())
+    one_by_one = _one_by_one(path, monkeypatch)
+
+    def refused(*args, **kwargs):
+        raise ValueError("the first block's pulse cannot be read off tables")
+
+    monkeypatch.setattr(_engine.Isochromats, "repetitions", refused)
+    played = list(player.readouts(0, player.blocks))
+
+    assert not player.runs
+    assert all(np.array_equal(a, b) for a, b in zip(played, one_by_one, strict=True))
 
 
 def test_readout_gradients_that_vary_within_a_window_play_block_by_block(

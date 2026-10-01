@@ -10,6 +10,7 @@
 #include "bloch/nufft.hpp"
 #include "bloch/parallel.hpp"
 #include "bloch/simd.hpp"
+#include "bloch/tables.hpp"
 
 #include <algorithm>
 #include <atomic>
@@ -572,13 +573,13 @@ namespace bloch
             return p.off_resonance[i] + along * (p.x[i] * direction[0] + p.y[i] * direction[1] + p.z[i] * direction[2]);
         }
 
-        /** Rows below and above an isochromat's drive its map is interpolated
-         *  from: along the drive, where the map turns as fast as it does
-         *  across the field, a quintic reaches the accuracy a cubic reaches
-         *  across the field, where half the pulse's precession is taken out. */
-        constexpr long long kRowsBelow = 2;
-        constexpr long long kRowsAbove = 3;
-        constexpr size_t kRows = static_cast<size_t>(kRowsBelow + kRowsAbove + 1);
+        using table::cubic;
+        using table::cubic_weights;
+        using table::kRows;
+        using table::kRowsAbove;
+        using table::kRowsBelow;
+        using table::row_weights;
+        using table::turned;
 
         /** The first and last rows and columns of a table that hold no point. */
         constexpr std::array<long long, 4> kNoPoints = {
@@ -706,70 +707,6 @@ namespace bloch
                     from.begin() + static_cast<std::ptrdiff_t>(held.at(row, held.first)),
                     12 * held.columns(),
                     to.begin() + static_cast<std::ptrdiff_t>(made.at(row, held.first)));
-        }
-
-        /** The weights of the Lagrange cubic through points -1, 0, 1 and 2,
-         *  at @p u in [0, 1). */
-        void cubic_weights(double u, double w[4])
-        {
-            w[0] = -u * (u - 1.0) * (u - 2.0) / 6.0;
-            w[1] = (u + 1.0) * (u - 1.0) * (u - 2.0) / 2.0;
-            w[2] = -(u + 1.0) * u * (u - 2.0) / 2.0;
-            w[3] = (u + 1.0) * u * (u - 1.0) / 6.0;
-        }
-
-        /** The cubic of weights @p w through the four consecutive maps from
-         *  @p around. */
-        void cubic(const double* around, const double w[4], double* map)
-        {
-            for (int e = 0; e < 12; ++e)
-                map[e] = w[0] * around[e] + w[1] * around[12 + e] + w[2] * around[24 + e] + w[3] * around[36 + e];
-        }
-
-        /** Write the affine map @p map turned about z by @p before before it
-         *  and by @p after after it to @p out: A -> R(after) A R(before) and
-         *  c -> R(after) c, as Isochromats::apply turns it. */
-        void turned(const double* map, std::complex<double> before, std::complex<double> after, double* out)
-        {
-            const double br = before.real();
-            const double bi = before.imag();
-            const double ar = after.real();
-            const double ai = after.imag();
-            double a[3][3];
-            for (int row = 0; row < 3; ++row)
-            {
-                const double* m = map + 3 * row;
-                a[row][0] = br * m[0] + bi * m[1];
-                a[row][1] = br * m[1] - bi * m[0];
-                a[row][2] = m[2];
-            }
-            for (int col = 0; col < 3; ++col)
-            {
-                out[col] = ar * a[0][col] - ai * a[1][col];
-                out[3 + col] = ai * a[0][col] + ar * a[1][col];
-                out[6 + col] = a[2][col];
-            }
-            out[9] = ar * map[9] - ai * map[10];
-            out[10] = ai * map[9] + ar * map[10];
-            out[11] = map[11];
-        }
-
-        /** The weights of the Lagrange polynomial through the kRows points
-         *  from -kRowsBelow on, at @p v in [0, 1). */
-        void row_weights(double v, double w[kRows])
-        {
-            for (size_t j = 0; j < kRows; ++j)
-            {
-                const double at = static_cast<double>(static_cast<long long>(j) - kRowsBelow);
-                double weight = 1.0;
-                for (size_t m = 0; m < kRows; ++m)
-                    if (m != j)
-                    {
-                        const double other = static_cast<double>(static_cast<long long>(m) - kRowsBelow);
-                        weight *= (v - other) / (at - other);
-                    }
-                w[j] = weight;
-            }
         }
 
         /** Write the affine map a pulse applies to isochromat @p r, A then c,
@@ -2655,6 +2592,68 @@ namespace bloch
         });
         keep(table);
         ++ungrouped_pulses_;
+        return true;
+    }
+
+    bool Isochromats::run_tables(const BlockEvents& block, double strongest, size_t most, RunTables& out)
+    {
+        const double duration = block.rf_step * static_cast<double>(block.rf_steps);
+        const double spacing = 1.0 / (kGridPoints * duration);
+        const IsochromatProperties& p = properties_;
+        std::vector<std::complex<double>> waveform;
+        std::vector<std::complex<double>> weights;
+        double drive_spacing = 0.0;
+        if (!table_waveform(block, p, waveform, weights, drive_spacing))
+            return false;
+        const bool driven = p.transmit_channels > 0;
+
+        /* Each isochromat's field lies within its distance from the origin
+         * times the strongest gradient of its off-resonance. Each worker's
+         * bounds, per class, merged into the tables', a point more on every
+         * side as excite_each() keeps. */
+        const size_t classes = relaxations_.size();
+        std::vector<std::vector<std::array<long long, 4>>> reached(
+            workers_for(count_, threads_, kChunk), std::vector<std::array<long long, 4>>(classes, kNoPoints));
+        parallel(count_, threads_, kChunk, [&](size_t worker, size_t first, size_t last) {
+            std::vector<std::array<long long, 4>>& bounds = reached[worker];
+            for (size_t i = first; i < last; ++i)
+            {
+                const double reach = strongest * std::sqrt(p.x[i] * p.x[i] + p.y[i] * p.y[i] + p.z[i] * p.z[i]);
+                const double magnitude = driven ? std::abs(drive_of(p, i, weights)) : 0.0;
+                std::array<long long, 4>& b = bounds[relaxation_of_[i]];
+                widen(b, p.off_resonance[i] - reach, magnitude, driven, spacing, drive_spacing);
+                widen(b, p.off_resonance[i] + reach, magnitude, driven, spacing, drive_spacing);
+            }
+        });
+        std::vector<std::array<long long, 4>> bounds(classes, kNoPoints);
+        for (const std::vector<std::array<long long, 4>>& part : reached)
+            for (size_t c = 0; c < classes; ++c)
+            {
+                bounds[c][0] = std::min(bounds[c][0], part[c][0] - (driven ? 1 : 0));
+                bounds[c][1] = std::max(bounds[c][1], part[c][1] + (driven ? 1 : 0));
+                bounds[c][2] = std::min(bounds[c][2], part[c][2] - 1);
+                bounds[c][3] = std::max(bounds[c][3], part[c][3] + 1);
+            }
+
+        std::vector<std::list<PulseTable>::iterator> table;
+        std::vector<std::complex<double>> turn;
+        if (!tables_for(block, spacing, drive_spacing, waveform, bounds, most, table, turn))
+            return false;
+        out.spacing = spacing;
+        out.drive_spacing = drive_spacing;
+        out.classes.assign(classes, RunTables::Class());
+        for (size_t c = 0; c < classes; ++c)
+        {
+            const PulseTable& held = *table[c];
+            out.classes[c] = {held.first_row, held.first, held.rows, held.columns, held.maps, turn[c]};
+        }
+        out.drives.assign(driven ? count_ : 0, 0.0);
+        if (driven)
+            parallel(count_, threads_, kChunk, [&](size_t, size_t first, size_t last) {
+                for (size_t i = first; i < last; ++i)
+                    out.drives[i] = drive_of(p, i, weights);
+            });
+        keep(table);
         return true;
     }
 

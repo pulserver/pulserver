@@ -31,6 +31,7 @@
 #include "bloch/repetitions.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <complex>
 #include <cstdint>
@@ -449,7 +450,7 @@ namespace
         if (turned)
             turn(count, readouts, nets);
         bloch::Repetitions scan(
-            spins, repetition(channels ? channels : 1, read), phases, phases, areas, readouts, nets, tolerance);
+            spins, repetition(channels ? channels : 1, read), phases, phases, areas, readouts, nets, {}, tolerance);
         if (tolerance > 0.0 && read && scan.split())
             sum_columns(scan, spins.coils());
         // In parts of three and of seven, the last what is left.
@@ -658,6 +659,7 @@ namespace
             made.begin = [this](const bloch::RunSet& set) { return begin(set); };
             made.tile = [this](const bloch::RunTile& tile) { return carry(tile); };
             made.state = [this](const bloch::RunState& state) { write(state); };
+            made.load = [this](const bloch::RunState& state) { load(state); };
             made.release = [this](size_t run) { released += runs_.erase(run); };
             return made;
         }
@@ -672,6 +674,10 @@ namespace
             std::vector<double> weight, factor, coordinate[3];
             std::vector<unsigned char> turned;
             std::vector<double> origin, place;
+            std::vector<double> field, row_weight, drive_turn, density, maps, relax;
+            std::vector<uint32_t> pulse_class, row;
+            std::vector<size_t> table_at, table_columns;
+            std::vector<long long> table_first;
         };
         std::map<size_t, Held> runs_;
 
@@ -707,13 +713,74 @@ namespace
             }
             held.turned.assign(s.turned, s.turned + s.windows);
             if (s.origin != nullptr)
-            {
                 held.origin.assign(s.origin, s.origin + s.slots * s.windows);
+            if (s.place != nullptr)
                 held.place.assign(s.place, s.place + s.slots * 3);
-            }
+            if (s.pulsed)
+                hold_pulse(s, held);
             runs_[s.run] = std::move(held);
             ++begun;
             return true;
+        }
+
+        /** Every array reading the first block's pulse off tables takes,
+         *  over the extents RunSet states. */
+        static void hold_pulse(const bloch::RunSet& s, Held& held)
+        {
+            held.field.assign(s.field, s.field + s.slots);
+            held.pulse_class.assign(s.pulse_class, s.pulse_class + s.slots);
+            held.row.assign(s.row, s.row + s.slots);
+            held.row_weight = doubles(s.row_weight, s.slots * s.rows, s.single);
+            held.drive_turn = doubles(s.drive_turn, s.slots * 2, s.single);
+            held.density = doubles(s.density, s.slots, s.single);
+            held.maps = doubles(s.maps, s.maps_size, s.single);
+            held.table_at.assign(s.table_at, s.table_at + s.pulse_classes);
+            held.table_first.assign(s.table_first, s.table_first + s.pulse_classes);
+            held.table_columns.assign(s.table_columns, s.table_columns + s.pulse_classes);
+            held.relax = doubles(s.relax, s.pulse_classes * 4, s.single);
+        }
+
+        /** Slot @p n's magnetisation @p m carried through the first block of
+         *  repetition @p r: decayed and turned by the precession at its field
+         *  before the pulse, mapped by the pulse's map read off its class's
+         *  table, turned and decayed after it. */
+        static void pulse(const Held& h, const bloch::RunTile& t, size_t n, size_t r, double m[3])
+        {
+            const bloch::RunSet& s = h.set;
+            const double* delta = t.pulse_delta + 3 * r;
+            double nu = h.field[n];
+            for (size_t axis = 0; axis < 3; ++axis)
+                nu += delta[axis] * h.place[3 * n + axis];
+            const double at = nu / s.spacing;
+            const double point = std::floor(at);
+            const double u = at - point;
+            const uint32_t k = h.pulse_class[n];
+            const long long column = static_cast<long long>(point) - 1 - h.table_first[k];
+            const double across[4] = {
+                -u * (u - 1.0) * (u - 2.0) / 6.0, (u + 1.0) * (u - 1.0) * (u - 2.0) / 2.0,
+                -(u + 1.0) * u * (u - 2.0) / 2.0, (u + 1.0) * u * (u - 1.0) / 6.0};
+            double map[12] = {};
+            for (size_t j = 0; j < s.rows; ++j)
+                for (size_t c = 0; c < 4; ++c)
+                {
+                    const size_t point_at = h.table_at[k] +
+                        s.table_values * ((h.row[n] + j) * h.table_columns[k] + static_cast<size_t>(column) + c);
+                    for (size_t e = 0; e < 12; ++e)
+                        map[e] += h.row_weight[n * s.rows + j] * across[c] * h.maps.at(point_at + e);
+                }
+            const Complex turn(h.drive_turn[2 * n], h.drive_turn[2 * n + 1]);
+            const double* relax = &h.relax[4 * k];
+            const double density = h.density[n];
+            const Complex before = relax[0] * Complex(m[0], m[1]) * std::polar(1.0, -2.0 * kPi * nu * s.before) *
+                std::conj(turn);
+            const double v[3] = {before.real(), before.imag(), relax[1] * m[2] + (1.0 - relax[1]) * density};
+            double out[3];
+            for (size_t row = 0; row < 3; ++row)
+                out[row] = map[3 * row] * v[0] + map[3 * row + 1] * v[1] + map[3 * row + 2] * v[2] + map[9 + row] * density;
+            const Complex after = relax[2] * Complex(out[0], out[1]) * std::polar(1.0, -2.0 * kPi * nu * s.after) * turn;
+            m[0] = after.real();
+            m[1] = after.imag();
+            m[2] = relax[3] * out[2] + (1.0 - relax[3]) * density;
         }
 
         static double& value(Held& h, size_t slot, size_t at)
@@ -759,6 +826,8 @@ namespace
                 double m[3] = {value(h, n, 0), value(h, n, 1), value(h, n, 2)};
                 for (size_t r = 0; r < t.count; ++r)
                 {
+                    if (s.pulsed)
+                        pulse(h, t, n, r, m);
                     read(h, t, n, r, m, grid);
                     advance(h, t, n, r, Complex(cosines[r], sines[r]), m);
                 }
@@ -905,6 +974,18 @@ namespace
                         static_cast<double*>(state.pack)[at] = value(h, n, k);
                 }
         }
+
+        void load(const bloch::RunState& state)
+        {
+            Held& h = runs_.at(state.run);
+            for (size_t n = 0; n < state.slots; ++n)
+                for (size_t k = 0; k < 3; ++k)
+                {
+                    const size_t at = (n / state.lanes * state.width + k) * state.lanes + n % state.lanes;
+                    value(h, n, k) = state.single ? static_cast<const float*>(state.pack)[at]
+                                                  : static_cast<const double*>(state.pack)[at];
+                }
+        }
     };
 
     /** Whether @p theirs differs from @p mine by at most @p within of the
@@ -962,8 +1043,8 @@ namespace
         bool split = true;
         std::vector<Complex> mine, theirs;
         {
-            bloch::Repetitions a(engine, repetition(1, true), phases, phases, areas, readouts, nets, tolerance);
-            bloch::Repetitions b(device, repetition(1, true), phases, phases, areas, readouts, nets, tolerance);
+            bloch::Repetitions a(engine, repetition(1, true), phases, phases, areas, readouts, nets, {}, tolerance);
+            bloch::Repetitions b(device, repetition(1, true), phases, phases, areas, readouts, nets, {}, tolerance);
             if (tolerance > 0.0 && !netted)
                 split = a.split() == b.split();
             const size_t per = a.coils() * a.samples();
@@ -977,6 +1058,121 @@ namespace
         const double within = tolerance > 0.0 ? 1e-5 : 1e-12;
         return split && carry.begun == 1 && carry.tiles == 4 && carry.released == 1 &&
             read_alike(mine, theirs, within) && left_alike(engine, device, within);
+    }
+
+    /** A spoke of a ZTE scan along @p along: a pulse on @p channels
+     *  channels, one if none, under the readout gradient held through its
+     *  block; then the window under it, and the turn onto @p next. */
+    std::vector<bloch::OwnedBlock> spoke(const double along[3], const double next[3], size_t channels)
+    {
+        constexpr double kGradient = 2e5;
+        bloch::OwnedBlock pulse;
+        pulse.duration = 60e-6;
+        pulse.rf_start = 10e-6;
+        pulse.rf_step = 1e-6;
+        pulse.rf_steps = 10;
+        pulse.rf_channels = channels ? channels : 1;
+        pulse.rf = sinc(10, pulse.rf_channels, 3000.0);
+        bloch::OwnedBlock readout;
+        readout.duration = 0.9e-3;
+        for (int axis = 0; axis < 3; ++axis)
+        {
+            pulse.gradient_times[axis] = {0.0, pulse.duration};
+            pulse.gradient_values[axis] = {kGradient * along[axis], kGradient * along[axis]};
+            readout.gradient_times[axis] = {0.0, 0.7e-3, 0.9e-3};
+            readout.gradient_values[axis] = {kGradient * along[axis], kGradient * along[axis], kGradient * next[axis]};
+        }
+        for (int k = 0; k < 32; ++k)
+            readout.adc_times.push_back(30e-6 + 20e-6 * k);
+        readout.receiver.assign(32, 0.0);
+        return {pulse, readout};
+    }
+
+    /** Play ZTE spokes by the engine and by a CarryDevice to @p tolerance,
+     *  on @p channels transmit channels, with @p between a spoke ramped to
+     *  zero played alone after the seventh and the run resumed after it;
+     *  whether both read each spoke's pulse off tables, and the device read
+     *  and left what the engine read and left. */
+    bool pulsed_as_engine(size_t channels, double tolerance, bool between)
+    {
+        std::vector<Complex> receive;
+        const bloch::IsochromatProperties p = lattice(channels, 3, receive);
+        bloch::Isochromats engine(p, 2);
+        bloch::Isochromats device(p, 2);
+        CarryDevice carry;
+        device.use_run_device(carry.device());
+        constexpr size_t count = 20;
+        std::vector<std::array<double, 3>> along;
+        for (size_t n = 0; n <= count; ++n)
+        {
+            const double z = 1.0 - (static_cast<double>(n) + 0.5) / static_cast<double>(count + 1);
+            const double turn = 2.39996 * static_cast<double>(n);
+            const double rho = std::sqrt(1.0 - z * z);
+            along.push_back({rho * std::cos(turn), rho * std::sin(turn), z});
+        }
+        std::vector<double> phases, areas, readouts, nets, held;
+        for (size_t n = 0; n < count; ++n)
+        {
+            phases.push_back(0.3 * static_cast<double>(n * n));
+            for (int axis = 0; axis < 3; ++axis)
+            {
+                const double change = 2e5 * (along[n][axis] - along[0][axis]);
+                const double next = 2e5 * (along[n + 1][axis] - along[1][axis]);
+                held.push_back(change);
+                readouts.push_back(change);
+                areas.push_back(change * 30e-6);
+                nets.push_back(change * 0.7e-3 + 0.1e-3 * (change + next));
+            }
+        }
+        std::vector<Complex> mine, theirs;
+        {
+            const std::vector<bloch::OwnedBlock> blocks = spoke(along[0].data(), along[1].data(), channels);
+            bloch::Repetitions a(engine, blocks, phases, phases, areas, readouts, nets, held, tolerance);
+            bloch::Repetitions b(device, blocks, phases, phases, areas, readouts, nets, held, tolerance);
+            const size_t per = a.coils() * a.samples();
+            mine.resize((count + 1) * per);
+            theirs.resize((count + 1) * per);
+            a.play(7, mine.data());
+            b.play(7, theirs.data());
+            if (between)
+            {
+                const double still[3] = {0.0, 0.0, 0.0};
+                for (const bloch::OwnedBlock& block : spoke(along[count].data(), still, channels))
+                {
+                    engine.play(block.events(), mine.data() + count * per);
+                    device.play(block.events(), theirs.data() + count * per);
+                }
+                a.resume();
+                b.resume();
+            }
+            a.play(count - 7, mine.data() + 7 * per);
+            b.play(count - 7, theirs.data() + 7 * per);
+        }
+        const double within = tolerance > 0.0 ? 1e-5 : 1e-12;
+        return carry.begun == 1 && carry.tiles == 2 && carry.released == 1 && read_alike(mine, theirs, within) &&
+            left_alike(engine, device, within);
+    }
+
+    /** Whether a CarryDevice carries ZTE spokes as the engine does, on no
+     *  transmit channel and on two, exact and to a tolerance, played whole
+     *  and resumed after a spoke played between them; the first case that
+     *  is not is reported. */
+    bool spokes_carried()
+    {
+        for (size_t channels : {size_t{0}, size_t{2}})
+            for (double tolerance : {0.0, 1e-4})
+                for (bool between : {false, true})
+                    if (!pulsed_as_engine(channels, tolerance, between))
+                    {
+                        std::fprintf(
+                            stderr,
+                            "the spokes on %zu channels to %g%s were not carried as the engine carries them\n",
+                            channels,
+                            tolerance,
+                            between ? ", resumed after a spoke between them," : "");
+                        return false;
+                    }
+        return true;
     }
 
     /** Whether a CarryDevice carries repetitions as the engine does, exact
@@ -1098,6 +1294,8 @@ int main()
             std::fprintf(stderr, "the repetitions of %zu coils were not carried as the engine carries them\n", coils);
             return 1;
         }
+    if (!spokes_carried())
+        return 1;
     std::printf("%g\n", sink);
     return 0;
 }

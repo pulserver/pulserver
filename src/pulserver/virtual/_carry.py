@@ -72,6 +72,127 @@ if triton is not None:
         return re, im
 
     @triton.jit
+    def _point(p, w0, w1, w2, w3, e: tl.constexpr):
+        """Return value ``e`` of the cubic of weights ``w0`` to ``w3`` through the four table points from ``p``, 16 values each."""
+        return (
+            w0 * tl.load(p + e)
+            + w1 * tl.load(p + 16 + e)
+            + w2 * tl.load(p + 32 + e)
+            + w3 * tl.load(p + 48 + e)
+        )
+
+    @triton.jit
+    def _cycle(phase):
+        """Return the cosine and sine of ``phase`` cycles, given in double precision, in the precision of the run."""
+        turn = (phase - tl.floor(phase + 0.5)) * 6.283185307179586
+        return tl.cos(turn), tl.sin(turn)
+
+    @triton.jit
+    def _pulse(
+        mx,
+        my,
+        mz,
+        i,
+        mask,
+        n,
+        r,
+        field_ptr,
+        place_ptr,
+        class_ptr,
+        row_ptr,
+        weight_ptr,
+        turn_ptr,
+        density_ptr,
+        maps_ptr,
+        at_ptr,
+        first_ptr,
+        columns_ptr,
+        relax_ptr,
+        delta_ptr,
+        spacing,
+        before,
+        after,
+        ROWS: tl.constexpr,
+    ):
+        """Return the magnetisation of slots ``i`` carried through the first block of repetition ``r``, its pulse's map read off the tables as the engine reads it."""
+        real = mx.dtype
+        dx = tl.load(delta_ptr + r * 3)
+        dy = tl.load(delta_ptr + r * 3 + 1)
+        dz = tl.load(delta_ptr + r * 3 + 2)
+        nu = tl.load(field_ptr + i, mask=mask, other=0.0)
+        nu += dx * tl.load(place_ptr + i, mask=mask, other=0.0)
+        nu += dy * tl.load(place_ptr + n + i, mask=mask, other=0.0)
+        nu += dz * tl.load(place_ptr + 2 * n + i, mask=mask, other=0.0)
+        at = nu / spacing
+        point = tl.floor(at)
+        u = (at - point).to(real)
+        k = tl.load(class_ptr + i, mask=mask, other=0).to(tl.int64)
+        columns = tl.load(columns_ptr + k, mask=mask, other=0)
+        column = point.to(tl.int64) - 1 - tl.load(first_ptr + k, mask=mask, other=0)
+        row = tl.load(row_ptr + i, mask=mask, other=0).to(tl.int64)
+        base = tl.load(at_ptr + k, mask=mask, other=0) + 16 * (row * columns + column)
+        base = tl.where(mask, base, 0)
+        w0 = -u * (u - 1.0) * (u - 2.0) / 6.0
+        w1 = (u + 1.0) * (u - 1.0) * (u - 2.0) / 2.0
+        w2 = -(u + 1.0) * u * (u - 2.0) / 2.0
+        w3 = (u + 1.0) * u * (u - 1.0) / 6.0
+        t0 = tl.zeros(u.shape, real)
+        t1 = tl.zeros(u.shape, real)
+        t2 = tl.zeros(u.shape, real)
+        t3 = tl.zeros(u.shape, real)
+        t4 = tl.zeros(u.shape, real)
+        t5 = tl.zeros(u.shape, real)
+        t6 = tl.zeros(u.shape, real)
+        t7 = tl.zeros(u.shape, real)
+        t8 = tl.zeros(u.shape, real)
+        t9 = tl.zeros(u.shape, real)
+        t10 = tl.zeros(u.shape, real)
+        t11 = tl.zeros(u.shape, real)
+        for j in tl.range(0, ROWS, loop_unroll_factor=1):
+            weight = tl.load(weight_ptr + j * n + i, mask=mask, other=0.0)
+            p = maps_ptr + base + 16 * j * columns
+            t0 += weight * _point(p, w0, w1, w2, w3, 0)
+            t1 += weight * _point(p, w0, w1, w2, w3, 1)
+            t2 += weight * _point(p, w0, w1, w2, w3, 2)
+            t3 += weight * _point(p, w0, w1, w2, w3, 3)
+            t4 += weight * _point(p, w0, w1, w2, w3, 4)
+            t5 += weight * _point(p, w0, w1, w2, w3, 5)
+            t6 += weight * _point(p, w0, w1, w2, w3, 6)
+            t7 += weight * _point(p, w0, w1, w2, w3, 7)
+            t8 += weight * _point(p, w0, w1, w2, w3, 8)
+            t9 += weight * _point(p, w0, w1, w2, w3, 9)
+            t10 += weight * _point(p, w0, w1, w2, w3, 10)
+            t11 += weight * _point(p, w0, w1, w2, w3, 11)
+        # The precession at the field before the pulse times the drive's
+        # turn's conjugate, and after it times the turn.
+        cb, sb = _cycle(-nu * before)
+        ca, sa = _cycle(-nu * after)
+        cb, sb, ca, sa = cb.to(real), sb.to(real), ca.to(real), sa.to(real)
+        tr = tl.load(turn_ptr + i, mask=mask, other=0.0)
+        ti = tl.load(turn_ptr + n + i, mask=mask, other=0.0)
+        br = cb * tr + sb * ti
+        bi = sb * tr - cb * ti
+        ar = ca * tr - sa * ti
+        ai = ca * ti + sa * tr
+        density = tl.load(density_ptr + i, mask=mask, other=0.0)
+        e2b = tl.load(relax_ptr + 4 * k, mask=mask, other=0.0)
+        e1b = tl.load(relax_ptr + 4 * k + 1, mask=mask, other=0.0)
+        e2a = tl.load(relax_ptr + 4 * k + 2, mask=mask, other=0.0)
+        e1a = tl.load(relax_ptr + 4 * k + 3, mask=mask, other=0.0)
+        x = e2b * mx
+        y = e2b * my
+        z = e1b * mz + (1.0 - e1b) * density
+        # The map's rows, each turned by the precession before the pulse.
+        cu = (br * t0 + bi * t1) * x + (br * t1 - bi * t0) * y + t2 * z + t9 * density
+        cv = (br * t3 + bi * t4) * x + (br * t4 - bi * t3) * y + t5 * z + t10 * density
+        w = (br * t6 + bi * t7) * x + (br * t7 - bi * t6) * y + t8 * z + t11 * density
+        return (
+            e2a * (ar * cu - ai * cv),
+            e2a * (ai * cu + ar * cv),
+            e1a * w + (1.0 - e1a) * density,
+        )
+
+    @triton.jit
     def _carry(
         m_ptr,
         a_ptr,
@@ -89,22 +210,42 @@ if triton is not None:
         angle_ptr,
         e_ptr,
         dropped_ptr,
+        field_ptr,
+        place_ptr,
+        class_ptr,
+        row_ptr,
+        weight_ptr,
+        turn_ptr,
+        density_ptr,
+        maps_ptr,
+        table_at_ptr,
+        first_ptr,
+        columns_ptr,
+        relax_ptr,
+        pulse_delta_ptr,
+        spacing,
+        before,
+        after,
         n,
         count,
         WINDOWS: tl.constexpr,
         OFFSETS: tl.constexpr,
         NETTED: tl.constexpr,
         DROP: tl.constexpr,
+        PULSED: tl.constexpr,
+        ROWS: tl.constexpr,
         BLOCK: tl.constexpr,
     ):
         """Carry BLOCK slots through the tile's ``count`` repetitions, writing each window's phase-encoded coefficients.
 
-        Repetition r's coefficient of window w is u . m + v, m the
-        magnetisation at the repetition's start, times set w's phase-encoding
-        phase, written to e[w][r][Re, Im][slot]. The magnetisation then
-        becomes A m + b, turned by the repetition's turn, times each slot's
-        net-area phase where NETTED; without OFFSETS, A m alone. With DROP, a
-        transient at or below its limit is zeroed and counted.
+        Where PULSED, the magnetisation is first carried through the first
+        block by its map read off the pulse's tables (:func:`_pulse`).
+        Repetition r's coefficient of window w is then u . m + v, times set
+        w's phase-encoding phase, written to e[w][r][Re, Im][slot]. The
+        magnetisation then becomes A m + b, turned by the repetition's turn,
+        times each slot's net-area phase where NETTED; without OFFSETS, A m
+        alone. With DROP, a transient at or below its limit is zeroed and
+        counted.
         """
         i = tl.program_id(0) * BLOCK + tl.arange(0, BLOCK)
         mask = i < n
@@ -125,6 +266,33 @@ if triton is not None:
             b1 = tl.load(b_ptr + n + i, mask=mask, other=0.0)
             b2 = tl.load(b_ptr + 2 * n + i, mask=mask, other=0.0)
         for r in range(count):
+            if PULSED:
+                mx, my, mz = _pulse(
+                    mx,
+                    my,
+                    mz,
+                    i,
+                    mask,
+                    n,
+                    r,
+                    field_ptr,
+                    place_ptr,
+                    class_ptr,
+                    row_ptr,
+                    weight_ptr,
+                    turn_ptr,
+                    density_ptr,
+                    maps_ptr,
+                    table_at_ptr,
+                    first_ptr,
+                    columns_ptr,
+                    relax_ptr,
+                    pulse_delta_ptr,
+                    spacing,
+                    before,
+                    after,
+                    ROWS,
+                )
             for w in tl.static_range(WINDOWS):
                 u = u_ptr + w * 6 * n + i
                 q_re = tl.load(u, mask=mask, other=0.0) * mx
@@ -430,9 +598,6 @@ class Run:
         self.device = device
         self.real = torch.float32 if run["single"] else torch.float64
         n = int(run["slots"])
-        pack = np.asarray(run["pack"])
-        width = pack.shape[1]
-        values = pack.transpose(1, 0, 2).reshape(width, -1)[:, :n]
         self.offsets = bool(run["offsets"])
         self.limits = bool(run["limits"])
         self.cells = [int(c) for c in run["cells"]]
@@ -442,39 +607,14 @@ class Run:
         self.coils = int(run["coils"])
         self.taps = int(run["taps"])
         self.classes = int(run["classes"])
-        u_at, u_width = int(run["u_at"]), int(run["u_width"])
-        rows = {
-            "m": values[0:3],
-            "a": values[3:12],
-            "b": values[12:15] if self.offsets else values[0:0],
-            "u": _rows(values, u_at, u_width, 0, 6, self.windows),
-            "v": _rows(values, u_at, u_width, 6, 8, self.windows)
-            if self.offsets
-            else values[0:0],
-            "limit": values[int(run["limit_at"]) : int(run["limit_at"]) + 1]
-            if self.limits
-            else values[0:0],
-            "weight": np.asarray(run["weight"]).transpose(1, 2, 0).reshape(-1, n),
-            "decay": np.asarray(run["decay"], dtype=np.int64)[None],
-            "start": np.asarray(run["start"], dtype=np.int64).T,
-        }
-        index = np.zeros((3, n), dtype=np.int32)
-        coordinate = np.zeros((3, n), dtype=values.dtype)
-        for axis in range(3):
-            if run["index"][axis] is not None:
-                index[axis] = run["index"][axis]
-            if run["coordinate"][axis] is not None:
-                coordinate[axis] = run["coordinate"][axis]
-        rows["index"] = index
-        rows["coordinate"] = coordinate
-        if any(self.turned):
-            rows["place"] = np.asarray(run["place"]).T
-            rows["origin"] = np.asarray(run["origin"]).T
+        pulse = run.get("pulse")
+        self.pulsed = pulse is not None
         self.rows = {
             name: torch.tensor(np.ascontiguousarray(row)).to(device)
-            for name, row in rows.items()
+            for name, row in _slot_rows(run).items()
             if row.size
         }
+        self.tables, self.pulse_rows, self.timing = _pulse_reading(pulse, device)
         # What a kernel is handed for a row the run does not hold.
         self._none = torch.zeros(1, dtype=self.real, device=device)
         # (windows, slots, coils, Re/Im), as the engine lays the factors out per slot.
@@ -548,10 +688,16 @@ class Run:
             )
 
         grid = torch.zeros(len(tile["grid"]), dtype=self.real, device=self.device)
+        pulse_delta = (
+            put(np.ravel(tile["pulse_delta"]), torch.float64)
+            if self.pulsed
+            else self._none
+        )
         began = lap("upload", began)
         if n:
             self._counter.zero_()
             row = self.row
+            table = self.tables.get
             _carry[(triton.cdiv(n, SLOTS),)](
                 row("m"),
                 row("a"),
@@ -569,12 +715,28 @@ class Run:
                 put(tile["angle"], torch.float64),
                 self.e,
                 self._counter,
+                row("field"),
+                row("place"),
+                row("pulse_class"),
+                row("row"),
+                row("row_weight"),
+                row("drive_turn"),
+                row("density"),
+                table("maps", self._none),
+                table("at", self._none),
+                table("first", self._none),
+                table("columns", self._none),
+                table("relax", self._none),
+                pulse_delta,
+                *self.timing,
                 n,
                 count,
                 WINDOWS=self.windows,
                 OFFSETS=self.offsets,
                 NETTED=bool(tile["netted"]),
                 DROP=bool(tile["drop"]) and self.limits,
+                PULSED=self.pulsed,
+                ROWS=self.pulse_rows,
                 BLOCK=SLOTS,
             )
             began = lap("carry", began)
@@ -732,10 +894,113 @@ class Run:
             row[:n] = m[k]
             pack[:, k, :] = row.reshape(-1, lanes)
 
+    def load(self, state: dict) -> None:
+        """Take the magnetisation in the engine's packs as the slots'."""
+        pack = np.asarray(state["pack"])
+        n = int(state["slots"])
+        m = pack[:, :3, :].transpose(1, 0, 2).reshape(3, -1)[:, :n]
+        self.rows["m"].copy_(
+            torch.from_numpy(np.ascontiguousarray(m)).to(self.device)[:, self.ids]
+        )
+
     def nbytes(self) -> int:
         """Bytes the run holds on the device."""
-        held = [*self.rows.values(), self.factor, self.e, *self.orders, *self.firsts]
+        held = [
+            *self.rows.values(),
+            *self.tables.values(),
+            self.factor,
+            self.e,
+            *self.orders,
+            *self.firsts,
+        ]
         return sum(t.numel() * t.element_size() for t in held)
+
+
+def _slot_rows(run: dict) -> dict:
+    """Return each slot's values the carry and the spreading take, a row per value over the slots, in the engine's order; empty rows for values the run has none of."""
+    n = int(run["slots"])
+    pack = np.asarray(run["pack"])
+    values = pack.transpose(1, 0, 2).reshape(pack.shape[1], -1)[:, :n]
+    none = values[0:0]
+    windows = len(run["cells"])
+    offsets = bool(run["offsets"])
+    u_at, u_width = int(run["u_at"]), int(run["u_width"])
+    limit_at = int(run["limit_at"])
+    rows = {
+        "m": values[0:3],
+        "a": values[3:12],
+        "b": values[12:15] if offsets else none,
+        "u": _rows(values, u_at, u_width, 0, 6, windows),
+        "v": _rows(values, u_at, u_width, 6, 8, windows) if offsets else none,
+        "limit": values[limit_at : limit_at + 1] if run["limits"] else none,
+        "weight": np.asarray(run["weight"]).transpose(1, 2, 0).reshape(-1, n),
+        "decay": np.asarray(run["decay"], dtype=np.int64)[None],
+        "start": np.asarray(run["start"], dtype=np.int64).T,
+        "index": np.zeros((3, n), dtype=np.int32),
+        "coordinate": np.zeros((3, n), dtype=values.dtype),
+    }
+    for axis in range(3):
+        if run["index"][axis] is not None:
+            rows["index"][axis] = run["index"][axis]
+        if run["coordinate"][axis] is not None:
+            rows["coordinate"][axis] = run["coordinate"][axis]
+    turned = bool(np.any(run["turned"]))
+    pulse = run.get("pulse")
+    if turned:
+        rows["origin"] = np.asarray(run["origin"]).T
+    if turned or pulse is not None:
+        rows["place"] = np.asarray(run["place"]).T
+    if pulse is not None:
+        rows.update(_pulse_rows(pulse))
+    return rows
+
+
+def _pulse_reading(
+    pulse: dict | None, device: torch.device
+) -> tuple[dict, int, tuple[float, float, float]]:
+    """Return what reading the first block's pulse off tables takes besides each slot's values: the tables on ``device``, the drive's rows each slot's map is interpolated over, and the tables' spacing and the times from the block's start to the pulse's centre and from it to the block's end; no tables, one row and no times where the pulse is not read so."""
+    if pulse is None:
+        return {}, 1, (1.0, 0.0, 0.0)
+    tables = {
+        name: torch.tensor(np.ascontiguousarray(values)).to(device)
+        for name, values in _pulse_tables(pulse).items()
+    }
+    timing = (float(pulse["spacing"]), float(pulse["before"]), float(pulse["after"]))
+    return tables, int(np.shape(pulse["row_weight"])[1]), timing
+
+
+def _pulse_rows(pulse: dict) -> dict:
+    """Return each slot's values reading the first block's pulse off tables takes, a row per value over the slots."""
+    return {
+        "field": np.asarray(pulse["field"])[None],
+        "pulse_class": np.asarray(pulse["pulse_class"], dtype=np.int32)[None],
+        "row": np.asarray(pulse["row"], dtype=np.int32)[None],
+        "row_weight": np.asarray(pulse["row_weight"]).T,
+        "drive_turn": np.asarray(pulse["drive_turn"]).T,
+        "density": np.asarray(pulse["density"])[None],
+    }
+
+
+def _pulse_tables(pulse: dict) -> dict:
+    """Return the pulse's tables and, per class, where each starts, its first column, its columns and its decays.
+
+    Raises
+    ------
+    ValueError
+        If a table point holds other than 16 values, as :func:`_point` reads
+        them.
+    """
+    if int(pulse["table_values"]) != 16:
+        raise ValueError(
+            f"a pulse table's points hold 16 values, not {pulse['table_values']}"
+        )
+    return {
+        "maps": np.asarray(pulse["maps"]),
+        "at": np.asarray(pulse["table_at"], dtype=np.int64),
+        "first": np.asarray(pulse["table_first"], dtype=np.int64),
+        "columns": np.asarray(pulse["table_columns"], dtype=np.int64),
+        "relax": np.ravel(pulse["relax"]),
+    }
 
 
 def _rows(
@@ -777,4 +1042,11 @@ def bytes_for(run: dict) -> int:
         per_slot += 8 * (3 + windows) + SORTED * (
             8 + 8 + 8 + itemsize + 4 + 4 + 8 + 4 + 24
         )
-    return n * per_slot
+    pulse = run.get("pulse")
+    if pulse is None:
+        return n * per_slot
+    # Field and place, class and row, the rows' weights, the drive's turn and
+    # the density; and the tables.
+    rows = np.shape(pulse["row_weight"])[1]
+    per_slot += 8 * 4 + 4 * 2 + (rows + 3) * itemsize
+    return n * per_slot + np.size(pulse["maps"]) * itemsize
