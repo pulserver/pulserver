@@ -217,22 +217,18 @@ class RfPulse:
 
     The scanner costs its RF before a scan from the pulses the sequence will
     play. Which pulses those are, and the shape of each, is settled by the
-    design; what the operator moves is an angle. So a pulse travels once, and
-    the scanner reads the angle from wherever ``follows`` names for as long as
+    design; what the operator moves is an angle. So a pulse states where its
+    angle comes from, and the scanner reads the angle from there for as long as
     the sequence is prescribed.
 
-    The envelope is the magnitude normalised to a peak of one. Every statistic
-    a scanner costs a pulse from is computed from that shape alone and does not
-    move with the angle, which is why one envelope serves every prescription.
+    The shape does not travel. It is in the design's own cache, which the
+    scanner reads, and every statistic a pulse is costed from is computed from
+    that shape at unit peak and does not move with the angle.
 
     Attributes
     ----------
-    envelope
-        Magnitude, normalised to a peak of one, on the RF raster.
-    duration_us
-        How long the pulse plays.
     flip_deg
-        The angle it is designed at. The angle played where ``follows`` is
+        The angle it was designed at. The angle played where ``follows`` is
         empty.
     follows
         Protocol parameter whose value the angle takes; empty is a pulse whose
@@ -240,49 +236,50 @@ class RfPulse:
     factor
         What that value is scaled by: an inversion at twice the excitation, a
         refocusing at four fifths of it.
-    bandwidth_hz
-        Bandwidth at half the spectral peak; 0 where it is not stated.
+    use
+        What the pulse is for, as Pulseq tags it: ``excitation``,
+        ``refocusing``, ``inversion``, ``saturation``, ``preparation`` or
+        ``other``.
     count
         How many times the sequence plays it.
     """
 
-    envelope: tuple[float, ...]
-    duration_us: float
     flip_deg: float
     follows: str = ""
     factor: float = 1.0
-    bandwidth_hz: float = 0.0
+    use: str = ""
     count: int = 1
 
 
-def format_pulses(pulses: Sequence[RfPulse]) -> str:
-    """Format the pulses a sequence plays, as the ``list`` design call replies them."""
-    lines = [PULSES_BEGIN]
+def format_pulses(pulses: Sequence[RfPulse], design: str = "") -> str:
+    """Format the RF a design plays, as the ``list`` design call replies it.
+
+    ``design`` names the design whose cache holds the shapes, which is what a
+    scanner reads them from.
+    """
+    lines = [PULSES_BEGIN, f"design {design or '-'}"]
     for pulse in pulses:
-        head = (
+        lines.append(
             f"{pulse.follows or '-'} {pulse.factor:.7g} {pulse.flip_deg:.7g} "
-            f"{pulse.duration_us:.7g} {pulse.bandwidth_hz:.7g} {pulse.count:d} "
-            f"{len(pulse.envelope)}"
+            f"{pulse.use or '-'} {pulse.count:d}"
         )
-        samples = " ".join(f"{v:.6g}" for v in pulse.envelope)
-        lines.append(f"{head} {samples}".rstrip())
     lines.append(PULSES_END)
     return "\n".join(lines) + "\n"
 
 
-def parse_pulses(text: str) -> list[RfPulse]:
-    """Read the pulses a sequence plays from a listing.
+def parse_pulses(text: str) -> tuple[str, list[RfPulse]]:
+    """Read the design and the RF it plays from a listing.
 
-    Returns an empty list where the text holds no block, which is a sequence
-    whose RF the scanner is not given in advance.
+    Returns an empty design and no pulses where the text holds no block, which
+    is a sequence the scanner is not given the RF of in advance.
 
     Raises
     ------
     ValueError
-        If a line states fewer samples than it carries, or a value that is not
-        a number.
+        If a line is not a pulse, or states a value that is not a number.
     """
     found: list[RfPulse] = []
+    design = ""
     inside = False
     for line in text.splitlines():
         stripped = line.strip()
@@ -294,26 +291,18 @@ def parse_pulses(text: str) -> list[RfPulse]:
         if not stripped:
             continue
         parts = stripped.split()
-        if len(parts) < 7:
-            raise ValueError(f"an RF pulse is at least seven values: {stripped!r}")
-        follows = "" if parts[0] == "-" else parts[0]
-        factor, flip, duration, bandwidth = (float(v) for v in parts[1:5])
-        played = int(parts[5])
-        count = int(parts[6])
-        samples = tuple(float(v) for v in parts[7 : 7 + count])
-        if len(samples) != count:
-            raise ValueError(
-                f"an RF pulse states {count} samples and carries {len(samples)}"
-            )
+        if parts[0] == "design":
+            design = "" if len(parts) < 2 or parts[1] == "-" else parts[1]
+            continue
+        if len(parts) < 5:
+            raise ValueError(f"an RF pulse is five values: {stripped!r}")
         found.append(
             RfPulse(
-                envelope=samples,
-                duration_us=duration,
-                flip_deg=flip,
-                follows=follows,
-                factor=factor,
-                bandwidth_hz=bandwidth,
-                count=played,
+                flip_deg=float(parts[2]),
+                follows="" if parts[0] == "-" else parts[0],
+                factor=float(parts[1]),
+                use="" if parts[3] == "-" else parts[3],
+                count=int(parts[4]),
             )
         )
-    return found
+    return design, found

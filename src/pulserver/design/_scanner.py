@@ -412,12 +412,10 @@ class ScannerSequence:
             entry = self.ui.get(parameter)
             driving = float(designed.get(entry.argument, 0.0) or 0.0) if entry else 0.0
             found[key] = RfPulse(
-                envelope=envelope,
-                duration_us=float(shape.time.samples[-1] - shape.time.samples[0]),
                 flip_deg=angle,
                 follows=parameter if driving else "",
                 factor=angle / driving if driving else 1.0,
-                bandwidth_hz=float(shape.bandwidth_hz),
+                use=_USE_NAMES.get(use, ""),
             )
         return [
             dataclasses.replace(pulse, count=counts[key])

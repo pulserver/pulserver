@@ -157,8 +157,6 @@ def generate(
         # The RF a scanner costs while the operator prescribes, read off the
         # sequence just written rather than designed again for the purpose.
         pulses = scanner.rf_pulses(paths[0], app.resolved)
-        if pulses:
-            (staged / PULSES_FILE).write_text(format_pulses(pulses))
         manifest = {
             **_record(limits),
             "plugin": plugin,
@@ -167,6 +165,12 @@ def generate(
             "scan_time": validation.duration,
         }
         design = store.commit(identity, staged, manifest)
+        # The RF a scanner costs while the operator prescribes. Written after
+        # the commit, because it names the design it was read from.
+        if pulses:
+            (store.directory(design) / PULSES_FILE).write_text(
+                format_pulses(pulses, design)
+            )
     except BaseException:
         store.discard(staged)
         raise

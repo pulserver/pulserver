@@ -1,78 +1,57 @@
 """The RF a sequence states it plays, so a scanner can cost it while prescribing."""
 
-import numpy as np
 import pytest
 
 from pulserver.protocol import RfPulse, format_pulses, parse_pulses
 
-_SHAPE = np.abs(np.sinc(np.linspace(-2, 2, 64)))
-SINC = tuple((_SHAPE / _SHAPE.max()).tolist())
-
-
-def excitation(**kwargs):
-    return RfPulse(
-        envelope=SINC,
-        duration_us=2000.0,
-        flip_deg=30.0,
-        follows="flip_angle",
-        bandwidth_hz=1250.0,
-        **kwargs,
-    )
+EXCITATION = RfPulse(flip_deg=90.0, use="excitation")
+REFOCUSING = RfPulse(
+    flip_deg=120.0, follows="flip", factor=0.8, use="refocusing", count=16
+)
 
 
 def test_a_pulse_states_what_its_angle_follows_and_comes_back_the_same():
-    """The wire carries six significant digits, which is a float32's worth."""
-    pulses = [
-        excitation(),
-        RfPulse(envelope=(1.0, 1.0), duration_us=500.0, flip_deg=180.0),
-    ]
-    read = parse_pulses(format_pulses(pulses))
-    assert len(read) == len(pulses)
-    for got, sent in zip(read, pulses, strict=True):
-        assert got.follows == sent.follows
-        assert got.factor == pytest.approx(sent.factor)
-        assert got.flip_deg == pytest.approx(sent.flip_deg)
-        assert got.duration_us == pytest.approx(sent.duration_us)
-        assert got.bandwidth_hz == pytest.approx(sent.bandwidth_hz)
-        # Six significant digits against a peak of one: a part in 1e5 of the
-        # peak bounds every sample, large or small.
-        assert got.envelope == pytest.approx(sent.envelope, abs=1e-5)
+    design, read = parse_pulses(format_pulses([EXCITATION, REFOCUSING], "abc123"))
+    assert design == "abc123"
+    assert read == [EXCITATION, REFOCUSING]
 
 
 def test_a_pulse_the_operator_does_not_move_follows_nothing():
-    fixed = RfPulse(envelope=(1.0,), duration_us=500.0, flip_deg=180.0)
-    assert fixed.follows == ""
-    assert parse_pulses(format_pulses([fixed]))[0].follows == ""
+    assert EXCITATION.follows == ""
+    assert parse_pulses(format_pulses([EXCITATION]))[1][0].follows == ""
 
 
-def test_a_pulse_may_follow_a_control_scaled():
+def test_a_pulse_may_follow_a_knob_scaled():
     """A refocusing at four fifths of the excitation, an inversion at twice it."""
-    scaled = excitation(factor=0.8)
-    read = parse_pulses(format_pulses([scaled]))[0]
-    assert read.follows == "flip_angle"
-    assert read.factor == pytest.approx(0.8)
+    _, read = parse_pulses(format_pulses([REFOCUSING]))
+    assert read[0].follows == "flip"
+    assert read[0].factor == pytest.approx(0.8)
+
+
+def test_a_pulse_says_how_many_times_it_is_played():
+    """A cost is per occurrence, so the count is part of the statement."""
+    _, read = parse_pulses(format_pulses([REFOCUSING]))
+    assert read[0].count == 16
 
 
 def test_text_without_a_block_states_no_pulses():
-    """A sequence the scanner is not given the RF of in advance."""
-    assert parse_pulses("[Protocol]\nTE: 8000\n[Protocol End]\n") == []
-
-
-def test_an_envelope_shorter_than_it_says_is_refused():
-    text = "[RfPulses]\nflip_angle 1 30 2000 0 1 8 1 1 1\n[RfPulses End]\n"
-    with pytest.raises(ValueError, match="states 8 samples"):
-        parse_pulses(text)
+    assert parse_pulses("[Protocol]\nTE: 8000\n[Protocol End]\n") == ("", [])
 
 
 def test_a_line_too_short_to_be_a_pulse_is_refused():
-    with pytest.raises(ValueError, match="at least seven values"):
-        parse_pulses("[RfPulses]\nflip_angle 1 30\n[RfPulses End]\n")
+    with pytest.raises(ValueError, match="five values"):
+        parse_pulses("[RfPulses]\nflip 1 30\n[RfPulses End]\n")
 
 
-def test_the_envelope_is_normalised_to_a_peak_of_one():
-    """Every statistic a scanner costs from the shape is read at unit peak."""
-    read = parse_pulses(format_pulses([excitation()]))[0]
-    assert max(read.envelope) == pytest.approx(1.0, abs=1e-6)
+def test_the_shape_does_not_travel():
+    """It is in the design's cache, which the scanner reads for itself."""
+    assert not hasattr(EXCITATION, "envelope")
+    assert len(format_pulses([EXCITATION, REFOCUSING], "abc123")) < 200
+
+
+def test_a_design_names_where_its_shapes_are():
+    design, _ = parse_pulses(format_pulses([EXCITATION], "d7"))
+    assert design == "d7"
 
 
 def test_the_pulses_of_a_design_reach_the_listing(tmp_path):
@@ -95,13 +74,15 @@ def test_the_pulses_of_a_design_reach_the_listing(tmp_path):
     )
     store = DesignStore(tmp_path / "store")
     staged = store.stage()
-    (staged / PULSES_FILE).write_text(format_pulses([excitation(count=144)]))
-    store.commit("identity-1", staged, {"plugin": "linked"})
+    design = store.commit("identity-1", staged, {"plugin": "linked"})
+    (store.directory(design) / PULSES_FILE).write_text(
+        format_pulses([REFOCUSING], design)
+    )
 
-    read = parse_pulses(list_protocol(plugins, "linked", store))
-    assert len(read) == 1
-    assert read[0].follows == "flip_angle"
-    assert read[0].count == 144
+    named, read = parse_pulses(list_protocol(plugins, "linked", store))
+    assert named == design
+    assert [p.follows for p in read] == ["flip"]
+    assert read[0].count == 16
 
 
 def test_a_sequence_no_design_has_been_made_of_states_no_rf(tmp_path):
@@ -119,6 +100,6 @@ def test_a_sequence_no_design_has_been_made_of_states_no_rf(tmp_path):
         "    ui = {}\n"
         "PLUGIN = Bare()\n"
     )
-    assert (
-        parse_pulses(list_protocol(plugins, "bare", DesignStore(tmp_path / "s"))) == []
-    )
+    assert parse_pulses(
+        list_protocol(plugins, "bare", DesignStore(tmp_path / "s"))
+    ) == ("", [])

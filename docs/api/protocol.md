@@ -70,9 +70,9 @@ read and reply them.
 | {obj}`~pulserver.protocol.PROTOCOL_BEGIN` | First line of every protocol block. |
 | {obj}`~pulserver.protocol.PROTOCOL_END` | Last line of every protocol block. |
 | {obj}`~pulserver.protocol.format_listing` | Format a protocol with its schema. |
-| {obj}`~pulserver.protocol.RfPulse` | One pulse a sequence plays, its shape, and the protocol parameter its flip angle follows. |
-| {obj}`~pulserver.protocol.format_pulses` | Format the RF a sequence plays, as the `list` design call replies them. |
-| {obj}`~pulserver.protocol.parse_pulses` | Read the RF a sequence plays from a listing. |
+| {obj}`~pulserver.protocol.RfPulse` | One pulse a sequence plays, and the protocol parameter its flip angle follows. |
+| {obj}`~pulserver.protocol.format_pulses` | Format the RF a design plays, as the `list` design call replies it. |
+| {obj}`~pulserver.protocol.parse_pulses` | Read the design and the RF it plays from a listing. |
 | {obj}`~pulserver.protocol.parse_listing` | Read a protocol with its schema from a listing block. |
 | {obj}`~pulserver.protocol.format_values` | Format a value block. |
 | {obj}`~pulserver.protocol.parse_values` | Read a value block against the listing it was edited from. |
