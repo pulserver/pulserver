@@ -608,25 +608,7 @@ class Isochromats:
         """
         if self.moving:
             raise ValueError("isochromats that move or diffuse play block by block")
-        conversions = []
-        receivers = []
-        for block in blocks:
-            start, step, samples = _field(block.get("rf"), system)
-            times, receiver = _window(block.get("adc"), system)
-            if times is not None and times.size:
-                receivers.append(np.zeros(times.size) if receiver is None else receiver)
-            conversions.append(
-                (
-                    float(block["duration"]),
-                    _axes(block.get("gradients")),
-                    _rotation(block.get("rotation")),
-                    start,
-                    step,
-                    samples,
-                    times,
-                    receiver,
-                )
-            )
+        conversions, receivers = _converted(blocks, system)
         phases = np.ascontiguousarray(np.asarray(phases, dtype=float).ravel())
         count = phases.size
         adc_phases = (
@@ -671,6 +653,30 @@ class Isochromats:
             ),
             steady=steady,
         )
+
+
+def _converted(blocks, system) -> tuple[list, list]:
+    """Return each block as the engine plays it, and each ADC window's demodulation phase per sample, zero for plain times."""
+    conversions = []
+    receivers = []
+    for block in blocks:
+        start, step, samples = _field(block.get("rf"), system)
+        times, receiver = _window(block.get("adc"), system)
+        if times is not None and times.size:
+            receivers.append(np.zeros(times.size) if receiver is None else receiver)
+        conversions.append(
+            (
+                float(block["duration"]),
+                _axes(block.get("gradients")),
+                _rotation(block.get("rotation")),
+                start,
+                step,
+                samples,
+                times,
+                receiver,
+            )
+        )
+    return conversions, receivers
 
 
 def _per_window(given, name: str, count: int, windows: int) -> np.ndarray:

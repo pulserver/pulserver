@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import functools
 import os
 import time
 from collections import OrderedDict
@@ -95,31 +96,29 @@ if triton is not None:
                 tl.store(sums_ptr + out + 1, sum_im, mask=written)
 
 
-if triton is not None:
-    #: Configurations the kernel is timed in on a CUDA device, the first
-    #: window of each shape; the interpreter runs the first.
-    _CONFIGS = [
+@functools.cache
+def _tuned_lattice_sums():
+    """Return the kernel autotuned on a CUDA device, the first window of each shape, over 4 or 1 lattice points per program and 4 or 8 warps."""
+    configs = [
         triton.Config({"POINTS": points}, num_warps=warps)
         for points in (4, 1)
         for warps in (4, 8)
     ]
-    _lattice_sums_tuned = triton.autotune(configs=_CONFIGS, key=["coils", "count"])(
-        _lattice_sums
-    )
+    return triton.autotune(configs=configs, key=["coils", "count"])(_lattice_sums)
 
 
 def _sum_onto_lattice(arguments: tuple, points: int, coils: int, nodes: int) -> None:
     """Launch the lattice sums of ``coils`` coils: in the interpreter's configuration, or in the one autotuned for their shape on a CUDA device."""
     constants = {"ISOCHROMATS": 16, "COILS": 16, "NODES": nodes}
     if _interpreted():
-        grid = (triton.cdiv(points, 4), triton.cdiv(coils, 16))
-        _lattice_sums[grid](*arguments, POINTS=4, **constants)
+        programs = (triton.cdiv(points, 4), triton.cdiv(coils, 16))
+        _lattice_sums[programs](*arguments, POINTS=4, **constants)
         return
 
-    def grid(meta):
+    def tuned(meta):
         return (triton.cdiv(points, meta["POINTS"]), triton.cdiv(coils, 16))
 
-    _lattice_sums_tuned[grid](*arguments, **constants)
+    _tuned_lattice_sums()[tuned](*arguments, **constants)
 
 
 def _interpreted() -> bool:
