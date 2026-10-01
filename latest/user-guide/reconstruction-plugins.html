@@ -656,30 +656,33 @@ describe the encoded space and the receiver channels:</p>
 
 </pre></div>
 </div>
-<p>Three built-in plugins are complete reconstructions, each image scaled to the
-header’s largest stored value:</p>
+<p>Three shipped plugins are complete reconstructions, each image scaled to the
+header’s largest stored value. They are searched after every reconstruction
+plugin directory, so a sequence names one with <code class="docutils literal notranslate"><span class="pre">recon</span> <span class="pre">=</span> <span class="pre">&quot;nufft&quot;</span></code> and needs no
+file of its own:</p>
 <div class="pst-scrollable-table-container"><table class="table">
 <thead>
-<tr class="row-odd"><th class="head"><p>Module</p></th>
+<tr class="row-odd"><th class="head"><p>Plugin</p></th>
 <th class="head"><p>Reconstructs</p></th>
 </tr>
 </thead>
 <tbody>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">pulserver.recon.handlers.simplefft</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">simplefft</span></code></p></td>
 <td><p>A two-dimensional Cartesian FFT of the lines in arrival order, one image per slice</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">pulserver.recon.handlers.cartesian</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">cartesian</span></code></p></td>
 <td><p>A Cartesian FFT of the readouts placed by their encoding counters, partitions included; one image per slice, contrast, cardiac phase, set and repetition, averages summed</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">pulserver.recon.handlers.nufft</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">nufft</span></code></p></td>
 <td><p>Each coil’s least-squares fit of bartorch’s NUFFT to its samples, with a Tikhonov term; the same images as <code class="docutils literal notranslate"><span class="pre">cartesian</span></code>, for a radial or spiral trajectory or a stack of them. Needs the <code class="docutils literal notranslate"><span class="pre">coils</span></code> extra</p></td>
 </tr>
 </tbody>
 </table>
 </div>
-<p>Each combines its coils as a root sum of squares. A plugin file that reexports
-one, <code class="docutils literal notranslate"><span class="pre">from</span> <span class="pre">pulserver.recon.handlers.cartesian</span> <span class="pre">import</span> <span class="pre">PLUGIN</span></code>, names it for a
-sequence.</p>
+<p>Each combines its coils as a root sum of squares; a volume is sent as one
+image per partition. A plugin file that reexports one under another name,
+<code class="docutils literal notranslate"><span class="pre">from</span> <span class="pre">pulserver.recon.handlers.cartesian</span> <span class="pre">import</span> <span class="pre">PLUGIN</span></code>, is the same
+reconstruction.</p>
 </section>
 <section id="see-also">
 <h2>See also<a class="headerlink" href="#see-also" title="Link to this heading">#</a></h2>
