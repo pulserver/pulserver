@@ -577,6 +577,7 @@
         <span class="n">region</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">],</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">coil</span><span class="p">:</span> <span class="n">Coil</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">threads</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span>
+        <span class="n">device</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Isochromats</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">"""Return the phantom sampled as isochromats, for :func:`~pulserver.virtual.simulate`.</span>
 
@@ -608,6 +609,10 @@
 <span class="sd">            The scanner's coil the phantom is scanned with.</span>
 <span class="sd">        threads</span>
 <span class="sd">            Worker threads of the simulation; 0 for every core.</span>
+<span class="sd">        device</span>
+<span class="sd">            The device the windows read on a lattice are read on, as</span>
+<span class="sd">            :class:`~pulserver.virtual.Isochromats` takes it; the engine</span>
+<span class="sd">            reads them itself without one.</span>
 
 <span class="sd">        Raises</span>
 <span class="sd">        ------</span>
@@ -632,6 +637,7 @@
             <span class="n">transmit</span><span class="o">=</span><span class="kc">None</span> <span class="k">if</span> <span class="n">coil</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">coil</span><span class="o">.</span><span class="n">transmit</span><span class="p">(</span><span class="n">positions</span><span class="p">),</span>
             <span class="n">receive</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_received</span><span class="p">(</span><span class="n">own</span><span class="p">)</span> <span class="k">if</span> <span class="n">coil</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">coil</span><span class="o">.</span><span class="n">receive</span><span class="p">(</span><span class="n">positions</span><span class="p">),</span>
             <span class="n">threads</span><span class="o">=</span><span class="n">threads</span><span class="p">,</span>
+            <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
         <span class="p">)</span></div>
 
 

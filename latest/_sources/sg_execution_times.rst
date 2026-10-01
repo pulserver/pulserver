@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:05.933** total execution time for 3 files **from all galleries**:
+**00:05.975** total execution time for 3 files **from all galleries**:
 
 .. container::
 
@@ -33,11 +33,11 @@ Computation times
      - Time
      - Mem (MB)
    * - :ref:`sphx_glr_generated_gallery_01-protocol_01_protocol_resolution.py` (``../gallery/01-protocol/01_protocol_resolution.py``)
-     - 00:04.104
+     - 00:04.121
      - 0.0
    * - :ref:`sphx_glr_generated_gallery_03-reconstruction_01_enrichment.py` (``../gallery/03-reconstruction/01_enrichment.py``)
-     - 00:01.200
+     - 00:01.209
      - 0.0
    * - :ref:`sphx_glr_generated_gallery_02-scanner-ir_01_segmentation.py` (``../gallery/02-scanner-ir/01_segmentation.py``)
-     - 00:00.629
+     - 00:00.646
      - 0.0

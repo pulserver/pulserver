@@ -747,6 +747,12 @@ ends the command with status 1.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">--speed</span></code> plays the scan that many times as fast as a scanner, once the
 simulation is far enough ahead, writing the time left before it is to
 standard error; without it, the scan runs as fast as the simulation.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--device</span> <span class="pre">cuda</span></code> reads the ADC windows under a changing gradient, such as a
+spiral’s, on the CUDA device wherever the isochromats lie on a lattice
+along the axes the window’s k moves along, as they do for a phantom: a
+Triton kernel sums them onto the lattice and cuFINUFFT transforms the sums,
+both of which the <code class="docutils literal notranslate"><span class="pre">gpu</span></code> extra installs (<code class="docutils literal notranslate"><span class="pre">pip</span> <span class="pre">install</span> <span class="pre">'pulserver[gpu]'</span></code>).
+The rest of the scan is simulated on the CPU.</p></li>
 </ul>
 </section>
 <section id="prescribe-an-orientation">
@@ -808,7 +814,8 @@ coil; maps solved at another frequency than the Larmor frequency of the limits�
 pulses excite (<a class="reference internal" href="../generated/pulserver.virtual.excited.html#pulserver.virtual.excited" title="pulserver.virtual.excited"><code class="xref py py-func docutils literal notranslate"><span class="pre">excited()</span></code></a>), sampled <code class="docutils literal notranslate"><span class="pre">--spacing</span></code> apart,
 1 mm by default. Where they number more than <code class="docutils literal notranslate"><span class="pre">--max-isochromats</span></code>, two million
 by default, as over a whole head, the spacing is coarsened in steps of 1 mm
-until they do not.</p>
+until they do not. <code class="docutils literal notranslate"><span class="pre">--device</span></code> reads windows on a device as it does for
+<code class="docutils literal notranslate"><span class="pre">pulserver</span> <span class="pre">scan</span></code>.</p>
 <p>pulserver’s image runs such a console by default, with BrainWeb’s normal brain
 and the field maps solved in it, <code class="docutils literal notranslate"><span class="pre">--fields=/console/fields</span></code>, so that every exam
 is on BrainWeb and downloads nothing, and with bartorch for the non-Cartesian

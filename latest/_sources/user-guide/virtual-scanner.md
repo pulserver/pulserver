@@ -197,6 +197,12 @@ line, is written to standard output, and the scan clock to standard error.
 - `--speed` plays the scan that many times as fast as a scanner, once the
   simulation is far enough ahead, writing the time left before it is to
   standard error; without it, the scan runs as fast as the simulation.
+- `--device cuda` reads the ADC windows under a changing gradient, such as a
+  spiral's, on the CUDA device wherever the isochromats lie on a lattice
+  along the axes the window's k moves along, as they do for a phantom: a
+  Triton kernel sums them onto the lattice and cuFINUFFT transforms the sums,
+  both of which the `gpu` extra installs (`pip install 'pulserver[gpu]'`).
+  The rest of the scan is simulated on the CPU.
 
 ## Prescribe an orientation
 
@@ -262,7 +268,8 @@ A scan is simulated on the phantom's isochromats in the slabs its excitation
 pulses excite ({func}`~pulserver.virtual.excited`), sampled `--spacing` apart,
 1 mm by default. Where they number more than `--max-isochromats`, two million
 by default, as over a whole head, the spacing is coarsened in steps of 1 mm
-until they do not.
+until they do not. `--device` reads windows on a device as it does for
+`pulserver scan`.
 
 pulserver's image runs such a console by default, with BrainWeb's normal brain
 and the field maps solved in it, `--fields=/console/fields`, so that every exam

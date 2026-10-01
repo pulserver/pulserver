@@ -552,7 +552,7 @@ window under a gradient held throughout it.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>blocks</strong> (<em>sequence</em><em> of </em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict" title="(in Python v3.14)"><em>dict</em></a>) – One repetition, each block as <a class="reference internal" href="pulserver.virtual.Isochromats.play.html#pulserver.virtual.Isochromats.play" title="pulserver.virtual.Isochromats.play"><code class="xref py py-meth docutils literal notranslate"><span class="pre">play()</span></code></a>’s keyword arguments:
+<li><p><strong>blocks</strong> (<em>sequence</em><em> of </em><em>dict</em>) – One repetition, each block as <a class="reference internal" href="pulserver.virtual.Isochromats.play.html#pulserver.virtual.Isochromats.play" title="pulserver.virtual.Isochromats.play"><code class="xref py py-meth docutils literal notranslate"><span class="pre">play()</span></code></a>’s keyword arguments:
 <code class="docutils literal notranslate"><span class="pre">duration</span></code> and, where it plays them, <code class="docutils literal notranslate"><span class="pre">gradients</span></code>,
 <code class="docutils literal notranslate"><span class="pre">rotation</span></code>, <code class="docutils literal notranslate"><span class="pre">rf</span></code> and <code class="docutils literal notranslate"><span class="pre">adc</span></code>. Every window must be read under
 a gradient held throughout it, its samples on one side of any RF
@@ -574,7 +574,7 @@ any, each isochromat’s transverse magnetisation is turned by its
 own phase at the end of each repetition, and the magnetisation is
 not split.</p></li>
 <li><p><strong>system</strong> (<em>Opts</em><em>, </em><em>default=None</em>) – As <a class="reference internal" href="pulserver.virtual.Isochromats.play.html#pulserver.virtual.Isochromats.play" title="pulserver.virtual.Isochromats.play"><code class="xref py py-meth docutils literal notranslate"><span class="pre">play()</span></code></a> takes it.</p></li>
-<li><p><strong>tolerance</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.14)"><em>float</em></a><em>, </em><em>default=0.0</em>) – Accuracy of the samples, relative to the sum of the magnitudes of
+<li><p><strong>tolerance</strong> (<em>float</em><em>, </em><em>default=0.0</em>) – Accuracy of the samples, relative to the sum of the magnitudes of
 the terms each sums; exact to rounding at zero. Above zero, the
 windows are read by a kernel just wide enough for it, and from
 1e-4 on the magnetisation is carried in single precision. Where,
@@ -597,7 +597,7 @@ magnetisation at the start of the next to be played.</p>
 <dd class="field-odd"><p><a class="reference internal" href="pulserver.virtual.Repetitions.html#pulserver.virtual.Repetitions" title="pulserver.virtual.Repetitions">Repetitions</a></p>
 </dd>
 <dt class="field-even">Raises<span class="colon">:</span></dt>
-<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If the phases, ADC phases and areas do not describe one set of
+<dd class="field-even"><p><strong>ValueError</strong> – If the phases, ADC phases and areas do not describe one set of
     repetitions, a window is not read under a held gradient, or a
     block is one <a class="reference internal" href="pulserver.virtual.Isochromats.play.html#pulserver.virtual.Isochromats.play" title="pulserver.virtual.Isochromats.play"><code class="xref py py-meth docutils literal notranslate"><span class="pre">play()</span></code></a> would refuse.</p>
 </dd>

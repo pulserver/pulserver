@@ -533,7 +533,7 @@
 <dl class="py class">
 <dt class="sig sig-object py" id="pulserver.virtual.Isochromats">
 <span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">pulserver.virtual.</span></span><span class="sig-name descname"><span class="pre">Isochromats</span></span><a class="reference internal" href="../_modules/pulserver/virtual/_isochromats.html#Isochromats"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.virtual.Isochromats" title="Link to this definition">#</a></dt>
-<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/builtins/functions.html#object" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
 <p>Isochromats, and the magnetisation the Bloch equation carries from one block to the next.</p>
 <p>The magnetisation turns about the field <code class="docutils literal notranslate"><span class="pre">b</span> <span class="pre">=</span> <span class="pre">(Re</span> <span class="pre">b1,</span> <span class="pre">Im</span> <span class="pre">b1,</span> <span class="pre">bz)</span></code>, in Hz,
 in the frame rotating at the reference frequency, as the magnetic moment
@@ -571,10 +571,10 @@ within a tolerance instead where given one.</p>
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>positions</strong> (<em>array_like</em>) – <code class="docutils literal notranslate"><span class="pre">(n,</span> <span class="pre">3)</span></code> positions, in m, along the axes the gradients are played on.</p></li>
-<li><p><strong>proton_density</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.14)"><em>float</em></a><em> or </em><em>array_like</em><em>, </em><em>default=1.0</em>) – Equilibrium longitudinal magnetisation, per isochromat.</p></li>
-<li><p><strong>t1</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.14)"><em>float</em></a><em> or </em><em>array_like</em><em>, </em><em>default=inf</em>) – Relaxation times, in s; <code class="docutils literal notranslate"><span class="pre">inf</span></code> for none.</p></li>
-<li><p><strong>t2</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.14)"><em>float</em></a><em> or </em><em>array_like</em><em>, </em><em>default=inf</em>) – Relaxation times, in s; <code class="docutils literal notranslate"><span class="pre">inf</span></code> for none.</p></li>
-<li><p><strong>off_resonance</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.14)"><em>float</em></a><em> or </em><em>array_like</em><em>, </em><em>default=0.0</em>) – Precession frequency at rest, in Hz from the reference frequency:
+<li><p><strong>proton_density</strong> (<em>float</em><em> or </em><em>array_like</em><em>, </em><em>default=1.0</em>) – Equilibrium longitudinal magnetisation, per isochromat.</p></li>
+<li><p><strong>t1</strong> (<em>float</em><em> or </em><em>array_like</em><em>, </em><em>default=inf</em>) – Relaxation times, in s; <code class="docutils literal notranslate"><span class="pre">inf</span></code> for none.</p></li>
+<li><p><strong>t2</strong> (<em>float</em><em> or </em><em>array_like</em><em>, </em><em>default=inf</em>) – Relaxation times, in s; <code class="docutils literal notranslate"><span class="pre">inf</span></code> for none.</p></li>
+<li><p><strong>off_resonance</strong> (<em>float</em><em> or </em><em>array_like</em><em>, </em><em>default=0.0</em>) – Precession frequency at rest, in Hz from the reference frequency:
 field inhomogeneity and chemical shift together.</p></li>
 <li><p><strong>transmit</strong> (<em>array_like</em><em>, </em><em>default=None</em>) – Complex transmit sensitivities, <code class="docutils literal notranslate"><span class="pre">(n,)</span></code> or <code class="docutils literal notranslate"><span class="pre">(n,</span> <span class="pre">channels)</span></code>, scaling
 the field of each RF channel. By default one channel of unit
@@ -583,12 +583,23 @@ sensitivity, onto which the channels of a pTx pulse are summed.</p></li>
 one coil of unit sensitivity. A C-contiguous complex128 array, a
 memory-mapped one included, is read in place into the isochromats’
 own layout, so that it is never copied whole into memory.</p></li>
-<li><p><strong>threads</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em>, </em><em>default=0</em>) – Worker threads; 0 for every core.</p></li>
+<li><p><strong>threads</strong> (<em>int</em><em>, </em><em>default=0</em>) – Worker threads; 0 for every core.</p></li>
+<li><p><strong>device</strong> (<em>str</em><em> or </em><em>torch.device</em><em>, </em><em>default=None</em>) – A torch device the windows read on a lattice are summed and
+transformed on: a CUDA device, on which a Triton kernel sums them and
+cuFINUFFT transforms them, or the CPU, under Triton’s interpreter
+alone (<code class="docutils literal notranslate"><span class="pre">TRITON_INTERPRET=1</span></code> before triton is first imported), on
+which FINUFFT transforms them. Needs the <code class="docutils literal notranslate"><span class="pre">gpu</span></code> extra. By default
+the engine reads them itself.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Raises<span class="colon">:</span></dt>
-<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If a property has the wrong shape or is not finite, or a relaxation
-    time is not positive.</p>
+<dd class="field-even"><ul class="simple">
+<li><p><strong>ValueError</strong> – If a property has the wrong shape or is not finite, or a relaxation
+    time is not positive.</p></li>
+<li><p><strong>ImportError</strong> – If <code class="docutils literal notranslate"><span class="pre">device</span></code> is given without torch and Triton, or is a CUDA device
+    without cuFINUFFT.</p></li>
+<li><p><strong>RuntimeError</strong> – If <code class="docutils literal notranslate"><span class="pre">device</span></code> is the CPU outside Triton’s interpreter.</p></li>
+</ul>
 </dd>
 </dl>
 <p class="rubric">Notes</p>
@@ -632,13 +643,16 @@ to <code class="docutils literal notranslate"><span class="pre">+y</span></code>
 <tr class="row-odd"><td><p><a class="reference internal" href="pulserver.virtual.Isochromats.coils.html#pulserver.virtual.Isochromats.coils" title="pulserver.virtual.Isochromats.coils"><code class="xref py py-obj docutils literal notranslate"><span class="pre">coils</span></code></a></p></td>
 <td><p>Number of receive coils; one without receive sensitivities.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pulserver.virtual.Isochromats.elapsed.html#pulserver.virtual.Isochromats.elapsed" title="pulserver.virtual.Isochromats.elapsed"><code class="xref py py-obj docutils literal notranslate"><span class="pre">elapsed</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pulserver.virtual.Isochromats.device_windows.html#pulserver.virtual.Isochromats.device_windows" title="pulserver.virtual.Isochromats.device_windows"><code class="xref py py-obj docutils literal notranslate"><span class="pre">device_windows</span></code></a></p></td>
+<td><p>Of <code class="xref py py-attr docutils literal notranslate"><span class="pre">lattice_windows</span></code>, those read on the <code class="docutils literal notranslate"><span class="pre">device</span></code>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.virtual.Isochromats.elapsed.html#pulserver.virtual.Isochromats.elapsed" title="pulserver.virtual.Isochromats.elapsed"><code class="xref py py-obj docutils literal notranslate"><span class="pre">elapsed</span></code></a></p></td>
 <td><p>Time played since construction or the last <code class="xref py py-meth docutils literal notranslate"><span class="pre">reset()</span></code>, in s.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.virtual.Isochromats.lattice_windows.html#pulserver.virtual.Isochromats.lattice_windows" title="pulserver.virtual.Isochromats.lattice_windows"><code class="xref py py-obj docutils literal notranslate"><span class="pre">lattice_windows</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pulserver.virtual.Isochromats.lattice_windows.html#pulserver.virtual.Isochromats.lattice_windows" title="pulserver.virtual.Isochromats.lattice_windows"><code class="xref py py-obj docutils literal notranslate"><span class="pre">lattice_windows</span></code></a></p></td>
 <td><p>ADC windows read on a lattice by FINUFFT since construction.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pulserver.virtual.Isochromats.magnetization.html#pulserver.virtual.Isochromats.magnetization" title="pulserver.virtual.Isochromats.magnetization"><code class="xref py py-obj docutils literal notranslate"><span class="pre">magnetization</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.virtual.Isochromats.magnetization.html#pulserver.virtual.Isochromats.magnetization" title="pulserver.virtual.Isochromats.magnetization"><code class="xref py py-obj docutils literal notranslate"><span class="pre">magnetization</span></code></a></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">(n,</span> <span class="pre">3)</span></code> magnetisation, a copy; assigning replaces it.</p></td>
 </tr>
 </tbody>

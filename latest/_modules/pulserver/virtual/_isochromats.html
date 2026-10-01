@@ -636,12 +636,24 @@
 <span class="sd">        own layout, so that it is never copied whole into memory.</span>
 <span class="sd">    threads : int, default=0</span>
 <span class="sd">        Worker threads; 0 for every core.</span>
+<span class="sd">    device : str or torch.device, default=None</span>
+<span class="sd">        A torch device the windows read on a lattice are summed and</span>
+<span class="sd">        transformed on: a CUDA device, on which a Triton kernel sums them and</span>
+<span class="sd">        cuFINUFFT transforms them, or the CPU, under Triton's interpreter</span>
+<span class="sd">        alone (``TRITON_INTERPRET=1`` before triton is first imported), on</span>
+<span class="sd">        which FINUFFT transforms them. Needs the ``gpu`` extra. By default</span>
+<span class="sd">        the engine reads them itself.</span>
 
 <span class="sd">    Raises</span>
 <span class="sd">    ------</span>
 <span class="sd">    ValueError</span>
 <span class="sd">        If a property has the wrong shape or is not finite, or a relaxation</span>
 <span class="sd">        time is not positive.</span>
+<span class="sd">    ImportError</span>
+<span class="sd">        If ``device`` is given without torch and Triton, or is a CUDA device</span>
+<span class="sd">        without cuFINUFFT.</span>
+<span class="sd">    RuntimeError</span>
+<span class="sd">        If ``device`` is the CPU outside Triton's interpreter.</span>
 
 <span class="sd">    Notes</span>
 <span class="sd">    -----</span>
@@ -675,6 +687,7 @@
         <span class="n">transmit</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">receive</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">threads</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span>
+        <span class="n">device</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="n">positions</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">positions</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">positions</span><span class="o">.</span><span class="n">ndim</span> <span class="o">!=</span> <span class="mi">2</span> <span class="ow">or</span> <span class="n">positions</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">!=</span> <span class="mi">3</span><span class="p">:</span>
@@ -690,6 +703,12 @@
             <span class="n">_sensitivities</span><span class="p">(</span><span class="n">receive</span><span class="p">,</span> <span class="n">count</span><span class="p">,</span> <span class="s2">"receive"</span><span class="p">),</span>
             <span class="nb">int</span><span class="p">(</span><span class="n">threads</span><span class="p">),</span>
         <span class="p">)</span>
+        <span class="k">if</span> <span class="n">device</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="kn">from</span><span class="w"> </span><span class="nn">._device</span><span class="w"> </span><span class="kn">import</span> <span class="n">LatticeDevice</span>
+
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">device</span><span class="p">,</span> <span class="n">LatticeDevice</span><span class="p">):</span>
+                <span class="n">device</span> <span class="o">=</span> <span class="n">LatticeDevice</span><span class="p">(</span><span class="n">device</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_native</span><span class="o">.</span><span class="n">use_lattice_device</span><span class="p">(</span><span class="n">device</span><span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__len__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_native</span><span class="o">.</span><span class="n">size</span>
@@ -708,6 +727,11 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">lattice_windows</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">"""ADC windows read on a lattice by FINUFFT since construction."""</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_native</span><span class="o">.</span><span class="n">lattice_windows</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">device_windows</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Of :attr:`lattice_windows`, those read on the ``device``."""</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_native</span><span class="o">.</span><span class="n">device_windows</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">magnetization</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>

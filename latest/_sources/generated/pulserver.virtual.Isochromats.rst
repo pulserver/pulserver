@@ -27,6 +27,7 @@
    :nosignatures:
 
    ~Isochromats.coils
+   ~Isochromats.device_windows
    ~Isochromats.elapsed
    ~Isochromats.lattice_windows
    ~Isochromats.magnetization

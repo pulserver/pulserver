@@ -137,6 +137,16 @@ the lattice points, rather than to the isochromats times the coils and the
 samples; a window is read this way where that costs less. Either way, the
 window leaves each isochromat as it stands at the last sample.
 
+Isochromats given a CUDA device read every such window there instead. The
+engine finds the lattice, the Chebyshev points, the basis and each sample's
+coordinates, as above, and hands the device the window's transverse
+magnetisation; a Triton kernel forms the lattice sums $S_{cl}(q)$ for a block
+of coils at a time, and cuFINUFFT transforms them, planned as FINUFFT is, in
+the same precision. The sensitivities are held on the device in the order of
+the lattice points from the first window on. The engine takes each
+isochromat to the last sample itself, so a window leaves the same state
+wherever it is read.
+
 ## RF pulses
 
 During an RF pulse $b_1$ varies, and the field no longer points along $z$. The

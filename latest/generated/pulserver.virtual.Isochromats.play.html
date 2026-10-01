@@ -540,7 +540,7 @@ times the events amount to can be given instead.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>duration</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.14)"><em>float</em></a>) – Block duration, in s.</p></li>
+<li><p><strong>duration</strong> (<em>float</em>) – Block duration, in s.</p></li>
 <li><p><strong>gradients</strong> (<em>sequence</em><em>, </em><em>default=None</em>) – Three entries, for the x, y and z axes, each <code class="docutils literal notranslate"><span class="pre">None</span></code> or a
 <code class="docutils literal notranslate"><span class="pre">(2,</span> <span class="pre">m)</span></code> array of corner times over gradient amplitude, in Hz/m.
 The gradient is linear between the corners and zero outside them.</p></li>
@@ -549,7 +549,7 @@ the axes of the positions, a reflection allowed. Each axis plays
 the sum its row weights, exact on the union of the corners, with
 a gradient’s step from or to zero at its first or last corner
 kept as a step.</p></li>
-<li><p><strong>rf</strong> (<em>RF event</em><em> or </em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#tuple" title="(in Python v3.14)"><em>tuple</em></a><em>, </em><em>default=None</em>) – An RF event: <code class="docutils literal notranslate"><span class="pre">signal</span></code>, in Hz, at the times <code class="docutils literal notranslate"><span class="pre">t</span></code> from the pulse’s
+<li><p><strong>rf</strong> (<em>RF event</em><em> or </em><em>tuple</em><em>, </em><em>default=None</em>) – An RF event: <code class="docutils literal notranslate"><span class="pre">signal</span></code>, in Hz, at the times <code class="docutils literal notranslate"><span class="pre">t</span></code> from the pulse’s
 start, which is <code class="docutils literal notranslate"><span class="pre">delay</span></code> into the block, with its phase and
 frequency offsets; a dynamic pTx pulse holds its channels one
 after another over one time base. Or the transverse field <code class="docutils literal notranslate"><span class="pre">b1</span></code>,
@@ -565,7 +565,7 @@ inside the RF pulse.</p></li>
 <li><p><strong>system</strong> (<em>Opts</em><em>, </em><em>default=None</em>) – The RF raster, over whose steps an RF event with a time shape is
 held, and the gamma and B0 the events’ ppm offsets are resolved
 at; the default system when None.</p></li>
-<li><p><strong>tolerance</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.14)"><em>float</em></a><em>, </em><em>default=0.0</em>) – Above zero, an ADC window read by a transform is read to within
+<li><p><strong>tolerance</strong> (<em>float</em><em>, </em><em>default=0.0</em>) – Above zero, an ADC window read by a transform is read to within
 it, relative to the sum of the magnitudes of the terms each sample
 sums.</p></li>
 </ul>
@@ -579,7 +579,7 @@ event.</p>
 <dd class="field-odd"><p>NDArray[np.complex128]</p>
 </dd>
 <dt class="field-even">Raises<span class="colon">:</span></dt>
-<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If an event does not fit in the block, an ADC sample falls inside
+<dd class="field-even"><p><strong>ValueError</strong> – If an event does not fit in the block, an ADC sample falls inside
     the RF pulse, the RF channels do not match the transmit
     sensitivities, or an event or the rotation is malformed.</p>
 </dd>
