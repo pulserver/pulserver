@@ -1,5 +1,6 @@
 """The console image's entry point: its console, with the options given after the image's name added to its own, or another pulserver command in the console's place."""
 
+import ipaddress
 import os
 import subprocess
 from pathlib import Path
@@ -39,12 +40,8 @@ def test_the_image_serves_its_console_without_arguments(run):
     assert command == "console"
     assert args.plugins == [Path("/console/user/plugins"), Path("/console/plugins")]
     assert args.recon_plugins == [Path("/console/user/recon"), Path("/console/recon")]
-    assert (args.fields, args.host, args.port, args.speed) == (
-        Path("/console/fields"),
-        "0.0.0.0",  # noqa: S104 -- what the image's console listens on
-        8765,
-        1.0,
-    )
+    assert (args.fields, args.port, args.speed) == (Path("/console/fields"), 8765, 1.0)
+    assert ipaddress.ip_address(args.host).is_unspecified
 
 
 def test_options_after_the_image_s_name_follow_its_console_s_own(run):
