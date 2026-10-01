@@ -400,8 +400,8 @@ def test_a_design_found_again_is_used_again(store):
 def test_pruning_to_a_size_keeps_the_most_recently_used(store):
     designs = [_stored(store, {"TE": te})[0] for te in (8000, 9000, 10000)]
     now = time.time()
-    for age, design in zip((3, 2, 1), designs, strict=True):
-        os.utime(store.directory(design) / "manifest.json", (now - age * 60,) * 2)
+    for age, design in zip((4, 3, 2), designs, strict=True):
+        os.utime(store.directory(design) / "manifest.json", (now - age * 86400,) * 2)
     budget = sum(p.stat().st_size for p in store.directory(designs[2]).iterdir())
     assert store.prune(max_bytes=budget, now=now) == designs[:2]
     assert list(store) == [designs[2]]
@@ -413,6 +413,69 @@ def test_pruning_removes_a_stage_a_process_left(store):
     os.utime(stage, (now - 7200,) * 2)
     store.prune(now=now)
     assert not stage.exists()
+
+
+def test_pruning_keeps_a_stage_younger_than_an_hour(store):
+    """A stage expires by its age, so no reused process id keeps or removes one."""
+    stage = store.stage()
+    store.prune(now=time.time() + 600)
+    assert stage.is_dir()
+
+
+def test_pruning_keeps_a_design_used_within_the_day_whatever_the_limits(store):
+    """A cleaner cannot remove a design a scan may be playing or reconstructing."""
+    design, _ = _stored(store, {"TE": 8000})
+    assert store.prune(max_age=0, max_bytes=0) == []
+    assert list(store) == [design]
+
+
+def test_a_design_being_written_is_invisible_until_it_is_whole(store):
+    """A reader on a shared filesystem sees no directory, or the whole design."""
+    identity = design_identity("tiny", LIMITS, {"TE": 8000})
+    staged = store.stage()
+    (staged / "sequence.seq").write_bytes(b"designed")
+    assert store.find(identity) is None
+    assert list(store) == []
+    assert not store.directory(design_id(identity)).exists()
+    design = store.commit(identity, staged, {})
+    assert store.find(identity) == design
+
+
+def test_a_stored_design_holds_the_files_its_manifest_records_and_no_other(store):
+    design = generated(generate(store, "gre2d", GRE))
+    files = {p.name for p in store.directory(design).iterdir()}
+    assert files == {"manifest.json", *store.manifest(design)["files"]}
+
+
+def test_two_processes_designing_one_protocol_at_once_store_it_once(
+    tmp_path, limits_file
+):
+    args = [
+        "--plugins",
+        str(PLUGINS),
+        "--plugin",
+        "tiny",
+        "--limits",
+        str(limits_file),
+        "--store",
+        str(tmp_path / "designs"),
+    ]
+    command = [sys.executable, "-m", "pulserver._cli", "design", "generate", *args]
+    running = [
+        subprocess.Popen(
+            command,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        for _ in range(2)
+    ]
+    replies = [p.communicate(block({"TE": 2500})) for p in running]
+    assert [p.returncode for p in running] == [0, 0], replies
+    assert replies[0][0] == replies[1][0]
+    design = replies[0][0].split()[1]
+    assert [p.name for p in (tmp_path / "designs").iterdir()] == [design]
 
 
 def _command(*args, stdin=""):
@@ -454,7 +517,7 @@ def test_the_command_replies_on_standard_output_with_its_exit_status(
     assert refused.returncode == 1
     assert refused.stdout.startswith("ERROR ")
     pruned = _command("prune", *store, "--max-bytes", "0")
-    assert (pruned.returncode, pruned.stdout) == (0, "PRUNED 1\n")
+    assert (pruned.returncode, pruned.stdout) == (0, "PRUNED 0\n")
 
 
 def test_a_listing_needs_neither_limits_nor_a_store():

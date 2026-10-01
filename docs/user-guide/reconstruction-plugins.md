@@ -135,7 +135,7 @@ describe the encoded space and the receiver channels:
 
 ```
 
-Three shipped plugins are complete reconstructions, each image scaled to the
+Four shipped plugins are complete reconstructions, each image scaled to the
 header's largest stored value. They are searched after every reconstruction
 plugin directory, so a sequence names one with `recon = "nufft"` and needs no
 file of its own:
@@ -145,8 +145,9 @@ file of its own:
 | `simplefft` | A two-dimensional Cartesian FFT of the lines in arrival order, one image per slice |
 | `cartesian` | A Cartesian FFT of the readouts placed by their encoding counters, partitions included; one image per slice, contrast, cardiac phase, set and repetition, averages summed |
 | `nufft` | Each coil's least-squares fit of bartorch's NUFFT to its samples, with a Tikhonov term; the same images as `cartesian`, for a radial or spiral trajectory or a stack of them. Needs the `coils` extra |
+| `pics` | `cartesian`'s images, each solved as `bart ecalib -m 1` and `bart pics -R W` with bartorch, for undersampled phase encodes with a fully sampled centre. Needs the `coils` extra |
 
-Each combines its coils as a root sum of squares; a volume is sent as one
+All but `pics` combine their coils as a root sum of squares. A volume is sent as one
 image per partition. A plugin file that reexports one under another name,
 `from pulserver.recon.handlers.cartesian import PLUGIN`, is the same
 reconstruction.

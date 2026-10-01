@@ -26,6 +26,8 @@ BUNDLE_LIMIT = 1 << 31
 _IDENTITY = re.compile(r"[0-9a-f]{64}")
 # A stage older than this is left by a process that ended mid-design.
 _STALE_STAGE = 3600.0
+# A design used more recently than this may be playing or reconstructing.
+_IN_USE = 86400.0
 
 
 def design_identity(
@@ -248,10 +250,10 @@ class DesignStore:
 
         A design is used when it is committed or found again. Designs unused
         for longer than ``max_age`` seconds are removed, then the least
-        recently used until the store holds at most ``max_bytes``. Stages
-        left by a process that ended mid-design are removed as well. A
-        design a series still needs must not be pruned: the reconstruction
-        side reads it by identifier.
+        recently used until the store holds at most ``max_bytes``. A design
+        used within the last day is kept whatever the limits, since a series
+        may still be playing or reconstructing it. Stages older than an hour,
+        left by a process that ended mid-design, are removed as well.
         """
         now = time.time() if now is None else now
         for stage in self.root.glob(".stage-*"):
@@ -264,7 +266,7 @@ class DesignStore:
         for last, design in used:
             too_old = max_age is not None and now - last > max_age
             too_big = max_bytes is not None and total > max_bytes
-            if not (too_old or too_big):
+            if now - last < _IN_USE or not (too_old or too_big):
                 continue
             shutil.rmtree(self.root / design, ignore_errors=True)
             total -= sizes[design]
