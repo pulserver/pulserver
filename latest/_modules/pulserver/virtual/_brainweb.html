@@ -491,15 +491,20 @@
 <span class="c1">#: The field, in T, at which BrainWeb's simulator gives :data:`TISSUES`.</span>
 <span class="n">TISSUES_FIELD_T</span> <span class="o">=</span> <span class="mf">1.5</span>
 
-<span class="c1">#: Exponents ``b`` of the power laws ``T1 ~ B0**b`` that white matter and grey</span>
-<span class="c1">#: matter follow from 0.2 T to 7 T (Rooney et al., Magn Reson Med 57:308,</span>
-<span class="c1">#: 2007), by the tissue classes BrainWeb gives their relaxation. CSF's T1 does</span>
-<span class="c1">#: not change with the field there; the other classes keep BrainWeb's.</span>
+<span class="c1">#: Exponents ``b`` of the power laws ``T1 ~ B0**b``, by the tissue classes</span>
+<span class="c1">#: BrainWeb gives their relaxation: those white matter and grey matter follow</span>
+<span class="c1">#: from 0.2 T to 7 T (Rooney et al., Magn Reson Med 57:308, 2007), and those</span>
+<span class="c1">#: Bottomley et al. fit to skeletal muscle and adipose tissue from 1 MHz to</span>
+<span class="c1">#: 100 MHz (Med Phys 11:425, 1984). CSF's T1 does not change with the field</span>
+<span class="c1">#: from 0.2 T to 7 T, and neither does that of skin, to which BrainWeb gives</span>
+<span class="c1">#: CSF's relaxation; skull and background hold no protons.</span>
 <span class="n">T1_EXPONENTS</span> <span class="o">=</span> <span class="p">{</span>
     <span class="s2">"white matter"</span><span class="p">:</span> <span class="mf">0.382</span><span class="p">,</span>
     <span class="s2">"connective tissue"</span><span class="p">:</span> <span class="mf">0.382</span><span class="p">,</span>
     <span class="s2">"grey matter"</span><span class="p">:</span> <span class="mf">0.376</span><span class="p">,</span>
     <span class="s2">"glial matter"</span><span class="p">:</span> <span class="mf">0.376</span><span class="p">,</span>
+    <span class="s2">"muscle and skin"</span><span class="p">:</span> <span class="mf">0.4203</span><span class="p">,</span>
+    <span class="s2">"fat"</span><span class="p">:</span> <span class="mf">0.1743</span><span class="p">,</span>
 <span class="p">}</span>
 
 <span class="c1">#: Volume magnetic susceptibility, in ppm (SI), of air, and of water, which</span>

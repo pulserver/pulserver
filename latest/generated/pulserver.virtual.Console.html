@@ -571,6 +571,14 @@ far enough ahead of its clock; as fast as it is simulated without it.</p></li>
 <li><p><strong>device</strong> – Device a scan’s ADC windows outside runs are read on, as
 <a class="reference internal" href="pulserver.virtual.Isochromats.html#pulserver.virtual.Isochromats" title="pulserver.virtual.Isochromats"><code class="xref py py-class docutils literal notranslate"><span class="pre">Isochromats</span></code></a> takes it; the engine reads
 them itself without one.</p></li>
+<li><p><strong>spins</strong> – Isochromats per voxel, spread over the T2’ line of its tissue.</p></li>
+<li><p><strong>voxel</strong> – Where a voxel’s isochromats lie: <code class="docutils literal notranslate"><span class="pre">&quot;point&quot;</span></code>, at its centre, or
+<code class="docutils literal notranslate"><span class="pre">&quot;box&quot;</span></code>, over it, as the phantom’s <code class="docutils literal notranslate"><span class="pre">isochromats</span></code> places them.</p></li>
+<li><p><strong>diffusion</strong> – Whether BrainWeb’s tissue classes diffuse, as
+<a class="reference internal" href="pulserver.virtual.BrainWeb.DIFFUSION.html#pulserver.virtual.BrainWeb.DIFFUSION" title="pulserver.virtual.BrainWeb.DIFFUSION"><code class="xref py py-attr docutils literal notranslate"><span class="pre">DIFFUSION</span></code></a> gives them.</p></li>
+<li><p><strong>motion</strong> – The subject’s motion, as <a class="reference internal" href="pulserver.virtual.Isochromats.html#pulserver.virtual.Isochromats" title="pulserver.virtual.Isochromats"><code class="xref py py-class docutils literal notranslate"><span class="pre">Isochromats</span></code></a>
+takes it, on the clock of each scan; at rest without one. Moving
+isochromats play every block alone.</p></li>
 </ul>
 </dd>
 </dl>

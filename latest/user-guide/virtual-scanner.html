@@ -746,6 +746,11 @@ the Lorentzian line of its tissue’s T2′, at its centre or, with
 its <code class="docutils literal notranslate"><span class="pre">t2_prime</span></code>, in s, and <code class="docutils literal notranslate"><span class="pre">diffusion</span></code>, in m²/s. Isochromats that diffuse are
 played block by block, and a voxel’s diffusion attenuation needs many spins
 to be resolved.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--nod</span> <span class="pre">DEGREES</span> <span class="pre">PERIOD</span></code> turns the subject about the physical x axis through
+the isocentre by <code class="docutils literal notranslate"><span class="pre">DEGREES</span></code> times the sine of 2π t / <code class="docutils literal notranslate"><span class="pre">PERIOD</span></code>, and
+<code class="docutils literal notranslate"><span class="pre">--drift</span> <span class="pre">X</span> <span class="pre">Y</span> <span class="pre">Z</span></code> translates it along the physical axes, in mm/min, t being the
+time from the start of the scan (<a class="reference internal" href="../generated/pulserver.virtual.RigidMotion.html#pulserver.virtual.RigidMotion" title="pulserver.virtual.RigidMotion"><code class="xref py py-class docutils literal notranslate"><span class="pre">RigidMotion</span></code></a>).
+Isochromats that move are played block by block.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">--recon</span></code> streams the series to a reconstruction proxy, which looks the
 design up in its store: give that store as <code class="docutils literal notranslate"><span class="pre">--store</span></code>, or the proxy’s design
 intake as <code class="docutils literal notranslate"><span class="pre">--push</span></code>. The images go to <code class="docutils literal notranslate"><span class="pre">images.h5</span></code> in <code class="docutils literal notranslate"><span class="pre">--output</span></code>, the DICOM
@@ -824,8 +829,9 @@ coil; maps solved at another frequency than the Larmor frequency of the limits�
 pulses excite (<a class="reference internal" href="../generated/pulserver.virtual.excited.html#pulserver.virtual.excited" title="pulserver.virtual.excited"><code class="xref py py-func docutils literal notranslate"><span class="pre">excited()</span></code></a>), sampled <code class="docutils literal notranslate"><span class="pre">--spacing</span></code> apart,
 1 mm by default. Where they number more than <code class="docutils literal notranslate"><span class="pre">--max-isochromats</span></code>, two million
 by default, as over a whole head, the spacing is coarsened in steps of 1 mm
-until they do not. <code class="docutils literal notranslate"><span class="pre">--device</span></code> reads windows on a device as it does for
-<code class="docutils literal notranslate"><span class="pre">pulserver</span> <span class="pre">scan</span></code>.</p>
+until they do not, counting <code class="docutils literal notranslate"><span class="pre">--spins</span></code> isochromats per voxel. <code class="docutils literal notranslate"><span class="pre">--device</span></code>,
+<code class="docutils literal notranslate"><span class="pre">--spins</span></code>, <code class="docutils literal notranslate"><span class="pre">--voxel</span></code>, <code class="docutils literal notranslate"><span class="pre">--diffusion</span></code>, <code class="docutils literal notranslate"><span class="pre">--nod</span></code> and <code class="docutils literal notranslate"><span class="pre">--drift</span></code> act as they do for
+<code class="docutils literal notranslate"><span class="pre">pulserver</span> <span class="pre">scan</span></code>; a subject’s motion starts anew with each scan.</p>
 <p>pulserver’s image runs such a console by default, with BrainWeb’s normal brain
 and the field maps solved in it, <code class="docutils literal notranslate"><span class="pre">--fields=/console/fields</span></code>, so that every exam
 is on BrainWeb and downloads nothing, and with bartorch for the non-Cartesian

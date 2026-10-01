@@ -469,6 +469,7 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">.._plugins</span><span class="w"> </span><span class="kn">import</span> <span class="n">PluginPath</span><span class="p">,</span> <span class="n">directories</span><span class="p">,</span> <span class="n">names</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">._command</span><span class="w"> </span><span class="kn">import</span> <span class="n">motion_arguments</span><span class="p">,</span> <span class="n">subject_motion</span>
 
 <span class="c1">#: The design calls a console forwards, answered as ``pulserver design`` answers them.</span>
 <span class="n">DESIGN_CALLS</span> <span class="o">=</span> <span class="p">(</span><span class="s2">"list"</span><span class="p">,</span> <span class="s2">"validate"</span><span class="p">,</span> <span class="s2">"generate"</span><span class="p">,</span> <span class="s2">"import"</span><span class="p">)</span>
@@ -538,6 +539,18 @@
 <span class="sd">        Device a scan's ADC windows outside runs are read on, as</span>
 <span class="sd">        :class:`~pulserver.virtual.Isochromats` takes it; the engine reads</span>
 <span class="sd">        them itself without one.</span>
+<span class="sd">    spins</span>
+<span class="sd">        Isochromats per voxel, spread over the T2' line of its tissue.</span>
+<span class="sd">    voxel</span>
+<span class="sd">        Where a voxel's isochromats lie: ``"point"``, at its centre, or</span>
+<span class="sd">        ``"box"``, over it, as the phantom's ``isochromats`` places them.</span>
+<span class="sd">    diffusion</span>
+<span class="sd">        Whether BrainWeb's tissue classes diffuse, as</span>
+<span class="sd">        :attr:`~pulserver.virtual.BrainWeb.DIFFUSION` gives them.</span>
+<span class="sd">    motion</span>
+<span class="sd">        The subject's motion, as :class:`~pulserver.virtual.Isochromats`</span>
+<span class="sd">        takes it, on the clock of each scan; at rest without one. Moving</span>
+<span class="sd">        isochromats play every block alone.</span>
 <span class="sd">    """</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
@@ -555,6 +568,10 @@
         <span class="n">fields</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">speed</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">device</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">spins</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
+        <span class="n">voxel</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"point"</span><span class="p">,</span>
+        <span class="n">diffusion</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">motion</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="kn">from</span><span class="w"> </span><span class="nn">..host._blocks</span><span class="w"> </span><span class="kn">import</span> <span class="n">parse_limits</span>
         <span class="kn">from</span><span class="w"> </span><span class="nn">..proxy</span><span class="w"> </span><span class="kn">import</span> <span class="n">LocalReconstruction</span>
@@ -578,6 +595,10 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">max_isochromats</span> <span class="o">=</span> <span class="n">max_isochromats</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">speed</span> <span class="o">=</span> <span class="n">speed</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">device</span> <span class="o">=</span> <span class="n">device</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">spins</span> <span class="o">=</span> <span class="n">spins</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">voxel</span> <span class="o">=</span> <span class="n">voxel</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">diffusion</span> <span class="o">=</span> <span class="n">diffusion</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">motion</span> <span class="o">=</span> <span class="n">motion</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">field_t</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">parse_limits</span><span class="p">(</span><span class="n">limits</span><span class="p">)[</span><span class="s2">"B0"</span><span class="p">])</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">fields</span> <span class="o">=</span> <span class="kc">None</span> <span class="k">if</span> <span class="n">fields</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">Path</span><span class="p">(</span><span class="n">fields</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_coils</span> <span class="o">=</span> <span class="n">coils</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">fields</span><span class="p">,</span> <span class="n">field_t</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">field_t</span><span class="p">)</span>
@@ -732,6 +753,10 @@
                 <span class="n">field_t</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">field_t</span><span class="p">,</span>
                 <span class="n">region</span><span class="o">=</span><span class="n">region</span><span class="p">,</span>
                 <span class="n">coil</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">coil</span><span class="p">,</span>
+                <span class="n">spins</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">spins</span><span class="p">,</span>
+                <span class="n">voxel</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">voxel</span><span class="p">,</span>
+                <span class="n">motion</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">motion</span><span class="p">,</span>
+                <span class="n">seed</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
                 <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
             <span class="p">)</span>
         <span class="k">try</span><span class="p">:</span>
@@ -756,7 +781,9 @@
             <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">spacing</span>
         <span class="k">for</span> <span class="n">step</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">_COARSER</span><span class="p">):</span>
             <span class="n">spacing</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">spacing</span> <span class="o">+</span> <span class="mf">1e-3</span> <span class="o">*</span> <span class="n">step</span>
-            <span class="n">kept</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">phantom</span><span class="o">.</span><span class="n">count</span><span class="p">(</span><span class="n">spacing</span><span class="p">,</span> <span class="n">field_t</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">field_t</span><span class="p">,</span> <span class="n">region</span><span class="o">=</span><span class="n">region</span><span class="p">)</span>
+            <span class="n">kept</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">phantom</span><span class="o">.</span><span class="n">count</span><span class="p">(</span>
+                <span class="n">spacing</span><span class="p">,</span> <span class="n">field_t</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">field_t</span><span class="p">,</span> <span class="n">region</span><span class="o">=</span><span class="n">region</span><span class="p">,</span> <span class="n">spins</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">spins</span>
+            <span class="p">)</span>
             <span class="k">if</span> <span class="n">kept</span> <span class="o">&lt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_isochromats</span><span class="p">:</span>
                 <span class="k">return</span> <span class="n">spacing</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
@@ -786,7 +813,9 @@
 
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">fields</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">subject</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="o">==</span> <span class="s2">"brainweb"</span><span class="p">:</span>
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_brainweb</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_brainweb</span> <span class="o">=</span> <span class="n">BrainWeb</span><span class="p">()</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_brainweb</span> <span class="o">=</span> <span class="n">BrainWeb</span><span class="p">(</span>
+                    <span class="n">diffusion</span><span class="o">=</span><span class="n">BrainWeb</span><span class="o">.</span><span class="n">DIFFUSION</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">diffusion</span> <span class="k">else</span> <span class="kc">None</span>
+                <span class="p">)</span>
             <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_brainweb</span>
         <span class="k">return</span> <span class="n">default_phantom</span><span class="p">()</span>
 
@@ -1110,6 +1139,25 @@
         <span class="n">help</span><span class="o">=</span><span class="s2">"torch device the ADC windows outside runs are read on, such as "</span>
         <span class="s2">"cuda (the gpu extra); the engine reads them without it"</span><span class="p">,</span>
     <span class="p">)</span>
+    <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span>
+        <span class="s2">"--spins"</span><span class="p">,</span>
+        <span class="nb">type</span><span class="o">=</span><span class="nb">int</span><span class="p">,</span>
+        <span class="n">default</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+        <span class="n">help</span><span class="o">=</span><span class="s2">"isochromats per voxel, spread over the T2' line of its tissue"</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span>
+        <span class="s2">"--voxel"</span><span class="p">,</span>
+        <span class="n">choices</span><span class="o">=</span><span class="p">(</span><span class="s2">"point"</span><span class="p">,</span> <span class="s2">"box"</span><span class="p">),</span>
+        <span class="n">default</span><span class="o">=</span><span class="s2">"point"</span><span class="p">,</span>
+        <span class="n">help</span><span class="o">=</span><span class="s2">"where a voxel's isochromats lie: at its centre, or over it, "</span>
+        <span class="s2">"--spins a square number for the vials and a cube for BrainWeb"</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span>
+        <span class="s2">"--diffusion"</span><span class="p">,</span>
+        <span class="n">action</span><span class="o">=</span><span class="s2">"store_true"</span><span class="p">,</span>
+        <span class="n">help</span><span class="o">=</span><span class="s2">"BrainWeb's tissue classes diffuse, as BrainWeb.DIFFUSION gives them"</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">motion_arguments</span><span class="p">(</span><span class="n">parser</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">parser</span>
 
 
@@ -1133,6 +1181,10 @@
         <span class="n">fields</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">fields</span><span class="p">,</span>
         <span class="n">speed</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">speed</span><span class="p">,</span>
         <span class="n">device</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+        <span class="n">spins</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">spins</span><span class="p">,</span>
+        <span class="n">voxel</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">voxel</span><span class="p">,</span>
+        <span class="n">diffusion</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">diffusion</span><span class="p">,</span>
+        <span class="n">motion</span><span class="o">=</span><span class="n">subject_motion</span><span class="p">(</span><span class="n">args</span><span class="p">),</span>
     <span class="p">)</span>
     <span class="k">with</span> <span class="n">contextlib</span><span class="o">.</span><span class="n">suppress</span><span class="p">(</span><span class="ne">KeyboardInterrupt</span><span class="p">):</span>
         <span class="n">asyncio</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">serve</span><span class="p">(</span><span class="n">console</span><span class="p">,</span> <span class="n">args</span><span class="o">.</span><span class="n">host</span><span class="p">,</span> <span class="n">args</span><span class="o">.</span><span class="n">port</span><span class="p">,</span> <span class="n">args</span><span class="o">.</span><span class="n">origins</span><span class="p">))</span>

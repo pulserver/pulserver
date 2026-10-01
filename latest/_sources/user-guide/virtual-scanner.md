@@ -196,6 +196,11 @@ line, is written to standard output, and the scan clock to standard error.
   its `t2_prime`, in s, and `diffusion`, in m²/s. Isochromats that diffuse are
   played block by block, and a voxel's diffusion attenuation needs many spins
   to be resolved.
+- `--nod DEGREES PERIOD` turns the subject about the physical x axis through
+  the isocentre by `DEGREES` times the sine of 2π t / `PERIOD`, and
+  `--drift X Y Z` translates it along the physical axes, in mm/min, t being the
+  time from the start of the scan ({class}`~pulserver.virtual.RigidMotion`).
+  Isochromats that move are played block by block.
 - `--recon` streams the series to a reconstruction proxy, which looks the
   design up in its store: give that store as `--store`, or the proxy's design
   intake as `--push`. The images go to `images.h5` in `--output`, the DICOM
@@ -278,8 +283,9 @@ A scan is simulated on the phantom's isochromats in the slabs its excitation
 pulses excite ({func}`~pulserver.virtual.excited`), sampled `--spacing` apart,
 1 mm by default. Where they number more than `--max-isochromats`, two million
 by default, as over a whole head, the spacing is coarsened in steps of 1 mm
-until they do not. `--device` reads windows on a device as it does for
-`pulserver scan`.
+until they do not, counting `--spins` isochromats per voxel. `--device`,
+`--spins`, `--voxel`, `--diffusion`, `--nod` and `--drift` act as they do for
+`pulserver scan`; a subject's motion starts anew with each scan.
 
 pulserver's image runs such a console by default, with BrainWeb's normal brain
 and the field maps solved in it, `--fields=/console/fields`, so that every exam
