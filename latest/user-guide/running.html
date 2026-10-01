@@ -756,8 +756,9 @@ records the plugin, the reconstruction plugin, the limits, the package versions
 and the SHA-256 of every file. The identifier is three 24-bit integers, each
 held exactly by a float32 scanner parameter. <code class="docutils literal notranslate"><span class="pre">prune</span></code> removes designs least recently used
 first: those unused for longer than <code class="docutils literal notranslate"><span class="pre">--max-age-days</span></code>, then others until the
-store holds at most <code class="docutils literal notranslate"><span class="pre">--max-bytes</span></code>. Nothing is removed otherwise, and a design a
-series still needs must not be: the proxy reads it by identifier. A store that
+store holds at most <code class="docutils literal notranslate"><span class="pre">--max-bytes</span></code>. A design used within the last day is kept
+whatever the limits, since a series may still be playing it or the proxy
+reading it by identifier. A store that
 receives pushed designs is pruned the same way, on the reconstruction computer.</p>
 </section>
 <section id="pushing-designs">

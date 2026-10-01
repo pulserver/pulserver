@@ -156,8 +156,9 @@ records the plugin, the reconstruction plugin, the limits, the package versions
 and the SHA-256 of every file. The identifier is three 24-bit integers, each
 held exactly by a float32 scanner parameter. `prune` removes designs least recently used
 first: those unused for longer than `--max-age-days`, then others until the
-store holds at most `--max-bytes`. Nothing is removed otherwise, and a design a
-series still needs must not be: the proxy reads it by identifier. A store that
+store holds at most `--max-bytes`. A design used within the last day is kept
+whatever the limits, since a series may still be playing it or the proxy
+reading it by identifier. A store that
 receives pushed designs is pruned the same way, on the reconstruction computer.
 
 ### Pushing designs

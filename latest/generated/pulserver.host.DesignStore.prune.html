@@ -536,10 +536,10 @@
 <dd><p>Remove designs, least recently used first; return their identifiers.</p>
 <p>A design is used when it is committed or found again. Designs unused
 for longer than <code class="docutils literal notranslate"><span class="pre">max_age</span></code> seconds are removed, then the least
-recently used until the store holds at most <code class="docutils literal notranslate"><span class="pre">max_bytes</span></code>. Stages
-left by a process that ended mid-design are removed as well. A
-design a series still needs must not be pruned: the reconstruction
-side reads it by identifier.</p>
+recently used until the store holds at most <code class="docutils literal notranslate"><span class="pre">max_bytes</span></code>. A design
+used within the last day is kept whatever the limits, since a series
+may still be playing or reconstructing it. Stages older than an hour,
+left by a process that ended mid-design, are removed as well.</p>
 </dd></dl>
 
 </section>
