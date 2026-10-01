@@ -485,7 +485,7 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">..recon._runtime.readers</span><span class="w"> </span><span class="kn">import</span> <span class="n">deserialize_config</span><span class="p">,</span> <span class="n">read_text</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">._designs</span><span class="w"> </span><span class="kn">import</span> <span class="n">Design</span><span class="p">,</span> <span class="n">DesignCache</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">._enrich</span><span class="w"> </span><span class="kn">import</span> <span class="n">enrich_acquisition</span><span class="p">,</span> <span class="n">enrich_header</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">._motion</span><span class="w"> </span><span class="kn">import</span> <span class="n">Pose</span><span class="p">,</span> <span class="n">pose_of</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">._motion</span><span class="w"> </span><span class="kn">import</span> <span class="n">FILENAME</span><span class="p">,</span> <span class="n">MotionWriter</span><span class="p">,</span> <span class="n">Pose</span><span class="p">,</span> <span class="n">pose_of</span><span class="p">,</span> <span class="n">pose_waveform</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">._queue</span><span class="w"> </span><span class="kn">import</span> <span class="n">QueueFile</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">._workers</span><span class="w"> </span><span class="kn">import</span> <span class="n">WorkerPool</span>
 
@@ -629,6 +629,12 @@
 <span class="sd">    :class:`~pulserver.recon.ExamCache`. It is deleted once a header names</span>
 <span class="sd">    another exam and no series of the exam still runs.</span>
 
+<span class="sd">    A series whose sequence sets ``EnablePmc`` is corrected for motion while</span>
+<span class="sd">    it plays: the poses its reconstruction states are published into the</span>
+<span class="sd">    pose file the scan reads, ``motion.buf`` in the design's directory,</span>
+<span class="sd">    rather than sent to the client. A forwarded series publishes the poses the</span>
+<span class="sd">    server passes back.</span>
+
 <span class="sd">    A forwarded series is sent on as it arrives; the server's own slots and</span>
 <span class="sd">    queue determine when it is reconstructed. The server is sent a config file message naming</span>
 <span class="sd">    ``forward_config``, or else the series' reconstruction plugin; the client's</span>
@@ -753,7 +759,7 @@
             <span class="n">header</span><span class="p">,</span>
             <span class="n">plugin</span><span class="p">,</span>
             <span class="n">_enriched</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="n">design</span><span class="p">),</span>
-            <span class="n">motion_corrected</span><span class="o">=</span><span class="n">design</span><span class="o">.</span><span class="n">prospective_motion</span><span class="p">,</span>
+            <span class="n">motion</span><span class="o">=</span><span class="n">design</span><span class="o">.</span><span class="n">directory</span> <span class="o">/</span> <span class="n">FILENAME</span> <span class="k">if</span> <span class="n">design</span><span class="o">.</span><span class="n">prospective_motion</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
         <span class="p">)</span></div>
 
 
@@ -850,7 +856,16 @@
         <span class="k">if</span> <span class="ow">not</span> <span class="n">plugin</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"the config names no reconstruction"</span><span class="p">)</span>
         <span class="n">_log</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">"series: </span><span class="si">%s</span><span class="s2">"</span><span class="p">,</span> <span class="n">plugin</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_reconstruction</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="n">config</span><span class="p">,</span> <span class="n">header</span><span class="p">,</span> <span class="n">plugin</span><span class="p">,</span> <span class="n">_received</span><span class="p">(</span><span class="n">client</span><span class="p">))</span></div>
+        <span class="c1"># The proxy that forwarded the series holds the scan's pose file, so a</span>
+        <span class="c1"># pose goes back to it rather than being taken here.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_reconstruction</span><span class="o">.</span><span class="n">run</span><span class="p">(</span>
+            <span class="n">client</span><span class="p">,</span>
+            <span class="n">config</span><span class="p">,</span>
+            <span class="n">header</span><span class="p">,</span>
+            <span class="n">plugin</span><span class="p">,</span>
+            <span class="n">_received</span><span class="p">(</span><span class="n">client</span><span class="p">),</span>
+            <span class="n">poses</span><span class="o">=</span><span class="k">lambda</span> <span class="n">pose</span><span class="p">:</span> <span class="n">client</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">pose_waveform</span><span class="p">(</span><span class="n">pose</span><span class="p">)),</span>
+        <span class="p">)</span></div>
 
 
 
@@ -909,15 +924,19 @@
         <span class="n">header</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
         <span class="n">plugin</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
         <span class="n">items</span><span class="p">:</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">Any</span><span class="p">],</span>
-        <span class="n">motion_corrected</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">motion</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">poses</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">Pose</span><span class="p">],</span> <span class="kc">None</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">"""Reconstruct the series ``items`` streams on a worker, in a slot or from the queue.</span>
 
-<span class="sd">        A series whose scan is corrected for motion while it plays runs alone</span>
-<span class="sd">        among such series, wherever its proxy runs.</span>
+<span class="sd">        ``motion`` is the pose file of a scan corrected for motion while it</span>
+<span class="sd">        plays: the poses the reconstruction states are published into it,</span>
+<span class="sd">        created anew for the series. Such a series runs alone among such</span>
+<span class="sd">        series, wherever its proxy runs. Otherwise the poses go to ``poses``,</span>
+<span class="sd">        and are dropped where it is ``None``.</span>
 <span class="sd">        """</span>
         <span class="n">path</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_plugin_path</span><span class="p">(</span><span class="n">plugin</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">motion_corrected</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">motion</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="c1"># Waits rather than queueing: a pose is worth nothing once the scan</span>
             <span class="c1"># it described has moved on, so a series that would publish one</span>
             <span class="c1"># either runs now or runs behind the one that is.</span>
@@ -925,9 +944,16 @@
             <span class="k">try</span><span class="p">:</span>
                 <span class="n">slot</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_slots</span><span class="o">.</span><span class="n">take</span><span class="p">(</span><span class="n">wait</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
                 <span class="k">try</span><span class="p">:</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">_run</span><span class="p">(</span>
-                        <span class="n">client</span><span class="p">,</span> <span class="n">config</span><span class="p">,</span> <span class="n">header</span><span class="p">,</span> <span class="n">path</span><span class="p">,</span> <span class="n">slot</span><span class="p">,</span> <span class="k">lambda</span> <span class="n">w</span><span class="p">:</span> <span class="n">_send</span><span class="p">(</span><span class="n">items</span><span class="p">,</span> <span class="n">w</span><span class="p">)</span>
-                    <span class="p">)</span>
+                    <span class="k">with</span> <span class="n">MotionWriter</span><span class="p">(</span><span class="n">motion</span><span class="p">)</span> <span class="k">as</span> <span class="n">writer</span><span class="p">:</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">_run</span><span class="p">(</span>
+                            <span class="n">client</span><span class="p">,</span>
+                            <span class="n">config</span><span class="p">,</span>
+                            <span class="n">header</span><span class="p">,</span>
+                            <span class="n">path</span><span class="p">,</span>
+                            <span class="n">slot</span><span class="p">,</span>
+                            <span class="k">lambda</span> <span class="n">w</span><span class="p">:</span> <span class="n">_send</span><span class="p">(</span><span class="n">items</span><span class="p">,</span> <span class="n">w</span><span class="p">),</span>
+                            <span class="n">_publisher</span><span class="p">(</span><span class="n">writer</span><span class="p">),</span>
+                        <span class="p">)</span>
                 <span class="k">finally</span><span class="p">:</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">_slots</span><span class="o">.</span><span class="n">release</span><span class="p">(</span><span class="n">slot</span><span class="p">)</span>
             <span class="k">finally</span><span class="p">:</span>
@@ -936,7 +962,15 @@
         <span class="n">slot</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_slots</span><span class="o">.</span><span class="n">take</span><span class="p">(</span><span class="n">wait</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">slot</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">try</span><span class="p">:</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_run</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="n">config</span><span class="p">,</span> <span class="n">header</span><span class="p">,</span> <span class="n">path</span><span class="p">,</span> <span class="n">slot</span><span class="p">,</span> <span class="k">lambda</span> <span class="n">w</span><span class="p">:</span> <span class="n">_send</span><span class="p">(</span><span class="n">items</span><span class="p">,</span> <span class="n">w</span><span class="p">))</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_run</span><span class="p">(</span>
+                    <span class="n">client</span><span class="p">,</span>
+                    <span class="n">config</span><span class="p">,</span>
+                    <span class="n">header</span><span class="p">,</span>
+                    <span class="n">path</span><span class="p">,</span>
+                    <span class="n">slot</span><span class="p">,</span>
+                    <span class="k">lambda</span> <span class="n">w</span><span class="p">:</span> <span class="n">_send</span><span class="p">(</span><span class="n">items</span><span class="p">,</span> <span class="n">w</span><span class="p">),</span>
+                    <span class="n">poses</span><span class="p">,</span>
+                <span class="p">)</span>
             <span class="k">finally</span><span class="p">:</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_slots</span><span class="o">.</span><span class="n">release</span><span class="p">(</span><span class="n">slot</span><span class="p">)</span>
             <span class="k">return</span>
@@ -953,6 +987,7 @@
                     <span class="n">path</span><span class="p">,</span>
                     <span class="n">slot</span><span class="p">,</span>
                     <span class="k">lambda</span> <span class="n">worker</span><span class="p">:</span> <span class="n">_replay</span><span class="p">(</span><span class="n">queued</span><span class="p">,</span> <span class="n">others</span><span class="p">,</span> <span class="n">worker</span><span class="p">),</span>
+                    <span class="n">poses</span><span class="p">,</span>
                 <span class="p">)</span>
             <span class="k">finally</span><span class="p">:</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_slots</span><span class="o">.</span><span class="n">release</span><span class="p">(</span><span class="n">slot</span><span class="p">)</span>
@@ -975,6 +1010,7 @@
         <span class="n">plugin</span><span class="p">:</span> <span class="n">Path</span><span class="p">,</span>
         <span class="n">slot</span><span class="p">:</span> <span class="n">Slot</span><span class="p">,</span>
         <span class="n">feed</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">Connection</span><span class="p">],</span> <span class="kc">None</span><span class="p">],</span>
+        <span class="n">poses</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">Pose</span><span class="p">],</span> <span class="kc">None</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">"""Give a worker the config, the header and whatever ``feed`` sends it."""</span>
         <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">exams</span><span class="o">.</span><span class="n">lease</span><span class="p">(</span><span class="n">header</span><span class="p">)</span> <span class="k">as</span> <span class="n">exam</span><span class="p">:</span>
@@ -989,6 +1025,7 @@
                     <span class="n">feed</span><span class="p">,</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">recon_timeout</span><span class="p">,</span>
                     <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">plugin</span><span class="o">.</span><span class="n">stem</span><span class="si">}</span><span class="s2"> did not finish"</span><span class="p">,</span>
+                    <span class="n">poses</span><span class="o">=</span><span class="n">poses</span><span class="p">,</span>
                 <span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_plugin_path</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">plugin</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Path</span><span class="p">:</span>
@@ -1017,13 +1054,14 @@
         <span class="n">header</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
         <span class="n">plugin</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
         <span class="n">items</span><span class="p">:</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">Any</span><span class="p">],</span>
-        <span class="n">motion_corrected</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>  <span class="c1"># noqa: ARG002 -- the server's to honour</span>
+        <span class="n">motion</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">"""Stream the series ``items`` carries to the server and its outputs back.</span>
 
-<span class="sd">        A series whose scan is corrected while it plays is not held apart here:</span>
-<span class="sd">        the server that reconstructs it decides what may run beside it, and it</span>
-<span class="sd">        is the one that would publish a pose.</span>
+<span class="sd">        The poses the server passes back are published into ``motion``, the</span>
+<span class="sd">        scan's pose file, when there is one. A series whose scan is corrected</span>
+<span class="sd">        while it plays is not held apart here: the server decides what may run</span>
+<span class="sd">        beside it.</span>
 
 <span class="sd">        The client's config text is not forwarded: the server is told the</span>
 <span class="sd">        configured name, or else ``plugin``.</span>
@@ -1040,7 +1078,13 @@
                 <span class="sa">f</span><span class="s2">"the reconstruction server at </span><span class="si">{</span><span class="n">host</span><span class="si">}</span><span class="s2">:</span><span class="si">{</span><span class="n">port</span><span class="si">}</span><span class="s2"> cannot be reached: </span><span class="si">{</span><span class="n">error</span><span class="si">}</span><span class="s2">"</span>
             <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">error</span>
         <span class="n">channel</span> <span class="o">=</span> <span class="n">_RemoteChannel</span><span class="p">(</span><span class="n">stream</span><span class="p">)</span>
-        <span class="k">with</span> <span class="n">channel</span> <span class="k">as</span> <span class="n">server</span><span class="p">:</span>
+        <span class="k">with</span> <span class="n">contextlib</span><span class="o">.</span><span class="n">ExitStack</span><span class="p">()</span> <span class="k">as</span> <span class="n">stack</span><span class="p">:</span>
+            <span class="n">server</span> <span class="o">=</span> <span class="n">stack</span><span class="o">.</span><span class="n">enter_context</span><span class="p">(</span><span class="n">channel</span><span class="p">)</span>
+            <span class="n">poses</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="kc">None</span>
+                <span class="k">if</span> <span class="n">motion</span> <span class="ow">is</span> <span class="kc">None</span>
+                <span class="k">else</span> <span class="n">_publisher</span><span class="p">(</span><span class="n">stack</span><span class="o">.</span><span class="n">enter_context</span><span class="p">(</span><span class="n">MotionWriter</span><span class="p">(</span><span class="n">motion</span><span class="p">)))</span>
+            <span class="p">)</span>
             <span class="n">server</span><span class="o">.</span><span class="n">send_config_file</span><span class="p">(</span><span class="n">name</span><span class="p">)</span>
             <span class="n">server</span><span class="o">.</span><span class="n">send_header</span><span class="p">(</span><span class="n">header</span><span class="p">)</span>
             <span class="n">_drive</span><span class="p">(</span>
@@ -1051,6 +1095,7 @@
                 <span class="bp">self</span><span class="o">.</span><span class="n">recon_timeout</span><span class="p">,</span>
                 <span class="sa">f</span><span class="s2">"the reconstruction server at </span><span class="si">{</span><span class="n">host</span><span class="si">}</span><span class="s2">:</span><span class="si">{</span><span class="n">port</span><span class="si">}</span><span class="s2"> did not finish"</span><span class="p">,</span>
                 <span class="n">convert</span><span class="p">,</span>
+                <span class="n">poses</span><span class="p">,</span>
             <span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">close</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
@@ -1065,15 +1110,17 @@
     <span class="n">timeout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">late</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
     <span class="n">convert</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">Any</span><span class="p">],</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">poses</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">Pose</span><span class="p">],</span> <span class="kc">None</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Feed a reconstruction its series while its outputs are relayed to the client.</span>
 
 <span class="sd">    ``late`` opens the text the client receives when the reconstruction is</span>
-<span class="sd">    still running ``timeout`` seconds after the series ended.</span>
+<span class="sd">    still running ``timeout`` seconds after the series ended. ``poses`` is</span>
+<span class="sd">    :func:`_relay`'s.</span>
 <span class="sd">    """</span>
     <span class="n">relay</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Thread</span><span class="p">(</span>
         <span class="n">target</span><span class="o">=</span><span class="n">_relay</span><span class="p">,</span>
-        <span class="n">args</span><span class="o">=</span><span class="p">(</span><span class="n">reconstruction</span><span class="p">,</span> <span class="n">client</span><span class="p">,</span> <span class="n">convert</span><span class="p">),</span>
+        <span class="n">args</span><span class="o">=</span><span class="p">(</span><span class="n">reconstruction</span><span class="p">,</span> <span class="n">client</span><span class="p">,</span> <span class="n">convert</span><span class="p">,</span> <span class="n">poses</span><span class="p">),</span>
         <span class="n">daemon</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
         <span class="n">name</span><span class="o">=</span><span class="s2">"relay"</span><span class="p">,</span>
     <span class="p">)</span>
@@ -1346,6 +1393,15 @@
         <span class="n">worker</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">item</span><span class="p">)</span>
     <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">queued</span><span class="p">:</span>
         <span class="n">worker</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">item</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_publisher</span><span class="p">(</span><span class="n">writer</span><span class="p">:</span> <span class="n">MotionWriter</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">Pose</span><span class="p">],</span> <span class="kc">None</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Return what publishes each pose a reconstruction states into ``writer``."""</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">publish</span><span class="p">(</span><span class="n">pose</span><span class="p">:</span> <span class="n">Pose</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">writer</span><span class="o">.</span><span class="n">publish</span><span class="p">(</span><span class="n">pose</span><span class="o">.</span><span class="n">rotation</span><span class="p">,</span> <span class="n">rescan</span><span class="o">=</span><span class="n">pose</span><span class="o">.</span><span class="n">rescan</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">publish</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_relay</span><span class="p">(</span>
