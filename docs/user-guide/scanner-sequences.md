@@ -70,6 +70,19 @@ shortest echo time. An entry's `default` replaces the application's default as
 the initial value, in UI units: `default=TEPreset.MINIMUM` offers a protocol a
 scanner with weaker gradients than the application assumes can play.
 
+## Shipped sequences
+
+pulserver ships a plugin for each of these pypulseqpp sequences, searched after
+every `--plugins` directory, so a file of the same name there replaces it:
+
+| Plugin | Reconstruction |
+| --- | --- |
+| `gre2d`, `se2d`, `bssfp2d`, `gre_multiecho2d`, `gre3d`, `se3d` | `cartesian` |
+| `gre_radial2d`, `gre_spiral2d`, `se_radial2d`, `se_spiral2d` | `nufft` |
+| `gre_stack_of_stars3d`, `gre_stack_of_spirals3d`, `se_stack_of_stars3d`, `se_stack_of_spirals3d` | `nufft` |
+
+A 3D sequence takes its number of partitions from the number of slices.
+
 ## Resolving a protocol
 
 {meth}`~pulserver.design.ScannerSequence.listing` is the protocol with its

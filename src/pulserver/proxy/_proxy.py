@@ -30,6 +30,7 @@ from ..recon._runtime.exam import (
 )
 from ..recon._runtime.mrd2dicom import MrdDicomBuilder
 from ..recon._runtime.readers import deserialize_config, read_text
+from . import _held
 from ._designs import Design, DesignCache
 from ._enrich import enrich_acquisition, enrich_header
 from ._motion import FILENAME, MotionWriter, Pose, pose_of, pose_waveform
@@ -180,6 +181,13 @@ class ReconProxy(_Listener):
     rather than sent to the client. A forwarded series publishes the poses the
     server passes back.
 
+    What goes back to a client is also written to a directory under the
+    system's temporary directory, shared with every other proxy on this host,
+    and removed once the client has had all of it. When the client has gone,
+    it is kept: a client opening a series with the same ``measurementID`` is
+    sent it, after it is complete, in place of a new reconstruction. Kept
+    output nobody takes up is removed after a day.
+
     A forwarded series is sent on as it arrives; the server's own slots and
     queue determine when it is reconstructed. The server is sent a config file message naming
     ``forward_config``, or else the series' reconstruction plugin; the client's
@@ -260,6 +268,7 @@ class ReconProxy(_Listener):
     ) -> None:
         super().__init__(store)
         self.designs = DesignCache(store)
+        self.held = Path(_held.DEFAULT_HELD_DIRECTORY)
         self.workers = self.exams = self.queue = None
         if forward is not None:
             self._reconstruction: _Workers | _Remote = _Remote(
@@ -286,6 +295,10 @@ class ReconProxy(_Listener):
         self._reconstruction.close()
 
     def _series(self, client: Connection, config: str, header: Any) -> None:
+        path, claimable = _held.held_path(self.held, header)
+        if claimable and _held.take_up(client, path):
+            _drain(client)
+            return
         design = self.designs.resolve(header)
         plugin = design.recon or _config_plugin(config)
         enrich_header(header, design.table)
@@ -295,14 +308,17 @@ class ReconProxy(_Listener):
             plugin,
             len(design.table),
         )
-        self._reconstruction.run(
-            client,
-            config,
-            header,
-            plugin,
-            _enriched(client, design),
-            motion=design.directory / FILENAME if design.prospective_motion else None,
-        )
+        with _held.HeldClient(client, path) as held:
+            self._reconstruction.run(
+                held,
+                config,
+                header,
+                plugin,
+                _enriched(client, design),
+                motion=design.directory / FILENAME
+                if design.prospective_motion
+                else None,
+            )
 
 
 class ReconServer(_Listener):
@@ -778,6 +794,11 @@ def _refuse(connection: Connection, error: Exception) -> None:
     """
     with contextlib.suppress(Exception):
         connection.send(f"pulserver: {error}")
+    _drain(connection)
+
+
+def _drain(connection: Connection) -> None:
+    """Send a CLOSE, then discard what the client still sends until it closes."""
     connection.send_close()
     raw = connection.socket.socket
     with contextlib.suppress(OSError):
