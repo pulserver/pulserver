@@ -271,7 +271,12 @@ class ReconProxy(_Listener):
             len(design.table),
         )
         self._reconstruction.run(
-            client, config, header, plugin, _enriched(client, design)
+            client,
+            config,
+            header,
+            plugin,
+            _enriched(client, design),
+            motion_corrected=design.prospective_motion,
         )
 
 
@@ -376,6 +381,11 @@ class _Workers:
         self._exam_root = Path(tempfile.mkdtemp(prefix="pulserver-exams-"))
         self.exams = ExamCacheManager(directory=self._exam_root)
         self._slots = HostSlots(slot_devices(slots, gpu_slots), slot_directory)
+        # One pose reaches the scan at a time, whatever else is reconstructing:
+        # a pose is a statement about where the object is, and two
+        # reconstructions answering at once would each be overwriting the
+        # other's. Held across proxies, like the slots.
+        self._alone = HostSlots([None], Path(self._slots.directory) / "motion")
         self._queued = itertools.count(1)
 
     def run(
@@ -385,9 +395,30 @@ class _Workers:
         header: Any,
         plugin: str,
         items: Iterator[Any],
+        motion_corrected: bool = False,
     ) -> None:
-        """Reconstruct the series ``items`` streams on a worker, in a slot or from the queue."""
+        """Reconstruct the series ``items`` streams on a worker, in a slot or from the queue.
+
+        A series whose scan is corrected for motion while it plays runs alone
+        among such series, wherever its proxy runs.
+        """
         path = self._plugin_path(plugin)
+        if motion_corrected:
+            # Waits rather than queueing: a pose is worth nothing once the scan
+            # it described has moved on, so a series that would publish one
+            # either runs now or runs behind the one that is.
+            alone = self._alone.take(wait=True)
+            try:
+                slot = self._slots.take(wait=True)
+                try:
+                    self._run(
+                        client, config, header, path, slot, lambda w: _send(items, w)
+                    )
+                finally:
+                    self._slots.release(slot)
+            finally:
+                self._alone.release(alone)
+            return
         slot = self._slots.take(wait=False)
         if slot is not None:
             try:
@@ -471,8 +502,13 @@ class _Remote:
         header: Any,
         plugin: str,
         items: Iterator[Any],
+        motion_corrected: bool = False,  # noqa: ARG002 -- the server's to honour
     ) -> None:
         """Stream the series ``items`` carries to the server and its outputs back.
+
+        A series whose scan is corrected while it plays is not held apart here:
+        the server that reconstructs it decides what may run beside it, and it
+        is the one that would publish a pose.
 
         The client's config text is not forwarded: the server is told the
         configured name, or else ``plugin``.

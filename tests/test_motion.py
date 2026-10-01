@@ -195,3 +195,52 @@ def test_a_pose_reaches_the_scan_and_not_whoever_asked_for_the_images():
     assert [p.rotation for p in taken] == [pytest.approx(TURNED)]
     assert len(client.sent) == 2, "the pose was sent on to the client"
     assert all(w.waveform_id == 0 for w in client.sent)
+
+
+PREAMBLE = """# Pulseq sequence file
+[VERSION]
+major 1
+
+[DEFINITIONS]
+AdcRasterTime 2e-06
+{key}GradientRasterTime 4e-06
+
+[BLOCKS]
+ 1 58 0 0 0 0 0 0
+"""
+
+
+def seqfile(tmp_path, key=""):
+    path = tmp_path / "sequence.seq"
+    path.write_text(PREAMBLE.format(key=key))
+    return path
+
+
+def test_a_scan_that_asks_to_be_corrected_for_motion_says_so(tmp_path):
+    from pulserver.proxy._designs import _asks_for_motion_correction
+
+    assert _asks_for_motion_correction(seqfile(tmp_path, "EnablePmc 1\n"))
+
+
+@pytest.mark.parametrize("key", ["", "EnablePmc 0\n"])
+def test_a_scan_that_does_not_ask_is_not_corrected(tmp_path, key):
+    from pulserver.proxy._designs import _asks_for_motion_correction
+
+    assert not _asks_for_motion_correction(seqfile(tmp_path, key))
+
+
+def test_the_key_is_read_only_inside_the_definitions(tmp_path):
+    """A later block naming it is not the scan asking."""
+    from pulserver.proxy._designs import _asks_for_motion_correction
+
+    path = tmp_path / "sequence.seq"
+    path.write_text(
+        "[DEFINITIONS]\nGradientRasterTime 4e-06\n\n[BLOCKS]\nEnablePmc 1\n"
+    )
+    assert not _asks_for_motion_correction(path)
+
+
+def test_a_file_that_is_not_there_asks_for_nothing(tmp_path):
+    from pulserver.proxy._designs import _asks_for_motion_correction
+
+    assert not _asks_for_motion_correction(tmp_path / "no_such.seq")
