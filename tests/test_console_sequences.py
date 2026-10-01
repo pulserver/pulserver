@@ -142,3 +142,22 @@ def test_a_shipped_sequence_names_a_shipped_reconstruction():
 
 def test_no_shipped_reconstruction_shares_a_name_with_a_shipped_sequence():
     assert not {p.stem for p in RECONSTRUCTIONS.glob("*.py")} & set(SHIPPED)
+
+
+def test_pics_images_the_vials_from_half_the_phase_encodes(tmp_path, reference):
+    pytest.importorskip("bartorch")
+    plugins = tmp_path / "accelerated"
+    plugins.mkdir()
+    (plugins / "gre2d_r2.py").write_text(
+        (SEQUENCES / "gre2d.py")
+        .read_text()
+        .replace('recon = "cartesian"', 'recon = "pics"')
+        .replace(
+            "    ui = {\n",
+            '    ui = {\n        UIParam.RY: IntParam("ry", range_min=1, range_max=4),\n',
+        )
+    )
+
+    (image,) = _images(_console(tmp_path, [plugins]), "gre2d_r2", {**SMALL, "Ry": 2})
+
+    assert _correlation(reference, image.astype(float)) > AGREEMENT
