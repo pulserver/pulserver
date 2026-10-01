@@ -501,6 +501,8 @@
 <span class="n">_ACCEPT_POLL</span> <span class="o">=</span> <span class="mf">0.5</span>
 <span class="c1"># How long a refused client may send nothing before the proxy stops reading it.</span>
 <span class="n">_DRAIN_IDLE</span> <span class="o">=</span> <span class="mf">30.0</span>
+<span class="c1"># How often the exams nothing has leased for a while are looked for.</span>
+<span class="n">_EXPIRY_POLL</span> <span class="o">=</span> <span class="mf">60.0</span>
 
 
 <span class="k">class</span><span class="w"> </span><span class="nc">_Listener</span><span class="p">:</span>
@@ -628,7 +630,9 @@
 <span class="sd">    system's temporary directory, through which a reconstruction reads what an</span>
 <span class="sd">    earlier series of the exam stored in its</span>
 <span class="sd">    :class:`~pulserver.recon.ExamCache`. It is deleted once a header names</span>
-<span class="sd">    another exam and no series of the exam still runs.</span>
+<span class="sd">    another exam, or nothing has leased it for</span>
+<span class="sd">    :data:`~pulserver.recon._runtime.exam.EXAM_IDLE` seconds, and no series of</span>
+<span class="sd">    the exam still runs on any proxy.</span>
 
 <span class="sd">    A series whose sequence sets ``EnablePmc`` is corrected for motion while</span>
 <span class="sd">    it plays: the poses its reconstruction states are published into the</span>
@@ -925,6 +929,10 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_exam_root</span><span class="o">.</span><span class="n">mkdir</span><span class="p">(</span><span class="n">parents</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="n">EXAM_DIRECTORY_MODE</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_exam_root</span><span class="o">.</span><span class="n">chmod</span><span class="p">(</span><span class="n">EXAM_DIRECTORY_MODE</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">exams</span> <span class="o">=</span> <span class="n">ExamCacheManager</span><span class="p">(</span><span class="n">directory</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_exam_root</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_closing</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Event</span><span class="p">()</span>
+        <span class="n">threading</span><span class="o">.</span><span class="n">Thread</span><span class="p">(</span>
+            <span class="n">target</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_expire_exams</span><span class="p">,</span> <span class="n">daemon</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">"exam-expiry"</span>
+        <span class="p">)</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_slots</span> <span class="o">=</span> <span class="n">HostSlots</span><span class="p">(</span><span class="n">slot_devices</span><span class="p">(</span><span class="n">slots</span><span class="p">,</span> <span class="n">gpu_slots</span><span class="p">),</span> <span class="n">slot_directory</span><span class="p">)</span>
         <span class="c1"># One pose reaches the scan at a time, whatever else is reconstructing:</span>
         <span class="c1"># a pose is a statement about where the object is, and two</span>
@@ -1011,12 +1019,17 @@
             <span class="n">queued</span><span class="o">.</span><span class="n">unlink</span><span class="p">()</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">close</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_closing</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">workers</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
         <span class="c1"># Closing the manager removes the directory of each exam nothing else</span>
         <span class="c1"># is on; the root is the host's and stays.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">exams</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_owns_queue</span><span class="p">:</span>
             <span class="n">shutil</span><span class="o">.</span><span class="n">rmtree</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">queue</span><span class="p">,</span> <span class="n">ignore_errors</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_expire_exams</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">while</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_closing</span><span class="o">.</span><span class="n">wait</span><span class="p">(</span><span class="n">_EXPIRY_POLL</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">exams</span><span class="o">.</span><span class="n">expire</span><span class="p">()</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_run</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>

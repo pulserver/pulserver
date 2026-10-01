@@ -564,7 +564,9 @@ once a slot frees. The series of one exam share a directory under the
 system’s temporary directory, through which a reconstruction reads what an
 earlier series of the exam stored in its
 <a class="reference internal" href="pulserver.recon.ExamCache.html#pulserver.recon.ExamCache" title="pulserver.recon.ExamCache"><code class="xref py py-class docutils literal notranslate"><span class="pre">ExamCache</span></code></a>. It is deleted once a header names
-another exam and no series of the exam still runs.</p>
+another exam, or nothing has leased it for
+<code class="xref py py-data docutils literal notranslate"><span class="pre">EXAM_IDLE</span></code> seconds, and no series of
+the exam still runs on any proxy.</p>
 <p>A series whose sequence sets <code class="docutils literal notranslate"><span class="pre">EnablePmc</span></code> is corrected for motion while
 it plays: the poses its reconstruction states are published into the
 pose file the scan reads, <code class="docutils literal notranslate"><span class="pre">motion.buf</span></code> in the design’s directory,
