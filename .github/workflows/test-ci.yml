@@ -68,11 +68,41 @@ jobs:
             -fsanitize=address,undefined -fno-sanitize-recover=all \
             -fno-omit-frame-pointer -pthread \
             -I src/cpp -o sanitize_bloch tests/native/sanitize_bloch.cpp \
-            src/cpp/bloch/bloch.cpp src/cpp/bloch/events.cpp \
+            src/cpp/bloch/bloch.cpp src/cpp/bloch/events.cpp src/cpp/bloch/finufft.cpp \
             src/cpp/bloch/nufft.cpp src/cpp/bloch/repetitions.cpp
 
       - name: Play each of its paths
         run: ./sanitize_bloch
+
+  device:
+    name: Lattice windows read under Triton's interpreter
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # setuptools_scm reads the tags
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      # torch's CPU build and Triton, whose interpreter runs the kernel where
+      # there is no card; cuFINUFFT transforms on a card alone.
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install triton .[dev]
+
+      - name: Run the device tests
+        run: pytest -q -ra tests/test_virtual_device.py --cov --cov-report=xml
+
+      - uses: codecov/codecov-action@v7
+        with:
+          fail_ci_if_error: false
+          token: ${{ secrets.CODECOV_TOKEN }}
+          slug: pulserver/pulserver
 
   coils:
     name: Coil models sampled by bartorch

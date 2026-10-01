@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import functools
+
 import numpy as np
 import pypulseqpp as pp
 
 from .._accelerators import require
+from . import _finufft
 
 __all__ = ["Isochromats", "Repetitions"]
 
@@ -14,8 +17,11 @@ __all__ = ["Isochromats", "Repetitions"]
 MEMORY = 4 << 30
 
 
+@functools.cache
 def _kernels():
-    return require("bloch")
+    kernels = require("bloch")
+    _finufft.install(kernels)
+    return kernels
 
 
 def _per_isochromat(value, count: int, name: str) -> np.ndarray:
@@ -144,7 +150,14 @@ class Isochromats:
     of the isochromats of each T2, to within about ``1e-13`` of the sum of
     the magnitudes of their transverse magnetisations times their receive
     sensitivities, wherever that costs less than turning every isochromat at
-    every sample.
+    every sample. A window under any other gradient whose k moves along axes
+    on which the isochromats lie on a lattice is read by FINUFFT, wherever
+    that costs less: each isochromat's value is summed onto its lattice point
+    for each coil and each of a few Chebyshev points across the window,
+    between which its decay and precession are interpolated, and the lattice
+    is transformed to each sample's k, to within about ``1e-11`` of the sum of
+    the magnitudes of the terms each sample sums. :meth:`play` reads either to
+    within a tolerance instead where given one.
 
     Parameters
     ----------
@@ -168,12 +181,24 @@ class Isochromats:
         own layout, so that it is never copied whole into memory.
     threads : int, default=0
         Worker threads; 0 for every core.
+    device : str or torch.device, default=None
+        A torch device the windows read on a lattice are summed and
+        transformed on: a CUDA device, on which a Triton kernel sums them and
+        cuFINUFFT transforms them, or the CPU, under Triton's interpreter
+        alone (``TRITON_INTERPRET=1`` before triton is first imported), on
+        which FINUFFT transforms them. Needs the ``gpu`` extra. By default
+        the engine reads them itself.
 
     Raises
     ------
     ValueError
         If a property has the wrong shape or is not finite, or a relaxation
         time is not positive.
+    ImportError
+        If ``device`` is given without torch and Triton, or is a CUDA device
+        without cuFINUFFT.
+    RuntimeError
+        If ``device`` is the CPU outside Triton's interpreter.
 
     Notes
     -----
@@ -207,6 +232,7 @@ class Isochromats:
         transmit=None,
         receive=None,
         threads: int = 0,
+        device=None,
     ):
         positions = np.asarray(positions, dtype=float)
         if positions.ndim != 2 or positions.shape[1] != 3:
@@ -222,6 +248,12 @@ class Isochromats:
             _sensitivities(receive, count, "receive"),
             int(threads),
         )
+        if device is not None:
+            from ._device import LatticeDevice
+
+            if not isinstance(device, LatticeDevice):
+                device = LatticeDevice(device)
+            self._native.use_lattice_device(device)
 
     def __len__(self) -> int:
         return self._native.size
@@ -235,6 +267,16 @@ class Isochromats:
     def elapsed(self) -> float:
         """Time played since construction or the last :meth:`reset`, in s."""
         return self._native.elapsed
+
+    @property
+    def lattice_windows(self) -> int:
+        """ADC windows read on a lattice by FINUFFT since construction."""
+        return self._native.lattice_windows
+
+    @property
+    def device_windows(self) -> int:
+        """Of :attr:`lattice_windows`, those read on the ``device``."""
+        return self._native.device_windows
 
     @property
     def magnetization(self) -> np.ndarray:
@@ -259,6 +301,7 @@ class Isochromats:
         rf=None,
         adc=None,
         system=None,
+        tolerance: float = 0.0,
     ) -> np.ndarray:
         """Play one block's events and return what each coil receives at each ADC sample.
 
@@ -299,6 +342,10 @@ class Isochromats:
             The RF raster, over whose steps an RF event with a time shape is
             held, and the gamma and B0 the events' ppm offsets are resolved
             at; the default system when None.
+        tolerance : float, default=0.0
+            Above zero, an ADC window read by a transform is read to within
+            it, relative to the sum of the magnitudes of the terms each sample
+            sums.
 
         Returns
         -------
@@ -335,6 +382,7 @@ class Isochromats:
             step,
             samples,
             times,
+            float(tolerance),
         )
         return signal if receiver is None else signal * np.exp(1j * receiver)
 

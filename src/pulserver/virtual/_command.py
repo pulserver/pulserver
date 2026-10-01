@@ -109,6 +109,11 @@ def _parser() -> argparse.ArgumentParser:
         help="play the scan this many times as fast as a scanner; as fast as "
         "it is simulated without one",
     )
+    parser.add_argument(
+        "--device",
+        help="torch device windows read on a lattice are read on, such as cuda "
+        "(the gpu extra); the engine reads them without it",
+    )
     parser.add_argument("--mrd", type=Path, help="ISMRMRD file to write the series to")
     parser.add_argument("--sound", type=Path, help="WAV file to write the sound to")
     parser.add_argument(
@@ -318,6 +323,7 @@ def _scan(args: argparse.Namespace, store: Path, design: str) -> int:
             field_t=field,
             region=excited(sequence, rotation),
             coil=coil,
+            device=args.device,
         ),
         rotation=rotation,
         default_shim=None if coil is None else coil.default_shim,

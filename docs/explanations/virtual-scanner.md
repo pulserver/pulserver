@@ -201,7 +201,9 @@ blocks is a run of its own or plays block by block. Within a run:
 A run ends where one of these stops holding. An interleaved multislice scan
 whose RF spoiling steps each slice's pulse by its own increment, a spin echo
 phase-encoded before its refocusing pulse, and spiral readouts, whose
-gradients vary during the windows, play block by block.
+gradients vary during the windows, play block by block; a spiral's windows are
+read from the lattice the phantom is sampled on, as
+{doc}`/explanations/bloch-simulation` states.
 
 The maps take memory in proportion to the isochromats and to the ADC windows of
 a repetition. A repetition whose maps would take more than 4 GiB is not played
@@ -213,9 +215,9 @@ the `tolerance` of {meth}`~pulserver.virtual.Isochromats.repetitions`. At zero,
 a run samples what its blocks played one by one sample, to the single precision
 of the cache's amplitudes, which leave the varying gradients' area by a pulse
 at rounding where the run takes it as zero. The console and `pulserver scan`
-play runs to a tolerance of $10^{-4}$, at which the transients of a steady
-state are carried until they fall below it and its fixed points are summed
-once, by columns of isochromats along the encoded axes; a run whose column sums
+play runs, and read the windows of the blocks played one by one, to a
+tolerance of $10^{-4}$, at which the transients of a steady state are carried
+until they fall below it and its fixed points are summed once, by columns of isochromats along the encoded axes; a run whose column sums
 would take more than 4 GiB carries every transient instead. Played to a
 tolerance, a run also takes as zero the area its varying gradients leave by a
 pulse or over a repetition at the six significant digits a Pulseq file keeps

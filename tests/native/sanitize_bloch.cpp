@@ -7,21 +7,30 @@
  * happened to be there, which the numerical tests catch only when it changes
  * a number. This plays blocks that reach every path of the engine -- a pulse
  * stepped for each group of isochromats, one reused turned by its phase, one
- * computed on a grid of fields and drives, a window read sample by sample and
- * one read by the non-uniform FFT, gradients turned with steps in them -- and
+ * computed on a grid of fields and drives, a window read sample by sample, one
+ * read by the non-uniform FFT and one read on the isochromats' lattice, by the
+ * engine and by a device, gradients turned with steps in them -- and
  * repetitions of them, exact and to a tolerance, on one transmit channel and
  * on two, with AddressSanitizer and UndefinedBehaviorSanitizer on. It asserts
- * nothing. The sanitisers do.
+ * only that the windows meant for the lattice are read there; the sanitisers
+ * assert the rest.
+ *
+ * The lattice is transformed by a stand-in for FINUFFT's plans that sums each
+ * point directly, handed to the engine as the finufft wheel's entry points
+ * are, so that no library outside the engine runs under the sanitisers.
  */
 
 #include "bloch/bloch.hpp"
 #include "bloch/events.hpp"
+#include "bloch/finufft.hpp"
 #include "bloch/repetitions.hpp"
 
 #include <algorithm>
 #include <cmath>
 #include <complex>
+#include <cstdint>
 #include <cstdio>
+#include <cstring>
 #include <numeric>
 #include <vector>
 
@@ -39,6 +48,102 @@ namespace
     {
         sink = std::accumulate(
             values.begin(), values.end(), sink, [](double sum, const Complex& value) { return sum + std::abs(value); });
+    }
+
+    /** A type-2 plan summed point by point: f(x) = sum_m f_m exp(-i m . x),
+     *  each mode from -modes / 2, the first dimension fastest. */
+    struct DirectPlan
+    {
+        int dimensions = 1;
+        int64_t modes[3] = {1, 1, 1};
+        int vectors = 1;
+        std::vector<double> points[3];
+    };
+
+    template <typename Real>
+    int direct_makeplan(int, int dimensions, int64_t* modes, int, int vectors, Real, void** plan, void*)
+    {
+        DirectPlan* made = new DirectPlan();
+        made->dimensions = dimensions;
+        std::copy(modes, modes + dimensions, made->modes);
+        made->vectors = vectors;
+        *plan = made;
+        return 0;
+    }
+
+    template <typename Real>
+    int direct_setpts(void* plan, int64_t count, Real* x, Real* y, Real* z, int64_t, Real*, Real*, Real*)
+    {
+        DirectPlan& made = *static_cast<DirectPlan*>(plan);
+        const Real* given[3] = {x, y, z};
+        for (int d = 0; d < made.dimensions; ++d)
+            made.points[d].assign(given[d], given[d] + count);
+        return 0;
+    }
+
+    template <typename Real>
+    int direct_execute(void* plan, std::complex<Real>* sums, std::complex<Real>* modes)
+    {
+        const DirectPlan& made = *static_cast<const DirectPlan*>(plan);
+        const size_t count = made.points[0].size();
+        const int64_t size = made.modes[0] * made.modes[1] * made.modes[2];
+        for (int v = 0; v < made.vectors; ++v)
+            for (size_t j = 0; j < count; ++j)
+            {
+                std::complex<double> sum = 0.0;
+                for (int64_t m = 0; m < size; ++m)
+                {
+                    double phase = 0.0;
+                    int64_t rest = m;
+                    for (int d = 0; d < made.dimensions; ++d)
+                    {
+                        const int64_t index = rest % made.modes[d] - made.modes[d] / 2;
+                        rest /= made.modes[d];
+                        phase += static_cast<double>(index) * made.points[d][j];
+                    }
+                    sum += std::complex<double>(modes[v * size + m]) * std::polar(1.0, -phase);
+                }
+                sums[static_cast<size_t>(v) * count + j] = std::complex<Real>(sum);
+            }
+        return 0;
+    }
+
+    int direct_destroy(void* plan)
+    {
+        delete static_cast<DirectPlan*>(plan);
+        return 0;
+    }
+
+    /** An options struct of the stand-in's own layout: FINUFFT's size and
+     *  offsets, as the finufft wheel reports them. */
+    constexpr size_t kOptions = 96;
+
+    void direct_default_opts(void* options)
+    {
+        std::memset(options, 0, kOptions);
+    }
+
+    template <typename Real>
+    bloch::FinufftPlans direct_plans()
+    {
+        bloch::FinufftPlans plans;
+        plans.makeplan = reinterpret_cast<void*>(&direct_makeplan<Real>);
+        plans.setpts = reinterpret_cast<void*>(&direct_setpts<Real>);
+        plans.execute = reinterpret_cast<void*>(&direct_execute<Real>);
+        plans.destroy = reinterpret_cast<void*>(&direct_destroy);
+        return plans;
+    }
+
+    void use_direct_plans()
+    {
+        bloch::FinufftOptions options;
+        options.size = kOptions;
+        options.warnings_at = 16;
+        options.threads_at = 20;
+        options.fftw_at = 24;
+        options.upsampling_at = 40;
+        bloch::use_finufft(
+            direct_plans<double>(), direct_plans<float>(), reinterpret_cast<void*>(&direct_default_opts), options);
     }
 
     /** Isochromats on a lattice, each at an off-resonance of its own. */
@@ -103,6 +208,36 @@ namespace
     {
         set(block, axis, g.times, g.values);
     }
+
+    /** A window on a spiral in the xy plane, which the block points into. */
+    struct Spiral
+    {
+        Axis x, y;
+        std::vector<double> times;
+        bloch::BlockEvents block;
+
+        Spiral()
+        {
+            for (int k = 0; k <= 80; ++k)
+            {
+                const double t = 5e-3 * k / 80.0;
+                const Complex g = std::polar(3e4 * t / 5e-3, 6.0 * kPi * t / 5e-3);
+                x.times.push_back(t);
+                x.values.push_back(g.real());
+                y.times.push_back(t);
+                y.values.push_back(g.imag());
+            }
+            for (int k = 0; k < 400; ++k)
+                times.push_back(0.05e-3 + 12e-6 * k);
+            block.duration = 5e-3;
+            set(block, 0, x);
+            set(block, 1, y);
+            block.adc_times = times.data();
+            block.adc_samples = times.size();
+        }
+        Spiral(const Spiral&) = delete;
+        Spiral& operator=(const Spiral&) = delete;
+    };
 
     /** One of each kind of block, played in turn. */
     void blocks(bloch::Isochromats& spins, size_t channels)
@@ -177,16 +312,27 @@ namespace
         readout.adc_samples = window.times.size();
         play(readout);
 
-        // A window on a trapezoid's ramps as well: read sample by sample.
+        // A window on a trapezoid's ramps as well, too short for a lattice to
+        // pay: read sample by sample.
         std::vector<double> times;
-        for (int k = 0; k < 64; ++k)
-            times.push_back(0.02e-3 + 0.085e-3 * k);
+        for (int k = 0; k < 13; ++k)
+            times.push_back(0.02e-3 + 0.42e-3 * k);
         bloch::BlockEvents ramped;
         ramped.duration = 5.6e-3;
         set(ramped, 0, read_x);
         ramped.adc_times = times.data();
         ramped.adc_samples = times.size();
         play(ramped);
+
+        // A window on a spiral, read on the lattice in single precision and
+        // in double.
+        const Spiral spiral;
+        for (double tolerance : {1e-4, 1e-7})
+        {
+            signal.assign(spins.coils() * spiral.block.adc_samples, 0.0);
+            spins.play(spiral.block, signal.data(), tolerance);
+            touch(signal);
+        }
 
         // A time-shaped pulse joined between its samples, and a dynamic pTx
         // pulse holding its channels one after another over one time base.
@@ -311,10 +457,94 @@ namespace
         }
     }
 
+    /** A device that reads every array the engine hands it, over the extents
+     *  the window states, and writes every value it is to write. */
+    bool read_whole(const bloch::LatticeWindowRead& w)
+    {
+        double sum = 0.0;
+        size_t points = 1;
+        for (int d = 0; d < w.dimensions; ++d)
+            points *= static_cast<size_t>(w.modes[d]);
+        sum += static_cast<double>(points == w.points);
+        for (size_t q = 0; q <= w.points; ++q)
+            sum += w.starts[q];
+        for (size_t k = 0; k < w.isochromats; ++k)
+            sum += w.order[k] + w.off_resonance[k] + w.decay[w.decay_of[k] * w.segments] + w.mx[k] + w.my[k];
+        if (w.receive_re != nullptr)
+            for (size_t k = 0; k < w.coils * w.isochromats; ++k)
+                sum += w.receive_re[k] + w.receive_im[k];
+        for (size_t l = 0; l < w.segments; ++l)
+            sum += w.nodes[l];
+        for (size_t k = 0; k < w.samples * w.segments; ++k)
+            sum += w.basis[k];
+        for (int d = 0; d < w.dimensions; ++d)
+            for (size_t k = 0; k < w.samples; ++k)
+                sum += w.x[d][k];
+        sum += w.frequency + w.tolerance;
+        for (size_t k = 0; k < w.coils * w.samples; ++k)
+            w.out[k] = sum;
+        return true;
+    }
+
+    /** Excite isochromats many to a lattice point, read by @p coils coils or,
+     *  for none, by one of unit sensitivity, and read the spiral's window in
+     *  double precision and in single, by the engine and by a device; the
+     *  windows read on the lattice. */
+    size_t many_coils(size_t coils)
+    {
+        bloch::IsochromatProperties p;
+        for (int i = 0; i < 12; ++i)
+            for (int j = 0; j < 10; ++j)
+                for (int k = 0; k < 32; ++k)
+                {
+                    p.x.push_back(3e-3 * (i - 6));
+                    p.y.push_back(3e-3 * (j - 5));
+                    p.z.push_back(0.25e-3 * (k - 16));
+                }
+        const size_t n = p.x.size();
+        for (size_t i = 0; i < n; ++i)
+        {
+            p.t2.push_back(i % 2 == 0 ? 0.05 : 0.09);
+            p.off_resonance.push_back(40.0 * std::sin(1.3 * i));
+        }
+        std::vector<Complex> receive;
+        for (size_t i = 0; i < n * coils; ++i)
+            receive.push_back(std::polar(1.0 + 0.1 * std::sin(0.3 * i), 0.07 * i));
+        p.coils = coils;
+        p.receive = coils ? receive.data() : nullptr;
+        bloch::Isochromats spins(p, 2);
+
+        const std::vector<Complex> hard = sinc(50, 1, 300.0);
+        bloch::BlockEvents excite;
+        excite.duration = 0.6e-3;
+        excite.rf_start = 0.05e-3;
+        excite.rf_step = 1e-5;
+        excite.rf_steps = 50;
+        excite.rf_channels = 1;
+        excite.rf = hard.data();
+        spins.play(excite, nullptr);
+
+        const Spiral spiral;
+        std::vector<Complex> signal;
+        for (bool device : {false, true})
+        {
+            if (device)
+                spins.use_lattice_device(read_whole);
+            for (double tolerance : {1e-7, 1e-4})
+            {
+                signal.assign(spins.coils() * spiral.block.adc_samples, 0.0);
+                spins.play(spiral.block, signal.data(), tolerance);
+                touch(signal);
+            }
+        }
+        return spins.lattice_windows() - spins.device_windows() == 2 && spins.device_windows() == 2 ? 2 : 0;
+    }
+
 } // namespace
 
 int main()
 {
+    use_direct_plans();
     for (size_t channels : {size_t{0}, size_t{2}})
     {
         std::vector<Complex> receive;
@@ -329,7 +559,16 @@ int main()
         std::vector<double> magnetization(3 * spins.size());
         spins.magnetization(magnetization.data());
         sink = std::accumulate(magnetization.begin(), magnetization.end(), sink);
+        sink += static_cast<double>(spins.lattice_windows());
     }
+    // More coils than a tile sums at once, and not a multiple of those
+    // summed together.
+    for (size_t coils : {size_t{0}, size_t{37}})
+        if (many_coils(coils) != 2)
+        {
+            std::fprintf(stderr, "the windows of %zu coils were not read on the lattice by both\n", coils);
+            return 1;
+        }
     std::printf("%g\n", sink);
     return 0;
 }

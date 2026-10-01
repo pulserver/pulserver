@@ -19,6 +19,7 @@
 #include <complex>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <list>
 #include <memory>
 #include <mutex>
@@ -28,6 +29,7 @@ namespace bloch
 {
 
     class GradientAreas;
+    class LatticeTransform;
     class Nufft;
     class Repetitions;
     struct PulseGradient;
@@ -54,6 +56,65 @@ namespace bloch
         size_t coils = 0;
         const std::complex<double>* receive = nullptr;
     };
+
+    /**
+     * A window under a changing gradient whose isochromats lie on a lattice
+     * along each axis its k moves along, as the engine hands it to a device
+     * that sums it onto the lattice and transforms it to the samples in its
+     * place. Every array is the engine's own, valid during the call.
+     */
+    struct LatticeWindowRead
+    {
+        /** The lattice axes, a bit per axis, the points along each, the
+         *  lowest axis first and fastest, and the points in all. */
+        unsigned axes = 0;
+        int dimensions = 0;
+        const int64_t* modes = nullptr;
+        size_t points = 0;
+        /** The isochromats in order of their point on the lattice, each
+         *  point's first position in that order, one more than the points;
+         *  and, in that order, each isochromat's off-resonance, in Hz, and
+         *  T2 class. */
+        size_t isochromats = 0;
+        const uint32_t* order = nullptr;
+        const uint32_t* starts = nullptr;
+        const double* off_resonance = nullptr;
+        const uint32_t* decay_of = nullptr;
+        /** The receive sensitivities, coil-major in the isochromats' own
+         *  order; none for one coil of unit sensitivity. */
+        size_t coils = 0;
+        const double* receive_re = nullptr;
+        const double* receive_im = nullptr;
+        /** The transverse magnetisation at the first sample, in the
+         *  isochromats' own order. */
+        const double* mx = nullptr;
+        const double* my = nullptr;
+        /** The window's middle off-resonance, in Hz; its Chebyshev points,
+         *  in s from the first sample; each T2 class's decay at them
+         *  relative to the window's middle rate, [class][point]; and the
+         *  Lagrange basis at each sample, [sample][point]. */
+        double frequency = 0.0;
+        size_t segments = 0;
+        const double* nodes = nullptr;
+        size_t decays = 0;
+        const double* decay = nullptr;
+        size_t samples = 0;
+        const double* basis = nullptr;
+        /** Each sample's coordinate along each lattice axis, in radians in
+         *  [-pi, pi), lowest axis first. */
+        const double* x[3] = {nullptr, nullptr, nullptr};
+        /** The tolerance the transform is planned to, and whether it is
+         *  computed in single precision. */
+        double tolerance = 0.0;
+        bool single = false;
+        /** Each coil's sum over the Chebyshev points of the basis times the
+         *  transform of its lattice sums, [coil][sample], zero on entry. */
+        std::complex<double>* out = nullptr;
+    };
+
+    /** Reads a window on the lattice in the engine's place and returns
+     *  true, or declines it and returns false. */
+    using LatticeDevice = std::function<bool(const LatticeWindowRead&)>;
 
     /** The events one block plays, timed in s from the block's start. */
     struct BlockEvents
@@ -100,7 +161,16 @@ namespace bloch
      * map about z. An ADC window under a gradient held throughout it is read
      * by a non-uniform FFT of each T2's isochromats, to within about 1e-13 of
      * the sum of their transverse magnetisations' magnitudes, where that
-     * costs less than turning every isochromat at every sample. An ADC
+     * costs less than turning every isochromat at every sample. A window
+     * under any other gradient is read by FINUFFT, where the host has handed
+     * it over (use_finufft()), if its k moves along axes on which the
+     * isochromats lie on a lattice and that costs less: each isochromat's
+     * value is summed onto its lattice point for each coil and each of a few
+     * Chebyshev points across the window, between which its decay and
+     * precession are interpolated, and the lattice is transformed to each
+     * sample's k, to within about 1e-11 of the sum of the magnitudes of the
+     * terms each sample sums. Either transform holds to a tolerance instead
+     * where play() is given one. An ADC
      * sample's coil sums are formed in partial sums over blocks of coils, with
      * AVX2 and FMA or AVX-512 where the processor has them, so their rounding
      * depends on the processor and the number of threads.
@@ -139,6 +209,24 @@ namespace bloch
             return elapsed_;
         }
 
+        /** ADC windows read on a lattice since construction. */
+        size_t lattice_windows() const
+        {
+            const std::lock_guard<std::mutex> held(mutex_);
+            return lattice_windows_;
+        }
+
+        /** Of those, the windows a device read. */
+        size_t device_windows() const
+        {
+            const std::lock_guard<std::mutex> held(mutex_);
+            return device_windows_;
+        }
+
+        /** Offer every window read on the lattice to @p device before the
+         *  engine reads it; an empty one offers none. */
+        void use_lattice_device(LatticeDevice device);
+
         /** Put every isochromat at equilibrium, along +z, and the clock at zero. */
         void reset();
 
@@ -153,12 +241,16 @@ namespace bloch
          * @p signal, coil-major: signal[c * adc_samples + k], the sum over the
          * isochromats of the receive sensitivity times Mx + i My.
          *
+         * An ADC window read by a transform is read to within @p tolerance of
+         * the sum of the magnitudes of the terms each sample sums, where it is
+         * above zero.
+         *
          * @throws std::invalid_argument on events the engine cannot play: an
          *         ADC sample inside the RF pulse, times out of order, or RF
          *         channels that differ in number from the transmit
          *         sensitivities.
          */
-        void play(const BlockEvents& block, std::complex<double>* signal);
+        void play(const BlockEvents& block, std::complex<double>* signal, double tolerance = 0.0);
 
     private:
         friend class Repetitions;
@@ -229,21 +321,24 @@ namespace bloch
             const GradientAreas& areas,
             size_t first,
             size_t last,
-            std::complex<double>* signal);
+            std::complex<double>* signal,
+            double tolerance);
         /** Read @p samples samples, @p area in 1/m and @p step in s apart,
          *  @p span in s from first to last, into signal[c * stride + k] by the
-         *  non-uniform FFT, unless reading them one by one costs less; return
-         *  whether it did. */
+         *  non-uniform FFT of kernel @p width, unless reading them one by one
+         *  costs less; return whether it did. */
         bool read_transformed(
             const double area[3],
             double step,
             size_t samples,
             double span,
+            size_t width,
             std::complex<double>* signal,
             size_t stride);
-        /** Whether the transform reads a window of @p samples samples for
-         *  less than reading it sample by sample, within its memory. */
-        bool transform_pays(size_t samples) const;
+        /** Whether the transform of kernel @p width reads a window of
+         *  @p samples samples for less than reading it sample by sample,
+         *  within its memory. */
+        bool transform_pays(size_t samples, size_t width) const;
         /** Spread every isochromat's term onto a grid per T2 and coil, the
          *  coils of a point together, and leave it as it stands at the
          *  window's last sample; return the grids. */
@@ -257,8 +352,154 @@ namespace bloch
             const std::vector<std::complex<double>>& spread,
             std::complex<double>* signal,
             size_t stride);
-        /** The transform of windows of @p samples samples. */
-        const Nufft& window_transform(size_t samples);
+        /** The transform of windows of @p samples samples by a kernel
+         *  @p width grid points wide. */
+        const Nufft& window_transform(size_t samples, size_t width);
+
+        /** The isochromats' positions along one axis as whole multiples of a
+         *  spacing from the least of them, where they are. */
+        struct Lattice
+        {
+            /** 0 where the positions are not such multiples. */
+            double spacing = 0.0;
+            double origin = 0.0;
+            size_t points = 0;
+            /** The largest distance of a position from its point, in m. */
+            double deviation = 0.0;
+            /** Each isochromat's point. */
+            std::vector<uint32_t> index;
+        };
+        /** The isochromats in order of their point on the lattice of the
+         *  axes in @p axes, a bit per axis, the lowest axis's index fastest,
+         *  where each point's start in that order, one more than the
+         *  points, and the most isochromats at one point; and, in that
+         *  order, each isochromat's off-resonance and T2 and, from the first
+         *  window summed in single precision on, its sensitivities, the
+         *  coils of an isochromat together. */
+        struct LatticeOrder
+        {
+            unsigned axes = 0;
+            std::vector<uint32_t> order;
+            std::vector<uint32_t> starts;
+            size_t fullest = 0;
+            std::vector<double> off_resonance;
+            std::vector<uint32_t> decay_of;
+            std::vector<std::complex<float>> receive;
+        };
+        /** The lattice of the positions along @p axis, found on first use. */
+        const Lattice& lattice(int axis);
+        LatticeOrder& lattice_order(unsigned axes);
+        /** Chebyshev points across a window of @p span s at which each
+         *  isochromat's decay and precession, interpolated between them,
+         *  hold to within @p error of their magnitude throughout the window;
+         *  0 where more than kMostSegments would be needed. */
+        size_t segments_for(double span, double error);
+        /**
+         * Read the window whose samples are @p area in 1/m and @p time in s
+         * after the one before them, three and one per sample, into
+         * signal[c * stride + k] by FINUFFT from the lattice of the axes its k
+         * moves along, to within @p error of the sum of the magnitudes of the
+         * terms each sample sums, and leave the isochromats as they stand at
+         * its last sample; unless FINUFFT is not ready, the isochromats lie on
+         * no such lattice, or reading it sample by sample costs less. Return
+         * whether it did.
+         */
+        bool read_on_lattice(
+            const std::vector<double>& area,
+            const std::vector<double>& time,
+            size_t samples,
+            double error,
+            std::complex<double>* signal,
+            size_t stride);
+
+        /** A window read on a lattice. */
+        struct LatticeWindow
+        {
+            /** Each sample's k from the first, in 1/m, three per sample, and
+             *  time from it, in s. */
+            std::vector<double> k;
+            std::vector<double> time;
+            double span = 0.0;
+            /** The axes the window's k moves along, the lowest first, and
+             *  their lattice's points along each. */
+            int along[3] = {0, 0, 0};
+            int axes = 0;
+            unsigned mask = 0;
+            int64_t modes[3] = {1, 1, 1};
+            size_t points = 1;
+            /** Per sample, the phase in cycles, over -2 pi, of the lattice's
+             *  centre along the axes the window's k moves along and of the
+             *  positions' middle along the others. */
+            std::vector<double> centre;
+            /** The middle of the isochromats' rates: 1/T2, in 1/s, and
+             *  off-resonance, in Hz. */
+            double rate = 0.0;
+            double frequency = 0.0;
+        };
+        /** Chebyshev points across a window, and the Lagrange basis at each
+         *  sample, [sample][point]. */
+        struct Segments
+        {
+            size_t count = 0;
+            std::vector<double> nodes;
+            std::vector<double> basis;
+        };
+        /** Fill @p window for the samples @p area and @p time apart; false
+         *  where its k moves along no axis or along one the isochromats do not
+         *  lie on a lattice of, to within @p error of the sum of the
+         *  magnitudes of the terms. */
+        bool lattice_window(
+            const std::vector<double>& area,
+            const std::vector<double>& time,
+            size_t samples,
+            double error,
+            LatticeWindow& window);
+        /** Sum each isochromat's value onto its lattice point, for each of
+         *  @p coils coils from @p first_coil on and each of the Chebyshev
+         *  points, into @p sums, [coil][point][lattice point]. */
+        template <typename Real>
+        void sum_onto_lattice(
+            const LatticeWindow& window,
+            const Segments& segments,
+            size_t first_coil,
+            size_t coils,
+            std::complex<Real>* sums);
+        /** Add each coil's sums at the samples of @p window, at the points
+         *  @p x along its axes in radians, to @p out, [coil][sample], by
+         *  lattice transforms in @p Real to within @p tolerance of the sum of
+         *  the magnitudes of the modes, as many coils at once as fit. */
+        template <typename Real>
+        void transform_lattice(
+            const LatticeWindow& window,
+            const Segments& segments,
+            const std::vector<std::vector<double>>& x,
+            double tolerance,
+            std::vector<std::complex<double>>& out);
+        /** Hand the window to the lattice device; whether it read it. */
+        bool read_on_device(
+            const LatticeWindow& window,
+            const Segments& segments,
+            const std::vector<std::vector<double>>& x,
+            double tolerance,
+            std::vector<std::complex<double>>& out);
+        /** Worker @p worker's lattice transform of @p modes along @p axes
+         *  axes, of @p vectors vectors at once, to within @p tolerance. */
+        LatticeTransform& lattice_transform(
+            int axes, const int64_t modes[3], int vectors, double tolerance, size_t worker);
+        /** Transform @p vectors vectors of @p modes, one after another, to
+         *  the samples of @p window at the points @p x, into @p sums, a
+         *  share of the vectors per worker. */
+        template <typename Real>
+        void transform_vectors(
+            const LatticeWindow& window,
+            const std::vector<std::vector<double>>& x,
+            double tolerance,
+            size_t vectors,
+            std::complex<Real>* modes,
+            std::complex<Real>* sums);
+        /** Leave each isochromat as it stands at the last sample of
+         *  @p window. */
+        void settle_after(const LatticeWindow& window);
         const Grouping& grouping(int mode, const double direction[3]);
 
         IsochromatProperties properties_;
@@ -359,6 +600,32 @@ namespace bloch
         std::vector<double> decays_;
         /** Transforms of ADC windows, the most recently read last. */
         std::list<std::unique_ptr<Nufft>> transforms_;
+
+        std::array<std::unique_ptr<Lattice>, 3> lattices_;
+        std::vector<std::unique_ptr<LatticeOrder>> lattice_orders_;
+        /** Lattice transforms, each a worker's, the most recently used
+         *  last. */
+        struct LatticeTransformHeld
+        {
+            size_t worker;
+            std::unique_ptr<LatticeTransform> plan;
+        };
+        std::list<LatticeTransformHeld> lattice_transforms_;
+        /** Chebyshev points found for a window's span and error. */
+        struct Segmentation
+        {
+            double span;
+            double error;
+            size_t count;
+        };
+        std::vector<Segmentation> segmentations_;
+        size_t lattice_windows_ = 0;
+        size_t device_windows_ = 0;
+        LatticeDevice lattice_device_;
+        /** The lattice's sums and their transforms at the samples, in
+         *  either precision, kept from one window to the next. */
+        std::vector<std::complex<double>> lattice_sums_, lattice_values_;
+        std::vector<std::complex<float>> single_sums_, single_values_;
 
         /** Held by every call that reads or changes the magnetisation. */
         mutable std::mutex mutex_;

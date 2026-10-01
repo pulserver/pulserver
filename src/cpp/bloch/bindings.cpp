@@ -13,6 +13,7 @@
 #include <cmath>
 #include <complex>
 #include <cstddef>
+#include <cstdint>
 #include <iterator>
 #include <memory>
 #include <stdexcept>
@@ -22,6 +23,7 @@
 
 #include "bloch/bloch.hpp"
 #include "bloch/events.hpp"
+#include "bloch/finufft.hpp"
 #include "bloch/parallel.hpp"
 #include "bloch/repetitions.hpp"
 
@@ -112,7 +114,74 @@ namespace
     {
         if (values.ndim() != 2 || static_cast<size_t>(values.shape(0)) != self.size() || values.shape(1) != 3)
             throw std::invalid_argument("the magnetisation must be (isochromats, 3)");
+        py::gil_scoped_release unlocked;
         self.set_magnetization(values.data());
+    }
+
+    /** A read-only view of an array the engine owns, valid during a call. */
+    template <typename T>
+    py::array view(const T* data, std::vector<py::ssize_t> shape)
+    {
+        py::array made(py::dtype::of<T>(), std::move(shape), {}, data, py::none());
+        py::detail::array_proxy(made.ptr())->flags &= ~py::detail::npy_api::NPY_ARRAY_WRITEABLE_;
+        return made;
+    }
+
+    /** The window as the device reads it: the engine's arrays, viewed. */
+    py::dict lattice_window(const bloch::LatticeWindowRead& read)
+    {
+        const auto n = static_cast<py::ssize_t>(read.isochromats);
+        const auto coils = static_cast<py::ssize_t>(read.coils);
+        const auto segments = static_cast<py::ssize_t>(read.segments);
+        const auto samples = static_cast<py::ssize_t>(read.samples);
+        py::dict window;
+        window["axes"] = read.axes;
+        window["modes"] = view(read.modes, {read.dimensions});
+        window["order"] = view(read.order, {n});
+        window["starts"] = view(read.starts, {static_cast<py::ssize_t>(read.points) + 1});
+        window["off_resonance"] = view(read.off_resonance, {n});
+        window["decay_of"] = view(read.decay_of, {n});
+        window["coils"] = read.coils;
+        window["receive_re"] = read.receive_re != nullptr ? py::object(view(read.receive_re, {coils, n})) : py::none();
+        window["receive_im"] = read.receive_im != nullptr ? py::object(view(read.receive_im, {coils, n})) : py::none();
+        window["mx"] = view(read.mx, {n});
+        window["my"] = view(read.my, {n});
+        window["frequency"] = read.frequency;
+        window["nodes"] = view(read.nodes, {segments});
+        window["decay"] = view(read.decay, {static_cast<py::ssize_t>(read.decays), segments});
+        window["basis"] = view(read.basis, {samples, segments});
+        py::list x;
+        for (int i = 0; i < read.dimensions; ++i)
+            x.append(view(read.x[i], {samples}));
+        window["x"] = x;
+        window["tolerance"] = read.tolerance;
+        window["single"] = read.single;
+        window["out"] = py::array_t<Complex>({coils, samples}, read.out, py::none());
+        return window;
+    }
+
+    /** The engine's lattice device calling @p device, or none for None. The
+     *  last reference to @p device is dropped holding the GIL, from whichever
+     *  thread drops it. */
+    bloch::LatticeDevice lattice_device(const py::object& device)
+    {
+        if (device.is_none())
+            return {};
+        std::shared_ptr<py::object> held(new py::object(device), [](py::object* object) {
+            py::gil_scoped_acquire acquired;
+            delete object;
+        });
+        return [held](const bloch::LatticeWindowRead& read) {
+            py::gil_scoped_acquire acquired;
+            return py::cast<bool>((*held)(lattice_window(read)));
+        };
+    }
+
+    void use_lattice_device(bloch::Isochromats& self, const py::object& device)
+    {
+        bloch::LatticeDevice made = lattice_device(device);
+        py::gil_scoped_release unlocked;
+        self.use_lattice_device(std::move(made));
     }
 
     /** Point @p block at the corners each entry of @p gradients holds, kept
@@ -172,7 +241,8 @@ namespace
         double rf_start,
         double rf_step,
         const py::object& rf,
-        const py::object& adc)
+        const py::object& adc,
+        double tolerance)
     {
         bloch::BlockEvents block;
         block.duration = duration;
@@ -208,9 +278,35 @@ namespace
         Complex* out = signal.mutable_data();
         {
             py::gil_scoped_release unlocked;
-            self.play(block, out);
+            self.play(block, out, tolerance);
         }
         return signal;
+    }
+
+    /** FINUFFT's entry points, as addresses by name, and its options'
+     *  layout: the struct's size and the byte offsets of its fields, by
+     *  name. */
+    bool use_finufft(const py::dict& entries, const py::dict& layout)
+    {
+        const auto entry = [&](const char* name) {
+            return reinterpret_cast<void*>(py::cast<uintptr_t>(entries[name]));
+        };
+        const auto plans = [&](const std::string& prefix) {
+            bloch::FinufftPlans made;
+            made.makeplan = entry((prefix + "_makeplan").c_str());
+            made.setpts = entry((prefix + "_setpts").c_str());
+            made.execute = entry((prefix + "_execute").c_str());
+            made.destroy = entry((prefix + "_destroy").c_str());
+            return made;
+        };
+        const auto field = [&](const char* name) { return py::cast<size_t>(layout[name]); };
+        bloch::FinufftOptions options;
+        options.size = field("size");
+        options.threads_at = field("nthreads");
+        options.fftw_at = field("fftw");
+        options.upsampling_at = field("upsampfac");
+        options.warnings_at = field("showwarn");
+        return bloch::use_finufft(plans("finufft"), plans("finufftf"), entry("finufft_default_opts"), options);
     }
 
     /** The RF pulse of a repeated block, given[3] to given[5] as
@@ -526,10 +622,20 @@ void bind_bloch(py::module_& module)
         .def_property_readonly("size", &bloch::Isochromats::size)
         .def_property_readonly("coils", &bloch::Isochromats::coils)
         .def_property_readonly("transmit_channels", &bloch::Isochromats::transmit_channels)
-        .def_property_readonly("elapsed", &bloch::Isochromats::elapsed)
-        .def("reset", &bloch::Isochromats::reset)
+        // Every call that takes the engine's lock lets the GIL go first: a
+        // device reading a window takes the GIL while the engine holds it.
+        .def_property_readonly(
+            "elapsed", py::cpp_function(&bloch::Isochromats::elapsed, py::call_guard<py::gil_scoped_release>()))
+        .def_property_readonly(
+            "lattice_windows",
+            py::cpp_function(&bloch::Isochromats::lattice_windows, py::call_guard<py::gil_scoped_release>()))
+        .def_property_readonly(
+            "device_windows",
+            py::cpp_function(&bloch::Isochromats::device_windows, py::call_guard<py::gil_scoped_release>()))
+        .def("reset", &bloch::Isochromats::reset, py::call_guard<py::gil_scoped_release>())
         .def("magnetization", &magnetization)
         .def("set_magnetization", &set_magnetization)
+        .def("use_lattice_device", &use_lattice_device, py::arg("device"))
         .def("play",
              &play,
              py::arg("duration"),
@@ -538,7 +644,8 @@ void bind_bloch(py::module_& module)
              py::arg("rf_start") = 0.0,
              py::arg("rf_step") = 0.0,
              py::arg("rf") = py::none(),
-             py::arg("adc") = py::none());
+             py::arg("adc") = py::none(),
+             py::arg("tolerance") = 0.0);
 
     py::class_<bloch::Repetitions>(module, "Repetitions")
         .def(py::init(&make_repetitions),
@@ -584,6 +691,15 @@ void bind_bloch(py::module_& module)
         py::arg("points"),
         py::arg("out"),
         "Maps (channels, z, y, x) interpolated trilinearly at (n, 3) points into out, (n, channels).");
+
+    module.def(
+        "use_finufft",
+        &use_finufft,
+        py::arg("entries"),
+        py::arg("layout"),
+        "Take FINUFFT's entry points, addresses by name (finufft_ and finufftf_ makeplan, setpts, execute and "
+        "destroy, and finufft_default_opts), and its options' size and the byte offsets of nthreads, fftw, "
+        "upsampfac and showwarn; whether they were taken.");
 
     module.def(
         "adc_window",

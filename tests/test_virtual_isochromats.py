@@ -697,6 +697,169 @@ def test_a_long_window_under_a_held_gradient_samples_each_isochromat_s_geometric
     np.testing.assert_allclose(m[:, 2], 0.2 * e1 + 1 - e1, rtol=0, atol=1e-12)
 
 
+def _changing(trajectory: str, duration: float) -> list[np.ndarray | None]:
+    """Corners of gradients whose k moves along one, two or three axes throughout ``duration``."""
+    if trajectory == "ramps along x":
+        ramps = np.array([[0.0, 0.4, 1.6, 2.0], [0.0, 2e4, 2e4, 0.0]])
+        return [ramps * [[duration / 2.0], [1.0]], None, None]
+    times = np.linspace(0.0, duration, 81)
+    spiral = 3e4 * (times / duration) * np.exp(6j * np.pi * times / duration)
+    ramp = np.array([times, 1e4 * times / duration])
+    return [
+        np.array([times, spiral.real]),
+        np.array([times, spiral.imag]),
+        ramp if trajectory == "cone" else None,
+    ]
+
+
+def _on_lattice(trajectory: str, copies: int | None = None) -> np.ndarray:
+    """Positions on a lattice 4 mm apart along the axes ``_changing``'s k moves along, anywhere along the others, ``copies`` per lattice point."""
+    shape = {"ramps along x": (40, 1, 1), "spiral": (16, 16, 1), "cone": (12, 12, 12)}[
+        trajectory
+    ]
+    index = np.indices(shape).reshape(3, -1).T - np.array(shape) // 2
+    positions = 4e-3 * index.astype(float)
+    free = np.array(shape) == 1
+    if copies is None:
+        copies = {"ramps along x": 50, "spiral": 8, "cone": 1}[trajectory]
+    positions = np.repeat(positions, copies, axis=0)
+    positions[:, free] = RNG.uniform(-0.02, 0.02, size=(len(positions), free.sum()))
+    return positions
+
+
+def _window_terms(positions, t2, off_resonance, start, gradients, times):
+    """Each isochromat's transverse magnetisation at ``times``, (times, isochromats)."""
+    areas = np.array(
+        [[0.0 if g is None else _area(*g, t) for g in gradients] for t in times]
+    )
+    phase = areas @ positions.T + np.outer(times, off_resonance)
+    return start * np.exp(-times[:, None] / t2 - 2j * np.pi * phase)
+
+
+@pytest.mark.parametrize(
+    ("trajectory", "tolerance", "coils"),
+    [
+        ("ramps along x", 0.0, 4),
+        ("ramps along x", 1e-4, 4),
+        ("spiral", 0.0, 4),
+        ("spiral", 1e-7, 4),
+        ("spiral", 1e-4, 4),
+        ("cone", 1e-4, 4),
+        ("spiral", 1e-7, 37),
+        ("spiral", 1e-4, 37),
+        ("spiral", 0.0, None),
+        ("spiral", 1e-4, None),
+    ],
+)
+def test_a_window_under_a_changing_gradient_is_read_on_the_lattice_its_k_moves_along(
+    trajectory, tolerance, coils
+):
+    """Read by FINUFFT, in double precision or, far enough above its rounding, in single, to within the tolerance of the terms, by any number of coils or one of unit sensitivity."""
+    # Many coils are read on the lattice where its points hold many isochromats.
+    positions = _on_lattice(trajectory, None if coils in (4, None) else 32)
+    n, duration = len(positions), 2e-3
+    receive = (
+        None
+        if coils is None
+        else RNG.normal(size=(n, coils)) + 1j * RNG.normal(size=(n, coils))
+    )
+    t2 = RNG.choice([0.03, 0.08, 0.3], n)
+    off_resonance = RNG.uniform(-100.0, 100.0, n)
+    start = RNG.normal(size=n) + 1j * RNG.normal(size=n)
+    spins = Isochromats(
+        positions, t1=0.9, t2=t2, off_resonance=off_resonance, receive=receive
+    )
+    spins.magnetization = np.column_stack([start.real, start.imag, np.full(n, 0.2)])
+    gradients = _changing(trajectory, duration)
+    adc = np.linspace(0.05e-3, duration - 0.05e-3, 400 if trajectory == "cone" else 200)
+    signal = spins.play(duration, gradients=gradients, adc=adc, tolerance=tolerance)
+
+    assert spins.lattice_windows == 1
+    sensitivities = np.ones((n, 1)) if receive is None else receive
+    terms = np.abs(start) @ np.abs(sensitivities)
+    transverse = _window_terms(positions, t2, off_resonance, start, gradients, adc)
+    np.testing.assert_allclose(
+        signal,
+        (transverse @ sensitivities).T,
+        rtol=0,
+        atol=max(tolerance, 1e-11) * terms.max(),
+    )
+    # The block goes on from the state the window leaves each isochromat in.
+    end = _window_terms(
+        positions, t2, off_resonance, start, gradients, np.array([duration])
+    )[0]
+    m = spins.magnetization
+    np.testing.assert_allclose(m[:, 0] + 1j * m[:, 1], end, rtol=0, atol=1e-12)
+    e1 = np.exp(-duration / 0.9)
+    np.testing.assert_allclose(m[:, 2], 0.2 * e1 + 1 - e1, rtol=0, atol=1e-12)
+
+
+@pytest.mark.parametrize("reason", ["off the lattice", "too many Chebyshev points"])
+def test_a_window_that_no_lattice_serves_is_read_sample_by_sample(reason):
+    positions = _on_lattice("spiral")
+    n, duration = len(positions), 2e-3
+    off_resonance = RNG.uniform(-100.0, 100.0, n)
+    if reason == "off the lattice":
+        positions[:, :2] += RNG.uniform(-1e-7, 1e-7, size=(n, 2))
+    else:
+        off_resonance = RNG.uniform(-2e4, 2e4, n)
+    start = RNG.normal(size=n) + 1j * RNG.normal(size=n)
+    spins = Isochromats(positions, t2=0.05, off_resonance=off_resonance)
+    spins.magnetization = np.column_stack([start.real, start.imag, np.zeros(n)])
+    gradients = _changing("spiral", duration)
+    adc = np.linspace(0.05e-3, duration - 0.05e-3, 200)
+    signal = spins.play(duration, gradients=gradients, adc=adc)
+
+    assert spins.lattice_windows == 0
+    transverse = _window_terms(
+        positions, np.full(n, 0.05), off_resonance, start, gradients, adc
+    )
+    np.testing.assert_allclose(
+        signal[0], transverse.sum(axis=1), rtol=0, atol=1e-11 * np.abs(start).sum()
+    )
+
+
+@pytest.mark.skipif(not hasattr(os, "fork"), reason="needs fork()")
+@pytest.mark.parametrize("tolerance", [0.0, 1e-4])
+def test_a_window_read_on_a_lattice_before_a_fork_is_read_on_it_in_the_child(
+    tolerance,
+):
+    positions = _on_lattice("spiral")
+    receive = np.exp(1j * RNG.uniform(0, 2 * np.pi, size=(len(positions), 3)))
+    gradients = _changing("spiral", 2e-3)
+    adc = np.linspace(0.05e-3, 1.95e-3, 200)
+
+    def window():
+        spins = Isochromats(positions, t2=0.05, receive=receive)
+        spins.magnetization = [0.0, 1.0, 0.0]
+        signal = spins.play(2e-3, gradients=gradients, adc=adc, tolerance=tolerance)
+        return signal, spins.lattice_windows
+
+    before, windows = window()
+    assert windows == 1
+    read, write = os.pipe()
+    child = os.fork()
+    if child == 0:
+        os.close(read)
+        try:
+            after, windows = window()
+            same = windows == 1 and np.allclose(after, before, rtol=0, atol=1e-12)
+        except BaseException:
+            same = False
+        os.write(write, b"1" if same else b"0")
+        os._exit(0)
+    os.close(write)
+    try:
+        ready, _, _ = select.select([read], [], [], 300)
+        answer = os.read(read, 1) if ready else b""
+    finally:
+        os.close(read)
+        if not answer:
+            os.kill(child, signal.SIGKILL)
+        os.waitpid(child, 0)
+    assert answer == b"1"
+
+
 def test_receive_sensitivities_in_a_read_only_memory_mapped_file_are_received_as_in_memory(
     tmp_path,
 ):

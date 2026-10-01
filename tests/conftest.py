@@ -1,5 +1,7 @@
 """Shared pytest fixtures."""
 
+import os
+
 import pytest
 
 
@@ -9,6 +11,12 @@ def _cuda_available():
     except ImportError:
         return False
     return torch.cuda.is_available()
+
+
+# Without a GPU, Triton's kernels run on the CPU under its interpreter, which
+# is chosen when triton is first imported.
+if not _cuda_available():
+    os.environ.setdefault("TRITON_INTERPRET", "1")
 
 
 @pytest.fixture(
