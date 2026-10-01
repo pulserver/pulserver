@@ -89,8 +89,9 @@ pulserver scan --plugins sequences --plugin gre --limits limits.txt \
   --store designs --recon 127.0.0.1:9002 --output images
 ```
 
-On a scanner, the interpreter makes the same design calls and streams to the
-same proxy.
+The shipped sequences and reconstructions are found by name after the given
+directories, so `--plugin gre_radial2d` needs no file of its own. On a scanner,
+the interpreter makes the same design calls and streams to the same proxy.
 
 ## Documentation
 
