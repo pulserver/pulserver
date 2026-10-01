@@ -5,6 +5,7 @@ import subprocess
 import numpy as np
 import pypulseqpp as pp
 import pytest
+from conftest import LABELS, VENDOR
 
 from pulserver.ir import convert, play, played_rf, summary
 
@@ -196,15 +197,15 @@ def test_a_zero_flip_pulse_converts_with_no_energy_and_the_fallback_bandwidth(tm
     assert played["b1sq_integral_s"] == pytest.approx(_b1sq_integral(sinc), rel=1e-5)
 
 
-def test_the_definitions_a_design_states_are_the_ones_a_scanner_reads(tmp_path):
+def test_the_definitions_a_design_states_are_the_ones_a_scanner_reads(
+    tmp_path, scanner_build
+):
     """A pulse is named by one number on both sides, or it is costed as another pulse.
 
     ``played_rf`` numbers the definitions for a design service answering a
     listing; the scanner reads them out of that design's cache. The two
     numberings are arrived at independently, in different languages.
     """
-    from tests.test_ir import LABELS, VENDOR, _scanner_build
-
     sinc, _, hard = _pulses()
     half = pp.make_sinc_pulse(
         np.pi / 12, duration=2e-3, time_bw_product=4, system=SYSTEM
@@ -213,7 +214,7 @@ def test_the_definitions_a_design_states_are_the_ones_a_scanner_reads(tmp_path):
     cache = convert(
         path, SYSTEM, vendor=VENDOR, label_column_map=LABELS, cache_ext=".cache"
     )
-    reader = _scanner_build(tmp_path, "read_rf_definitions.c", "read_rf_definitions")
+    reader = scanner_build(tmp_path, "read_rf_definitions.c", "read_rf_definitions")
 
     printed = subprocess.run(
         [str(reader), str(cache), str(path.stat().st_size)],
