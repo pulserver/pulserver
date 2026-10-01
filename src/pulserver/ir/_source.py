@@ -661,6 +661,34 @@ def _block_states(
     }
 
 
+def played_rf(sequence: Any) -> tuple[tuple[int, float], ...]:
+    """Return the definition and designed angle of each RF row a sequence plays.
+
+    One entry per row of the RF library some block names, in the order the
+    conversion keeps them. Rows sharing a definition play one shape at
+    different amplitudes or offsets, so a refocusing train is several entries
+    naming the one definition.
+
+    Definitions are numbered as the IR numbers them, densely from 0, so a
+    scanner reading the cache of this design names the same pulse by the same
+    number.
+
+    Returns
+    -------
+    tuple of (int, float)
+        The definition, and the angle the row turns the magnetisation through
+        in degrees.
+    """
+    libraries = _sequence_libraries(sequence, _tables(sequence))
+    _, mapping = _played(libraries.rf, libraries.blocks, (1,))
+    rows = [old - 1 for old in sorted(mapping, key=mapping.get)]
+    definitions = _densified(libraries.rf_definitions, rows)
+    return tuple(
+        (int(definition), float(libraries.rf_flip_deg[row]))
+        for definition, row in zip(definitions, rows, strict=True)
+    )
+
+
 def _repetition_size(sequence: Any) -> int:
     size, start = sequence.repetition()
     if start != 1:

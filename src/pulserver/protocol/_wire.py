@@ -215,11 +215,18 @@ PULSES_END = "[RfPulses End]"
 class RfPulse:
     """One pulse a sequence plays, and what its flip angle follows.
 
-    The scanner costs its RF before a scan from the pulses the sequence will
-    play. Which pulses those are, and the shape of each, is settled by the
-    design; what the operator moves is an angle. So a pulse states where its
-    angle comes from, and the scanner reads the angle from there for as long as
-    the sequence is prescribed.
+    The scanner costs the RF of a scan before it runs it. What the operator
+    moves between one costing and the next is a flip angle, and sometimes the
+    structure: another echo in the train, another line of the matrix, so a
+    repetition holding a different number of pulses in a different order.
+
+    **A pulse is a definition of the design it was read from.** Which knob
+    drives a pulse is not a property of the pulse, so it is stated by the
+    sequence's author and not worked out here: an angle is the thing being
+    moved, a position moves when another echo joins a train, and what a pulse
+    is for is shared by pulses that are not the same. :attr:`definition` is the
+    design's own identity for it, and a scanner reads the same number from that
+    design's cache.
 
     The shape does not travel. It is in the design's own cache, which the
     scanner reads, and every statistic a pulse is costed from is computed from
@@ -227,6 +234,8 @@ class RfPulse:
 
     Attributes
     ----------
+    definition
+        The design's RF definition this pulse is an instance of.
     flip_deg
         The angle it was designed at. The angle played where ``follows`` is
         empty.
@@ -236,32 +245,25 @@ class RfPulse:
     factor
         What that value is scaled by: an inversion at twice the excitation, a
         refocusing at four fifths of it.
-    use
-        What the pulse is for, as Pulseq tags it: ``excitation``,
-        ``refocusing``, ``inversion``, ``saturation``, ``preparation`` or
-        ``other``.
-    count
-        How many times the sequence plays it.
     """
 
+    definition: int
     flip_deg: float
     follows: str = ""
     factor: float = 1.0
-    use: str = ""
-    count: int = 1
 
 
 def format_pulses(pulses: Sequence[RfPulse], design: str = "") -> str:
     """Format the RF a design plays, as the ``list`` design call replies it.
 
     ``design`` names the design whose cache holds the shapes, which is what a
-    scanner reads them from.
+    scanner reads them from, and by the definition number each pulse states.
     """
     lines = [PULSES_BEGIN, f"design {design or '-'}"]
     for pulse in pulses:
         lines.append(
-            f"{pulse.follows or '-'} {pulse.factor:.7g} {pulse.flip_deg:.7g} "
-            f"{pulse.use or '-'} {pulse.count:d}"
+            f"{pulse.follows or '-'} {pulse.factor:.7g} "
+            f"{pulse.flip_deg:.7g} {pulse.definition:d}"
         )
     lines.append(PULSES_END)
     return "\n".join(lines) + "\n"
@@ -294,15 +296,14 @@ def parse_pulses(text: str) -> tuple[str, list[RfPulse]]:
         if parts[0] == "design":
             design = "" if len(parts) < 2 or parts[1] == "-" else parts[1]
             continue
-        if len(parts) < 5:
-            raise ValueError(f"an RF pulse is five values: {stripped!r}")
+        if len(parts) < 4:
+            raise ValueError(f"an RF pulse is four values: {stripped!r}")
         found.append(
             RfPulse(
+                definition=int(parts[3]),
                 flip_deg=float(parts[2]),
                 follows="" if parts[0] == "-" else parts[0],
                 factor=float(parts[1]),
-                use="" if parts[3] == "-" else parts[3],
-                count=int(parts[4]),
             )
         )
     return design, found
