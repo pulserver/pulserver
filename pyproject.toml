@@ -138,7 +138,7 @@ ignore = [
 # where the page introduces them rather than all at the top. A scanner
 # sequence declares its `ui` as a class-level mapping, as a plugin file does.
 "gallery/**" = ["D205", "D400", "D401", "E402", "RUF012"]
-"docker/console/plugins/**" = ["RUF012"]
+"src/pulserver/_zoo/sequences/**" = ["RUF012"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "numpy"

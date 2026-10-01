@@ -4,6 +4,8 @@ import pytest
 
 from pulserver import _plugins
 
+SHIPPED = sorted(path.stem for path in _plugins.SEQUENCES.glob("*.py"))
+
 
 @pytest.fixture
 def path(tmp_path):
@@ -25,13 +27,26 @@ def test_a_plugin_is_the_file_of_the_first_directory_that_holds_it(path):
 
 
 def test_the_plugin_names_are_those_of_every_directory_each_once(path):
-    assert _plugins.names(path) == ["own", "shared"]
+    assert _plugins.names(path) == sorted({"own", "shared", *SHIPPED})
+
+
+def test_a_shipped_plugin_is_found_after_every_directory_given(path):
+    first = path[0]
+    (first / "gre2d.py").write_text("")
+
+    assert _plugins.find(first, "gre2d") == first / "gre2d.py"
+    assert _plugins.find(path[1], "gre2d") == _plugins.SEQUENCES / "gre2d.py"
+    assert _plugins.find(path[1], "nufft") == _plugins.RECONSTRUCTIONS / "nufft.py"
+
+
+def test_the_shipped_reconstructions_are_not_listed_as_sequences(path):
+    assert "nufft" not in _plugins.names(path)
 
 
 def test_a_directory_that_does_not_exist_holds_no_plugins(path, tmp_path):
     absent = tmp_path / "absent"
 
-    assert _plugins.names([absent, *path]) == ["own", "shared"]
+    assert _plugins.names([absent, *path]) == sorted({"own", "shared", *SHIPPED})
     assert _plugins.find([absent, *path], "own") == path[1] / "own.py"
 
 
@@ -40,7 +55,7 @@ def test_a_link_is_a_plugin_named_after_the_link(path):
     (first / "alias.py").symlink_to("../second/own.py")
     (first / "dangling.py").symlink_to("../second/absent.py")
 
-    assert _plugins.names(first) == ["alias", "shared"]
+    assert _plugins.names(first) == sorted({"alias", "shared", *SHIPPED})
     assert _plugins.find(first, "alias").read_text() == ""
 
 
@@ -56,4 +71,7 @@ def test_a_plugin_no_directory_holds_names_every_directory_searched(path):
     with pytest.raises(FileNotFoundError) as refused:
         _plugins.find(path, "absent")
 
-    assert str(refused.value) == f"no plugin 'absent' in {first}, {second}"
+    assert str(refused.value) == (
+        f"no plugin 'absent' in {first}, {second}, "
+        f"{_plugins.SEQUENCES}, {_plugins.RECONSTRUCTIONS}"
+    )
