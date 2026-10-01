@@ -70,6 +70,7 @@ shortest echo time. An entry's `default` replaces the application's default as
 the initial value, in UI units: `default=TEPreset.MINIMUM` offers a protocol a
 scanner with weaker gradients than the application assumes can play.
 
+(shipped-sequences)=
 ## Shipped sequences
 
 pulserver ships a plugin for each of these pypulseqpp sequences, searched after
