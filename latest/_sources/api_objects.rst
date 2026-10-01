@@ -113,6 +113,9 @@ from.
    PROTOCOL_BEGIN
    PROTOCOL_END
    format_listing
+   RfPulse
+   format_pulses
+   parse_pulses
    parse_listing
    format_values
    parse_values

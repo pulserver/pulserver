@@ -546,11 +546,22 @@ argument took in the design, as the application records it with
 travel as integer microseconds; other float values are read and reported
 to six significant digits, the precision of a float32 parameter. Either way
 a reply stored in scanner parameters and sent back resolves to itself.</p>
-<dl class="field-list simple">
+<dl class="field-list">
 <dt class="field-odd">Attributes<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>recon</strong> (<em>str</em>) – Reconstruction plugin the data of this sequence is reconstructed with,
+<dd class="field-odd"><ul>
+<li><p><strong>recon</strong> (<em>str</em>) – Reconstruction plugin the data of this sequence is reconstructed with,
 recorded in every design generated from it. Empty leaves the choice
-to the reconstruction client.</p>
+to the reconstruction client.</p></li>
+<li><p><strong>follows</strong> (<em>Mapping[str, str]</em>) – Which protocol parameter drives the flip angle of each kind of pulse:
+<code class="docutils literal notranslate"><span class="pre">{&quot;excitation&quot;:</span> <span class="pre">UIParam.FLIP}</span></code>. A kind the mapping does not name is
+played at the angle it was designed at, whatever the operator does.</p>
+<p>Nothing else is stated. The pulses, their shapes and their angles are
+read from a design at the application’s defaults, and a pulse’s share
+of its parameter is the angle it was designed at over the value that
+parameter was designed with – so a refocusing train whose angles vary
+gets one share each without any of them being written down.</p>
+</li>
+</ul>
 </dd>
 <dt class="field-even">Raises<span class="colon">:</span></dt>
 <dd class="field-even"><p><strong>ValueError</strong> – When a subclass is defined with a <code class="docutils literal notranslate"><span class="pre">ui</span></code> key the interpreter does not
@@ -572,10 +583,13 @@ to the reconstruction client.</p>
 <tr class="row-odd"><td><p><a class="reference internal" href="pulserver.design.ScannerSequence.resolve.html#pulserver.design.ScannerSequence.resolve" title="pulserver.design.ScannerSequence.resolve"><code class="xref py py-obj docutils literal notranslate"><span class="pre">resolve</span></code></a></p></td>
 <td><p>Return the application a request constructs, and the validation of <code class="xref py py-meth docutils literal notranslate"><span class="pre">validate()</span></code>.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pulserver.design.ScannerSequence.validate.html#pulserver.design.ScannerSequence.validate" title="pulserver.design.ScannerSequence.validate"><code class="xref py py-obj docutils literal notranslate"><span class="pre">validate</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pulserver.design.ScannerSequence.rf_pulses.html#pulserver.design.ScannerSequence.rf_pulses" title="pulserver.design.ScannerSequence.rf_pulses"><code class="xref py py-obj docutils literal notranslate"><span class="pre">rf_pulses</span></code></a></p></td>
+<td><p>Return the RF a design plays, as a scanner costs it while prescribing.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.design.ScannerSequence.validate.html#pulserver.design.ScannerSequence.validate" title="pulserver.design.ScannerSequence.validate"><code class="xref py py-obj docutils literal notranslate"><span class="pre">validate</span></code></a></p></td>
 <td><p>Resolve a request into the protocol the application will play.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.design.ScannerSequence.write.html#pulserver.design.ScannerSequence.write" title="pulserver.design.ScannerSequence.write"><code class="xref py py-obj docutils literal notranslate"><span class="pre">write</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pulserver.design.ScannerSequence.write.html#pulserver.design.ScannerSequence.write" title="pulserver.design.ScannerSequence.write"><code class="xref py py-obj docutils literal notranslate"><span class="pre">write</span></code></a></p></td>
 <td><p>Write a resolved application into <code class="docutils literal notranslate"><span class="pre">directory</span></code> as signed binary Pulseq.</p></td>
 </tr>
 </tbody>
@@ -584,13 +598,16 @@ to the reconstruction client.</p>
 <p class="rubric">Attributes</p>
 <div class="pst-scrollable-table-container"><table class="autosummary longtable table">
 <tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.design.ScannerSequence.recon.html#pulserver.design.ScannerSequence.recon" title="pulserver.design.ScannerSequence.recon"><code class="xref py py-obj docutils literal notranslate"><span class="pre">recon</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.design.ScannerSequence.follows.html#pulserver.design.ScannerSequence.follows" title="pulserver.design.ScannerSequence.follows"><code class="xref py py-obj docutils literal notranslate"><span class="pre">follows</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pulserver.design.ScannerSequence.app.html#pulserver.design.ScannerSequence.app" title="pulserver.design.ScannerSequence.app"><code class="xref py py-obj docutils literal notranslate"><span class="pre">app</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pulserver.design.ScannerSequence.recon.html#pulserver.design.ScannerSequence.recon" title="pulserver.design.ScannerSequence.recon"><code class="xref py py-obj docutils literal notranslate"><span class="pre">recon</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.design.ScannerSequence.ui.html#pulserver.design.ScannerSequence.ui" title="pulserver.design.ScannerSequence.ui"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ui</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.design.ScannerSequence.app.html#pulserver.design.ScannerSequence.app" title="pulserver.design.ScannerSequence.app"><code class="xref py py-obj docutils literal notranslate"><span class="pre">app</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pulserver.design.ScannerSequence.ui.html#pulserver.design.ScannerSequence.ui" title="pulserver.design.ScannerSequence.ui"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ui</span></code></a></p></td>
 <td><p></p></td>
 </tr>
 </tbody>

@@ -460,7 +460,7 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">math</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Mapping</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Mapping</span><span class="p">,</span> <span class="n">Sequence</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">._schema</span><span class="w"> </span><span class="kn">import</span> <span class="n">InputMode</span><span class="p">,</span> <span class="n">Kind</span><span class="p">,</span> <span class="n">Parameter</span>
@@ -678,6 +678,116 @@
         <span class="n">info</span><span class="o">=</span><span class="n">info</span><span class="o">.</span><span class="n">removeprefix</span><span class="p">(</span><span class="s2">"INFO"</span><span class="p">)</span><span class="o">.</span><span class="n">strip</span><span class="p">(),</span>
         <span class="n">values</span><span class="o">=</span><span class="n">parse_values</span><span class="p">(</span><span class="n">block</span><span class="p">,</span> <span class="n">listing</span><span class="p">),</span>
     <span class="p">)</span></div>
+
+
+
+<span class="n">PULSES_BEGIN</span> <span class="o">=</span> <span class="s2">"[RfPulses]"</span>
+<span class="n">PULSES_END</span> <span class="o">=</span> <span class="s2">"[RfPulses End]"</span>
+
+
+<div class="viewcode-block" id="RfPulse">
+<a class="viewcode-back" href="../../../generated/pulserver.protocol.RfPulse.html#pulserver.protocol.RfPulse">[docs]</a>
+<span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">RfPulse</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""One pulse a sequence plays, and what its flip angle follows.</span>
+
+<span class="sd">    The scanner costs its RF before a scan from the pulses the sequence will</span>
+<span class="sd">    play. Which pulses those are, and the shape of each, is settled by the</span>
+<span class="sd">    design; what the operator moves is an angle. So a pulse states where its</span>
+<span class="sd">    angle comes from, and the scanner reads the angle from there for as long as</span>
+<span class="sd">    the sequence is prescribed.</span>
+
+<span class="sd">    The shape does not travel. It is in the design's own cache, which the</span>
+<span class="sd">    scanner reads, and every statistic a pulse is costed from is computed from</span>
+<span class="sd">    that shape at unit peak and does not move with the angle.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    flip_deg</span>
+<span class="sd">        The angle it was designed at. The angle played where ``follows`` is</span>
+<span class="sd">        empty.</span>
+<span class="sd">    follows</span>
+<span class="sd">        Protocol parameter whose value the angle takes; empty is a pulse whose</span>
+<span class="sd">        angle the operator does not move.</span>
+<span class="sd">    factor</span>
+<span class="sd">        What that value is scaled by: an inversion at twice the excitation, a</span>
+<span class="sd">        refocusing at four fifths of it.</span>
+<span class="sd">    use</span>
+<span class="sd">        What the pulse is for, as Pulseq tags it: ``excitation``,</span>
+<span class="sd">        ``refocusing``, ``inversion``, ``saturation``, ``preparation`` or</span>
+<span class="sd">        ``other``.</span>
+<span class="sd">    count</span>
+<span class="sd">        How many times the sequence plays it.</span>
+<span class="sd">    """</span>
+
+    <span class="n">flip_deg</span><span class="p">:</span> <span class="nb">float</span>
+    <span class="n">follows</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">""</span>
+    <span class="n">factor</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span>
+    <span class="n">use</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">""</span>
+    <span class="n">count</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span></div>
+
+
+
+<div class="viewcode-block" id="format_pulses">
+<a class="viewcode-back" href="../../../generated/pulserver.protocol.format_pulses.html#pulserver.protocol.format_pulses">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">format_pulses</span><span class="p">(</span><span class="n">pulses</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">RfPulse</span><span class="p">],</span> <span class="n">design</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">""</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Format the RF a design plays, as the ``list`` design call replies it.</span>
+
+<span class="sd">    ``design`` names the design whose cache holds the shapes, which is what a</span>
+<span class="sd">    scanner reads them from.</span>
+<span class="sd">    """</span>
+    <span class="n">lines</span> <span class="o">=</span> <span class="p">[</span><span class="n">PULSES_BEGIN</span><span class="p">,</span> <span class="sa">f</span><span class="s2">"design </span><span class="si">{</span><span class="n">design</span><span class="w"> </span><span class="ow">or</span><span class="w"> </span><span class="s1">'-'</span><span class="si">}</span><span class="s2">"</span><span class="p">]</span>
+    <span class="k">for</span> <span class="n">pulse</span> <span class="ow">in</span> <span class="n">pulses</span><span class="p">:</span>
+        <span class="n">lines</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">pulse</span><span class="o">.</span><span class="n">follows</span><span class="w"> </span><span class="ow">or</span><span class="w"> </span><span class="s1">'-'</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">pulse</span><span class="o">.</span><span class="n">factor</span><span class="si">:</span><span class="s2">.7g</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">pulse</span><span class="o">.</span><span class="n">flip_deg</span><span class="si">:</span><span class="s2">.7g</span><span class="si">}</span><span class="s2"> "</span>
+            <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">pulse</span><span class="o">.</span><span class="n">use</span><span class="w"> </span><span class="ow">or</span><span class="w"> </span><span class="s1">'-'</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">pulse</span><span class="o">.</span><span class="n">count</span><span class="si">:</span><span class="s2">d</span><span class="si">}</span><span class="s2">"</span>
+        <span class="p">)</span>
+    <span class="n">lines</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">PULSES_END</span><span class="p">)</span>
+    <span class="k">return</span> <span class="s2">"</span><span class="se">\n</span><span class="s2">"</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">lines</span><span class="p">)</span> <span class="o">+</span> <span class="s2">"</span><span class="se">\n</span><span class="s2">"</span></div>
+
+
+
+<div class="viewcode-block" id="parse_pulses">
+<a class="viewcode-back" href="../../../generated/pulserver.protocol.parse_pulses.html#pulserver.protocol.parse_pulses">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">parse_pulses</span><span class="p">(</span><span class="n">text</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="n">RfPulse</span><span class="p">]]:</span>
+<span class="w">    </span><span class="sd">"""Read the design and the RF it plays from a listing.</span>
+
+<span class="sd">    Returns an empty design and no pulses where the text holds no block, which</span>
+<span class="sd">    is a sequence the scanner is not given the RF of in advance.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If a line is not a pulse, or states a value that is not a number.</span>
+<span class="sd">    """</span>
+    <span class="n">found</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">RfPulse</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">design</span> <span class="o">=</span> <span class="s2">""</span>
+    <span class="n">inside</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="n">text</span><span class="o">.</span><span class="n">splitlines</span><span class="p">():</span>
+        <span class="n">stripped</span> <span class="o">=</span> <span class="n">line</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">inside</span><span class="p">:</span>
+            <span class="n">inside</span> <span class="o">=</span> <span class="n">stripped</span> <span class="o">==</span> <span class="n">PULSES_BEGIN</span>
+            <span class="k">continue</span>
+        <span class="k">if</span> <span class="n">stripped</span> <span class="o">==</span> <span class="n">PULSES_END</span><span class="p">:</span>
+            <span class="k">break</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">stripped</span><span class="p">:</span>
+            <span class="k">continue</span>
+        <span class="n">parts</span> <span class="o">=</span> <span class="n">stripped</span><span class="o">.</span><span class="n">split</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">parts</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="s2">"design"</span><span class="p">:</span>
+            <span class="n">design</span> <span class="o">=</span> <span class="s2">""</span> <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">parts</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">2</span> <span class="ow">or</span> <span class="n">parts</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">==</span> <span class="s2">"-"</span> <span class="k">else</span> <span class="n">parts</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+            <span class="k">continue</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">parts</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">5</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"an RF pulse is five values: </span><span class="si">{</span><span class="n">stripped</span><span class="si">!r}</span><span class="s2">"</span><span class="p">)</span>
+        <span class="n">found</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+            <span class="n">RfPulse</span><span class="p">(</span>
+                <span class="n">flip_deg</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">parts</span><span class="p">[</span><span class="mi">2</span><span class="p">]),</span>
+                <span class="n">follows</span><span class="o">=</span><span class="s2">""</span> <span class="k">if</span> <span class="n">parts</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="s2">"-"</span> <span class="k">else</span> <span class="n">parts</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
+                <span class="n">factor</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">parts</span><span class="p">[</span><span class="mi">1</span><span class="p">]),</span>
+                <span class="n">use</span><span class="o">=</span><span class="s2">""</span> <span class="k">if</span> <span class="n">parts</span><span class="p">[</span><span class="mi">3</span><span class="p">]</span> <span class="o">==</span> <span class="s2">"-"</span> <span class="k">else</span> <span class="n">parts</span><span class="p">[</span><span class="mi">3</span><span class="p">],</span>
+                <span class="n">count</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">parts</span><span class="p">[</span><span class="mi">4</span><span class="p">]),</span>
+            <span class="p">)</span>
+        <span class="p">)</span>
+    <span class="k">return</span> <span class="n">design</span><span class="p">,</span> <span class="n">found</span></div>
 
 </pre></div>
 
