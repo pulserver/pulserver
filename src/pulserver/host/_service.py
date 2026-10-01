@@ -35,7 +35,7 @@ from ..protocol import (
 from ._blocks import parse_import
 from ._limits import design_system, split_limits
 from ._push import push as push_design
-from ._store import DesignStore, design_identity
+from ._store import DesignStore, design_id, design_identity
 
 # The file name the interpreter loads in a design.
 _ENTRY = "sequence.seq"
@@ -157,6 +157,10 @@ def generate(
         # The RF a scanner costs while the operator prescribes, read off the
         # sequence just written rather than designed again for the purpose.
         pulses = scanner.rf_pulses(paths[0], app.resolved)
+        if pulses:
+            (staged / PULSES_FILE).write_text(
+                format_pulses(pulses, design_id(identity))
+            )
         manifest = {
             **_record(limits),
             "plugin": plugin,
@@ -165,12 +169,6 @@ def generate(
             "scan_time": validation.duration,
         }
         design = store.commit(identity, staged, manifest)
-        # The RF a scanner costs while the operator prescribes. Written after
-        # the commit, because it names the design it was read from.
-        if pulses:
-            (store.directory(design) / PULSES_FILE).write_text(
-                format_pulses(pulses, design)
-            )
     except BaseException:
         store.discard(staged)
         raise
