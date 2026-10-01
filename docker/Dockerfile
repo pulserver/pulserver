@@ -8,8 +8,8 @@
 #     -p 127.0.0.1:8765:8765 ghcr.io/pulserver/pulserver
 #
 # Directories mounted at /console/user/plugins and /console/user/recon add
-# sequences and reconstructions to the image's; a file there takes the place
-# of the image's file of the same name.
+# sequences and reconstructions to those pulserver ships; a file there takes
+# the place of the shipped file of the same name.
 #
 # Any other pulserver command runs in its place, as compose.yaml runs the
 # reconstruction proxy and a console that forwards to it.
@@ -43,19 +43,16 @@ RUN for attempt in 1 2 3; do \
 # brain with mariepy and publishes as an image of those files alone.
 COPY --from=ghcr.io/pulserver/brainweb-fields@sha256:c102b4f2563e1a1a19ca25d9cd3b9b9d7505555041b4795310aee4725a659ddb / /console/fields/
 
-# The console's sequences, their reconstructions, and the limits they design
-# under; the user directories are searched first.
-COPY tests/plugins/gre2d.py docker/console/plugins/*.py /console/plugins/
-COPY docker/console/recon/*.py /console/recon/
+# The limits the console's sequences design under.
 COPY docker/limits/limits.txt /console/limits.txt
 RUN mkdir -p /console/user/plugins /console/user/recon
 
 EXPOSE 8765
 ENTRYPOINT ["pulserver"]
-CMD ["console", "--plugins=/console/user/plugins", "--plugins=/console/plugins", \
+CMD ["console", "--plugins=/console/user/plugins", \
      "--limits=/console/limits.txt", "--store=/console/designs", \
      "--fields=/console/fields", \
-     "--recon-plugins=/console/user/recon", "--recon-plugins=/console/recon", \
+     "--recon-plugins=/console/user/recon", \
      "--host=0.0.0.0", "--port=8765", "--speed=1", \
      "--origin=https://pulserver.github.io", "--origin=http://localhost:8000", \
      "--origin=http://127.0.0.1:8000"]

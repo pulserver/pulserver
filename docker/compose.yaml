@@ -32,7 +32,6 @@ services:
     command:
       - console
       - --plugins=/plugins
-      - --plugins=/console/plugins
       - --limits=/limits/limits.txt
       - --store=/designs
       - --recon=proxy:9020
