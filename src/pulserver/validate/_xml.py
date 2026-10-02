@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-__all__ = ["CHANNELS", "PlayedWaveforms", "read_waveform_xml"]
+__all__ = ["PlayedWaveforms", "read_waveform_xml"]
 
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
@@ -11,8 +11,8 @@ from pathlib import Path
 import numpy as np
 from numpy.typing import NDArray
 
-#: Which channel each sequencer of the file carries, by its id.
-CHANNELS = {
+# Which channel each sequencer of the file carries, by its id.
+_CHANNELS = {
     0: "gx",
     1: "gy",
     2: "gz",
@@ -48,7 +48,8 @@ class PlayedWaveforms:
     end_time_us
         The length of the recording, as the file states it.
     channels
-        ``(time_us, amplitude)`` per channel named in :data:`CHANNELS`.
+        ``(time_us, amplitude)`` per channel: ``gx``, ``gy`` and ``gz``,
+        ``ssp``, and the transmit ``rho``, ``theta`` and ``omega``.
     titles
         What the file calls each sequencer, which names its core and hardware.
     """
@@ -109,7 +110,7 @@ def read_waveform_xml(path: Path | str) -> PlayedWaveforms:
             number = int(sequencer.get("id"))
         except (TypeError, ValueError):
             continue
-        name = CHANNELS.get(number, f"sequencer{number}")
+        name = _CHANNELS.get(number, f"sequencer{number}")
         data = sequencer.find("data")
         played.channels[name] = _samples(data.text if data is not None else "")
         played.titles[name] = sequencer.get("title", "")

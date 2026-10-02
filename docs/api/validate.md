@@ -28,5 +28,4 @@ exists to find.
 | {obj}`~pulserver.validate.ChannelAgreement` | How far apart one channel's two renderings are. |
 | {obj}`~pulserver.validate.read_waveform_xml` | Read the waveform XML a scanner's plotter writes. |
 | {obj}`~pulserver.validate.PlayedWaveforms` | What a scanner played, as its plotter recorded it. |
-| {obj}`~pulserver.validate.CHANNELS` | Which channel each sequencer of a recording carries. |
 | {obj}`~pulserver.validate.VENDORS` | The machines a recording can be read from. |

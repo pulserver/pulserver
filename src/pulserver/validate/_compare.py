@@ -41,7 +41,8 @@ class ChannelAgreement:
     Attributes
     ----------
     channel
-        Which channel, named as :data:`~pulserver.validate.CHANNELS` names it.
+        Which channel: a gradient axis ``gx``, ``gy`` or ``gz``, or a transmit
+        channel ``rho`` or ``theta``.
     peak
         The larger of the two renderings' peak amplitudes, in the channel's
         unit. The scale the difference is read against.
