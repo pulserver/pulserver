@@ -15,11 +15,13 @@ from.
    :nosignatures:
 
    ScannerSequence
+   Protocol
    load_plugin
    TimeParam
    FloatParam
    IntParam
    BoolParam
+   ChoiceParam
    StringListParam
    ConfigParam
    Description
@@ -107,6 +109,7 @@ from.
    :nosignatures:
 
    Parameter
+   ProtocolKey
    UIParam
    PRESCRIPTION
    FOV_OFFSET
@@ -122,6 +125,8 @@ from.
    parse_listing
    format_values
    parse_values
+   format_prescription
+   parse_prescription
    Validation
    format_validation
    parse_validation
@@ -140,6 +145,8 @@ from.
    BoolKey
    EnumKey
    ConfigKey
+   UserKey
+   UserNameKey
    SequenceType
    ImagingMode
    PreparationType

@@ -466,15 +466,15 @@
 <span class="c1">#: The translation of the field-of-view centre along the logical readout,</span>
 <span class="c1">#: phase and slice axes, in mm.</span>
 <span class="n">FOV_OFFSET</span> <span class="o">=</span> <span class="p">(</span>
-    <span class="nb">str</span><span class="p">(</span><span class="n">FloatKey</span><span class="o">.</span><span class="n">FOV_OFFSET_X</span><span class="p">),</span>
-    <span class="nb">str</span><span class="p">(</span><span class="n">FloatKey</span><span class="o">.</span><span class="n">FOV_OFFSET_Y</span><span class="p">),</span>
-    <span class="nb">str</span><span class="p">(</span><span class="n">FloatKey</span><span class="o">.</span><span class="n">FOV_OFFSET_Z</span><span class="p">),</span>
+    <span class="n">FloatKey</span><span class="o">.</span><span class="n">FOV_OFFSET_X</span><span class="p">,</span>
+    <span class="n">FloatKey</span><span class="o">.</span><span class="n">FOV_OFFSET_Y</span><span class="p">,</span>
+    <span class="n">FloatKey</span><span class="o">.</span><span class="n">FOV_OFFSET_Z</span><span class="p">,</span>
 <span class="p">)</span>
 
 <span class="c1">#: The rotation from the logical to the physical axes, row-major:</span>
 <span class="c1">#: ``fov_rotation_ij`` is element ``(i, j)`` of ``R`` in physical = R logical.</span>
 <span class="n">FOV_ROTATION</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span>
-    <span class="nb">str</span><span class="p">(</span><span class="n">FloatKey</span><span class="p">[</span><span class="sa">f</span><span class="s2">"FOV_ROTATION_</span><span class="si">{</span><span class="n">i</span><span class="si">}{</span><span class="n">j</span><span class="si">}</span><span class="s2">"</span><span class="p">])</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span> <span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
+    <span class="n">FloatKey</span><span class="p">[</span><span class="sa">f</span><span class="s2">"FOV_ROTATION_</span><span class="si">{</span><span class="n">i</span><span class="si">}{</span><span class="n">j</span><span class="si">}</span><span class="s2">"</span><span class="p">]</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span> <span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
 <span class="p">)</span>
 
 <span class="c1">#: The entries a protocol carries for the scanner's prescription. The</span>

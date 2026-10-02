@@ -535,8 +535,10 @@
 <dt class="sig sig-object py" id="pulserver.design.ScannerSequence.resolve">
 <span class="sig-prename descclassname"><span class="pre">ScannerSequence.</span></span><span class="sig-name descname"><span class="pre">resolve</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pulserver/design/_scanner.html#ScannerSequence.resolve"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.design.ScannerSequence.resolve" title="Link to this definition">#</a></dt>
 <dd><p>Return the application a request constructs, and the validation of <a class="reference internal" href="pulserver.design.ScannerSequence.validate.html#pulserver.design.ScannerSequence.validate" title="pulserver.design.ScannerSequence.validate"><code class="xref py py-meth docutils literal notranslate"><span class="pre">validate()</span></code></a>.</p>
-<p>The application is <code class="docutils literal notranslate"><span class="pre">None</span></code> for an invalid request. It is constructed
-once and not designed, so <a class="reference internal" href="pulserver.design.ScannerSequence.write.html#pulserver.design.ScannerSequence.write" title="pulserver.design.ScannerSequence.write"><code class="xref py py-meth docutils literal notranslate"><span class="pre">write()</span></code></a> designs it.</p>
+<p>The request is in wire values and so is the validation, which a
+<a class="reference internal" href="pulserver.design.Protocol.html#pulserver.design.Protocol" title="pulserver.design.Protocol"><code class="xref py py-class docutils literal notranslate"><span class="pre">Protocol</span></code></a> converts to and from the argument units the
+application takes. The application is <code class="docutils literal notranslate"><span class="pre">None</span></code> for an invalid request.
+It is constructed once and not designed, so <a class="reference internal" href="pulserver.design.ScannerSequence.write.html#pulserver.design.ScannerSequence.write" title="pulserver.design.ScannerSequence.write"><code class="xref py py-meth docutils literal notranslate"><span class="pre">write()</span></code></a> designs it.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Raises<span class="colon">:</span></dt>
 <dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If the request names an entry the UI does not declare.</p>

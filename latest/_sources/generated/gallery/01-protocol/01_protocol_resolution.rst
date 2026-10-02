@@ -313,14 +313,15 @@ parameter stores. Sending it back resolves to the same protocol,
 which is what lets a design be identified by its resolved protocol
 (:doc:`/explanations/designs`).
 
-.. GENERATED FROM PYTHON SOURCE LINES 202-207
+.. GENERATED FROM PYTHON SOURCE LINES 202-208
 
 .. code-block:: Python
 
 
     first = gre.validate(system, {"TE": TEPreset.MINIMUM, "nx": 192, "bandwidth": 150e3})
     again = gre.validate(system, first.values)
-    print(first.values)
+    for key in gre.ui:
+        print(f"{key}: {first.values[key]}")
     print(again.values == first.values, f"scan time {first.duration:.1f} s")
 
 
@@ -330,7 +331,11 @@ which is what lets a design be identified by its resolved protocol
 
  .. code-block:: none
 
-    {'TE': 3580, 'TR': 250000, 'bandwidth': 133333.0, 'fov': 220.0, 'nx': 192, 'fov_offset_x': 0.0, 'fov_offset_y': 0.0, 'fov_offset_z': 0.0, 'fov_rotation_11': 1.0, 'fov_rotation_12': 0.0, 'fov_rotation_13': 0.0, 'fov_rotation_21': 0.0, 'fov_rotation_22': 1.0, 'fov_rotation_23': 0.0, 'fov_rotation_31': 0.0, 'fov_rotation_32': 0.0, 'fov_rotation_33': 1.0}
+    TE: 3580
+    TR: 250000
+    bandwidth: 133333.0
+    fov: 220.0
+    nx: 192
     True scan time 36.0 s
 
 
@@ -339,7 +344,7 @@ which is what lets a design be identified by its resolved protocol
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 3.482 seconds)
+   **Total running time of the script:** (0 minutes 4.225 seconds)
 
 
 .. _sphx_glr_download_generated_gallery_01-protocol_01_protocol_resolution.py:

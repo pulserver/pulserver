@@ -536,12 +536,13 @@
 <h1>Scanner sequences<a class="headerlink" href="#scanner-sequences" title="Link to this heading">#</a></h1>
 <p>A pypulseqpp sequence application bound to the entries of the scanner protocol.</p>
 <p>A plugin file in the design calls’ plugin directory defines one
-<a class="reference internal" href="../generated/pulserver.design.ScannerSequence.html#pulserver.design.ScannerSequence" title="pulserver.design.ScannerSequence"><code class="xref py py-class docutils literal notranslate"><span class="pre">ScannerSequence</span></code></a> subclass. Its <code class="docutils literal notranslate"><span class="pre">ui</span></code> maps each interpreter parameter
-name to an entry naming the <code class="docutils literal notranslate"><span class="pre">init_sequence</span></code> argument it sets, and its methods
-resolve a request into the protocol the application will play and write the
-design. Conversion between the UI’s units and the application’s SI arguments,
-and the rounding of resolved values to the precision of a float32 control
-variable, are described in <a class="reference internal" href="../explanations/protocol.html"><span class="doc">Protocol resolution</span></a>.</p>
+<a class="reference internal" href="../generated/pulserver.design.ScannerSequence.html#pulserver.design.ScannerSequence" title="pulserver.design.ScannerSequence"><code class="xref py py-class docutils literal notranslate"><span class="pre">ScannerSequence</span></code></a> subclass. Its <code class="docutils literal notranslate"><span class="pre">ui</span></code> maps each key of the interpreter’s
+parameter table, a <a class="reference internal" href="../generated/pulserver.protocol.ProtocolKey.html#pulserver.protocol.ProtocolKey" title="pulserver.protocol.ProtocolKey"><code class="xref py py-data docutils literal notranslate"><span class="pre">ProtocolKey</span></code></a>, to an entry naming
+the <code class="docutils literal notranslate"><span class="pre">init_sequence</span></code> argument it sets, and its methods resolve a request into
+the protocol the application will play and write the design. Conversion between
+the UI’s units and the application’s SI arguments, and the rounding of resolved
+values to the precision of a float32 control variable, are described in
+<a class="reference internal" href="../explanations/protocol.html"><span class="doc">Protocol resolution</span></a>.</p>
 <section id="sequence">
 <h2>Sequence<a class="headerlink" href="#sequence" title="Link to this heading">#</a></h2>
 <div class="pst-scrollable-table-container"><table class="table">
@@ -554,7 +555,10 @@ variable, are described in <a class="reference internal" href="../explanations/p
 <tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.design.ScannerSequence.html#pulserver.design.ScannerSequence" title="pulserver.design.ScannerSequence"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ScannerSequence</span></code></a></p></td>
 <td><p>A pypulseqpp application exposed to the scanner UI.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="../generated/pulserver.design.load_plugin.html#pulserver.design.load_plugin" title="pulserver.design.load_plugin"><code class="xref py py-obj docutils literal notranslate"><span class="pre">load_plugin</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="../generated/pulserver.design.Protocol.html#pulserver.design.Protocol" title="pulserver.design.Protocol"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Protocol</span></code></a></p></td>
+<td><p>The values of a protocol in the units of the application’s arguments, convertible from and to the wire values.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.design.load_plugin.html#pulserver.design.load_plugin" title="pulserver.design.load_plugin"><code class="xref py py-obj docutils literal notranslate"><span class="pre">load_plugin</span></code></a></p></td>
 <td><p>Import a plugin file and instantiate the scanner sequence it defines.</p></td>
 </tr>
 </tbody>
@@ -582,13 +586,16 @@ variable, are described in <a class="reference internal" href="../explanations/p
 <tr class="row-odd"><td><p><a class="reference internal" href="../generated/pulserver.design.BoolParam.html#pulserver.design.BoolParam" title="pulserver.design.BoolParam"><code class="xref py py-obj docutils literal notranslate"><span class="pre">BoolParam</span></code></a></p></td>
 <td><p>Checkbox.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.design.StringListParam.html#pulserver.design.StringListParam" title="pulserver.design.StringListParam"><code class="xref py py-obj docutils literal notranslate"><span class="pre">StringListParam</span></code></a></p></td>
-<td><p>Choice among option strings; the argument receives the string.</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.design.ChoiceParam.html#pulserver.design.ChoiceParam" title="pulserver.design.ChoiceParam"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ChoiceParam</span></code></a></p></td>
+<td><p>Choice among the members of a <code class="docutils literal notranslate"><span class="pre">StrEnum</span></code>; the argument receives the member.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="../generated/pulserver.design.ConfigParam.html#pulserver.design.ConfigParam" title="pulserver.design.ConfigParam"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ConfigParam</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="../generated/pulserver.design.StringListParam.html#pulserver.design.StringListParam" title="pulserver.design.StringListParam"><code class="xref py py-obj docutils literal notranslate"><span class="pre">StringListParam</span></code></a></p></td>
+<td><p>Deprecated: a <code class="docutils literal notranslate"><span class="pre">ChoiceParam</span></code> over an enum built from option strings.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.design.ConfigParam.html#pulserver.design.ConfigParam" title="pulserver.design.ConfigParam"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ConfigParam</span></code></a></p></td>
 <td><p>Value declared to the interpreter; not shown or edited.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.design.Description.html#pulserver.design.Description" title="pulserver.design.Description"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Description</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="../generated/pulserver.design.Description.html#pulserver.design.Description" title="pulserver.design.Description"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Description</span></code></a></p></td>
 <td><p>Read-only text row.</p></td>
 </tr>
 </tbody>

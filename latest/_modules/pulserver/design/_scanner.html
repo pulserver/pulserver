@@ -462,7 +462,7 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">math</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">sys</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Mapping</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Iterator</span><span class="p">,</span> <span class="n">Mapping</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span><span class="p">,</span> <span class="n">field</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">decimal</span><span class="w"> </span><span class="kn">import</span> <span class="n">Decimal</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
@@ -480,11 +480,14 @@
     <span class="n">InputMode</span><span class="p">,</span>
     <span class="n">Kind</span><span class="p">,</span>
     <span class="n">Parameter</span><span class="p">,</span>
+    <span class="n">ProtocolKey</span><span class="p">,</span>
     <span class="n">RfPulse</span><span class="p">,</span>
+    <span class="n">TEPreset</span><span class="p">,</span>
+    <span class="n">TRPreset</span><span class="p">,</span>
     <span class="n">Validation</span><span class="p">,</span>
     <span class="n">prescribed_rotation</span><span class="p">,</span>
 <span class="p">)</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">..protocol._keys</span><span class="w"> </span><span class="kn">import</span> <span class="n">WIRE_NAMES</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">..protocol._keys</span><span class="w"> </span><span class="kn">import</span> <span class="n">WIRE_NAMES</span><span class="p">,</span> <span class="n">StrEnum</span>
 
 <span class="n">Preset</span> <span class="o">=</span> <span class="nb">float</span> <span class="o">|</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">pp</span><span class="o">.</span><span class="n">Opts</span><span class="p">],</span> <span class="nb">float</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span>
 <span class="c1">#: Range of each prescription entry, in mm either side of the isocentre.</span>
@@ -578,20 +581,22 @@
 
 
 
-<div class="viewcode-block" id="StringListParam">
-<a class="viewcode-back" href="../../../generated/pulserver.design.StringListParam.html#pulserver.design.StringListParam">[docs]</a>
+<div class="viewcode-block" id="ChoiceParam">
+<a class="viewcode-back" href="../../../generated/pulserver.design.ChoiceParam.html#pulserver.design.ChoiceParam">[docs]</a>
 <span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-<span class="k">class</span><span class="w"> </span><span class="nc">StringListParam</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""A choice among option strings, bound to an ``init_sequence`` argument.</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">ChoiceParam</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""A choice among the members of a ``StrEnum``, bound to an ``init_sequence`` argument.</span>
 
-<span class="sd">    The argument receives the chosen string, not its index. ``default`` is the</span>
-<span class="sd">    option the protocol starts at; ``None`` starts it at the application's</span>
-<span class="sd">    default.</span>
+<span class="sd">    The argument receives the chosen member, a ``str`` equal to its option. The</span>
+<span class="sd">    options are the members in definition order, and the wire carries the index</span>
+<span class="sd">    of the chosen one. ``default`` is the member the protocol starts at;</span>
+<span class="sd">    ``None`` starts it at the application's default, which has to be a member</span>
+<span class="sd">    or the value of one.</span>
 <span class="sd">    """</span>
 
     <span class="n">argument</span><span class="p">:</span> <span class="nb">str</span>
-    <span class="n">options</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span>
-    <span class="n">default</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span></div>
+    <span class="n">choices</span><span class="p">:</span> <span class="nb">type</span><span class="p">[</span><span class="n">StrEnum</span><span class="p">]</span>
+    <span class="n">default</span><span class="p">:</span> <span class="n">StrEnum</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span></div>
 
 
 
@@ -620,10 +625,39 @@
     <span class="o">|</span> <span class="n">TimeParam</span>
     <span class="o">|</span> <span class="n">IntParam</span>
     <span class="o">|</span> <span class="n">BoolParam</span>
-    <span class="o">|</span> <span class="n">StringListParam</span>
+    <span class="o">|</span> <span class="n">ChoiceParam</span>
     <span class="o">|</span> <span class="n">ConfigParam</span>
     <span class="o">|</span> <span class="n">Description</span>
 <span class="p">)</span>
+
+
+<div class="viewcode-block" id="StringListParam">
+<a class="viewcode-back" href="../../../generated/pulserver.design.StringListParam.html#pulserver.design.StringListParam">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">StringListParam</span><span class="p">(</span>
+    <span class="n">argument</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">options</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">],</span> <span class="n">default</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ChoiceParam</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return a :class:`ChoiceParam` over a ``StrEnum`` built from option strings.</span>
+
+<span class="sd">    Deprecated: declare the enum and use :class:`ChoiceParam`. The argument</span>
+<span class="sd">    receives the member of the chosen option, a ``str`` equal to it.</span>
+<span class="sd">    ``default`` is the option the protocol starts at; ``None`` starts it at the</span>
+<span class="sd">    application's default.</span>
+
+<span class="sd">    Warns</span>
+<span class="sd">    -----</span>
+<span class="sd">    DeprecationWarning</span>
+<span class="sd">        On every call.</span>
+<span class="sd">    """</span>
+    <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+        <span class="s2">"StringListParam is deprecated; use ChoiceParam with a StrEnum"</span><span class="p">,</span>
+        <span class="ne">DeprecationWarning</span><span class="p">,</span>
+        <span class="n">stacklevel</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">choices</span> <span class="o">=</span> <span class="n">StrEnum</span><span class="p">(</span>
+        <span class="s2">"Options"</span><span class="p">,</span> <span class="p">{</span><span class="sa">f</span><span class="s2">"OPTION_</span><span class="si">{</span><span class="n">n</span><span class="si">}</span><span class="s2">"</span><span class="p">:</span> <span class="n">option</span> <span class="k">for</span> <span class="n">n</span><span class="p">,</span> <span class="n">option</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">options</span><span class="p">)}</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="n">ChoiceParam</span><span class="p">(</span><span class="n">argument</span><span class="p">,</span> <span class="n">choices</span><span class="p">,</span> <span class="kc">None</span> <span class="k">if</span> <span class="n">default</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">choices</span><span class="p">(</span><span class="n">default</span><span class="p">))</span></div>
+
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_ui_float</span><span class="p">(</span><span class="n">value</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
@@ -647,7 +681,18 @@
     <span class="k">return</span> <span class="nb">float</span><span class="p">(</span><span class="n">Decimal</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">microseconds</span><span class="p">))</span> <span class="o">*</span> <span class="n">_MICROSECOND</span><span class="p">)</span>
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_parameter</span><span class="p">(</span><span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">entry</span><span class="p">:</span> <span class="n">Entry</span><span class="p">,</span> <span class="n">defaults</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">Parameter</span><span class="p">:</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_member</span><span class="p">(</span><span class="n">key</span><span class="p">:</span> <span class="n">ProtocolKey</span><span class="p">,</span> <span class="n">entry</span><span class="p">:</span> <span class="n">ChoiceParam</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">StrEnum</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return the member of the entry's choices that ``value`` is or names."""</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">entry</span><span class="o">.</span><span class="n">choices</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>
+        <span class="n">options</span> <span class="o">=</span> <span class="s2">", "</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">entry</span><span class="o">.</span><span class="n">choices</span><span class="p">)</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">value</span><span class="si">!r}</span><span class="s2"> is not one of </span><span class="si">{</span><span class="n">options</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="kc">None</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_parameter</span><span class="p">(</span>
+    <span class="n">name</span><span class="p">:</span> <span class="n">ProtocolKey</span><span class="p">,</span> <span class="n">entry</span><span class="p">:</span> <span class="n">Entry</span><span class="p">,</span> <span class="n">defaults</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Parameter</span><span class="p">:</span>
     <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">entry</span><span class="p">,</span> <span class="n">ConfigParam</span><span class="p">):</span>
         <span class="k">return</span> <span class="n">Parameter</span><span class="p">(</span><span class="n">Kind</span><span class="o">.</span><span class="n">CONFIG</span><span class="p">,</span> <span class="n">entry</span><span class="o">.</span><span class="n">value</span><span class="p">,</span> <span class="n">InputMode</span><span class="o">.</span><span class="n">OFF</span><span class="p">)</span>
     <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">entry</span><span class="p">,</span> <span class="n">Description</span><span class="p">):</span>
@@ -713,12 +758,207 @@
         <span class="p">)</span>
     <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">entry</span><span class="p">,</span> <span class="n">BoolParam</span><span class="p">):</span>
         <span class="k">return</span> <span class="n">Parameter</span><span class="p">(</span><span class="n">Kind</span><span class="o">.</span><span class="n">BOOL</span><span class="p">,</span> <span class="n">default</span> <span class="k">if</span> <span class="n">entry</span><span class="o">.</span><span class="n">default</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">entry</span><span class="o">.</span><span class="n">default</span><span class="p">)</span>
+    <span class="n">default</span> <span class="o">=</span> <span class="n">default</span> <span class="k">if</span> <span class="n">entry</span><span class="o">.</span><span class="n">default</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">entry</span><span class="o">.</span><span class="n">default</span>
     <span class="k">return</span> <span class="n">Parameter</span><span class="p">(</span>
         <span class="n">Kind</span><span class="o">.</span><span class="n">STRINGLIST</span><span class="p">,</span>
-        <span class="n">default</span> <span class="k">if</span> <span class="n">entry</span><span class="o">.</span><span class="n">default</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">entry</span><span class="o">.</span><span class="n">default</span><span class="p">,</span>
+        <span class="n">_member</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">entry</span><span class="p">,</span> <span class="n">default</span><span class="p">),</span>
         <span class="n">InputMode</span><span class="o">.</span><span class="n">DROPDOWN</span><span class="p">,</span>
-        <span class="n">options</span><span class="o">=</span><span class="n">entry</span><span class="o">.</span><span class="n">options</span><span class="p">,</span>
+        <span class="n">options</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(</span><span class="n">entry</span><span class="o">.</span><span class="n">choices</span><span class="p">),</span>
     <span class="p">)</span>
+
+
+<div class="viewcode-block" id="Protocol">
+<a class="viewcode-back" href="../../../generated/pulserver.design.Protocol.html#pulserver.design.Protocol">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">Protocol</span><span class="p">(</span><span class="n">Mapping</span><span class="p">[</span><span class="n">ProtocolKey</span><span class="p">,</span> <span class="n">Any</span><span class="p">]):</span>
+<span class="w">    </span><span class="sd">"""The values of a scanner sequence's protocol, in the units of its application's arguments.</span>
+
+<span class="sd">    An immutable mapping from :data:`~pulserver.protocol.ProtocolKey` to value.</span>
+<span class="sd">    A time is in seconds and a float in the unit of the argument it binds,</span>
+<span class="sd">    metres for a length; an integer is an ``int``, a checkbox a ``bool`` and a</span>
+<span class="sd">    choice a member of its enum. A time entry showing a preset holds what the</span>
+<span class="sd">    preset requests, a number of seconds or ``None`` for the application's own</span>
+<span class="sd">    shortest choice, and :meth:`preset` names the preset. The prescription</span>
+<span class="sd">    entries bind no argument and keep the units of the wire: mm for the</span>
+<span class="sd">    offset, unitless for the rotation.</span>
+
+<span class="sd">    The wire carries integer microseconds for a time and the entry's own unit</span>
+<span class="sd">    for a float, to six significant digits. :meth:`from_wire` and</span>
+<span class="sd">    :meth:`to_wire` are the only conversions between the two.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    entries</span>
+<span class="sd">        The declared entries the values belong to, as</span>
+<span class="sd">        :attr:`ScannerSequence.ui` holds them.</span>
+<span class="sd">    values</span>
+<span class="sd">        The value of each key, in argument units.</span>
+<span class="sd">    presets</span>
+<span class="sd">        The preset each time key shows, by the key its entry declares it with.</span>
+<span class="sd">    """</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">entries</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="n">ProtocolKey</span><span class="p">,</span> <span class="n">Entry</span><span class="p">],</span>
+        <span class="n">values</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="n">ProtocolKey</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
+        <span class="n">presets</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="n">ProtocolKey</span><span class="p">,</span> <span class="n">TEPreset</span> <span class="o">|</span> <span class="n">TRPreset</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_entries</span> <span class="o">=</span> <span class="n">entries</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_values</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">values</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_presets</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">presets</span> <span class="ow">or</span> <span class="p">{})</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__getitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">:</span> <span class="n">ProtocolKey</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_values</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__iter__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">ProtocolKey</span><span class="p">]:</span>
+        <span class="k">return</span> <span class="nb">iter</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_values</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__len__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+        <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_values</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="n">items</span> <span class="o">=</span> <span class="s2">", "</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">value</span><span class="si">!r}</span><span class="s2">"</span> <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_values</span><span class="o">.</span><span class="n">items</span><span class="p">())</span>
+        <span class="k">return</span> <span class="sa">f</span><span class="s2">"Protocol(</span><span class="se">{{</span><span class="si">{</span><span class="n">items</span><span class="si">}</span><span class="se">}}</span><span class="s2">)"</span>
+
+<div class="viewcode-block" id="Protocol.from_wire">
+<a class="viewcode-back" href="../../../generated/pulserver.design.Protocol.from_wire.html#pulserver.design.Protocol.from_wire">[docs]</a>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">from_wire</span><span class="p">(</span>
+        <span class="bp">cls</span><span class="p">,</span>
+        <span class="n">entries</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="n">ProtocolKey</span><span class="p">,</span> <span class="n">Entry</span><span class="p">],</span>
+        <span class="n">values</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="n">ProtocolKey</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
+        <span class="n">system</span><span class="p">:</span> <span class="n">pp</span><span class="o">.</span><span class="n">Opts</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Protocol</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Return the protocol that wire values stand for.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        entries</span>
+<span class="sd">            The declared entries: :attr:`ScannerSequence.ui`.</span>
+<span class="sd">        values</span>
+<span class="sd">            Wire values by key: integer microseconds or a preset code for a</span>
+<span class="sd">            time, the entry's unit for a float, an option for a choice. A key</span>
+<span class="sd">            of a config or description entry, which holds no value, is left</span>
+<span class="sd">            out.</span>
+<span class="sd">        system</span>
+<span class="sd">            The scanner limits a callable preset is a function of.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If a key is neither a declared entry nor a prescription entry, a</span>
+<span class="sd">            time is a preset its entry does not offer, or a choice is not one</span>
+<span class="sd">            of its options.</span>
+<span class="sd">        """</span>
+        <span class="n">converted</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="n">ProtocolKey</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="n">presets</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="n">ProtocolKey</span><span class="p">,</span> <span class="n">TEPreset</span> <span class="o">|</span> <span class="n">TRPreset</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">values</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="n">entry</span> <span class="o">=</span> <span class="n">entries</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">entry</span><span class="p">,</span> <span class="n">ConfigParam</span> <span class="o">|</span> <span class="n">Description</span><span class="p">):</span>
+                <span class="k">continue</span>
+            <span class="k">if</span> <span class="n">entry</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">key</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">PRESCRIPTION</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2"> is not an entry of this protocol"</span><span class="p">)</span>
+                <span class="n">converted</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">entry</span><span class="p">,</span> <span class="n">TimeParam</span><span class="p">):</span>
+                <span class="k">if</span> <span class="n">entry</span><span class="o">.</span><span class="n">presets</span> <span class="ow">and</span> <span class="n">value</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span>
+                    <span class="n">code</span> <span class="o">=</span> <span class="nb">next</span><span class="p">((</span><span class="n">c</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">entry</span><span class="o">.</span><span class="n">presets</span> <span class="k">if</span> <span class="n">c</span> <span class="o">==</span> <span class="n">value</span><span class="p">),</span> <span class="kc">None</span><span class="p">)</span>
+                    <span class="k">if</span> <span class="n">code</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2"> does not offer preset </span><span class="si">{</span><span class="n">value</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+                    <span class="n">preset</span> <span class="o">=</span> <span class="n">entry</span><span class="o">.</span><span class="n">presets</span><span class="p">[</span><span class="n">code</span><span class="p">]</span>
+                    <span class="n">presets</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">code</span>
+                    <span class="n">converted</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">preset</span><span class="p">(</span><span class="n">system</span><span class="p">)</span> <span class="k">if</span> <span class="nb">callable</span><span class="p">(</span><span class="n">preset</span><span class="p">)</span> <span class="k">else</span> <span class="n">preset</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">converted</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">_to_seconds</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">entry</span><span class="p">,</span> <span class="n">FloatParam</span><span class="p">):</span>
+                <span class="n">converted</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">_to_si</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">entry</span><span class="o">.</span><span class="n">scale</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">entry</span><span class="p">,</span> <span class="n">IntParam</span><span class="p">):</span>
+                <span class="n">converted</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">entry</span><span class="p">,</span> <span class="n">BoolParam</span><span class="p">):</span>
+                <span class="n">converted</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="nb">bool</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">converted</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">_member</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">entry</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="n">entries</span><span class="p">,</span> <span class="n">converted</span><span class="p">,</span> <span class="n">presets</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="Protocol.to_wire">
+<a class="viewcode-back" href="../../../generated/pulserver.design.Protocol.to_wire.html#pulserver.design.Protocol.to_wire">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">to_wire</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="n">ProtocolKey</span><span class="p">,</span> <span class="nb">float</span> <span class="o">|</span> <span class="nb">int</span> <span class="o">|</span> <span class="nb">bool</span> <span class="o">|</span> <span class="nb">str</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""Return the wire values of the protocol, the inverse of :meth:`from_wire`.</span>
+
+<span class="sd">        A time showing a preset is its preset code. A float is rounded to six</span>
+<span class="sd">        significant digits, the precision of a float32 parameter, and a time</span>
+<span class="sd">        to the nearest microsecond, ties to even.</span>
+<span class="sd">        """</span>
+        <span class="n">wire</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="n">ProtocolKey</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_values</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="n">entry</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_entries</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_presets</span><span class="p">:</span>
+                <span class="n">wire</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_presets</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
+            <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">entry</span><span class="p">,</span> <span class="n">TimeParam</span><span class="p">):</span>
+                <span class="n">wire</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">_to_microseconds</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">entry</span><span class="p">,</span> <span class="n">FloatParam</span><span class="p">):</span>
+                <span class="n">wire</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">_to_ui</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">entry</span><span class="o">.</span><span class="n">scale</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">entry</span><span class="p">,</span> <span class="n">IntParam</span><span class="p">):</span>
+                <span class="n">wire</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">entry</span><span class="p">,</span> <span class="n">BoolParam</span><span class="p">):</span>
+                <span class="n">wire</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="nb">bool</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">wire</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
+        <span class="k">return</span> <span class="n">wire</span></div>
+
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">arguments</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""The values by the name of the ``init_sequence`` argument each binds.</span>
+
+<span class="sd">        The prescription entries bind no argument and are left out.</span>
+<span class="sd">        """</span>
+        <span class="n">arguments</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_values</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="n">argument</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_entries</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">),</span> <span class="s2">"argument"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">argument</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">arguments</span><span class="p">[</span><span class="n">argument</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
+        <span class="k">return</span> <span class="n">arguments</span>
+
+<div class="viewcode-block" id="Protocol.preset">
+<a class="viewcode-back" href="../../../generated/pulserver.design.Protocol.preset.html#pulserver.design.Protocol.preset">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">preset</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">:</span> <span class="n">ProtocolKey</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TEPreset</span> <span class="o">|</span> <span class="n">TRPreset</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Return the preset a time key shows, or ``None`` where it shows none.</span>
+
+<span class="sd">        The preset is the key of the entry's ``presets`` the wire value</span>
+<span class="sd">        selected: a :class:`~pulserver.protocol.TEPreset` or</span>
+<span class="sd">        :class:`~pulserver.protocol.TRPreset` member.</span>
+<span class="sd">        """</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_presets</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="Protocol.replace">
+<a class="viewcode-back" href="../../../generated/pulserver.design.Protocol.replace.html#pulserver.design.Protocol.replace">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">replace</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">changes</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="n">ProtocolKey</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">Protocol</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Return a protocol holding ``changes`` in place of the values they name.</span>
+
+<span class="sd">        The values are in argument units, and a time given in seconds no</span>
+<span class="sd">        longer shows a preset.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If a key is not in the protocol, or a choice is not one of its</span>
+<span class="sd">            options.</span>
+<span class="sd">        """</span>
+        <span class="n">unknown</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">key</span> <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">changes</span> <span class="k">if</span> <span class="n">key</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_values</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">unknown</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"not entries of this protocol: </span><span class="si">{</span><span class="s1">', '</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">unknown</span><span class="p">)</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+        <span class="n">values</span><span class="p">,</span> <span class="n">presets</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_values</span><span class="p">),</span> <span class="nb">dict</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_presets</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">changes</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="n">entry</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_entries</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">entry</span><span class="p">,</span> <span class="n">ChoiceParam</span><span class="p">):</span>
+                <span class="n">value</span> <span class="o">=</span> <span class="n">_member</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">entry</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
+            <span class="n">values</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
+            <span class="n">presets</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">Protocol</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_entries</span><span class="p">,</span> <span class="n">values</span><span class="p">,</span> <span class="n">presets</span><span class="p">)</span></div>
+</div>
+
 
 
 <div class="viewcode-block" id="ScannerSequence">
@@ -728,16 +968,17 @@
 
 <span class="sd">    A subclass sets :attr:`app` and, for the arguments the operator edits,</span>
 <span class="sd">    :attr:`ui`; without ``ui`` the application plays its defaults. The keys of</span>
-<span class="sd">    ``ui`` are the interpreter's parameter names: members of</span>
-<span class="sd">    :class:`~pulserver.protocol.UIParam` or :class:`~pulserver.protocol.ConfigKey`,</span>
-<span class="sd">    or user-entry keys. They are stored as plain strings. Entries a request</span>
-<span class="sd">    omits keep their initial values, the entry's ``default`` or else the</span>
-<span class="sd">    application's. An entry resolves to the value its</span>
-<span class="sd">    argument took in the design, as the application records it with</span>
-<span class="sd">    ``SequenceApp.resolve``, and otherwise keeps the requested value. Times</span>
-<span class="sd">    travel as integer microseconds; other float values are read and reported</span>
-<span class="sd">    to six significant digits, the precision of a float32 parameter. Either way</span>
-<span class="sd">    a reply stored in scanner parameters and sent back resolves to itself.</span>
+<span class="sd">    ``ui`` are the interpreter's parameter names: the members of</span>
+<span class="sd">    :data:`~pulserver.protocol.ProtocolKey`, which</span>
+<span class="sd">    :class:`~pulserver.protocol.UIParam` collects. A plain string naming an</span>
+<span class="sd">    entry is stored as its member. Entries a request omits keep their initial</span>
+<span class="sd">    values, the entry's ``default`` or else the application's. An entry</span>
+<span class="sd">    resolves to the value its argument took in the design, as the application</span>
+<span class="sd">    records it with ``SequenceApp.resolve``, and otherwise keeps the requested</span>
+<span class="sd">    value. Times travel as integer microseconds; other float values are read</span>
+<span class="sd">    and reported to six significant digits, the precision of a float32</span>
+<span class="sd">    parameter. Either way a reply stored in scanner parameters and sent back</span>
+<span class="sd">    resolves to itself.</span>
 
 <span class="sd">    Attributes</span>
 <span class="sd">    ----------</span>
@@ -773,8 +1014,8 @@
 <span class="sd">    """</span>
 
     <span class="n">app</span><span class="p">:</span> <span class="n">ClassVar</span><span class="p">[</span><span class="nb">type</span><span class="p">[</span><span class="n">sequences</span><span class="o">.</span><span class="n">SequenceApp</span><span class="p">]]</span>
-    <span class="n">ui</span><span class="p">:</span> <span class="n">ClassVar</span><span class="p">[</span><span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Entry</span><span class="p">]]</span> <span class="o">=</span> <span class="p">{}</span>
-    <span class="n">follows</span><span class="p">:</span> <span class="n">ClassVar</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">]]</span> <span class="o">=</span> <span class="p">()</span>
+    <span class="n">ui</span><span class="p">:</span> <span class="n">ClassVar</span><span class="p">[</span><span class="n">Mapping</span><span class="p">[</span><span class="n">ProtocolKey</span><span class="p">,</span> <span class="n">Entry</span><span class="p">]]</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="n">follows</span><span class="p">:</span> <span class="n">ClassVar</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="n">ProtocolKey</span> <span class="o">|</span> <span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">]]</span> <span class="o">=</span> <span class="p">()</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">__init_subclass__</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">__init_subclass__</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
@@ -787,9 +1028,9 @@
             <span class="p">)</span>
         <span class="k">if</span> <span class="s2">"ui"</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">cls</span><span class="o">.</span><span class="vm">__dict__</span><span class="p">:</span>
             <span class="k">return</span>
-        <span class="n">unknown</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">name</span><span class="p">)</span> <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="bp">cls</span><span class="o">.</span><span class="n">ui</span> <span class="k">if</span> <span class="n">name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">WIRE_NAMES</span><span class="p">)</span>
+        <span class="n">unknown</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">name</span> <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="bp">cls</span><span class="o">.</span><span class="n">ui</span> <span class="k">if</span> <span class="n">name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">WIRE_NAMES</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">unknown</span><span class="p">:</span>
-            <span class="n">names</span> <span class="o">=</span> <span class="p">{</span><span class="nb">str</span><span class="p">(</span><span class="n">name</span><span class="p">)</span><span class="o">.</span><span class="n">lower</span><span class="p">():</span> <span class="nb">str</span><span class="p">(</span><span class="n">name</span><span class="p">)</span> <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">WIRE_NAMES</span><span class="p">}</span>
+            <span class="n">names</span> <span class="o">=</span> <span class="p">{</span><span class="n">name</span><span class="o">.</span><span class="n">lower</span><span class="p">():</span> <span class="n">name</span> <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">WIRE_NAMES</span><span class="p">}</span>
             <span class="n">close</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span>
                 <span class="p">{</span>
                     <span class="n">names</span><span class="p">[</span><span class="n">m</span><span class="p">]</span>
@@ -802,17 +1043,18 @@
                 <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="bp">cls</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> declares entries the interpreter does not know: "</span>
                 <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">unknown</span><span class="si">}{</span><span class="n">hint</span><span class="si">}</span><span class="s2">"</span>
             <span class="p">)</span>
-        <span class="n">reserved</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">name</span><span class="p">)</span> <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="bp">cls</span><span class="o">.</span><span class="n">ui</span> <span class="k">if</span> <span class="nb">str</span><span class="p">(</span><span class="n">name</span><span class="p">)</span> <span class="ow">in</span> <span class="n">PRESCRIPTION</span><span class="p">)</span>
+        <span class="n">ui</span> <span class="o">=</span> <span class="p">{</span><span class="n">WIRE_NAMES</span><span class="p">[</span><span class="n">name</span><span class="p">]:</span> <span class="n">entry</span> <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">entry</span> <span class="ow">in</span> <span class="bp">cls</span><span class="o">.</span><span class="n">ui</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span>
+        <span class="n">reserved</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">key</span><span class="o">.</span><span class="n">value</span> <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">ui</span> <span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">PRESCRIPTION</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">reserved</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
                 <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="bp">cls</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> binds the prescription entries </span><span class="si">{</span><span class="n">reserved</span><span class="si">}</span><span class="s2">, which "</span>
                 <span class="s2">"pulserver applies when it builds the IR"</span>
             <span class="p">)</span>
-        <span class="bp">cls</span><span class="o">.</span><span class="n">ui</span> <span class="o">=</span> <span class="p">{</span><span class="nb">str</span><span class="p">(</span><span class="n">name</span><span class="p">):</span> <span class="n">entry</span> <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">entry</span> <span class="ow">in</span> <span class="bp">cls</span><span class="o">.</span><span class="n">ui</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span>
+        <span class="bp">cls</span><span class="o">.</span><span class="n">ui</span> <span class="o">=</span> <span class="n">ui</span>
 
 <div class="viewcode-block" id="ScannerSequence.listing">
 <a class="viewcode-back" href="../../../generated/pulserver.design.ScannerSequence.listing.html#pulserver.design.ScannerSequence.listing">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">listing</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Parameter</span><span class="p">]:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">listing</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="n">ProtocolKey</span><span class="p">,</span> <span class="n">Parameter</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">"""Return the protocol with its schema, valued at the application's defaults.</span>
 
 <span class="sd">        An argument defaulting to ``None`` shows the preset that requests ``None``.</span>
@@ -822,10 +1064,10 @@
 <span class="sd">        """</span>
         <span class="n">defaults</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">app</span><span class="o">.</span><span class="n">protocol</span><span class="p">()</span>
         <span class="n">listing</span> <span class="o">=</span> <span class="p">{</span>
-            <span class="n">name</span><span class="p">:</span> <span class="n">_parameter</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">entry</span><span class="p">,</span> <span class="n">defaults</span><span class="p">)</span> <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">entry</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">ui</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+            <span class="n">key</span><span class="p">:</span> <span class="n">_parameter</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">entry</span><span class="p">,</span> <span class="n">defaults</span><span class="p">)</span> <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">entry</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">ui</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
         <span class="p">}</span>
-        <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">FOV_OFFSET</span><span class="p">:</span>
-            <span class="n">listing</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">Parameter</span><span class="p">(</span>
+        <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">FOV_OFFSET</span><span class="p">:</span>
+            <span class="n">listing</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">Parameter</span><span class="p">(</span>
                 <span class="n">Kind</span><span class="o">.</span><span class="n">FLOAT</span><span class="p">,</span>
                 <span class="mf">0.0</span><span class="p">,</span>
                 <span class="n">InputMode</span><span class="o">.</span><span class="n">OFF</span><span class="p">,</span>
@@ -834,8 +1076,8 @@
                 <span class="mf">0.1</span><span class="p">,</span>
                 <span class="s2">"mm"</span><span class="p">,</span>
             <span class="p">)</span>
-        <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">FOV_ROTATION</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span><span class="o">.</span><span class="n">ravel</span><span class="p">(),</span> <span class="n">strict</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
-            <span class="n">listing</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">Parameter</span><span class="p">(</span>
+        <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">FOV_ROTATION</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span><span class="o">.</span><span class="n">ravel</span><span class="p">(),</span> <span class="n">strict</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+            <span class="n">listing</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">Parameter</span><span class="p">(</span>
                 <span class="n">Kind</span><span class="o">.</span><span class="n">FLOAT</span><span class="p">,</span> <span class="nb">float</span><span class="p">(</span><span class="n">value</span><span class="p">),</span> <span class="n">InputMode</span><span class="o">.</span><span class="n">OFF</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="mf">1e-6</span><span class="p">,</span> <span class="s2">""</span>
             <span class="p">)</span>
         <span class="k">return</span> <span class="n">listing</span></div>
@@ -890,8 +1132,8 @@
             <span class="p">)</span>
         <span class="n">driving</span> <span class="o">=</span> <span class="p">{}</span>
         <span class="k">for</span> <span class="n">parameter</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">follows</span><span class="p">:</span>
-            <span class="n">entry</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">ui</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">parameter</span> <span class="ow">or</span> <span class="s2">""</span><span class="p">))</span>
-            <span class="n">driving</span><span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">parameter</span> <span class="ow">or</span> <span class="s2">""</span><span class="p">)]</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">entry</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">ui</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">parameter</span> <span class="ow">or</span> <span class="s2">""</span><span class="p">)</span>
+            <span class="n">driving</span><span class="p">[</span><span class="n">parameter</span> <span class="ow">or</span> <span class="s2">""</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
                 <span class="nb">float</span><span class="p">(</span><span class="n">designed</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">entry</span><span class="o">.</span><span class="n">argument</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span> <span class="ow">or</span> <span class="mf">0.0</span><span class="p">)</span> <span class="k">if</span> <span class="n">entry</span> <span class="k">else</span> <span class="mf">0.0</span>
             <span class="p">)</span>
 
@@ -902,7 +1144,7 @@
             <span class="n">key</span> <span class="o">=</span> <span class="p">(</span><span class="n">definition</span><span class="p">,</span> <span class="nb">round</span><span class="p">(</span><span class="n">angle</span> <span class="o">*</span> <span class="mf">1e3</span><span class="p">))</span>
             <span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">found</span><span class="p">:</span>
                 <span class="k">continue</span>
-            <span class="n">parameter</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">follows</span><span class="p">[</span><span class="n">order</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="n">definition</span><span class="p">)]</span> <span class="ow">or</span> <span class="s2">""</span><span class="p">)</span>
+            <span class="n">parameter</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">follows</span><span class="p">[</span><span class="n">order</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="n">definition</span><span class="p">)]</span> <span class="ow">or</span> <span class="s2">""</span>
             <span class="n">drives</span> <span class="o">=</span> <span class="n">driving</span><span class="p">[</span><span class="n">parameter</span><span class="p">]</span>
             <span class="n">found</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">RfPulse</span><span class="p">(</span>
                 <span class="n">definition</span><span class="o">=</span><span class="n">definition</span><span class="p">,</span>
@@ -915,7 +1157,9 @@
 
 <div class="viewcode-block" id="ScannerSequence.validate">
 <a class="viewcode-back" href="../../../generated/pulserver.design.ScannerSequence.validate.html#pulserver.design.ScannerSequence.validate">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">validate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">system</span><span class="p">:</span> <span class="n">pp</span><span class="o">.</span><span class="n">Opts</span><span class="p">,</span> <span class="n">request</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">Validation</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">validate</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">system</span><span class="p">:</span> <span class="n">pp</span><span class="o">.</span><span class="n">Opts</span><span class="p">,</span> <span class="n">request</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="n">ProtocolKey</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Validation</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">"""Resolve a request into the protocol the application will play.</span>
 
 <span class="sd">        A valid reply carries the resolved values, as the application's</span>
@@ -934,7 +1178,7 @@
 <div class="viewcode-block" id="ScannerSequence.generate">
 <a class="viewcode-back" href="../../../generated/pulserver.design.ScannerSequence.generate.html#pulserver.design.ScannerSequence.generate">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">generate</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span> <span class="n">system</span><span class="p">:</span> <span class="n">pp</span><span class="o">.</span><span class="n">Opts</span><span class="p">,</span> <span class="n">request</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span> <span class="n">directory</span><span class="p">:</span> <span class="n">Path</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">system</span><span class="p">:</span> <span class="n">pp</span><span class="o">.</span><span class="n">Opts</span><span class="p">,</span> <span class="n">request</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="n">ProtocolKey</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span> <span class="n">directory</span><span class="p">:</span> <span class="n">Path</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">Validation</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]]:</span>
 <span class="w">        </span><span class="sd">"""Write the resolved design into ``directory``, as :meth:`write` does.</span>
 
@@ -969,12 +1213,14 @@
 <div class="viewcode-block" id="ScannerSequence.resolve">
 <a class="viewcode-back" href="../../../generated/pulserver.design.ScannerSequence.resolve.html#pulserver.design.ScannerSequence.resolve">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">resolve</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span> <span class="n">system</span><span class="p">:</span> <span class="n">pp</span><span class="o">.</span><span class="n">Opts</span><span class="p">,</span> <span class="n">request</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">system</span><span class="p">:</span> <span class="n">pp</span><span class="o">.</span><span class="n">Opts</span><span class="p">,</span> <span class="n">request</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="n">ProtocolKey</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">sequences</span><span class="o">.</span><span class="n">SequenceApp</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">Validation</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">"""Return the application a request constructs, and the validation of :meth:`validate`.</span>
 
-<span class="sd">        The application is ``None`` for an invalid request. It is constructed</span>
-<span class="sd">        once and not designed, so :meth:`write` designs it.</span>
+<span class="sd">        The request is in wire values and so is the validation, which a</span>
+<span class="sd">        :class:`Protocol` converts to and from the argument units the</span>
+<span class="sd">        application takes. The application is ``None`` for an invalid request.</span>
+<span class="sd">        It is constructed once and not designed, so :meth:`write` designs it.</span>
 
 <span class="sd">        Raises</span>
 <span class="sd">        ------</span>
@@ -985,52 +1231,28 @@
         <span class="n">unknown</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">request</span><span class="p">)</span> <span class="o">-</span> <span class="nb">set</span><span class="p">(</span><span class="n">listing</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">unknown</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"not entries of this protocol: </span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="n">unknown</span><span class="p">)</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
-        <span class="n">values</span> <span class="o">=</span> <span class="p">{</span><span class="n">name</span><span class="p">:</span> <span class="n">p</span><span class="o">.</span><span class="n">value</span> <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">listing</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">p</span><span class="o">.</span><span class="n">editable</span><span class="p">}</span>
+        <span class="n">values</span> <span class="o">=</span> <span class="p">{</span><span class="n">key</span><span class="p">:</span> <span class="n">p</span><span class="o">.</span><span class="n">value</span> <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">listing</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">p</span><span class="o">.</span><span class="n">editable</span><span class="p">}</span>
         <span class="n">values</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">request</span><span class="p">)</span>
         <span class="k">try</span><span class="p">:</span>
             <span class="n">prescribed_rotation</span><span class="p">(</span><span class="n">values</span><span class="p">)</span>
-            <span class="n">app</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">app</span><span class="p">(</span><span class="n">system</span><span class="p">,</span> <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">_arguments</span><span class="p">(</span><span class="n">system</span><span class="p">,</span> <span class="n">values</span><span class="p">))</span>
+            <span class="n">protocol</span> <span class="o">=</span> <span class="n">Protocol</span><span class="o">.</span><span class="n">from_wire</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">ui</span><span class="p">,</span> <span class="n">values</span><span class="p">,</span> <span class="n">system</span><span class="p">)</span>
+            <span class="n">app</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">app</span><span class="p">(</span><span class="n">system</span><span class="p">,</span> <span class="o">**</span><span class="n">protocol</span><span class="o">.</span><span class="n">arguments</span><span class="p">)</span>
             <span class="n">scan_time</span> <span class="o">=</span> <span class="n">app</span><span class="o">.</span><span class="n">scan_time</span><span class="p">()</span>
         <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">error</span><span class="p">:</span>  <span class="c1"># a design refuses a protocol by raising</span>
             <span class="k">return</span> <span class="kc">None</span><span class="p">,</span> <span class="n">Validation</span><span class="p">(</span>
                 <span class="kc">False</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">error</span><span class="p">)</span> <span class="ow">or</span> <span class="nb">type</span><span class="p">(</span><span class="n">error</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="p">,</span> <span class="n">values</span>
             <span class="p">)</span>
 
-        <span class="n">resolved</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">values</span><span class="p">)</span>
         <span class="n">readback</span> <span class="o">=</span> <span class="n">app</span><span class="o">.</span><span class="n">resolved</span>
-        <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">entry</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">ui</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+        <span class="n">recorded</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">entry</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">ui</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
             <span class="n">value</span> <span class="o">=</span> <span class="n">readback</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="n">entry</span><span class="p">,</span> <span class="s2">"argument"</span><span class="p">,</span> <span class="kc">None</span><span class="p">))</span>
-            <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="k">continue</span>
-            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">entry</span><span class="p">,</span> <span class="n">TimeParam</span><span class="p">):</span>
-                <span class="n">resolved</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">_to_microseconds</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
-            <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">entry</span><span class="p">,</span> <span class="n">FloatParam</span><span class="p">):</span>
-                <span class="n">resolved</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">_to_ui</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">entry</span><span class="o">.</span><span class="n">scale</span><span class="p">)</span>
-            <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">entry</span><span class="p">,</span> <span class="n">IntParam</span><span class="p">):</span>
-                <span class="n">resolved</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="n">resolved</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
-        <span class="k">return</span> <span class="n">app</span><span class="p">,</span> <span class="n">Validation</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="n">scan_time</span><span class="p">,</span> <span class="s2">""</span><span class="p">,</span> <span class="n">resolved</span><span class="p">)</span></div>
-
-
-    <span class="k">def</span><span class="w"> </span><span class="nf">_arguments</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">system</span><span class="p">:</span> <span class="n">pp</span><span class="o">.</span><span class="n">Opts</span><span class="p">,</span> <span class="n">values</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
-        <span class="n">arguments</span> <span class="o">=</span> <span class="p">{}</span>
-        <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">entry</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">ui</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
-            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">entry</span><span class="p">,</span> <span class="n">ConfigParam</span> <span class="o">|</span> <span class="n">Description</span><span class="p">):</span>
-                <span class="k">continue</span>
-            <span class="n">value</span> <span class="o">=</span> <span class="n">values</span><span class="p">[</span><span class="n">name</span><span class="p">]</span>
-            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">entry</span><span class="p">,</span> <span class="n">TimeParam</span><span class="p">):</span>
-                <span class="k">if</span> <span class="n">entry</span><span class="o">.</span><span class="n">presets</span> <span class="ow">and</span> <span class="n">value</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span>
-                    <span class="k">if</span> <span class="n">value</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">entry</span><span class="o">.</span><span class="n">presets</span><span class="p">:</span>
-                        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2"> does not offer preset </span><span class="si">{</span><span class="n">value</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
-                    <span class="n">preset</span> <span class="o">=</span> <span class="n">entry</span><span class="o">.</span><span class="n">presets</span><span class="p">[</span><span class="n">value</span><span class="p">]</span>
-                    <span class="n">value</span> <span class="o">=</span> <span class="n">preset</span><span class="p">(</span><span class="n">system</span><span class="p">)</span> <span class="k">if</span> <span class="nb">callable</span><span class="p">(</span><span class="n">preset</span><span class="p">)</span> <span class="k">else</span> <span class="n">preset</span>
-                <span class="k">else</span><span class="p">:</span>
-                    <span class="n">value</span> <span class="o">=</span> <span class="n">_to_seconds</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
-            <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">entry</span><span class="p">,</span> <span class="n">FloatParam</span><span class="p">):</span>
-                <span class="n">value</span> <span class="o">=</span> <span class="n">_to_si</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">entry</span><span class="o">.</span><span class="n">scale</span><span class="p">)</span>
-            <span class="n">arguments</span><span class="p">[</span><span class="n">entry</span><span class="o">.</span><span class="n">argument</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
-        <span class="k">return</span> <span class="n">arguments</span></div>
+            <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">recorded</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
+        <span class="k">return</span> <span class="n">app</span><span class="p">,</span> <span class="n">Validation</span><span class="p">(</span>
+            <span class="kc">True</span><span class="p">,</span> <span class="n">scan_time</span><span class="p">,</span> <span class="s2">""</span><span class="p">,</span> <span class="n">protocol</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="n">recorded</span><span class="p">)</span><span class="o">.</span><span class="n">to_wire</span><span class="p">()</span>
+        <span class="p">)</span></div>
+</div>
 
 
 

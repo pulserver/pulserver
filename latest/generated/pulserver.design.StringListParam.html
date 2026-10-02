@@ -517,7 +517,7 @@
             </div>
             <nav aria-label="Page">
                 <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.design.StringListParam"><code class="docutils literal notranslate"><span class="pre">StringListParam</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.design.StringListParam"><code class="docutils literal notranslate"><span class="pre">StringListParam()</span></code></a></li>
 </ul>
             </nav>
         </div>
@@ -531,31 +531,21 @@
                   
   <section id="stringlistparam">
 <h1>StringListParam<a class="headerlink" href="#stringlistparam" title="Link to this heading">#</a></h1>
-<dl class="py class">
+<dl class="py function">
 <dt class="sig sig-object py" id="pulserver.design.StringListParam">
-<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">pulserver.design.</span></span><span class="sig-name descname"><span class="pre">StringListParam</span></span><a class="reference internal" href="../_modules/pulserver/design/_scanner.html#StringListParam"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.design.StringListParam" title="Link to this definition">#</a></dt>
-<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/builtins/functions.html#object" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
-<p>A choice among option strings, bound to an <code class="docutils literal notranslate"><span class="pre">init_sequence</span></code> argument.</p>
-<p>The argument receives the chosen string, not its index. <code class="docutils literal notranslate"><span class="pre">default</span></code> is the
-option the protocol starts at; <code class="docutils literal notranslate"><span class="pre">None</span></code> starts it at the application’s
-default.</p>
+<span class="sig-prename descclassname"><span class="pre">pulserver.design.</span></span><span class="sig-name descname"><span class="pre">StringListParam</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pulserver/design/_scanner.html#StringListParam"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.design.StringListParam" title="Link to this definition">#</a></dt>
+<dd><p>Return a <a class="reference internal" href="pulserver.design.ChoiceParam.html#pulserver.design.ChoiceParam" title="pulserver.design.ChoiceParam"><code class="xref py py-class docutils literal notranslate"><span class="pre">ChoiceParam</span></code></a> over a <code class="docutils literal notranslate"><span class="pre">StrEnum</span></code> built from option strings.</p>
+<p>Deprecated: declare the enum and use <a class="reference internal" href="pulserver.design.ChoiceParam.html#pulserver.design.ChoiceParam" title="pulserver.design.ChoiceParam"><code class="xref py py-class docutils literal notranslate"><span class="pre">ChoiceParam</span></code></a>. The argument
+receives the member of the chosen option, a <code class="docutils literal notranslate"><span class="pre">str</span></code> equal to it.
+<code class="docutils literal notranslate"><span class="pre">default</span></code> is the option the protocol starts at; <code class="docutils literal notranslate"><span class="pre">None</span></code> starts it at the
+application’s default.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Warns<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>DeprecationWarning</strong> – On every call.</p>
+</dd>
+</dl>
 </dd></dl>
 
-<p class="rubric">Attributes</p>
-<div class="pst-scrollable-table-container"><table class="autosummary longtable table">
-<tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.design.StringListParam.default.html#pulserver.design.StringListParam.default" title="pulserver.design.StringListParam.default"><code class="xref py py-obj docutils literal notranslate"><span class="pre">default</span></code></a></p></td>
-<td><p></p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pulserver.design.StringListParam.argument.html#pulserver.design.StringListParam.argument" title="pulserver.design.StringListParam.argument"><code class="xref py py-obj docutils literal notranslate"><span class="pre">argument</span></code></a></p></td>
-<td><p></p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.design.StringListParam.options.html#pulserver.design.StringListParam.options" title="pulserver.design.StringListParam.options"><code class="xref py py-obj docutils literal notranslate"><span class="pre">options</span></code></a></p></td>
-<td><p></p></td>
-</tr>
-</tbody>
-</table>
-</div>
 </section>
 
 
@@ -587,7 +577,7 @@ default.</p>
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.design.StringListParam"><code class="docutils literal notranslate"><span class="pre">StringListParam</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.design.StringListParam"><code class="docutils literal notranslate"><span class="pre">StringListParam()</span></code></a></li>
 </ul>
   </nav></div>
 

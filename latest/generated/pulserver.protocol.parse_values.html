@@ -535,7 +535,9 @@
 <dt class="sig sig-object py" id="pulserver.protocol.parse_values">
 <span class="sig-prename descclassname"><span class="pre">pulserver.protocol.</span></span><span class="sig-name descname"><span class="pre">parse_values</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pulserver/protocol/_wire.html#parse_values"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.protocol.parse_values" title="Link to this definition">#</a></dt>
 <dd><p>Read a value block against the listing it was edited from.</p>
-<p>Lines for read-only entries are ignored.</p>
+<p>Lines for read-only entries are ignored. A stringlist’s value is the
+option object the listing holds, which is a member of the choices’ enum
+where the listing comes from a scanner sequence.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Raises<span class="colon">:</span></dt>
 <dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If a line names a parameter the listing does not declare, or carries a

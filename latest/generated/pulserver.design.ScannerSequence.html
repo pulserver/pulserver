@@ -538,16 +538,17 @@
 <p>A pypulseqpp application exposed to the scanner UI.</p>
 <p>A subclass sets <a class="reference internal" href="pulserver.design.ScannerSequence.app.html#pulserver.design.ScannerSequence.app" title="pulserver.design.ScannerSequence.app"><code class="xref py py-attr docutils literal notranslate"><span class="pre">app</span></code></a> and, for the arguments the operator edits,
 <a class="reference internal" href="pulserver.design.ScannerSequence.ui.html#pulserver.design.ScannerSequence.ui" title="pulserver.design.ScannerSequence.ui"><code class="xref py py-attr docutils literal notranslate"><span class="pre">ui</span></code></a>; without <code class="docutils literal notranslate"><span class="pre">ui</span></code> the application plays its defaults. The keys of
-<code class="docutils literal notranslate"><span class="pre">ui</span></code> are the interpreter’s parameter names: members of
-<a class="reference internal" href="pulserver.protocol.UIParam.html#pulserver.protocol.UIParam" title="pulserver.protocol.UIParam"><code class="xref py py-class docutils literal notranslate"><span class="pre">UIParam</span></code></a> or <a class="reference internal" href="pulserver.protocol.ConfigKey.html#pulserver.protocol.ConfigKey" title="pulserver.protocol.ConfigKey"><code class="xref py py-class docutils literal notranslate"><span class="pre">ConfigKey</span></code></a>,
-or user-entry keys. They are stored as plain strings. Entries a request
-omits keep their initial values, the entry’s <code class="docutils literal notranslate"><span class="pre">default</span></code> or else the
-application’s. An entry resolves to the value its
-argument took in the design, as the application records it with
-<code class="docutils literal notranslate"><span class="pre">SequenceApp.resolve</span></code>, and otherwise keeps the requested value. Times
-travel as integer microseconds; other float values are read and reported
-to six significant digits, the precision of a float32 parameter. Either way
-a reply stored in scanner parameters and sent back resolves to itself.</p>
+<code class="docutils literal notranslate"><span class="pre">ui</span></code> are the interpreter’s parameter names: the members of
+<a class="reference internal" href="pulserver.protocol.ProtocolKey.html#pulserver.protocol.ProtocolKey" title="pulserver.protocol.ProtocolKey"><code class="xref py py-data docutils literal notranslate"><span class="pre">ProtocolKey</span></code></a>, which
+<a class="reference internal" href="pulserver.protocol.UIParam.html#pulserver.protocol.UIParam" title="pulserver.protocol.UIParam"><code class="xref py py-class docutils literal notranslate"><span class="pre">UIParam</span></code></a> collects. A plain string naming an
+entry is stored as its member. Entries a request omits keep their initial
+values, the entry’s <code class="docutils literal notranslate"><span class="pre">default</span></code> or else the application’s. An entry
+resolves to the value its argument took in the design, as the application
+records it with <code class="docutils literal notranslate"><span class="pre">SequenceApp.resolve</span></code>, and otherwise keeps the requested
+value. Times travel as integer microseconds; other float values are read
+and reported to six significant digits, the precision of a float32
+parameter. Either way a reply stored in scanner parameters and sent back
+resolves to itself.</p>
 <dl class="field-list">
 <dt class="field-odd">Attributes<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>follows</strong> (<em>tuple of str</em>) – Which protocol parameter drives the angle of each pulse the sequence

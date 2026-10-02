@@ -455,7 +455,9 @@
 <span></span><span class="sd">"""Text form of a protocol on the interpreter wire.</span>
 
 <span class="sd">The block grammar is the one ``pulseg_protocol_parse`` reads: listings carry</span>
-<span class="sd">``name: kind|…`` schema lines, value blocks carry ``name: value`` lines.</span>
+<span class="sd">``name: kind|…`` schema lines, value blocks carry ``name: value`` lines. Keys</span>
+<span class="sd">and values are typed everywhere else: this module is where they become text,</span>
+<span class="sd">and where text becomes them.</span>
 <span class="sd">"""</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
@@ -464,6 +466,8 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Mapping</span><span class="p">,</span> <span class="n">Sequence</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span>
 
+<span class="kn">from</span><span class="w"> </span><span class="nn">._keys</span><span class="w"> </span><span class="kn">import</span> <span class="n">WIRE_NAMES</span><span class="p">,</span> <span class="n">ProtocolKey</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">._prescription</span><span class="w"> </span><span class="kn">import</span> <span class="n">PRESCRIPTION</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">._schema</span><span class="w"> </span><span class="kn">import</span> <span class="n">InputMode</span><span class="p">,</span> <span class="n">Kind</span><span class="p">,</span> <span class="n">Parameter</span>
 
 <span class="c1">#: First and last lines of every protocol block, listing or values.</span>
@@ -489,14 +493,19 @@
 <span class="sd">        Scan time in seconds; ``None`` when the plugin reports none.</span>
 <span class="sd">    values</span>
 <span class="sd">        The resolved protocol for a valid request, the request itself for an</span>
-<span class="sd">        invalid one.</span>
+<span class="sd">        invalid one, as wire values by key.</span>
 <span class="sd">    """</span>
 
     <span class="n">valid</span><span class="p">:</span> <span class="nb">bool</span>
     <span class="n">duration</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span>
     <span class="n">info</span><span class="p">:</span> <span class="nb">str</span>
-    <span class="n">values</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span> <span class="o">|</span> <span class="nb">int</span> <span class="o">|</span> <span class="nb">bool</span> <span class="o">|</span> <span class="nb">str</span><span class="p">]</span></div>
+    <span class="n">values</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="n">ProtocolKey</span><span class="p">,</span> <span class="nb">float</span> <span class="o">|</span> <span class="nb">int</span> <span class="o">|</span> <span class="nb">bool</span> <span class="o">|</span> <span class="nb">str</span><span class="p">]</span></div>
 
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_key</span><span class="p">(</span><span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ProtocolKey</span> <span class="o">|</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return the key a wire name stands for; a name the interpreter does not know stays text."""</span>
+    <span class="k">return</span> <span class="n">WIRE_NAMES</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_number</span><span class="p">(</span><span class="n">value</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
@@ -508,7 +517,7 @@
     <span class="k">return</span> <span class="nb">repr</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_listing_line</span><span class="p">(</span><span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">p</span><span class="p">:</span> <span class="n">Parameter</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_listing_line</span><span class="p">(</span><span class="n">name</span><span class="p">:</span> <span class="n">ProtocolKey</span><span class="p">,</span> <span class="n">p</span><span class="p">:</span> <span class="n">Parameter</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
     <span class="k">if</span> <span class="n">p</span><span class="o">.</span><span class="n">kind</span> <span class="ow">in</span> <span class="p">(</span><span class="n">Kind</span><span class="o">.</span><span class="n">FLOAT</span><span class="p">,</span> <span class="n">Kind</span><span class="o">.</span><span class="n">INT</span><span class="p">):</span>
         <span class="n">fields</span> <span class="o">=</span> <span class="p">[</span>
             <span class="n">p</span><span class="o">.</span><span class="n">kind</span><span class="o">.</span><span class="n">value</span><span class="p">,</span>
@@ -553,7 +562,7 @@
 
 <div class="viewcode-block" id="format_listing">
 <a class="viewcode-back" href="../../../generated/pulserver.protocol.format_listing.html#pulserver.protocol.format_listing">[docs]</a>
-<span class="k">def</span><span class="w"> </span><span class="nf">format_listing</span><span class="p">(</span><span class="n">parameters</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Parameter</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">format_listing</span><span class="p">(</span><span class="n">parameters</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="n">ProtocolKey</span><span class="p">,</span> <span class="n">Parameter</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Format a protocol with its schema, as the ``list`` design call replies it."""</span>
     <span class="n">lines</span> <span class="o">=</span> <span class="p">[</span><span class="n">_listing_line</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">p</span><span class="p">)</span> <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">parameters</span><span class="o">.</span><span class="n">items</span><span class="p">()]</span>
     <span class="k">return</span> <span class="s2">"</span><span class="se">\n</span><span class="s2">"</span><span class="o">.</span><span class="n">join</span><span class="p">([</span><span class="n">PROTOCOL_BEGIN</span><span class="p">,</span> <span class="o">*</span><span class="n">lines</span><span class="p">,</span> <span class="n">PROTOCOL_END</span><span class="p">])</span> <span class="o">+</span> <span class="s2">"</span><span class="se">\n</span><span class="s2">"</span></div>
@@ -562,10 +571,11 @@
 
 <div class="viewcode-block" id="parse_listing">
 <a class="viewcode-back" href="../../../generated/pulserver.protocol.parse_listing.html#pulserver.protocol.parse_listing">[docs]</a>
-<span class="k">def</span><span class="w"> </span><span class="nf">parse_listing</span><span class="p">(</span><span class="n">text</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Parameter</span><span class="p">]:</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">parse_listing</span><span class="p">(</span><span class="n">text</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="n">ProtocolKey</span><span class="p">,</span> <span class="n">Parameter</span><span class="p">]:</span>
 <span class="w">    </span><span class="sd">"""Read a protocol with its schema from a listing block."""</span>
     <span class="n">parameters</span> <span class="o">=</span> <span class="p">{}</span>
-    <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">_block_lines</span><span class="p">(</span><span class="n">text</span><span class="p">):</span>
+    <span class="k">for</span> <span class="n">wire_name</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">_block_lines</span><span class="p">(</span><span class="n">text</span><span class="p">):</span>
+        <span class="n">name</span> <span class="o">=</span> <span class="n">_key</span><span class="p">(</span><span class="n">wire_name</span><span class="p">)</span>
         <span class="n">kind</span><span class="p">,</span> <span class="o">*</span><span class="n">fields</span> <span class="o">=</span> <span class="n">value</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">"|"</span><span class="p">)</span>
         <span class="n">kind</span> <span class="o">=</span> <span class="n">Kind</span><span class="p">(</span><span class="n">kind</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">kind</span> <span class="ow">in</span> <span class="p">(</span><span class="n">Kind</span><span class="o">.</span><span class="n">FLOAT</span><span class="p">,</span> <span class="n">Kind</span><span class="o">.</span><span class="n">INT</span><span class="p">):</span>
@@ -600,7 +610,8 @@
 <div class="viewcode-block" id="format_values">
 <a class="viewcode-back" href="../../../generated/pulserver.protocol.format_values.html#pulserver.protocol.format_values">[docs]</a>
 <span class="k">def</span><span class="w"> </span><span class="nf">format_values</span><span class="p">(</span>
-    <span class="n">values</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span> <span class="o">|</span> <span class="nb">int</span> <span class="o">|</span> <span class="nb">bool</span> <span class="o">|</span> <span class="nb">str</span><span class="p">],</span> <span class="n">listing</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Parameter</span><span class="p">]</span>
+    <span class="n">values</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="n">ProtocolKey</span><span class="p">,</span> <span class="nb">float</span> <span class="o">|</span> <span class="nb">int</span> <span class="o">|</span> <span class="nb">bool</span> <span class="o">|</span> <span class="nb">str</span><span class="p">],</span>
+    <span class="n">listing</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="n">ProtocolKey</span><span class="p">,</span> <span class="n">Parameter</span><span class="p">],</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Format a value block, as requests and replies carry it.</span>
 
@@ -626,11 +637,13 @@
 <div class="viewcode-block" id="parse_values">
 <a class="viewcode-back" href="../../../generated/pulserver.protocol.parse_values.html#pulserver.protocol.parse_values">[docs]</a>
 <span class="k">def</span><span class="w"> </span><span class="nf">parse_values</span><span class="p">(</span>
-    <span class="n">text</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">listing</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Parameter</span><span class="p">]</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span> <span class="o">|</span> <span class="nb">int</span> <span class="o">|</span> <span class="nb">bool</span> <span class="o">|</span> <span class="nb">str</span><span class="p">]:</span>
+    <span class="n">text</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">listing</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="n">ProtocolKey</span><span class="p">,</span> <span class="n">Parameter</span><span class="p">]</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="n">ProtocolKey</span><span class="p">,</span> <span class="nb">float</span> <span class="o">|</span> <span class="nb">int</span> <span class="o">|</span> <span class="nb">bool</span> <span class="o">|</span> <span class="nb">str</span><span class="p">]:</span>
 <span class="w">    </span><span class="sd">"""Read a value block against the listing it was edited from.</span>
 
-<span class="sd">    Lines for read-only entries are ignored.</span>
+<span class="sd">    Lines for read-only entries are ignored. A stringlist's value is the</span>
+<span class="sd">    option object the listing holds, which is a member of the choices' enum</span>
+<span class="sd">    where the listing comes from a scanner sequence.</span>
 
 <span class="sd">    Raises</span>
 <span class="sd">    ------</span>
@@ -644,14 +657,49 @@
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">name</span><span class="si">!r}</span><span class="s2"> is not a parameter of this protocol"</span><span class="p">)</span>
         <span class="n">p</span> <span class="o">=</span> <span class="n">listing</span><span class="p">[</span><span class="n">name</span><span class="p">]</span>
         <span class="k">if</span> <span class="n">p</span><span class="o">.</span><span class="n">editable</span><span class="p">:</span>
-            <span class="n">values</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">p</span><span class="o">.</span><span class="n">coerce</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+            <span class="n">values</span><span class="p">[</span><span class="n">_key</span><span class="p">(</span><span class="n">name</span><span class="p">)]</span> <span class="o">=</span> <span class="n">p</span><span class="o">.</span><span class="n">coerce</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">values</span></div>
+
+
+
+<div class="viewcode-block" id="format_prescription">
+<a class="viewcode-back" href="../../../generated/pulserver.protocol.format_prescription.html#pulserver.protocol.format_prescription">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">format_prescription</span><span class="p">(</span><span class="n">values</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="n">ProtocolKey</span><span class="p">,</span> <span class="nb">float</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Format prescription entries as the ``name: value`` lines of a block.</span>
+
+<span class="sd">    The offset is in mm and the rotation unitless, as the entries of a</span>
+<span class="sd">    protocol carry them.</span>
+<span class="sd">    """</span>
+    <span class="k">return</span> <span class="p">[</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">_number</span><span class="p">(</span><span class="n">value</span><span class="p">)</span><span class="si">}</span><span class="s2">"</span> <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">values</span><span class="o">.</span><span class="n">items</span><span class="p">()]</span></div>
+
+
+
+<div class="viewcode-block" id="parse_prescription">
+<a class="viewcode-back" href="../../../generated/pulserver.protocol.parse_prescription.html#pulserver.protocol.parse_prescription">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">parse_prescription</span><span class="p">(</span><span class="n">text</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="n">ProtocolKey</span><span class="p">,</span> <span class="nb">float</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Read the prescription entries out of the ``name: value`` lines of a block.</span>
+
+<span class="sd">    Other lines are left out.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If a prescription line is not a number.</span>
+<span class="sd">    """</span>
+    <span class="n">found</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="n">text</span><span class="o">.</span><span class="n">splitlines</span><span class="p">():</span>
+        <span class="n">name</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">value</span> <span class="o">=</span> <span class="n">line</span><span class="o">.</span><span class="n">partition</span><span class="p">(</span><span class="s2">": "</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">PRESCRIPTION</span><span class="p">:</span>
+            <span class="n">found</span><span class="p">[</span><span class="n">_key</span><span class="p">(</span><span class="n">name</span><span class="p">)]</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">found</span></div>
 
 
 
 <div class="viewcode-block" id="format_validation">
 <a class="viewcode-back" href="../../../generated/pulserver.protocol.format_validation.html#pulserver.protocol.format_validation">[docs]</a>
-<span class="k">def</span><span class="w"> </span><span class="nf">format_validation</span><span class="p">(</span><span class="n">validation</span><span class="p">:</span> <span class="n">Validation</span><span class="p">,</span> <span class="n">listing</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Parameter</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">format_validation</span><span class="p">(</span>
+    <span class="n">validation</span><span class="p">:</span> <span class="n">Validation</span><span class="p">,</span> <span class="n">listing</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="n">ProtocolKey</span><span class="p">,</span> <span class="n">Parameter</span><span class="p">]</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Format a ``validate`` reply: status line, info line, value block.</span>
 
 <span class="sd">    Whitespace in the info text, newlines included, is folded to single spaces.</span>
@@ -668,7 +716,7 @@
 
 <div class="viewcode-block" id="parse_validation">
 <a class="viewcode-back" href="../../../generated/pulserver.protocol.parse_validation.html#pulserver.protocol.parse_validation">[docs]</a>
-<span class="k">def</span><span class="w"> </span><span class="nf">parse_validation</span><span class="p">(</span><span class="n">text</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">listing</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Parameter</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">Validation</span><span class="p">:</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">parse_validation</span><span class="p">(</span><span class="n">text</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">listing</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="n">ProtocolKey</span><span class="p">,</span> <span class="n">Parameter</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">Validation</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Read a ``validate`` reply."""</span>
     <span class="n">status</span><span class="p">,</span> <span class="n">info</span><span class="p">,</span> <span class="n">block</span> <span class="o">=</span> <span class="n">text</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">"</span><span class="se">\n</span><span class="s2">"</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
     <span class="n">word</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">duration</span> <span class="o">=</span> <span class="n">status</span><span class="o">.</span><span class="n">partition</span><span class="p">(</span><span class="s2">" "</span><span class="p">)</span>

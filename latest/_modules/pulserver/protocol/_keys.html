@@ -608,6 +608,74 @@
 
 
 
+<div class="viewcode-block" id="UserKey">
+<a class="viewcode-back" href="../../../generated/pulserver.protocol.UserKey.html#pulserver.protocol.UserKey">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">UserKey</span><span class="p">(</span><span class="n">StrEnum</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Keys of the float user entries, ``user0_value`` to ``user18_value``.</span>
+
+<span class="sd">    ``UserKey.USER3`` is ``UIParam.user_value(3)``. The entry is a</span>
+<span class="sd">    :class:`~pulserver.design.FloatParam`; the description naming it is bound</span>
+<span class="sd">    to the matching :class:`UserNameKey` member.</span>
+<span class="sd">    """</span>
+
+    <span class="n">USER0</span> <span class="o">=</span> <span class="s2">"user0_value"</span>
+    <span class="n">USER1</span> <span class="o">=</span> <span class="s2">"user1_value"</span>
+    <span class="n">USER2</span> <span class="o">=</span> <span class="s2">"user2_value"</span>
+    <span class="n">USER3</span> <span class="o">=</span> <span class="s2">"user3_value"</span>
+    <span class="n">USER4</span> <span class="o">=</span> <span class="s2">"user4_value"</span>
+    <span class="n">USER5</span> <span class="o">=</span> <span class="s2">"user5_value"</span>
+    <span class="n">USER6</span> <span class="o">=</span> <span class="s2">"user6_value"</span>
+    <span class="n">USER7</span> <span class="o">=</span> <span class="s2">"user7_value"</span>
+    <span class="n">USER8</span> <span class="o">=</span> <span class="s2">"user8_value"</span>
+    <span class="n">USER9</span> <span class="o">=</span> <span class="s2">"user9_value"</span>
+    <span class="n">USER10</span> <span class="o">=</span> <span class="s2">"user10_value"</span>
+    <span class="n">USER11</span> <span class="o">=</span> <span class="s2">"user11_value"</span>
+    <span class="n">USER12</span> <span class="o">=</span> <span class="s2">"user12_value"</span>
+    <span class="n">USER13</span> <span class="o">=</span> <span class="s2">"user13_value"</span>
+    <span class="n">USER14</span> <span class="o">=</span> <span class="s2">"user14_value"</span>
+    <span class="n">USER15</span> <span class="o">=</span> <span class="s2">"user15_value"</span>
+    <span class="n">USER16</span> <span class="o">=</span> <span class="s2">"user16_value"</span>
+    <span class="n">USER17</span> <span class="o">=</span> <span class="s2">"user17_value"</span>
+    <span class="n">USER18</span> <span class="o">=</span> <span class="s2">"user18_value"</span></div>
+
+
+
+<div class="viewcode-block" id="UserNameKey">
+<a class="viewcode-back" href="../../../generated/pulserver.protocol.UserNameKey.html#pulserver.protocol.UserNameKey">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">UserNameKey</span><span class="p">(</span><span class="n">StrEnum</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Keys of the descriptions naming the user entries, ``user0_name`` to ``user18_name``.</span>
+
+<span class="sd">    ``UserNameKey.USER3`` is ``UIParam.user_name(3)``. The entry is a</span>
+<span class="sd">    :class:`~pulserver.design.Description`.</span>
+<span class="sd">    """</span>
+
+    <span class="n">USER0</span> <span class="o">=</span> <span class="s2">"user0_name"</span>
+    <span class="n">USER1</span> <span class="o">=</span> <span class="s2">"user1_name"</span>
+    <span class="n">USER2</span> <span class="o">=</span> <span class="s2">"user2_name"</span>
+    <span class="n">USER3</span> <span class="o">=</span> <span class="s2">"user3_name"</span>
+    <span class="n">USER4</span> <span class="o">=</span> <span class="s2">"user4_name"</span>
+    <span class="n">USER5</span> <span class="o">=</span> <span class="s2">"user5_name"</span>
+    <span class="n">USER6</span> <span class="o">=</span> <span class="s2">"user6_name"</span>
+    <span class="n">USER7</span> <span class="o">=</span> <span class="s2">"user7_name"</span>
+    <span class="n">USER8</span> <span class="o">=</span> <span class="s2">"user8_name"</span>
+    <span class="n">USER9</span> <span class="o">=</span> <span class="s2">"user9_name"</span>
+    <span class="n">USER10</span> <span class="o">=</span> <span class="s2">"user10_name"</span>
+    <span class="n">USER11</span> <span class="o">=</span> <span class="s2">"user11_name"</span>
+    <span class="n">USER12</span> <span class="o">=</span> <span class="s2">"user12_name"</span>
+    <span class="n">USER13</span> <span class="o">=</span> <span class="s2">"user13_name"</span>
+    <span class="n">USER14</span> <span class="o">=</span> <span class="s2">"user14_name"</span>
+    <span class="n">USER15</span> <span class="o">=</span> <span class="s2">"user15_name"</span>
+    <span class="n">USER16</span> <span class="o">=</span> <span class="s2">"user16_name"</span>
+    <span class="n">USER17</span> <span class="o">=</span> <span class="s2">"user17_name"</span>
+    <span class="n">USER18</span> <span class="o">=</span> <span class="s2">"user18_name"</span></div>
+
+
+
+<span class="c1">#: A key of the protocol: the wire name of any entry the interpreter knows,</span>
+<span class="c1">#: as the member of the enum that groups it.</span>
+<span class="n">ProtocolKey</span> <span class="o">=</span> <span class="n">FloatKey</span> <span class="o">|</span> <span class="n">IntKey</span> <span class="o">|</span> <span class="n">BoolKey</span> <span class="o">|</span> <span class="n">EnumKey</span> <span class="o">|</span> <span class="n">ConfigKey</span> <span class="o">|</span> <span class="n">UserKey</span> <span class="o">|</span> <span class="n">UserNameKey</span>
+
+
 <span class="k">def</span><span class="w"> </span><span class="nf">_check_user_index</span><span class="p">(</span><span class="n">n</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
     <span class="k">if</span> <span class="ow">not</span> <span class="mi">0</span> <span class="o">&lt;=</span> <span class="n">n</span> <span class="o">&lt;</span> <span class="n">NUM_USER_ENTRIES</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"user entries are numbered 0 to </span><span class="si">{</span><span class="n">NUM_USER_ENTRIES</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="mi">1</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
@@ -629,7 +697,7 @@
 <span class="sd">    &gt;&gt;&gt; f"{UIParam.PHASE_FOV}"</span>
 <span class="sd">    'phase_fov'</span>
 <span class="sd">    &gt;&gt;&gt; UIParam.user_value(3)</span>
-<span class="sd">    'user3_value'</span>
+<span class="sd">    &lt;UserKey.USER3: 'user3_value'&gt;</span>
 <span class="sd">    """</span>
 
     <span class="n">SAT_X_LOC1</span> <span class="o">=</span> <span class="n">FloatKey</span><span class="o">.</span><span class="n">SAT_X_LOC1</span>
@@ -704,7 +772,7 @@
 <div class="viewcode-block" id="UIParam.user_value">
 <a class="viewcode-back" href="../../../generated/pulserver.protocol.UIParam.user_value.html#pulserver.protocol.UIParam.user_value">[docs]</a>
     <span class="nd">@staticmethod</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">user_value</span><span class="p">(</span><span class="n">n</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">user_value</span><span class="p">(</span><span class="n">n</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">UserKey</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">"""Return the key of float user entry ``n``, 0 to 18.</span>
 
 <span class="sd">        Raises</span>
@@ -713,13 +781,13 @@
 <span class="sd">            If ``n`` is out of range.</span>
 <span class="sd">        """</span>
         <span class="n">_check_user_index</span><span class="p">(</span><span class="n">n</span><span class="p">)</span>
-        <span class="k">return</span> <span class="sa">f</span><span class="s2">"user</span><span class="si">{</span><span class="n">n</span><span class="si">}</span><span class="s2">_value"</span></div>
+        <span class="k">return</span> <span class="n">UserKey</span><span class="p">[</span><span class="sa">f</span><span class="s2">"USER</span><span class="si">{</span><span class="n">n</span><span class="si">}</span><span class="s2">"</span><span class="p">]</span></div>
 
 
 <div class="viewcode-block" id="UIParam.user_name">
 <a class="viewcode-back" href="../../../generated/pulserver.protocol.UIParam.user_name.html#pulserver.protocol.UIParam.user_name">[docs]</a>
     <span class="nd">@staticmethod</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">user_name</span><span class="p">(</span><span class="n">n</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">user_name</span><span class="p">(</span><span class="n">n</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">UserNameKey</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">"""Return the key of the description naming user entry ``n``, 0 to 18.</span>
 
 <span class="sd">        Raises</span>
@@ -728,7 +796,7 @@
 <span class="sd">            If ``n`` is out of range.</span>
 <span class="sd">        """</span>
         <span class="n">_check_user_index</span><span class="p">(</span><span class="n">n</span><span class="p">)</span>
-        <span class="k">return</span> <span class="sa">f</span><span class="s2">"user</span><span class="si">{</span><span class="n">n</span><span class="si">}</span><span class="s2">_name"</span></div>
+        <span class="k">return</span> <span class="n">UserNameKey</span><span class="p">[</span><span class="sa">f</span><span class="s2">"USER</span><span class="si">{</span><span class="n">n</span><span class="si">}</span><span class="s2">"</span><span class="p">]</span></div>
 </div>
 
 
@@ -778,17 +846,12 @@
 
 
 
-<span class="n">WIRE_NAMES</span> <span class="o">=</span> <span class="nb">frozenset</span><span class="p">(</span>
-    <span class="p">{</span>
-        <span class="o">*</span><span class="n">FloatKey</span><span class="p">,</span>
-        <span class="o">*</span><span class="n">IntKey</span><span class="p">,</span>
-        <span class="o">*</span><span class="n">BoolKey</span><span class="p">,</span>
-        <span class="o">*</span><span class="n">EnumKey</span><span class="p">,</span>
-        <span class="o">*</span><span class="n">ConfigKey</span><span class="p">,</span>
-        <span class="o">*</span><span class="p">(</span><span class="n">UIParam</span><span class="o">.</span><span class="n">user_value</span><span class="p">(</span><span class="n">n</span><span class="p">)</span> <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">NUM_USER_ENTRIES</span><span class="p">)),</span>
-        <span class="o">*</span><span class="p">(</span><span class="n">UIParam</span><span class="o">.</span><span class="n">user_name</span><span class="p">(</span><span class="n">n</span><span class="p">)</span> <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">NUM_USER_ENTRIES</span><span class="p">)),</span>
-    <span class="p">}</span>
-<span class="p">)</span>
+<span class="c1">#: Every wire name of the interpreter's parameter table, with its key.</span>
+<span class="n">WIRE_NAMES</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">ProtocolKey</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="n">key</span><span class="o">.</span><span class="n">value</span><span class="p">:</span> <span class="n">key</span>
+    <span class="k">for</span> <span class="n">keys</span> <span class="ow">in</span> <span class="p">(</span><span class="n">FloatKey</span><span class="p">,</span> <span class="n">IntKey</span><span class="p">,</span> <span class="n">BoolKey</span><span class="p">,</span> <span class="n">EnumKey</span><span class="p">,</span> <span class="n">ConfigKey</span><span class="p">,</span> <span class="n">UserKey</span><span class="p">,</span> <span class="n">UserNameKey</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">keys</span>
+<span class="p">}</span>
 </pre></div>
 
                 </article>

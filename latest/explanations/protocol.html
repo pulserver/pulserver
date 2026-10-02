@@ -520,6 +520,7 @@
             <nav aria-label="Page">
                 <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#resolution">Resolution</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#keys-and-values">Keys and values</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#presets">Presets</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#units-and-precision">Units and precision</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#wire-format">Wire format</a></li>
@@ -552,16 +553,16 @@ application’s <code class="docutils literal notranslate"><span class="pre">ini
 <ol class="arabic simple">
 <li><p>Every entry the request omits takes the application’s default, so a request
 is always a complete prescription.</p></li>
-<li><p>The UI values are converted to the application’s arguments, and the
-application is constructed under the scanner limits, capped by the design
-limits the scanner derates for the prescription
-(<a class="reference internal" href="../user-guide/running.html"><span class="doc">Running the services</span></a>). Construction designs the events and their
-timing against those limits, without playing the scan, and raises an error
-for a prescription it cannot realize.</p></li>
+<li><p>The wire values are converted to the application’s arguments, held as a
+<a class="reference internal" href="../generated/pulserver.design.Protocol.html#pulserver.design.Protocol" title="pulserver.design.Protocol"><code class="xref py py-class docutils literal notranslate"><span class="pre">Protocol</span></code></a>, and the application is constructed
+under the scanner limits, capped by the design limits the scanner derates
+for the prescription (<a class="reference internal" href="../user-guide/running.html"><span class="doc">Running the services</span></a>). Construction designs
+the events and their timing against those limits, without playing the scan,
+and raises an error for a prescription it cannot realize.</p></li>
 <li><p>The value each argument took in the design, as the application records it
-(<a class="reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.sequences.SequenceApp.resolved.html#pypulseqpp.sequences.SequenceApp.resolved" title="(in pypulseqpp latest)"><code class="xref py py-attr docutils literal notranslate"><span class="pre">resolved</span></code></a>), is converted to UI
-units. An argument the application does not record keeps its requested
-value.</p></li>
+(<a class="reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.sequences.SequenceApp.resolved.html#pypulseqpp.sequences.SequenceApp.resolved" title="(in pypulseqpp latest)"><code class="xref py py-attr docutils literal notranslate"><span class="pre">resolved</span></code></a>), replaces the
+requested one in the protocol, which is converted back to wire values. An
+argument the application does not record keeps its requested value.</p></li>
 </ol>
 <p>The prescription is not a design argument. Every listing ends with its
 entries, not editable in the UI, which the interpreter fills from the
@@ -577,6 +578,29 @@ unchanged and the error message the application raised, which the interpreter
 shows to the operator. A valid reply carries the resolved values and the scan
 time in seconds (<a class="reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.sequences.SequenceApp.scan_time.html#pypulseqpp.sequences.SequenceApp.scan_time" title="(in pypulseqpp latest)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">scan_time()</span></code></a>).</p>
 </section>
+<section id="keys-and-values">
+<h2>Keys and values<a class="headerlink" href="#keys-and-values" title="Link to this heading">#</a></h2>
+<p>The keys of a protocol are members of the key enums of
+<code class="xref py py-mod docutils literal notranslate"><span class="pre">pulserver.protocol</span></code>, of which <a class="reference internal" href="../generated/pulserver.protocol.ProtocolKey.html#pulserver.protocol.ProtocolKey" title="pulserver.protocol.ProtocolKey"><code class="xref py py-data docutils literal notranslate"><span class="pre">ProtocolKey</span></code></a> is
+the union. A key is a <code class="docutils literal notranslate"><span class="pre">str</span></code> that equals and hashes as its wire name, so a plain
+string indexes a mapping of keys, and a scanner sequence stores a plain string
+in <code class="docutils literal notranslate"><span class="pre">ui</span></code> as the member it names. A <a class="reference internal" href="../generated/pulserver.design.Protocol.html#pulserver.design.Protocol" title="pulserver.design.Protocol"><code class="xref py py-class docutils literal notranslate"><span class="pre">Protocol</span></code></a> maps each
+key to its value in the units of the application’s argument: seconds for a
+time, the argument’s unit for a float, a member of the enum for a
+<a class="reference internal" href="../generated/pulserver.design.ChoiceParam.html#pulserver.design.ChoiceParam" title="pulserver.design.ChoiceParam"><code class="xref py py-class docutils literal notranslate"><span class="pre">ChoiceParam</span></code></a>. The prescription entries bind no
+argument and keep the units of the wire.</p>
+<p>The wire carries the same protocol as integer microseconds, values in the
+entry’s UI unit and, for a choice, the index of the chosen option.
+<a class="reference internal" href="../generated/pulserver.design.Protocol.from_wire.html#pulserver.design.Protocol.from_wire" title="pulserver.design.Protocol.from_wire"><code class="xref py py-meth docutils literal notranslate"><span class="pre">from_wire()</span></code></a> and
+<a class="reference internal" href="../generated/pulserver.design.Protocol.to_wire.html#pulserver.design.Protocol.to_wire" title="pulserver.design.Protocol.to_wire"><code class="xref py py-meth docutils literal notranslate"><span class="pre">to_wire()</span></code></a> are the only conversions between
+the two, and the formatting and parsing functions of
+<code class="xref py py-mod docutils literal notranslate"><span class="pre">pulserver.protocol</span></code> are the only conversions between keys and values and
+the text of a block. A value block that names no option of a choice is refused
+when it is parsed, and a request that names none is invalid when it is given
+to <a class="reference internal" href="../generated/pulserver.design.ScannerSequence.validate.html#pulserver.design.ScannerSequence.validate" title="pulserver.design.ScannerSequence.validate"><code class="xref py py-meth docutils literal notranslate"><span class="pre">validate()</span></code></a> as a mapping.
+<a class="reference internal" href="../generated/pulserver.design.StringListParam.html#pulserver.design.StringListParam" title="pulserver.design.StringListParam"><code class="xref py py-func docutils literal notranslate"><span class="pre">StringListParam()</span></code></a>, which builds the enum from option
+strings, is deprecated: declare the enum and use <code class="docutils literal notranslate"><span class="pre">ChoiceParam</span></code>.</p>
+</section>
 <section id="presets">
 <h2>Presets<a class="headerlink" href="#presets" title="Link to this heading">#</a></h2>
 <p>A preset is a negative value of a time entry that the UI shows as a word, such
@@ -585,7 +609,9 @@ as <em>Minimum</em> for the echo time (<a class="reference internal" href="../ge
 offers to the argument value it requests: <code class="docutils literal notranslate"><span class="pre">None</span></code>, which asks the application
 for its shortest achievable time; a time in seconds; or a function of the
 scanner limits. A preset is resolved like any other request, so the reply
-carries the time the design achieved in place of the preset.</p>
+carries the time the design achieved in place of the preset. A time showing a
+preset holds what the preset requests in a protocol, and
+<a class="reference internal" href="../generated/pulserver.design.Protocol.preset.html#pulserver.design.Protocol.preset" title="pulserver.design.Protocol.preset"><code class="xref py py-meth docutils literal notranslate"><span class="pre">preset()</span></code></a> returns the preset.</p>
 </section>
 <section id="units-and-precision">
 <h2>Units and precision<a class="headerlink" href="#units-and-precision" title="Link to this heading">#</a></h2>
@@ -605,16 +631,21 @@ generates it again obtains the same design.</p>
 </section>
 <section id="wire-format">
 <h2>Wire format<a class="headerlink" href="#wire-format" title="Link to this heading">#</a></h2>
-<p>Protocols are exchanged as text blocks delimited by
-<code class="docutils literal notranslate"><span class="pre">[NimPulseqGUI</span> <span class="pre">Protocol]</span></code> and <code class="docutils literal notranslate"><span class="pre">[NimPulseqGUI</span> <span class="pre">Protocol</span> <span class="pre">End]</span></code>. A listing block
-carries each entry with its schema, one line per entry:</p>
+<p>Protocols are exchanged as text blocks delimited by <code class="docutils literal notranslate"><span class="pre">[Protocol]</span></code> and
+<code class="docutils literal notranslate"><span class="pre">[Protocol</span> <span class="pre">End]</span></code>. A listing block carries each entry with its schema, one line
+per entry:</p>
 <div class="highlight-text notranslate"><div class="highlight"><pre><span></span>TE: int|dropdown|8000|1000|80000|10|us|-2
 </pre></div>
 </div>
 <p>that is, kind, input mode, current value, minimum, maximum, increment, unit and
-the dropdown options. A value block carries <code class="docutils literal notranslate"><span class="pre">name:</span> <span class="pre">value</span></code> lines only. The
-grammar is implemented in <code class="xref py py-mod docutils literal notranslate"><span class="pre">pulserver.protocol</span></code> for the host and in
-<code class="docutils literal notranslate"><span class="pre">pulseg_protocol.h</span></code> for the interpreter.</p>
+the dropdown options. The line of a string list is its kind, the index of the
+chosen option and the options:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>imaging_mode: stringlist|1|2d|3d
+</pre></div>
+</div>
+<p>A value block carries <code class="docutils literal notranslate"><span class="pre">name:</span> <span class="pre">value</span></code> lines only, a string list as the index of
+its chosen option. The grammar is implemented in <code class="xref py py-mod docutils literal notranslate"><span class="pre">pulserver.protocol</span></code> for
+the host and in <code class="docutils literal notranslate"><span class="pre">pulseg_protocol.h</span></code> for the interpreter.</p>
 </section>
 <section id="see-also">
 <h2>See also<a class="headerlink" href="#see-also" title="Link to this heading">#</a></h2>
@@ -675,6 +706,7 @@ grammar is implemented in <code class="xref py py-mod docutils literal notransla
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#resolution">Resolution</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#keys-and-values">Keys and values</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#presets">Presets</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#units-and-precision">Units and precision</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#wire-format">Wire format</a></li>

@@ -540,8 +540,8 @@
 <dt class="field-odd">Attributes<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>duration</strong> (<em>float | None</em>) – Scan time in seconds; <code class="docutils literal notranslate"><span class="pre">None</span></code> when the plugin reports none.</p></li>
-<li><p><strong>values</strong> (<em>dict[str, float | int | bool | str]</em>) – The resolved protocol for a valid request, the request itself for an
-invalid one.</p></li>
+<li><p><strong>values</strong> (<em>dict[pulserver.protocol._keys.FloatKey | pulserver.protocol._keys.IntKey | pulserver.protocol._keys.BoolKey | pulserver.protocol._keys.EnumKey | pulserver.protocol._keys.ConfigKey | pulserver.protocol._keys.UserKey | pulserver.protocol._keys.UserNameKey, float | int | bool | str]</em>) – The resolved protocol for a valid request, the request itself for an
+invalid one, as wire values by key.</p></li>
 </ul>
 </dd>
 </dl>

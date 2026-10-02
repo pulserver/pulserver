@@ -539,8 +539,10 @@
 <p>Mirrors <code class="docutils literal notranslate"><span class="pre">pulseg_protocol_value</span></code> in the interpreter. Numeric entries carry
 a mode, range, increment, unit and, as a dropdown, up to five options; a
 negative option of a time entry is a preset. A stringlist’s options are
-its choices and its value is one of them. <code class="docutils literal notranslate"><span class="pre">config</span></code> and <code class="docutils literal notranslate"><span class="pre">description</span></code>
-entries are declared by the sequence and never edited.</p>
+its choices and its value is one of them, as the option object: a member
+where the options are the members of an enum, a string otherwise.
+<code class="docutils literal notranslate"><span class="pre">config</span></code> and <code class="docutils literal notranslate"><span class="pre">description</span></code> entries are declared by the sequence and
+never edited.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Raises<span class="colon">:</span></dt>
 <dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If a dropdown has no options or more than five, or a stringlist value

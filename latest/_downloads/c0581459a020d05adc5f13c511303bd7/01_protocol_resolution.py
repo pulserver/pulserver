@@ -202,5 +202,6 @@ print(reply.info)
 
 first = gre.validate(system, {"TE": TEPreset.MINIMUM, "nx": 192, "bandwidth": 150e3})
 again = gre.validate(system, first.values)
-print(first.values)
+for key in gre.ui:
+    print(f"{key}: {first.values[key]}")
 print(again.values == first.values, f"scan time {first.duration:.1f} s")

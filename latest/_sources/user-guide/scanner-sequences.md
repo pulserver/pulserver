@@ -22,12 +22,14 @@ they cap the scanner's limits, which the design call passes in.
 
 ## Binding the protocol
 
-`ui` maps {class}`~pulserver.protocol.UIParam` members, the parameters of the
-interpreter's table, to entries; a name outside that table is refused when the
-class is defined. An entry names the `init_sequence` argument it sets. The class
-does not name a reconstruction: the console's scan or the reconstruction client
-does ({doc}`reconstruction-plugins`). A `recon` attribute has no effect, and
-defining one raises a `DeprecationWarning`.
+`ui` maps the parameters of the interpreter's table, the members of
+{data}`~pulserver.protocol.ProtocolKey`, to entries;
+{class}`~pulserver.protocol.UIParam` collects those of the UI controls. A plain
+string naming a parameter is stored as its member, and a name outside the table
+is refused when the class is defined. An entry names the `init_sequence`
+argument it sets. The class does not name a reconstruction: the console's scan
+or the reconstruction client does ({doc}`reconstruction-plugins`). A `recon`
+attribute has no effect, and defining one raises a `DeprecationWarning`.
 
 ```pycon
 >>> from pypulseqpp.sequences.sequence.gre2D_sequence import Gre2DApp
@@ -53,7 +55,7 @@ defining one raises a `DeprecationWarning`.
 | {class}`~pulserver.design.FloatParam` | the argument divided by `scale`, in `unit` | as the application takes it |
 | {class}`~pulserver.design.IntParam` | integer | integer |
 | {class}`~pulserver.design.BoolParam` | checkbox | boolean |
-| {class}`~pulserver.design.StringListParam` | dropdown | the chosen string |
+| {class}`~pulserver.design.ChoiceParam` | dropdown | the chosen member of a `StrEnum` |
 | {class}`~pulserver.design.ConfigParam` | not shown | none; a value declared to the interpreter |
 | {class}`~pulserver.design.Description` | read-only text | none |
 
@@ -62,7 +64,10 @@ The options of the four string-list parameters are
 {class}`~pulserver.protocol.ImagingMode`,
 {class}`~pulserver.protocol.PreparationType` and
 {class}`~pulserver.protocol.TriggerType`, which
-{class}`~pulserver.design.StringListParam` takes as they are.
+{class}`~pulserver.design.ChoiceParam` takes as its `choices`:
+`ChoiceParam("mode", ImagingMode)`. The argument receives the member, a `str`
+equal to the option. {func}`~pulserver.design.StringListParam`, which builds
+the enum from option strings, is deprecated.
 
 A preset is a negative value the interpreter sends in place of a time;
 `{TEPreset.MINIMUM: None}` passes `None`, for which the application designs its
