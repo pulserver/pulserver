@@ -35,6 +35,7 @@ from ._designs import Design, DesignCache
 from ._enrich import enrich_acquisition, enrich_header
 from ._motion import FILENAME, MotionWriter, Pose, pose_of, pose_waveform
 from ._queue import QueueFile
+from ._seqdesc import is_message
 from ._workers import WorkerPool
 
 _log = logging.getLogger("pulserver.proxy")
@@ -148,7 +149,10 @@ class ReconProxy(_Listener):
     config text, the header, one acquisition per readout of the chain and a
     ``CLOSE``. The header's ``pulserver_design`` names the design of the store
     the series was played from; its readout table enriches the header and
-    every acquisition. The readouts arrive demodulated to the
+    every acquisition, and the reconstruction receives the chain's sequence
+    description as a text message after the header and before the first
+    acquisition (:func:`~pulserver.proxy._seqdesc.message`), which is not
+    sent back to the client. The readouts arrive demodulated to the
     prescribed field-of-view centre by the playout
     (:func:`pulserver.ir.prescribe`), and their samples are passed on as
     received. The reconstruction plugin is the design's, falling back to
@@ -318,7 +322,7 @@ class ReconProxy(_Listener):
                 config,
                 header,
                 plugin,
-                _enriched(client, design),
+                itertools.chain((design.description,), _enriched(client, design)),
                 motion=design.directory / FILENAME
                 if design.prospective_motion
                 else None,
@@ -983,7 +987,8 @@ def _relay(
 
     ``convert`` turns each image into what is sent in its place. ``poses``
     takes each pose the reconstruction states, which is not sent on: a pose is
-    addressed to the scan, not to whoever asked for the images. A message
+    addressed to the scan, not to whoever asked for the images; nor is the
+    sequence description, which a reconstruction may echo. A message
     ``source`` has no reader for ends the relay, and the client is told its
     type, because what followed it in the stream cannot be read.
     """
@@ -991,6 +996,8 @@ def _relay(
         for item in source:
             if _is_close_marker(item):
                 break
+            if is_message(item):
+                continue
             if isinstance(item, ismrmrd.Waveform):
                 found = pose_of(item)
                 if found is not None:
