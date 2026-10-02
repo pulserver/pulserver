@@ -251,6 +251,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../explanations/designs.html">Designs and the design store</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../explanations/ir-cache.html">The scanner IR</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../explanations/reconstruction.html">Raw-data enrichment and routing</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../explanations/calibration.html">Calibration, noise and coil compression</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../explanations/virtual-scanner.html">The virtual scanner</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../explanations/bloch-simulation.html">Bloch simulation on isochromats</a></li>
 </ul>
@@ -544,6 +545,12 @@ some series of the exam has measured it.</p>
 <p>Those three names are the whole vocabulary, so a misspelt one raises
 instead of being stored where nothing looks for it. A plugin carrying an
 artifact of its own puts it in <a class="reference internal" href="pulserver.recon.ReconContext.exam.html#pulserver.recon.ReconContext.exam" title="pulserver.recon.ReconContext.exam"><code class="xref py py-attr docutils literal notranslate"><span class="pre">exam</span></code></a> under a key it chooses.</p>
+<p>The calibration helpers keep the state of one stream on the context, empty
+when the stream starts and not shared with other series. <a class="reference internal" href="pulserver.recon.coil_maps.html#pulserver.recon.coil_maps" title="pulserver.recon.coil_maps"><code class="xref py py-attr docutils literal notranslate"><span class="pre">coil_maps</span></code></a>
+maps a slice counter to the <a class="reference internal" href="pulserver.recon.CoilSensitivities.html#pulserver.recon.CoilSensitivities" title="pulserver.recon.CoilSensitivities"><code class="xref py py-class docutils literal notranslate"><span class="pre">CoilSensitivities</span></code></a> the stream holds for
+it, <a class="reference internal" href="pulserver.recon.ReconContext.noise.html#pulserver.recon.ReconContext.noise" title="pulserver.recon.ReconContext.noise"><code class="xref py py-attr docutils literal notranslate"><span class="pre">noise</span></code></a> is the prewhitening a <a class="reference internal" href="pulserver.recon.Prewhiten.html#pulserver.recon.Prewhiten" title="pulserver.recon.Prewhiten"><code class="xref py py-class docutils literal notranslate"><span class="pre">Prewhiten</span></code></a> applies and
+<a class="reference internal" href="pulserver.recon.ReconContext.coil_compression.html#pulserver.recon.ReconContext.coil_compression" title="pulserver.recon.ReconContext.coil_compression"><code class="xref py py-attr docutils literal notranslate"><span class="pre">coil_compression</span></code></a> the basis a <a class="reference internal" href="pulserver.recon.CoilCompression.html#pulserver.recon.CoilCompression" title="pulserver.recon.CoilCompression"><code class="xref py py-class docutils literal notranslate"><span class="pre">CoilCompression</span></code></a> applies; the
+last two are <code class="docutils literal notranslate"><span class="pre">None</span></code> until the stream has them. A hook may assign them.</p>
 <p>The scan context itself does not change once built: assigning to
 <a class="reference internal" href="pulserver.recon.ReconContext.header.html#pulserver.recon.ReconContext.header" title="pulserver.recon.ReconContext.header"><code class="xref py py-attr docutils literal notranslate"><span class="pre">header</span></code></a>, <a class="reference internal" href="pulserver.recon.ReconContext.exam.html#pulserver.recon.ReconContext.exam" title="pulserver.recon.ReconContext.exam"><code class="xref py py-attr docutils literal notranslate"><span class="pre">exam</span></code></a>, <a class="reference internal" href="pulserver.recon.ReconContext.config.html#pulserver.recon.ReconContext.config" title="pulserver.recon.ReconContext.config"><code class="xref py py-attr docutils literal notranslate"><span class="pre">config</span></code></a> or <a class="reference internal" href="pulserver.recon.ReconContext.device.html#pulserver.recon.ReconContext.device" title="pulserver.recon.ReconContext.device"><code class="xref py py-attr docutils literal notranslate"><span class="pre">device</span></code></a> raises.</p>
 <dl class="field-list simple">
@@ -587,19 +594,28 @@ three names do not cover.</p></li>
 <p class="rubric">Attributes</p>
 <div class="pst-scrollable-table-container"><table class="autosummary longtable table">
 <tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.recon.ReconContext.config.html#pulserver.recon.ReconContext.config" title="pulserver.recon.ReconContext.config"><code class="xref py py-obj docutils literal notranslate"><span class="pre">config</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.recon.ReconContext.coil_compression.html#pulserver.recon.ReconContext.coil_compression" title="pulserver.recon.ReconContext.coil_compression"><code class="xref py py-obj docutils literal notranslate"><span class="pre">coil_compression</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pulserver.recon.ReconContext.device.html#pulserver.recon.ReconContext.device" title="pulserver.recon.ReconContext.device"><code class="xref py py-obj docutils literal notranslate"><span class="pre">device</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pulserver.recon.ReconContext.config.html#pulserver.recon.ReconContext.config" title="pulserver.recon.ReconContext.config"><code class="xref py py-obj docutils literal notranslate"><span class="pre">config</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.recon.ReconContext.exam_id.html#pulserver.recon.ReconContext.exam_id" title="pulserver.recon.ReconContext.exam_id"><code class="xref py py-obj docutils literal notranslate"><span class="pre">exam_id</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.recon.ReconContext.device.html#pulserver.recon.ReconContext.device" title="pulserver.recon.ReconContext.device"><code class="xref py py-obj docutils literal notranslate"><span class="pre">device</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pulserver.recon.ReconContext.exam_id.html#pulserver.recon.ReconContext.exam_id" title="pulserver.recon.ReconContext.exam_id"><code class="xref py py-obj docutils literal notranslate"><span class="pre">exam_id</span></code></a></p></td>
 <td><p>Identifier of <code class="xref py py-attr docutils literal notranslate"><span class="pre">exam</span></code>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.recon.ReconContext.noise.html#pulserver.recon.ReconContext.noise" title="pulserver.recon.ReconContext.noise"><code class="xref py py-obj docutils literal notranslate"><span class="pre">noise</span></code></a></p></td>
+<td><p></p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="pulserver.recon.ReconContext.header.html#pulserver.recon.ReconContext.header" title="pulserver.recon.ReconContext.header"><code class="xref py py-obj docutils literal notranslate"><span class="pre">header</span></code></a></p></td>
 <td><p></p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="pulserver.recon.ReconContext.exam.html#pulserver.recon.ReconContext.exam" title="pulserver.recon.ReconContext.exam"><code class="xref py py-obj docutils literal notranslate"><span class="pre">exam</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pulserver.recon.ReconContext.coil_maps.html#pulserver.recon.ReconContext.coil_maps" title="pulserver.recon.ReconContext.coil_maps"><code class="xref py py-obj docutils literal notranslate"><span class="pre">coil_maps</span></code></a></p></td>
 <td><p></p></td>
 </tr>
 </tbody>

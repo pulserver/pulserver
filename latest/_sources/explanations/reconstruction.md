@@ -266,21 +266,29 @@ no series of that exam is being reconstructed anywhere on the host.
 Three maps have names the series agree on, and a hook reaches them as
 attributes of its context: `b0_map` is off-resonance in Hz, `b1_map` the
 transmit field as a fraction of what was asked for, and `coil_sensitivities`
-the receive sensitivity of each coil. A calibration hook assigns what it
+the receive sensitivity of each coil, a
+{class}`~pulserver.recon.CoilSensitivities`. A calibration hook assigns what it
 measured and a later hook reads it, with `None` meaning no series of the exam
 has measured it yet.
 
 ```python
-def __call__(self, bucket, context):
+def recon(self, context, branch, data):
     maps = context.coil_sensitivities  # measured by an earlier series
-    image, transmit = parallel_imaging_and_b1_fit(bucket, maps)
+    image, transmit = parallel_imaging_and_b1_fit(data, maps)
     context.b1_map = transmit          # read by a later one
-    return image
+    return recon.ReconResult(image)
 ```
 
-Those three are the whole vocabulary, so a misspelt name raises rather than
-storing a map where nothing looks for it. An artifact a plugin carries for
-itself goes in `context.exam` under a key of its own.
+A map is stored as measured, in the frame and on the grid of its series.
+Nothing resamples, regrids or reslices it for a series acquired at another
+position, orientation or matrix; {func}`~pulserver.recon.coil_maps` compares the
+coil sensitivities with the unit that needs them, as {doc}`calibration` states.
+
+Those three are the whole vocabulary of the exam's maps, so a misspelt name
+raises rather than storing a map where nothing looks for it. An artifact a
+plugin carries for itself goes in `context.exam` under a key of its own, as
+{obj}`~pulserver.recon.NOISE_COVARIANCE` does for the whitening of a noise
+series.
 
 The number of series reconstructed concurrently is bounded by a number of
 slots, derived from the available memory unless it is specified. On a host with
@@ -324,6 +332,7 @@ relays, and the client receives a text naming the message's type.
 
 * {doc}`../user-guide/reconstruction-plugins` — writing a reconstruction.
 * {doc}`../user-guide/reconstruction-client` — the MRD stream a reconstruction client sends.
+* {doc}`calibration` — coil sensitivity maps, prewhitening and coil compression.
 * {doc}`../api/proxy` — the proxy, the reconstruction server and the enrichment interface.
 * {doc}`../api/recon` — the reconstruction plugin interface.
 * {doc}`/generated/gallery/03-reconstruction/01_enrichment` — enrichment and reconstruction of a simulated series.

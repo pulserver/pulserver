@@ -1,0 +1,1021 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>pulserver.recon._calibration &#8212; pulserver documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  <!--
+    this give us a css class that will be invisible only if js is disabled
+  -->
+  <noscript>
+    <style>
+      .pst-js-only { display: none !important; }
+
+    </style>
+  </noscript>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../../_static/styles/theme.css?digest=90905a2f556bf617f1a9" rel="stylesheet" />
+<link href="../../../_static/styles/pydata-sphinx-theme.css?digest=90905a2f556bf617f1a9" rel="stylesheet" />
+
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=03e43079" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/styles/sphinx-book-theme.css?v=4418a689" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery.css?v=c83e6b79" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/pulserver.css?v=36f0fcfd" />
+  
+  <!-- So that users can add custom icons -->
+  <script defer src="../../../_static/scripts/fontawesome.js?digest=90905a2f556bf617f1a9"></script>
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
+<link rel="preload" as="script" href="../../../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
+
+    <script src="../../../_static/documentation_options.js?v=b1def801"></script>
+    <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../../../_static/copybutton.js?v=f281be69"></script>
+    <script src="../../../_static/sg-tags.js?v=d80f6fa4"></script>
+    <script src="../../../_static/scripts/sphinx-book-theme.js?v=fab101a9"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = '_modules/pulserver/recon/_calibration';</script>
+    <script>
+        DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
+        DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'latest';
+        DOCUMENTATION_OPTIONS.show_version_warning_banner =
+            true;
+        </script>
+    <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
+    <link rel="canonical" href="https://pulserver.github.io/pulserver/latest/_modules/pulserver/recon/_calibration.html" />
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  <meta name="docsearch:version" content="latest" />
+  
+    
+    <script src="../../../_static/searchtools.js"></script>
+    <script src="../../../_static/language_data.js"></script>
+    <script src="../../../searchindex.js"></script>
+  
+  </head>
+  <body data-default-mode="">
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+  
+  
+  
+  
+  <dialog id="pst-search-dialog">
+    
+<form class="bd-search d-flex align-items-center"
+      action="../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         placeholder="Search..."
+         aria-label="Search..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+  </dialog>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header id="pst-header" class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+  
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+        </div>
+      
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+    </div>
+  
+
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+        
+      
+      <dialog id="pst-primary-sidebar-modal"></dialog>
+      <div id="pst-primary-sidebar" class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+    
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../../../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../../../_static/pulserver-mark.svg" class="logo__image only-light" alt="pulserver documentation - Home"/>
+    <img src="../../../_static/pulserver-mark.svg" class="logo__image only-dark pst-js-only" alt="pulserver documentation - Home"/>
+  
+  
+</a></div>
+        <div class="sidebar-primary-item">
+<div class="version-switcher__container dropdown pst-js-only">
+  <button id="pst-version-switcher-button-2"
+    type="button"
+    class="version-switcher__button btn btn-sm dropdown-toggle"
+    data-bs-toggle="dropdown"
+    aria-haspopup="listbox"
+    aria-controls="pst-version-switcher-list-2"
+    aria-label="Version switcher list"
+  >
+    Choose version  <!-- this text may get changed later by javascript -->
+    <span class="caret"></span>
+  </button>
+  <div id="pst-version-switcher-list-2"
+    class="version-switcher__menu dropdown-menu list-group-flush py-0"
+    role="listbox" aria-labelledby="pst-version-switcher-button-2">
+    <!-- dropdown will be populated by javascript on page load -->
+  </div>
+</div></div>
+        <div class="sidebar-primary-item">
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button></div>
+        <div class="sidebar-primary-item"><nav class="bd-links bd-docs-nav" aria-label="Main">
+    <div class="bd-toc-item navbar-nav active">
+        
+        <ul class="nav bd-sidenav bd-sidenav__home-link">
+            <li class="toctree-l1">
+                <a class="reference internal" href="../../../index.html">
+                    Homepage
+                </a>
+            </li>
+        </ul>
+        <ul class="nav bd-sidenav">
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../user-guide/index.html">User guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/running.html">Running the services</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/scanner-sequences.html">Scanner sequences</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/reconstruction-plugins.html">Reconstruction plugins</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/reconstruction-client.html">Reconstruction clients</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/virtual-scanner.html">Scanning a phantom without a scanner</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../explanations/index.html">Explanations</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/architecture.html">Architecture</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/protocol.html">Protocol resolution</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/designs.html">Designs and the design store</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/ir-cache.html">The scanner IR</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/reconstruction.html">Raw-data enrichment and routing</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/calibration.html">Calibration, noise and coil compression</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/virtual-scanner.html">The virtual scanner</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/bloch-simulation.html">Bloch simulation on isochromats</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../examples/index.html">Examples</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../../examples/protocol.html">Protocol resolution</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-protocol/01_protocol_resolution.html">Protocol resolution for a 2D gradient echo</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../../examples/scanner-ir.html">Scanner IR</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/02-scanner-ir/01_segmentation.html">Segmentation of a sequence for the scanner</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../../examples/reconstruction.html">Reconstruction</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/03-reconstruction/01_enrichment.html">Raw-data enrichment and reconstruction</a></li>
+</ul>
+</details></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../api/index.html">API reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/protocol.html">Protocol</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/design.html">Scanner sequences</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/host.html">Design calls</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/ir.html">IR conversion</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/proxy.html">Reconstruction proxy</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/recon.html">Reconstruction plugins</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/mrd.html">MRD data</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/validate.html">Validation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/virtual.html">Virtual scanner</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../developer-guide/index.html">Developer guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/prerequisites.html">Development prerequisites</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/installation.html">Editable installation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/workflow.html">Development workflow</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/style.html">Coding style</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/documentation.html">Documentation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/terminology.html">Terminology and conventions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/pre-commit.html">Pre-commit</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/pull-requests.html">Pull requests</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/releases.html">Releases</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/code-of-conduct.html">Code of conduct</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../misc/index.html">Miscellaneous</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../misc/license.html">License and notices</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../misc/related.html">Related projects</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../misc/contributors.html">Contributors</a></li>
+</ul>
+</details></li>
+</ul>
+
+    </div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+      <div class="sidebar-primary-item">
+<div id="ethical-ad-placement"
+      class="flat"
+      data-ea-publisher="readthedocs"
+      data-ea-type="readthedocs-sidebar"
+      data-ea-manual="true">
+</div></div>
+  </div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+
+<div class="sbt-scroll-pixel-helper"></div>
+
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item"><button class="sidebar-toggle primary-toggle btn btn-sm" title="Toggle primary sidebar" data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <span class="fa-solid fa-bars"></span>
+</button></div>
+      
+    </div>
+  
+  
+    <div class="header-article-items__end">
+      
+        <div class="header-article-item">
+
+<div class="article-header-buttons">
+
+
+
+
+
+<div class="dropdown dropdown-source-buttons">
+  <button class="btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Source repositories">
+    <i class="fab fa-github"></i>
+  </button>
+  <ul class="dropdown-menu">
+      
+      
+      
+      <li><a href="https://github.com/pulserver/pulserver" target="_blank"
+   class="btn btn-sm btn-source-repository-button dropdown-item"
+   title="Source repository"
+   data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fab fa-github"></i>
+  </span>
+<span class="btn__text-container">Repository</span>
+</a>
+</li>
+      
+      
+      
+      
+      <li><a href="https://github.com/pulserver/pulserver/issues/new?title=Issue%20on%20page%20%2F_modules/pulserver/recon/_calibration.html&body=Your%20issue%20content%20here." target="_blank"
+   class="btn btn-sm btn-source-issues-button dropdown-item"
+   title="Open an issue"
+   data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-lightbulb"></i>
+  </span>
+<span class="btn__text-container">Open issue</span>
+</a>
+</li>
+      
+  </ul>
+</div>
+
+
+
+
+<button onclick="toggleFullScreen()"
+  class="btn btn-sm btn-fullscreen-button pst-navbar-icon"
+  title="Fullscreen mode"
+  data-bs-placement="bottom" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-expand"></i>
+  </span>
+
+</button>
+
+
+
+<div class="theme-switch-container dropdown pst-js-only" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Color mode">
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button dropdown-toggle" aria-label="Color mode" data-bs-toggle="dropdown">
+    <i class="theme-switch fa-solid fa-sun fa-lg fa-fw" data-mode="light" title="Light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg fa-fw" data-mode="dark" title="Dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg fa-fw" data-mode="auto" title="System Settings"></i>
+  </button>
+  <ul class="dropdown-menu dropdown-menu-end">
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg fa-fw me-1"></i>System Settings</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="light"><i class="fa-solid fa-sun fa-lg fa-fw me-1"></i>Light</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="dark"><i class="fa-solid fa-moon fa-lg fa-fw me-1"></i>Dark</button></li>
+  </ul>
+</div>
+
+
+<button class="btn btn-sm pst-navbar-icon search-button search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass fa-lg"></i>
+</button>
+
+</div></div>
+      
+    </div>
+  
+</div>
+</div>
+              
+              
+
+<div id="jb-print-docs-body" class="onlyprint">
+    <h1></h1>
+    <!-- Table of contents -->
+    <div id="print-main-content">
+        <div id="jb-print-toc">
+            
+        </div>
+    </div>
+</div>
+
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <h1>Source code for pulserver.recon._calibration</h1><div class="highlight"><pre>
+<span></span><span class="sd">"""Coil sensitivities of a reconstruction unit, and the compression of its receive channels."""</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"CoilCompression"</span><span class="p">,</span> <span class="s2">"CoilSensitivities"</span><span class="p">,</span> <span class="s2">"MissingCalibration"</span><span class="p">,</span> <span class="s2">"coil_maps"</span><span class="p">]</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">copy</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">dataclasses</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">hashlib</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">._buffers</span><span class="w"> </span><span class="kn">import</span> <span class="n">ReconBuffer</span><span class="p">,</span> <span class="n">ReconData</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.plugin</span><span class="w"> </span><span class="kn">import</span> <span class="n">COIL_SENSITIVITIES</span><span class="p">,</span> <span class="n">ReconContext</span>
+
+<span class="c1">#: The placement axes the calibration k-space of a unit may vary along.</span>
+<span class="n">_ENCODED</span> <span class="o">=</span> <span class="p">(</span><span class="s2">"partition"</span><span class="p">,</span> <span class="s2">"phase_encode"</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="MissingCalibration">
+<a class="viewcode-back" href="../../../generated/pulserver.recon.MissingCalibration.html#pulserver.recon.MissingCalibration">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">MissingCalibration</span><span class="p">(</span><span class="ne">RuntimeError</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""No source holds a calibration the stream can use.</span>
+
+<span class="sd">    The message names each source consulted and why it was rejected.</span>
+<span class="sd">    """</span></div>
+
+
+
+<span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">eq</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">Whitening</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""The matrix a :class:`~pulserver.recon.Prewhiten` multiplies the channels of a readout by.</span>
+
+<span class="sd">    ``matrix`` ``W``, ``(coils, coils)``, satisfies ``W Ψ W^H = I`` for the</span>
+<span class="sd">    covariance ``Ψ`` of noise sampled with dwell time ``dwell_us``, in µs;</span>
+<span class="sd">    ``None`` where the noise readouts stated none. ``coils`` are the receive</span>
+<span class="sd">    coil labels of the header in channel order, and ``id`` identifies the</span>
+<span class="sd">    matrix.</span>
+<span class="sd">    """</span>
+
+    <span class="n">matrix</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+    <span class="n">coils</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span>
+    <span class="n">dwell_us</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span>
+    <span class="nb">id</span><span class="p">:</span> <span class="nb">str</span>
+
+
+<span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">eq</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">Basis</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""The basis a :class:`CoilCompression` projects the channels of k-space onto.</span>
+
+<span class="sd">    ``matrix`` is the unitary ``(coils, coils)`` matrix ``bartorch.tools.cc``</span>
+<span class="sd">    returns, of which ``n_virtual`` virtual channels are kept; ``id``</span>
+<span class="sd">    identifies the basis.</span>
+<span class="sd">    """</span>
+
+    <span class="n">matrix</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+    <span class="n">n_virtual</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="nb">id</span><span class="p">:</span> <span class="nb">str</span>
+
+
+<div class="viewcode-block" id="CoilSensitivities">
+<a class="viewcode-back" href="../../../generated/pulserver.recon.CoilSensitivities.html#pulserver.recon.CoilSensitivities">[docs]</a>
+<span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">eq</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">CoilSensitivities</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Receive coil sensitivity maps, with what they were estimated from.</span>
+
+<span class="sd">    Maps are reused only for data with the coils, prewhitening, compression</span>
+<span class="sd">    and geometry of the calibration data they were estimated from;</span>
+<span class="sd">    :meth:`incompatibility` states the comparison. Nothing is resampled,</span>
+<span class="sd">    regridded or resliced to make maps fit.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    maps : ndarray</span>
+<span class="sd">        ``(coils, [z,] y, x)`` complex64, one set of sensitivities on the grid</span>
+<span class="sd">        of the calibration k-space, as the estimate returned them. The channels</span>
+<span class="sd">        are those of the data after compression, when it was compressed.</span>
+<span class="sd">    coils : tuple of str</span>
+<span class="sd">        Receive coil labels of the header in channel order,</span>
+<span class="sd">        ``acquisitionSystemInformation.coilLabel`` by ``coilNumber``; the</span>
+<span class="sd">        channel indices where the header states none.</span>
+<span class="sd">    noise : str or None</span>
+<span class="sd">        Identifier of the prewhitening the calibration data went through;</span>
+<span class="sd">        ``None`` when it was not whitened.</span>
+<span class="sd">    basis : str or None</span>
+<span class="sd">        Identifier of the compression basis the calibration data was</span>
+<span class="sd">        projected onto; ``None`` when it was not compressed.</span>
+<span class="sd">    geometry : dict</span>
+<span class="sd">        Where the maps are defined, by component: ``frame_of_reference``</span>
+<span class="sd">        (header ``measurementInformation.frameOfReferenceUID``);</span>
+<span class="sd">        ``table_position``, ``position`` in mm, and ``read_dir``,</span>
+<span class="sd">        ``phase_dir`` and ``slice_dir`` of the calibration k-space's reference</span>
+<span class="sd">        acquisition; ``fov`` in metres and ``matrix`` of the reconstruction</span>
+<span class="sd">        space, ordered as ``(z,) y, x``; and ``grid``, the shape of the voxel</span>
+<span class="sd">        axes of ``maps``. A component the header or acquisition does not state</span>
+<span class="sd">        is ``None``.</span>
+<span class="sd">    method : str</span>
+<span class="sd">        The estimate that produced the maps.</span>
+<span class="sd">    source : str or None</span>
+<span class="sd">        ``measurementID`` of the series that measured them.</span>
+<span class="sd">    """</span>
+
+    <span class="n">maps</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+    <span class="n">coils</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span>
+    <span class="n">noise</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span>
+    <span class="n">basis</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span>
+    <span class="n">geometry</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span>
+    <span class="n">method</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">source</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span>
+
+<div class="viewcode-block" id="CoilSensitivities.incompatibility">
+<a class="viewcode-back" href="../../../generated/pulserver.recon.CoilSensitivities.incompatibility.html#pulserver.recon.CoilSensitivities.incompatibility">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">incompatibility</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">ReconData</span><span class="p">,</span> <span class="n">context</span><span class="p">:</span> <span class="n">ReconContext</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Return why the maps cannot serve a unit, or ``None`` when they can.</span>
+
+<span class="sd">        Each field is compared for equality, in this order: ``coils`` with the</span>
+<span class="sd">        labels of the context's header, ``noise`` with the prewhitening in</span>
+<span class="sd">        ``context.noise``, ``basis`` with the compression in</span>
+<span class="sd">        ``context.coil_compression``, then each component of ``geometry`` with</span>
+<span class="sd">        that of the unit's imaging k-space, or of its calibration k-space where</span>
+<span class="sd">        it holds no imaging data.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        str or None</span>
+<span class="sd">            The first field that differs, with the stored value and the</span>
+<span class="sd">            unit's.</span>
+<span class="sd">        """</span>
+        <span class="n">buffer</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">data</span> <span class="k">if</span> <span class="n">data</span><span class="o">.</span><span class="n">data</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">data</span><span class="o">.</span><span class="n">ref</span>
+        <span class="k">if</span> <span class="n">buffer</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="s2">"the unit holds no k-space, so its geometry is not known"</span>
+        <span class="n">wanted</span> <span class="o">=</span> <span class="n">_geometry</span><span class="p">(</span><span class="n">context</span><span class="o">.</span><span class="n">header</span><span class="p">,</span> <span class="n">buffer</span><span class="p">)</span>
+        <span class="n">fields</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="p">(</span><span class="s2">"coils"</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">coils</span><span class="p">,</span> <span class="n">coil_labels</span><span class="p">(</span><span class="n">context</span><span class="o">.</span><span class="n">header</span><span class="p">)),</span>
+            <span class="p">(</span><span class="s2">"noise"</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">noise</span><span class="p">,</span> <span class="n">_id</span><span class="p">(</span><span class="n">context</span><span class="o">.</span><span class="n">noise</span><span class="p">)),</span>
+            <span class="p">(</span><span class="s2">"basis"</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">basis</span><span class="p">,</span> <span class="n">_id</span><span class="p">(</span><span class="n">context</span><span class="o">.</span><span class="n">coil_compression</span><span class="p">)),</span>
+            <span class="o">*</span><span class="p">(</span>
+                <span class="p">(</span><span class="sa">f</span><span class="s2">"geometry.</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">"</span><span class="p">,</span> <span class="n">stored</span><span class="p">,</span> <span class="n">wanted</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">name</span><span class="p">))</span>
+                <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">stored</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">geometry</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+            <span class="p">),</span>
+        <span class="p">)</span>
+        <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">stored</span><span class="p">,</span> <span class="n">requested</span> <span class="ow">in</span> <span class="n">fields</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">stored</span> <span class="o">!=</span> <span class="n">requested</span><span class="p">:</span>
+                <span class="k">return</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2"> differs: stored </span><span class="si">{</span><span class="n">stored</span><span class="si">!r}</span><span class="s2">, this unit </span><span class="si">{</span><span class="n">requested</span><span class="si">!r}</span><span class="s2">"</span>
+        <span class="k">return</span> <span class="kc">None</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="coil_maps">
+<a class="viewcode-back" href="../../../generated/pulserver.recon.coil_maps.html#pulserver.recon.coil_maps">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">coil_maps</span><span class="p">(</span>
+    <span class="n">context</span><span class="p">:</span> <span class="n">ReconContext</span><span class="p">,</span>
+    <span class="n">data</span><span class="p">:</span> <span class="n">ReconData</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">estimate</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="n">required</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return the coil sensitivities of a unit from the first source that has them.</span>
+
+<span class="sd">    The sources, in order:</span>
+
+<span class="sd">    1. The unit's calibration k-space, ``data.ref``: the maps are estimated</span>
+<span class="sd">       from it and stored in ``context.coil_maps`` under the unit's slice</span>
+<span class="sd">       counter, replacing the maps stored there.</span>
+<span class="sd">    2. ``context.coil_maps`` for the unit's slice.</span>
+<span class="sd">    3. The exam's ``COIL_SENSITIVITIES``.</span>
+
+<span class="sd">    Stored maps serve only where :meth:`CoilSensitivities.incompatibility`</span>
+<span class="sd">    finds nothing. The location is the slice counter, not the encoding space,</span>
+<span class="sd">    so maps estimated from a calibration unit in an encoding space of its own</span>
+<span class="sd">    serve the imaging units of its slice.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    context</span>
+<span class="sd">        Scan context; its ``device`` is where the estimate runs and the maps</span>
+<span class="sd">        are returned.</span>
+<span class="sd">    data</span>
+<span class="sd">        The unit that needs maps; ``data.counters["slice"]`` is its slice,</span>
+<span class="sd">        0 when the unit has no such counter.</span>
+<span class="sd">    estimate</span>
+<span class="sd">        ``estimate(kspace) -&gt; maps``, such as :func:`bartorch.apps.nlinv_maps`.</span>
+<span class="sd">        ``kspace`` is the calibration k-space of the unit as a torch tensor</span>
+<span class="sd">        ``(coils, [z,] y, x)``, zero outside the lines it holds, on the grid of</span>
+<span class="sd">        its encoding space; ``maps`` are the sensitivities on the same grid.</span>
+<span class="sd">    required</span>
+<span class="sd">        Return ``None``, rather than raise, when no source has usable maps.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    torch.Tensor or None</span>
+<span class="sd">        A copy of the maps ``(coils, [z,] y, x)``, complex64, on</span>
+<span class="sd">        ``context.device``.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    MissingCalibration</span>
+<span class="sd">        If no source has usable maps and ``required`` is true. The message</span>
+<span class="sd">        names each source and why it was rejected.</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If the unit's calibration k-space is of a non-Cartesian space, varies</span>
+<span class="sd">        along an axis other than the partition and phase-encode axes, or the</span>
+<span class="sd">        estimate returns maps on another grid than it was given.</span>
+<span class="sd">    """</span>
+    <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+
+    <span class="n">location</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">counters</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"slice"</span><span class="p">,</span> <span class="mi">0</span><span class="p">))</span>
+    <span class="n">found</span><span class="p">:</span> <span class="n">CoilSensitivities</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">rejected</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+
+    <span class="k">if</span> <span class="n">data</span><span class="o">.</span><span class="n">ref</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">rejected</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">"this unit: it holds no calibration readouts"</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">found</span> <span class="o">=</span> <span class="n">_estimated</span><span class="p">(</span><span class="n">context</span><span class="p">,</span> <span class="n">data</span><span class="o">.</span><span class="n">ref</span><span class="p">,</span> <span class="n">estimate</span><span class="p">)</span>
+        <span class="n">context</span><span class="o">.</span><span class="n">coil_maps</span><span class="p">[</span><span class="n">location</span><span class="p">]</span> <span class="o">=</span> <span class="n">found</span>
+
+    <span class="k">if</span> <span class="n">found</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">stored</span> <span class="o">=</span> <span class="n">context</span><span class="o">.</span><span class="n">coil_maps</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">location</span><span class="p">)</span>
+        <span class="n">found</span> <span class="o">=</span> <span class="n">_usable</span><span class="p">(</span>
+            <span class="n">stored</span><span class="p">,</span> <span class="sa">f</span><span class="s2">"this series, slice </span><span class="si">{</span><span class="n">location</span><span class="si">}</span><span class="s2">"</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">context</span><span class="p">,</span> <span class="n">rejected</span>
+        <span class="p">)</span>
+    <span class="k">if</span> <span class="n">found</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">stored</span> <span class="o">=</span> <span class="n">context</span><span class="o">.</span><span class="n">exam</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">COIL_SENSITIVITIES</span><span class="p">)</span>
+        <span class="n">found</span> <span class="o">=</span> <span class="n">_usable</span><span class="p">(</span><span class="n">stored</span><span class="p">,</span> <span class="s2">"this exam"</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">context</span><span class="p">,</span> <span class="n">rejected</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">found</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">required</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">None</span>
+        <span class="k">raise</span> <span class="n">MissingCalibration</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"no coil sensitivities for slice </span><span class="si">{</span><span class="n">location</span><span class="si">}</span><span class="s2">; sources consulted:</span><span class="se">\n</span><span class="s2">  "</span>
+            <span class="o">+</span> <span class="s2">"</span><span class="se">\n</span><span class="s2">  "</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">rejected</span><span class="p">)</span>
+        <span class="p">)</span>
+    <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">found</span><span class="o">.</span><span class="n">maps</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">context</span><span class="o">.</span><span class="n">device</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="CoilCompression">
+<a class="viewcode-back" href="../../../generated/pulserver.recon.CoilCompression.html#pulserver.recon.CoilCompression">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">CoilCompression</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Reduce the receive channels of a unit's k-space to virtual channels.</span>
+
+<span class="sd">    The basis is estimated once per stream, from the first unit it is given,</span>
+<span class="sd">    and applied to every unit. It consists of the eigenvectors of the channel</span>
+<span class="sd">    covariance over every placed sample of the unit's calibration k-space, or</span>
+<span class="sd">    of its imaging k-space where it holds no calibration data</span>
+<span class="sd">    (:func:`bartorch.tools.cc`), of which the ``n_virtual`` with the largest</span>
+<span class="sd">    eigenvalues are kept: the virtual channels are uncorrelated and ordered by</span>
+<span class="sd">    decreasing power. :func:`bartorch.tools.ccapply` projects the k-space of</span>
+<span class="sd">    ``data.data`` and ``data.ref`` onto it. The basis is stored in</span>
+<span class="sd">    ``context.coil_compression``, and :func:`coil_maps` records it with the</span>
+<span class="sd">    maps it estimates, which only units compressed by the same basis reuse:</span>
+<span class="sd">    compress a unit before asking for its maps.</span>
+
+<span class="sd">    The returned unit holds new buffers with ``n_virtual`` channels, and shares</span>
+<span class="sd">    its ``counters`` and ``acquisitions`` with the unit it was made from.</span>
+<span class="sd">    bartorch is imported when a unit is compressed; the ``coils`` extra</span>
+<span class="sd">    installs it.</span>
+
+<span class="sd">    Corresponds to Gadgetron's ``GenericReconEigenChannelGadget``.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    n_virtual</span>
+<span class="sd">        Virtual channels kept, at most the number of channels of the first</span>
+<span class="sd">        unit.</span>
+<span class="sd">    """</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">n_virtual</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">n_virtual</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"n_virtual is </span><span class="si">{</span><span class="n">n_virtual</span><span class="si">}</span><span class="s2">; it has to be at least 1"</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">n_virtual</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">n_virtual</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">context</span><span class="p">:</span> <span class="n">ReconContext</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">ReconData</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ReconData</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Return ``data`` with its k-space projected onto the stream's basis.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If the stream's basis was made for another ``n_virtual`` or</span>
+<span class="sd">            another number of channels, or the first unit holds no k-space.</span>
+<span class="sd">        """</span>
+        <span class="n">basis</span> <span class="o">=</span> <span class="n">context</span><span class="o">.</span><span class="n">coil_compression</span>
+        <span class="k">if</span> <span class="n">basis</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">source</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">ref</span> <span class="k">if</span> <span class="n">data</span><span class="o">.</span><span class="n">ref</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">data</span><span class="o">.</span><span class="n">data</span>
+            <span class="k">if</span> <span class="n">source</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"a unit with no k-space cannot give the basis"</span><span class="p">)</span>
+            <span class="n">basis</span> <span class="o">=</span> <span class="n">_basis</span><span class="p">(</span><span class="n">source</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_virtual</span><span class="p">,</span> <span class="n">context</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+            <span class="n">context</span><span class="o">.</span><span class="n">coil_compression</span> <span class="o">=</span> <span class="n">basis</span>
+        <span class="k">elif</span> <span class="n">basis</span><span class="o">.</span><span class="n">n_virtual</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_virtual</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"the stream's basis keeps </span><span class="si">{</span><span class="n">basis</span><span class="o">.</span><span class="n">n_virtual</span><span class="si">}</span><span class="s2"> virtual channels, "</span>
+                <span class="sa">f</span><span class="s2">"not the </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">n_virtual</span><span class="si">}</span><span class="s2"> this step keeps"</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="n">dataclasses</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span>
+            <span class="n">data</span><span class="p">,</span>
+            <span class="n">data</span><span class="o">=</span><span class="n">_compressed</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">data</span><span class="p">,</span> <span class="n">basis</span><span class="p">,</span> <span class="n">context</span><span class="o">.</span><span class="n">device</span><span class="p">),</span>
+            <span class="n">ref</span><span class="o">=</span><span class="n">_compressed</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">ref</span><span class="p">,</span> <span class="n">basis</span><span class="p">,</span> <span class="n">context</span><span class="o">.</span><span class="n">device</span><span class="p">),</span>
+        <span class="p">)</span></div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">coil_labels</span><span class="p">(</span><span class="n">header</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Return the receive coil labels of a header in channel order.</span>
+
+<span class="sd">    ``acquisitionSystemInformation.coilLabel`` ordered by ``coilNumber``; the</span>
+<span class="sd">    channel indices up to ``receiverChannels`` where it has none.</span>
+<span class="sd">    """</span>
+    <span class="n">system</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">header</span><span class="p">,</span> <span class="s2">"acquisitionSystemInformation"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="n">labels</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">system</span><span class="p">,</span> <span class="s2">"coilLabel"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">or</span> <span class="p">()</span>
+    <span class="k">if</span> <span class="n">labels</span><span class="p">:</span>
+        <span class="n">ordered</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span>
+            <span class="n">labels</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">label</span><span class="p">:</span> <span class="nb">int</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="n">label</span><span class="p">,</span> <span class="s2">"coilNumber"</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span> <span class="ow">or</span> <span class="mi">0</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="nb">tuple</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="n">label</span><span class="p">,</span> <span class="s2">"coilName"</span><span class="p">,</span> <span class="s2">""</span><span class="p">))</span> <span class="k">for</span> <span class="n">label</span> <span class="ow">in</span> <span class="n">ordered</span><span class="p">)</span>
+    <span class="k">return</span> <span class="nb">tuple</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">index</span><span class="p">)</span> <span class="k">for</span> <span class="n">index</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">_channels</span><span class="p">(</span><span class="n">system</span><span class="p">)))</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">digest</span><span class="p">(</span><span class="o">*</span><span class="n">parts</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return a 12-digit hexadecimal identifier of arrays and values."""</span>
+    <span class="n">state</span> <span class="o">=</span> <span class="n">hashlib</span><span class="o">.</span><span class="n">sha256</span><span class="p">()</span>
+    <span class="k">for</span> <span class="n">part</span> <span class="ow">in</span> <span class="n">parts</span><span class="p">:</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">part</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">):</span>
+            <span class="n">state</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">part</span><span class="p">)</span><span class="o">.</span><span class="n">tobytes</span><span class="p">())</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">state</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="nb">repr</span><span class="p">(</span><span class="n">part</span><span class="p">)</span><span class="o">.</span><span class="n">encode</span><span class="p">())</span>
+    <span class="k">return</span> <span class="n">state</span><span class="o">.</span><span class="n">hexdigest</span><span class="p">()[:</span><span class="mi">12</span><span class="p">]</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_channels</span><span class="p">(</span><span class="n">system</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+    <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="n">system</span><span class="p">,</span> <span class="s2">"receiverChannels"</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span> <span class="ow">or</span> <span class="mi">0</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_id</span><span class="p">(</span><span class="n">state</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">return</span> <span class="kc">None</span> <span class="k">if</span> <span class="n">state</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">state</span><span class="o">.</span><span class="n">id</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_grid</span><span class="p">(</span><span class="n">buffer</span><span class="p">:</span> <span class="n">ReconBuffer</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Return the shape of the voxel axes of the image the whole k-space of ``buffer``'s space makes."""</span>
+    <span class="n">extents</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">buffer</span><span class="o">.</span><span class="n">space</span><span class="o">.</span><span class="n">extents</span><span class="p">)</span>
+    <span class="k">return</span> <span class="p">(</span>
+        <span class="o">*</span><span class="p">(</span><span class="n">extents</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">_ENCODED</span> <span class="k">if</span> <span class="n">extents</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">),</span>
+        <span class="n">buffer</span><span class="o">.</span><span class="n">kspace</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span>
+    <span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_geometry</span><span class="p">(</span><span class="n">header</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">buffer</span><span class="p">:</span> <span class="n">ReconBuffer</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+    <span class="n">reference</span> <span class="o">=</span> <span class="n">buffer</span><span class="o">.</span><span class="n">reference</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">stated</span><span class="p">(</span><span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">value</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">reference</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">return</span> <span class="kc">None</span> <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="nb">tuple</span><span class="p">(</span><span class="nb">float</span><span class="p">(</span><span class="n">item</span><span class="p">)</span> <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">value</span><span class="p">)</span>
+
+    <span class="n">measurement</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">header</span><span class="p">,</span> <span class="s2">"measurementInformation"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="k">return</span> <span class="p">{</span>
+        <span class="s2">"frame_of_reference"</span><span class="p">:</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">measurement</span><span class="p">,</span> <span class="s2">"frameOfReferenceUID"</span><span class="p">,</span> <span class="kc">None</span><span class="p">),</span>
+        <span class="s2">"table_position"</span><span class="p">:</span> <span class="n">stated</span><span class="p">(</span><span class="s2">"patient_table_position"</span><span class="p">),</span>
+        <span class="s2">"position"</span><span class="p">:</span> <span class="n">stated</span><span class="p">(</span><span class="s2">"position"</span><span class="p">),</span>
+        <span class="s2">"read_dir"</span><span class="p">:</span> <span class="n">stated</span><span class="p">(</span><span class="s2">"read_dir"</span><span class="p">),</span>
+        <span class="s2">"phase_dir"</span><span class="p">:</span> <span class="n">stated</span><span class="p">(</span><span class="s2">"phase_dir"</span><span class="p">),</span>
+        <span class="s2">"slice_dir"</span><span class="p">:</span> <span class="n">stated</span><span class="p">(</span><span class="s2">"slice_dir"</span><span class="p">),</span>
+        <span class="s2">"fov"</span><span class="p">:</span> <span class="n">buffer</span><span class="o">.</span><span class="n">space</span><span class="o">.</span><span class="n">recon_fov</span><span class="p">,</span>
+        <span class="s2">"matrix"</span><span class="p">:</span> <span class="n">buffer</span><span class="o">.</span><span class="n">space</span><span class="o">.</span><span class="n">recon_matrix</span><span class="p">,</span>
+        <span class="s2">"grid"</span><span class="p">:</span> <span class="n">_grid</span><span class="p">(</span><span class="n">buffer</span><span class="p">),</span>
+    <span class="p">}</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_method</span><span class="p">(</span><span class="n">estimate</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+    <span class="n">function</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">estimate</span><span class="p">,</span> <span class="s2">"func"</span><span class="p">,</span> <span class="n">estimate</span><span class="p">)</span>
+    <span class="n">name</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">function</span><span class="p">,</span> <span class="s2">"__name__"</span><span class="p">,</span> <span class="nb">type</span><span class="p">(</span><span class="n">function</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="p">)</span>
+    <span class="n">keywords</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">estimate</span><span class="p">,</span> <span class="s2">"keywords"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">or</span> <span class="p">{}</span>
+    <span class="n">options</span> <span class="o">=</span> <span class="s2">", "</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2">=</span><span class="si">{</span><span class="n">value</span><span class="si">!r}</span><span class="s2">"</span> <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">keywords</span><span class="o">.</span><span class="n">items</span><span class="p">())</span>
+    <span class="k">return</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">(</span><span class="si">{</span><span class="n">options</span><span class="si">}</span><span class="s2">)"</span> <span class="k">if</span> <span class="n">options</span> <span class="k">else</span> <span class="n">name</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_estimated</span><span class="p">(</span>
+    <span class="n">context</span><span class="p">:</span> <span class="n">ReconContext</span><span class="p">,</span> <span class="n">ref</span><span class="p">:</span> <span class="n">ReconBuffer</span><span class="p">,</span> <span class="n">estimate</span><span class="p">:</span> <span class="n">Any</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">CoilSensitivities</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Estimate maps from a unit's calibration k-space, zero-filled onto the grid of its space."""</span>
+    <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+
+    <span class="n">space</span> <span class="o">=</span> <span class="n">ref</span><span class="o">.</span><span class="n">space</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">space</span><span class="o">.</span><span class="n">cartesian</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"encoding space </span><span class="si">{</span><span class="n">space</span><span class="o">.</span><span class="n">index</span><span class="si">}</span><span class="s2"> is not Cartesian, and coil_maps estimates "</span>
+            <span class="s2">"maps from the calibration k-space of a Cartesian space only"</span>
+        <span class="p">)</span>
+    <span class="n">placement</span> <span class="o">=</span> <span class="n">ref</span><span class="o">.</span><span class="n">axes</span><span class="p">[</span><span class="mi">1</span><span class="p">:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+    <span class="n">other</span> <span class="o">=</span> <span class="p">[</span><span class="n">name</span> <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">placement</span> <span class="k">if</span> <span class="n">name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">_ENCODED</span><span class="p">]</span>
+    <span class="k">if</span> <span class="n">other</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"the calibration k-space of encoding space </span><span class="si">{</span><span class="n">space</span><span class="o">.</span><span class="n">index</span><span class="si">}</span><span class="s2"> varies along "</span>
+            <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">other</span><span class="si">}</span><span class="s2">, and coil_maps estimates one set of maps from a k-space "</span>
+            <span class="s2">"that varies along the partition and phase-encode axes only"</span>
+        <span class="p">)</span>
+    <span class="n">grid</span> <span class="o">=</span> <span class="n">_grid</span><span class="p">(</span><span class="n">ref</span><span class="p">)</span>
+    <span class="n">kspace</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">ref</span><span class="o">.</span><span class="n">coils</span><span class="p">,</span> <span class="o">*</span><span class="n">grid</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">complex64</span><span class="p">)</span>
+    <span class="n">lines</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span>
+        <span class="nb">slice</span><span class="p">(</span><span class="n">ref</span><span class="o">.</span><span class="n">origin</span><span class="p">[</span><span class="n">name</span><span class="p">],</span> <span class="n">ref</span><span class="o">.</span><span class="n">origin</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">+</span> <span class="n">size</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">size</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">placement</span><span class="p">,</span> <span class="n">ref</span><span class="o">.</span><span class="n">kspace</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">:</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="n">strict</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="p">)</span>
+    <span class="n">kspace</span><span class="p">[(</span><span class="nb">slice</span><span class="p">(</span><span class="kc">None</span><span class="p">),</span> <span class="o">*</span><span class="n">lines</span><span class="p">,</span> <span class="nb">slice</span><span class="p">(</span><span class="kc">None</span><span class="p">))]</span> <span class="o">=</span> <span class="n">ref</span><span class="o">.</span><span class="n">kspace</span>
+
+    <span class="n">maps</span> <span class="o">=</span> <span class="n">estimate</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span><span class="n">kspace</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">context</span><span class="o">.</span><span class="n">device</span><span class="p">))</span>
+    <span class="n">maps</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">maps</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">numpy</span><span class="p">(),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">complex64</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">maps</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="n">kspace</span><span class="o">.</span><span class="n">shape</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"the estimate returned maps of shape </span><span class="si">{</span><span class="n">maps</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2"> for k-space of "</span>
+            <span class="sa">f</span><span class="s2">"shape </span><span class="si">{</span><span class="n">kspace</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">"</span>
+        <span class="p">)</span>
+    <span class="n">measurement</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">context</span><span class="o">.</span><span class="n">header</span><span class="p">,</span> <span class="s2">"measurementInformation"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="n">source</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">measurement</span><span class="p">,</span> <span class="s2">"measurementID"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">CoilSensitivities</span><span class="p">(</span>
+        <span class="n">maps</span><span class="o">=</span><span class="n">maps</span><span class="p">,</span>
+        <span class="n">coils</span><span class="o">=</span><span class="n">coil_labels</span><span class="p">(</span><span class="n">context</span><span class="o">.</span><span class="n">header</span><span class="p">),</span>
+        <span class="n">noise</span><span class="o">=</span><span class="n">_id</span><span class="p">(</span><span class="n">context</span><span class="o">.</span><span class="n">noise</span><span class="p">),</span>
+        <span class="n">basis</span><span class="o">=</span><span class="n">_id</span><span class="p">(</span><span class="n">context</span><span class="o">.</span><span class="n">coil_compression</span><span class="p">),</span>
+        <span class="n">geometry</span><span class="o">=</span><span class="n">_geometry</span><span class="p">(</span><span class="n">context</span><span class="o">.</span><span class="n">header</span><span class="p">,</span> <span class="n">ref</span><span class="p">),</span>
+        <span class="n">method</span><span class="o">=</span><span class="n">_method</span><span class="p">(</span><span class="n">estimate</span><span class="p">),</span>
+        <span class="n">source</span><span class="o">=</span><span class="kc">None</span> <span class="k">if</span> <span class="n">source</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="nb">str</span><span class="p">(</span><span class="n">source</span><span class="p">),</span>
+    <span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_usable</span><span class="p">(</span>
+    <span class="n">stored</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="n">where</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">data</span><span class="p">:</span> <span class="n">ReconData</span><span class="p">,</span>
+    <span class="n">context</span><span class="p">:</span> <span class="n">ReconContext</span><span class="p">,</span>
+    <span class="n">rejected</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">CoilSensitivities</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return ``stored`` if it serves ``data``, else record why it does not."""</span>
+    <span class="k">if</span> <span class="n">stored</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">rejected</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">where</span><span class="si">}</span><span class="s2">: no maps stored"</span><span class="p">)</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">stored</span><span class="p">,</span> <span class="n">CoilSensitivities</span><span class="p">):</span>
+        <span class="n">rejected</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">where</span><span class="si">}</span><span class="s2">: holds a </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">stored</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">, not CoilSensitivities"</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="n">reason</span> <span class="o">=</span> <span class="n">stored</span><span class="o">.</span><span class="n">incompatibility</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">context</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">reason</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">stored</span>
+    <span class="n">origin</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="sa">f</span><span class="s2">"measurement </span><span class="si">{</span><span class="n">stored</span><span class="o">.</span><span class="n">source</span><span class="si">}</span><span class="s2">"</span> <span class="k">if</span> <span class="n">stored</span><span class="o">.</span><span class="n">source</span> <span class="k">else</span> <span class="s2">"an unnamed measurement"</span>
+    <span class="p">)</span>
+    <span class="n">rejected</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">where</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">reason</span><span class="si">}</span><span class="s2"> (estimated by </span><span class="si">{</span><span class="n">stored</span><span class="o">.</span><span class="n">method</span><span class="si">}</span><span class="s2"> from </span><span class="si">{</span><span class="n">origin</span><span class="si">}</span><span class="s2">)"</span><span class="p">)</span>
+    <span class="k">return</span> <span class="kc">None</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_basis</span><span class="p">(</span><span class="n">buffer</span><span class="p">:</span> <span class="n">ReconBuffer</span><span class="p">,</span> <span class="n">n_virtual</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">device</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Basis</span><span class="p">:</span>
+    <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">bartorch</span><span class="w"> </span><span class="kn">import</span> <span class="n">tools</span>
+
+    <span class="n">coils</span> <span class="o">=</span> <span class="n">buffer</span><span class="o">.</span><span class="n">coils</span>
+    <span class="k">if</span> <span class="n">n_virtual</span> <span class="o">&gt;</span> <span class="n">coils</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"cannot keep </span><span class="si">{</span><span class="n">n_virtual</span><span class="si">}</span><span class="s2"> virtual channels of </span><span class="si">{</span><span class="n">coils</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+    <span class="n">samples</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">buffer</span><span class="o">.</span><span class="n">kspace</span><span class="p">[:,</span> <span class="n">buffer</span><span class="o">.</span><span class="n">mask</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">complex64</span><span class="p">)</span>
+    <span class="n">matrix</span> <span class="o">=</span> <span class="n">tools</span><span class="o">.</span><span class="n">cc</span><span class="p">(</span>
+        <span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span><span class="n">samples</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">coils</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="p">),</span>
+        <span class="n">p</span><span class="o">=</span><span class="n">n_virtual</span><span class="p">,</span>
+        <span class="n">M</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="n">A</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="n">S</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">matrix</span> <span class="o">=</span> <span class="n">matrix</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">numpy</span><span class="p">()[:,</span> <span class="p">:,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span>
+    <span class="k">return</span> <span class="n">Basis</span><span class="p">(</span><span class="n">matrix</span><span class="p">,</span> <span class="n">n_virtual</span><span class="p">,</span> <span class="n">digest</span><span class="p">(</span><span class="n">matrix</span><span class="p">[:,</span> <span class="p">:</span><span class="n">n_virtual</span><span class="p">],</span> <span class="n">n_virtual</span><span class="p">))</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_compressed</span><span class="p">(</span>
+    <span class="n">buffer</span><span class="p">:</span> <span class="n">ReconBuffer</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">basis</span><span class="p">:</span> <span class="n">Basis</span><span class="p">,</span> <span class="n">device</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ReconBuffer</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">if</span> <span class="n">buffer</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">bartorch</span><span class="w"> </span><span class="kn">import</span> <span class="n">tools</span>
+
+    <span class="n">coils</span> <span class="o">=</span> <span class="n">buffer</span><span class="o">.</span><span class="n">kspace</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="k">if</span> <span class="n">coils</span> <span class="o">!=</span> <span class="n">basis</span><span class="o">.</span><span class="n">matrix</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"a unit of </span><span class="si">{</span><span class="n">coils</span><span class="si">}</span><span class="s2"> channels cannot be projected onto a basis of "</span>
+            <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">basis</span><span class="o">.</span><span class="n">matrix</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="si">}</span><span class="s2">"</span>
+        <span class="p">)</span>
+    <span class="n">kspace</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">buffer</span><span class="o">.</span><span class="n">kspace</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">complex64</span><span class="p">)</span>
+    <span class="n">virtual</span> <span class="o">=</span> <span class="n">tools</span><span class="o">.</span><span class="n">ccapply</span><span class="p">(</span>
+        <span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span><span class="n">kspace</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">coils</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="p">),</span>
+        <span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span><span class="n">basis</span><span class="o">.</span><span class="n">matrix</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">coils</span><span class="p">,</span> <span class="n">coils</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="p">),</span>
+        <span class="n">p</span><span class="o">=</span><span class="n">basis</span><span class="o">.</span><span class="n">n_virtual</span><span class="p">,</span>
+        <span class="n">S</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">compressed</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">copy</span><span class="p">(</span><span class="n">buffer</span><span class="p">)</span>
+    <span class="n">compressed</span><span class="o">.</span><span class="n">kspace</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="n">virtual</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">basis</span><span class="o">.</span><span class="n">n_virtual</span><span class="p">,</span> <span class="o">*</span><span class="n">kspace</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">:])</span>
+    <span class="p">)</span>
+    <span class="n">compressed</span><span class="o">.</span><span class="n">coils</span> <span class="o">=</span> <span class="n">basis</span><span class="o">.</span><span class="n">n_virtual</span>
+    <span class="k">return</span> <span class="n">compressed</span>
+</pre></div>
+
+                </article>
+              
+
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+<div class="bd-footer-content__inner container">
+  
+  <div class="footer-item">
+    
+<p class="component-author">
+By pulserver contributors
+</p>
+
+  </div>
+  
+  <div class="footer-item">
+    
+
+  <p class="copyright">
+    
+      © Copyright 2024-2026, pulserver contributors.
+      <br/>
+    
+  </p>
+
+  </div>
+  
+  <div class="footer-item">
+    
+  </div>
+  
+  <div class="footer-item">
+    
+  </div>
+  
+</div>
+          </footer>
+        
+
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script defer src="../../../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9"></script>
+<script defer src="../../../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9"></script>
+
+  <footer class="bd-footer">
+  </footer>
+  </body>
+</html>

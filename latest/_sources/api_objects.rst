@@ -187,13 +187,19 @@ from.
    Gadget
    load_plugin
    AsymmetricEcho
+   Prewhiten
    RemoveReadoutOversampling
    ReconContext
    ExamCache
    B0_MAP
    B1_MAP
    COIL_SENSITIVITIES
+   NOISE_COVARIANCE
    EXAM_ARTIFACTS
+   coil_maps
+   CoilSensitivities
+   MissingCalibration
+   CoilCompression
    ReconData
    ReconBuffer
    ReconResult

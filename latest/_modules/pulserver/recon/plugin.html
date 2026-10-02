@@ -248,6 +248,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../../../explanations/designs.html">Designs and the design store</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../explanations/ir-cache.html">The scanner IR</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../explanations/reconstruction.html">Raw-data enrichment and routing</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/calibration.html">Calibration, noise and coil compression</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../explanations/virtual-scanner.html">The virtual scanner</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../explanations/bloch-simulation.html">Bloch simulation on isochromats</a></li>
 </ul>
@@ -610,8 +611,11 @@
 <span class="c1">#:</span>
 <span class="c1">#: ``B0_MAP`` is off-resonance in Hz, ``B1_MAP`` the transmit field as a</span>
 <span class="c1">#: fraction of what was asked for, and ``COIL_SENSITIVITIES`` the receive</span>
-<span class="c1">#: sensitivity of each coil. Each is stored in the frame it was measured in;</span>
-<span class="c1">#: a series at another prescription resamples it.</span>
+<span class="c1">#: sensitivity of each coil, a :class:`~pulserver.recon.CoilSensitivities`. A</span>
+<span class="c1">#: value is stored as measured, in the frame and on the grid it was measured</span>
+<span class="c1">#: on. Nothing resamples, regrids or reslices it: a series whose geometry or</span>
+<span class="c1">#: matrix differs does not reuse it. :func:`~pulserver.recon.coil_maps` makes</span>
+<span class="c1">#: that comparison for the coil sensitivities.</span>
 <span class="n">B0_MAP</span> <span class="o">=</span> <span class="s2">"b0_map"</span>
 <span class="n">B1_MAP</span> <span class="o">=</span> <span class="s2">"b1_map"</span>
 <span class="n">COIL_SENSITIVITIES</span> <span class="o">=</span> <span class="s2">"coil_sensitivities"</span>
@@ -620,6 +624,17 @@
 <span class="c1">#: Each is its own key in the exam cache, so a hook reaching one by attribute</span>
 <span class="c1">#: and a hook reaching it through :attr:`ReconContext.exam` reach the same map.</span>
 <span class="n">EXAM_ARTIFACTS</span> <span class="o">=</span> <span class="p">(</span><span class="n">B0_MAP</span><span class="p">,</span> <span class="n">B1_MAP</span><span class="p">,</span> <span class="n">COIL_SENSITIVITIES</span><span class="p">)</span>
+
+<span class="c1">#: Where a noise scan leaves the prewhitening of its exam: the whitening matrix</span>
+<span class="c1">#: with the coil labels and dwell time it was measured at. A</span>
+<span class="c1">#: :class:`~pulserver.recon.Prewhiten` of a later series loads it when its coil</span>
+<span class="c1">#: labels are those of the series. It is not an attribute of</span>
+<span class="c1">#: :class:`ReconContext`; it is read as ``context.exam[NOISE_COVARIANCE]``.</span>
+<span class="n">NOISE_COVARIANCE</span> <span class="o">=</span> <span class="s2">"noise_covariance"</span>
+
+<span class="c1">#: The attributes of a :class:`ReconContext` that hold the state of one stream</span>
+<span class="c1">#: and that a hook may assign.</span>
+<span class="n">_STREAM</span> <span class="o">=</span> <span class="p">(</span><span class="s2">"coil_maps"</span><span class="p">,</span> <span class="s2">"noise"</span><span class="p">,</span> <span class="s2">"coil_compression"</span><span class="p">)</span>
 
 
 <div class="viewcode-block" id="ExamCache">
@@ -911,6 +926,13 @@
 <span class="sd">    instead of being stored where nothing looks for it. A plugin carrying an</span>
 <span class="sd">    artifact of its own puts it in :attr:`exam` under a key it chooses.</span>
 
+<span class="sd">    The calibration helpers keep the state of one stream on the context, empty</span>
+<span class="sd">    when the stream starts and not shared with other series. :attr:`coil_maps`</span>
+<span class="sd">    maps a slice counter to the :class:`CoilSensitivities` the stream holds for</span>
+<span class="sd">    it, :attr:`noise` is the prewhitening a :class:`Prewhiten` applies and</span>
+<span class="sd">    :attr:`coil_compression` the basis a :class:`CoilCompression` applies; the</span>
+<span class="sd">    last two are ``None`` until the stream has them. A hook may assign them.</span>
+
 <span class="sd">    The scan context itself does not change once built: assigning to</span>
 <span class="sd">    :attr:`header`, :attr:`exam`, :attr:`config` or :attr:`device` raises.</span>
 
@@ -947,6 +969,9 @@
     <span class="n">exam</span><span class="p">:</span> <span class="n">ExamCache</span>
     <span class="n">config</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">device</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">coil_maps</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">dict</span><span class="p">,</span> <span class="n">init</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="nb">repr</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="n">noise</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">init</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="nb">repr</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="n">coil_compression</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">init</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="nb">repr</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__getattr__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
         <span class="c1"># Reached only where normal lookup failed, so never for a field.</span>
@@ -958,6 +983,9 @@
     <span class="k">def</span><span class="w"> </span><span class="fm">__setattr__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">if</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">EXAM_ARTIFACTS</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">exam</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
+            <span class="k">return</span>
+        <span class="k">if</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">_STREAM</span><span class="p">:</span>
+            <span class="nb">object</span><span class="o">.</span><span class="fm">__setattr__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
             <span class="k">return</span>
         <span class="k">if</span> <span class="n">name</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">__dataclass_fields__</span> <span class="ow">and</span> <span class="n">name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="p">:</span>
             <span class="nb">object</span><span class="o">.</span><span class="fm">__setattr__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>

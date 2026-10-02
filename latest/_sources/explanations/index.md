@@ -12,6 +12,7 @@ rest of the documentation assumes.
 | {doc}`designs` | The identity of a design, the design store, and how the reconstruction side finds a design. |
 | {doc}`ir-cache` | The segmented representation of a sequence that a scanner interpreter plays, and the passes that compute it. |
 | {doc}`reconstruction` | Enrichment of the raw data from the sequence that played it, and the routing of each series to a reconstruction. |
+| {doc}`calibration` | Coil sensitivity maps, noise prewhitening and coil compression as transforms of the receive channels, and the conditions under which sensitivity maps are reused. |
 | {doc}`virtual-scanner` | The stand-ins that replace the scanner in tests: the playout, the physics and the reconstruction client, and what a run establishes. |
 | {doc}`bloch-simulation` | The Bloch equation the virtual scanner integrates on isochromats, how each Pulseq event enters it, and how repeated blocks are played from one repetition's maps. |
 
@@ -23,6 +24,7 @@ protocol
 designs
 ir-cache
 reconstruction
+calibration
 virtual-scanner
 bloch-simulation
 ```

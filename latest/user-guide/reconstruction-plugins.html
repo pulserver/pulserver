@@ -253,6 +253,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../explanations/designs.html">Designs and the design store</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../explanations/ir-cache.html">The scanner IR</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../explanations/reconstruction.html">Raw-data enrichment and routing</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../explanations/calibration.html">Calibration, noise and coil compression</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../explanations/virtual-scanner.html">The virtual scanner</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../explanations/bloch-simulation.html">Bloch simulation on isochromats</a></li>
 </ul>
@@ -523,6 +524,7 @@
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#hooks">Hooks</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#readout-placement">Readout placement</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#non-cartesian-data">Non-Cartesian data</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#coil-sensitivities-noise-and-compression">Coil sensitivities, noise and compression</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#running-a-plugin-offline">Running a plugin offline</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#see-also">See also</a></li>
 </ul>
@@ -770,6 +772,82 @@ units and layout <code class="docutils literal notranslate"><span class="pre">ba
 <code class="docutils literal notranslate"><span class="pre">kspace_encode_step_2</span></code> counter and carry no kz: the partition axis is
 transformed with an FFT before the in-plane NUFFT.</p>
 </section>
+<section id="coil-sensitivities-noise-and-compression">
+<h2>Coil sensitivities, noise and compression<a class="headerlink" href="#coil-sensitivities-noise-and-compression" title="Link to this heading">#</a></h2>
+<p><a class="reference internal" href="../generated/pulserver.recon.coil_maps.html#pulserver.recon.coil_maps" title="pulserver.recon.coil_maps"><code class="xref py py-func docutils literal notranslate"><span class="pre">coil_maps()</span></code></a> returns the coil sensitivities of a unit as
+a complex torch tensor <code class="docutils literal notranslate"><span class="pre">(coils,</span> <span class="pre">[z,]</span> <span class="pre">y,</span> <span class="pre">x)</span></code> on <code class="docutils literal notranslate"><span class="pre">context.device</span></code>. They are
+estimated by the function the plugin passes, from the unit’s calibration
+k-space <code class="docutils literal notranslate"><span class="pre">data.ref</span></code>, or taken from the maps the stream or the exam holds
+(<a class="reference internal" href="../explanations/calibration.html"><span class="doc">Calibration, noise and coil compression</span></a> states the order and the conditions for
+reuse). <a class="reference internal" href="../generated/pulserver.recon.Prewhiten.html#pulserver.recon.Prewhiten" title="pulserver.recon.Prewhiten"><code class="xref py py-class docutils literal notranslate"><span class="pre">Prewhiten</span></code></a> is a gadget and
+<a class="reference internal" href="../generated/pulserver.recon.CoilCompression.html#pulserver.recon.CoilCompression" title="pulserver.recon.CoilCompression"><code class="xref py py-class docutils literal notranslate"><span class="pre">CoilCompression</span></code></a> a step called from <code class="docutils literal notranslate"><span class="pre">recon</span></code>. All three
+need bartorch, which the <code class="docutils literal notranslate"><span class="pre">coils</span></code> extra installs.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># recon/gre.py</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">bartorch</span><span class="w"> </span><span class="kn">import</span> <span class="n">apps</span><span class="p">,</span> <span class="n">priors</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pulserver</span><span class="w"> </span><span class="kn">import</span> <span class="n">mrd</span><span class="p">,</span> <span class="n">recon</span>
+
+<span class="k">class</span><span class="w"> </span><span class="nc">Pics</span><span class="p">(</span><span class="n">recon</span><span class="o">.</span><span class="n">ReconPlugin</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span>
+            <span class="n">gadgets</span><span class="o">=</span><span class="p">[</span>
+                <span class="n">recon</span><span class="o">.</span><span class="n">Prewhiten</span><span class="p">(),</span>
+                <span class="n">recon</span><span class="o">.</span><span class="n">AsymmetricEcho</span><span class="p">(),</span>
+                <span class="n">recon</span><span class="o">.</span><span class="n">RemoveReadoutOversampling</span><span class="p">(),</span>
+            <span class="p">],</span>
+            <span class="n">triggers</span><span class="o">=</span><span class="p">{</span><span class="s2">"imaging"</span><span class="p">:</span> <span class="n">mrd</span><span class="o">.</span><span class="n">AcquisitionFlag</span><span class="o">.</span><span class="n">LAST_IN_SLICE</span><span class="p">},</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">compression</span> <span class="o">=</span> <span class="n">recon</span><span class="o">.</span><span class="n">CoilCompression</span><span class="p">(</span><span class="mi">8</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">recon</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">context</span><span class="p">,</span> <span class="n">branch</span><span class="p">,</span> <span class="n">data</span><span class="p">):</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">compression</span><span class="p">(</span><span class="n">context</span><span class="p">,</span> <span class="n">data</span><span class="p">)</span>
+        <span class="n">maps</span> <span class="o">=</span> <span class="n">recon</span><span class="o">.</span><span class="n">coil_maps</span><span class="p">(</span><span class="n">context</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">estimate</span><span class="o">=</span><span class="n">apps</span><span class="o">.</span><span class="n">nlinv_maps</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">data</span><span class="o">.</span><span class="n">data</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>  <span class="c1"># a unit of calibration readouts only</span>
+            <span class="k">return</span> <span class="kc">None</span>
+        <span class="n">kspace</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">kspace</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">context</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+        <span class="n">image</span> <span class="o">=</span> <span class="n">apps</span><span class="o">.</span><span class="n">pics</span><span class="p">(</span><span class="n">kspace</span><span class="p">,</span> <span class="n">maps</span><span class="p">,</span> <span class="n">regularizers</span><span class="o">=</span><span class="n">priors</span><span class="o">.</span><span class="n">Wavelet</span><span class="p">((</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">2</span><span class="p">),</span> <span class="mf">0.005</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">recon</span><span class="o">.</span><span class="n">ReconResult</span><span class="p">(</span><span class="n">image</span><span class="o">.</span><span class="n">abs</span><span class="p">()</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">numpy</span><span class="p">())</span>
+
+<span class="n">PLUGIN</span> <span class="o">=</span> <span class="n">Pics</span><span class="p">()</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">Prewhiten</span></code> consumes the noise readouts of the stream and whitens every other
+readout with them, or with the noise covariance a noise series left in the exam.
+Without either it passes readouts unchanged and logs a warning once;
+<code class="docutils literal notranslate"><span class="pre">Prewhiten(required=True)</span></code> raises instead. <code class="docutils literal notranslate"><span class="pre">CoilCompression(n)</span></code> keeps <code class="docutils literal notranslate"><span class="pre">n</span></code>
+virtual channels, at most the channels of the first unit, with the basis of
+that unit’s calibration k-space (its imaging k-space where it has none), and
+projects every later unit onto it. A unit is compressed before its maps are
+requested, so that they are estimated in the basis of the data they are used
+with.</p>
+<p>A calibration unit, whose <code class="docutils literal notranslate"><span class="pre">data.data</span></code> is <code class="docutils literal notranslate"><span class="pre">None</span></code>, stores its maps for its slice,
+and the imaging units of that slice take them from the stream. A series that is
+only a calibration leaves its maps to the exam by assigning
+<code class="docutils literal notranslate"><span class="pre">context.coil_sensitivities</span></code>, and a noise series leaves its whitening with
+<a class="reference internal" href="../generated/pulserver.recon.Prewhiten.publish.html#pulserver.recon.Prewhiten.publish" title="pulserver.recon.Prewhiten.publish"><code class="xref py py-meth docutils literal notranslate"><span class="pre">publish()</span></code></a>:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">Calibration</span><span class="p">(</span><span class="n">recon</span><span class="o">.</span><span class="n">ReconPlugin</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">recon</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">context</span><span class="p">,</span> <span class="n">branch</span><span class="p">,</span> <span class="n">data</span><span class="p">):</span>
+        <span class="n">recon</span><span class="o">.</span><span class="n">coil_maps</span><span class="p">(</span><span class="n">context</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">estimate</span><span class="o">=</span><span class="n">apps</span><span class="o">.</span><span class="n">nlinv_maps</span><span class="p">)</span>
+        <span class="n">context</span><span class="o">.</span><span class="n">coil_sensitivities</span> <span class="o">=</span> <span class="n">context</span><span class="o">.</span><span class="n">coil_maps</span><span class="p">[</span><span class="n">data</span><span class="o">.</span><span class="n">counters</span><span class="p">[</span><span class="s2">"slice"</span><span class="p">]]</span>
+
+<span class="k">class</span><span class="w"> </span><span class="nc">Noise</span><span class="p">(</span><span class="n">recon</span><span class="o">.</span><span class="n">ReconPlugin</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">gadgets</span><span class="o">=</span><span class="p">[</span><span class="n">recon</span><span class="o">.</span><span class="n">Prewhiten</span><span class="p">()])</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">recon</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">context</span><span class="p">,</span> <span class="n">branch</span><span class="p">,</span> <span class="n">data</span><span class="p">):</span>
+        <span class="k">return</span> <span class="kc">None</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">finish</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">context</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">gadget</span><span class="p">(</span><span class="n">recon</span><span class="o">.</span><span class="n">Prewhiten</span><span class="p">)</span><span class="o">.</span><span class="n">publish</span><span class="p">()</span>
+</pre></div>
+</div>
+<p>The exam holds one set of maps. A later series is given them only where the
+coil labels, the whitening, the compression and the geometry equal its own, and
+otherwise <a class="reference internal" href="../generated/pulserver.recon.MissingCalibration.html#pulserver.recon.MissingCalibration" title="pulserver.recon.MissingCalibration"><code class="xref py py-class docutils literal notranslate"><span class="pre">MissingCalibration</span></code></a> is raised, naming the
+first field that differs with both values. The failure text the client
+receives carries the message. <code class="docutils literal notranslate"><span class="pre">required=False</span></code> returns <code class="docutils literal notranslate"><span class="pre">None</span></code> instead of
+raising.</p>
+</section>
 <section id="running-a-plugin-offline">
 <h2>Running a plugin offline<a class="headerlink" href="#running-a-plugin-offline" title="Link to this heading">#</a></h2>
 <p><a class="reference internal" href="../generated/pulserver.recon.ReconPlugin.run.html#pulserver.recon.ReconPlugin.run" title="pulserver.recon.ReconPlugin.run"><code class="xref py py-meth docutils literal notranslate"><span class="pre">run()</span></code></a> reconstructs an ISMRMRD HDF5 file in
@@ -896,6 +974,7 @@ reconstruction.</p>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#hooks">Hooks</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#readout-placement">Readout placement</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#non-cartesian-data">Non-Cartesian data</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#coil-sensitivities-noise-and-compression">Coil sensitivities, noise and compression</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#running-a-plugin-offline">Running a plugin offline</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#see-also">See also</a></li>
 </ul>
