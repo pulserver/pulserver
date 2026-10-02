@@ -479,9 +479,9 @@
 
 <span class="sd">    For a host that starts no processes, such as a browser tab. A series is</span>
 <span class="sd">    checked and enriched as the proxy checks and enriches a stream, and</span>
-<span class="sd">    reconstructed on the host by the design's reconstruction plugin, or else</span>
-<span class="sd">    the one its config names. The series of one exam share an</span>
-<span class="sd">    :class:`~pulserver.recon.ExamCache` held in memory.</span>
+<span class="sd">    reconstructed on the host by the reconstruction plugin its config names.</span>
+<span class="sd">    The series of one exam share an :class:`~pulserver.recon.ExamCache` held</span>
+<span class="sd">    in memory.</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
@@ -518,7 +518,7 @@
 <span class="sd">        """</span>
         <span class="k">try</span><span class="p">:</span>
             <span class="n">design</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">designs</span><span class="o">.</span><span class="n">resolve</span><span class="p">(</span><span class="n">header</span><span class="p">)</span>
-            <span class="n">plugin</span> <span class="o">=</span> <span class="n">design</span><span class="o">.</span><span class="n">recon</span> <span class="ow">or</span> <span class="n">_config_plugin</span><span class="p">(</span><span class="n">config</span><span class="p">)</span>
+            <span class="n">plugin</span> <span class="o">=</span> <span class="n">_config_plugin</span><span class="p">(</span><span class="n">config</span><span class="p">)</span>
             <span class="n">path</span> <span class="o">=</span> <span class="n">_plugin_path</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">plugins</span><span class="p">,</span> <span class="n">plugin</span><span class="p">)</span>
             <span class="n">enrich_header</span><span class="p">(</span><span class="n">header</span><span class="p">,</span> <span class="n">design</span><span class="o">.</span><span class="n">table</span><span class="p">)</span>
             <span class="n">reconstruction</span> <span class="o">=</span> <span class="n">load_plugin</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>

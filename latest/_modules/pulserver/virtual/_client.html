@@ -498,8 +498,10 @@
 <span class="sd">    and as ``read_dir``, ``phase_dir`` and ``slice_dir`` the columns of the</span>
 <span class="sd">    prescription's ``rotation`` from logical to physical axes, the identity</span>
 <span class="sd">    by default. Nothing else of the sequence is sent, as</span>
-<span class="sd">    :doc:`/user-guide/reconstruction-client` specifies. The reply is the</span>
-<span class="sd">    images, DICOM datasets and texts in the order they arrive.</span>
+<span class="sd">    :doc:`/user-guide/reconstruction-client` specifies. ``config``, when</span>
+<span class="sd">    given, is the config text sent before the header, from which a proxy takes</span>
+<span class="sd">    the reconstruction plugin. The reply is the images, DICOM</span>
+<span class="sd">    datasets and texts in the order they arrive.</span>
 
 <span class="sd">    ``readouts`` may be an iterator: the header is sent once its first</span>
 <span class="sd">    readout is taken, and each readout once the next one is, so that the</span>

@@ -543,9 +543,9 @@ per connection as MRD messages, and reads what the reconstruction returns on
 the same connection.</p>
 <p>The proxy replaces the encoding counters, flags, encoding spaces and trajectory
 of the series with those the sequence states (<a class="reference internal" href="../explanations/reconstruction.html"><span class="doc">Raw-data enrichment and routing</span></a>).
-The client therefore sends what the scanner measured and the identity of the
-design the series was played from, and leaves the Pulseq structure of the scan
-to the proxy.</p>
+The client therefore sends what the scanner measured, the identity of the
+design the series was played from and the reconstruction plugin to run, and
+leaves the Pulseq structure of the scan to the proxy.</p>
 <section id="messages">
 <h2>Messages<a class="headerlink" href="#messages" title="Link to this heading">#</a></h2>
 <p>A series is sent in this order:</p>
@@ -559,7 +559,7 @@ to the proxy.</p>
 <tbody>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">CONFIG</span></code></p></td>
 <td><p>2</p></td>
-<td><p>Optional. The reconstruction plugin, as a bare name or under <code class="docutils literal notranslate"><span class="pre">parameters.config</span></code> of a JSON, YAML or XML text, used when the design names none</p></td>
+<td><p>The reconstruction plugin, as a bare name or the path of its <code class="docutils literal notranslate"><span class="pre">&lt;plugin&gt;.py</span></code> file, or as either under <code class="docutils literal notranslate"><span class="pre">parameters.config</span></code> of a JSON, YAML or XML text</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">HEADER</span></code></p></td>
 <td><p>3</p></td>
@@ -580,6 +580,10 @@ to the proxy.</p>
 </tbody>
 </table>
 </div>
+<p>The design names no reconstruction, so the proxy refuses a series whose config
+names none, unless it forwards with a <code class="docutils literal notranslate"><span class="pre">--forward-config</span></code>. A path ending in <code class="docutils literal notranslate"><span class="pre">.py</span></code>
+names the plugin its file is called, without the extension; the proxy searches
+its own <code class="docutils literal notranslate"><span class="pre">--plugins</span></code> directories for that name, whatever the path’s directory.</p>
 <p>The client then reads until the proxy’s <code class="docutils literal notranslate"><span class="pre">CLOSE</span></code>: images (<code class="docutils literal notranslate"><span class="pre">IMAGE</span></code>, 1022),
 DICOM datasets (<code class="docutils literal notranslate"><span class="pre">DICOM_WITHNAME</span></code>, 1018) and texts (<code class="docutils literal notranslate"><span class="pre">TEXT</span></code>, 5), in the order the
 reconstruction produces them. A text beginning <code class="docutils literal notranslate"><span class="pre">pulserver:</span></code> reports a series

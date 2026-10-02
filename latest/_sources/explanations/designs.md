@@ -54,8 +54,8 @@ designs/
     sequence_main.seq     the remaining files, when there are prescans
     sequence.pseg         IR cache
     resolved.protocol
-    manifest.json         identity, plugin, reconstruction plugin, limits,
-                          package versions, SHA-256 of every file
+    manifest.json         identity, plugin, limits, package versions,
+                          SHA-256 of every file
 ```
 
 A design is written into a staging directory in the store and renamed into

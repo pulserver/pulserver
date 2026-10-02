@@ -551,6 +551,17 @@ pulses excite, at the spacing <code class="docutils literal notranslate"><span c
 that excite the same slabs play on the same isochromats, each from
 equilibrium, which keeps the pulses the engine has computed; a scan
 started while another plays has isochromats of its own.</p>
+<p><code class="docutils literal notranslate"><span class="pre">recon</span></code> names the reconstruction plugin. Without it, a design of a
+shipped scanner sequence is reconstructed with the shipped
+reconstruction paired with it in <code class="docutils literal notranslate"><span class="pre">pulserver._zoo.ZOO_PAIRS</span></code>. A
+console that reconstructs nothing ignores it.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If the console reconstructs, <code class="docutils literal notranslate"><span class="pre">recon</span></code> is <code class="docutils literal notranslate"><span class="pre">None</span></code> and the design
+    is not of a shipped scanner sequence, as an imported design is
+    not.</p>
+</dd>
+</dl>
 </dd></dl>
 
 </section>

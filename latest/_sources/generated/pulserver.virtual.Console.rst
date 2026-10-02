@@ -19,6 +19,7 @@
    ~Console.design
    ~Console.exam
    ~Console.plugin_names
+   ~Console.recon_names
    ~Console.scan
 
 

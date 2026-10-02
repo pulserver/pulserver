@@ -542,8 +542,10 @@ the field-of-view centre <code class="docutils literal notranslate"><span class=
 and as <code class="docutils literal notranslate"><span class="pre">read_dir</span></code>, <code class="docutils literal notranslate"><span class="pre">phase_dir</span></code> and <code class="docutils literal notranslate"><span class="pre">slice_dir</span></code> the columns of the
 prescription’s <code class="docutils literal notranslate"><span class="pre">rotation</span></code> from logical to physical axes, the identity
 by default. Nothing else of the sequence is sent, as
-<a class="reference internal" href="../user-guide/reconstruction-client.html"><span class="doc">Reconstruction clients</span></a> specifies. The reply is the
-images, DICOM datasets and texts in the order they arrive.</p>
+<a class="reference internal" href="../user-guide/reconstruction-client.html"><span class="doc">Reconstruction clients</span></a> specifies. <code class="docutils literal notranslate"><span class="pre">config</span></code>, when
+given, is the config text sent before the header, from which a proxy takes
+the reconstruction plugin. The reply is the images, DICOM
+datasets and texts in the order they arrive.</p>
 <p><code class="docutils literal notranslate"><span class="pre">readouts</span></code> may be an iterator: the header is sent once its first
 readout is taken, and each readout once the next one is, so that the
 last carries its flag.</p>

@@ -458,7 +458,6 @@
 
 <span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"DESIGN_PARAMETER"</span><span class="p">,</span> <span class="s2">"Design"</span><span class="p">,</span> <span class="s2">"DesignCache"</span><span class="p">]</span>
 
-<span class="kn">import</span><span class="w"> </span><span class="nn">json</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">re</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">threading</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">collections</span><span class="w"> </span><span class="kn">import</span> <span class="n">OrderedDict</span>
@@ -494,9 +493,6 @@
 <span class="sd">    ----------</span>
 <span class="sd">    directory</span>
 <span class="sd">        ``&lt;store&gt;/&lt;id&gt;/``.</span>
-<span class="sd">    recon</span>
-<span class="sd">        Reconstruction plugin the design names; empty when it names none, which</span>
-<span class="sd">        leaves the choice to the client's config.</span>
 <span class="sd">    table</span>
 <span class="sd">        The readouts of the design's sequence chain, in play order.</span>
 <span class="sd">    prospective_motion</span>
@@ -506,7 +502,6 @@
 <span class="sd">    """</span>
 
     <span class="n">directory</span><span class="p">:</span> <span class="n">Path</span>
-    <span class="n">recon</span><span class="p">:</span> <span class="nb">str</span>
     <span class="n">table</span><span class="p">:</span> <span class="n">SequenceTable</span>
     <span class="n">prospective_motion</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
 
@@ -587,10 +582,8 @@
                 <span class="k">if</span> <span class="n">directory</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_designs</span><span class="p">:</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">_designs</span><span class="o">.</span><span class="n">move_to_end</span><span class="p">(</span><span class="n">directory</span><span class="p">)</span>
                     <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_designs</span><span class="p">[</span><span class="n">directory</span><span class="p">]</span>
-            <span class="n">manifest</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">((</span><span class="n">directory</span> <span class="o">/</span> <span class="n">MANIFEST</span><span class="p">)</span><span class="o">.</span><span class="n">read_text</span><span class="p">())</span>
             <span class="n">design</span> <span class="o">=</span> <span class="n">Design</span><span class="p">(</span>
                 <span class="n">directory</span><span class="o">=</span><span class="n">directory</span><span class="p">,</span>
-                <span class="n">recon</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">manifest</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"recon"</span><span class="p">,</span> <span class="s2">""</span><span class="p">)),</span>
                 <span class="n">table</span><span class="o">=</span><span class="n">SequenceTable</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">directory</span> <span class="o">/</span> <span class="n">_ENTRY</span><span class="p">),</span>
                 <span class="n">prospective_motion</span><span class="o">=</span><span class="n">_asks_for_motion_correction</span><span class="p">(</span><span class="n">directory</span> <span class="o">/</span> <span class="n">_ENTRY</span><span class="p">),</span>
             <span class="p">)</span>

@@ -19,5 +19,4 @@
    ~Design.description
    ~Design.prospective_motion
    ~Design.directory
-   ~Design.recon
    ~Design.table

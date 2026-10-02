@@ -561,7 +561,9 @@ counters, which a sequence sets with <code class="docutils literal notranslate">
 <code class="docutils literal notranslate"><span class="pre">pp.make_label</span></code> as in PyPulseq; a readout placed over another is warned about.
 The proxy runs the plugin in a worker process, one per series, over an MRD
 stream enriched from the sequence’s design
-(<a class="reference internal" href="../explanations/reconstruction.html"><span class="doc">Raw-data enrichment and routing</span></a>).</p>
+(<a class="reference internal" href="../explanations/reconstruction.html"><span class="doc">Raw-data enrichment and routing</span></a>). The client names the plugin of a series
+in its config text (<a class="reference internal" href="reconstruction-client.html"><span class="doc">Reconstruction clients</span></a>), independently of the
+scanner-sequence plugin the series was played from.</p>
 <section id="hooks">
 <h2>Hooks<a class="headerlink" href="#hooks" title="Link to this heading">#</a></h2>
 <p>The runtime calls three hooks over one stream:</p>
@@ -672,8 +674,8 @@ describe the encoded space and the receiver channels:</p>
 </div>
 <p>Four shipped plugins are complete reconstructions, each image scaled to the
 header’s largest stored value. They are searched after every reconstruction
-plugin directory, so a sequence names one with <code class="docutils literal notranslate"><span class="pre">recon</span> <span class="pre">=</span> <span class="pre">&quot;nufft&quot;</span></code> and needs no
-file of its own:</p>
+plugin directory, so a client can name one, such as <code class="docutils literal notranslate"><span class="pre">nufft</span></code>, without a file of
+its own:</p>
 <div class="pst-scrollable-table-container"><table class="table">
 <thead>
 <tr class="row-odd"><th class="head"><p>Plugin</p></th>

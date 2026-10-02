@@ -577,9 +577,18 @@ field-of-view offset in the protocol block (<a class="reference internal" href="
     <span class="p">[</span><span class="n">virtual</span><span class="o">.</span><span class="n">Ellipse</span><span class="p">((</span><span class="mf">0.02</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">),</span> <span class="p">(</span><span class="mf">0.08</span><span class="p">,</span> <span class="mf">0.06</span><span class="p">))],</span> <span class="n">coils</span><span class="o">=</span><span class="mi">4</span>
 <span class="p">)</span>
 <span class="n">readouts</span> <span class="o">=</span> <span class="n">virtual</span><span class="o">.</span><span class="n">acquire</span><span class="p">(</span><span class="n">sequence</span><span class="p">,</span> <span class="n">phantom</span><span class="p">)</span>
-<span class="n">received</span> <span class="o">=</span> <span class="n">virtual</span><span class="o">.</span><span class="n">send</span><span class="p">((</span><span class="s2">"127.0.0.1"</span><span class="p">,</span> <span class="mi">9002</span><span class="p">),</span> <span class="n">design</span><span class="p">,</span> <span class="n">readouts</span><span class="p">,</span> <span class="n">position_mm</span><span class="o">=</span><span class="p">(</span><span class="mf">20.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">))</span>
+<span class="n">received</span> <span class="o">=</span> <span class="n">virtual</span><span class="o">.</span><span class="n">send</span><span class="p">(</span>
+    <span class="p">(</span><span class="s2">"127.0.0.1"</span><span class="p">,</span> <span class="mi">9002</span><span class="p">),</span>
+    <span class="n">design</span><span class="p">,</span>
+    <span class="n">readouts</span><span class="p">,</span>
+    <span class="n">position_mm</span><span class="o">=</span><span class="p">(</span><span class="mf">20.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">),</span>
+    <span class="n">config</span><span class="o">=</span><span class="s2">"cartesian"</span><span class="p">,</span>
+<span class="p">)</span>
 </pre></div>
 </div>
+<p><code class="docutils literal notranslate"><span class="pre">config</span></code> names the reconstruction plugin, here the shipped <code class="docutils literal notranslate"><span class="pre">cartesian</span></code>, as the
+config text of a reconstruction client does (<a class="reference internal" href="reconstruction-client.html"><span class="doc">Reconstruction clients</span></a>); the
+proxy refuses a series whose config names none.</p>
 <p>The phantom lies in the physical frame, whose axes are the logical ones under
 a prescription without a rotation; the object above is centred on the
 prescribed field of view, so it appears at the centre of the image. <code class="docutils literal notranslate"><span class="pre">received</span></code>
@@ -653,7 +662,7 @@ the client sends it on; the sound of its gradients can be written as it plays:</
             <span class="n">audio</span><span class="o">.</span><span class="n">writeframes</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">round</span><span class="p">(</span><span class="mi">32767</span> <span class="o">*</span> <span class="n">chunk</span><span class="o">.</span><span class="n">sound</span><span class="o">.</span><span class="n">T</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="s2">"&lt;i2"</span><span class="p">)</span><span class="o">.</span><span class="n">tobytes</span><span class="p">())</span>
             <span class="k">yield from</span> <span class="n">chunk</span><span class="o">.</span><span class="n">readouts</span>
 
-    <span class="n">received</span> <span class="o">=</span> <span class="n">virtual</span><span class="o">.</span><span class="n">send</span><span class="p">((</span><span class="s2">"127.0.0.1"</span><span class="p">,</span> <span class="mi">9002</span><span class="p">),</span> <span class="n">design</span><span class="p">,</span> <span class="n">acquired</span><span class="p">())</span>
+    <span class="n">received</span> <span class="o">=</span> <span class="n">virtual</span><span class="o">.</span><span class="n">send</span><span class="p">((</span><span class="s2">"127.0.0.1"</span><span class="p">,</span> <span class="mi">9002</span><span class="p">),</span> <span class="n">design</span><span class="p">,</span> <span class="n">acquired</span><span class="p">(),</span> <span class="n">config</span><span class="o">=</span><span class="s2">"cartesian"</span><span class="p">)</span>
 </pre></div>
 </div>
 <p>The spans are simulated in a thread of their own, ahead of the clock. At
@@ -756,7 +765,12 @@ Isochromats that move are played block by block.</p></li>
 design up in its store: give that store as <code class="docutils literal notranslate"><span class="pre">--store</span></code>, or the proxy’s design
 intake as <code class="docutils literal notranslate"><span class="pre">--push</span></code>. The images go to <code class="docutils literal notranslate"><span class="pre">images.h5</span></code> in <code class="docutils literal notranslate"><span class="pre">--output</span></code>, the DICOM
 datasets to the files they are named by, and a text beginning <code class="docutils literal notranslate"><span class="pre">pulserver:</span></code>
-ends the command with status 1.</p></li>
+ends the command with status 1. <code class="docutils literal notranslate"><span class="pre">--reconstruction</span></code> names the reconstruction
+plugin the proxy reconstructs the series with, independently of the sequence
+the design was generated from. Without it, a shipped <code class="docutils literal notranslate"><span class="pre">--plugin</span></code> is
+reconstructed with the shipped reconstruction paired with it
+(<a class="reference internal" href="scanner-sequences.html#shipped-sequences"><span class="std std-ref">Shipped sequences</span></a>), and a design of another plugin or imported with
+<code class="docutils literal notranslate"><span class="pre">--seq</span></code> needs it.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">--speed</span></code> plays the scan that many times as fast as a scanner, once the
 simulation is far enough ahead, writing the time left before it is to
 standard error; without it, the scan runs as fast as the simulation.</p></li>
@@ -795,7 +809,12 @@ the client sends <span class="math notranslate nohighlight">\(R\)</span> times t
 <span class="p">)</span>
 <span class="n">readouts</span> <span class="o">=</span> <span class="n">virtual</span><span class="o">.</span><span class="n">acquire</span><span class="p">(</span><span class="n">sequence</span><span class="p">,</span> <span class="n">phantom</span><span class="p">,</span> <span class="n">rotation</span><span class="o">=</span><span class="n">rotation</span><span class="p">)</span>  <span class="c1"># or virtual.simulate</span>
 <span class="n">received</span> <span class="o">=</span> <span class="n">virtual</span><span class="o">.</span><span class="n">send</span><span class="p">(</span>
-    <span class="p">(</span><span class="s2">"127.0.0.1"</span><span class="p">,</span> <span class="mi">9002</span><span class="p">),</span> <span class="n">design</span><span class="p">,</span> <span class="n">readouts</span><span class="p">,</span> <span class="n">position_mm</span><span class="o">=</span><span class="mf">1e3</span> <span class="o">*</span> <span class="n">centre</span><span class="p">,</span> <span class="n">rotation</span><span class="o">=</span><span class="n">rotation</span>
+    <span class="p">(</span><span class="s2">"127.0.0.1"</span><span class="p">,</span> <span class="mi">9002</span><span class="p">),</span>
+    <span class="n">design</span><span class="p">,</span>
+    <span class="n">readouts</span><span class="p">,</span>
+    <span class="n">position_mm</span><span class="o">=</span><span class="mf">1e3</span> <span class="o">*</span> <span class="n">centre</span><span class="p">,</span>
+    <span class="n">rotation</span><span class="o">=</span><span class="n">rotation</span><span class="p">,</span>
+    <span class="n">config</span><span class="o">=</span><span class="s2">"cartesian"</span><span class="p">,</span>
 <span class="p">)</span>
 </pre></div>
 </div>
@@ -856,8 +875,9 @@ with a period of 8 s:</p>
 </pre></div>
 </div>
 <p>Its sequences are the ones listed under <a class="reference internal" href="scanner-sequences.html#shipped-sequences"><span class="std std-ref">Shipped sequences</span></a>,
-reconstructed by the shipped plugins of <a class="reference internal" href="reconstruction-plugins.html"><span class="doc">Reconstruction plugins</span></a>, and each
-protocol starts at values the image’s limits play.</p>
+reconstructed by the shipped plugins of <a class="reference internal" href="reconstruction-plugins.html"><span class="doc">Reconstruction plugins</span></a> unless a
+scan names another, and each protocol starts at values the image’s limits
+play.</p>
 <p>Directories mounted at <code class="docutils literal notranslate"><span class="pre">/console/user/plugins</span></code> and <code class="docutils literal notranslate"><span class="pre">/console/user/recon</span></code> add
 sequences and reconstructions to those pulserver ships. They are searched
 first, so a file there takes the place of the shipped file of that name. A
@@ -882,31 +902,42 @@ it repeats:</p>
 <tbody>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">plugins</span></code></p></td>
 <td><p></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">plugins</span></code>: the plugin names</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">plugins</span></code>: the scanner-sequence plugin names</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">coils</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">recons</span></code></p></td>
+<td><p></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">recons</span></code>: the reconstruction plugin names, the shipped ones and those of <code class="docutils literal notranslate"><span class="pre">--recon-plugins</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">coils</span></code></p></td>
 <td><p></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">coils</span></code>: each coil’s <code class="docutils literal notranslate"><span class="pre">name</span></code> and its <code class="docutils literal notranslate"><span class="pre">transmit</span></code> and <code class="docutils literal notranslate"><span class="pre">receive</span></code> channels</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">list</span></code>, <code class="docutils literal notranslate"><span class="pre">validate</span></code>, <code class="docutils literal notranslate"><span class="pre">generate</span></code>, <code class="docutils literal notranslate"><span class="pre">import</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">list</span></code>, <code class="docutils literal notranslate"><span class="pre">validate</span></code>, <code class="docutils literal notranslate"><span class="pre">generate</span></code>, <code class="docutils literal notranslate"><span class="pre">import</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">plugin</span></code>, <code class="docutils literal notranslate"><span class="pre">block</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">status</span></code> and <code class="docutils literal notranslate"><span class="pre">reply</span></code>, as <code class="docutils literal notranslate"><span class="pre">pulserver</span> <span class="pre">design</span></code> answers; <code class="docutils literal notranslate"><span class="pre">design</span></code> for a generated or imported design</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">exam</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">exam</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">subject</span></code>, <code class="docutils literal notranslate"><span class="pre">coil</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">localizer</span></code>: the axial, coronal and sagittal images of the subject’s phantom, as base64 DICOM files</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">scan</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">design</span></code>, <code class="docutils literal notranslate"><span class="pre">rotation</span></code> (nine elements), <code class="docutils literal notranslate"><span class="pre">centre_mm</span></code>, <code class="docutils literal notranslate"><span class="pre">sound</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">scan</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">design</span></code>, <code class="docutils literal notranslate"><span class="pre">rotation</span></code> (nine elements), <code class="docutils literal notranslate"><span class="pre">centre_mm</span></code>, <code class="docutils literal notranslate"><span class="pre">sound</span></code>, <code class="docutils literal notranslate"><span class="pre">recon</span></code></p></td>
 <td><p>at a speed, <code class="docutils literal notranslate"><span class="pre">preparing</span></code> about twice a second until the clock starts, the wall-clock time left in s or <code class="docutils literal notranslate"><span class="pre">null</span></code> before there is an estimate; <code class="docutils literal notranslate"><span class="pre">clock</span></code> and <code class="docutils literal notranslate"><span class="pre">duration</span></code> after each span played, with the span’s <code class="docutils literal notranslate"><span class="pre">sound</span></code> when asked, as base64 of 16-bit little-endian stereo samples at <code class="docutils literal notranslate"><span class="pre">rate</span></code> Hz; <code class="docutils literal notranslate"><span class="pre">dicom</span></code> and <code class="docutils literal notranslate"><span class="pre">name</span></code> for each image the reconstruction returns, <code class="docutils literal notranslate"><span class="pre">text</span></code>, then <code class="docutils literal notranslate"><span class="pre">done</span></code> with the status</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">cancel</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">cancel</span></code></p></td>
 <td><p></p></td>
 <td><p>stops the scan in progress</p></td>
 </tr>
 </tbody>
 </table>
 </div>
+<p>The <code class="docutils literal notranslate"><span class="pre">recon</span></code> field of a <code class="docutils literal notranslate"><span class="pre">scan</span></code> names the reconstruction plugin of the scan,
+independently of the plugin the design was generated from. Without it, a design
+of a shipped sequence is reconstructed with the shipped reconstruction paired
+with it (<a class="reference internal" href="scanner-sequences.html#shipped-sequences"><span class="std std-ref">Shipped sequences</span></a>), and any other design, such as an imported
+one, is refused with an <code class="docutils literal notranslate"><span class="pre">error</span></code> naming the missing reconstruction. A console
+that reconstructs through a proxy lists the shipped reconstructions only, and
+uses a name the proxy holds all the same.</p>
 <p><a class="reference internal" href="../generated/pulserver.virtual.Console.answer.html#pulserver.virtual.Console.answer" title="pulserver.virtual.Console.answer"><code class="xref py py-meth docutils literal notranslate"><span class="pre">Console.answer</span></code></a> answers one request
 in process with the same replies, without the <code class="docutils literal notranslate"><span class="pre">id</span></code>, for a console that reaches
 pulserver by another route than a WebSocket, such as the messages of a Web

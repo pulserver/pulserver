@@ -30,6 +30,5 @@
    :nosignatures:
 
    ~ScannerSequence.follows
-   ~ScannerSequence.recon
    ~ScannerSequence.ui
    ~ScannerSequence.app

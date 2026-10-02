@@ -57,9 +57,10 @@ One acquisition proceeds as follows.
    keeps a store of its own, and replies its identifier ({doc}`designs`,
    {doc}`ir-cache`). The interpreter loads the IR cache and plays the sequence.
 3. The reconstruction client streams the raw data of the series as MRD. The
-   header names the design the series was played from.
+   header names the design the series was played from, and the client's config
+   names the reconstruction plugin.
 4. The proxy reads the design's sequence files, completes the MRD header and
-   every acquisition from them, and runs the reconstruction plugin the sequence
+   every acquisition from them, and runs the reconstruction plugin the config
    names in a worker process, or forwards the completed series to a
    reconstruction server on another computer ({doc}`reconstruction`). The
    images return to the console through the client's connection.

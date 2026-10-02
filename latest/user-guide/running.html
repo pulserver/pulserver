@@ -865,11 +865,11 @@ python<span class="w"> </span>-m<span class="w"> </span>pulserver.proxy<span cla
 </div>
 <p>The MRD header of each series names the design it was played from in the
 <code class="docutils literal notranslate"><span class="pre">pulserver_design</span></code> user parameter, and the proxy refuses a series whose header
-names no stored design. The reconstruction
-plugin is the one the scanner sequence names in its <code class="docutils literal notranslate"><span class="pre">recon</span></code> attribute; when it
-names none, the client’s config text names it, either as a bare plugin name or
-under <code class="docutils literal notranslate"><span class="pre">parameters.config</span></code>. The messages and fields the client sends are listed
-in <a class="reference internal" href="reconstruction-client.html"><span class="doc">Reconstruction clients</span></a>.</p>
+names no stored design. The client’s config text names the reconstruction
+plugin, as a bare plugin name or the path of its file, or as either under
+<code class="docutils literal notranslate"><span class="pre">parameters.config</span></code>; the design names none. A series whose config names none is
+refused unless the proxy forwards with <code class="docutils literal notranslate"><span class="pre">--forward-config</span></code>. The messages and
+fields the client sends are listed in <a class="reference internal" href="reconstruction-client.html"><span class="doc">Reconstruction clients</span></a>.</p>
 <p>A series that finds every slot busy is written to the queue directory as it
 arrives and reconstructed once a slot frees; the client stays connected
 meanwhile.</p>

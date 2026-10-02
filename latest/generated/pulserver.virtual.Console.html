@@ -541,7 +541,9 @@ the text blocks the interpreter sends, starts an exam on a subject with
 one of the virtual scanner’s coils, and scans a stored design on it.
 Images return as DICOM from the reconstruction proxy at <code class="docutils literal notranslate"><span class="pre">recon</span></code>, or from
 the plugins of <code class="docutils literal notranslate"><span class="pre">recon_plugins</span></code> run in this process as the proxy runs
-them; with neither, a scan returns no images.</p>
+them; with neither, a scan returns no images. A scan names its
+reconstruction plugin; without one, the design’s shipped scanner sequence
+is reconstructed with the shipped reconstruction paired with it.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
@@ -603,7 +605,10 @@ isochromats play every block alone.</p></li>
 <tr class="row-odd"><td><p><a class="reference internal" href="pulserver.virtual.Console.plugin_names.html#pulserver.virtual.Console.plugin_names" title="pulserver.virtual.Console.plugin_names"><code class="xref py py-obj docutils literal notranslate"><span class="pre">plugin_names</span></code></a></p></td>
 <td><p>Return the names of the plugins a console can list.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pulserver.virtual.Console.scan.html#pulserver.virtual.Console.scan" title="pulserver.virtual.Console.scan"><code class="xref py py-obj docutils literal notranslate"><span class="pre">scan</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pulserver.virtual.Console.recon_names.html#pulserver.virtual.Console.recon_names" title="pulserver.virtual.Console.recon_names"><code class="xref py py-obj docutils literal notranslate"><span class="pre">recon_names</span></code></a></p></td>
+<td><p>Return the names of the reconstruction plugins a scan can name.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.virtual.Console.scan.html#pulserver.virtual.Console.scan" title="pulserver.virtual.Console.scan"><code class="xref py py-obj docutils literal notranslate"><span class="pre">scan</span></code></a></p></td>
 <td><p>Scan a stored design on the exam's phantom; return the reconstruction's status.</p></td>
 </tr>
 </tbody>

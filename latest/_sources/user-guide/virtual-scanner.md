@@ -38,8 +38,18 @@ phantom = virtual.Phantom(
     [virtual.Ellipse((0.02, 0.0, 0.0), (0.08, 0.06))], coils=4
 )
 readouts = virtual.acquire(sequence, phantom)
-received = virtual.send(("127.0.0.1", 9002), design, readouts, position_mm=(20.0, 0.0, 0.0))
+received = virtual.send(
+    ("127.0.0.1", 9002),
+    design,
+    readouts,
+    position_mm=(20.0, 0.0, 0.0),
+    config="cartesian",
+)
 ```
+
+`config` names the reconstruction plugin, here the shipped `cartesian`, as the
+config text of a reconstruction client does ({doc}`reconstruction-client`); the
+proxy refuses a series whose config names none.
 
 The phantom lies in the physical frame, whose axes are the logical ones under
 a prescription without a rotation; the object above is centred on the
@@ -120,7 +130,7 @@ with wave.open("scan.wav", "wb") as audio:
             audio.writeframes(np.round(32767 * chunk.sound.T).astype("<i2").tobytes())
             yield from chunk.readouts
 
-    received = virtual.send(("127.0.0.1", 9002), design, acquired())
+    received = virtual.send(("127.0.0.1", 9002), design, acquired(), config="cartesian")
 ```
 
 The spans are simulated in a thread of their own, ahead of the clock. At
@@ -205,7 +215,12 @@ line, is written to standard output, and the scan clock to standard error.
   design up in its store: give that store as `--store`, or the proxy's design
   intake as `--push`. The images go to `images.h5` in `--output`, the DICOM
   datasets to the files they are named by, and a text beginning `pulserver:`
-  ends the command with status 1.
+  ends the command with status 1. `--reconstruction` names the reconstruction
+  plugin the proxy reconstructs the series with, independently of the sequence
+  the design was generated from. Without it, a shipped `--plugin` is
+  reconstructed with the shipped reconstruction paired with it
+  ({ref}`shipped-sequences`), and a design of another plugin or imported with
+  `--seq` needs it.
 - `--speed` plays the scan that many times as fast as a scanner, once the
   simulation is far enough ahead, writing the time left before it is to
   standard error; without it, the scan runs as fast as the simulation.
@@ -245,7 +260,12 @@ phantom = virtual.Phantom(
 )
 readouts = virtual.acquire(sequence, phantom, rotation=rotation)  # or virtual.simulate
 received = virtual.send(
-    ("127.0.0.1", 9002), design, readouts, position_mm=1e3 * centre, rotation=rotation
+    ("127.0.0.1", 9002),
+    design,
+    readouts,
+    position_mm=1e3 * centre,
+    rotation=rotation,
+    config="cartesian",
 )
 ```
 
@@ -314,8 +334,9 @@ docker run -d --restart unless-stopped --name pulserver \
 ```
 
 Its sequences are the ones listed under {ref}`shipped-sequences`,
-reconstructed by the shipped plugins of {doc}`reconstruction-plugins`, and each
-protocol starts at values the image's limits play.
+reconstructed by the shipped plugins of {doc}`reconstruction-plugins` unless a
+scan names another, and each protocol starts at values the image's limits
+play.
 
 Directories mounted at `/console/user/plugins` and `/console/user/recon` add
 sequences and reconstructions to those pulserver ships. They are searched
@@ -336,12 +357,21 @@ it repeats:
 
 | `call` | Fields | Replies |
 | --- | --- | --- |
-| `plugins` | | `plugins`: the plugin names |
+| `plugins` | | `plugins`: the scanner-sequence plugin names |
+| `recons` | | `recons`: the reconstruction plugin names, the shipped ones and those of `--recon-plugins` |
 | `coils` | | `coils`: each coil's `name` and its `transmit` and `receive` channels |
 | `list`, `validate`, `generate`, `import` | `plugin`, `block` | `status` and `reply`, as `pulserver design` answers; `design` for a generated or imported design |
 | `exam` | `subject`, `coil` | `localizer`: the axial, coronal and sagittal images of the subject's phantom, as base64 DICOM files |
-| `scan` | `design`, `rotation` (nine elements), `centre_mm`, `sound` | at a speed, `preparing` about twice a second until the clock starts, the wall-clock time left in s or `null` before there is an estimate; `clock` and `duration` after each span played, with the span's `sound` when asked, as base64 of 16-bit little-endian stereo samples at `rate` Hz; `dicom` and `name` for each image the reconstruction returns, `text`, then `done` with the status |
+| `scan` | `design`, `rotation` (nine elements), `centre_mm`, `sound`, `recon` | at a speed, `preparing` about twice a second until the clock starts, the wall-clock time left in s or `null` before there is an estimate; `clock` and `duration` after each span played, with the span's `sound` when asked, as base64 of 16-bit little-endian stereo samples at `rate` Hz; `dicom` and `name` for each image the reconstruction returns, `text`, then `done` with the status |
 | `cancel` | | stops the scan in progress |
+
+The `recon` field of a `scan` names the reconstruction plugin of the scan,
+independently of the plugin the design was generated from. Without it, a design
+of a shipped sequence is reconstructed with the shipped reconstruction paired
+with it ({ref}`shipped-sequences`), and any other design, such as an imported
+one, is refused with an `error` naming the missing reconstruction. A console
+that reconstructs through a proxy lists the shipped reconstructions only, and
+uses a name the proxy holds all the same.
 
 {meth}`Console.answer <pulserver.virtual.Console.answer>` answers one request
 in process with the same replies, without the `id`, for a console that reaches

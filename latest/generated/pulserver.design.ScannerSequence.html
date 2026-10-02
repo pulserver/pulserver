@@ -550,11 +550,7 @@ to six significant digits, the precision of a float32 parameter. Either way
 a reply stored in scanner parameters and sent back resolves to itself.</p>
 <dl class="field-list">
 <dt class="field-odd">Attributes<span class="colon">:</span></dt>
-<dd class="field-odd"><ul>
-<li><p><strong>recon</strong> (<em>str</em>) – Reconstruction plugin the data of this sequence is reconstructed with,
-recorded in every design generated from it. Empty leaves the choice
-to the reconstruction client.</p></li>
-<li><p><strong>follows</strong> (<em>tuple of str</em>) – Which protocol parameter drives the angle of each pulse the sequence
+<dd class="field-odd"><p><strong>follows</strong> (<em>tuple of str</em>) – Which protocol parameter drives the angle of each pulse the sequence
 plays: one entry per distinct pulse, in the order the sequence first
 plays them, <code class="docutils literal notranslate"><span class="pre">&quot;&quot;</span></code> for one the operator does not move. A sequence that
 excites and then refocuses under the one control declares
@@ -567,13 +563,15 @@ application’s defaults, and a pulse’s share of its parameter is the
 angle it was designed at over the value that parameter was designed
 with – so a refocusing train whose angles vary gets one share each
 without any of them being written down.</p>
-</li>
-</ul>
 </dd>
 <dt class="field-even">Raises<span class="colon">:</span></dt>
 <dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – When a subclass is defined with a <code class="docutils literal notranslate"><span class="pre">ui</span></code> key the interpreter does not
     know, which its parser would drop, or with one of the prescription
     entries, which pulserver applies itself.</p>
+</dd>
+<dt class="field-odd">Warns<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>DeprecationWarning</strong> – When a subclass sets <code class="docutils literal notranslate"><span class="pre">recon</span></code>, which has no effect: the reconstruction
+is named by the reconstruction client or, on a console, by the scan.</p>
 </dd>
 </dl>
 </dd></dl>
@@ -608,13 +606,10 @@ without any of them being written down.</p>
 <tr class="row-odd"><td><p><a class="reference internal" href="pulserver.design.ScannerSequence.follows.html#pulserver.design.ScannerSequence.follows" title="pulserver.design.ScannerSequence.follows"><code class="xref py py-obj docutils literal notranslate"><span class="pre">follows</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pulserver.design.ScannerSequence.recon.html#pulserver.design.ScannerSequence.recon" title="pulserver.design.ScannerSequence.recon"><code class="xref py py-obj docutils literal notranslate"><span class="pre">recon</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pulserver.design.ScannerSequence.ui.html#pulserver.design.ScannerSequence.ui" title="pulserver.design.ScannerSequence.ui"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ui</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.design.ScannerSequence.ui.html#pulserver.design.ScannerSequence.ui" title="pulserver.design.ScannerSequence.ui"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ui</span></code></a></p></td>
-<td><p></p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pulserver.design.ScannerSequence.app.html#pulserver.design.ScannerSequence.app" title="pulserver.design.ScannerSequence.app"><code class="xref py py-obj docutils literal notranslate"><span class="pre">app</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.design.ScannerSequence.app.html#pulserver.design.ScannerSequence.app" title="pulserver.design.ScannerSequence.app"><code class="xref py py-obj docutils literal notranslate"><span class="pre">app</span></code></a></p></td>
 <td><p></p></td>
 </tr>
 </tbody>

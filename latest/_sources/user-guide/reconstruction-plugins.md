@@ -27,7 +27,9 @@ counters, which a sequence sets with `self.labels(LIN=line)` in its kernel or
 `pp.make_label` as in PyPulseq; a readout placed over another is warned about.
 The proxy runs the plugin in a worker process, one per series, over an MRD
 stream enriched from the sequence's design
-({doc}`../explanations/reconstruction`).
+({doc}`../explanations/reconstruction`). The client names the plugin of a series
+in its config text ({doc}`reconstruction-client`), independently of the
+scanner-sequence plugin the series was played from.
 
 ## Hooks
 
@@ -137,8 +139,8 @@ describe the encoded space and the receiver channels:
 
 Four shipped plugins are complete reconstructions, each image scaled to the
 header's largest stored value. They are searched after every reconstruction
-plugin directory, so a sequence names one with `recon = "nufft"` and needs no
-file of its own:
+plugin directory, so a client can name one, such as `nufft`, without a file of
+its own:
 
 | Plugin | Reconstructs |
 | --- | --- |

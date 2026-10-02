@@ -546,10 +546,10 @@ acquisition (<code class="xref py py-func docutils literal notranslate"><span cl
 sent back to the client. The readouts arrive demodulated to the
 prescribed field-of-view centre by the playout
 (<a class="reference internal" href="pulserver.ir.prescribe.html#pulserver.ir.prescribe" title="pulserver.ir.prescribe"><code class="xref py py-func docutils literal notranslate"><span class="pre">pulserver.ir.prescribe()</span></code></a>), and their samples are passed on as
-received. The reconstruction plugin is the design’s, falling back to
-the name in the client’s config text. A series that breaks this is refused
-with a text naming the reason and a <code class="docutils literal notranslate"><span class="pre">CLOSE</span></code>, and what the client still
-sends is discarded until it closes the connection.</p>
+received. The reconstruction plugin is the one the client’s config text
+names. A series that breaks this is refused with a text naming the reason
+and a <code class="docutils literal notranslate"><span class="pre">CLOSE</span></code>, and what the client still sends is discarded until it
+closes the connection.</p>
 <p>The enriched series is reconstructed by a local worker, or, with
 <code class="docutils literal notranslate"><span class="pre">forward</span></code>, by the MRD server at that address. Whatever reconstructs it,
 its images, DICOM and text go back to the client as they arrive, the

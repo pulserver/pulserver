@@ -557,15 +557,15 @@ they cap the scanner’s limits, which the design call passes in.</p>
 <h2>Binding the protocol<a class="headerlink" href="#binding-the-protocol" title="Link to this heading">#</a></h2>
 <p><code class="docutils literal notranslate"><span class="pre">ui</span></code> maps <a class="reference internal" href="../generated/pulserver.protocol.UIParam.html#pulserver.protocol.UIParam" title="pulserver.protocol.UIParam"><code class="xref py py-class docutils literal notranslate"><span class="pre">UIParam</span></code></a> members, the parameters of the
 interpreter’s table, to entries; a name outside that table is refused when the
-class is defined. An entry names the <code class="docutils literal notranslate"><span class="pre">init_sequence</span></code> argument it sets. <code class="docutils literal notranslate"><span class="pre">recon</span></code>
-names the reconstruction plugin of the sequence’s data
-(<a class="reference internal" href="reconstruction-plugins.html"><span class="doc">Reconstruction plugins</span></a>).</p>
+class is defined. An entry names the <code class="docutils literal notranslate"><span class="pre">init_sequence</span></code> argument it sets. The class
+does not name a reconstruction: the console’s scan or the reconstruction client
+does (<a class="reference internal" href="reconstruction-plugins.html"><span class="doc">Reconstruction plugins</span></a>). A <code class="docutils literal notranslate"><span class="pre">recon</span></code> attribute has no effect, and
+defining one raises a <code class="docutils literal notranslate"><span class="pre">DeprecationWarning</span></code>.</p>
 <div class="highlight-pycon notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">pypulseqpp.sequences.sequence.gre2D_sequence</span><span class="w"> </span><span class="kn">import</span> <span class="n">Gre2DApp</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">pulserver.design</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span><span class="n">FloatParam</span><span class="p">,</span> <span class="n">IntParam</span><span class="p">,</span> <span class="n">ScannerSequence</span><span class="p">,</span> <span class="n">TEPreset</span><span class="p">,</span>
 <span class="gp">... </span>                              <span class="n">TimeParam</span><span class="p">,</span> <span class="n">TRPreset</span><span class="p">,</span> <span class="n">UIParam</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">Gre2D</span><span class="p">(</span><span class="n">ScannerSequence</span><span class="p">):</span>
 <span class="gp">... </span>    <span class="n">app</span> <span class="o">=</span> <span class="n">Gre2DApp</span>
-<span class="gp">... </span>    <span class="n">recon</span> <span class="o">=</span> <span class="s2">"gre2d"</span>
 <span class="gp">... </span>    <span class="n">ui</span> <span class="o">=</span> <span class="p">{</span>
 <span class="gp">... </span>        <span class="n">UIParam</span><span class="o">.</span><span class="n">TE</span><span class="p">:</span> <span class="n">TimeParam</span><span class="p">(</span><span class="s2">"te"</span><span class="p">,</span> <span class="n">range_min</span><span class="o">=</span><span class="mi">1000</span><span class="p">,</span> <span class="n">range_max</span><span class="o">=</span><span class="mi">80000</span><span class="p">,</span> <span class="n">range_incr</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>
 <span class="gp">... </span>                        <span class="n">presets</span><span class="o">=</span><span class="p">{</span><span class="n">TEPreset</span><span class="o">.</span><span class="n">MINIMUM</span><span class="p">:</span> <span class="kc">None</span><span class="p">}),</span>
@@ -636,7 +636,7 @@ every <code class="docutils literal notranslate"><span class="pre">--plugins</sp
 <div class="pst-scrollable-table-container"><table class="table">
 <thead>
 <tr class="row-odd"><th class="head"><p>Plugin</p></th>
-<th class="head"><p>Reconstruction</p></th>
+<th class="head"><p>Paired reconstruction</p></th>
 </tr>
 </thead>
 <tbody>
@@ -655,6 +655,10 @@ every <code class="docutils literal notranslate"><span class="pre">--plugins</sp
 </tbody>
 </table>
 </div>
+<p>The pair is what a console reconstructs a shipped sequence with when the scan
+names no reconstruction (<a class="reference internal" href="virtual-scanner.html"><span class="doc">Scanning a phantom without a scanner</span></a>); a scan can name another, and
+the reconstruction client of a scanner names one in its config
+(<a class="reference internal" href="reconstruction-client.html"><span class="doc">Reconstruction clients</span></a>).</p>
 <p>A 3D sequence takes its number of partitions from the number of slices. The
 Cartesian ones take <code class="docutils literal notranslate"><span class="pre">Ry</span></code>, and the 3D ones <code class="docutils literal notranslate"><span class="pre">Rz</span></code>, as their undersampling.</p>
 </section>

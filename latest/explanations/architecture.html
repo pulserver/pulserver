@@ -593,9 +593,10 @@ design of the design store, pushes the design to the proxy when the proxy
 keeps a store of its own, and replies its identifier (<a class="reference internal" href="designs.html"><span class="doc">Designs and the design store</span></a>,
 <a class="reference internal" href="ir-cache.html"><span class="doc">The scanner IR</span></a>). The interpreter loads the IR cache and plays the sequence.</p></li>
 <li><p>The reconstruction client streams the raw data of the series as MRD. The
-header names the design the series was played from.</p></li>
+header names the design the series was played from, and the client’s config
+names the reconstruction plugin.</p></li>
 <li><p>The proxy reads the design’s sequence files, completes the MRD header and
-every acquisition from them, and runs the reconstruction plugin the sequence
+every acquisition from them, and runs the reconstruction plugin the config
 names in a worker process, or forwards the completed series to a
 reconstruction server on another computer (<a class="reference internal" href="reconstruction.html"><span class="doc">Raw-data enrichment and routing</span></a>). The
 images return to the console through the client’s connection.</p></li>
