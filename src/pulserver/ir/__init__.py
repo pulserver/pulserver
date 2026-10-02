@@ -16,6 +16,7 @@ from ._convert import (
 )
 from ._playout import Prescan, playout
 from ._source import played_rf
+from ._vendor import read_vendor
 from ._waves import plan_waves, repetition_gradients, sample_wave
 
 __all__ = [
@@ -36,6 +37,7 @@ __all__ = [
     "played_rf",
     "playout",
     "prescribe",
+    "read_vendor",
     "repetition_gradients",
     "sample_wave",
     "sar_ratios",

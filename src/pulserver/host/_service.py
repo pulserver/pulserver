@@ -239,23 +239,26 @@ def import_chain(
 
 
 def identified_limits(limits: Mapping[str, Any]) -> dict[str, Any]:
-    """Return limits with the digest of the VOP file they name.
+    """Return limits with the digest of each file they name: the VOP and vendor files.
 
-    A design whose SAR ratios came from one VOP file is not the design of
-    another file written to the same path.
+    A design converted under one file is not the design of another file
+    written to the same path.
 
     Raises
     ------
     CallError
-        If the VOP file cannot be read.
+        If a named file cannot be read.
     """
-    if "vop_file" not in limits:
-        return dict(limits)
-    try:
-        digest = hashlib.sha256(Path(str(limits["vop_file"])).read_bytes()).hexdigest()
-    except OSError as error:
-        raise CallError(f"cannot read the VOP file: {error}") from None
-    return {**limits, "vop_file_sha256": digest}
+    identified = dict(limits)
+    for key in ("vop_file", "ir_vendor_file"):
+        if key not in limits:
+            continue
+        try:
+            content = Path(str(limits[key])).read_bytes()
+        except OSError as error:
+            raise CallError(f"cannot read the {key}: {error}") from None
+        identified[f"{key}_sha256"] = hashlib.sha256(content).hexdigest()
+    return identified
 
 
 def call(name: str, **inputs: Any) -> tuple[int, str]:

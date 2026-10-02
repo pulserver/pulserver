@@ -30,6 +30,7 @@ passes and the cache layout are described in {doc}`../explanations/ir-cache`.
 | {obj}`~pulserver.ir.WaveBudget` | The waveform memory, gradient raster, load rate and slots per position a playout affords the waves, which a cache is converted for. |
 | {obj}`~pulserver.ir.Grouping` | How a repetition's blocks become the units a machine plays: where a boundary may fall, where it must, and whether few are preferred. |
 | {obj}`~pulserver.ir.VendorProfile` | What a cache holds its numbers as, for the machine that reads it: a sequencer that plays integers is given integers, already scaled, so it converts nothing while it plays. |
+| {obj}`~pulserver.ir.read_vendor` | The profile and grouping a vendor file states, refusing a file that states anything else or leaves a field out. |
 | {obj}`~pulserver.ir.Quantity` | The format one quantity is stored in, and the SI value of one integer step. |
 | {obj}`~pulserver.ir.Format` | Whether a quantity is stored as a float in its SI unit or as an integer. |
 | {obj}`~pulserver.ir.sample_wave` | A cache's wave on a playout's gradient raster, as loaded into a region of its waveform memory. |

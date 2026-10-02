@@ -14,7 +14,7 @@ from pypulseqpp import safety
 
 from .. import ir
 
-_IR_OPTIONS = ("ir_vendor", "ir_label_column_map", "ir_cache_ext")
+_IR_OPTIONS = ("ir_vendor", "ir_label_column_map", "ir_cache_ext", "ir_vendor_file")
 _WAVE_BUDGET = {
     "ir_wave_max_samples": ("max_samples", int),
     "ir_wave_raster_us": ("raster_us", float),
@@ -45,8 +45,9 @@ def split_limits(
 
     Keys starting with ``ir_`` are conversion options: ``ir_vendor``,
     ``ir_label_column_map`` (three integers separated by spaces),
-    ``ir_cache_ext``, and the playout's waveform memory the cache lays the
-    waves out for, the fields of :class:`pulserver.ir.WaveBudget` prefixed
+    ``ir_cache_ext``, ``ir_vendor_file`` (the file
+    :func:`pulserver.ir.read_vendor` reads the profile and grouping from), and
+    the playout's waveform memory the cache lays the waves out for, the fields of :class:`pulserver.ir.WaveBudget` prefixed
     ``ir_wave_``, of which ``ir_wave_max_samples`` and ``ir_wave_raster_us``
     are required together. Keys starting with ``pns_``, ``forbidden_band_`` and
     ``vop_`` are the check limits of :func:`check_limits`, and those starting
@@ -58,8 +59,8 @@ def split_limits(
     ------
     ValueError
         If ``B0`` is missing, an ``ir_`` key is not a conversion option, the
-        waveform memory is incomplete or out of range, or the design or check
-        limits are malformed.
+        vendor file cannot be read, the waveform memory is incomplete or out
+        of range, or the design or check limits are malformed.
     """
     if "B0" not in limits:
         raise ValueError(
@@ -83,6 +84,13 @@ def split_limits(
         options["label_column_map"] = tuple(int(v) for v in values)
     if "ir_cache_ext" in limits:
         options["cache_ext"] = str(limits["ir_cache_ext"])
+    if "ir_vendor_file" in limits:
+        try:
+            options["profile"], options["grouping"] = ir.read_vendor(
+                str(limits["ir_vendor_file"])
+            )
+        except OSError as error:
+            raise ValueError(f"cannot read the vendor file: {error}") from None
     budget = _wave_budget(limits)
     if budget is not None:
         options["wave_budget"] = budget
