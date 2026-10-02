@@ -24,7 +24,7 @@ RUN SETUPTOOLS_SCM_PRETEND_VERSION=0.0.0 \
 
 FROM python:3.12-slim
 
-# torch's CPU build: bartorch reconstructs the non-Cartesian scans with it, and
+# torch's CPU build: bartorch reconstructs the shipped sequences with it, and
 # no card is used.
 RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
 

@@ -220,13 +220,14 @@ class ReconBuffer:
         MRD trajectories are ``(samples, dimensions)`` and are stored transposed.
         An acquisition may carry fewer trailing dimensions than its neighbours --
         the centre partition of a slab traverses no kz -- and the rows it omits stay
-        0.
+        0. A trajectory whose samples are not those placed, as after a chain
+        resampled the readout, is not stored.
         """
         traj = getattr(acquisition, "traj", None)
         if traj is None:
             return
         traj = np.asarray(traj)
-        if traj.size == 0:
+        if traj.size == 0 or traj.shape[0] != readout.stop - readout.start:
             return
         dimensions = int(traj.shape[-1])
         if self.trajectory is None:

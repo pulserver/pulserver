@@ -1,4 +1,4 @@
-"""Non-Cartesian reconstruction with bartorch's NUFFT, one least-squares image per coil."""
+"""Non-Cartesian parallel-imaging compressed-sensing reconstruction with bartorch, as ``bart nlinv -t`` and ``bart pics -t``."""
 
 from __future__ import annotations
 
@@ -9,20 +9,21 @@ from typing import Any
 import numpy as np
 
 from ...mrd._acquisitions import AcquisitionFlag
-from ...mrd._images import coil_combine
+from ...mrd._images import center_crop
 from ...mrd._metadata import acquisition_label, max_stored_value
 from ..plugin import ReconContext, ReconPlugin, ReconResult
 from .cartesian import last_average, loop_position
 
 
 class NufftRecon(ReconPlugin):
-    """Root-sum-of-squares image of each slice, contrast, cardiac phase, set and repetition of a non-Cartesian scan, made as each closes.
+    """Image of each slice, contrast, cardiac phase, set and repetition of a non-Cartesian scan, a ``pics`` solve made as each closes.
 
-    Each coil's image ``x`` minimises ``|A x - y|^2 + lambda |x|^2`` over its
-    samples ``y``, with ``A`` bartorch's NUFFT, so no density compensation is
-    assumed of the trajectory; ``lambda`` is ``damping`` times the largest
-    eigenvalue of ``A^H A``, which :func:`bartorch.optim.maxeigen` estimates.
-    The trajectory is the one the proxy's enrichment writes, which
+    The coil sensitivities are fitted by nonlinear inversion to the samples
+    near the k-space centre (:func:`sensitivities`), and the image minimises
+    ``|P F S x - y|^2 + lambda |W x|_1`` over them (``bart pics -t -R W``),
+    ``F`` bartorch's NUFFT, so no density compensation is assumed of the
+    trajectory; the step is the reciprocal of the largest eigenvalue of the
+    normal operator (``bart pics -e``). The trajectory is the one the proxy's enrichment writes, which
     :meth:`~pulserver.recon.ReconBuffer.grid_trajectory` scales to the image
     grid. A stack of spokes or spirals is Fourier transformed along its
     partitions first and fitted partition by partition. Images close on the
@@ -33,20 +34,20 @@ class NufftRecon(ReconPlugin):
 
     Parameters
     ----------
+    wavelet
+        ``lambda``, relative to the data scaling ``pics`` estimates.
     iterations
-        Conjugate-gradient steps of each fit, from zero.
-    damping
-        Tikhonov weight as a fraction of the largest eigenvalue of ``A^H A``.
+        Iterations of the solve.
     """
 
-    def __init__(self, iterations: int = 30, damping: float = 0.05) -> None:
+    def __init__(self, wavelet: float = 0.005, iterations: int = 30) -> None:
         super().__init__(
             branches={AcquisitionFlag.LAST_IN_SLICE: "imaging"},
             reject_flags=AcquisitionFlag.IS_NOISE_MEASUREMENT
             | AcquisitionFlag.IS_PHASECORR_DATA,
         )
+        self.wavelet = wavelet
         self.iterations = iterations
-        self.damping = damping
 
     def startup(self, context: ReconContext) -> None:
         super().startup(context)
@@ -78,7 +79,7 @@ class NufftRecon(ReconPlugin):
         return ReconResult(
             np.around(image).astype(np.int16),
             attributes={
-                "ImageProcessingHistory": ["PULSERVER", "PYTHON", "NUFFT"],
+                "ImageProcessingHistory": ["PULSERVER", "PYTHON", "PICS"],
                 "WindowCenter": str((max_stored_value(context.header) + 1) // 2),
                 "WindowWidth": str(max_stored_value(context.header) + 1),
             },
@@ -91,10 +92,9 @@ class NufftRecon(ReconPlugin):
         shape: tuple[int, ...],
         device: str | None,
     ) -> np.ndarray:
-        """Return the root-sum-of-squares image of ``(coils, [partitions,] shots, samples)`` k-space."""
+        """Return the magnitude image of ``(coils, [partitions,] shots, samples)`` k-space."""
         import torch
-        from bartorch import optim
-        from bartorch.linop import NUFFT
+        from bartorch import apps, priors
 
         plane = shape[-2:]
         if kspace.ndim == 4:
@@ -108,23 +108,48 @@ class NufftRecon(ReconPlugin):
             stack = [(kspace, trajectory)]
         images = []
         for samples, points in stack:
-            operator = NUFFT(
-                torch.from_numpy(np.ascontiguousarray(points)).to(device),
-                image_shape=(samples.shape[0], *plane),
-            )
-            coils = optim.cg(
-                torch.from_numpy(np.ascontiguousarray(samples, dtype=np.complex64)).to(
-                    device
-                ),
-                operator,
-                self.damping * optim.maxeigen(operator),
+            samples = torch.from_numpy(
+                np.ascontiguousarray(samples, dtype=np.complex64)
+            ).to(device)
+            points = torch.from_numpy(np.ascontiguousarray(points)).to(device)
+            maps = sensitivities(samples, points)
+            image = apps.pics(
+                samples,
+                maps,
+                traj=points,
+                regularizers=priors.Wavelet((-1, -2), self.wavelet),
                 maxiter=self.iterations,
+                eigen_step=True,
             )
-            images.append(coil_combine(coils.cpu().numpy(), coil_axis=0))
+            image = image.abs().cpu().numpy().reshape(maps.shape[-2:])
+            images.append(np.array(center_crop(image, plane)))
         return np.stack(images) if len(images) > 1 else images[0]
 
 
 PLUGIN = NufftRecon()
+
+
+def sensitivities(samples, points, radius: float = 12.0):
+    """Return one set of coil sensitivities of ``(coils, shots, samples)`` k-space at ``points``, as ``bart nlinv -m 1 -t``.
+
+    The fit is to the samples within ``radius`` of the k-space centre, in
+    units of the image grid, the rest zeroed, so the sensitivities are smooth.
+    One coil has unit sensitivity.
+    """
+    import torch
+    from bartorch import tools
+
+    if samples.shape[0] == 1:
+        size = [int(n) for n in tools.estdims(points.real.cpu()).split()]
+        return torch.ones(
+            (1, size[1], size[0]), dtype=samples.dtype, device=samples.device
+        )
+    centre = points.real.square().sum(dim=-1).sqrt() <= radius
+    _, maps = tools.nlinv(
+        samples * centre, traj=points, maps=1, return_sensitivities=True
+    )
+    maps = maps.reshape(samples.shape[0], *maps.shape[-2:])
+    return maps / maps.abs().square().sum(dim=0, keepdim=True).sqrt().clamp_min(1e-12)
 
 
 def _loop_index(buffer: Any, acquisition: Any) -> tuple[Any, ...]:
