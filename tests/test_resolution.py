@@ -5,7 +5,7 @@ import pypulseqpp as pp
 import pytest
 from pypulseqpp import sequences
 
-from pulserver.design import FloatParam, ScannerSequence, TimeParam, load_plugin
+from pulserver.design import FloatParam, SequencePlugin, TimeParam, load_plugin
 from pulserver.protocol import (
     PRESCRIPTION,
     FloatKey,
@@ -75,17 +75,17 @@ class PrescannedApp(sequences.SequenceApp):
         self.seq.add_block(pp.make_delay(self.tr))
 
 
-class Stated(ScannerSequence):
+class Stated(SequencePlugin):
     app = StatedApp
-    ui = {
+    protocol = {
         UIParam.TE: TimeParam("te", range_max=80000, presets={TEPreset.MINIMUM: None}),
         UIParam.TR: TimeParam("tr", range_max=5_000_000),
     }
 
 
-class Prescanned(ScannerSequence):
+class Prescanned(SequencePlugin):
     app = PrescannedApp
-    ui = {UIParam.TR: TimeParam("tr", range_max=5_000_000)}
+    protocol = {UIParam.TR: TimeParam("tr", range_max=5_000_000)}
 
 
 @pytest.fixture(scope="module")
@@ -150,9 +150,9 @@ def test_an_infeasible_protocol_is_invalid_with_the_design_error_as_info(tiny, g
     assert "TR" in gre2d.validate(SYSTEM, {"TR": 1000}).info
 
 
-class Defaulted(ScannerSequence):
+class Defaulted(SequencePlugin):
     app = StatedApp
-    ui = {
+    protocol = {
         UIParam.TE: TimeParam(
             "te", range_max=80000, presets={TEPreset.MINIMUM: None}, default=4000
         ),
@@ -170,8 +170,9 @@ def test_an_entry_s_default_is_the_protocol_s_initial_value_in_place_of_the_appl
 
 def test_a_time_entry_defaults_to_a_preset_it_offers_and_no_other():
     def bound(**entry):
-        ui = {UIParam.TE: TimeParam("te", default=TEPreset.MINIMUM, **entry)}
-        return type("Bound", (ScannerSequence,), {"app": StatedApp, "ui": ui})()
+        entries = {UIParam.TE: TimeParam("te", default=TEPreset.MINIMUM, **entry)}
+        attributes = {"app": StatedApp, "protocol": entries}
+        return type("Bound", (SequencePlugin,), attributes)()
 
     offered = bound(presets={TEPreset.MINIMUM: None})
 
@@ -187,9 +188,11 @@ def test_a_preset_the_entry_does_not_offer_is_invalid(tiny):
     assert "preset" in reply.info
 
 
-def test_a_request_for_an_undeclared_entry_is_refused(tiny):
-    with pytest.raises(ValueError, match="flip"):
-        tiny.validate(SYSTEM, {"flip": 10.0})
+def test_a_request_for_an_undeclared_entry_is_invalid_and_names_it(tiny):
+    reply = tiny.validate(SYSTEM, {"flip": 10.0})
+    assert not reply.valid
+    assert "flip" in reply.info
+    assert "flip" not in reply.values
 
 
 @pytest.mark.parametrize(("plugin", "prescription"), PRESCRIPTIONS)
@@ -215,8 +218,8 @@ def test_a_resolved_protocol_survives_cv_storage(plugin, prescription, request):
     }
 
 
-def test_generate_writes_the_resolved_design(tiny, tmp_path):
-    validation, paths = tiny.generate(SYSTEM, {"TE": TEPreset.MINIMUM}, tmp_path)
+def test_design_writes_the_resolved_design(tiny, tmp_path):
+    validation, paths = tiny.design(SYSTEM, {"TE": TEPreset.MINIMUM}, tmp_path)
     assert validation.values["TE"] == 2500
     assert [Path(p).name for p in paths] == ["sequence.seq"]
     seq = pp.Sequence()
@@ -225,13 +228,13 @@ def test_generate_writes_the_resolved_design(tiny, tmp_path):
 
 
 def test_nothing_is_written_for_an_invalid_request(tiny, tmp_path):
-    validation, paths = tiny.generate(SYSTEM, {"TE": 1000}, tmp_path)
+    validation, paths = tiny.design(SYSTEM, {"TE": 1000}, tmp_path)
     assert not validation.valid
     assert paths == []
     assert list(tmp_path.iterdir()) == []
 
 
-def test_a_plugin_file_must_define_exactly_one_scanner_sequence(tmp_path):
+def test_a_plugin_file_must_define_exactly_one_sequence_plugin(tmp_path):
     empty = tmp_path / "empty.py"
     empty.write_text("VALUE = 1\n")
     with pytest.raises(ValueError, match="defines 0"):
@@ -271,17 +274,20 @@ def test_a_request_whose_rotation_is_not_orthonormal_is_invalid(tiny):
     assert "not orthonormal" in reply.info
 
 
-def test_a_scanner_sequence_may_not_bind_a_prescription_entry(tiny):
+def test_a_sequence_plugin_may_not_bind_a_prescription_entry(tiny):
     with pytest.raises(ValueError, match="prescription entries"):
         type(
             "Moved",
-            (ScannerSequence,),
-            {"app": type(tiny).app, "ui": {FloatKey.FOV_OFFSET_X: FloatParam("te")}},
+            (SequencePlugin,),
+            {
+                "app": type(tiny).app,
+                "protocol": {FloatKey.FOV_OFFSET_X: FloatParam("te")},
+            },
         )
 
 
-def test_a_sequence_without_ui_plays_its_application_s_defaults():
-    class Bare(ScannerSequence):
+def test_a_sequence_without_protocol_plays_its_application_s_defaults():
+    class Bare(SequencePlugin):
         app = StatedApp
 
     assert set(Bare().listing()) == set(PRESCRIPTION)
@@ -291,6 +297,6 @@ def test_a_sequence_without_ui_plays_its_application_s_defaults():
 def test_an_entry_the_interpreter_does_not_know_is_refused_with_the_names_it_resembles():
     with pytest.raises(ValueError, match=r"did you mean \['TE'"):
 
-        class Lowercase(ScannerSequence):
+        class Lowercase(SequencePlugin):
             app = StatedApp
-            ui = {"te": TimeParam("te")}
+            protocol = {"te": TimeParam("te")}

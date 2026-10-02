@@ -6,7 +6,7 @@ from pathlib import Path
 import pypulseqpp as pp
 import pytest
 
-from pulserver.design import IntParam, Protocol, ScannerSequence, load_plugin
+from pulserver.design import IntParam, Protocol, SequencePlugin, load_plugin
 from pulserver.protocol import (
     BoolKey,
     ConfigKey,
@@ -95,24 +95,27 @@ def test_a_user_entry_outside_the_table_is_refused(n):
 def test_a_scanner_sequence_refuses_a_name_the_interpreter_does_not_know():
     with pytest.raises(ValueError, match=r"\['Nx'\]"):
 
-        class Misspelled(ScannerSequence):
-            ui = {"Nx": IntParam("n_x")}
+        class Misspelled(SequencePlugin):
+            protocol = {"Nx": IntParam("n_x")}
 
 
 def test_a_scanner_sequence_stores_its_entries_under_key_members():
-    class Keyed(ScannerSequence):
-        ui = {UIParam.NX: IntParam("n_x"), UIParam.user_value(0): IntParam("n_y")}
+    class Keyed(SequencePlugin):
+        protocol = {
+            UIParam.NX: IntParam("n_x"),
+            UIParam.user_value(0): IntParam("n_y"),
+        }
 
-    assert [type(key) for key in Keyed.ui] == [IntKey, UserKey]
-    assert list(Keyed.ui) == ["nx", "user0_value"]
+    assert [type(key) for key in Keyed.protocol] == [IntKey, UserKey]
+    assert list(Keyed.protocol) == ["nx", "user0_value"]
 
 
 def test_a_plain_string_naming_an_entry_is_stored_as_its_member():
-    class Plain(ScannerSequence):
-        ui = {"nx": IntParam("n_x"), "user0_name": IntParam("n_y")}
+    class Plain(SequencePlugin):
+        protocol = {"nx": IntParam("n_x"), "user0_name": IntParam("n_y")}
 
-    assert [type(key) for key in Plain.ui] == [IntKey, UserNameKey]
-    assert Plain.ui[IntKey.NX] == IntParam("n_x")
+    assert [type(key) for key in Plain.protocol] == [IntKey, UserNameKey]
+    assert Plain.protocol[IntKey.NX] == IntParam("n_x")
 
 
 @pytest.fixture(scope="module")
@@ -123,9 +126,9 @@ def typed():
 def test_a_protocol_keeps_its_typed_keys(typed):
     listing = typed.listing()
     wire = {key: p.value for key, p in listing.items() if p.editable}
-    protocol = Protocol.from_wire(typed.ui, wire, SYSTEM)
+    protocol = Protocol.from_wire(typed.protocol, wire, SYSTEM)
     stages = {
-        "ui": typed.ui,
+        "entries": typed.protocol,
         "listing": listing,
         "protocol": protocol,
         "replaced": protocol.replace({UIParam.NX: 3}),

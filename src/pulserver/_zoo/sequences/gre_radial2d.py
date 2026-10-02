@@ -2,13 +2,13 @@
 
 from pypulseqpp.sequences.sequence.gre_radial2D_sequence import GreRadial2DApp
 
-from pulserver.design import FloatParam, IntParam, ScannerSequence, TimeParam
+from pulserver.design import FloatParam, IntParam, SequencePlugin, TimeParam
 from pulserver.protocol import TEPreset, TRPreset, UIParam
 
 
-class GreRadial2D(ScannerSequence):
+class GreRadial2D(SequencePlugin):
     app = GreRadial2DApp
-    ui = {
+    protocol = {
         UIParam.FLIP: FloatParam(
             "flip_angle_deg", unit="deg", range_min=1.0, range_max=90.0
         ),

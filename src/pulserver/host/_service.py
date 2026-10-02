@@ -8,6 +8,7 @@ the designs it adds to a :class:`~pulserver.host.DesignStore`.
 from __future__ import annotations
 
 import datetime
+import functools
 import hashlib
 import inspect
 import shutil
@@ -20,7 +21,7 @@ import pypulseqpp as pp
 
 from .. import __version__, _plugins, ir
 from .._plugins import PluginPath
-from ..design import ScannerSequence, load_plugin
+from ..design import Protocol, SequencePlugin, load_plugin
 from ..protocol import (
     Parameter,
     ProtocolKey,
@@ -85,8 +86,8 @@ def validate(
 ) -> str:
     """Reply ``VALID <seconds>`` or ``INVALID``, an ``INFO`` line and the value block.
 
-    The application is constructed under the design limits and its scan
-    time computed; the sequence is not designed.
+    The plugin evaluates the request under the design limits; the sequence is
+    not generated. The duration is ``?`` where the plugin states no scan time.
     """
     path = str(plugin_path(plugins, plugin))
     listing = _listing(path)
@@ -106,7 +107,7 @@ def generate(
 
     A design already stored for the resolved protocol, the plugin source, the
     package versions and the limits is returned without designing again.
-    Otherwise the application is designed once, under the scanner limits
+    Otherwise the sequence is designed once, under the scanner limits
     capped by the design limits ``design_max_grad`` and ``design_max_slew``,
     written in the logical frame, checked in the physical frame of the
     prescription rotation against the scanner limits with
@@ -131,10 +132,10 @@ def generate(
     scanner = _plugin(path)
     requested = {key: p.value for key, p in listing.items() if p.editable}
     requested.update(request)
-    app, validation = scanner.resolve(design, requested)
-    if app is not None and validation.values != requested:
-        app, validation = scanner.resolve(design, validation.values)
-    if app is None:
+    validation = scanner.validate(design, requested)
+    if validation.valid and validation.values != requested:
+        validation = scanner.validate(design, validation.values)
+    if not validation.valid:
         raise CallError(validation.info)
     source = _source(path)
     identity = design_identity(
@@ -145,7 +146,9 @@ def generate(
         return f"GENERATED {_pushed(store, found, push)}\n"
     staged = store.stage()
     try:
-        paths = scanner.write(app, staged)
+        accepted, paths = scanner.design(design, validation.values, staged)
+        if not accepted.valid:
+            raise CallError(accepted.info)
         rotation = prescribed_rotation(validation.values)
         problems = ir.check(paths[0], system, rotation=rotation, limits=checked)
         if problems:
@@ -157,7 +160,8 @@ def generate(
         )
         # The RF a scanner costs while the operator prescribes, read off the
         # sequence just written rather than designed again for the purpose.
-        pulses = scanner.rf_pulses(paths[0], app.resolved)
+        protocol = Protocol.from_wire(scanner.protocol, validation.values, design)
+        pulses = scanner.rf_pulses(paths[0], protocol.arguments)
         if pulses:
             (staged / PULSES_FILE).write_text(
                 format_pulses(pulses, design_id(identity))
@@ -321,11 +325,11 @@ def _record(limits: Mapping[str, Any]) -> dict[str, Any]:
 
 
 @lru_cache(maxsize=32)
-def _cached(path: str, mtime_ns: int) -> ScannerSequence:  # noqa: ARG001 -- part of the key
+def _cached(path: str, mtime_ns: int) -> SequencePlugin:  # noqa: ARG001 -- part of the key
     return load_plugin(Path(path))
 
 
-def _plugin(path: str) -> ScannerSequence:
+def _plugin(path: str) -> SequencePlugin:
     """Return the plugin at ``path``, imported again when the file changed."""
     return _cached(path, Path(path).stat().st_mtime_ns)
 
@@ -359,14 +363,17 @@ def _stated_pulses(store: DesignStore | None, plugin: str) -> str:
 def _source(path: str) -> str:
     """Return a digest of the code that designs with the plugin at ``path``.
 
-    Covers the plugin file, the source file of the application it binds, and
-    the installed versions of pypulseqpp and pulserver. Modules the
-    application imports from elsewhere are covered only through those
-    versions.
+    Covers the plugin file, the source file of the app it binds, and the
+    installed versions of pypulseqpp and pulserver. A :func:`functools.partial`
+    app is covered through the function it wraps. Modules the app imports from
+    elsewhere are covered only through those versions.
     """
     digest = hashlib.sha256(Path(path).read_bytes())
+    app = _plugin(path).app
+    while isinstance(app, functools.partial):
+        app = app.func
     try:
-        module = inspect.getsourcefile(_plugin(path).app)
+        module = inspect.getsourcefile(app)
     except TypeError:
         module = None
     if module:

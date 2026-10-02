@@ -2,13 +2,13 @@
 
 from pypulseqpp.sequences.sequence.gre2D_sequence import Gre2DApp
 
-from pulserver.design import FloatParam, IntParam, ScannerSequence, TimeParam
+from pulserver.design import FloatParam, IntParam, SequencePlugin, TimeParam
 from pulserver.protocol import TEPreset, TRPreset, UIParam
 
 
-class Gre2D(ScannerSequence):
+class Gre2D(SequencePlugin):
     app = Gre2DApp
-    ui = {
+    protocol = {
         UIParam.TE: TimeParam(
             "te",
             range_min=1000,

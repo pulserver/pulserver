@@ -10,7 +10,7 @@ from _host import LIMITS, PLUGINS, value_block
 from pulserver.design import (
     ChoiceParam,
     Protocol,
-    ScannerSequence,
+    SequencePlugin,
     StringListParam,
     TimeParam,
     load_plugin,
@@ -144,9 +144,10 @@ def typed():
     return load_plugin(PLUGINS / "typed.py")
 
 
-def _bound(typed, ui):
-    """A scanner sequence over the application of ``typed`` with the entries ``ui``."""
-    return type("Bound", (ScannerSequence,), {"app": type(typed).app, "ui": ui})()
+def _bound(typed, entries):
+    """A plugin over the application of ``typed`` with ``entries`` as its protocol."""
+    attributes = {"app": type(typed).app, "protocol": entries}
+    return type("Bound", (SequencePlugin,), attributes)()
 
 
 def _wire(typed, changes=None):
@@ -156,12 +157,17 @@ def _wire(typed, changes=None):
     return wire
 
 
+def _protocol(plugin, changes=None):
+    """The :class:`Protocol` the wire values of ``plugin`` stand for, with ``changes``."""
+    return Protocol.from_wire(plugin.protocol, _wire(plugin, changes), SYSTEM)
+
+
 def test_only_the_wire_turns_keys_into_strings(typed):
     listing = typed.listing()
     reply = typed.validate(SYSTEM, REQUEST)
     assert reply.valid, reply.info
 
-    for keyed in (typed.ui, listing, reply.values):
+    for keyed in (typed.protocol, listing, reply.values):
         assert all(isinstance(key, ProtocolKey) for key in keyed)
 
     assert format_listing(listing) == TYPED_LISTING
@@ -222,8 +228,9 @@ def test_a_choice_is_a_member_of_its_enum_until_the_wire(typed):
     assert all(type(option) is ImagingMode for option in mode.options)
 
     request = {UIParam.IMAGING_MODE: "3d"}
-    app, reply = typed.resolve(SYSTEM, request)
+    reply = typed.validate(SYSTEM, request)
     assert reply.valid, reply.info
+    app = typed.generate(SYSTEM, _protocol(typed, request))
     assert type(app.mode) is ImagingMode
     assert reply.values[UIParam.IMAGING_MODE] is ImagingMode.THREE_D
 
@@ -284,7 +291,7 @@ def test_a_string_list_param_is_a_choice_param_over_an_enum_of_its_options(typed
     assert format_listing({UIParam.IMAGING_MODE: mode}).splitlines()[1] == (
         "imaging_mode: stringlist|1|2d|3d"
     )
-    app, _ = listed.resolve(SYSTEM, {UIParam.IMAGING_MODE: "2d"})
+    app = listed.generate(SYSTEM, _protocol(listed, {UIParam.IMAGING_MODE: "2d"}))
     assert app.mode == "2d"
     assert isinstance(app.mode, str)
 
@@ -300,7 +307,7 @@ def test_a_protocol_holds_the_values_in_the_units_of_the_application_arguments(t
             UserKey.USER0: 7.5,
         },
     )
-    protocol = Protocol.from_wire(typed.ui, wire, SYSTEM)
+    protocol = Protocol.from_wire(typed.protocol, wire, SYSTEM)
 
     assert protocol[UIParam.TE] == 2.5e-3
     assert protocol[UIParam.TR] is None
@@ -321,7 +328,7 @@ def test_the_prescription_entries_keep_the_units_of_the_wire_and_bind_no_argumen
     typed,
 ):
     wire = _wire(typed, {FloatKey.FOV_OFFSET_X: 12.5})
-    protocol = Protocol.from_wire(typed.ui, wire, SYSTEM)
+    protocol = Protocol.from_wire(typed.protocol, wire, SYSTEM)
     assert protocol[FloatKey.FOV_OFFSET_X] == 12.5
     assert protocol[FloatKey.FOV_ROTATION_22] == 1.0
     assert protocol.to_wire()[FloatKey.FOV_OFFSET_X] == 12.5
@@ -332,14 +339,16 @@ def test_the_prescription_entries_keep_the_units_of_the_wire_and_bind_no_argumen
 def test_a_callable_preset_is_a_function_of_the_scanner_limits(typed):
     shortest = {TEPreset.MINIMUM: lambda system: 250 * system.grad_raster_time}
     raster = _bound(typed, {UIParam.TE: TimeParam("te", presets=shortest)})
-    protocol = Protocol.from_wire(raster.ui, {UIParam.TE: TEPreset.MINIMUM}, SYSTEM)
+    protocol = Protocol.from_wire(
+        raster.protocol, {UIParam.TE: TEPreset.MINIMUM}, SYSTEM
+    )
     assert protocol[UIParam.TE] == pytest.approx(250 * SYSTEM.grad_raster_time)
     assert protocol.preset(UIParam.TE) is TEPreset.MINIMUM
 
 
 def test_a_protocol_converts_back_to_the_wire_values_it_was_made_from(typed):
     wire = _wire(typed, {UIParam.TE: TEPreset.MINIMUM, UIParam.NX: 9})
-    protocol = Protocol.from_wire(typed.ui, wire, SYSTEM)
+    protocol = Protocol.from_wire(typed.protocol, wire, SYSTEM)
     assert protocol.to_wire() == wire
 
 
@@ -347,27 +356,27 @@ def test_a_float_is_carried_to_six_significant_digits_and_a_time_to_a_microsecon
     typed,
 ):
     wire = _wire(typed, {UIParam.TE: 2500, UserKey.USER0: 7.1234567})
-    protocol = Protocol.from_wire(typed.ui, wire, SYSTEM)
+    protocol = Protocol.from_wire(typed.protocol, wire, SYSTEM)
     assert protocol.to_wire()[UserKey.USER0] == 7.12346
     assert protocol.replace({UIParam.TE: 2.5004e-3}).to_wire()[UIParam.TE] == 2500
     assert protocol.replace({UIParam.TE: 2.5006e-3}).to_wire()[UIParam.TE] == 2501
 
 
 def test_a_protocol_names_the_preset_a_time_shows(typed):
-    protocol = Protocol.from_wire(typed.ui, _wire(typed), SYSTEM)
+    protocol = Protocol.from_wire(typed.protocol, _wire(typed), SYSTEM)
     assert protocol.preset(UIParam.TR) is TRPreset.MINIMUM
     assert protocol.preset(UIParam.TE) is None
     assert protocol.preset(UIParam.NX) is None
 
     shortest = Protocol.from_wire(
-        typed.ui, _wire(typed, {UIParam.TE: TEPreset.MINIMUM}), SYSTEM
+        typed.protocol, _wire(typed, {UIParam.TE: TEPreset.MINIMUM}), SYSTEM
     )
     assert shortest.preset(UIParam.TE) is TEPreset.MINIMUM
     assert shortest[UIParam.TE] is None
 
 
 def test_a_time_given_in_seconds_shows_no_preset(typed):
-    protocol = Protocol.from_wire(typed.ui, _wire(typed), SYSTEM)
+    protocol = Protocol.from_wire(typed.protocol, _wire(typed), SYSTEM)
     replaced = protocol.replace({UIParam.TR: 10e-3})
     assert replaced[UIParam.TR] == 10e-3
     assert replaced.preset(UIParam.TR) is None
@@ -376,7 +385,7 @@ def test_a_time_given_in_seconds_shows_no_preset(typed):
 
 
 def test_replacing_values_returns_a_new_protocol_and_leaves_the_old_one(typed):
-    protocol = Protocol.from_wire(typed.ui, _wire(typed), SYSTEM)
+    protocol = Protocol.from_wire(typed.protocol, _wire(typed), SYSTEM)
     changed = protocol.replace(
         {UIParam.NX: 9, UIParam.IMAGING_MODE: "3d", UserKey.USER0: 0.02}
     )
@@ -393,7 +402,7 @@ def test_replacing_values_returns_a_new_protocol_and_leaves_the_old_one(typed):
 
 
 def test_a_protocol_is_an_immutable_mapping(typed):
-    protocol = Protocol.from_wire(typed.ui, _wire(typed), SYSTEM)
+    protocol = Protocol.from_wire(typed.protocol, _wire(typed), SYSTEM)
     with pytest.raises(TypeError):
         protocol[UIParam.NX] = 9
     protocol.arguments["n_repetitions"] = 99
@@ -405,15 +414,15 @@ def test_a_protocol_is_an_immutable_mapping(typed):
 
 
 def test_a_protocol_refuses_what_it_does_not_hold(typed):
-    protocol = Protocol.from_wire(typed.ui, _wire(typed), SYSTEM)
+    protocol = Protocol.from_wire(typed.protocol, _wire(typed), SYSTEM)
     with pytest.raises(ValueError, match="flip"):
         protocol.replace({FloatKey.FLIP: 10.0})
     with pytest.raises(ValueError, match="flip"):
-        Protocol.from_wire(typed.ui, {FloatKey.FLIP: 10.0}, SYSTEM)
+        Protocol.from_wire(typed.protocol, {FloatKey.FLIP: 10.0}, SYSTEM)
     with pytest.raises(ValueError, match="is not one of 2d, 3d"):
         protocol.replace({UIParam.IMAGING_MODE: "4d"})
     with pytest.raises(ValueError, match="does not offer preset -3"):
-        Protocol.from_wire(typed.ui, {UIParam.TE: TEPreset.IN_PHASE}, SYSTEM)
+        Protocol.from_wire(typed.protocol, {UIParam.TE: TEPreset.IN_PHASE}, SYSTEM)
 
 
 def test_the_prescription_lines_of_a_block_name_the_entries_by_their_wire_names():

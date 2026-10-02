@@ -53,8 +53,11 @@ design choice, not a time.
 
 **Design.** A *sequence application* is the pypulseqpp `SequenceApp` subclass
 that designs the sequence. A *scanner sequence* is the pulserver
-`ScannerSequence` that binds an application to protocol entries. A *plugin* is
-the file either kind is loaded from; say which kind.
+`SequencePlugin` that binds an *app*, a sequence application or a function
+returning sequences, to protocol entries. A *plugin* is the file either kind is
+loaded from; say which kind. The *evaluation* of a prescription is what the
+scanner sequence's `evaluate` returns: the resolved protocol, the scan time and
+a note.
 
 **Storage.** A *design* is one generated or imported chain with its IR cache,
 immutable once written. Its *identity* is the hash of what it depends on; its
@@ -147,7 +150,7 @@ Every documented quantity carries its unit.
 | Time entry of a protocol, on the wire and in a scanner parameter | integer µs |
 | Time argument of a sequence application | s |
 | Float protocol entry | the entry's `unit`; the argument is the value times `scale` |
-| Scan time in a `VALIDATE` reply | s |
+| Scan time in a `VALIDATE` reply | s; `?` where the evaluation states none |
 | Rasters passed to the IR conversion | s in `pypulseqpp.Opts`, µs in the cache |
 | Gyromagnetic ratio, field strength | Hz/T, T |
 | Field-of-view offset in a protocol or an import block | mm |
@@ -187,7 +190,7 @@ establish scanner or patient safety.
 
 - Never write "safe", "validated", "compliant" or "approved" of a sequence, a
   protocol or a design.
-- A valid `VALIDATE` reply means the sequence application designed the
+- A valid `VALIDATE` reply means the plugin's evaluation accepted the
   prescription under the scanner limits it was given. State that, not more.
 
 ## 6. Source of truth

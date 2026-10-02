@@ -2,13 +2,13 @@
 
 from pypulseqpp.sequences.sequence.gre3D_sequence import Gre3DApp
 
-from pulserver.design import FloatParam, IntParam, ScannerSequence, TimeParam
+from pulserver.design import FloatParam, IntParam, SequencePlugin, TimeParam
 from pulserver.protocol import TEPreset, TRPreset, UIParam
 
 
-class Gre3D(ScannerSequence):
+class Gre3D(SequencePlugin):
     app = Gre3DApp
-    ui = {
+    protocol = {
         UIParam.FLIP: FloatParam(
             "flip_angle_deg", unit="deg", range_min=1.0, range_max=90.0
         ),

@@ -9,10 +9,11 @@ what the resolved protocol depends on: the receiver bandwidth a readout can
 realize on the sampling rasters, and the shortest echo time the readout
 admits.
 
-A request is resolved by designing the sequence under the scanner limits and
-reading back the values the design achieved, as described in
-:doc:`/explanations/protocol`. The sequence is pypulseqpp's shipped
-``Gre2DApp``, bound to five protocol entries.
+A request is resolved by evaluating the protocol under the scanner limits,
+which constructs the application and so designs the sequence, and reading back
+the values the design achieved, as described in :doc:`/explanations/protocol`.
+The sequence is pypulseqpp's shipped ``Gre2DApp``, bound to five protocol
+entries.
 
 Outline:
 
@@ -48,13 +49,13 @@ import numpy as np
 import pypulseqpp as pp
 from pypulseqpp.sequences.sequence.gre2D_sequence import Gre2DApp
 
-from pulserver.design import FloatParam, IntParam, ScannerSequence, TimeParam
+from pulserver.design import FloatParam, IntParam, SequencePlugin, TimeParam
 from pulserver.protocol import TEPreset, TRPreset, UIParam, format_listing
 
 
-class Gre2D(ScannerSequence):
+class Gre2D(SequencePlugin):
     app = Gre2DApp
-    ui = {
+    protocol = {
         UIParam.TE: TimeParam(
             "te", range_min=1000, range_max=80000, presets={TEPreset.MINIMUM: None}
         ),
@@ -187,7 +188,7 @@ plt.show()
 # -------------------------------------------
 #
 # A prescription the design cannot realize is invalid. The reply carries the
-# request unchanged and the error the application raised, which the
+# request unchanged and the message of the error the design raised, which the
 # interpreter shows to the operator.
 
 reply = gre.validate(system, {"TE": 1500, "nx": 256})
@@ -202,6 +203,6 @@ print(reply.info)
 
 first = gre.validate(system, {"TE": TEPreset.MINIMUM, "nx": 192, "bandwidth": 150e3})
 again = gre.validate(system, first.values)
-for key in gre.ui:
+for key in gre.protocol:
     print(f"{key}: {first.values[key]}")
 print(again.values == first.values, f"scan time {first.duration:.1f} s")

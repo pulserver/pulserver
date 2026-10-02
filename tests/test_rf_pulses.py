@@ -57,11 +57,11 @@ def _plugin(tmp_path, body):
     plugins.mkdir(exist_ok=True)
     (plugins / "linked.py").write_text(
         "from pypulseqpp.sequences.sequence.gre2D_sequence import Gre2DApp\n"
-        "from pulserver.design import FloatParam, ScannerSequence\n"
+        "from pulserver.design import FloatParam, SequencePlugin\n"
         "from pulserver.protocol import UIParam\n"
-        "class Linked(ScannerSequence):\n"
+        "class Linked(SequencePlugin):\n"
         "    app = Gre2DApp\n"
-        "    ui = {UIParam.FLIP: FloatParam('flip_angle_deg', unit='deg',\n"
+        "    protocol = {UIParam.FLIP: FloatParam('flip_angle_deg', unit='deg',\n"
         "                                   range_min=1.0, range_max=180.0)}\n"
         f"    {body}\n"
         "PLUGIN = Linked()\n"
@@ -114,10 +114,10 @@ def test_a_sequence_no_design_has_been_made_of_states_no_rf(tmp_path):
     plugins.mkdir()
     (plugins / "bare.py").write_text(
         "from pypulseqpp.sequences.sequence.gre2D_sequence import Gre2DApp\n"
-        "from pulserver.design import ScannerSequence\n"
-        "class Bare(ScannerSequence):\n"
+        "from pulserver.design import SequencePlugin\n"
+        "class Bare(SequencePlugin):\n"
         "    app = Gre2DApp\n"
-        "    ui = {}\n"
+        "    protocol = {}\n"
         "PLUGIN = Bare()\n"
     )
     assert parse_pulses(

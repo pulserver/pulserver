@@ -4,13 +4,13 @@ from pypulseqpp.sequences.sequence.se_stack_of_stars3D_sequence import (
     SeStackOfStars3DApp,
 )
 
-from pulserver.design import FloatParam, IntParam, ScannerSequence, TimeParam
+from pulserver.design import FloatParam, IntParam, SequencePlugin, TimeParam
 from pulserver.protocol import TEPreset, TRPreset, UIParam
 
 
-class SeStackOfStars3D(ScannerSequence):
+class SeStackOfStars3D(SequencePlugin):
     app = SeStackOfStars3DApp
-    ui = {
+    protocol = {
         UIParam.TE: TimeParam(
             "te",
             range_min=2000,

@@ -2,13 +2,13 @@
 
 from pypulseqpp.sequences.sequence.gre_multiecho2D_sequence import GreMultiecho2DApp
 
-from pulserver.design import FloatParam, IntParam, ScannerSequence, TimeParam
+from pulserver.design import FloatParam, IntParam, SequencePlugin, TimeParam
 from pulserver.protocol import TEPreset, TRPreset, UIParam
 
 
-class GreMultiecho2D(ScannerSequence):
+class GreMultiecho2D(SequencePlugin):
     app = GreMultiecho2DApp
-    ui = {
+    protocol = {
         UIParam.FLIP: FloatParam(
             "flip_angle_deg", unit="deg", range_min=1.0, range_max=90.0
         ),

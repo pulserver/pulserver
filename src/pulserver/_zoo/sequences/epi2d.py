@@ -4,7 +4,7 @@ import functools
 
 from pypulseqpp.sequences.sequence.epi2D_sequence import Epi2DApp
 
-from pulserver.design import FloatParam, IntParam, ScannerSequence, TimeParam
+from pulserver.design import FloatParam, IntParam, SequencePlugin, TimeParam
 from pulserver.protocol import TEPreset, TRPreset, UIParam
 
 
@@ -16,9 +16,9 @@ class _Epi2DApp(Epi2DApp):
     )
 
 
-class Epi2D(ScannerSequence):
+class Epi2D(SequencePlugin):
     app = _Epi2DApp
-    ui = {
+    protocol = {
         UIParam.FLIP: FloatParam(
             "flip_angle_deg", unit="deg", range_min=1.0, range_max=90.0
         ),
