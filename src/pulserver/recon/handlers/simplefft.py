@@ -15,7 +15,7 @@ import numpy.fft as fft
 
 from ...mrd._acquisitions import AcquisitionFlag
 from ...mrd._images import center_crop, coil_combine
-from ...mrd._metadata import max_stored_value
+from ...mrd._metadata import acquisition_label
 from .._buffers import ReconData
 from ..plugin import ReconContext, ReconPlugin, ReconResult
 
@@ -25,9 +25,9 @@ class SimpleFftRecon(ReconPlugin):
 
     Lines are taken in arrival order rather than placed by their counters,
     so a header that does not describe the encoding is enough. Noise and
-    phase-correction lines are rejected. Images are ``int16``, scaled so their
-    maximum is the header's largest stored value, and cropped to the first
-    encoding space's reconstruction matrix.
+    phase-correction lines are rejected. Images are cropped to the
+    reconstruction matrix of the encoding space of their lines, and their values
+    are those of the transform, unscaled.
     """
 
     def __init__(self) -> None:
@@ -47,11 +47,7 @@ class SimpleFftRecon(ReconPlugin):
         image = _reconstruct(data.acquisitions, context.header)
         return ReconResult(
             image.transpose(),
-            attributes={
-                "ImageProcessingHistory": ["PULSERVER", "PYTHON", "FFT"],
-                "WindowCenter": str((max_stored_value(context.header) + 1) // 2),
-                "WindowWidth": str(max_stored_value(context.header) + 1),
-            },
+            attributes={"ImageProcessingHistory": ["PULSERVER", "PYTHON", "FFT"]},
         )
 
 
@@ -69,12 +65,8 @@ def _reconstruct(lines: list[Any], header: Any) -> np.ndarray:
     data = fft.fftshift(data, axes=(1, 2))
     data = coil_combine(data, coil_axis=0)
 
-    maximum = float(data.max(initial=0.0))
-    if maximum > 0.0:
-        data *= max_stored_value(header) / maximum
-    data = np.around(data).astype(np.int16)
-
-    encoding = header.encoding[0]
+    space = int(acquisition_label(lines[0], "encoding_space_ref", 0) or 0)
+    encoding = header.encoding[space]
     target_x = min(
         int(encoding.reconSpace.matrixSize.x or data.shape[0]), data.shape[0]
     )

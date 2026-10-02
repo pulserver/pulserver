@@ -14,7 +14,7 @@ __all__ = ["ReconBuffer", "ReconData"]
 
 import math
 import warnings
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -411,6 +411,19 @@ class ReconBuffer:
         return self.kspace[(slice(None), *picks)], self.mask[picks]
 
     @property
+    def reference(self) -> Any:
+        """The placed acquisition nearest the k-space centre, ``None`` while none is placed.
+
+        Nearness is the Euclidean distance, in positions on the grid of the
+        space, from ``extent // 2``, where the buffer places the k-space centre,
+        along ``phase_encode`` and, where the space has more than one partition,
+        ``partition``; the first placed of acquisitions at the same distance is
+        returned. A :class:`~pulserver.recon.ReconResult` takes the geometry of
+        the image from this acquisition unless it names another.
+        """
+        return nearest_to_centre(self.space, self.headers)
+
+    @property
     def readout_time(self) -> Any:
         """Sample times relative to the echo, ``(readout,)`` in seconds.
 
@@ -699,6 +712,34 @@ class ReconUnit:
         for placed, readout, _ in readouts:
             buffer.add(placed, readout)
         return buffer
+
+
+def nearest_to_centre(space: EncodingSpace, acquisitions: Iterable[Any]) -> Any:
+    """Return the acquisition placed nearest the k-space centre of ``space``, ``None`` when there are none.
+
+    Distance is Euclidean over the positions on the grid along ``phase_encode``
+    and, where ``space`` has more than one partition, ``partition``, from
+    ``extent // 2``, where a buffer of ``space`` places the centre. The earliest
+    of equally near acquisitions is returned.
+    """
+    axes = [
+        (name, extent)
+        for name, extent in space.extents
+        if name in _COUNTERS and extent > 1
+    ]
+
+    def distance(acquisition: Any) -> int:
+        return sum(
+            (
+                int(acquisition_label(acquisition, _COUNTERS[name], 0) or 0)
+                + space.offset(name)
+                - extent // 2
+            )
+            ** 2
+            for name, extent in axes
+        )
+
+    return min(acquisitions, key=distance, default=None)
 
 
 def readout_roles(acquisition: Any) -> tuple[bool, bool]:

@@ -26,7 +26,7 @@ from pulserver.recon import (
     ReconContext,
     ReconPlugin,
 )
-from pulserver.recon._buffers import ReconUnit
+from pulserver.recon._buffers import ReconUnit, nearest_to_centre
 from pulserver.recon._units import unit_key
 
 N_X = 8
@@ -701,6 +701,62 @@ def test_a_buffer_keeps_the_headers_it_placed():
     unit = fill(header(space()), *sent)
     assert unit.data.headers == sent
     assert unit.acquisitions == sent
+
+
+def test_the_reference_of_a_buffer_is_the_placed_acquisition_nearest_the_k_space_centre():
+    """A scan that starts and ends far from its centre still names the line at it."""
+    sent = [acquire(kspace_encode_step_1=line) for line in range(1, 9)]
+    unit = fill(header(space(y=8, kspace_encoding_step_1=(1, 8, 5))), *sent)
+
+    assert unit.data.reference is sent[4]
+
+
+def test_a_header_that_states_no_centre_has_the_reference_at_half_the_extent():
+    sent = [acquire(kspace_encode_step_1=line) for line in range(N_X)]
+    unit = fill(header(space(y=8)), *sent)
+
+    assert unit.data.reference is sent[4]
+
+
+def test_equally_near_acquisitions_have_the_earliest_placed_as_reference():
+    sent = [acquire(kspace_encode_step_1=line) for line in (5, 3)]
+    unit = fill(header(space(y=8, kspace_encoding_step_1=(0, 7, 4))), *sent)
+
+    assert unit.data.reference is sent[0]
+
+
+def test_the_reference_of_a_volume_is_nearest_in_line_and_partition_together():
+    planes = [
+        acquire(kspace_encode_step_1=line, kspace_encode_step_2=partition)
+        for line, partition in ((0, 3), (1, 4), (2, 0), (2, 2))
+    ]
+    stated = space(
+        y=4, z=8, kspace_encoding_step_1=(0, 3, 2), kspace_encoding_step_2=(0, 6, 3)
+    )
+
+    unit = fill(header(stated), *planes)
+
+    assert unit.data.reference is planes[3]
+
+
+def test_the_partition_does_not_count_toward_the_distance_in_a_space_without_partitions():
+    on_the_centre_line, on_the_centre_partition = (
+        acquire(kspace_encode_step_1=line, kspace_encode_step_2=partition)
+        for line, partition in ((2, 5), (0, 0))
+    )
+    planar = EncodingSpace.from_header(
+        header(space(y=4, kspace_encoding_step_1=(0, 3, 2)))
+    )
+
+    assert planar.partitions == 1
+    assert (
+        nearest_to_centre(planar, [on_the_centre_partition, on_the_centre_line])
+        is on_the_centre_line
+    )
+
+
+def test_a_buffer_with_nothing_placed_has_no_reference():
+    assert ReconBuffer(EncodingSpace.from_header(header(space()))).reference is None
 
 
 def test_the_dtype_is_the_callers_to_choose():

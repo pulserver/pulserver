@@ -46,6 +46,7 @@ import contextlib
 import copy
 import hashlib
 import logging
+import numbers
 import os
 import pickle
 import threading
@@ -76,27 +77,44 @@ from ._units import UnitKey, _Closure, _FlagClosure, unit_key
 
 @dataclass(frozen=True)
 class ReconResult:
-    """Image array for the runtime to package as an MRD image.
+    """Image array for the runtime to package as an MRD image, or as DICOM.
 
-    Geometry and timing come from a reference acquisition, so a plugin builds no
-    image header. Plugins may return ``ismrmrd.Image`` objects instead.
+    The runtime builds the image header, so a plugin builds none. The field of
+    view and matrix are those of the unit's own encoding space; position,
+    orientation, table position and physiology time stamps are those of
+    ``reference``; the acquisition time stamp is the earliest of the unit's
+    imaging acquisitions. Plugins may return ``ismrmrd.Image`` objects instead.
+
+    The MRD image holds the values of ``data`` unchanged, in ``float32`` for
+    real floating-point data and ``complex64`` for complex data; wider types are
+    downcast and integer types are kept. Integers are made only where DICOM is
+    written, from the floating-point values, by one rescale mapping per
+    ``series_index``.
 
     Parameters
     ----------
     data
-        NumPy array or Torch tensor, on any device.
+        NumPy array or Torch tensor, on any device. A ``(z, y, x)`` array
+        becomes one image per partition, each stating the smallest and largest
+        value of the array, of its magnitude when complex, in its meta
+        attributes ``ArrayMinimum`` and ``ArrayMaximum``.
     reference
-        Index into the imaging acquisitions of the unit being emitted; negative
-        values count from the end, ``-1`` being the acquisition that closed it.
+        Acquisition the image takes its geometry from, such as an element of
+        :attr:`ReconBuffer.headers`. ``None`` is the unit's reference
+        acquisition, :attr:`ReconBuffer.reference`. An integer indexes the
+        imaging acquisitions of the unit, negative values counting from the
+        end, and is deprecated.
     series_index
-        MRD ``image_series_index``.
+        MRD ``image_series_index``, which also selects the DICOM series.
     image_index
         MRD ``image_index``; ``None`` numbers images consecutively.
     image_type
         ``"magnitude"``, ``"phase"``, ``"real"``, ``"imaginary"`` or
         ``"complex"``.
     attributes
-        MRD meta attributes, merged over the runtime's defaults.
+        MRD meta attributes, merged over the runtime's defaults. In a DICOM
+        image ``RescaleSlope`` and ``RescaleIntercept`` state the mapping
+        ``value = stored * slope + intercept`` of its stored integers.
     dicom
         Convert the image to DICOM before sending it.
 
@@ -110,12 +128,21 @@ class ReconResult:
     """
 
     data: Any
-    reference: int = 0
+    reference: Any = None
     series_index: int = 0
     image_index: int | None = None
     image_type: str = "magnitude"
     attributes: Mapping[str, Any] = field(default_factory=dict)
     dicom: bool = False
+
+    def __post_init__(self) -> None:
+        if isinstance(self.reference, numbers.Integral):
+            warnings.warn(
+                "ReconResult(reference=<int>) is deprecated; pass an acquisition, "
+                "or None for the unit's reference acquisition",
+                DeprecationWarning,
+                stacklevel=3,
+            )
 
 
 #: What a calibration scan leaves in the exam cache for the series that follow.

@@ -166,6 +166,85 @@ states the echo of the readout it returns by assigning `center_sample`,
 of the acquisition: neither the stream's acquisition nor
 `ReconData.acquisitions` changes.
 
+## Images
+
+A {class}`~pulserver.recon.ReconResult` becomes an MRD image whose header the
+runtime builds from the unit that produced it. The values of the image are those
+of the array the plugin returned.
+
+### Header
+
+The field of view is that of the reconstruction space of the unit's encoding
+space, `(x, y, z)` in mm, so the images of a unit in the second encoding space
+carry the second space's field of view. The matrix is the shape of the returned
+array, which is {attr}`~pulserver.recon.ReconBuffer.image_shape`, the
+reconstruction matrix of the unit's space, for a plugin that uses it.
+
+The position, the orientation (`read_dir`, `phase_dir`, `slice_dir`), the
+patient table position, the physiology time stamps and the user fields are those
+of the unit's *reference acquisition*, the imaging acquisition placed nearest the
+k-space centre, as Gadgetron selects it for an image header. The centre lies at
+`extent // 2` along the phase-encoding axis and, where the encoded space has more
+than one partition, the partition axis, as described under
+{ref}`reconstruction-placement`; nearness is the Euclidean distance from it in
+grid positions. Of acquisitions at the same distance, the first placed is the
+reference. The acquisition time stamp of the image is the earliest of the unit's
+imaging acquisitions.
+
+A plugin reads the reference acquisition as
+{attr}`~pulserver.recon.ReconBuffer.reference`, and takes the geometry from
+another acquisition by passing it as `ReconResult.reference`.
+
+### Values
+
+The MRD image holds the values the plugin returned: `float32` for real
+floating-point data, `complex64` for complex data, wider types being converted
+to these, and integer data in its own type. No scale or normalisation is
+applied, so the ratios between the images of a series, such as the decay across
+the echoes of a multi-echo acquisition or the ratios between frames, are those
+of the reconstruction. The units are the reconstruction's own.
+
+A `(z, y, x)` result becomes one image per partition. Each image states the
+smallest and largest finite value of the result, of its magnitude where it is
+complex, in the meta attributes `ArrayMinimum` and `ArrayMaximum`.
+
+### DICOM pixels
+
+A DICOM dataset stores integer pixels, and the integers are made when a result
+with `dicom=True` is converted, from the image the plugin returned. The
+dataset's rescale maps them to the values of the image,
+`value = stored × RescaleSlope + RescaleIntercept`, with one mapping for each
+DICOM series, a series being the images that share `image_series_index`.
+
+- An integer image is stored as it is. Its dataset carries a rescale only when
+  the attributes of the result state one.
+- The first floating-point image of a series fixes the mapping of the series.
+  The intercept is 0, so that zero is stored as zero, and the slope stores the
+  peak magnitude of the image at half the stored range, which leaves headroom
+  for later images of the series up to twice as large. The stored type is
+  16-bit, signed when that image has a negative value and unsigned when it has
+  none. An image that states `ArrayMinimum` and `ArrayMaximum` is mapped as the
+  array of images it belongs to, so the mapping of a series that begins with a
+  volume does not depend on which partition arrives first. A complex image is
+  stored as its magnitude. An image with no nonzero finite value fixes no
+  mapping.
+- Every later image of the series is stored under the mapping of the series, so
+  the ratios between the values of its images are the ratios between their
+  stored integers.
+- A mapping stated in the attributes of a result, `RescaleSlope` or
+  `RescaleIntercept`, is the mapping of that image:
+  `stored = round((value - intercept) / slope)`, a slope left out being 1 and an
+  intercept left out 0. It is also the mapping of the series when the image is
+  the first floating-point image of the series, and the images that follow it
+  and state none are stored under it. The slope is nonzero and both are finite.
+- A value outside the range of the stored type is clipped to the nearest end of
+  the range, never wrapped, and NaN is stored as 0. The clipped pixels are
+  counted for each series, and the first clipping of a series is logged with its
+  count. An image whose peak exceeds twice the peak its series was mapped from
+  clips under the mapping of the series, unless the plugin states a mapping.
+
+`RescaleType` is `US`, unspecified: the units are those of the reconstruction.
+
 ## Workers
 
 Each series is reconstructed in its own worker process, with the reconstruction
