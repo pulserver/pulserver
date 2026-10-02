@@ -22,7 +22,7 @@ import pypulseqpp as pp
 
 from .. import __version__, _plugins, ir
 from .._plugins import PluginPath
-from ..design import SequencePlugin, load_plugin
+from ..design import RfLayout, SequencePlugin, load_plugin
 from ..protocol import (
     Parameter,
     ProtocolKey,
@@ -75,10 +75,10 @@ def list_protocol(
     The listing depends on the plugin file and the installed packages only.
     With ``rf_definitions``, the ``[RfDefinitions]`` block of the plugin's
     evaluation at its default protocol under ``limits`` follows it, naming the
-    definitions the RF layouts of later validations refer to. No block follows
-    where the evaluation states no RF layout. Where it is invalid, a warning is
-    logged and the listing is replied without the block. ``limits`` is not read
-    unless the definitions are asked for.
+    definitions, and the peak amplitudes, the RF layouts of later validations
+    refer to. No block follows where the evaluation states no RF layout. Where
+    it is invalid, a warning is logged and the listing is replied without the
+    block. ``limits`` is not read unless the definitions are asked for.
 
     Raises
     ------
@@ -94,16 +94,11 @@ def list_protocol(
             "the RF definitions are evaluated under scanner limits, and the call "
             "carries none"
         )
-    evaluated = _validated(path, _read(limits), {})
-    if not evaluated.valid:
-        _log.warning(
-            "the RF definitions of %s are not listed: its default protocol is "
-            "invalid: %s",
-            plugin,
-            evaluated.info,
-        )
-    elif evaluated.rf_layout is not None:
-        reply += format_rf_definitions(evaluated.rf_layout.instances)
+    layout = _default_rf_layout(
+        path, _read(limits), f"the RF definitions of {plugin} are not listed"
+    )
+    if layout is not None:
+        reply += format_rf_definitions(layout.instances)
     return reply
 
 
@@ -119,13 +114,29 @@ def validate(
     The plugin evaluates the request under the design limits; the sequence is
     not generated. The duration is ``?`` where the plugin states no scan time.
     With ``rf_layout``, a valid reply ends with the ``[RfLayout]`` block of the
-    evaluation where the plugin states one.
+    evaluation where the plugin states one, with amplitudes over the peaks the
+    listing states, read by evaluating the plugin again at its default
+    protocol. Where that evaluation is invalid, a warning is logged and the
+    amplitudes are the layout's own.
     """
     path = str(plugin_path(plugins, plugin))
     listing = _listing(path)
     request = _request(block, listing)
+    limits = _read(limits)
+    validation = _validated(path, limits, request)
+    listed: list[float] = []
+    if rf_layout and validation.valid and validation.rf_layout is not None:
+        default = _default_rf_layout(
+            path,
+            limits,
+            f"the RF layout of {plugin} is not stated over the listed peaks",
+        )
+        if default is not None:
+            listed = [
+                definition.peak_hz for definition in default.instances.definitions
+            ]
     return format_validation(
-        _validated(path, _read(limits), request), listing, rf_layout=rf_layout
+        validation, listing, rf_layout=rf_layout, listed_peak_hz=listed
     )
 
 
@@ -390,6 +401,22 @@ def _validated(
     path: str, limits: Mapping[str, Any], request: Mapping[ProtocolKey, Any]
 ) -> Validation:
     return _plugin(path).validate(design_system(limits), request)
+
+
+def _default_rf_layout(
+    path: str, limits: Mapping[str, Any], unavailable: str
+) -> RfLayout | None:
+    """Return the RF layout of the plugin's evaluation at its default protocol, the RF the listing states.
+
+    ``None`` where the evaluation states none. Where it is invalid, a warning
+    that begins with ``unavailable`` is logged and the result is ``None``.
+    """
+    evaluated = _validated(path, limits, {})
+    if not evaluated.valid:
+        _log.warning(
+            "%s: its default protocol is invalid: %s", unavailable, evaluated.info
+        )
+    return evaluated.rf_layout
 
 
 def _chain(first: str) -> list[str]:

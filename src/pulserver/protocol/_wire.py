@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import itertools
 import math
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from types import SimpleNamespace
 from typing import TYPE_CHECKING
@@ -245,12 +245,14 @@ def format_validation(
     listing: Mapping[ProtocolKey, Parameter],
     *,
     rf_layout: bool = False,
+    listed_peak_hz: Sequence[float] = (),
 ) -> str:
     """Format a ``validate`` reply: status line, info line, value block.
 
     Whitespace in the info text, newlines included, is folded to single spaces.
     With ``rf_layout``, a valid reply that holds an RF layout ends with its
-    ``[RfLayout]`` block.
+    ``[RfLayout]`` block, as :func:`format_rf_layout` formats it over
+    ``listed_peak_hz``.
     """
     if validation.valid:
         duration = "?" if validation.duration is None else repr(validation.duration)
@@ -260,7 +262,7 @@ def format_validation(
     info = " ".join(validation.info.split())
     text = f"{status}\nINFO {info}\n" + format_values(validation.values, listing)
     if rf_layout and validation.valid and validation.rf_layout is not None:
-        text += format_rf_layout(validation.rf_layout)
+        text += format_rf_layout(validation.rf_layout, listed_peak_hz)
     return text
 
 
@@ -334,8 +336,8 @@ class RfLayoutRecord:
     definition
         The number of the definition each instance plays.
     amplitude
-        The amplitude of each instance over that of the base instance of its
-        definition.
+        The peak RF amplitude of each instance over the ``peak_hz`` the listing
+        states for its definition.
     control
         The control each amplitude is proportional to, or ``None``.
     """
@@ -426,22 +428,49 @@ def format_rf_definitions(instances: pp.RfInstances) -> str:
     return "\n".join(lines) + "\n"
 
 
-def format_rf_layout(layout: RfLayout) -> str:
+def _over_listed_peaks(
+    layout: RfLayout, listed_peak_hz: Sequence[float]
+) -> list[float]:
+    """Return per definition the ratio of the layout's ``peak_hz`` to the listed one.
+
+    The ratio is 1.0 where no peak is listed for the definition, or the listed
+    peak is zero.
+    """
+    factors = []
+    for index, definition in enumerate(layout.instances.definitions):
+        listed = listed_peak_hz[index] if index < len(listed_peak_hz) else 0.0
+        factors.append(definition.peak_hz / listed if listed > 0 else 1.0)
+    return factors
+
+
+def format_rf_layout(layout: RfLayout, listed_peak_hz: Sequence[float] = ()) -> str:
     """Format the RF layout of a validation, as the ``validate`` design call replies it.
 
     The instances are run-length encoded in play order: consecutive instances
     of one definition and control, with amplitudes that print alike, are one
     ``run`` line holding their count, so a train of equal pulses is one line.
     No samples are carried; a run names its definition by the number the
-    ``[RfDefinitions]`` block of the listing gives it. Returns an empty string
-    for a layout without instances.
+    ``[RfDefinitions]`` block of the listing gives it.
+
+    The amplitude of a run is the peak RF amplitude of its instances over
+    ``listed_peak_hz[definition]``, the ``peak_hz`` in Hz the listing states for
+    the definition, so ``amplitude * peak_hz * waveform`` is what the instance
+    plays. A definition that ``listed_peak_hz`` does not reach, or lists as zero,
+    keeps the amplitude of the layout, which is over the ``peak_hz`` of the
+    layout's own definition. Returns an empty string for a layout without
+    instances.
     """
     instances = layout.instances
     if not len(instances.definition):
         return ""
+    numbers = instances.definition.tolist()
+    factors = _over_listed_peaks(layout, listed_peak_hz)
     rows = zip(
-        (str(number) for number in instances.definition.tolist()),
-        (_g(amplitude) for amplitude in instances.amplitude),
+        (str(number) for number in numbers),
+        (
+            _g(amplitude * factors[number])
+            for amplitude, number in zip(instances.amplitude, numbers, strict=True)
+        ),
         ("-" if control is None else control.value for control in layout.control),
         strict=True,
     )

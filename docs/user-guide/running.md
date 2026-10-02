@@ -43,9 +43,11 @@ The RF blocks are sent only when asked, and only where the plugin's evaluation
 states an RF layout ({ref}`stating-the-rf-layout`). `--rf-definitions` evaluates
 the plugin at its default protocol under `--limits`, which it requires, and
 follows the listing with the RF definitions of that evaluation. `--rf-layout`
-follows a valid reply with the RF layout of the evaluation of the request. Both
-blocks are described in {doc}`../explanations/protocol`. Without a flag, `list`
-reads no limits and `validate` replies no RF block.
+follows a valid reply with the RF layout of the evaluation of the request, its
+amplitudes over the peaks the listing states, which it reads by evaluating the
+plugin at its default protocol as well. Both blocks are described in
+{doc}`../explanations/protocol`. Without a flag, `list` reads no limits and
+`validate` replies no RF block.
 
 A call that fails replies `ERROR <message>` and exits with status 1; a plugin
 that ends its process ends the call without a reply and with a nonzero exit

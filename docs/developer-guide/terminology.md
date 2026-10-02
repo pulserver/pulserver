@@ -155,7 +155,7 @@ Every documented quantity carries its unit.
 | Time argument of a sequence application | s |
 | Float protocol entry | the entry's `unit`; the argument is the value times `scale` |
 | Scan time in a `VALIDATE` reply | s; `?` where the evaluation states none |
-| Times, frequencies and flip angles of an RF block | s, Hz and degrees; the amplitude of an instance in an `[RfLayout]` block is unitless, relative to the first instance of its definition with a nonzero amplitude |
+| Times, frequencies and flip angles of an RF block | s, Hz and degrees; the amplitude of an instance in an `[RfLayout]` block is unitless, the peak RF amplitude over the `peak_hz` the listing states for its definition |
 | Rasters passed to the IR conversion | s in `pypulseqpp.Opts`, µs in the cache |
 | Gyromagnetic ratio, field strength | Hz/T, T |
 | Field-of-view offset in a protocol or an import block | mm |

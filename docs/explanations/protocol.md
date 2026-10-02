@@ -69,11 +69,11 @@ follows.
 
 A definition is one RF pulse: a complex waveform at unit peak magnitude, its
 timing and its use. Instances of a definition differ in amplitude and in
-frequency and phase offset. The amplitude of an instance is relative to the
-first instance of its definition with a nonzero amplitude, so a refocusing
-train with a flip angle schedule is one definition with one instance per pulse,
-and RF spoiling, which steps the phase offset, adds no definition
-({meth}`pypulseqpp.Sequence.rf_instances`).
+frequency and phase offset. In the sequence an evaluation builds, the amplitude
+of an instance is relative to the first instance of its definition with a
+nonzero amplitude, so a refocusing train with a flip angle schedule is one
+definition with one instance per pulse, and RF spoiling, which steps the phase
+offset, adds no definition ({meth}`pypulseqpp.Sequence.rf_instances`).
 
 A control of an instance is the flip angle, or a float user entry, of the
 plugin's protocol. It states that the amplitude of the instance is proportional
@@ -81,6 +81,13 @@ to the entry: a scanner that plays a protocol with another value of the entry
 multiplies the amplitude by the ratio of that value to the value in the
 evaluated protocol, which is positive. An instance without a control is played
 at the amplitude it was evaluated at.
+
+A validation states the amplitude of an instance over the `peak_hz` the listing
+states for its definition, not over the first instance of the definition in the
+evaluation of the validation. A protocol that changes a flip angle changes the
+peak of the definition in its own evaluation, and the amplitude stated includes
+that change, so that the product of the amplitude and the listed `peak_hz` is the
+peak RF amplitude the instance plays.
 
 The layout need not hold the scan. The instances repeat over a period, and an
 evaluation that builds one representative repetition, a TR, a shot or a train,
@@ -212,11 +219,16 @@ run <index> <amplitude> <control|-> <count>
 [RfLayout End]
 ```
 
-`period` is the time in seconds over which the instances repeat, the
-`amplitude` of a run is unitless, relative to the first instance of its
-definition with a nonzero amplitude, and `control` is the wire name of the
-entry the amplitude is proportional to, or `-`. A reader skips the blocks it
-does not know.
+`period` is the time in seconds over which the instances repeat. The `amplitude`
+of a run is unitless: the peak RF amplitude of its instances over the `peak_hz`
+the listing states for the definition, so that `amplitude × peak_hz × waveform`
+is what an instance plays. The host reads those peaks by evaluating the plugin
+at its default protocol as well. A run whose definition the listing does not
+state, or states with a peak of zero, carries its amplitude relative to the first
+instance of its definition with a nonzero amplitude in the evaluation of the
+request, as does every run where the evaluation at the default protocol is
+invalid. `control` is the wire name of the entry the amplitude is proportional
+to, or `-`. A reader skips the blocks it does not know.
 
 ## See also
 

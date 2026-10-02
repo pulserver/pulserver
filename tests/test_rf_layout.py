@@ -8,7 +8,13 @@ import pypulseqpp as pp
 import pytest
 from _host import LIMITS, PLUGINS, generate, value_block
 
-from pulserver.design import Evaluation, FloatParam, RfLayout, SequencePlugin
+from pulserver.design import (
+    Evaluation,
+    FloatParam,
+    RfLayout,
+    SequencePlugin,
+    load_plugin,
+)
 from pulserver.host import DesignStore, call
 from pulserver.protocol import (
     ConfigKey,
@@ -88,12 +94,12 @@ def _pulse(kind, system=SYSTEM):
     return pp.make_ptx_pulse(channels, system=system, use="excitation")
 
 
-def _runs(layout):
-    return [
-        line
-        for line in format_rf_layout(layout).splitlines()
-        if line.startswith("run ")
-    ]
+def _run_lines(text):
+    return [line for line in text.splitlines() if line.startswith("run ")]
+
+
+def _runs(layout, listed_peak_hz=()):
+    return _run_lines(format_rf_layout(layout, listed_peak_hz))
 
 
 def _echo_app(system, flip=90.0, refocusing=150.0):
@@ -150,6 +156,16 @@ def _stated_plugins(tmp_path, body):
     plugins = tmp_path / "plugins"
     plugins.mkdir(exist_ok=True)
     (plugins / "stated.py").write_text(STATED_PLUGIN.replace("BODY", body))
+    return plugins
+
+
+def _rf_train_variant(tmp_path, stem, old, new):
+    """A directory holding ``rf_train`` as the plugin ``stem``, its source with ``old`` replaced by ``new``."""
+    source = (PLUGINS / "rf_train.py").read_text()
+    assert source.count(old) == 1
+    plugins = tmp_path / "plugins"
+    plugins.mkdir(exist_ok=True)
+    (plugins / f"{stem}.py").write_text(source.replace(old, new))
     return plugins
 
 
@@ -566,6 +582,92 @@ def test_the_rf_layout_is_the_one_the_evaluation_states():
     assert read.definition == (0, 1, 1, 1, 1)
     assert read.amplitude == (1.0,) * 5
     assert read.control == (UIParam.FLIP, *[UserKey.USER0] * 4)
+
+
+@pytest.mark.parametrize(
+    "values",
+    [
+        {"flip": 180.0},
+        {"user0_value": 75.0, "etl": 3},
+        {"flip": 45.0, "user0_value": 100.0, "etl": 2},
+    ],
+    ids=["flip-doubled", "refocusing-halved", "both-changed"],
+)
+def test_a_validated_amplitude_times_the_listed_peak_is_the_peak_the_instance_plays(
+    values,
+):
+    peaks = {record.index: record.peak_hz for record in parse_rf_definitions(_list())}
+    own = load_plugin(PLUGINS / "rf_train.py").validate(SYSTEM, values).rf_layout
+    own_peaks = [definition.peak_hz for definition in own.instances.definitions]
+    flip, refocusing = values.get("flip", 90.0), values.get("user0_value", 150.0)
+
+    read = parse_rf_layout(_validate(values))
+
+    played = own.instances.amplitude * np.array(own_peaks)[own.instances.definition]
+    stated = np.array(read.amplitude) * [peaks[number] for number in read.definition]
+    assert stated == pytest.approx(played, rel=2e-9)
+    assert read.amplitude == pytest.approx(
+        (flip / 90.0, *[refocusing / 150.0] * values.get("etl", 8)), rel=2e-9
+    )
+
+
+def test_a_fixed_instance_keeps_its_amplitude_when_the_flip_changes(tmp_path):
+    plugins = _rf_train_variant(
+        tmp_path,
+        "fixed",
+        "[UserKey.USER0] * protocol[UIParam.ETL]",
+        "[None] * protocol[UIParam.ETL]",
+    )
+
+    reply = _validate({"flip": 180.0}, plugin="fixed", plugins=plugins)
+
+    assert _run_lines(reply) == ["run 0 2 flip 1", "run 1 1 - 8"]
+
+
+def test_a_definition_the_listing_does_not_state_is_validated_as_the_evaluation_states_it(
+    tmp_path,
+):
+    plugins = _rf_train_variant(tmp_path, "bare", "echoes=8", "echoes=0")
+
+    listed = parse_rf_definitions(_list(plugin="bare", plugins=plugins))
+    reply = _validate({"flip": 180.0, "etl": 2}, plugin="bare", plugins=plugins)
+
+    assert [record.index for record in listed] == [0]
+    assert _run_lines(reply) == ["run 0 2 flip 1", "run 1 1 user0_value 2"]
+
+
+def test_a_validation_whose_default_protocol_is_invalid_states_the_layout_as_evaluated(
+    tmp_path, caplog
+):
+    plugins = _rf_train_variant(tmp_path, "undesigned", "flip=90.0", "flip=0.0")
+
+    with caplog.at_level(logging.WARNING, logger="pulserver.host"):
+        reply = _validate({"flip": 180.0}, plugin="undesigned", plugins=plugins)
+
+    assert parse_rf_layout(reply).amplitude == (1.0,) * 9
+    warned = [r.getMessage() for r in caplog.records if r.name == "pulserver.host"]
+    assert len(warned) == 1
+    assert "default protocol is invalid" in warned[0]
+
+
+@pytest.mark.parametrize(
+    "listed", [[125.0], [125.0, 0.0]], ids=["not-listed", "listed-as-zero"]
+)
+def test_an_id_without_a_listed_peak_is_sent_as_the_layout_states_it(listed):
+    layout = RfLayout.of(_train([150.0, 100.0]), _controls(2))
+
+    assert _runs(layout, listed) == [
+        "run 0 2 flip 1",
+        "run 1 1 user0_value 1",
+        "run 1 0.666666667 user0_value 1",
+    ]
+
+
+def test_a_layout_over_its_own_peaks_is_sent_as_it_states_it():
+    layout = RfLayout.of(_train([150.0, 100.0, 150.0]), _controls(3))
+    own = [definition.peak_hz for definition in layout.instances.definitions]
+
+    assert format_rf_layout(layout, own) == format_rf_layout(layout)
 
 
 def test_a_train_length_change_keeps_the_definition_ids():
