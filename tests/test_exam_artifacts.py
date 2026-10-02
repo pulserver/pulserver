@@ -28,7 +28,7 @@ def test_a_map_no_series_has_measured_reads_as_nothing():
     assert context.coil_sensitivities is None
 
 
-@pytest.mark.parametrize("name", ["b0_mapp", "b1map", "coil_maps", "tx_field"])
+@pytest.mark.parametrize("name", ["b0_mapp", "b1map", "coil_sensitivity", "tx_field"])
 def test_a_name_outside_the_vocabulary_is_refused(name):
     """A misspelt map stored is a map the next series reads nothing from."""
     context = recon.ReconContext.offline()
@@ -36,6 +36,25 @@ def test_a_name_outside_the_vocabulary_is_refused(name):
         setattr(context, name, [1.0])
     with pytest.raises(AttributeError, match=name):
         getattr(context, name)
+
+
+def test_the_state_of_a_stream_starts_empty_and_stays_out_of_the_exam():
+    """Per-slice maps, prewhitening and compression belong to the series that made them."""
+    context = recon.ReconContext.offline()
+    assert context.coil_maps == {}
+    assert context.noise is None
+    assert context.coil_compression is None
+
+    context.coil_maps[0] = "maps"
+    context.noise = "whitening"
+    context.coil_compression = "basis"
+
+    assert (context.coil_maps, context.noise, context.coil_compression) == (
+        {0: "maps"},
+        "whitening",
+        "basis",
+    )
+    assert len(context.exam) == 0
 
 
 def test_a_plugins_own_artifact_goes_in_the_exam_under_a_key_it_chooses():
