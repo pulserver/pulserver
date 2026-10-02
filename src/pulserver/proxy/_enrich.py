@@ -83,6 +83,12 @@ class TableSpace:
         The ``LIN`` and ``PAR`` counter of the k-space centre, from
         ``kSpaceCenterLine`` and ``kSpaceCenterPartition``; ``None`` when
         undefined, and for a navigator.
+    readout_samples
+        Samples of the full echo the space's readouts are parts of, readout
+        oversampling included: the largest, over its readouts, of the samples
+        of the echo that is symmetric about the readout's ``center_sample``.
+        ``None`` for a space with a trajectory, whose readouts are not echoes
+        of one grid, and for a space with no readout.
     """
 
     subsequence: int
@@ -92,6 +98,7 @@ class TableSpace:
     trajectory: bool
     centre_line: int | None = None
     centre_partition: int | None = None
+    readout_samples: int | None = None
 
 
 @dataclass(frozen=True, eq=False)
@@ -238,13 +245,17 @@ class SequenceTable:
 def enrich_header(header: Any, table: SequenceTable) -> None:
     """Describe the table's encoding spaces and sequence parameters in an MRD header.
 
-    For every space, sets ``encodedSpace`` and ``reconSpace`` from the
-    sequence's matrix and field of view when defined, ``encodingLimits`` from
-    the counters of its readouts (minimum 0, centre half the maximum, or for
-    ``kspace_encoding_step_1`` and ``_2`` the centre the sequence defines), and
-    ``trajectory`` to ``OTHER`` or ``CARTESIAN``. Other fields of an existing
-    encoding are kept; missing encodings are appended. Sequence parameters the
-    table holds replace the header's.
+    For every space, sets ``reconSpace`` from the sequence's matrix and field
+    of view when defined, and ``encodedSpace`` from them with the readout of a
+    Cartesian space widened to the samples of its full echo
+    (:attr:`TableSpace.readout_samples`), the field of view along it growing in
+    proportion, so that the ratio of the encoded to the reconstructed field of
+    view is the readout oversampling. ``encodingLimits`` are the extremes of
+    the counters of its readouts, with the centre the sequence defines for
+    ``kspace_encoding_step_1`` and ``_2`` and the middle of the range for the
+    others, and ``trajectory`` is ``OTHER`` or ``CARTESIAN``. Other fields of
+    an existing encoding are kept; missing encodings are appended. Sequence
+    parameters the table holds replace the header's.
     """
     parameters = header.sequenceParameters
     if table.sequence_parameters and parameters is None:
@@ -284,14 +295,16 @@ def enrich_header(header: Any, table: SequenceTable) -> None:
         if index < len(encodings):
             encoding = encodings[index]
             if space.matrix is not None or space.fov_mm is not None:
-                encoding.encodedSpace = _encoding_space(space, encoding.encodedSpace)
+                encoding.encodedSpace = _encoding_space(
+                    space, encoding.encodedSpace, widened=True
+                )
                 encoding.reconSpace = _encoding_space(space, encoding.reconSpace)
             encoding.encodingLimits = limits
             encoding.trajectory = trajectory
         else:
             encodings.append(
                 xsd.encodingType(
-                    encodedSpace=_encoding_space(space, None),
+                    encodedSpace=_encoding_space(space, None, widened=True),
                     reconSpace=_encoding_space(space, None),
                     encodingLimits=limits,
                     trajectory=trajectory,
@@ -378,6 +391,7 @@ def _map_readouts(
         if name in labels:
             flags[labels[name] != 0] |= np.uint64(bit)
     navigator = (flags & np.uint64(_F.IS_NAVIGATION_DATA.value)) != 0
+    reverse = (flags & np.uint64(_F.IS_REVERSE.value)) != 0
     local_space = navigator.astype(np.int64)
     flags |= _boundary_flags(counters, local_space, set(labels))
 
@@ -386,6 +400,8 @@ def _map_readouts(
         if is_navigator and not navigator.any():
             break
         fov = definitions.navigator_fov if is_navigator else definitions.fov
+        members = local_space == local
+        trajectory = bool((readouts.trajectory_dimensions[members] > 1).any())
         spaces.append(
             TableSpace(
                 subsequence=subsequence,
@@ -394,11 +410,16 @@ def _map_readouts(
                 if is_navigator
                 else definitions.matrix,
                 fov_mm=None if fov is None else tuple(round(1e3 * v, 9) for v in fov),
-                trajectory=bool(
-                    (readouts.trajectory_dimensions[local_space == local] > 1).any()
-                ),
+                trajectory=trajectory,
                 centre_line=None if is_navigator else definitions.centre_line,
                 centre_partition=None if is_navigator else definitions.centre_partition,
+                readout_samples=None
+                if trajectory
+                else _full_echo(
+                    readouts.num_samples[members],
+                    readouts.center_sample[members],
+                    reverse[members],
+                ),
             )
         )
 
@@ -412,6 +433,24 @@ def _map_readouts(
         "num_samples": readouts.num_samples,
     }
     return part, spaces
+
+
+def _full_echo(
+    samples: np.ndarray, centre: np.ndarray, reverse: np.ndarray
+) -> int | None:
+    """Return the samples of the largest full echo the readouts are parts of, or ``None`` for no readouts.
+
+    A readout is a full echo when its ``center_sample`` is ``samples // 2``,
+    which is also taken of one whose k does not move (``centre`` -1);
+    otherwise the full echo is symmetric about the echo, with the longer side
+    of the readout. A reversed readout is counted from its end.
+    """
+    if not samples.size:
+        return None
+    echo = np.where(reverse, samples - 1 - centre, centre)
+    echo = np.where(centre < 0, samples // 2, echo)
+    full = np.where(echo == samples // 2, samples, 2 * np.maximum(echo, samples - echo))
+    return int(full.max())
 
 
 def _boundary_flags(
@@ -441,24 +480,37 @@ def _boundary_flags(
 
 
 def _limit(values: np.ndarray, centre: int | None = None) -> Any:
+    """Return the ``limitType`` of a counter's values, centred on ``centre`` or, where it is ``None``, on the middle of the range."""
+    minimum = int(values.min()) if values.size else 0
     maximum = int(values.max()) if values.size else 0
     return xsd.limitType(
-        minimum=0, maximum=maximum, center=maximum // 2 if centre is None else centre
+        minimum=minimum,
+        maximum=maximum,
+        center=minimum + (maximum - minimum + 1) // 2 if centre is None else centre,
     )
 
 
-def _encoding_space(space: TableSpace, current: Any) -> Any:
-    """Return an ``encodingSpaceType`` from the space's definitions, falling back to ``current`` per field."""
+def _encoding_space(space: TableSpace, current: Any, *, widened: bool = False) -> Any:
+    """Return an ``encodingSpaceType`` from the space's definitions, falling back to ``current`` per field.
+
+    With ``widened``, a defined matrix has as many samples along the readout as
+    the space's full echo, and a defined field of view the extent of them.
+    """
+    grown = 1.0
     if space.matrix is not None:
-        matrix = xsd.matrixSizeType(
-            x=space.matrix[0], y=space.matrix[1], z=space.matrix[2]
-        )
+        samples = space.matrix[0]
+        if widened and space.readout_samples and samples > 0:
+            grown = space.readout_samples / samples
+            samples = space.readout_samples
+        matrix = xsd.matrixSizeType(x=samples, y=space.matrix[1], z=space.matrix[2])
     elif current is not None:
         matrix = current.matrixSize
     else:
         matrix = xsd.matrixSizeType()
     if space.fov_mm is not None:
-        fov = xsd.fieldOfViewMm(x=space.fov_mm[0], y=space.fov_mm[1], z=space.fov_mm[2])
+        fov = xsd.fieldOfViewMm(
+            x=round(space.fov_mm[0] * grown, 9), y=space.fov_mm[1], z=space.fov_mm[2]
+        )
     elif current is not None:
         fov = current.fieldOfView_mm
     else:

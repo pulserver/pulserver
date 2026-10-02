@@ -53,6 +53,13 @@ def _limit(limits: Any, name: str) -> int:
     return 0 if maximum is None else int(maximum) + 1
 
 
+def _center(limits: Any, name: str) -> int | None:
+    """Counter of the k-space centre an encoding limit states, or ``None`` when it states none."""
+    entry = getattr(limits, name, None) if limits is not None else None
+    center = getattr(entry, "center", None) if entry is not None else None
+    return None if center is None else int(center)
+
+
 @dataclass(frozen=True)
 class EncodingSpace:
     """Buffer layout of one encoding space of an MRD header.
@@ -80,6 +87,16 @@ class EncodingSpace:
     recon_fov
         Field of view of the image in metres, ordered as ``recon_matrix``;
         ``None`` when the header states none.
+    cartesian
+        Whether the space samples a Cartesian grid. A readout of a Cartesian
+        space is placed by its echo along the readout, and its lines by their
+        offset from the k-space centre; a non-Cartesian space places a readout
+        as it arrives and a view by its counter.
+    phase_center, partition_center
+        Counter value of the k-space centre along ``kspace_encode_step_1`` and
+        ``kspace_encode_step_2``, from the ``center`` of the header's encoding
+        limits; ``None`` where the header states none, so the counter is the
+        position on the grid.
 
     Examples
     --------
@@ -101,6 +118,9 @@ class EncodingSpace:
     loop_sizes: tuple[int, ...]
     recon_matrix: tuple[int, ...]
     recon_fov: tuple[float, ...] | None = None
+    cartesian: bool = True
+    phase_center: int | None = None
+    partition_center: int | None = None
 
     @classmethod
     def from_header(
@@ -108,12 +128,15 @@ class EncodingSpace:
     ) -> EncodingSpace:
         """Read encoding space ``index`` of a parsed MRD header.
 
-        For a Cartesian space ``phase_encodes`` is the larger of the encoded matrix
-        and the ``kspace_encoding_step_1`` limit, since an undersampled grid still
-        needs every line. For a non-Cartesian space it is the limit, which counts
-        views, or the encoded matrix when no limit is stated. ``partitions`` is
-        always the larger of the two. ``recon_matrix`` and ``recon_fov`` fall
-        back to the encoded space when the header has no ``reconSpace``.
+        For a Cartesian space ``phase_encodes`` and ``partitions`` are the encoded
+        matrix, the whole grid whatever number of lines an undersampled scan took,
+        and ``phase_center`` and ``partition_center`` place the counters on it. For
+        a non-Cartesian space ``phase_encodes`` is the ``kspace_encoding_step_1``
+        limit, which counts views, or the encoded matrix when no limit is stated;
+        its ``partitions`` is the larger of the encoded matrix and the
+        ``kspace_encoding_step_2`` limit, a stack being Cartesian along z, and no
+        counter is shifted. ``recon_matrix`` and ``recon_fov`` fall back to the
+        encoded space when the header has no ``reconSpace``.
 
         Parameters
         ----------
@@ -154,23 +177,28 @@ class EncodingSpace:
         if recon_matrix[0] == 1:
             recon_matrix = recon_matrix[1:]
 
-        views = _limit(limits, "kspace_encoding_step_1")
-        partitions = _limit(limits, "kspace_encoding_step_2")
         gridded = _is_cartesian(encoding)
+        if gridded:
+            phase_encodes, partitions = int(encoded.y), int(encoded.z)
+        else:
+            phase_encodes = _limit(limits, "kspace_encoding_step_1") or int(encoded.y)
+            partitions = max(_limit(limits, "kspace_encoding_step_2"), int(encoded.z))
 
         return cls(
             index=index,
             coils=coils,
             readout=int(encoded.x),
-            phase_encodes=max(views, int(encoded.y))
-            if gridded
-            else views or int(encoded.y),
-            # A stack is Cartesian along z whatever it does in plane.
-            partitions=max(partitions, int(encoded.z)),
+            phase_encodes=phase_encodes,
+            partitions=partitions,
             loops=tuple(names),
             loop_sizes=tuple(sizes),
             recon_matrix=recon_matrix,
             recon_fov=_fov(encoding, len(recon_matrix)),
+            cartesian=gridded,
+            phase_center=_center(limits, "kspace_encoding_step_1") if gridded else None,
+            partition_center=_center(limits, "kspace_encoding_step_2")
+            if gridded
+            else None,
         )
 
     @classmethod
@@ -185,6 +213,26 @@ class EncodingSpace:
         return tuple(
             cls.from_header(header, index, loops) for index in range(len(encodings))
         )
+
+    def offset(self, axis: str) -> int:
+        """Shift that places a counter of ``axis`` on this space's grid.
+
+        ``extent // 2 - center`` along ``phase_encode`` and, in a volume,
+        ``partition`` of a Cartesian space whose header states the centre, so the
+        centre line lands on ``extent // 2``; 0 for every other axis and for a
+        space that states no centre.
+        """
+        if not self.cartesian:
+            return 0
+        if axis == "phase_encode" and self.phase_center is not None:
+            return self.phase_encodes // 2 - self.phase_center
+        if (
+            axis == "partition"
+            and self.partitions > 1
+            and self.partition_center is not None
+        ):
+            return self.partitions // 2 - self.partition_center
+        return 0
 
     @property
     def extents(self) -> tuple[tuple[str, int], ...]:

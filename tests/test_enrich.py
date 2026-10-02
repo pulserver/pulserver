@@ -5,7 +5,7 @@ import ismrmrd.xsd
 import numpy as np
 import pypulseqpp as pp
 import pytest
-from _synthetic import DELTA_K, add_readout
+from _synthetic import DELTA_K, SAMPLES, add_readout
 
 from pulserver.mrd import AcquisitionFlag, EncodingSpace
 from pulserver.proxy._enrich import (
@@ -65,6 +65,34 @@ def readout_k(k, table, index):
 
 def has(table, flag):
     return (table.flags & np.uint64(flag.value)) != 0
+
+
+def add_partial_readout(seq, fraction, *labels):
+    """A readout along x whose k starts at ``-fraction`` of its extent, so that its echo is not at its middle."""
+    system = pp.Opts()
+    gx = pp.make_trapezoid(
+        "x", flat_area=SAMPLES * DELTA_K, flat_time=3.2e-3, system=system
+    )
+    adc = pp.make_adc(
+        num_samples=SAMPLES, duration=3.2e-3, delay=gx.rise_time, system=system
+    )
+    seq.add_block(
+        pp.make_trapezoid("x", area=-fraction * gx.area, duration=1e-3, system=system)
+    )
+    seq.add_block(gx, adc, *labels)
+
+
+def enriched_encoding(table):
+    """The first encoding of an empty header enriched from ``table``."""
+    enriched = header()
+    enrich_header(enriched, table)
+    return enriched.encoding[0]
+
+
+def designed(tmp_path, app):
+    path = tmp_path / "designed.seq"
+    app.design().write(str(path))
+    return SequenceTable.read(path)
 
 
 @pytest.mark.parametrize(
@@ -260,6 +288,115 @@ def test_the_header_centres_k_space_where_the_design_puts_its_centre(tmp_path):
     line, partition = limits.kspace_encoding_step_1, limits.kspace_encoding_step_2
     assert (line.maximum, line.center) == (15, 8)
     assert (partition.maximum, partition.center) == (7, 4)
+
+
+def test_the_limits_start_at_the_first_counter_a_scan_plays(tmp_path):
+    seq = pp.Sequence(pp.Opts())
+    for lin in range(2, 6):
+        add_readout(seq, pp.make_label("LIN", "SET", lin))
+
+    limits = enriched_encoding(written(seq, tmp_path)).encodingLimits
+
+    line = limits.kspace_encoding_step_1
+    assert (line.minimum, line.maximum) == (2, 5)
+    assert (limits.slice.minimum, limits.slice.maximum) == (0, 0)
+
+
+def test_the_limits_centre_is_the_centre_line_the_sequence_defines(tmp_path):
+    seq = pp.Sequence(pp.Opts())
+    seq.set_definition("kSpaceCenterLine", 5)
+    for lin in range(2, 8):
+        add_readout(seq, pp.make_label("LIN", "SET", lin))
+
+    limits = enriched_encoding(written(seq, tmp_path)).encodingLimits
+
+    assert limits.kspace_encoding_step_1.center == 5
+
+
+@pytest.mark.parametrize(
+    ("lines", "centre"),
+    [(range(8), 4), (range(2, 6), 4), (range(5), 2), (range(3, 6), 4)],
+)
+def test_the_limits_centre_is_the_middle_of_the_lines_when_the_sequence_defines_none(
+    tmp_path, lines, centre
+):
+    seq = pp.Sequence(pp.Opts())
+    for lin in lines:
+        add_readout(seq, pp.make_label("LIN", "SET", lin))
+
+    limits = enriched_encoding(written(seq, tmp_path)).encodingLimits
+
+    assert limits.kspace_encoding_step_1.center == centre
+
+
+@pytest.mark.parametrize(
+    ("options", "samples"),
+    [
+        ({}, 64),
+        ({"partial_fourier_x": 0.75}, 64),
+        ({"readout_oversampling": 1.0}, 32),
+    ],
+)
+def test_the_encoded_readout_is_the_full_echo_with_its_oversampling(
+    tmp_path, options, samples
+):
+    from pypulseqpp.sequences.sequence.gre2D_sequence import Gre2DApp
+
+    system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=170, slew_unit="T/m/s")
+    app = Gre2DApp(system, fov_x=0.22, fov_y=0.22, n_x=32, n_y=16, **options)
+
+    encoding = enriched_encoding(designed(tmp_path, app))
+
+    encoded, recon = encoding.encodedSpace, encoding.reconSpace
+    assert (encoded.matrixSize.x, encoded.matrixSize.y) == (samples, 16)
+    assert (recon.matrixSize.x, recon.matrixSize.y) == (32, 16)
+    assert encoded.fieldOfView_mm.x == pytest.approx(220.0 * samples / 32)
+    assert recon.fieldOfView_mm.x == pytest.approx(220.0)
+    assert encoded.fieldOfView_mm.y == recon.fieldOfView_mm.y == pytest.approx(220.0)
+
+
+@pytest.mark.parametrize("fraction", [0.25, 0.75])
+def test_the_full_echo_of_a_partial_echo_has_as_many_samples_on_each_side_as_its_longer_side(
+    tmp_path, fraction
+):
+    seq = pp.Sequence(pp.Opts())
+    seq.set_definition("Matrix", [SAMPLES, 1, 1])
+    seq.set_definition("FOV", [0.2, 0.2, 0.005])
+    add_partial_readout(seq, fraction)
+    table = written(seq, tmp_path)
+    samples, echo = int(table.num_samples[0]), int(table.center_sample[0])
+    full = 2 * max(echo, samples - echo)
+
+    encoding = enriched_encoding(table)
+
+    assert echo != samples // 2
+    assert full > samples
+    assert table.spaces[0].readout_samples == full
+    assert encoding.encodedSpace.matrixSize.x == full
+    assert encoding.encodedSpace.fieldOfView_mm.x == pytest.approx(
+        200.0 * full / SAMPLES
+    )
+    assert encoding.reconSpace.matrixSize.x == SAMPLES
+
+
+def test_a_reversed_readout_is_counted_from_its_end():
+    """The echo of a reversed readout is at the mirror image of the forward readouts' echo: sample 15 of 32 against 16."""
+    table = fixture("epi_2d_main.seq")
+
+    assert has(table, AcquisitionFlag.IS_REVERSE).any()
+    assert set(table.center_sample.tolist()) == {15, 16}
+    assert table.spaces[0].readout_samples == 32
+
+
+def test_a_non_cartesian_space_keeps_its_matrix_and_field_of_view_along_the_readout():
+    table = fixture("mprage_stack_of_spirals_3d.seq")
+
+    encoding = enriched_encoding(table)
+
+    assert table.spaces[0].readout_samples is None
+    for space in (encoding.encodedSpace, encoding.reconSpace):
+        assert space.matrixSize.x == 32
+        assert space.fieldOfView_mm.x == pytest.approx(220.0)
 
 
 def test_an_acquisition_of_the_wrong_length_is_refused():

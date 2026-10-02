@@ -11,8 +11,9 @@ import numpy as np
 from ...proxy._motion import Pose, pose_waveform
 from .._buffers import ReconData
 from .._units import carries
+from ..gadgets import NAVIGATOR
 from ..plugin import ReconContext
-from .pics import NAVIGATOR, PicsRecon
+from .pics import PicsRecon
 
 #: Planes of one navigator, as pypulseqpp's ``SpiralNavigator`` plays them.
 PLANES = 3

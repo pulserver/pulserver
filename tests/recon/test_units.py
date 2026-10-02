@@ -51,6 +51,7 @@ def acquire(*flags, encoding_space=0, **idx):
     acquisition = ismrmrd.Acquisition()
     acquisition.resize(N_X, COILS)
     acquisition.data[:] = 1.0
+    acquisition.center_sample = N_X // 2
     acquisition.encoding_space_ref = encoding_space
     for name, index in idx.items():
         setattr(acquisition.idx, name, index)
@@ -297,7 +298,9 @@ def test_a_unit_places_each_readout_in_data_and_reference_by_its_flags():
 
     (data,) = reconstructed(plugin)
     assert data.data.mask[:, 0].tolist() == [True, False, True, False]
-    assert data.ref.mask[:, 0].tolist() == [False, True, True, False]
+    # The reference holds lines 1 and 2: it is cropped to the lines it covers.
+    assert data.ref.origin == {"phase_encode": 1}
+    assert data.ref.mask[:, 0].tolist() == [True, True]
 
 
 def test_the_emission_bucket_splits_readouts_as_the_unit_buffers_do():

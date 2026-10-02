@@ -64,6 +64,7 @@ from pathlib import Path
 from threading import RLock
 from typing import Any, final
 
+import ismrmrd
 import numpy as np
 
 from ..mrd._acquisitions import AcquisitionBucket, AcquisitionFlag
@@ -487,6 +488,15 @@ class Gadget(ABC):
     noise covariance, a coil basis -- on ``self``. :meth:`ReconPlugin.spawn`
     copies the gadgets, so each stream has its own.
 
+    A gadget that changes the samples of a readout states where its echo lies
+    in the readout it returns by assigning ``center_sample``, ``discard_pre``
+    and ``discard_post`` of the acquisition it was given, as Gadgetron's
+    gadgets update the header they pass on. The next gadget and the buffers
+    read them, and the length of the returned array is the readout's number of
+    samples. The plugin gives each gadget a copy of the received acquisition,
+    so an assignment changes neither the acquisition the stream delivered nor
+    what :attr:`ReconData.acquisitions` lists.
+
     Attributes
     ----------
     context : ReconContext
@@ -516,7 +526,9 @@ class Gadget(ABC):
         Parameters
         ----------
         acquisition
-            The acquisition, for its flags and counters.
+            The acquisition, for its flags and counters; its ``center_sample``
+            and discards describe ``data``, and are to be updated where the
+            readout returned differs from it.
         data
             ``(coils, samples)``: the acquisition's data, or the previous step's
             output.
@@ -559,7 +571,8 @@ class ReconPlugin(ABC):
     ----------
     gadgets
         :class:`Gadget` steps applied to every accepted readout on arrival, in
-        order, before it is placed.
+        order, before it is placed; each receives a copy of the acquisition,
+        which it may update to describe the readout it returns.
     triggers
         ``{branch: flag}``: the :class:`~pulserver.mrd.AcquisitionFlag` that
         closes a unit of the branch, combined with ``|`` for either of several.
@@ -724,10 +737,11 @@ class ReconPlugin(ABC):
         """Take in one acquisition and reconstruct the units it completes.
 
         In order: the acquisition must pass ``require_flags`` and
-        ``reject_flags``; the ``gadgets`` run, any of which may consume it;
-        :meth:`branch_for` names its branch; it is added to its unit; the
-        units that close are removed from the plugin and reconstructed by
-        :meth:`recon`, in the order they opened. An acquisition carrying
+        ``reject_flags``; the ``gadgets`` run over a copy of it, any of which may
+        consume it; :meth:`branch_for` names its branch; it is added to its
+        unit, which places the readout the gadgets returned; the units that
+        close are removed from the plugin and reconstructed by :meth:`recon`,
+        in the order they opened. An acquisition carrying
         ``LAST_IN_MEASUREMENT`` closes every open unit instead, as :meth:`flush`
         does, whether or not it has samples: the stream's end marker has none.
 
@@ -739,10 +753,12 @@ class ReconPlugin(ABC):
         """
         emitted: list[tuple[ReconData | None, Any]] = []
         if self._accepts(acquisition):
-            readout = self._process(acquisition)
+            readout, placed = self._process(acquisition)
             branch = None if readout is None else self.branch_for(acquisition)
             if branch is not None:
-                self._unit(branch, acquisition).add_acquisition(acquisition, readout)
+                self._unit(branch, acquisition).add_acquisition(
+                    acquisition, readout, placed
+                )
             if has_acquisition_flag(acquisition, "ACQ_LAST_IN_MEASUREMENT"):
                 emitted = self.flush(context)
             elif branch is not None:
@@ -888,16 +904,23 @@ class ReconPlugin(ABC):
             has_acquisition_flag(acquisition, flag) for flag in self.reject_flags
         )
 
-    def _process(self, acquisition: Any) -> Any:
-        """Run the gadgets over one readout; ``None`` when one consumed it or it has no samples."""
+    def _process(self, acquisition: Any) -> tuple[Any, Any]:
+        """Run the gadgets over one readout, returning it and the acquisition as they left it.
+
+        The readout is ``None`` when a gadget consumed it or it has no samples.
+        The gadgets are given a copy of the acquisition, so that the header
+        fields they assign reach the buffers and the received acquisition is
+        unchanged; with no gadgets the acquisition is returned as it is.
+        """
         data = np.asarray(acquisition.data)
         if data.size == 0:
-            return None
+            return None, acquisition
+        placed = _copy_acquisition(acquisition) if self.gadgets else acquisition
         for gadget in self.gadgets:
-            data = gadget(acquisition, data)
+            data = gadget(placed, data)
             if data is None:
-                return None
-        return data
+                return None, placed
+        return data, placed
 
     def _unit(self, branch: str, acquisition: Any) -> ReconUnit:
         key = unit_key(branch, acquisition, self.axes)
@@ -917,7 +940,7 @@ class ReconPlugin(ABC):
         self._waveforms.clear()
         emitted: list[tuple[ReconData | None, Any]] = []
         for key in keys:
-            data = self._units.pop(key).data
+            data = self._units.pop(key).close()
             data.waveforms = waveforms
             output = self.recon(context, data.branch, data)
             if output is not None:
@@ -930,6 +953,18 @@ _AXES = (*LOOP_COUNTERS, "segment")
 
 
 # %% private module subroutines
+
+
+def _copy_acquisition(acquisition: Any) -> Any:
+    """Return a copy of an acquisition whose header fields can be assigned without changing the original.
+
+    The copy shares the samples and trajectory.
+    """
+    if isinstance(acquisition, ismrmrd.Acquisition):
+        return ismrmrd.Acquisition(
+            acquisition.getHead(), acquisition.data, acquisition.traj
+        )
+    return copy.copy(acquisition)
 
 
 def _flag_members(flags: Any) -> tuple[Any, ...]:

@@ -1,10 +1,11 @@
 """K-space buffers of a reconstruction unit, laid out from the MRD header and filled one acquisition at a time.
 
 A unit holds one buffer for its imaging readouts and one for its
-parallel-imaging calibration readouts, each allocated when its first readout
-arrives and indexed by that readout's counters. Axes run coil first and
-readout last, with a placement axis only where the header says a counter
-varies.
+parallel-imaging calibration readouts. Axes run coil first and readout last,
+with a placement axis only where the header says a counter varies. Readouts
+of a Cartesian space are placed by their echo along the readout and by the
+offset of their lines from the k-space centre along the encoded axes, as
+Gadgetron's acquisition bucket places them.
 """
 
 from __future__ import annotations
@@ -15,7 +16,7 @@ import math
 import warnings
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any, ClassVar
+from typing import Any
 
 import numpy as np
 
@@ -25,13 +26,98 @@ from ..mrd._metadata import acquisition_label, has_acquisition_flag
 #: Every name :meth:`ReconBuffer.select` accepts, whether or not a space varies it.
 _AXIS_NAMES = frozenset((*LOOP_COUNTERS, "segment", "partition", "phase_encode"))
 
+#: The MRD counter each placement axis is read from.
+_COUNTERS = {
+    "partition": "kspace_encode_step_2",
+    "phase_encode": "kspace_encode_step_1",
+}
+
+#: The placement axes a buffer can be cropped along.
+_CROPPABLE = ("partition", "phase_encode")
+
+
+def echo_centre(acquisition: Any, samples: int) -> int:
+    """Return the index of the echo in a readout of ``samples`` samples.
+
+    The acquisition's ``center_sample``; ``samples // 2`` when it states none,
+    which is the echo of a centred full echo.
+    """
+    centre = acquisition_label(acquisition, "center_sample", None)
+    return samples // 2 if centre is None else int(centre)
+
+
+def discards(acquisition: Any) -> tuple[int, int]:
+    """Return the ``(discard_pre, discard_post)`` sample counts of an acquisition, 0 where it states none."""
+    pre = int(acquisition_label(acquisition, "discard_pre", 0) or 0)
+    post = int(acquisition_label(acquisition, "discard_post", 0) or 0)
+    return pre, post
+
+
+def _as_readout(data: Any) -> np.ndarray:
+    data = np.asarray(data)
+    if data.ndim != 2:
+        raise ValueError(
+            f"acquisition data must be (coils, samples), got shape {data.shape}"
+        )
+    return data
+
+
+def _grid_position(space: EncodingSpace, acquisition: Any) -> tuple[int, ...]:
+    """Return the index of an acquisition on each varying placement axis of ``space``'s grid.
+
+    Raises
+    ------
+    ValueError
+        If a counter, shifted by the offset of its axis, lies outside the grid
+        the header laid this space out for.
+    """
+    where: list[int] = []
+    for name, extent in space.extents:
+        counter = _COUNTERS.get(name, name)
+        index = int(acquisition_label(acquisition, counter, 0) or 0)
+        shift = space.offset(name)
+        if not 0 <= index + shift < extent:
+            moved = (
+                f" ({index + shift} once placed about the limits' centre)"
+                if shift
+                else ""
+            )
+            raise ValueError(
+                f"acquisition has {counter}={index}{moved}, outside the {extent} "
+                f"{name} positions encoding space {space.index} was laid out for"
+            )
+        if extent > 1:
+            where.append(index + shift)
+    return tuple(where)
+
+
+def _width(space: EncodingSpace, acquisition: Any, samples: int) -> int:
+    """Return the readout samples of a buffer of ``space`` whose first readout is ``acquisition``.
+
+    The readout's own samples when it is a centred full echo, which is how a
+    readout completed by :class:`~pulserver.recon.AsymmetricEcho` arrives, or
+    when the space is not Cartesian; otherwise the encoded matrix, in which a
+    partial echo is placed by its echo.
+    """
+    if not space.cartesian:
+        return max(space.readout, samples)
+    centred = echo_centre(acquisition, samples) == samples // 2
+    return samples if centred else space.readout
+
 
 class ReconBuffer:
     """K-space of one encoding space, filled one acquisition at a time.
 
-    A readout shorter than the buffer is right-aligned, where a partial echo's
-    samples belong. The axes are those of ``space``: its counters that vary
-    and were asked for, then the encoded axes.
+    Along the readout of a Cartesian space, the samples of an acquisition from
+    ``discard_pre`` to ``number_of_samples - discard_post`` are placed so that
+    its echo, ``center_sample``, lies at sample ``samples // 2`` of the buffer.
+    Along an encoded axis of a Cartesian space, a counter is placed at
+    ``counter - center + extent // 2``, ``center`` being the counter of the
+    k-space centre the header's limits state, so the centre line lies at
+    ``extent // 2`` whatever the counters start at. A non-Cartesian space
+    places a readout right-aligned and a counter as it is. The axes are those
+    of ``space``: its counters that vary and were asked for, then the encoded
+    axes.
 
     Parameters
     ----------
@@ -40,8 +126,12 @@ class ReconBuffer:
     coils
         Channels to allocate; ``space.coils`` when not given. Fewer than the
         header declares is valid, for data compressed before placement.
-    readout
-        Samples to allocate; never fewer than ``space.readout``.
+    samples
+        Samples to allocate along the readout; ``space.readout`` when not given.
+    crop
+        ``{axis: (first, stop)}`` for the ``phase_encode`` and ``partition``
+        axes: the positions of the space's grid the buffer holds, the whole axis
+        where an axis is not named.
     dtype
         Complex dtype of :attr:`kspace`.
 
@@ -51,14 +141,21 @@ class ReconBuffer:
         Shaped as :attr:`axes` names.
     mask : ndarray
         Boolean, :attr:`kspace` without the coil axis: samples that were placed.
+    origin : dict of str to int
+        Position on the space's grid of the first entry of each placement axis
+        of :attr:`axes`; 0 along an axis that is not cropped.
+    readout : tuple of int or None
+        First and last sample of the readout axis placed, inclusive; ``None``
+        until an acquisition is placed. The samples outside it are zero fill.
     trajectory : ndarray or None
         ``(dimensions, ...)`` over the axes of :attr:`mask`, in the units the
         acquisitions carry. ``None`` until an acquisition carries a trajectory;
         widened to the most dimensions any acquisition carried, missing trailing
         dimensions reading 0.
     center_sample : int or None
-        Echo index along the readout axis, after right alignment, from the first
-        acquisition that states it.
+        Echo index along the readout axis. ``samples // 2`` in a Cartesian
+        space, where every echo is placed there; in a non-Cartesian space that
+        of the first acquisition that states it, after alignment.
     sample_time : float or None
         Dwell time in seconds, from the first acquisition that states it.
     headers : list
@@ -86,15 +183,33 @@ class ReconBuffer:
         space: EncodingSpace,
         *,
         coils: int | None = None,
-        readout: int | None = None,
+        samples: int | None = None,
+        crop: Mapping[str, tuple[int, int]] | None = None,
         dtype: Any = np.complex64,
     ) -> None:
         self.space = space
         self.coils = int(coils) if coils else space.coils
-        self.readout = max(space.readout, readout or 0)
-        shape = (self.coils, *space.shape[1:-1], self.readout)
+        crop = dict(crop or {})
+        unknown = sorted(set(crop) - set(_CROPPABLE))
+        if unknown:
+            raise ValueError(f"only {list(_CROPPABLE)} can be cropped, not {unknown}")
+        self.origin: dict[str, int] = {}
+        extents: list[int] = []
+        for name, extent in space.extents:
+            if extent <= 1:
+                continue
+            first, stop = crop.get(name, (0, extent))
+            if not 0 <= first < stop <= extent:
+                raise ValueError(
+                    f"cannot crop the {extent} {name} positions of encoding space "
+                    f"{space.index} to {first}..{stop}"
+                )
+            self.origin[name] = first
+            extents.append(stop - first)
+        shape = (self.coils, *extents, int(samples) if samples else space.readout)
         self.kspace = np.zeros(shape, dtype=dtype)
         self.mask = np.zeros(shape[1:], dtype=bool)
+        self.readout: tuple[int, int] | None = None
         self.trajectory: Any | None = None
         self.center_sample: int | None = None
         self.sample_time: float | None = None
@@ -120,36 +235,34 @@ class ReconBuffer:
         """Image matrix the header prescribes; see :attr:`EncodingSpace.recon_matrix`."""
         return self.space.recon_matrix
 
-    #: The MRD counter each placement axis is read from.
-    _COUNTERS: ClassVar[dict[str, str]] = {
-        "partition": "kspace_encode_step_2",
-        "phase_encode": "kspace_encode_step_1",
-    }
-
     def position(self, acquisition: Any) -> tuple[int, ...]:
-        """Index along each axis of :attr:`kspace` this acquisition fills.
+        """Index along each placement axis of :attr:`kspace` this acquisition fills.
 
         Raises
         ------
         ValueError
-            If a counter runs past what the header laid this space out for.
+            If a counter, placed about the limits' centre, lies outside what the
+            header laid this space out for, or outside the part of the grid a
+            cropped buffer holds.
         """
-        where: list[int] = []
-        for name, extent in self.space.extents:
-            counter = self._COUNTERS.get(name, name)
-            index = int(acquisition_label(acquisition, counter, 0) or 0)
-            if not 0 <= index < extent:
+        grid = _grid_position(self.space, acquisition)
+        where = tuple(
+            index - self.origin[name]
+            for index, name in zip(grid, self.axes[1:-1], strict=True)
+        )
+        for index, name, size in zip(
+            where, self.axes[1:-1], self.kspace.shape[1:-1], strict=True
+        ):
+            if not 0 <= index < size:
                 raise ValueError(
-                    f"acquisition has {counter}={index}, past the {extent} "
-                    f"{name} positions encoding space {self.space.index} was "
-                    f"laid out for"
+                    f"acquisition lies at {name} position {index + self.origin[name]}, "
+                    f"outside the {size} from {self.origin[name]} that this buffer "
+                    f"of encoding space {self.space.index} holds"
                 )
-            if extent > 1:
-                where.append(index)
-        return tuple(where)
+        return where
 
     def add(self, acquisition: Any, data: Any = None) -> None:
-        """Place one acquisition where its counters say it belongs.
+        """Place one acquisition where its counters and echo say it belongs.
 
         Also records its trajectory, and ``center_sample`` and dwell when not yet
         known. A readout placed where one already is replaces it, with a warning
@@ -158,36 +271,48 @@ class ReconBuffer:
         Parameters
         ----------
         acquisition
-            The acquisition, for its counters, flags and data.
+            The acquisition, for its counters, ``center_sample``, discards and
+            flags, and its data. An acquisition that states no ``center_sample``
+            is a centred full echo.
         data
-            ``(coils, samples)`` to place instead of ``acquisition.data``, for a
-            readout corrected before placement.
+            ``(coils, samples)`` to place instead of ``acquisition.data``: a
+            readout corrected before placement, whose ``center_sample`` and
+            discards the acquisition states.
 
         Raises
         ------
         ValueError
-            If the data is not two-dimensional, is larger than the buffer, or a
-            counter is outside the laid-out extent.
+            If the data is not two-dimensional, the readout does not fit the
+            buffer along the readout, or a counter is outside the laid-out extent.
         """
-        data = np.asarray(acquisition.data if data is None else data)
-        if data.ndim != 2:
-            raise ValueError(
-                f"acquisition data must be (coils, samples), got shape {data.shape}"
-            )
+        data = _as_readout(acquisition.data if data is None else data)
         coils, samples = data.shape
-        if samples > self.readout or coils > self.coils:
+        width = self.kspace.shape[-1]
+        if coils > self.coils:
             raise ValueError(
-                f"acquisition is {coils} x {samples} but encoding space "
-                f"{self.space.index} was laid out for "
-                f"{self.coils} x {self.readout}"
+                f"acquisition has {coils} channels, more than the {self.coils} "
+                f"encoding space {self.space.index} was laid out for"
             )
 
         where = self.position(acquisition)
 
-        # Right-aligned, which is where a partial echo's acquired window ends.
-        offset = self.readout - samples
-        readout = slice(offset, self.readout)
-        if not self._overwrote and self.mask[(*where, readout)].any():
+        if self.space.cartesian:
+            centre = echo_centre(acquisition, samples)
+            skip, after = discards(acquisition)
+            count = samples - skip - after
+            offset = width // 2 - (centre - skip)
+            detail = f"with its echo at {centre} and {skip} + {after} samples discarded"
+        else:
+            skip, count, offset = 0, samples, width - samples
+            detail = ""
+        if count < 1 or offset < 0 or offset + count > width:
+            raise ValueError(
+                f"a readout of {samples} samples {detail} does not fit the {width} "
+                f"samples of encoding space {self.space.index}: its {count} placed "
+                f"samples would occupy {offset} to {offset + count - 1}"
+            )
+        region = slice(offset, offset + count)
+        if not self._overwrote and self.mask[(*where, region)].any():
             self._overwrote = True
             warnings.warn(
                 f"a readout replaced one already placed at {dict(zip(self.axes[1:-1], where, strict=False))} "
@@ -196,33 +321,53 @@ class ReconBuffer:
                 "partition, slice, average or repetition (pypulseqpp.make_label)",
                 stacklevel=2,
             )
-        self.kspace[(slice(0, coils), *where, readout)] = data
-        self.mask[(*where, readout)] = True
-        self._place_trajectory(acquisition, where, readout)
+        self.kspace[(slice(0, coils), *where, region)] = data[:, skip : skip + count]
+        self.mask[(*where, region)] = True
+        self._place_trajectory(acquisition, where, region, skip, samples)
+        self.readout = (
+            (region.start, region.stop - 1)
+            if self.readout is None
+            else (
+                min(self.readout[0], region.start),
+                max(self.readout[1], region.stop - 1),
+            )
+        )
         if self.center_sample is None:
-            center = acquisition_label(acquisition, "center_sample", None)
-            if center is not None:
-                self.center_sample = int(center) + offset
+            if self.space.cartesian:
+                self.center_sample = width // 2
+            else:
+                center = acquisition_label(acquisition, "center_sample", None)
+                if center is not None:
+                    self.center_sample = int(center) + offset
         if self.sample_time is None:
             dwell = acquisition_label(acquisition, "sample_time_us", None)
             if dwell:
                 self.sample_time = float(dwell) * 1e-6
         self.headers.append(acquisition)
 
-    def _place_trajectory(self, acquisition: Any, where: tuple, readout: slice) -> None:
+    def _place_trajectory(
+        self, acquisition: Any, where: tuple, region: slice, skip: int, samples: int
+    ) -> None:
         """Store the acquisition's trajectory, if it carries one.
 
         MRD trajectories are ``(samples, dimensions)`` and are stored transposed.
-        An acquisition may carry fewer trailing dimensions than its neighbours --
-        the centre partition of a slab traverses no kz -- and the rows it omits stay
-        0. A trajectory whose samples are not those placed, as after a gadget
-        resampled the readout, is not stored.
+        A trajectory with a row for each of the readout's ``samples`` is cut to
+        the samples placed; one with a row for each sample placed is stored as it
+        is. A trajectory with any other count, as after a gadget resampled the
+        readout, is not stored. An acquisition may carry fewer trailing
+        dimensions than its neighbours -- the centre partition of a slab
+        traverses no kz -- and the rows it omits stay 0.
         """
         traj = getattr(acquisition, "traj", None)
         if traj is None:
             return
         traj = np.asarray(traj)
-        if traj.size == 0 or traj.shape[0] != readout.stop - readout.start:
+        if traj.size == 0:
+            return
+        count = region.stop - region.start
+        if traj.shape[0] == samples:
+            traj = traj[skip : skip + count]
+        elif traj.shape[0] != count:
             return
         dimensions = int(traj.shape[-1])
         if self.trajectory is None:
@@ -236,7 +381,7 @@ class ReconBuffer:
             )
             widened[: self.trajectory.shape[0]] = self.trajectory
             self.trajectory = widened
-        self.trajectory[(slice(0, dimensions), *where, readout)] = traj.T
+        self.trajectory[(slice(0, dimensions), *where, region)] = traj.T
 
     def select(self, **where: int) -> tuple[Any, Any]:
         """Return the ``(kspace, mask)`` at one position along named axes.
@@ -273,7 +418,8 @@ class ReconBuffer:
         """
         if self.sample_time is None or self.center_sample is None:
             return None
-        return (np.arange(self.readout) - self.center_sample) * self.sample_time
+        samples = self.kspace.shape[-1]
+        return (np.arange(samples) - self.center_sample) * self.sample_time
 
     def grid_trajectory(self) -> Any:
         """Return the trajectory in grid units, laid out as ``bartorch.linop.NUFFT`` takes it.
@@ -371,8 +517,10 @@ class ReconData:
         readout was calibration only.
     ref : ReconBuffer or None
         K-space of the parallel-imaging calibration readouts, laid out as
-        ``data``; ``None`` when the unit has none. A readout flagged as
-        calibration and imaging is in both buffers; one flagged as
+        ``data`` but cropped along the phase-encode and partition axes to the
+        lines the readouts cover, whose position on the grid is its
+        :attr:`~ReconBuffer.origin`; ``None`` when the unit has none. A readout
+        flagged as calibration and imaging is in both buffers; one flagged as
         calibration only is in ``ref`` alone; a phase-correction readout is in
         neither.
     counters : dict of str to int
@@ -404,6 +552,10 @@ class ReconData:
 class ReconUnit:
     """The readouts of one unit as they arrive, placed into the buffers of :attr:`data`.
 
+    Imaging readouts are placed as they arrive, into a buffer allocated at the
+    first of them. Calibration readouts are held until :meth:`close`, which lays
+    them out over the lines they cover.
+
     Parameters
     ----------
     key
@@ -420,7 +572,8 @@ class ReconUnit:
     Attributes
     ----------
     data : ReconData
-        What the unit has collected, which is what the plugin receives.
+        What the unit has collected, which is what the plugin receives once
+        the unit is closed.
     """
 
     def __init__(
@@ -437,6 +590,7 @@ class ReconUnit:
         self.buffered = buffered
         self.dtype = dtype
         self.data = ReconData(branch, counters=dict(counters))
+        self._reference: list[tuple[Any, np.ndarray, tuple[int, ...]]] = []
 
     @property
     def combinations(self) -> int:
@@ -444,19 +598,28 @@ class ReconUnit:
         space = self.spaces.get(self.space_index)
         return 1 if space is None else math.prod(space.loop_sizes)
 
-    def add_acquisition(self, acquisition: Any, readout: Any) -> None:
+    def add_acquisition(
+        self, acquisition: Any, readout: Any, placed: Any = None
+    ) -> None:
         """Record one acquisition and place ``readout`` in the buffers its flags select.
 
-        A buffer is allocated at this readout's coils and samples when it is
-        the first the unit places in it.
+        The first readout the unit places in a buffer sizes it: its channels,
+        and along the readout its own samples when it is a centred full echo,
+        the encoded matrix's readout otherwise. A calibration readout is held
+        until :meth:`close`.
 
         Parameters
         ----------
         acquisition
-            The acquisition, for its counters and flags.
+            The acquisition as received, for its flags, which select the
+            buffers, and for :attr:`ReconData.acquisitions`.
         readout
             ``(coils, samples)`` to place: the acquisition's data as the
             gadgets left it.
+        placed
+            The acquisition as the gadgets left it, whose ``center_sample`` and
+            discards describe ``readout`` and which the buffers keep as their
+            header; ``acquisition`` when not given.
 
         Raises
         ------
@@ -469,29 +632,72 @@ class ReconUnit:
         self.data.acquisitions.append(acquisition)
         if not (self.buffered and self.spaces):
             return
+        readout = _as_readout(readout)
+        placed = acquisition if placed is None else placed
         in_data, in_ref = readout_roles(acquisition)
         if in_data:
-            self.data.data = self._place(self.data.data, acquisition, readout)
+            self.data.data = self._place(self.data.data, placed, readout)
         if in_ref:
-            self.data.ref = self._place(self.data.ref, acquisition, readout)
+            self._reference.append(
+                (placed, readout, _grid_position(self._space(), placed))
+            )
+
+    def close(self) -> ReconData:
+        """Lay out the calibration readouts and return what the unit collected.
+
+        The calibration buffer covers the lines its readouts do along the
+        phase-encode and partition axes, and every position of the other axes.
+        """
+        if self._reference:
+            self.data.ref = self._assemble(self._reference)
+            self._reference = []
+        return self.data
+
+    def _space(self) -> EncodingSpace:
+        if self.space_index not in self.spaces:
+            raise KeyError(
+                f"the header describes no encoding space {self.space_index}; "
+                f"it has {sorted(self.spaces)}"
+            )
+        return self.spaces[self.space_index]
 
     def _place(
-        self, buffer: ReconBuffer | None, acquisition: Any, readout: Any
+        self, buffer: ReconBuffer | None, placed: Any, readout: np.ndarray
     ) -> ReconBuffer:
         if buffer is None:
-            if self.space_index not in self.spaces:
-                raise KeyError(
-                    f"the header describes no encoding space {self.space_index}; "
-                    f"it has {sorted(self.spaces)}"
-                )
-            coils, samples = np.shape(readout)[-2:]
+            space = self._space()
+            coils, samples = readout.shape
             buffer = ReconBuffer(
-                self.spaces[self.space_index],
+                space,
                 coils=coils,
-                readout=samples,
+                samples=_width(space, placed, samples),
                 dtype=self.dtype,
             )
-        buffer.add(acquisition, readout)
+        buffer.add(placed, readout)
+        return buffer
+
+    def _assemble(
+        self, readouts: list[tuple[Any, np.ndarray, tuple[int, ...]]]
+    ) -> ReconBuffer:
+        space = self._space()
+        placed, readout, _ = readouts[0]
+        coils, samples = readout.shape
+        varying = [name for name, extent in space.extents if extent > 1]
+        grid = np.array([position for _, _, position in readouts], dtype=np.int64)
+        crop = {
+            name: (int(grid[:, column].min()), int(grid[:, column].max()) + 1)
+            for column, name in enumerate(varying)
+            if name in _CROPPABLE
+        }
+        buffer = ReconBuffer(
+            space,
+            coils=coils,
+            samples=_width(space, placed, samples),
+            crop=crop,
+            dtype=self.dtype,
+        )
+        for placed, readout, _ in readouts:
+            buffer.add(placed, readout)
         return buffer
 
 

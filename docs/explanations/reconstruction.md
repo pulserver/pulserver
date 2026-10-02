@@ -22,9 +22,22 @@ its readouts in play order ({class}`~pulserver.proxy.SequenceTable`). The table
 is applied to the stream as follows.
 
 - The header receives one encoding space for the imaging readouts of each
-  subsequence, and one for its navigator readouts when it has any. Each space
-  carries the matrix size and field of view the sequence defines and encoding
-  limits from the counters its readouts reach.
+  subsequence, and one for its navigator readouts when it has any. The
+  reconstruction space of each carries the matrix size and field of view the
+  sequence defines. The encoded space of a Cartesian space carries them with
+  the readout widened to the full echo: its matrix size along the readout is
+  the number of samples of the echo that is symmetric about the readouts'
+  `center_sample`, readout oversampling included, and its field of view along
+  the readout is the reconstructed one times the ratio of the two matrix
+  sizes. The ratio of the encoded to the reconstructed field of view along the
+  readout is the readout oversampling. A space with a trajectory keeps the
+  matrix size and field of view the sequence defines.
+- The encoding limits of each space are the minimum and maximum of the
+  counters its readouts reach. The `center` of `kspace_encoding_step_1` and
+  `kspace_encoding_step_2` is the counter of the k-space centre the sequence
+  defines (`kSpaceCenterLine`, `kSpaceCenterPartition`); where it defines
+  none, and for every other counter, the centre is the minimum plus half the
+  number of positions between the minimum and the maximum, rounded down.
 - The header's sequence parameters are the TR, TE, TI and flip angles the
   sequence defines. The TR, TE and flip angles it does not define are
   measured by pypulseqpp's `Sequence.test_report_dict`: TE from the excitation
@@ -85,12 +98,14 @@ A plugin names in its `axes` the counters it takes as axes of the unit's
 k-space instead, such as the echoes of a multi-echo acquisition, and these do
 not separate units either.
 
-A unit allocates its k-space when its first readout arrives, from the encoding
-space the header gives it, and places each readout by its counters. The flags
-of a readout select its buffer as Gadgetron's acquisition bucket divides
-readouts: parallel-imaging calibration readouts are placed in `ref`, readouts
-flagged as calibration and imaging in `ref` and `data`, phase-correction
-readouts in neither, and any other readout in `data`.
+A unit allocates its imaging k-space when its first imaging readout arrives,
+from the encoding space the header gives it, and places each readout as
+described under {ref}`reconstruction-placement`. The flags of a readout select
+its buffer as Gadgetron's acquisition bucket divides readouts: parallel-imaging
+calibration readouts are placed in `ref`, readouts flagged as calibration and
+imaging in `ref` and `data`, phase-correction readouts in neither, and any
+other readout in `data`. The calibration k-space is allocated when the unit
+closes, over the lines its readouts cover.
 
 A unit closes when the flag its branch declares has arrived at every position
 along its axes. Enrichment sets the last-in flag of a counter within each
@@ -105,6 +120,51 @@ the runtime holds it afterwards, so the memory a series holds is that of the
 units open at once, not that of the series. A unit still open at the last
 readout of the measurement or at the end of the stream is reconstructed then,
 under its own branch, in the order the units opened.
+
+(reconstruction-placement)=
+## Placement
+
+The readouts of a Cartesian encoding space are placed as Gadgetron's
+acquisition bucket places them.
+
+Along the readout axis, a readout is placed by its echo. The samples from
+`discard_pre` to `number_of_samples - discard_post` are copied so that the
+sample at `center_sample` lies at sample `N // 2` of the buffer, `N` being the
+number of samples of the buffer along the readout. `N` is the number of samples
+of the unit's first readout when that is a full echo centred in its samples
+(`center_sample == number_of_samples // 2`), and otherwise the matrix size of
+the encoded space along the readout. Readouts that sample different parts of
+the echo, such as a partial echo and a full one, are aligned by it, and the
+samples a gadget added to complete an echo, which the gadget declares as
+discarded, are not placed. `ReconBuffer.readout` is the first and last sample
+placed. A readout whose placed samples fall outside the buffer is an error.
+
+Along the phase-encoding and partition axes, a counter is placed at
+`counter - center + extent // 2`, with `extent` the matrix size of the encoded
+space along the axis and `center` the centre of the counter's encoding limit.
+The k-space centre lies at `extent // 2` whichever counter the sequence gives
+it, so undersampled, partial-Fourier and offset-numbered acquisitions are
+placed on one grid. The partition axis is shifted only when the encoded space
+has more than one partition. A counter that falls outside the grid once placed
+is an error. The calibration buffer is placed by the same rule and holds the
+lines its readouts cover; its `origin` is the position of its first line on the
+grid of the imaging buffer.
+
+A space with a trajectory has no echo or centre line to place by. Its readouts
+are aligned to the end of the readout axis, its counters are the positions of
+its views, and the k-space location of each sample is the trajectory the buffer
+holds.
+
+Two gadgets bring a Cartesian readout to the form the buffer places.
+{class}`~pulserver.recon.AsymmetricEcho` zero-fills a partial echo to the full
+echo that is symmetric about its `center_sample` and declares the zeros as
+discarded. {class}`~pulserver.recon.RemoveReadoutOversampling` crops a full
+echo to the readout field of view of the reconstruction, the ratio of the
+encoded to the reconstructed field of view being the oversampling. A gadget
+states the echo of the readout it returns by assigning `center_sample`,
+`discard_pre` and `discard_post` of the acquisition it is given. That is a copy
+of the acquisition: neither the stream's acquisition nor
+`ReconData.acquisitions` changes.
 
 ## Workers
 

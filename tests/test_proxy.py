@@ -931,7 +931,13 @@ def test_a_forwarded_series_names_its_reconstruction_in_a_config_file_message(
     name, header, description, *acquisitions = recording.received
     assert name == (configured or "gre2d")
     assert is_message(description)
-    assert header.encoding[0].encodedSpace.matrixSize.x == MATRIX["nx"]
+    encoding = header.encoding[0]
+    assert encoding.reconSpace.matrixSize.x == MATRIX["nx"]
+    oversampling = encoding.encodedSpace.matrixSize.x / MATRIX["nx"]
+    assert oversampling >= 1
+    assert encoding.encodedSpace.fieldOfView_mm.x == pytest.approx(
+        oversampling * encoding.reconSpace.fieldOfView_mm.x
+    )
     assert len(acquisitions) == len(series["gre2d"].table)
     assert "forwarded" in received
     assert closed(received)
