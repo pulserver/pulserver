@@ -15,8 +15,8 @@ from typing import Any
 
 import numpy as np
 
-from .._plugins import PluginPath, directories, names
-from ._command import motion_arguments, subject_motion
+from .._plugins import PluginPath, directories, names, recon_names
+from ._command import motion_arguments, reconstruction_plugin, subject_motion
 
 #: The design calls a console forwards, answered as ``pulserver design`` answers them.
 DESIGN_CALLS = ("list", "validate", "generate", "import")
@@ -41,7 +41,9 @@ class Console:
     one of the virtual scanner's coils, and scans a stored design on it.
     Images return as DICOM from the reconstruction proxy at ``recon``, or from
     the plugins of ``recon_plugins`` run in this process as the proxy runs
-    them; with neither, a scan returns no images.
+    them; with neither, a scan returns no images. A scan names its
+    reconstruction plugin; without one, the design's shipped scanner sequence
+    is reconstructed with the shipped reconstruction paired with it.
 
     Parameters
     ----------
@@ -190,6 +192,15 @@ class Console:
         """Return the names of the plugins a console can list."""
         return names(self.plugins)
 
+    def recon_names(self) -> list[str]:
+        """Return the names of the reconstruction plugins a scan can name.
+
+        The shipped ones and those of ``recon_plugins``. A console that
+        reconstructs through a proxy lists the shipped ones only; a name the
+        proxy holds is used all the same.
+        """
+        return recon_names(() if self.local is None else self.local.plugins)
+
     def coils(self) -> list[dict[str, Any]]:
         """Return each coil an exam can be started with: its ``name`` and its ``transmit`` and ``receive`` channels."""
         return [
@@ -240,6 +251,7 @@ class Console:
         emit: Callable[[dict], None],
         cancelled: Callable[[], bool] = lambda: False,
         sound: bool = False,
+        recon: str | None = None,
     ) -> int:
         """Scan a stored design on the exam's phantom; return the reconstruction's status.
 
@@ -260,10 +272,27 @@ class Console:
         that excite the same slabs play on the same isochromats, each from
         equilibrium, which keeps the pulses the engine has computed; a scan
         started while another plays has isochromats of its own.
+
+        ``recon`` names the reconstruction plugin. Without it, a design of a
+        shipped scanner sequence is reconstructed with the shipped
+        reconstruction paired with it in ``pulserver._zoo.ZOO_PAIRS``. A
+        console that reconstructs nothing ignores it.
+
+        Raises
+        ------
+        ValueError
+            If the console reconstructs, ``recon`` is ``None`` and the design
+            is not of a shipped scanner sequence, as an imported design is
+            not.
         """
         from ..host import DesignStore
         from ._region import excited
 
+        plugin = None
+        if self.recon is not None or self.local is not None:
+            plugin = reconstruction_plugin(
+                DesignStore(self.store).manifest(design).get("plugin", ""), recon
+            )
         if self.speed is not None:
             emit({"preparing": None})
         rotation = np.asarray(rotation, dtype=float).reshape(3, 3)
@@ -292,7 +321,7 @@ class Console:
             )
         try:
             return self._scan(
-                design, isochromats, rotation, centre_mm, emit, cancelled, sound
+                design, isochromats, rotation, centre_mm, emit, cancelled, sound, plugin
             )
         finally:
             with self._held:
@@ -378,6 +407,7 @@ class Console:
         emit: Callable[[dict], None],
         cancelled: Callable[[], bool],
         sound: bool,
+        plugin: str | None,
     ) -> int:
         from ..host import DesignStore
         from . import SAMPLE_RATE, Scan
@@ -425,7 +455,9 @@ class Console:
         # Closed however the scan ends, which stops its simulation before the
         # isochromats are handed on.
         with contextlib.closing(played()) as readouts:
-            return self._acquire(design, readouts, rotation, centre_mm, emit, stopped)
+            return self._acquire(
+                design, readouts, rotation, centre_mm, emit, stopped, plugin
+            )
 
     def _acquire(
         self,
@@ -435,8 +467,9 @@ class Console:
         centre_mm: Sequence[float],
         emit: Callable[[dict], None],
         stopped: threading.Event,
+        plugin: str | None,
     ) -> int:
-        """Send the readouts to the reconstruction, emitting what it returns; return its status."""
+        """Send the readouts to the reconstruction ``plugin`` names, emitting what it returns; return its status."""
         import ismrmrd
         import pypulseqpp as pp
 
@@ -472,7 +505,7 @@ class Console:
                 status = 1 if item.startswith("pulserver:") else status
 
         if self.local is None:
-            for item in send(self.recon, design, readouts, **series):
+            for item in send(self.recon, design, readouts, config=plugin, **series):
                 returned(item)
         else:
             header, acquisitions = _series(
@@ -484,7 +517,10 @@ class Console:
                 None,
             )
             self.local.run(
-                ismrmrd.xsd.CreateFromDocument(header), acquisitions, returned
+                ismrmrd.xsd.CreateFromDocument(header),
+                acquisitions,
+                returned,
+                config=plugin,
             )
         return 1 if stopped.is_set() else status
 
@@ -507,6 +543,8 @@ class Console:
         try:
             if call == "plugins":
                 reply({"plugins": self.plugin_names()})
+            elif call == "recons":
+                reply({"recons": self.recon_names()})
             elif call == "coils":
                 reply({"coils": self.coils()})
             elif call in DESIGN_CALLS:
@@ -522,6 +560,7 @@ class Console:
                     {"localizer": [base64.b64encode(f).decode("ascii") for f in files]}
                 )
             elif call == "scan":
+                recon = request.get("recon")
                 status = self.scan(
                     str(request["design"]),
                     rotation=np.asarray(request.get("rotation", np.eye(3).ravel())),
@@ -529,6 +568,7 @@ class Console:
                     emit=reply,
                     cancelled=cancelled,
                     sound=bool(request.get("sound", False)),
+                    recon=None if recon is None else str(recon),
                 )
                 reply({"done": status})
             else:

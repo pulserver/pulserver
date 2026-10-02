@@ -42,8 +42,10 @@ def send(
     and as ``read_dir``, ``phase_dir`` and ``slice_dir`` the columns of the
     prescription's ``rotation`` from logical to physical axes, the identity
     by default. Nothing else of the sequence is sent, as
-    :doc:`/user-guide/reconstruction-client` specifies. The reply is the
-    images, DICOM datasets and texts in the order they arrive.
+    :doc:`/user-guide/reconstruction-client` specifies. ``config``, when
+    given, is the config text sent before the header, from which a proxy takes
+    the reconstruction plugin: its name. The reply is the images, DICOM
+    datasets and texts in the order they arrive.
 
     ``readouts`` may be an iterator: the header is sent once its first
     readout is taken, and each readout once the next one is, so that the

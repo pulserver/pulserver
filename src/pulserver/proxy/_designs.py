@@ -4,7 +4,6 @@ from __future__ import annotations
 
 __all__ = ["DESIGN_PARAMETER", "Design", "DesignCache"]
 
-import json
 import re
 import threading
 from collections import OrderedDict
@@ -38,9 +37,6 @@ class Design:
     ----------
     directory
         ``<store>/<id>/``.
-    recon
-        Reconstruction plugin the design names; empty when it names none, which
-        leaves the choice to the client's config.
     table
         The readouts of the design's sequence chain, in play order.
     prospective_motion
@@ -50,7 +46,6 @@ class Design:
     """
 
     directory: Path
-    recon: str
     table: SequenceTable
     prospective_motion: bool = False
 
@@ -123,10 +118,8 @@ class DesignCache:
                 if directory in self._designs:
                     self._designs.move_to_end(directory)
                     return self._designs[directory]
-            manifest = json.loads((directory / MANIFEST).read_text())
             design = Design(
                 directory=directory,
-                recon=str(manifest.get("recon", "")),
                 table=SequenceTable.read(directory / _ENTRY),
                 prospective_motion=_asks_for_motion_correction(directory / _ENTRY),
             )

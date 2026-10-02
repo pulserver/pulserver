@@ -1,4 +1,4 @@
-"""pypulseqpp's stack-of-spirals gradient echo bound to the scanner UI, reconstructed by bartorch's NUFFT, its partitions counted by the number of slices."""
+"""pypulseqpp's stack-of-spirals gradient echo bound to the scanner UI, its partitions counted by the number of slices."""
 
 from pypulseqpp.sequences.sequence.gre_stack_of_spirals3D_sequence import (
     GreStackOfSpirals3DApp,
@@ -10,7 +10,6 @@ from pulserver.protocol import TEPreset, TRPreset, UIParam
 
 class GreStackOfSpirals3D(ScannerSequence):
     app = GreStackOfSpirals3DApp
-    recon = "nufft"
     ui = {
         UIParam.FLIP: FloatParam(
             "flip_angle_deg", unit="deg", range_min=1.0, range_max=90.0

@@ -23,9 +23,9 @@ class LocalReconstruction:
 
     For a host that starts no processes, such as a browser tab. A series is
     checked and enriched as the proxy checks and enriches a stream, and
-    reconstructed on the host by the design's reconstruction plugin, or else
-    the one its config names. The series of one exam share an
-    :class:`~pulserver.recon.ExamCache` held in memory.
+    reconstructed on the host by the reconstruction plugin its config names.
+    The series of one exam share an :class:`~pulserver.recon.ExamCache` held
+    in memory.
 
     Parameters
     ----------
@@ -60,7 +60,7 @@ class LocalReconstruction:
         """
         try:
             design = self.designs.resolve(header)
-            plugin = design.recon or _config_plugin(config)
+            plugin = _config_plugin(config)
             path = _plugin_path(self.plugins, plugin)
             enrich_header(header, design.table)
             reconstruction = load_plugin(path)

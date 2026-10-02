@@ -229,11 +229,11 @@ python -m pulserver.proxy --store DIR --port N --forward HOST:PORT [--forward-co
 
 The MRD header of each series names the design it was played from in the
 `pulserver_design` user parameter, and the proxy refuses a series whose header
-names no stored design. The reconstruction
-plugin is the one the scanner sequence names in its `recon` attribute; when it
-names none, the client's config text names it, either as a bare plugin name or
-under `parameters.config`. The messages and fields the client sends are listed
-in {doc}`reconstruction-client`.
+names no stored design. The client's config text names the reconstruction
+plugin, as a bare plugin name or the path of its file, or as either under
+`parameters.config`; the design names none. A series whose config names none is
+refused unless the proxy forwards with `--forward-config`. The messages and
+fields the client sends are listed in {doc}`reconstruction-client`.
 
 A series that finds every slot busy is written to the queue directory as it
 arrives and reconstructed once a slot frees; the client stays connected

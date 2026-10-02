@@ -1,4 +1,4 @@
-"""pypulseqpp's 2D spiral gradient echo bound to the scanner UI, reconstructed with bartorch's NUFFT."""
+"""pypulseqpp's 2D spiral gradient echo bound to the scanner UI."""
 
 from pypulseqpp.sequences.sequence.gre_spiral2D_sequence import GreSpiral2DApp
 
@@ -8,7 +8,6 @@ from pulserver.protocol import TEPreset, TRPreset, UIParam
 
 class GreSpiral2D(ScannerSequence):
     app = GreSpiral2DApp
-    recon = "nufft"
     ui = {
         UIParam.FLIP: FloatParam(
             "flip_angle_deg", unit="deg", range_min=1.0, range_max=90.0

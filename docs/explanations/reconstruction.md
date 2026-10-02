@@ -74,9 +74,10 @@ with the length of the scan.
 ## Workers
 
 Each series is reconstructed in its own worker process, with the reconstruction
-plugin the scanner sequence names, or the one named by the client's
-configuration when the sequence names none. A worker reconstructs one series
-and exits, which releases the host and GPU memory the reconstruction allocated.
+plugin the client's configuration names. The design names none, so the choice is
+independent of the scanner sequence the series was played from, and one design
+can be reconstructed by different plugins. A worker reconstructs one series and
+exits, which releases the host and GPU memory the reconstruction allocated.
 Importing a reconstruction engine takes seconds, so the proxy keeps spare
 worker processes that have already imported it.
 

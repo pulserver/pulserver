@@ -571,6 +571,7 @@ def _scan(proxy, tmp_path, rotation, readouts=None):
         acquired if readouts is None else acquired[:readouts],
         position_mm=1e3 * rotation @ OFFSET,
         rotation=rotation,
+        config="gre2d",
         timeout=DEADLINE,
     )
     return seq, received
@@ -612,7 +613,11 @@ def test_a_series_streamed_as_it_is_acquired_is_reconstructed_as_one_sent_whole(
     images = []
     for readouts in (streamed, whole):
         received = virtual.send(
-            ("127.0.0.1", proxy.port), design, readouts, timeout=DEADLINE
+            ("127.0.0.1", proxy.port),
+            design,
+            readouts,
+            config="gre2d",
+            timeout=DEADLINE,
         )
         (image,) = [item for item in received if isinstance(item, ismrmrd.Image)]
         images.append(np.squeeze(np.abs(image.data)).astype(float))

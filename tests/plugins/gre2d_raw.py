@@ -1,4 +1,4 @@
-"""The 2D gradient echo without a bound reconstruction: the client's config chooses."""
+"""The 2D gradient echo whose protocol is its echo time and its matrix."""
 
 from pypulseqpp.sequences.sequence.gre2D_sequence import Gre2DApp
 

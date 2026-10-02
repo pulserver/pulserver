@@ -1,4 +1,4 @@
-"""pypulseqpp's 2D spiral spin echo bound to the scanner UI, reconstructed by bartorch's NUFFT."""
+"""pypulseqpp's 2D spiral spin echo bound to the scanner UI."""
 
 from pypulseqpp.sequences.sequence.se_spiral2D_sequence import SeSpiral2DApp
 
@@ -8,7 +8,6 @@ from pulserver.protocol import TEPreset, TRPreset, UIParam
 
 class SeSpiral2D(ScannerSequence):
     app = SeSpiral2DApp
-    recon = "nufft"
     ui = {
         UIParam.TE: TimeParam(
             "te",

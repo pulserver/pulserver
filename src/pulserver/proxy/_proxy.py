@@ -155,10 +155,10 @@ class ReconProxy(_Listener):
     sent back to the client. The readouts arrive demodulated to the
     prescribed field-of-view centre by the playout
     (:func:`pulserver.ir.prescribe`), and their samples are passed on as
-    received. The reconstruction plugin is the design's, falling back to
-    the name in the client's config text. A series that breaks this is refused
-    with a text naming the reason and a ``CLOSE``, and what the client still
-    sends is discarded until it closes the connection.
+    received. The reconstruction plugin is the one the client's config text
+    names. A series that breaks this is refused with a text naming the reason
+    and a ``CLOSE``, and what the client still sends is discarded until it
+    closes the connection.
 
     The enriched series is reconstructed by a local worker, or, with
     ``forward``, by the MRD server at that address. Whatever reconstructs it,
@@ -308,7 +308,7 @@ class ReconProxy(_Listener):
             _drain(client)
             return
         design = self.designs.resolve(header)
-        plugin = design.recon or _config_plugin(config)
+        plugin = _config_plugin(config)
         enrich_header(header, design.table)
         _log.info(
             "series on %s: %s, %d readouts",
@@ -636,7 +636,10 @@ class _Remote:
         """
         name = self.config or plugin
         if not name:
-            raise ValueError("neither the design nor the config names a reconstruction")
+            raise ValueError(
+                "neither the client's config nor the forward config names a "
+                "reconstruction"
+            )
         convert = MrdDicomBuilder(header) if self.dicom else None
         host, port = self.address
         try:
@@ -791,7 +794,7 @@ class _RemoteChannel:
 
 def _plugin_path(plugins: PluginPath, plugin: str) -> Path:
     if not plugin:
-        raise ValueError("neither the design nor the config names a reconstruction")
+        raise ValueError("the config names no reconstruction")
     return find(plugins, plugin)
 
 
@@ -828,8 +831,8 @@ def _drain(connection: Connection) -> None:
 def _opening(connection: Connection) -> tuple[str, Any]:
     """Return the config text and the header a stream opens with.
 
-    The config is optional: a stream may open with its header, which leaves
-    the reconstruction to the one the design names.
+    The config is optional: a stream may open with its header, and its config
+    text is then empty.
 
     Raises
     ------
@@ -854,16 +857,18 @@ def _config_plugin(config: str) -> str:
     """Return the plugin a config text names.
 
     A bare name is the plugin; anything else is parsed as the runtime parses a
-    config and read from ``parameters.config``.
+    config and read from ``parameters.config``. A name that is the path of a
+    plugin file, ending in ``.py``, is the plugin of the file's stem, since the
+    plugin finder takes bare names only.
     """
     text = config.strip()
-    if NAME.fullmatch(text):
-        return text
-    parsed = deserialize_config(text, "")
-    parameters = parsed.get("parameters") if isinstance(parsed, dict) else None
-    if not isinstance(parameters, dict):
-        return ""
-    return str(parameters.get("config", ""))
+    if "\n" in text or not (NAME.fullmatch(text) or text.endswith(".py")):
+        parsed = deserialize_config(text, "")
+        parameters = parsed.get("parameters") if isinstance(parsed, dict) else None
+        if not isinstance(parameters, dict):
+            return ""
+        text = str(parameters.get("config", "")).strip()
+    return Path(text).stem if text.endswith(".py") else text
 
 
 def _is_close_marker(item: Any) -> bool:

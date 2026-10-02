@@ -1,4 +1,4 @@
-"""pypulseqpp's 2D spin echo bound to the scanner UI, reconstructed by pics."""
+"""pypulseqpp's 2D spin echo bound to the scanner UI."""
 
 from pypulseqpp.sequences.sequence.se2D_sequence import Se2DApp
 
@@ -8,7 +8,6 @@ from pulserver.protocol import TEPreset, TRPreset, UIParam
 
 class Se2D(ScannerSequence):
     app = Se2DApp
-    recon = "pics"
     ui = {
         UIParam.TE: TimeParam(
             "te",

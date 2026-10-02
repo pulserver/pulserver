@@ -20,6 +20,8 @@ from _host import ANY_ORIENTATION, LIMITS, PLUGINS
 from _virtual import FIELD_CHANNELS, write_fields
 
 from pulserver import ir, virtual
+from pulserver._plugins import RECONSTRUCTIONS
+from pulserver._zoo import ZOO_PAIRS
 from pulserver.host import DesignStore
 from pulserver.host._blocks import format_limits
 from pulserver.protocol import FOV_OFFSET, FOV_ROTATION, PROTOCOL_BEGIN, PROTOCOL_END
@@ -244,7 +246,11 @@ def test_a_scan_streams_its_clock_and_returns_the_reconstruction_as_dicom(
     messages = []
 
     status = console.scan(
-        design, rotation=np.eye(3), centre_mm=(0.0, 0.0, 0.0), emit=messages.append
+        design,
+        rotation=np.eye(3),
+        centre_mm=(0.0, 0.0, 0.0),
+        emit=messages.append,
+        recon="gre2d",
     )
 
     assert status == 0
@@ -281,7 +287,11 @@ def test_a_scan_reconstructed_in_this_process_returns_the_images_a_proxy_returns
         console.exam("vials")
         messages = []
         status = console.scan(
-            design, rotation=np.eye(3), centre_mm=(0.0, 0.0, 0.0), emit=messages.append
+            design,
+            rotation=np.eye(3),
+            centre_mm=(0.0, 0.0, 0.0),
+            emit=messages.append,
+            recon="gre2d",
         )
         assert status == 0
         returned[name] = _images(messages)
@@ -300,7 +310,11 @@ def test_an_exams_scans_play_on_its_isochromats_each_from_equilibrium(tmp_path):
     def scanned():
         messages = []
         status = console.scan(
-            design, rotation=np.eye(3), centre_mm=(0.0, 0.0, 0.0), emit=messages.append
+            design,
+            rotation=np.eye(3),
+            centre_mm=(0.0, 0.0, 0.0),
+            emit=messages.append,
+            recon="gre2d",
         )
         assert status == 0
         return _images(messages)[0]
@@ -475,7 +489,7 @@ def test_a_request_answered_in_process_carries_what_the_websocket_carries(tmp_pa
         "generate", plugin="gre2d", block=_block(TE=5000, nx=32, ny=32)
     )
     answer("exam", subject="vials")
-    scanned = answer("scan", design=generated["design"])
+    scanned = answer("scan", design=generated["design"], recon="gre2d")
     [refused] = answer("reboot")
     [failed] = answer("scan")
 
@@ -491,20 +505,82 @@ def test_a_scan_whose_reconstruction_is_refused_returns_the_reason_and_fails(
     tmp_path,
 ):
     console = _console(tmp_path, recon_plugins=RECON_PLUGINS)
-    design = console.design("generate", "gre2d_raw", _block(TE=5000, nx=32, ny=32))[
+    design = console.design("generate", "gre2d", _block(TE=5000, nx=32, ny=32))[
         "design"
     ]
     messages = []
 
     status = console.scan(
-        design, rotation=np.eye(3), centre_mm=(0.0, 0.0, 0.0), emit=messages.append
+        design,
+        rotation=np.eye(3),
+        centre_mm=(0.0, 0.0, 0.0),
+        emit=messages.append,
+        recon="absent",
     )
 
     assert status == 1
     assert not _images(messages)
     assert [m["text"] for m in messages if "text" in m] == [
-        "pulserver: neither the design nor the config names a reconstruction"
+        f"pulserver: no plugin 'absent' in {RECON_PLUGINS} or among the shipped plugins"
     ]
+
+
+def test_a_scan_without_a_reconstruction_uses_the_shipped_pair(tmp_path):
+    console = _console(tmp_path, recon_plugins=RECON_PLUGINS)
+    design = console.design("generate", "gre2d", _block(TE=5000, nx=32, ny=32))[
+        "design"
+    ]
+    console.exam("vials")
+    named = []
+    console.local.run = lambda header, items, send, config="": named.append(config)
+
+    _scanned(console, design, np.eye(3))
+    console.answer({"call": "scan", "design": design}, lambda _: None)
+
+    assert named == [ZOO_PAIRS["gre2d"]] * 2
+
+
+def test_a_scan_of_an_unpaired_design_must_name_its_reconstruction(tmp_path):
+    console = _console(tmp_path, recon_plugins=RECON_PLUGINS)
+    design = console.design("generate", "gre2d_raw", _block(TE=5000, nx=32, ny=32))[
+        "design"
+    ]
+    console.exam("vials")
+    refused, named = [], []
+
+    with pytest.raises(ValueError, match="must name its reconstruction"):
+        _scanned(console, design, np.eye(3))
+    console.answer({"call": "scan", "design": design}, refused.append)
+    console.answer({"call": "scan", "design": design, "recon": "gre2d"}, named.append)
+
+    assert len(refused) == 1
+    assert refused[0]["error"].startswith(
+        "ValueError: the scan must name its reconstruction"
+    )
+    assert named[-1] == {"done": 0}
+    assert len(_images(named)) == 1
+
+
+def test_a_console_that_reconstructs_nothing_scans_a_design_of_any_plugin(tmp_path):
+    console = _console(tmp_path)
+    design = console.design("generate", "gre2d_raw", _block(TE=5000, nx=32, ny=32))[
+        "design"
+    ]
+
+    _scanned(console, design, np.eye(3))
+
+
+def test_a_console_lists_the_reconstruction_plugins_a_scan_can_name(tmp_path):
+    shipped = {path.stem for path in RECONSTRUCTIONS.glob("*.py")}
+    own = {path.stem for path in RECON_PLUGINS.glob("*.py")}
+    local = _console(tmp_path, recon_plugins=RECON_PLUGINS)
+    proxied = _console(tmp_path, recon=("127.0.0.1", 9))
+    listed = []
+
+    local.answer({"call": "recons"}, listed.append)
+
+    assert listed == [{"recons": sorted(shipped | own)}]
+    assert proxied.recon_names() == sorted(shipped)
 
 
 def test_a_cancelled_scan_stops_and_reports_it(tmp_path):

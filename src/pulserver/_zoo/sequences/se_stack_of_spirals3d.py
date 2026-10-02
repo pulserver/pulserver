@@ -1,4 +1,4 @@
-"""pypulseqpp's stack-of-spirals spin echo bound to the scanner UI, reconstructed by bartorch's NUFFT, its partitions counted by the number of slices."""
+"""pypulseqpp's stack-of-spirals spin echo bound to the scanner UI, its partitions counted by the number of slices."""
 
 from pypulseqpp.sequences.sequence.se_stack_of_spirals3D_sequence import (
     SeStackOfSpirals3DApp,
@@ -10,7 +10,6 @@ from pulserver.protocol import TEPreset, TRPreset, UIParam
 
 class SeStackOfSpirals3D(ScannerSequence):
     app = SeStackOfSpirals3DApp
-    recon = "nufft"
     ui = {
         UIParam.TE: TimeParam(
             "te",

@@ -164,7 +164,6 @@ def generate(
         manifest = {
             **_record(limits),
             "plugin": plugin,
-            "recon": scanner.recon,
             "source": source,
             "scan_time": validation.duration,
         }
@@ -226,7 +225,6 @@ def import_chain(
         manifest = {
             **_record(limits),
             "plugin": "",
-            "recon": "",
             "source": str(first),
             "fov_offset_mm": list(offset_mm),
             "fov_rotation": rotation.ravel().tolist(),

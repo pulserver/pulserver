@@ -56,10 +56,23 @@ def names(plugins: PluginPath) -> list[str]:
     The shipped sequences are listed; the shipped reconstructions are not. A
     directory that does not exist holds none.
     """
+    return _stems((*directories(plugins), SEQUENCES))
+
+
+def recon_names(plugins: PluginPath = ()) -> list[str]:
+    """Return the name of each reconstruction :func:`find` can return, once, sorted.
+
+    The shipped reconstructions are listed; the shipped sequences are not. A
+    directory that does not exist holds none.
+    """
+    return _stems((*directories(plugins), RECONSTRUCTIONS))
+
+
+def _stems(search: Sequence[Path]) -> list[str]:
     return sorted(
         {
             path.stem
-            for directory in (*directories(plugins), SEQUENCES)
+            for directory in search
             for path in directory.glob("*.py")
             if NAME.fullmatch(path.stem) and path.is_file()
         }

@@ -1,4 +1,4 @@
-"""pypulseqpp's 2D gradient-echo EPI bound to the scanner UI, reconstructed by the EPI pics chain."""
+"""pypulseqpp's 2D gradient-echo EPI bound to the scanner UI."""
 
 import functools
 
@@ -18,7 +18,6 @@ class _Epi2DApp(Epi2DApp):
 
 class Epi2D(ScannerSequence):
     app = _Epi2DApp
-    recon = "epi"
     ui = {
         UIParam.FLIP: FloatParam(
             "flip_angle_deg", unit="deg", range_min=1.0, range_max=90.0

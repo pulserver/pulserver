@@ -14,6 +14,7 @@ from _host import ANY_ORIENTATION, FIXTURE_LIMITS, FIXTURES, PLUGINS
 from scipy.io import wavfile
 
 from pulserver import _cli, virtual
+from pulserver._zoo import ZOO_PAIRS
 from pulserver.host import DesignStore
 from pulserver.host._blocks import format_limits
 from pulserver.protocol import PROTOCOL_BEGIN, PROTOCOL_END
@@ -151,6 +152,8 @@ def test_a_headless_scan_streams_a_generated_design_to_a_proxy_and_keeps_its_ima
             "2",
             "--recon",
             f"127.0.0.1:{proxy.port}",
+            "--reconstruction",
+            "gre2d",
             "--output",
             str(tmp_path / "images"),
         ]
@@ -171,6 +174,63 @@ def test_a_headless_scan_streams_a_generated_design_to_a_proxy_and_keeps_its_ima
         (image.read_dir, image.phase_dir, image.slice_dir), rotation.T, strict=True
     ):
         np.testing.assert_allclose(direction, axis, atol=1e-6)
+
+
+def test_a_headless_scan_without_a_reconstruction_uses_the_shipped_pair_of_its_plugin(
+    tmp_path, monkeypatch
+):
+    protocol = tmp_path / "protocol.txt"
+    protocol.write_text(f"{PROTOCOL_BEGIN}\nTE: 5000\nnx: 32\nny: 32\n{PROTOCOL_END}\n")
+    named = []
+    monkeypatch.setattr(
+        virtual,
+        "send",
+        lambda address, design, readouts, config=None, **series: (
+            named.append(config) or []
+        ),
+    )
+
+    status = _cli.main(
+        [
+            "scan",
+            "--plugins",
+            str(PLUGINS),
+            "--plugin",
+            "gre2d",
+            "--protocol",
+            str(protocol),
+            "--limits",
+            str(_limits(tmp_path / "limits.txt", ANY_ORIENTATION)),
+            "--store",
+            str(tmp_path / "designs"),
+            "--spacing",
+            "2",
+            "--recon",
+            "127.0.0.1:9",
+            "--output",
+            str(tmp_path / "images"),
+        ]
+    )
+
+    assert status == 0
+    assert named == [ZOO_PAIRS["gre2d"]]
+
+
+@pytest.mark.parametrize(
+    ("options", "reason"),
+    [
+        (["--recon", "127.0.0.1:9"], "must name its reconstruction"),
+        (["--reconstruction", "nufft"], "--reconstruction needs --recon"),
+    ],
+)
+def test_a_scan_that_does_not_say_how_it_is_reconstructed_is_refused_before_it_starts(
+    options, reason, capsys
+):
+    with pytest.raises(SystemExit) as refused:
+        main(["--seq", "x.seq", "--limits", "limits.txt", *options])
+
+    assert refused.value.code == 2
+    assert reason in capsys.readouterr().err
 
 
 def test_a_design_the_calls_refuse_ends_the_scan_with_their_error(tmp_path, capsys):

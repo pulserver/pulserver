@@ -5,6 +5,9 @@ import pytest
 from pulserver import _plugins
 
 SHIPPED = sorted(path.stem for path in _plugins.SEQUENCES.glob("*.py"))
+SHIPPED_RECONSTRUCTIONS = sorted(
+    path.stem for path in _plugins.RECONSTRUCTIONS.glob("*.py")
+)
 
 
 @pytest.fixture
@@ -28,6 +31,17 @@ def test_a_plugin_is_the_file_of_the_first_directory_that_holds_it(path):
 
 def test_the_plugin_names_are_those_of_every_directory_each_once(path):
     assert _plugins.names(path) == sorted({"own", "shared", *SHIPPED})
+
+
+def test_the_reconstruction_names_are_those_of_every_directory_each_once(path):
+    assert _plugins.recon_names(path) == sorted(
+        {"own", "shared", *SHIPPED_RECONSTRUCTIONS}
+    )
+    assert _plugins.recon_names() == SHIPPED_RECONSTRUCTIONS
+
+
+def test_the_shipped_sequences_are_not_listed_as_reconstructions(path):
+    assert "gre2d" not in _plugins.recon_names(path)
 
 
 def test_a_shipped_plugin_is_found_after_every_directory_given(path):
