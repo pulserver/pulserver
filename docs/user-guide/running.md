@@ -301,6 +301,55 @@ authenticated nor encrypted, and `--host` names the interface the proxy
 reaches it on. It stops on `SIGINT` or `SIGTERM` and waits for the series it is
 running.
 
+## Checking a sequence plays as it was written
+
+```bash
+pulserver validate SEQ [--vendor ge] [--played FILE] [--dead-time-us N] [--rf-wait-us N] [--tolerance MT] [--rf-tolerance PCT] [--limits FILE]
+```
+
+| Option | Meaning |
+| --- | --- |
+| `SEQ` | The sequence file to check |
+| `--vendor` | Which machine the recording came from. Without one the check is against the sequence's own IR cache |
+| `--played` | The recording to check against; without one, and with a vendor named, the recording is asked for from that vendor's tooling if it is installed |
+| `--dead-time-us` | What the recording's times run ahead of the sequence's by, on every channel |
+| `--rf-wait-us` | What the transmit channels run ahead by on top of that |
+| `--tolerance` | The largest gradient difference that counts as agreement, in mT/m; taken from the slew rate and raster of `--limits` when unset |
+| `--rf-tolerance` | The largest transmit difference, as a percentage of the peak; 1 by default |
+| `--limits` | The `[Limits]` block, for a sequence that has no cache yet |
+
+The command exits 0 where the two agree, 1 where they differ, and 2 where it
+could not compare, and prints the largest difference on each gradient axis
+against the peak that axis reaches.
+
+Naming a vendor compares against a recording of a machine playing the sequence,
+which establishes that the machine plays what was written. Naming none compares
+against the waveforms the sequence's own IR cache holds, which establishes only
+that the conversion kept the sequence — a conversion and a playout that are
+wrong in the same way agree with each other. The output says which of the two
+ran.
+
+The gradients are compared in millitesla per metre, and the transmit channels
+as the recording stores them: the phase over a converter that spans a turn, and
+the magnitude by its shape, because what turns a recorded count into hertz is
+the peak transmit field of the scan being played and the recording does not
+carry it. The scale that the shape took is printed, which is the number a
+machine's own calibration would have to supply.
+
+A machine starts a unit before it plays anything of it, and drives its transmit
+and gradient channels on separate timelines, so a recording runs ahead of the
+sequence by one constant on every channel and by a second on the transmit
+channels. `--dead-time-us` and `--rf-wait-us` state them. Nothing estimates
+them, because a comparison that quietly aligns two waveforms can align away the
+disagreement it exists to find.
+
+The gradient tolerance is the hardware's: what the gradients can slew through
+in the few raster steps the two renderings may be apart. A fixed number would
+be either too tight for a fast machine or too loose for a careful one.
+
+Checking a sequence leaves nothing beside it: where no cache is there already,
+one is built beside a copy and discarded.
+
 ## See also
 
 * {doc}`../explanations/architecture` — the services and what passes between them.
