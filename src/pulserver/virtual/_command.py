@@ -464,8 +464,9 @@ def _scan(
             acquired = []
             host, _, port = args.recon.rpartition(":")
             sent = _kept(readouts, acquired) if args.mrd is not None else readouts
+            config = json.dumps({"parameters": {"config": recon_plugin}})
             status = _received(
-                send((host, int(port)), design, sent, config=recon_plugin, **series),
+                send((host, int(port)), design, sent, config=config, **series),
                 args.output,
             )
     if args.mrd is not None:

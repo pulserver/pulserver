@@ -26,6 +26,7 @@ from pulserver.host import DesignStore
 from pulserver.host._blocks import format_limits
 from pulserver.protocol import FOV_OFFSET, FOV_ROTATION, PROTOCOL_BEGIN, PROTOCOL_END
 from pulserver.proxy import ReconProxy
+from pulserver.recon._runtime.readers import deserialize_config
 from pulserver.virtual._command import ORIENTATIONS
 from pulserver.virtual._console import Console, _connection
 from pulserver.virtual._localizer import PLANES
@@ -537,7 +538,9 @@ def test_a_scan_without_a_reconstruction_uses_the_shipped_pair(tmp_path):
     _scanned(console, design, np.eye(3))
     console.answer({"call": "scan", "design": design}, lambda _: None)
 
-    assert named == [ZOO_PAIRS["gre2d"]] * 2
+    assert [deserialize_config(config) for config in named] == [
+        {"parameters": {"config": ZOO_PAIRS["gre2d"]}}
+    ] * 2
 
 
 def test_a_scan_of_an_unpaired_design_must_name_its_reconstruction(tmp_path):

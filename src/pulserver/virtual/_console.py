@@ -481,6 +481,7 @@ class Console:
             for _ in readouts:
                 pass
             return 1 if stopped.is_set() else 0
+        config = json.dumps({"parameters": {"config": plugin}})
         status = 0
         series = {
             "frequency_hz": pp.Opts().gamma * self.field_t,
@@ -505,7 +506,7 @@ class Console:
                 status = 1 if item.startswith("pulserver:") else status
 
         if self.local is None:
-            for item in send(self.recon, design, readouts, config=plugin, **series):
+            for item in send(self.recon, design, readouts, config=config, **series):
                 returned(item)
         else:
             header, acquisitions = _series(
@@ -520,7 +521,7 @@ class Console:
                 ismrmrd.xsd.CreateFromDocument(header),
                 acquisitions,
                 returned,
-                config=plugin,
+                config=config,
             )
         return 1 if stopped.is_set() else status
 

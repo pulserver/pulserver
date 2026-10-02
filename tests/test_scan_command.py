@@ -19,6 +19,7 @@ from pulserver.host import DesignStore
 from pulserver.host._blocks import format_limits
 from pulserver.protocol import PROTOCOL_BEGIN, PROTOCOL_END
 from pulserver.proxy import ReconProxy
+from pulserver.recon._runtime.readers import deserialize_config
 from pulserver.virtual._bloch import TOLERANCE
 from pulserver.virtual._command import (
     ORIENTATIONS,
@@ -213,7 +214,9 @@ def test_a_headless_scan_without_a_reconstruction_uses_the_shipped_pair_of_its_p
     )
 
     assert status == 0
-    assert named == [ZOO_PAIRS["gre2d"]]
+    assert [deserialize_config(config) for config in named] == [
+        {"parameters": {"config": ZOO_PAIRS["gre2d"]}}
+    ]
 
 
 @pytest.mark.parametrize(
