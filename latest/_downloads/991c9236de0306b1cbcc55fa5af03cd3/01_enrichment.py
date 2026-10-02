@@ -241,20 +241,28 @@ print("flags of acquisition 63:", acquisitions[63].flags)
 # ----------
 #
 # :func:`~pulserver.proxy.enrich_header` describes the table's encoding space in
-# the header. :func:`~pulserver.proxy.enrich_acquisition` applies one table row
-# to each acquisition, in stream order, and leaves the samples as received.
+# the header: the reconstruction space has the matrix size and field of view the
+# sequence defines, and the encoded space has the readout widened to the full
+# echo, readout oversampling included, with its field of view in proportion.
+# :func:`~pulserver.proxy.enrich_acquisition` applies one table row to each
+# acquisition, in stream order, and leaves the samples as received.
 
 enrich_header(header, table)
 for row, acquisition in enumerate(acquisitions):
     enrich_acquisition(acquisition, table, row)
 
 encoding = header.encoding[0]
-matrix = encoding.encodedSpace.matrixSize
-fov = encoding.reconSpace.fieldOfView_mm
+for name in ("encodedSpace", "reconSpace"):
+    space = getattr(encoding, name)
+    matrix, fov = space.matrixSize, space.fieldOfView_mm
+    print(
+        f"{name}: matrix {matrix.x} x {matrix.y} x {matrix.z}, "
+        f"FOV {fov.x:g} x {fov.y:g} mm"
+    )
+limit = encoding.encodingLimits.kspace_encoding_step_1
 print(
-    f"encoded matrix {matrix.x} x {matrix.y} x {matrix.z}, FOV {fov.x:g} x {fov.y:g} mm"
+    f"phase-encoding limits {limit.minimum} to {limit.maximum}, centre {limit.center}"
 )
-print("phase-encoding limit:", encoding.encodingLimits.kspace_encoding_step_1.maximum)
 print("LIN of acquisition 10:", acquisitions[10].idx.kspace_encode_step_1)
 print(
     "acquisition 63 closes the slice:",

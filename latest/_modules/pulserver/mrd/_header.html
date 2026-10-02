@@ -507,6 +507,13 @@
     <span class="k">return</span> <span class="mi">0</span> <span class="k">if</span> <span class="n">maximum</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="nb">int</span><span class="p">(</span><span class="n">maximum</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span>
 
 
+<span class="k">def</span><span class="w"> </span><span class="nf">_center</span><span class="p">(</span><span class="n">limits</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Counter of the k-space centre an encoding limit states, or ``None`` when it states none."""</span>
+    <span class="n">entry</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">limits</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="k">if</span> <span class="n">limits</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span>
+    <span class="n">center</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">entry</span><span class="p">,</span> <span class="s2">"center"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="k">if</span> <span class="n">entry</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span>
+    <span class="k">return</span> <span class="kc">None</span> <span class="k">if</span> <span class="n">center</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="nb">int</span><span class="p">(</span><span class="n">center</span><span class="p">)</span>
+
+
 <div class="viewcode-block" id="EncodingSpace">
 <a class="viewcode-back" href="../../../generated/pulserver.mrd.EncodingSpace.html#pulserver.mrd.EncodingSpace">[docs]</a>
 <span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
@@ -536,6 +543,16 @@
 <span class="sd">    recon_fov</span>
 <span class="sd">        Field of view of the image in metres, ordered as ``recon_matrix``;</span>
 <span class="sd">        ``None`` when the header states none.</span>
+<span class="sd">    cartesian</span>
+<span class="sd">        Whether the space samples a Cartesian grid. A readout of a Cartesian</span>
+<span class="sd">        space is placed by its echo along the readout, and its lines by their</span>
+<span class="sd">        offset from the k-space centre; a non-Cartesian space places a readout</span>
+<span class="sd">        as it arrives and a view by its counter.</span>
+<span class="sd">    phase_center, partition_center</span>
+<span class="sd">        Counter value of the k-space centre along ``kspace_encode_step_1`` and</span>
+<span class="sd">        ``kspace_encode_step_2``, from the ``center`` of the header's encoding</span>
+<span class="sd">        limits; ``None`` where the header states none, so the counter is the</span>
+<span class="sd">        position on the grid.</span>
 
 <span class="sd">    Examples</span>
 <span class="sd">    --------</span>
@@ -557,6 +574,9 @@
     <span class="n">loop_sizes</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span>
     <span class="n">recon_matrix</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span>
     <span class="n">recon_fov</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">cartesian</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
+    <span class="n">phase_center</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">partition_center</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
 
 <div class="viewcode-block" id="EncodingSpace.from_header">
 <a class="viewcode-back" href="../../../generated/pulserver.mrd.EncodingSpace.from_header.html#pulserver.mrd.EncodingSpace.from_header">[docs]</a>
@@ -566,12 +586,15 @@
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">EncodingSpace</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">"""Read encoding space ``index`` of a parsed MRD header.</span>
 
-<span class="sd">        For a Cartesian space ``phase_encodes`` is the larger of the encoded matrix</span>
-<span class="sd">        and the ``kspace_encoding_step_1`` limit, since an undersampled grid still</span>
-<span class="sd">        needs every line. For a non-Cartesian space it is the limit, which counts</span>
-<span class="sd">        views, or the encoded matrix when no limit is stated. ``partitions`` is</span>
-<span class="sd">        always the larger of the two. ``recon_matrix`` and ``recon_fov`` fall</span>
-<span class="sd">        back to the encoded space when the header has no ``reconSpace``.</span>
+<span class="sd">        For a Cartesian space ``phase_encodes`` and ``partitions`` are the encoded</span>
+<span class="sd">        matrix, the whole grid whatever number of lines an undersampled scan took,</span>
+<span class="sd">        and ``phase_center`` and ``partition_center`` place the counters on it. For</span>
+<span class="sd">        a non-Cartesian space ``phase_encodes`` is the ``kspace_encoding_step_1``</span>
+<span class="sd">        limit, which counts views, or the encoded matrix when no limit is stated;</span>
+<span class="sd">        its ``partitions`` is the larger of the encoded matrix and the</span>
+<span class="sd">        ``kspace_encoding_step_2`` limit, a stack being Cartesian along z, and no</span>
+<span class="sd">        counter is shifted. ``recon_matrix`` and ``recon_fov`` fall back to the</span>
+<span class="sd">        encoded space when the header has no ``reconSpace``.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
@@ -612,23 +635,28 @@
         <span class="k">if</span> <span class="n">recon_matrix</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
             <span class="n">recon_matrix</span> <span class="o">=</span> <span class="n">recon_matrix</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span>
 
-        <span class="n">views</span> <span class="o">=</span> <span class="n">_limit</span><span class="p">(</span><span class="n">limits</span><span class="p">,</span> <span class="s2">"kspace_encoding_step_1"</span><span class="p">)</span>
-        <span class="n">partitions</span> <span class="o">=</span> <span class="n">_limit</span><span class="p">(</span><span class="n">limits</span><span class="p">,</span> <span class="s2">"kspace_encoding_step_2"</span><span class="p">)</span>
         <span class="n">gridded</span> <span class="o">=</span> <span class="n">_is_cartesian</span><span class="p">(</span><span class="n">encoding</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">gridded</span><span class="p">:</span>
+            <span class="n">phase_encodes</span><span class="p">,</span> <span class="n">partitions</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">encoded</span><span class="o">.</span><span class="n">y</span><span class="p">),</span> <span class="nb">int</span><span class="p">(</span><span class="n">encoded</span><span class="o">.</span><span class="n">z</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">phase_encodes</span> <span class="o">=</span> <span class="n">_limit</span><span class="p">(</span><span class="n">limits</span><span class="p">,</span> <span class="s2">"kspace_encoding_step_1"</span><span class="p">)</span> <span class="ow">or</span> <span class="nb">int</span><span class="p">(</span><span class="n">encoded</span><span class="o">.</span><span class="n">y</span><span class="p">)</span>
+            <span class="n">partitions</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">_limit</span><span class="p">(</span><span class="n">limits</span><span class="p">,</span> <span class="s2">"kspace_encoding_step_2"</span><span class="p">),</span> <span class="nb">int</span><span class="p">(</span><span class="n">encoded</span><span class="o">.</span><span class="n">z</span><span class="p">))</span>
 
         <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span>
             <span class="n">index</span><span class="o">=</span><span class="n">index</span><span class="p">,</span>
             <span class="n">coils</span><span class="o">=</span><span class="n">coils</span><span class="p">,</span>
             <span class="n">readout</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">encoded</span><span class="o">.</span><span class="n">x</span><span class="p">),</span>
-            <span class="n">phase_encodes</span><span class="o">=</span><span class="nb">max</span><span class="p">(</span><span class="n">views</span><span class="p">,</span> <span class="nb">int</span><span class="p">(</span><span class="n">encoded</span><span class="o">.</span><span class="n">y</span><span class="p">))</span>
-            <span class="k">if</span> <span class="n">gridded</span>
-            <span class="k">else</span> <span class="n">views</span> <span class="ow">or</span> <span class="nb">int</span><span class="p">(</span><span class="n">encoded</span><span class="o">.</span><span class="n">y</span><span class="p">),</span>
-            <span class="c1"># A stack is Cartesian along z whatever it does in plane.</span>
-            <span class="n">partitions</span><span class="o">=</span><span class="nb">max</span><span class="p">(</span><span class="n">partitions</span><span class="p">,</span> <span class="nb">int</span><span class="p">(</span><span class="n">encoded</span><span class="o">.</span><span class="n">z</span><span class="p">)),</span>
+            <span class="n">phase_encodes</span><span class="o">=</span><span class="n">phase_encodes</span><span class="p">,</span>
+            <span class="n">partitions</span><span class="o">=</span><span class="n">partitions</span><span class="p">,</span>
             <span class="n">loops</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(</span><span class="n">names</span><span class="p">),</span>
             <span class="n">loop_sizes</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(</span><span class="n">sizes</span><span class="p">),</span>
             <span class="n">recon_matrix</span><span class="o">=</span><span class="n">recon_matrix</span><span class="p">,</span>
             <span class="n">recon_fov</span><span class="o">=</span><span class="n">_fov</span><span class="p">(</span><span class="n">encoding</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">recon_matrix</span><span class="p">)),</span>
+            <span class="n">cartesian</span><span class="o">=</span><span class="n">gridded</span><span class="p">,</span>
+            <span class="n">phase_center</span><span class="o">=</span><span class="n">_center</span><span class="p">(</span><span class="n">limits</span><span class="p">,</span> <span class="s2">"kspace_encoding_step_1"</span><span class="p">)</span> <span class="k">if</span> <span class="n">gridded</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
+            <span class="n">partition_center</span><span class="o">=</span><span class="n">_center</span><span class="p">(</span><span class="n">limits</span><span class="p">,</span> <span class="s2">"kspace_encoding_step_2"</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">gridded</span>
+            <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
         <span class="p">)</span></div>
 
 
@@ -646,6 +674,29 @@
         <span class="k">return</span> <span class="nb">tuple</span><span class="p">(</span>
             <span class="bp">cls</span><span class="o">.</span><span class="n">from_header</span><span class="p">(</span><span class="n">header</span><span class="p">,</span> <span class="n">index</span><span class="p">,</span> <span class="n">loops</span><span class="p">)</span> <span class="k">for</span> <span class="n">index</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">encodings</span><span class="p">))</span>
         <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="EncodingSpace.offset">
+<a class="viewcode-back" href="../../../generated/pulserver.mrd.EncodingSpace.offset.html#pulserver.mrd.EncodingSpace.offset">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">offset</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">axis</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Shift that places a counter of ``axis`` on this space's grid.</span>
+
+<span class="sd">        ``extent // 2 - center`` along ``phase_encode`` and, in a volume,</span>
+<span class="sd">        ``partition`` of a Cartesian space whose header states the centre, so the</span>
+<span class="sd">        centre line lands on ``extent // 2``; 0 for every other axis and for a</span>
+<span class="sd">        space that states no centre.</span>
+<span class="sd">        """</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">cartesian</span><span class="p">:</span>
+            <span class="k">return</span> <span class="mi">0</span>
+        <span class="k">if</span> <span class="n">axis</span> <span class="o">==</span> <span class="s2">"phase_encode"</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">phase_center</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">phase_encodes</span> <span class="o">//</span> <span class="mi">2</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">phase_center</span>
+        <span class="k">if</span> <span class="p">(</span>
+            <span class="n">axis</span> <span class="o">==</span> <span class="s2">"partition"</span>
+            <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">partitions</span> <span class="o">&gt;</span> <span class="mi">1</span>
+            <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">partition_center</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+        <span class="p">):</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">partitions</span> <span class="o">//</span> <span class="mi">2</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">partition_center</span>
+        <span class="k">return</span> <span class="mi">0</span></div>
 
 
     <span class="nd">@property</span>

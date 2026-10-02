@@ -561,7 +561,8 @@ across the series of an exam; a plugin adds to it and never clears it.</p>
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>gadgets</strong> – <a class="reference internal" href="pulserver.recon.Gadget.html#pulserver.recon.Gadget" title="pulserver.recon.Gadget"><code class="xref py py-class docutils literal notranslate"><span class="pre">Gadget</span></code></a> steps applied to every accepted readout on arrival, in
-order, before it is placed.</p></li>
+order, before it is placed; each receives a copy of the acquisition,
+which it may update to describe the readout it returns.</p></li>
 <li><p><strong>triggers</strong> – <code class="docutils literal notranslate"><span class="pre">{branch:</span> <span class="pre">flag}</span></code>: the <a class="reference internal" href="pulserver.mrd.AcquisitionFlag.html#pulserver.mrd.AcquisitionFlag" title="pulserver.mrd.AcquisitionFlag"><code class="xref py py-class docutils literal notranslate"><span class="pre">AcquisitionFlag</span></code></a> that
 closes a unit of the branch, combined with <code class="docutils literal notranslate"><span class="pre">|</span></code> for either of several.
 The first branch declared receives the readouts <a class="reference internal" href="pulserver.recon.ReconPlugin.branch_for.html#pulserver.recon.ReconPlugin.branch_for" title="pulserver.recon.ReconPlugin.branch_for"><code class="xref py py-meth docutils literal notranslate"><span class="pre">branch_for()</span></code></a>

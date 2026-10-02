@@ -521,6 +521,7 @@
                 <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#reconstruction-units">Reconstruction units</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#hooks">Hooks</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#readout-placement">Readout placement</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#non-cartesian-data">Non-Cartesian data</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#running-a-plugin-offline">Running a plugin offline</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#see-also">See also</a></li>
@@ -558,9 +559,11 @@ and a module-level <code class="docutils literal notranslate"><span class="pre">
 </div>
 <p><code class="docutils literal notranslate"><span class="pre">data</span></code> is the <a class="reference internal" href="../generated/pulserver.recon.ReconData.html#pulserver.recon.ReconData" title="pulserver.recon.ReconData"><code class="xref py py-class docutils literal notranslate"><span class="pre">ReconData</span></code></a> of one reconstruction unit,
 and <code class="docutils literal notranslate"><span class="pre">data.data</span></code> its k-space, <code class="docutils literal notranslate"><span class="pre">(coils,</span> <span class="pre">...,</span> <span class="pre">readout)</span></code>, with the axes
-<code class="docutils literal notranslate"><span class="pre">data.data.axes</span></code> names. Readouts are placed by their encoding counters, which a
-sequence sets with <code class="docutils literal notranslate"><span class="pre">self.labels(LIN=line)</span></code> in its kernel or <code class="docutils literal notranslate"><span class="pre">pp.make_label</span></code> as
-in PyPulseq; a readout placed over another is warned about.
+<code class="docutils literal notranslate"><span class="pre">data.data.axes</span></code> names. Readouts are placed by their echo along the readout and
+by their encoding counters along the encoded axes
+(<a class="reference internal" href="../explanations/reconstruction.html#reconstruction-placement"><span class="std std-ref">Placement</span></a>); a sequence sets the counters with
+<code class="docutils literal notranslate"><span class="pre">self.labels(LIN=line)</span></code> in its kernel or <code class="docutils literal notranslate"><span class="pre">pp.make_label</span></code> as in PyPulseq, and a
+readout placed over another is warned about.
 The proxy runs the plugin in a worker process, one per series, over an MRD
 stream enriched from the sequence’s design
 (<a class="reference internal" href="../explanations/reconstruction.html"><span class="doc">Raw-data enrichment and routing</span></a>). The client names the plugin of a series
@@ -618,7 +621,7 @@ then, under its own branch, in the order the units opened.</p>
 <td><p>the k-space of the imaging readouts, a <a class="reference internal" href="../generated/pulserver.recon.ReconBuffer.html#pulserver.recon.ReconBuffer" title="pulserver.recon.ReconBuffer"><code class="xref py py-class docutils literal notranslate"><span class="pre">ReconBuffer</span></code></a>, or <code class="docutils literal notranslate"><span class="pre">None</span></code> when the unit placed none</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">ref</span></code></p></td>
-<td><p>the k-space of the parallel-imaging calibration readouts laid out as <code class="docutils literal notranslate"><span class="pre">data</span></code>, or <code class="docutils literal notranslate"><span class="pre">None</span></code></p></td>
+<td><p>the k-space of the parallel-imaging calibration readouts, laid out as <code class="docutils literal notranslate"><span class="pre">data</span></code> but holding only the lines of the phase-encode and partition axes its readouts cover, which start at <code class="docutils literal notranslate"><span class="pre">ref.origin</span></code> on the grid of <code class="docutils literal notranslate"><span class="pre">data</span></code>; <code class="docutils literal notranslate"><span class="pre">None</span></code> when the unit has none</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">counters</span></code></p></td>
 <td><p>the unit’s image counters not in <code class="docutils literal notranslate"><span class="pre">axes</span></code>, by MRD name</p></td>
@@ -698,6 +701,37 @@ series pickled, as a copy without its <code class="docutils literal notranslate"
 <code class="docutils literal notranslate"><span class="pre">None</span></code>. A child process started with the <code class="docutils literal notranslate"><span class="pre">spawn</span></code> method runs functions from
 importable modules, not from the plugin file.</p>
 </section>
+<section id="readout-placement">
+<h2>Readout placement<a class="headerlink" href="#readout-placement" title="Link to this heading">#</a></h2>
+<p>A readout of a Cartesian encoding space is placed so that its echo,
+<code class="docutils literal notranslate"><span class="pre">center_sample</span></code>, lies at sample <code class="docutils literal notranslate"><span class="pre">N</span> <span class="pre">//</span> <span class="pre">2</span></code> of the readout axis, the samples from
+<code class="docutils literal notranslate"><span class="pre">discard_pre</span></code> to <code class="docutils literal notranslate"><span class="pre">number_of_samples</span> <span class="pre">-</span> <span class="pre">discard_post</span></code> being the ones copied. The
+counter of a line is placed at <code class="docutils literal notranslate"><span class="pre">counter</span> <span class="pre">-</span> <span class="pre">center</span> <span class="pre">+</span> <span class="pre">extent</span> <span class="pre">//</span> <span class="pre">2</span></code> along the
+encoded axis, <code class="docutils literal notranslate"><span class="pre">center</span></code> being the counter of the k-space centre in the header’s
+encoding limits, so the counters of a partial-Fourier or undersampled scan
+need not start at 0. A readout or a line that falls outside the buffer raises a
+<code class="docutils literal notranslate"><span class="pre">ValueError</span></code>. <code class="docutils literal notranslate"><span class="pre">data.data.readout</span></code> is the first and last sample placed.</p>
+<p>A plugin brings its readouts to the reconstruction matrix with two gadgets,
+run in this order. <a class="reference internal" href="../generated/pulserver.recon.AsymmetricEcho.html#pulserver.recon.AsymmetricEcho" title="pulserver.recon.AsymmetricEcho"><code class="xref py py-class docutils literal notranslate"><span class="pre">AsymmetricEcho</span></code></a> zero-fills a
+partial echo to the full echo that is symmetric about its <code class="docutils literal notranslate"><span class="pre">center_sample</span></code>, and
+declares the zeros as discarded so that they are not placed.
+<a class="reference internal" href="../generated/pulserver.recon.RemoveReadoutOversampling.html#pulserver.recon.RemoveReadoutOversampling" title="pulserver.recon.RemoveReadoutOversampling"><code class="xref py py-class docutils literal notranslate"><span class="pre">RemoveReadoutOversampling</span></code></a> crops a full echo to the
+readout field of view of the reconstruction, the ratio of the header’s encoded
+to reconstructed field of view along the readout, and needs bartorch (the
+<code class="docutils literal notranslate"><span class="pre">coils</span></code> extra). A gadget states the echo of the readout it returns by assigning
+<code class="docutils literal notranslate"><span class="pre">center_sample</span></code>, <code class="docutils literal notranslate"><span class="pre">discard_pre</span></code> and <code class="docutils literal notranslate"><span class="pre">discard_post</span></code> of the acquisition it is
+given, which is a copy of the one the stream delivered:</p>
+<div class="highlight-pycon notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">ismrmrd</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">acquisition</span> <span class="o">=</span> <span class="n">ismrmrd</span><span class="o">.</span><span class="n">Acquisition</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">acquisition</span><span class="o">.</span><span class="n">resize</span><span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">acquisition</span><span class="o">.</span><span class="n">center_sample</span> <span class="o">=</span> <span class="mi">1</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">full</span> <span class="o">=</span> <span class="n">recon</span><span class="o">.</span><span class="n">AsymmetricEcho</span><span class="p">()(</span><span class="n">acquisition</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">((</span><span class="mi">2</span><span class="p">,</span> <span class="mi">5</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">complex64</span><span class="p">))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">full</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="n">acquisition</span><span class="o">.</span><span class="n">discard_pre</span><span class="p">,</span> <span class="n">acquisition</span><span class="o">.</span><span class="n">center_sample</span>
+<span class="go">(8, 3, 4)</span>
+
+</pre></div>
+</div>
+</section>
 <section id="non-cartesian-data">
 <h2>Non-Cartesian data<a class="headerlink" href="#non-cartesian-data" title="Link to this heading">#</a></h2>
 <p>A buffer holds the trajectory of its samples beside the k-space, as the
@@ -769,7 +803,7 @@ its own:</p>
 <td><p>The same images as <code class="docutils literal notranslate"><span class="pre">cartesian</span></code>, for a radial or spiral trajectory or a stack of them, each solved as <code class="docutils literal notranslate"><span class="pre">bart</span> <span class="pre">pics</span> <span class="pre">-t</span> <span class="pre">-R</span> <span class="pre">W</span></code> over <code class="docutils literal notranslate"><span class="pre">bart</span> <span class="pre">nlinv</span> <span class="pre">-t</span></code> sensitivities of the samples near the k-space centre. Needs the <code class="docutils literal notranslate"><span class="pre">coils</span></code> extra</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">pics</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">cartesian</span></code>’s images, its readouts cropped to the matrix as they arrive; each image solved as <code class="docutils literal notranslate"><span class="pre">bart</span> <span class="pre">pics</span> <span class="pre">-R</span> <span class="pre">W</span></code> over <code class="docutils literal notranslate"><span class="pre">bart</span> <span class="pre">nlinv</span></code> sensitivities of its low-resolution centre, then completed by <code class="docutils literal notranslate"><span class="pre">bart</span> <span class="pre">homodyne</span></code> along a partial-Fourier axis. Needs the <code class="docutils literal notranslate"><span class="pre">coils</span></code> extra</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">cartesian</span></code>’s images, its readouts completed to full echoes and cropped to the reconstruction field of view as they arrive (<code class="docutils literal notranslate"><span class="pre">AsymmetricEcho</span></code>, <code class="docutils literal notranslate"><span class="pre">RemoveReadoutOversampling</span></code>); each image solved as <code class="docutils literal notranslate"><span class="pre">bart</span> <span class="pre">pics</span> <span class="pre">-R</span> <span class="pre">W</span></code> over <code class="docutils literal notranslate"><span class="pre">bart</span> <span class="pre">nlinv</span></code> sensitivities of its low-resolution centre, then completed by <code class="docutils literal notranslate"><span class="pre">bart</span> <span class="pre">homodyne</span></code> along a partial-Fourier axis. Needs the <code class="docutils literal notranslate"><span class="pre">coils</span></code> extra</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">epi</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">pics</span></code>’s images from EPI readouts, each resampled off its ramps onto the matrix and corrected for its odd/even phase against the shot’s navigator as it arrives (<code class="docutils literal notranslate"><span class="pre">bart</span></code> ramp operator, <code class="docutils literal notranslate"><span class="pre">estimate_epi_phase</span></code>). The phase-encode-reversed reference set is an image of its own, and with PyHySCO installed (GPL-3.0, not a dependency) each later image of its slice is corrected for susceptibility distortion against it. Needs the <code class="docutils literal notranslate"><span class="pre">coils</span></code> extra</p></td>
@@ -844,6 +878,7 @@ reconstruction.</p>
     <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#reconstruction-units">Reconstruction units</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#hooks">Hooks</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#readout-placement">Readout placement</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#non-cartesian-data">Non-Cartesian data</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#running-a-plugin-offline">Running a plugin offline</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#see-also">See also</a></li>

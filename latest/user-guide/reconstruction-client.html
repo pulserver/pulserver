@@ -627,7 +627,7 @@ connection, so the client can finish sending and read the reason.</p>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">encoding</span></code></p></td>
 <td><p>Optional</p></td>
-<td><p>Replaced by one encoding space per subsequence, and one more for the navigator readouts of a subsequence that has them; a matrix size or field of view the sequence does not define is kept from the client’s encoding at the same index</p></td>
+<td><p>Replaced by one encoding space per subsequence, and one more for the navigator readouts of a subsequence that has them. The reconstruction space is the sequence’s matrix size and field of view; the encoded space of a Cartesian space has the readout widened to the full echo, oversampling included, and its field of view in proportion. The encoding limits are the extremes of the counters the readouts reach, centred on the k-space centre line and partition the sequence defines. A matrix size or field of view the sequence does not define is kept from the client’s encoding at the same index</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">sequenceParameters</span></code></p></td>
 <td><p>Optional</p></td>

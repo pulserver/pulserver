@@ -534,10 +534,12 @@
 <dl class="py method">
 <dt class="sig sig-object py" id="pulserver.recon.ReconBuffer.position">
 <span class="sig-prename descclassname"><span class="pre">ReconBuffer.</span></span><span class="sig-name descname"><span class="pre">position</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pulserver/recon/_buffers.html#ReconBuffer.position"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.recon.ReconBuffer.position" title="Link to this definition">#</a></dt>
-<dd><p>Index along each axis of <code class="xref py py-attr docutils literal notranslate"><span class="pre">kspace</span></code> this acquisition fills.</p>
+<dd><p>Index along each placement axis of <code class="xref py py-attr docutils literal notranslate"><span class="pre">kspace</span></code> this acquisition fills.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Raises<span class="colon">:</span></dt>
-<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If a counter runs past what the header laid this space out for.</p>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If a counter, placed about the limits’ centre, lies outside what the
+    header laid this space out for, or outside the part of the grid a
+    cropped buffer holds.</p>
 </dd>
 </dl>
 </dd></dl>

@@ -110,7 +110,7 @@ simulation below joins them over the scan.
 
     64 readouts of 128 samples
     LIN of the first readouts: [0 1 2 3 4 5]
-    encoding spaces: (TableSpace(subsequence=0, navigator=False, matrix=(64, 64, 1), fov_mm=(220.0, 220.0, 5.0), trajectory=False, centre_line=32, centre_partition=None),)
+    encoding spaces: (TableSpace(subsequence=0, navigator=False, matrix=(64, 64, 1), fov_mm=(220.0, 220.0, 5.0), trajectory=False, centre_line=32, centre_partition=None, readout_samples=128),)
 
 
 
@@ -330,16 +330,19 @@ receiver channel, the readout samples, and a header with no encoding space.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 240-246
+.. GENERATED FROM PYTHON SOURCE LINES 240-249
 
 Enrichment
 ----------
 
 :func:`~pulserver.proxy.enrich_header` describes the table's encoding space in
-the header. :func:`~pulserver.proxy.enrich_acquisition` applies one table row
-to each acquisition, in stream order, and leaves the samples as received.
+the header: the reconstruction space has the matrix size and field of view the
+sequence defines, and the encoded space has the readout widened to the full
+echo, readout oversampling included, with its field of view in proportion.
+:func:`~pulserver.proxy.enrich_acquisition` applies one table row to each
+acquisition, in stream order, and leaves the samples as received.
 
-.. GENERATED FROM PYTHON SOURCE LINES 246-264
+.. GENERATED FROM PYTHON SOURCE LINES 249-272
 
 .. code-block:: Python
 
@@ -349,12 +352,17 @@ to each acquisition, in stream order, and leaves the samples as received.
         enrich_acquisition(acquisition, table, row)
 
     encoding = header.encoding[0]
-    matrix = encoding.encodedSpace.matrixSize
-    fov = encoding.reconSpace.fieldOfView_mm
+    for name in ("encodedSpace", "reconSpace"):
+        space = getattr(encoding, name)
+        matrix, fov = space.matrixSize, space.fieldOfView_mm
+        print(
+            f"{name}: matrix {matrix.x} x {matrix.y} x {matrix.z}, "
+            f"FOV {fov.x:g} x {fov.y:g} mm"
+        )
+    limit = encoding.encodingLimits.kspace_encoding_step_1
     print(
-        f"encoded matrix {matrix.x} x {matrix.y} x {matrix.z}, FOV {fov.x:g} x {fov.y:g} mm"
+        f"phase-encoding limits {limit.minimum} to {limit.maximum}, centre {limit.center}"
     )
-    print("phase-encoding limit:", encoding.encodingLimits.kspace_encoding_step_1.maximum)
     print("LIN of acquisition 10:", acquisitions[10].idx.kspace_encode_step_1)
     print(
         "acquisition 63 closes the slice:",
@@ -369,15 +377,16 @@ to each acquisition, in stream order, and leaves the samples as received.
 
  .. code-block:: none
 
-    encoded matrix 64 x 64 x 1, FOV 220 x 220 mm
-    phase-encoding limit: 63
+    encodedSpace: matrix 128 x 64 x 1, FOV 440 x 220 mm
+    reconSpace: matrix 64 x 64 x 1, FOV 220 x 220 mm
+    phase-encoding limits 0 to 63, centre 32
     LIN of acquisition 10: 10
     acquisition 63 closes the slice: True
 
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 265-277
+.. GENERATED FROM PYTHON SOURCE LINES 273-285
 
 Reconstruction
 --------------
@@ -392,7 +401,7 @@ oversampled readout to the reconstruction matrix of the header.
 The phantom is acquired twice: with the design played as written, and played
 at the prescribed offset.
 
-.. GENERATED FROM PYTHON SOURCE LINES 277-314
+.. GENERATED FROM PYTHON SOURCE LINES 285-322
 
 .. code-block:: Python
 
@@ -433,7 +442,7 @@ at the prescribed offset.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 315-322
+.. GENERATED FROM PYTHON SOURCE LINES 323-330
 
 Played as written, the sequence acquires the phantom at its displacement from
 the isocentre: shifted along the readout axis, and folded along the
@@ -446,7 +455,7 @@ to the gradients or the trajectory.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.616 seconds)
+   **Total running time of the script:** (0 minutes 1.185 seconds)
 
 
 .. _sphx_glr_download_generated_gallery_03-reconstruction_01_enrichment.py:

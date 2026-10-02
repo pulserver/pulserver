@@ -549,8 +549,10 @@ header’s encoded axes. <code class="docutils literal notranslate"><span class=
 is not <code class="docutils literal notranslate"><span class="pre">buffered</span></code>, the header describes no encoding space, or every
 readout was calibration only.</p></li>
 <li><p><strong>ref</strong> (<em>ReconBuffer or None</em>) – K-space of the parallel-imaging calibration readouts, laid out as
-<code class="docutils literal notranslate"><span class="pre">data</span></code>; <code class="docutils literal notranslate"><span class="pre">None</span></code> when the unit has none. A readout flagged as
-calibration and imaging is in both buffers; one flagged as
+<code class="docutils literal notranslate"><span class="pre">data</span></code> but cropped along the phase-encode and partition axes to the
+lines the readouts cover, whose position on the grid is its
+<code class="xref py py-attr docutils literal notranslate"><span class="pre">origin</span></code>; <code class="docutils literal notranslate"><span class="pre">None</span></code> when the unit has none. A readout
+flagged as calibration and imaging is in both buffers; one flagged as
 calibration only is in <code class="docutils literal notranslate"><span class="pre">ref</span></code> alone; a phase-correction readout is in
 neither.</p></li>
 <li><p><strong>counters</strong> (<em>dict of str to int</em>) – The unit’s image counters not listed in <code class="docutils literal notranslate"><span class="pre">axes</span></code>, by MRD name.</p></li>

@@ -455,10 +455,11 @@
 <span></span><span class="sd">"""K-space buffers of a reconstruction unit, laid out from the MRD header and filled one acquisition at a time.</span>
 
 <span class="sd">A unit holds one buffer for its imaging readouts and one for its</span>
-<span class="sd">parallel-imaging calibration readouts, each allocated when its first readout</span>
-<span class="sd">arrives and indexed by that readout's counters. Axes run coil first and</span>
-<span class="sd">readout last, with a placement axis only where the header says a counter</span>
-<span class="sd">varies.</span>
+<span class="sd">parallel-imaging calibration readouts. Axes run coil first and readout last,</span>
+<span class="sd">with a placement axis only where the header says a counter varies. Readouts</span>
+<span class="sd">of a Cartesian space are placed by their echo along the readout and by the</span>
+<span class="sd">offset of their lines from the k-space centre along the encoded axes, as</span>
+<span class="sd">Gadgetron's acquisition bucket places them.</span>
 <span class="sd">"""</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
@@ -469,7 +470,7 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Mapping</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span><span class="p">,</span> <span class="n">field</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">ClassVar</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 
@@ -479,15 +480,100 @@
 <span class="c1">#: Every name :meth:`ReconBuffer.select` accepts, whether or not a space varies it.</span>
 <span class="n">_AXIS_NAMES</span> <span class="o">=</span> <span class="nb">frozenset</span><span class="p">((</span><span class="o">*</span><span class="n">LOOP_COUNTERS</span><span class="p">,</span> <span class="s2">"segment"</span><span class="p">,</span> <span class="s2">"partition"</span><span class="p">,</span> <span class="s2">"phase_encode"</span><span class="p">))</span>
 
+<span class="c1">#: The MRD counter each placement axis is read from.</span>
+<span class="n">_COUNTERS</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">"partition"</span><span class="p">:</span> <span class="s2">"kspace_encode_step_2"</span><span class="p">,</span>
+    <span class="s2">"phase_encode"</span><span class="p">:</span> <span class="s2">"kspace_encode_step_1"</span><span class="p">,</span>
+<span class="p">}</span>
+
+<span class="c1">#: The placement axes a buffer can be cropped along.</span>
+<span class="n">_CROPPABLE</span> <span class="o">=</span> <span class="p">(</span><span class="s2">"partition"</span><span class="p">,</span> <span class="s2">"phase_encode"</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">echo_centre</span><span class="p">(</span><span class="n">acquisition</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">samples</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return the index of the echo in a readout of ``samples`` samples.</span>
+
+<span class="sd">    The acquisition's ``center_sample``; ``samples // 2`` when it states none,</span>
+<span class="sd">    which is the echo of a centred full echo.</span>
+<span class="sd">    """</span>
+    <span class="n">centre</span> <span class="o">=</span> <span class="n">acquisition_label</span><span class="p">(</span><span class="n">acquisition</span><span class="p">,</span> <span class="s2">"center_sample"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">samples</span> <span class="o">//</span> <span class="mi">2</span> <span class="k">if</span> <span class="n">centre</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="nb">int</span><span class="p">(</span><span class="n">centre</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">discards</span><span class="p">(</span><span class="n">acquisition</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Return the ``(discard_pre, discard_post)`` sample counts of an acquisition, 0 where it states none."""</span>
+    <span class="n">pre</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">acquisition_label</span><span class="p">(</span><span class="n">acquisition</span><span class="p">,</span> <span class="s2">"discard_pre"</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span> <span class="ow">or</span> <span class="mi">0</span><span class="p">)</span>
+    <span class="n">post</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">acquisition_label</span><span class="p">(</span><span class="n">acquisition</span><span class="p">,</span> <span class="s2">"discard_post"</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span> <span class="ow">or</span> <span class="mi">0</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">pre</span><span class="p">,</span> <span class="n">post</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_as_readout</span><span class="p">(</span><span class="n">data</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+    <span class="n">data</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">data</span><span class="o">.</span><span class="n">ndim</span> <span class="o">!=</span> <span class="mi">2</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"acquisition data must be (coils, samples), got shape </span><span class="si">{</span><span class="n">data</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">"</span>
+        <span class="p">)</span>
+    <span class="k">return</span> <span class="n">data</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_grid_position</span><span class="p">(</span><span class="n">space</span><span class="p">:</span> <span class="n">EncodingSpace</span><span class="p">,</span> <span class="n">acquisition</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Return the index of an acquisition on each varying placement axis of ``space``'s grid.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If a counter, shifted by the offset of its axis, lies outside the grid</span>
+<span class="sd">        the header laid this space out for.</span>
+<span class="sd">    """</span>
+    <span class="n">where</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">extent</span> <span class="ow">in</span> <span class="n">space</span><span class="o">.</span><span class="n">extents</span><span class="p">:</span>
+        <span class="n">counter</span> <span class="o">=</span> <span class="n">_COUNTERS</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span>
+        <span class="n">index</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">acquisition_label</span><span class="p">(</span><span class="n">acquisition</span><span class="p">,</span> <span class="n">counter</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span> <span class="ow">or</span> <span class="mi">0</span><span class="p">)</span>
+        <span class="n">shift</span> <span class="o">=</span> <span class="n">space</span><span class="o">.</span><span class="n">offset</span><span class="p">(</span><span class="n">name</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="mi">0</span> <span class="o">&lt;=</span> <span class="n">index</span> <span class="o">+</span> <span class="n">shift</span> <span class="o">&lt;</span> <span class="n">extent</span><span class="p">:</span>
+            <span class="n">moved</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="sa">f</span><span class="s2">" (</span><span class="si">{</span><span class="n">index</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">shift</span><span class="si">}</span><span class="s2"> once placed about the limits' centre)"</span>
+                <span class="k">if</span> <span class="n">shift</span>
+                <span class="k">else</span> <span class="s2">""</span>
+            <span class="p">)</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"acquisition has </span><span class="si">{</span><span class="n">counter</span><span class="si">}</span><span class="s2">=</span><span class="si">{</span><span class="n">index</span><span class="si">}{</span><span class="n">moved</span><span class="si">}</span><span class="s2">, outside the </span><span class="si">{</span><span class="n">extent</span><span class="si">}</span><span class="s2"> "</span>
+                <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2"> positions encoding space </span><span class="si">{</span><span class="n">space</span><span class="o">.</span><span class="n">index</span><span class="si">}</span><span class="s2"> was laid out for"</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="n">extent</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">where</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">index</span> <span class="o">+</span> <span class="n">shift</span><span class="p">)</span>
+    <span class="k">return</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">where</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_width</span><span class="p">(</span><span class="n">space</span><span class="p">:</span> <span class="n">EncodingSpace</span><span class="p">,</span> <span class="n">acquisition</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">samples</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return the readout samples of a buffer of ``space`` whose first readout is ``acquisition``.</span>
+
+<span class="sd">    The readout's own samples when it is a centred full echo, which is how a</span>
+<span class="sd">    readout completed by :class:`~pulserver.recon.AsymmetricEcho` arrives, or</span>
+<span class="sd">    when the space is not Cartesian; otherwise the encoded matrix, in which a</span>
+<span class="sd">    partial echo is placed by its echo.</span>
+<span class="sd">    """</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">space</span><span class="o">.</span><span class="n">cartesian</span><span class="p">:</span>
+        <span class="k">return</span> <span class="nb">max</span><span class="p">(</span><span class="n">space</span><span class="o">.</span><span class="n">readout</span><span class="p">,</span> <span class="n">samples</span><span class="p">)</span>
+    <span class="n">centred</span> <span class="o">=</span> <span class="n">echo_centre</span><span class="p">(</span><span class="n">acquisition</span><span class="p">,</span> <span class="n">samples</span><span class="p">)</span> <span class="o">==</span> <span class="n">samples</span> <span class="o">//</span> <span class="mi">2</span>
+    <span class="k">return</span> <span class="n">samples</span> <span class="k">if</span> <span class="n">centred</span> <span class="k">else</span> <span class="n">space</span><span class="o">.</span><span class="n">readout</span>
+
 
 <div class="viewcode-block" id="ReconBuffer">
 <a class="viewcode-back" href="../../../generated/pulserver.recon.ReconBuffer.html#pulserver.recon.ReconBuffer">[docs]</a>
 <span class="k">class</span><span class="w"> </span><span class="nc">ReconBuffer</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""K-space of one encoding space, filled one acquisition at a time.</span>
 
-<span class="sd">    A readout shorter than the buffer is right-aligned, where a partial echo's</span>
-<span class="sd">    samples belong. The axes are those of ``space``: its counters that vary</span>
-<span class="sd">    and were asked for, then the encoded axes.</span>
+<span class="sd">    Along the readout of a Cartesian space, the samples of an acquisition from</span>
+<span class="sd">    ``discard_pre`` to ``number_of_samples - discard_post`` are placed so that</span>
+<span class="sd">    its echo, ``center_sample``, lies at sample ``samples // 2`` of the buffer.</span>
+<span class="sd">    Along an encoded axis of a Cartesian space, a counter is placed at</span>
+<span class="sd">    ``counter - center + extent // 2``, ``center`` being the counter of the</span>
+<span class="sd">    k-space centre the header's limits state, so the centre line lies at</span>
+<span class="sd">    ``extent // 2`` whatever the counters start at. A non-Cartesian space</span>
+<span class="sd">    places a readout right-aligned and a counter as it is. The axes are those</span>
+<span class="sd">    of ``space``: its counters that vary and were asked for, then the encoded</span>
+<span class="sd">    axes.</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
@@ -496,8 +582,12 @@
 <span class="sd">    coils</span>
 <span class="sd">        Channels to allocate; ``space.coils`` when not given. Fewer than the</span>
 <span class="sd">        header declares is valid, for data compressed before placement.</span>
-<span class="sd">    readout</span>
-<span class="sd">        Samples to allocate; never fewer than ``space.readout``.</span>
+<span class="sd">    samples</span>
+<span class="sd">        Samples to allocate along the readout; ``space.readout`` when not given.</span>
+<span class="sd">    crop</span>
+<span class="sd">        ``{axis: (first, stop)}`` for the ``phase_encode`` and ``partition``</span>
+<span class="sd">        axes: the positions of the space's grid the buffer holds, the whole axis</span>
+<span class="sd">        where an axis is not named.</span>
 <span class="sd">    dtype</span>
 <span class="sd">        Complex dtype of :attr:`kspace`.</span>
 
@@ -507,14 +597,21 @@
 <span class="sd">        Shaped as :attr:`axes` names.</span>
 <span class="sd">    mask : ndarray</span>
 <span class="sd">        Boolean, :attr:`kspace` without the coil axis: samples that were placed.</span>
+<span class="sd">    origin : dict of str to int</span>
+<span class="sd">        Position on the space's grid of the first entry of each placement axis</span>
+<span class="sd">        of :attr:`axes`; 0 along an axis that is not cropped.</span>
+<span class="sd">    readout : tuple of int or None</span>
+<span class="sd">        First and last sample of the readout axis placed, inclusive; ``None``</span>
+<span class="sd">        until an acquisition is placed. The samples outside it are zero fill.</span>
 <span class="sd">    trajectory : ndarray or None</span>
 <span class="sd">        ``(dimensions, ...)`` over the axes of :attr:`mask`, in the units the</span>
 <span class="sd">        acquisitions carry. ``None`` until an acquisition carries a trajectory;</span>
 <span class="sd">        widened to the most dimensions any acquisition carried, missing trailing</span>
 <span class="sd">        dimensions reading 0.</span>
 <span class="sd">    center_sample : int or None</span>
-<span class="sd">        Echo index along the readout axis, after right alignment, from the first</span>
-<span class="sd">        acquisition that states it.</span>
+<span class="sd">        Echo index along the readout axis. ``samples // 2`` in a Cartesian</span>
+<span class="sd">        space, where every echo is placed there; in a non-Cartesian space that</span>
+<span class="sd">        of the first acquisition that states it, after alignment.</span>
 <span class="sd">    sample_time : float or None</span>
 <span class="sd">        Dwell time in seconds, from the first acquisition that states it.</span>
 <span class="sd">    headers : list</span>
@@ -542,15 +639,33 @@
         <span class="n">space</span><span class="p">:</span> <span class="n">EncodingSpace</span><span class="p">,</span>
         <span class="o">*</span><span class="p">,</span>
         <span class="n">coils</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">readout</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">samples</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">crop</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">dtype</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">complex64</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">space</span> <span class="o">=</span> <span class="n">space</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">coils</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">coils</span><span class="p">)</span> <span class="k">if</span> <span class="n">coils</span> <span class="k">else</span> <span class="n">space</span><span class="o">.</span><span class="n">coils</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">readout</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">space</span><span class="o">.</span><span class="n">readout</span><span class="p">,</span> <span class="n">readout</span> <span class="ow">or</span> <span class="mi">0</span><span class="p">)</span>
-        <span class="n">shape</span> <span class="o">=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">coils</span><span class="p">,</span> <span class="o">*</span><span class="n">space</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">:</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">readout</span><span class="p">)</span>
+        <span class="n">crop</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">crop</span> <span class="ow">or</span> <span class="p">{})</span>
+        <span class="n">unknown</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="n">crop</span><span class="p">)</span> <span class="o">-</span> <span class="nb">set</span><span class="p">(</span><span class="n">_CROPPABLE</span><span class="p">))</span>
+        <span class="k">if</span> <span class="n">unknown</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"only </span><span class="si">{</span><span class="nb">list</span><span class="p">(</span><span class="n">_CROPPABLE</span><span class="p">)</span><span class="si">}</span><span class="s2"> can be cropped, not </span><span class="si">{</span><span class="n">unknown</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">origin</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="n">extents</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">extent</span> <span class="ow">in</span> <span class="n">space</span><span class="o">.</span><span class="n">extents</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">extent</span> <span class="o">&lt;=</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="n">first</span><span class="p">,</span> <span class="n">stop</span> <span class="o">=</span> <span class="n">crop</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">extent</span><span class="p">))</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="mi">0</span> <span class="o">&lt;=</span> <span class="n">first</span> <span class="o">&lt;</span> <span class="n">stop</span> <span class="o">&lt;=</span> <span class="n">extent</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">"cannot crop the </span><span class="si">{</span><span class="n">extent</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2"> positions of encoding space "</span>
+                    <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">space</span><span class="o">.</span><span class="n">index</span><span class="si">}</span><span class="s2"> to </span><span class="si">{</span><span class="n">first</span><span class="si">}</span><span class="s2">..</span><span class="si">{</span><span class="n">stop</span><span class="si">}</span><span class="s2">"</span>
+                <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">origin</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">first</span>
+            <span class="n">extents</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">stop</span> <span class="o">-</span> <span class="n">first</span><span class="p">)</span>
+        <span class="n">shape</span> <span class="o">=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">coils</span><span class="p">,</span> <span class="o">*</span><span class="n">extents</span><span class="p">,</span> <span class="nb">int</span><span class="p">(</span><span class="n">samples</span><span class="p">)</span> <span class="k">if</span> <span class="n">samples</span> <span class="k">else</span> <span class="n">space</span><span class="o">.</span><span class="n">readout</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">kspace</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">shape</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">mask</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">:],</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">readout</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">trajectory</span><span class="p">:</span> <span class="n">Any</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">center_sample</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">sample_time</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
@@ -576,41 +691,39 @@
 <span class="w">        </span><span class="sd">"""Image matrix the header prescribes; see :attr:`EncodingSpace.recon_matrix`."""</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">space</span><span class="o">.</span><span class="n">recon_matrix</span>
 
-    <span class="c1">#: The MRD counter each placement axis is read from.</span>
-    <span class="n">_COUNTERS</span><span class="p">:</span> <span class="n">ClassVar</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="p">{</span>
-        <span class="s2">"partition"</span><span class="p">:</span> <span class="s2">"kspace_encode_step_2"</span><span class="p">,</span>
-        <span class="s2">"phase_encode"</span><span class="p">:</span> <span class="s2">"kspace_encode_step_1"</span><span class="p">,</span>
-    <span class="p">}</span>
-
 <div class="viewcode-block" id="ReconBuffer.position">
 <a class="viewcode-back" href="../../../generated/pulserver.recon.ReconBuffer.position.html#pulserver.recon.ReconBuffer.position">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">position</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">acquisition</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">]:</span>
-<span class="w">        </span><span class="sd">"""Index along each axis of :attr:`kspace` this acquisition fills.</span>
+<span class="w">        </span><span class="sd">"""Index along each placement axis of :attr:`kspace` this acquisition fills.</span>
 
 <span class="sd">        Raises</span>
 <span class="sd">        ------</span>
 <span class="sd">        ValueError</span>
-<span class="sd">            If a counter runs past what the header laid this space out for.</span>
+<span class="sd">            If a counter, placed about the limits' centre, lies outside what the</span>
+<span class="sd">            header laid this space out for, or outside the part of the grid a</span>
+<span class="sd">            cropped buffer holds.</span>
 <span class="sd">        """</span>
-        <span class="n">where</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
-        <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">extent</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">space</span><span class="o">.</span><span class="n">extents</span><span class="p">:</span>
-            <span class="n">counter</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_COUNTERS</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span>
-            <span class="n">index</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">acquisition_label</span><span class="p">(</span><span class="n">acquisition</span><span class="p">,</span> <span class="n">counter</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span> <span class="ow">or</span> <span class="mi">0</span><span class="p">)</span>
-            <span class="k">if</span> <span class="ow">not</span> <span class="mi">0</span> <span class="o">&lt;=</span> <span class="n">index</span> <span class="o">&lt;</span> <span class="n">extent</span><span class="p">:</span>
+        <span class="n">grid</span> <span class="o">=</span> <span class="n">_grid_position</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">space</span><span class="p">,</span> <span class="n">acquisition</span><span class="p">)</span>
+        <span class="n">where</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span>
+            <span class="n">index</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">origin</span><span class="p">[</span><span class="n">name</span><span class="p">]</span>
+            <span class="k">for</span> <span class="n">index</span><span class="p">,</span> <span class="n">name</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">grid</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">axes</span><span class="p">[</span><span class="mi">1</span><span class="p">:</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="n">strict</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="k">for</span> <span class="n">index</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">size</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span>
+            <span class="n">where</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">axes</span><span class="p">[</span><span class="mi">1</span><span class="p">:</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">kspace</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">:</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="n">strict</span><span class="o">=</span><span class="kc">True</span>
+        <span class="p">):</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="mi">0</span> <span class="o">&lt;=</span> <span class="n">index</span> <span class="o">&lt;</span> <span class="n">size</span><span class="p">:</span>
                 <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                    <span class="sa">f</span><span class="s2">"acquisition has </span><span class="si">{</span><span class="n">counter</span><span class="si">}</span><span class="s2">=</span><span class="si">{</span><span class="n">index</span><span class="si">}</span><span class="s2">, past the </span><span class="si">{</span><span class="n">extent</span><span class="si">}</span><span class="s2"> "</span>
-                    <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2"> positions encoding space </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">space</span><span class="o">.</span><span class="n">index</span><span class="si">}</span><span class="s2"> was "</span>
-                    <span class="sa">f</span><span class="s2">"laid out for"</span>
+                    <span class="sa">f</span><span class="s2">"acquisition lies at </span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2"> position </span><span class="si">{</span><span class="n">index</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="bp">self</span><span class="o">.</span><span class="n">origin</span><span class="p">[</span><span class="n">name</span><span class="p">]</span><span class="si">}</span><span class="s2">, "</span>
+                    <span class="sa">f</span><span class="s2">"outside the </span><span class="si">{</span><span class="n">size</span><span class="si">}</span><span class="s2"> from </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">origin</span><span class="p">[</span><span class="n">name</span><span class="p">]</span><span class="si">}</span><span class="s2"> that this buffer "</span>
+                    <span class="sa">f</span><span class="s2">"of encoding space </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">space</span><span class="o">.</span><span class="n">index</span><span class="si">}</span><span class="s2"> holds"</span>
                 <span class="p">)</span>
-            <span class="k">if</span> <span class="n">extent</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
-                <span class="n">where</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">index</span><span class="p">)</span>
-        <span class="k">return</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">where</span><span class="p">)</span></div>
+        <span class="k">return</span> <span class="n">where</span></div>
 
 
 <div class="viewcode-block" id="ReconBuffer.add">
 <a class="viewcode-back" href="../../../generated/pulserver.recon.ReconBuffer.add.html#pulserver.recon.ReconBuffer.add">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">add</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">acquisition</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""Place one acquisition where its counters say it belongs.</span>
+<span class="w">        </span><span class="sd">"""Place one acquisition where its counters and echo say it belongs.</span>
 
 <span class="sd">        Also records its trajectory, and ``center_sample`` and dwell when not yet</span>
 <span class="sd">        known. A readout placed where one already is replaces it, with a warning</span>
@@ -619,36 +732,48 @@
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
 <span class="sd">        acquisition</span>
-<span class="sd">            The acquisition, for its counters, flags and data.</span>
+<span class="sd">            The acquisition, for its counters, ``center_sample``, discards and</span>
+<span class="sd">            flags, and its data. An acquisition that states no ``center_sample``</span>
+<span class="sd">            is a centred full echo.</span>
 <span class="sd">        data</span>
-<span class="sd">            ``(coils, samples)`` to place instead of ``acquisition.data``, for a</span>
-<span class="sd">            readout corrected before placement.</span>
+<span class="sd">            ``(coils, samples)`` to place instead of ``acquisition.data``: a</span>
+<span class="sd">            readout corrected before placement, whose ``center_sample`` and</span>
+<span class="sd">            discards the acquisition states.</span>
 
 <span class="sd">        Raises</span>
 <span class="sd">        ------</span>
 <span class="sd">        ValueError</span>
-<span class="sd">            If the data is not two-dimensional, is larger than the buffer, or a</span>
-<span class="sd">            counter is outside the laid-out extent.</span>
+<span class="sd">            If the data is not two-dimensional, the readout does not fit the</span>
+<span class="sd">            buffer along the readout, or a counter is outside the laid-out extent.</span>
 <span class="sd">        """</span>
-        <span class="n">data</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">acquisition</span><span class="o">.</span><span class="n">data</span> <span class="k">if</span> <span class="n">data</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">data</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">data</span><span class="o">.</span><span class="n">ndim</span> <span class="o">!=</span> <span class="mi">2</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">"acquisition data must be (coils, samples), got shape </span><span class="si">{</span><span class="n">data</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">"</span>
-            <span class="p">)</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="n">_as_readout</span><span class="p">(</span><span class="n">acquisition</span><span class="o">.</span><span class="n">data</span> <span class="k">if</span> <span class="n">data</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">data</span><span class="p">)</span>
         <span class="n">coils</span><span class="p">,</span> <span class="n">samples</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">shape</span>
-        <span class="k">if</span> <span class="n">samples</span> <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">readout</span> <span class="ow">or</span> <span class="n">coils</span> <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">coils</span><span class="p">:</span>
+        <span class="n">width</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">kspace</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">coils</span> <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">coils</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">"acquisition is </span><span class="si">{</span><span class="n">coils</span><span class="si">}</span><span class="s2"> x </span><span class="si">{</span><span class="n">samples</span><span class="si">}</span><span class="s2"> but encoding space "</span>
-                <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">space</span><span class="o">.</span><span class="n">index</span><span class="si">}</span><span class="s2"> was laid out for "</span>
-                <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">coils</span><span class="si">}</span><span class="s2"> x </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">readout</span><span class="si">}</span><span class="s2">"</span>
+                <span class="sa">f</span><span class="s2">"acquisition has </span><span class="si">{</span><span class="n">coils</span><span class="si">}</span><span class="s2"> channels, more than the </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">coils</span><span class="si">}</span><span class="s2"> "</span>
+                <span class="sa">f</span><span class="s2">"encoding space </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">space</span><span class="o">.</span><span class="n">index</span><span class="si">}</span><span class="s2"> was laid out for"</span>
             <span class="p">)</span>
 
         <span class="n">where</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">position</span><span class="p">(</span><span class="n">acquisition</span><span class="p">)</span>
 
-        <span class="c1"># Right-aligned, which is where a partial echo's acquired window ends.</span>
-        <span class="n">offset</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">readout</span> <span class="o">-</span> <span class="n">samples</span>
-        <span class="n">readout</span> <span class="o">=</span> <span class="nb">slice</span><span class="p">(</span><span class="n">offset</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">readout</span><span class="p">)</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_overwrote</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">mask</span><span class="p">[(</span><span class="o">*</span><span class="n">where</span><span class="p">,</span> <span class="n">readout</span><span class="p">)]</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">space</span><span class="o">.</span><span class="n">cartesian</span><span class="p">:</span>
+            <span class="n">centre</span> <span class="o">=</span> <span class="n">echo_centre</span><span class="p">(</span><span class="n">acquisition</span><span class="p">,</span> <span class="n">samples</span><span class="p">)</span>
+            <span class="n">skip</span><span class="p">,</span> <span class="n">after</span> <span class="o">=</span> <span class="n">discards</span><span class="p">(</span><span class="n">acquisition</span><span class="p">)</span>
+            <span class="n">count</span> <span class="o">=</span> <span class="n">samples</span> <span class="o">-</span> <span class="n">skip</span> <span class="o">-</span> <span class="n">after</span>
+            <span class="n">offset</span> <span class="o">=</span> <span class="n">width</span> <span class="o">//</span> <span class="mi">2</span> <span class="o">-</span> <span class="p">(</span><span class="n">centre</span> <span class="o">-</span> <span class="n">skip</span><span class="p">)</span>
+            <span class="n">detail</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"with its echo at </span><span class="si">{</span><span class="n">centre</span><span class="si">}</span><span class="s2"> and </span><span class="si">{</span><span class="n">skip</span><span class="si">}</span><span class="s2"> + </span><span class="si">{</span><span class="n">after</span><span class="si">}</span><span class="s2"> samples discarded"</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">skip</span><span class="p">,</span> <span class="n">count</span><span class="p">,</span> <span class="n">offset</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span> <span class="n">samples</span><span class="p">,</span> <span class="n">width</span> <span class="o">-</span> <span class="n">samples</span>
+            <span class="n">detail</span> <span class="o">=</span> <span class="s2">""</span>
+        <span class="k">if</span> <span class="n">count</span> <span class="o">&lt;</span> <span class="mi">1</span> <span class="ow">or</span> <span class="n">offset</span> <span class="o">&lt;</span> <span class="mi">0</span> <span class="ow">or</span> <span class="n">offset</span> <span class="o">+</span> <span class="n">count</span> <span class="o">&gt;</span> <span class="n">width</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"a readout of </span><span class="si">{</span><span class="n">samples</span><span class="si">}</span><span class="s2"> samples </span><span class="si">{</span><span class="n">detail</span><span class="si">}</span><span class="s2"> does not fit the </span><span class="si">{</span><span class="n">width</span><span class="si">}</span><span class="s2"> "</span>
+                <span class="sa">f</span><span class="s2">"samples of encoding space </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">space</span><span class="o">.</span><span class="n">index</span><span class="si">}</span><span class="s2">: its </span><span class="si">{</span><span class="n">count</span><span class="si">}</span><span class="s2"> placed "</span>
+                <span class="sa">f</span><span class="s2">"samples would occupy </span><span class="si">{</span><span class="n">offset</span><span class="si">}</span><span class="s2"> to </span><span class="si">{</span><span class="n">offset</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">count</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="mi">1</span><span class="si">}</span><span class="s2">"</span>
+            <span class="p">)</span>
+        <span class="n">region</span> <span class="o">=</span> <span class="nb">slice</span><span class="p">(</span><span class="n">offset</span><span class="p">,</span> <span class="n">offset</span> <span class="o">+</span> <span class="n">count</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_overwrote</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">mask</span><span class="p">[(</span><span class="o">*</span><span class="n">where</span><span class="p">,</span> <span class="n">region</span><span class="p">)]</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_overwrote</span> <span class="o">=</span> <span class="kc">True</span>
             <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
                 <span class="sa">f</span><span class="s2">"a readout replaced one already placed at </span><span class="si">{</span><span class="nb">dict</span><span class="p">(</span><span class="nb">zip</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">axes</span><span class="p">[</span><span class="mi">1</span><span class="p">:</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span><span class="w"> </span><span class="n">where</span><span class="p">,</span><span class="w"> </span><span class="n">strict</span><span class="o">=</span><span class="kc">False</span><span class="p">))</span><span class="si">}</span><span class="s2"> "</span>
@@ -657,13 +782,24 @@
                 <span class="s2">"partition, slice, average or repetition (pypulseqpp.make_label)"</span><span class="p">,</span>
                 <span class="n">stacklevel</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
             <span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">kspace</span><span class="p">[(</span><span class="nb">slice</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">coils</span><span class="p">),</span> <span class="o">*</span><span class="n">where</span><span class="p">,</span> <span class="n">readout</span><span class="p">)]</span> <span class="o">=</span> <span class="n">data</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">mask</span><span class="p">[(</span><span class="o">*</span><span class="n">where</span><span class="p">,</span> <span class="n">readout</span><span class="p">)]</span> <span class="o">=</span> <span class="kc">True</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_place_trajectory</span><span class="p">(</span><span class="n">acquisition</span><span class="p">,</span> <span class="n">where</span><span class="p">,</span> <span class="n">readout</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">kspace</span><span class="p">[(</span><span class="nb">slice</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">coils</span><span class="p">),</span> <span class="o">*</span><span class="n">where</span><span class="p">,</span> <span class="n">region</span><span class="p">)]</span> <span class="o">=</span> <span class="n">data</span><span class="p">[:,</span> <span class="n">skip</span> <span class="p">:</span> <span class="n">skip</span> <span class="o">+</span> <span class="n">count</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">mask</span><span class="p">[(</span><span class="o">*</span><span class="n">where</span><span class="p">,</span> <span class="n">region</span><span class="p">)]</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_place_trajectory</span><span class="p">(</span><span class="n">acquisition</span><span class="p">,</span> <span class="n">where</span><span class="p">,</span> <span class="n">region</span><span class="p">,</span> <span class="n">skip</span><span class="p">,</span> <span class="n">samples</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">readout</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="p">(</span><span class="n">region</span><span class="o">.</span><span class="n">start</span><span class="p">,</span> <span class="n">region</span><span class="o">.</span><span class="n">stop</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">readout</span> <span class="ow">is</span> <span class="kc">None</span>
+            <span class="k">else</span> <span class="p">(</span>
+                <span class="nb">min</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">readout</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">region</span><span class="o">.</span><span class="n">start</span><span class="p">),</span>
+                <span class="nb">max</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">readout</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">region</span><span class="o">.</span><span class="n">stop</span> <span class="o">-</span> <span class="mi">1</span><span class="p">),</span>
+            <span class="p">)</span>
+        <span class="p">)</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">center_sample</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">center</span> <span class="o">=</span> <span class="n">acquisition_label</span><span class="p">(</span><span class="n">acquisition</span><span class="p">,</span> <span class="s2">"center_sample"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
-            <span class="k">if</span> <span class="n">center</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">center_sample</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">center</span><span class="p">)</span> <span class="o">+</span> <span class="n">offset</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">space</span><span class="o">.</span><span class="n">cartesian</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">center_sample</span> <span class="o">=</span> <span class="n">width</span> <span class="o">//</span> <span class="mi">2</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">center</span> <span class="o">=</span> <span class="n">acquisition_label</span><span class="p">(</span><span class="n">acquisition</span><span class="p">,</span> <span class="s2">"center_sample"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">center</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">center_sample</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">center</span><span class="p">)</span> <span class="o">+</span> <span class="n">offset</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">sample_time</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">dwell</span> <span class="o">=</span> <span class="n">acquisition_label</span><span class="p">(</span><span class="n">acquisition</span><span class="p">,</span> <span class="s2">"sample_time_us"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
             <span class="k">if</span> <span class="n">dwell</span><span class="p">:</span>
@@ -671,20 +807,29 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">headers</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">acquisition</span><span class="p">)</span></div>
 
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_place_trajectory</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">acquisition</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">where</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">,</span> <span class="n">readout</span><span class="p">:</span> <span class="nb">slice</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_place_trajectory</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">acquisition</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">where</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">,</span> <span class="n">region</span><span class="p">:</span> <span class="nb">slice</span><span class="p">,</span> <span class="n">skip</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">samples</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">"""Store the acquisition's trajectory, if it carries one.</span>
 
 <span class="sd">        MRD trajectories are ``(samples, dimensions)`` and are stored transposed.</span>
-<span class="sd">        An acquisition may carry fewer trailing dimensions than its neighbours --</span>
-<span class="sd">        the centre partition of a slab traverses no kz -- and the rows it omits stay</span>
-<span class="sd">        0. A trajectory whose samples are not those placed, as after a gadget</span>
-<span class="sd">        resampled the readout, is not stored.</span>
+<span class="sd">        A trajectory with a row for each of the readout's ``samples`` is cut to</span>
+<span class="sd">        the samples placed; one with a row for each sample placed is stored as it</span>
+<span class="sd">        is. A trajectory with any other count, as after a gadget resampled the</span>
+<span class="sd">        readout, is not stored. An acquisition may carry fewer trailing</span>
+<span class="sd">        dimensions than its neighbours -- the centre partition of a slab</span>
+<span class="sd">        traverses no kz -- and the rows it omits stay 0.</span>
 <span class="sd">        """</span>
         <span class="n">traj</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">acquisition</span><span class="p">,</span> <span class="s2">"traj"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">traj</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">return</span>
         <span class="n">traj</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">traj</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">traj</span><span class="o">.</span><span class="n">size</span> <span class="o">==</span> <span class="mi">0</span> <span class="ow">or</span> <span class="n">traj</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">!=</span> <span class="n">readout</span><span class="o">.</span><span class="n">stop</span> <span class="o">-</span> <span class="n">readout</span><span class="o">.</span><span class="n">start</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">traj</span><span class="o">.</span><span class="n">size</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">return</span>
+        <span class="n">count</span> <span class="o">=</span> <span class="n">region</span><span class="o">.</span><span class="n">stop</span> <span class="o">-</span> <span class="n">region</span><span class="o">.</span><span class="n">start</span>
+        <span class="k">if</span> <span class="n">traj</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="n">samples</span><span class="p">:</span>
+            <span class="n">traj</span> <span class="o">=</span> <span class="n">traj</span><span class="p">[</span><span class="n">skip</span> <span class="p">:</span> <span class="n">skip</span> <span class="o">+</span> <span class="n">count</span><span class="p">]</span>
+        <span class="k">elif</span> <span class="n">traj</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">!=</span> <span class="n">count</span><span class="p">:</span>
             <span class="k">return</span>
         <span class="n">dimensions</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">traj</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">trajectory</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
@@ -698,7 +843,7 @@
             <span class="p">)</span>
             <span class="n">widened</span><span class="p">[:</span> <span class="bp">self</span><span class="o">.</span><span class="n">trajectory</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">trajectory</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">trajectory</span> <span class="o">=</span> <span class="n">widened</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">trajectory</span><span class="p">[(</span><span class="nb">slice</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">dimensions</span><span class="p">),</span> <span class="o">*</span><span class="n">where</span><span class="p">,</span> <span class="n">readout</span><span class="p">)]</span> <span class="o">=</span> <span class="n">traj</span><span class="o">.</span><span class="n">T</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">trajectory</span><span class="p">[(</span><span class="nb">slice</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">dimensions</span><span class="p">),</span> <span class="o">*</span><span class="n">where</span><span class="p">,</span> <span class="n">region</span><span class="p">)]</span> <span class="o">=</span> <span class="n">traj</span><span class="o">.</span><span class="n">T</span>
 
 <div class="viewcode-block" id="ReconBuffer.select">
 <a class="viewcode-back" href="../../../generated/pulserver.recon.ReconBuffer.select.html#pulserver.recon.ReconBuffer.select">[docs]</a>
@@ -738,7 +883,8 @@
 <span class="sd">        """</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">sample_time</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">center_sample</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">return</span> <span class="kc">None</span>
-        <span class="k">return</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">readout</span><span class="p">)</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">center_sample</span><span class="p">)</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">sample_time</span>
+        <span class="n">samples</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">kspace</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+        <span class="k">return</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">samples</span><span class="p">)</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">center_sample</span><span class="p">)</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">sample_time</span>
 
 <div class="viewcode-block" id="ReconBuffer.grid_trajectory">
 <a class="viewcode-back" href="../../../generated/pulserver.recon.ReconBuffer.grid_trajectory.html#pulserver.recon.ReconBuffer.grid_trajectory">[docs]</a>
@@ -845,8 +991,10 @@
 <span class="sd">        readout was calibration only.</span>
 <span class="sd">    ref : ReconBuffer or None</span>
 <span class="sd">        K-space of the parallel-imaging calibration readouts, laid out as</span>
-<span class="sd">        ``data``; ``None`` when the unit has none. A readout flagged as</span>
-<span class="sd">        calibration and imaging is in both buffers; one flagged as</span>
+<span class="sd">        ``data`` but cropped along the phase-encode and partition axes to the</span>
+<span class="sd">        lines the readouts cover, whose position on the grid is its</span>
+<span class="sd">        :attr:`~ReconBuffer.origin`; ``None`` when the unit has none. A readout</span>
+<span class="sd">        flagged as calibration and imaging is in both buffers; one flagged as</span>
 <span class="sd">        calibration only is in ``ref`` alone; a phase-correction readout is in</span>
 <span class="sd">        neither.</span>
 <span class="sd">    counters : dict of str to int</span>
@@ -879,6 +1027,10 @@
 <span class="k">class</span><span class="w"> </span><span class="nc">ReconUnit</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""The readouts of one unit as they arrive, placed into the buffers of :attr:`data`.</span>
 
+<span class="sd">    Imaging readouts are placed as they arrive, into a buffer allocated at the</span>
+<span class="sd">    first of them. Calibration readouts are held until :meth:`close`, which lays</span>
+<span class="sd">    them out over the lines they cover.</span>
+
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
 <span class="sd">    key</span>
@@ -895,7 +1047,8 @@
 <span class="sd">    Attributes</span>
 <span class="sd">    ----------</span>
 <span class="sd">    data : ReconData</span>
-<span class="sd">        What the unit has collected, which is what the plugin receives.</span>
+<span class="sd">        What the unit has collected, which is what the plugin receives once</span>
+<span class="sd">        the unit is closed.</span>
 <span class="sd">    """</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
@@ -912,6 +1065,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">buffered</span> <span class="o">=</span> <span class="n">buffered</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">dtype</span> <span class="o">=</span> <span class="n">dtype</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">data</span> <span class="o">=</span> <span class="n">ReconData</span><span class="p">(</span><span class="n">branch</span><span class="p">,</span> <span class="n">counters</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span><span class="n">counters</span><span class="p">))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_reference</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">]]]</span> <span class="o">=</span> <span class="p">[]</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">combinations</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
@@ -919,19 +1073,28 @@
         <span class="n">space</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">spaces</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">space_index</span><span class="p">)</span>
         <span class="k">return</span> <span class="mi">1</span> <span class="k">if</span> <span class="n">space</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">math</span><span class="o">.</span><span class="n">prod</span><span class="p">(</span><span class="n">space</span><span class="o">.</span><span class="n">loop_sizes</span><span class="p">)</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">add_acquisition</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">acquisition</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">readout</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">add_acquisition</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">acquisition</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">readout</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">placed</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">"""Record one acquisition and place ``readout`` in the buffers its flags select.</span>
 
-<span class="sd">        A buffer is allocated at this readout's coils and samples when it is</span>
-<span class="sd">        the first the unit places in it.</span>
+<span class="sd">        The first readout the unit places in a buffer sizes it: its channels,</span>
+<span class="sd">        and along the readout its own samples when it is a centred full echo,</span>
+<span class="sd">        the encoded matrix's readout otherwise. A calibration readout is held</span>
+<span class="sd">        until :meth:`close`.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
 <span class="sd">        acquisition</span>
-<span class="sd">            The acquisition, for its counters and flags.</span>
+<span class="sd">            The acquisition as received, for its flags, which select the</span>
+<span class="sd">            buffers, and for :attr:`ReconData.acquisitions`.</span>
 <span class="sd">        readout</span>
 <span class="sd">            ``(coils, samples)`` to place: the acquisition's data as the</span>
 <span class="sd">            gadgets left it.</span>
+<span class="sd">        placed</span>
+<span class="sd">            The acquisition as the gadgets left it, whose ``center_sample`` and</span>
+<span class="sd">            discards describe ``readout`` and which the buffers keep as their</span>
+<span class="sd">            header; ``acquisition`` when not given.</span>
 
 <span class="sd">        Raises</span>
 <span class="sd">        ------</span>
@@ -944,29 +1107,72 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">acquisitions</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">acquisition</span><span class="p">)</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">buffered</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">spaces</span><span class="p">):</span>
             <span class="k">return</span>
+        <span class="n">readout</span> <span class="o">=</span> <span class="n">_as_readout</span><span class="p">(</span><span class="n">readout</span><span class="p">)</span>
+        <span class="n">placed</span> <span class="o">=</span> <span class="n">acquisition</span> <span class="k">if</span> <span class="n">placed</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">placed</span>
         <span class="n">in_data</span><span class="p">,</span> <span class="n">in_ref</span> <span class="o">=</span> <span class="n">readout_roles</span><span class="p">(</span><span class="n">acquisition</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">in_data</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_place</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">data</span><span class="p">,</span> <span class="n">acquisition</span><span class="p">,</span> <span class="n">readout</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_place</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">data</span><span class="p">,</span> <span class="n">placed</span><span class="p">,</span> <span class="n">readout</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">in_ref</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">ref</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_place</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">ref</span><span class="p">,</span> <span class="n">acquisition</span><span class="p">,</span> <span class="n">readout</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_reference</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                <span class="p">(</span><span class="n">placed</span><span class="p">,</span> <span class="n">readout</span><span class="p">,</span> <span class="n">_grid_position</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_space</span><span class="p">(),</span> <span class="n">placed</span><span class="p">))</span>
+            <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">close</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ReconData</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Lay out the calibration readouts and return what the unit collected.</span>
+
+<span class="sd">        The calibration buffer covers the lines its readouts do along the</span>
+<span class="sd">        phase-encode and partition axes, and every position of the other axes.</span>
+<span class="sd">        """</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_reference</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">ref</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_assemble</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_reference</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_reference</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_space</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">EncodingSpace</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">space_index</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">spaces</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"the header describes no encoding space </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">space_index</span><span class="si">}</span><span class="s2">; "</span>
+                <span class="sa">f</span><span class="s2">"it has </span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">spaces</span><span class="p">)</span><span class="si">}</span><span class="s2">"</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">spaces</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">space_index</span><span class="p">]</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_place</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span> <span class="n">buffer</span><span class="p">:</span> <span class="n">ReconBuffer</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">acquisition</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">readout</span><span class="p">:</span> <span class="n">Any</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">buffer</span><span class="p">:</span> <span class="n">ReconBuffer</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">placed</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">readout</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ReconBuffer</span><span class="p">:</span>
         <span class="k">if</span> <span class="n">buffer</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">space_index</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">spaces</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span>
-                    <span class="sa">f</span><span class="s2">"the header describes no encoding space </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">space_index</span><span class="si">}</span><span class="s2">; "</span>
-                    <span class="sa">f</span><span class="s2">"it has </span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">spaces</span><span class="p">)</span><span class="si">}</span><span class="s2">"</span>
-                <span class="p">)</span>
-            <span class="n">coils</span><span class="p">,</span> <span class="n">samples</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">shape</span><span class="p">(</span><span class="n">readout</span><span class="p">)[</span><span class="o">-</span><span class="mi">2</span><span class="p">:]</span>
+            <span class="n">space</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_space</span><span class="p">()</span>
+            <span class="n">coils</span><span class="p">,</span> <span class="n">samples</span> <span class="o">=</span> <span class="n">readout</span><span class="o">.</span><span class="n">shape</span>
             <span class="n">buffer</span> <span class="o">=</span> <span class="n">ReconBuffer</span><span class="p">(</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">spaces</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">space_index</span><span class="p">],</span>
+                <span class="n">space</span><span class="p">,</span>
                 <span class="n">coils</span><span class="o">=</span><span class="n">coils</span><span class="p">,</span>
-                <span class="n">readout</span><span class="o">=</span><span class="n">samples</span><span class="p">,</span>
+                <span class="n">samples</span><span class="o">=</span><span class="n">_width</span><span class="p">(</span><span class="n">space</span><span class="p">,</span> <span class="n">placed</span><span class="p">,</span> <span class="n">samples</span><span class="p">),</span>
                 <span class="n">dtype</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span>
             <span class="p">)</span>
-        <span class="n">buffer</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">acquisition</span><span class="p">,</span> <span class="n">readout</span><span class="p">)</span>
+        <span class="n">buffer</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">placed</span><span class="p">,</span> <span class="n">readout</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">buffer</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_assemble</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">readouts</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">]]]</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ReconBuffer</span><span class="p">:</span>
+        <span class="n">space</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_space</span><span class="p">()</span>
+        <span class="n">placed</span><span class="p">,</span> <span class="n">readout</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">readouts</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">coils</span><span class="p">,</span> <span class="n">samples</span> <span class="o">=</span> <span class="n">readout</span><span class="o">.</span><span class="n">shape</span>
+        <span class="n">varying</span> <span class="o">=</span> <span class="p">[</span><span class="n">name</span> <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">extent</span> <span class="ow">in</span> <span class="n">space</span><span class="o">.</span><span class="n">extents</span> <span class="k">if</span> <span class="n">extent</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">]</span>
+        <span class="n">grid</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">position</span> <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">position</span> <span class="ow">in</span> <span class="n">readouts</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
+        <span class="n">crop</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="n">name</span><span class="p">:</span> <span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">grid</span><span class="p">[:,</span> <span class="n">column</span><span class="p">]</span><span class="o">.</span><span class="n">min</span><span class="p">()),</span> <span class="nb">int</span><span class="p">(</span><span class="n">grid</span><span class="p">[:,</span> <span class="n">column</span><span class="p">]</span><span class="o">.</span><span class="n">max</span><span class="p">())</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">column</span><span class="p">,</span> <span class="n">name</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">varying</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">_CROPPABLE</span>
+        <span class="p">}</span>
+        <span class="n">buffer</span> <span class="o">=</span> <span class="n">ReconBuffer</span><span class="p">(</span>
+            <span class="n">space</span><span class="p">,</span>
+            <span class="n">coils</span><span class="o">=</span><span class="n">coils</span><span class="p">,</span>
+            <span class="n">samples</span><span class="o">=</span><span class="n">_width</span><span class="p">(</span><span class="n">space</span><span class="p">,</span> <span class="n">placed</span><span class="p">,</span> <span class="n">samples</span><span class="p">),</span>
+            <span class="n">crop</span><span class="o">=</span><span class="n">crop</span><span class="p">,</span>
+            <span class="n">dtype</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">for</span> <span class="n">placed</span><span class="p">,</span> <span class="n">readout</span><span class="p">,</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">readouts</span><span class="p">:</span>
+            <span class="n">buffer</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">placed</span><span class="p">,</span> <span class="n">readout</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">buffer</span>
 
 

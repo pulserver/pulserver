@@ -534,21 +534,24 @@
 <dl class="py method">
 <dt class="sig sig-object py" id="pulserver.recon.ReconBuffer.add">
 <span class="sig-prename descclassname"><span class="pre">ReconBuffer.</span></span><span class="sig-name descname"><span class="pre">add</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pulserver/recon/_buffers.html#ReconBuffer.add"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.recon.ReconBuffer.add" title="Link to this definition">#</a></dt>
-<dd><p>Place one acquisition where its counters say it belongs.</p>
+<dd><p>Place one acquisition where its counters and echo say it belongs.</p>
 <p>Also records its trajectory, and <code class="docutils literal notranslate"><span class="pre">center_sample</span></code> and dwell when not yet
 known. A readout placed where one already is replaces it, with a warning
 the first time: the sequence labels neither apart.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>acquisition</strong> – The acquisition, for its counters, flags and data.</p></li>
-<li><p><strong>data</strong> – <code class="docutils literal notranslate"><span class="pre">(coils,</span> <span class="pre">samples)</span></code> to place instead of <code class="docutils literal notranslate"><span class="pre">acquisition.data</span></code>, for a
-readout corrected before placement.</p></li>
+<li><p><strong>acquisition</strong> – The acquisition, for its counters, <code class="docutils literal notranslate"><span class="pre">center_sample</span></code>, discards and
+flags, and its data. An acquisition that states no <code class="docutils literal notranslate"><span class="pre">center_sample</span></code>
+is a centred full echo.</p></li>
+<li><p><strong>data</strong> – <code class="docutils literal notranslate"><span class="pre">(coils,</span> <span class="pre">samples)</span></code> to place instead of <code class="docutils literal notranslate"><span class="pre">acquisition.data</span></code>: a
+readout corrected before placement, whose <code class="docutils literal notranslate"><span class="pre">center_sample</span></code> and
+discards the acquisition states.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Raises<span class="colon">:</span></dt>
-<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If the data is not two-dimensional, is larger than the buffer, or a
-    counter is outside the laid-out extent.</p>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If the data is not two-dimensional, the readout does not fit the
+    buffer along the readout, or a counter is outside the laid-out extent.</p>
 </dd>
 </dl>
 </dd></dl>

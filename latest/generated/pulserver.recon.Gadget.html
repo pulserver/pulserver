@@ -539,6 +539,14 @@
 <p>A gadget keeps what it learns from earlier acquisitions of its stream – a
 noise covariance, a coil basis – on <code class="docutils literal notranslate"><span class="pre">self</span></code>. <a class="reference internal" href="pulserver.recon.ReconPlugin.spawn.html#pulserver.recon.ReconPlugin.spawn" title="pulserver.recon.ReconPlugin.spawn"><code class="xref py py-meth docutils literal notranslate"><span class="pre">ReconPlugin.spawn()</span></code></a>
 copies the gadgets, so each stream has its own.</p>
+<p>A gadget that changes the samples of a readout states where its echo lies
+in the readout it returns by assigning <code class="docutils literal notranslate"><span class="pre">center_sample</span></code>, <code class="docutils literal notranslate"><span class="pre">discard_pre</span></code>
+and <code class="docutils literal notranslate"><span class="pre">discard_post</span></code> of the acquisition it was given, as Gadgetron’s
+gadgets update the header they pass on. The next gadget and the buffers
+read them, and the length of the returned array is the readout’s number of
+samples. The plugin gives each gadget a copy of the received acquisition,
+so an assignment changes neither the acquisition the stream delivered nor
+what <a class="reference internal" href="pulserver.recon.ReconData.acquisitions.html#pulserver.recon.ReconData.acquisitions" title="pulserver.recon.ReconData.acquisitions"><code class="xref py py-attr docutils literal notranslate"><span class="pre">ReconData.acquisitions</span></code></a> lists.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Attributes<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>context</strong> (<em>ReconContext</em>) – Set by <a class="reference internal" href="pulserver.recon.Gadget.startup.html#pulserver.recon.Gadget.startup" title="pulserver.recon.Gadget.startup"><code class="xref py py-meth docutils literal notranslate"><span class="pre">startup()</span></code></a>.</p>

@@ -535,12 +535,15 @@
 <dt class="sig sig-object py" id="pulserver.mrd.EncodingSpace.from_header">
 <span class="property"><span class="k"><span class="pre">classmethod</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">EncodingSpace.</span></span><span class="sig-name descname"><span class="pre">from_header</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pulserver/mrd/_header.html#EncodingSpace.from_header"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.mrd.EncodingSpace.from_header" title="Link to this definition">#</a></dt>
 <dd><p>Read encoding space <code class="docutils literal notranslate"><span class="pre">index</span></code> of a parsed MRD header.</p>
-<p>For a Cartesian space <code class="docutils literal notranslate"><span class="pre">phase_encodes</span></code> is the larger of the encoded matrix
-and the <code class="docutils literal notranslate"><span class="pre">kspace_encoding_step_1</span></code> limit, since an undersampled grid still
-needs every line. For a non-Cartesian space it is the limit, which counts
-views, or the encoded matrix when no limit is stated. <code class="docutils literal notranslate"><span class="pre">partitions</span></code> is
-always the larger of the two. <code class="docutils literal notranslate"><span class="pre">recon_matrix</span></code> and <code class="docutils literal notranslate"><span class="pre">recon_fov</span></code> fall
-back to the encoded space when the header has no <code class="docutils literal notranslate"><span class="pre">reconSpace</span></code>.</p>
+<p>For a Cartesian space <code class="docutils literal notranslate"><span class="pre">phase_encodes</span></code> and <code class="docutils literal notranslate"><span class="pre">partitions</span></code> are the encoded
+matrix, the whole grid whatever number of lines an undersampled scan took,
+and <code class="docutils literal notranslate"><span class="pre">phase_center</span></code> and <code class="docutils literal notranslate"><span class="pre">partition_center</span></code> place the counters on it. For
+a non-Cartesian space <code class="docutils literal notranslate"><span class="pre">phase_encodes</span></code> is the <code class="docutils literal notranslate"><span class="pre">kspace_encoding_step_1</span></code>
+limit, which counts views, or the encoded matrix when no limit is stated;
+its <code class="docutils literal notranslate"><span class="pre">partitions</span></code> is the larger of the encoded matrix and the
+<code class="docutils literal notranslate"><span class="pre">kspace_encoding_step_2</span></code> limit, a stack being Cartesian along z, and no
+counter is shifted. <code class="docutils literal notranslate"><span class="pre">recon_matrix</span></code> and <code class="docutils literal notranslate"><span class="pre">recon_fov</span></code> fall back to the
+encoded space when the header has no <code class="docutils literal notranslate"><span class="pre">reconSpace</span></code>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">

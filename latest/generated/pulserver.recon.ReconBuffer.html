@@ -536,16 +536,26 @@
 <span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">pulserver.recon.</span></span><span class="sig-name descname"><span class="pre">ReconBuffer</span></span><a class="reference internal" href="../_modules/pulserver/recon/_buffers.html#ReconBuffer"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.recon.ReconBuffer" title="Link to this definition">#</a></dt>
 <dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/builtins/functions.html#object" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
 <p>K-space of one encoding space, filled one acquisition at a time.</p>
-<p>A readout shorter than the buffer is right-aligned, where a partial echo’s
-samples belong. The axes are those of <code class="docutils literal notranslate"><span class="pre">space</span></code>: its counters that vary
-and were asked for, then the encoded axes.</p>
+<p>Along the readout of a Cartesian space, the samples of an acquisition from
+<code class="docutils literal notranslate"><span class="pre">discard_pre</span></code> to <code class="docutils literal notranslate"><span class="pre">number_of_samples</span> <span class="pre">-</span> <span class="pre">discard_post</span></code> are placed so that
+its echo, <code class="docutils literal notranslate"><span class="pre">center_sample</span></code>, lies at sample <code class="docutils literal notranslate"><span class="pre">samples</span> <span class="pre">//</span> <span class="pre">2</span></code> of the buffer.
+Along an encoded axis of a Cartesian space, a counter is placed at
+<code class="docutils literal notranslate"><span class="pre">counter</span> <span class="pre">-</span> <span class="pre">center</span> <span class="pre">+</span> <span class="pre">extent</span> <span class="pre">//</span> <span class="pre">2</span></code>, <code class="docutils literal notranslate"><span class="pre">center</span></code> being the counter of the
+k-space centre the header’s limits state, so the centre line lies at
+<code class="docutils literal notranslate"><span class="pre">extent</span> <span class="pre">//</span> <span class="pre">2</span></code> whatever the counters start at. A non-Cartesian space
+places a readout right-aligned and a counter as it is. The axes are those
+of <code class="docutils literal notranslate"><span class="pre">space</span></code>: its counters that vary and were asked for, then the encoded
+axes.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>space</strong> – Encoding space to lay out.</p></li>
 <li><p><strong>coils</strong> – Channels to allocate; <code class="docutils literal notranslate"><span class="pre">space.coils</span></code> when not given. Fewer than the
 header declares is valid, for data compressed before placement.</p></li>
-<li><p><strong>readout</strong> – Samples to allocate; never fewer than <code class="docutils literal notranslate"><span class="pre">space.readout</span></code>.</p></li>
+<li><p><strong>samples</strong> – Samples to allocate along the readout; <code class="docutils literal notranslate"><span class="pre">space.readout</span></code> when not given.</p></li>
+<li><p><strong>crop</strong> – <code class="docutils literal notranslate"><span class="pre">{axis:</span> <span class="pre">(first,</span> <span class="pre">stop)}</span></code> for the <code class="docutils literal notranslate"><span class="pre">phase_encode</span></code> and <code class="docutils literal notranslate"><span class="pre">partition</span></code>
+axes: the positions of the space’s grid the buffer holds, the whole axis
+where an axis is not named.</p></li>
 <li><p><strong>dtype</strong> – Complex dtype of <code class="xref py py-attr docutils literal notranslate"><span class="pre">kspace</span></code>.</p></li>
 </ul>
 </dd>
@@ -553,12 +563,17 @@ header declares is valid, for data compressed before placement.</p></li>
 <dd class="field-even"><ul class="simple">
 <li><p><strong>kspace</strong> (<em>ndarray</em>) – Shaped as <a class="reference internal" href="pulserver.recon.ReconBuffer.axes.html#pulserver.recon.ReconBuffer.axes" title="pulserver.recon.ReconBuffer.axes"><code class="xref py py-attr docutils literal notranslate"><span class="pre">axes</span></code></a> names.</p></li>
 <li><p><strong>mask</strong> (<em>ndarray</em>) – Boolean, <code class="xref py py-attr docutils literal notranslate"><span class="pre">kspace</span></code> without the coil axis: samples that were placed.</p></li>
+<li><p><strong>origin</strong> (<em>dict of str to int</em>) – Position on the space’s grid of the first entry of each placement axis
+of <a class="reference internal" href="pulserver.recon.ReconBuffer.axes.html#pulserver.recon.ReconBuffer.axes" title="pulserver.recon.ReconBuffer.axes"><code class="xref py py-attr docutils literal notranslate"><span class="pre">axes</span></code></a>; 0 along an axis that is not cropped.</p></li>
+<li><p><strong>readout</strong> (<em>tuple of int or None</em>) – First and last sample of the readout axis placed, inclusive; <code class="docutils literal notranslate"><span class="pre">None</span></code>
+until an acquisition is placed. The samples outside it are zero fill.</p></li>
 <li><p><strong>trajectory</strong> (<em>ndarray or None</em>) – <code class="docutils literal notranslate"><span class="pre">(dimensions,</span> <span class="pre">...)</span></code> over the axes of <code class="xref py py-attr docutils literal notranslate"><span class="pre">mask</span></code>, in the units the
 acquisitions carry. <code class="docutils literal notranslate"><span class="pre">None</span></code> until an acquisition carries a trajectory;
 widened to the most dimensions any acquisition carried, missing trailing
 dimensions reading 0.</p></li>
-<li><p><strong>center_sample</strong> (<em>int or None</em>) – Echo index along the readout axis, after right alignment, from the first
-acquisition that states it.</p></li>
+<li><p><strong>center_sample</strong> (<em>int or None</em>) – Echo index along the readout axis. <code class="docutils literal notranslate"><span class="pre">samples</span> <span class="pre">//</span> <span class="pre">2</span></code> in a Cartesian
+space, where every echo is placed there; in a non-Cartesian space that
+of the first acquisition that states it, after alignment.</p></li>
 <li><p><strong>sample_time</strong> (<em>float or None</em>) – Dwell time in seconds, from the first acquisition that states it.</p></li>
 <li><p><strong>headers</strong> (<em>list</em>) – Placed acquisitions, in placement order.</p></li>
 </ul>
@@ -586,7 +601,7 @@ acquisition that states it.</p></li>
 <div class="pst-scrollable-table-container"><table class="autosummary longtable table">
 <tbody>
 <tr class="row-odd"><td><p><a class="reference internal" href="pulserver.recon.ReconBuffer.add.html#pulserver.recon.ReconBuffer.add" title="pulserver.recon.ReconBuffer.add"><code class="xref py py-obj docutils literal notranslate"><span class="pre">add</span></code></a></p></td>
-<td><p>Place one acquisition where its counters say it belongs.</p></td>
+<td><p>Place one acquisition where its counters and echo say it belongs.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="pulserver.recon.ReconBuffer.grid_trajectory.html#pulserver.recon.ReconBuffer.grid_trajectory" title="pulserver.recon.ReconBuffer.grid_trajectory"><code class="xref py py-obj docutils literal notranslate"><span class="pre">grid_trajectory</span></code></a></p></td>
 <td><p>Return the trajectory in grid units, laid out as <code class="docutils literal notranslate"><span class="pre">bartorch.linop.NUFFT</span></code> takes it.</p></td>
@@ -595,7 +610,7 @@ acquisition that states it.</p></li>
 <td><p>Return the trajectory at one position, indexed as <code class="xref py py-meth docutils literal notranslate"><span class="pre">select()</span></code> indexes.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="pulserver.recon.ReconBuffer.position.html#pulserver.recon.ReconBuffer.position" title="pulserver.recon.ReconBuffer.position"><code class="xref py py-obj docutils literal notranslate"><span class="pre">position</span></code></a></p></td>
-<td><p>Index along each axis of <code class="xref py py-attr docutils literal notranslate"><span class="pre">kspace</span></code> this acquisition fills.</p></td>
+<td><p>Index along each placement axis of <code class="xref py py-attr docutils literal notranslate"><span class="pre">kspace</span></code> this acquisition fills.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="pulserver.recon.ReconBuffer.select.html#pulserver.recon.ReconBuffer.select" title="pulserver.recon.ReconBuffer.select"><code class="xref py py-obj docutils literal notranslate"><span class="pre">select</span></code></a></p></td>
 <td><p>Return the <code class="docutils literal notranslate"><span class="pre">(kspace,</span> <span class="pre">mask)</span></code> at one position along named axes.</p></td>

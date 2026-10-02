@@ -181,6 +181,8 @@ from.
    ReconPlugin
    Gadget
    load_plugin
+   AsymmetricEcho
+   RemoveReadoutOversampling
    ReconContext
    ExamCache
    B0_MAP

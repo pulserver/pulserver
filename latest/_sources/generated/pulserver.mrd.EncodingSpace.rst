@@ -16,6 +16,7 @@
 
    ~EncodingSpace.all_from_header
    ~EncodingSpace.from_header
+   ~EncodingSpace.offset
 
 
 
@@ -26,7 +27,10 @@
    :nosignatures:
 
    ~EncodingSpace.axes
+   ~EncodingSpace.cartesian
    ~EncodingSpace.extents
+   ~EncodingSpace.partition_center
+   ~EncodingSpace.phase_center
    ~EncodingSpace.recon_fov
    ~EncodingSpace.shape
    ~EncodingSpace.index

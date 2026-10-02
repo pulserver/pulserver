@@ -18,6 +18,7 @@
 
    ~TableSpace.centre_line
    ~TableSpace.centre_partition
+   ~TableSpace.readout_samples
    ~TableSpace.subsequence
    ~TableSpace.navigator
    ~TableSpace.matrix
