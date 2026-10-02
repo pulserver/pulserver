@@ -1,13 +1,14 @@
 """pypulseqpp's 2D spiral spin echo bound to the scanner UI."""
 
-from pypulseqpp.sequences.sequence.se_spiral2D_sequence import SeSpiral2DApp
+from pypulseqpp.sequences.sequence.se_spiral2D_sequence import se_spiral2d
 
+from pulserver._zoo._evaluation import evaluation
 from pulserver.design import FloatParam, IntParam, SequencePlugin, TimeParam
 from pulserver.protocol import TEPreset, TRPreset, UIParam
 
 
 class SeSpiral2D(SequencePlugin):
-    app = SeSpiral2DApp
+    app = se_spiral2d
     protocol = {
         UIParam.TE: TimeParam(
             "te",
@@ -35,3 +36,6 @@ class SeSpiral2D(SequencePlugin):
             "slice_thickness", unit="mm", scale=1e-3, range_min=1.0, range_max=20.0
         ),
     }
+
+    def evaluate(self, system, protocol):
+        return evaluation(self, system, protocol)

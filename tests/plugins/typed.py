@@ -1,13 +1,13 @@
 """A scanner sequence with one entry of every kind: a choice, a user entry and a configuration key."""
 
 import pypulseqpp as pp
-from pypulseqpp import sequences
 
 from pulserver.design import (
     BoolParam,
     ChoiceParam,
     ConfigParam,
     Description,
+    Evaluation,
     FloatParam,
     IntParam,
     SequencePlugin,
@@ -23,45 +23,34 @@ from pulserver.protocol import (
     UserNameKey,
 )
 
+SHORTEST_TE = 2.5e-3
 
-class TypedApp(sequences.SequenceApp):
-    MAX_GRAD = 40.0
-    MAX_SLEW = 150.0
-    SHORTEST_TE = 2.5e-3
 
-    def init_sequence(
-        self,
-        te: float | None = 8e-3,
-        tr: float | None = None,
-        mode: str = "2d",
-        n_repetitions: int = 4,
-        fat_sat: bool = False,
-        thickness: float = 5e-3,
-    ) -> None:
-        if te is not None and te < self.SHORTEST_TE:
-            raise ValueError(
-                f"the requested TE of {te * 1e3:.3f} ms is shorter than "
-                f"{self.SHORTEST_TE * 1e3:.3f} ms"
-            )
-        self.te = self.SHORTEST_TE if te is None else te
-        self.tr = tr
-        self.mode = mode
-        self.n_repetitions = n_repetitions
-        self.fat_sat = fat_sat
-        self.thickness = thickness
-        self.duration = n_repetitions * self.te
-        self.resolve(te=self.te)
-
-    def loop(self) -> None:
-        for _ in range(self.n_repetitions):
-            self.kernel()
-
-    def kernel(self) -> None:
-        self.seq.add_block(pp.make_delay(self.te))
+def typed(
+    system=None,
+    *,
+    te: float | None = 8e-3,
+    tr: float | None = None,
+    mode: str = "2d",
+    n_repetitions: int = 4,
+    fat_sat: bool = False,
+    thickness: float = 5e-3,
+):
+    if te is not None and te < SHORTEST_TE:
+        raise ValueError(
+            f"the requested TE of {te * 1e3:.3f} ms is shorter than "
+            f"{SHORTEST_TE * 1e3:.3f} ms"
+        )
+    te = SHORTEST_TE if te is None else te
+    seq = pp.Sequence(system)
+    seq.set_definition("TE", [te])
+    for _ in range(n_repetitions):
+        seq.add_block(pp.make_delay(te))
+    return seq
 
 
 class Typed(SequencePlugin):
-    app = TypedApp
+    app = typed
     protocol = {
         UIParam.TE: TimeParam(
             "te",
@@ -82,3 +71,10 @@ class Typed(SequencePlugin):
         ),
         ConfigKey.ENABLE_SAR_BURST_MODE: ConfigParam(1),
     }
+
+    def evaluate(self, system, protocol):
+        arguments = protocol.arguments
+        te = self.app(system, **arguments).definitions["TE"][0]
+        return Evaluation(
+            protocol.replace({UIParam.TE: te}), arguments["n_repetitions"] * te
+        )

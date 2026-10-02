@@ -9,7 +9,7 @@ import numpy as np
 import pypulseqpp as pp
 import pytest
 from _virtual import ORIENTATIONS
-from _zoo import SMALL
+from _zoo import SMALL, designed
 from pypulseqpp import sequences
 
 from pulserver import ir, virtual
@@ -57,7 +57,7 @@ def _fixture(name, tmp_path):
 def design(request, tmp_path_factory):
     name = request.param
     path = tmp_path_factory.mktemp(name) / "scan.seq"
-    getattr(sequences, name)(**SMALL[name]).write(str(path))
+    sequences.write(path, designed(name))
     return path
 
 

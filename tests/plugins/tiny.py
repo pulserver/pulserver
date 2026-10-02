@@ -3,35 +3,28 @@
 import pypulseqpp as pp
 from pypulseqpp import sequences
 
-from pulserver.design import IntParam, SequencePlugin, TimeParam
+from pulserver.design import Evaluation, IntParam, SequencePlugin, TimeParam
 from pulserver.protocol import TEPreset, UIParam
 
+SHORTEST_TE = 2.5e-3
 
-class TinyApp(sequences.SequenceApp):
-    MAX_GRAD = 40.0
-    MAX_SLEW = 150.0
-    SHORTEST_TE = 2.5e-3
 
-    def init_sequence(self, te: float | None = 8e-3, n_repetitions: int = 4) -> None:
-        if te is not None and te < self.SHORTEST_TE:
-            raise ValueError(
-                f"the requested TE of {te * 1e3:.3f} ms is shorter than "
-                f"{self.SHORTEST_TE * 1e3:.3f} ms"
-            )
-        self.te = self.SHORTEST_TE if te is None else te
-        self.n_repetitions = n_repetitions
-        self.resolve(te=self.te)
-
-    def loop(self) -> None:
-        for _ in range(self.n_repetitions):
-            self.kernel()
-
-    def kernel(self) -> None:
-        self.seq.add_block(pp.make_delay(self.te))
+def tiny(system=None, *, te: float | None = 8e-3, n_repetitions: int = 4):
+    if te is not None and te < SHORTEST_TE:
+        raise ValueError(
+            f"the requested TE of {te * 1e3:.3f} ms is shorter than "
+            f"{SHORTEST_TE * 1e3:.3f} ms"
+        )
+    te = SHORTEST_TE if te is None else te
+    seq = pp.Sequence(system)
+    seq.set_definition("TE", [te])
+    for _ in range(n_repetitions):
+        seq.add_block(pp.make_delay(te))
+    return seq
 
 
 class Tiny(SequencePlugin):
-    app = TinyApp
+    app = tiny
     protocol = {
         UIParam.TE: TimeParam(
             "te",
@@ -42,3 +35,10 @@ class Tiny(SequencePlugin):
         ),
         UIParam.NX: IntParam("n_repetitions", range_min=1, range_max=64),
     }
+
+    def evaluate(self, system, protocol):
+        sequence = self.app(system, **protocol.arguments)
+        return Evaluation(
+            protocol.replace({UIParam.TE: sequence.definitions["TE"][0]}),
+            sequences.duration(sequence),
+        )

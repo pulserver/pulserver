@@ -110,6 +110,18 @@ def test_a_partial_app_lists_the_defaults_of_the_partial(calls):
     assert (listing[UIParam.TE].value, listing[UIParam.NX].value) == (4000, 5)
 
 
+def test_a_partial_app_is_called_with_the_limits_and_no_instance_bound(calls, tmp_path):
+    plugin = _plugin(functools.partial(_delays(calls), nx=2))
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        validation, paths = plugin.design(SYSTEM, {}, tmp_path)
+
+    assert validation.valid
+    assert calls == [{"te": 2.5e-3, "nx": 2}]
+    assert _durations(paths) == [pytest.approx(2 * 2.5e-3)]
+
+
 def test_a_function_app_without_a_protocol_is_designed_at_its_defaults(calls, tmp_path):
     plugin = _plugin(_delays(calls), protocol={})
 

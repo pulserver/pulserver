@@ -1,13 +1,14 @@
 """pypulseqpp's 3D spin echo bound to the scanner UI, its partitions counted by the number of slices."""
 
-from pypulseqpp.sequences.sequence.se3D_sequence import Se3DApp
+from pypulseqpp.sequences.sequence.se3D_sequence import se3d
 
+from pulserver._zoo._evaluation import evaluation
 from pulserver.design import FloatParam, IntParam, SequencePlugin, TimeParam
 from pulserver.protocol import TEPreset, TRPreset, UIParam
 
 
 class Se3D(SequencePlugin):
-    app = Se3DApp
+    app = se3d
     protocol = {
         UIParam.TE: TimeParam(
             "te",
@@ -37,3 +38,6 @@ class Se3D(SequencePlugin):
         UIParam.RY: IntParam("ry", range_min=1, range_max=4),
         UIParam.RZ: IntParam("rz", range_min=1, range_max=4),
     }
+
+    def evaluate(self, system, protocol):
+        return evaluation(self, system, protocol)

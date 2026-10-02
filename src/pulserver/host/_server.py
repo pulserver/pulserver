@@ -185,13 +185,16 @@ class DesignServer:
 
 def _warm_design() -> None:
     import pypulseqpp as pp
-    from pypulseqpp.sequences.sequence.gre2D_sequence import Gre2DApp
+    from pypulseqpp import sequences
+    from pypulseqpp.sequences.sequence.gre2D_sequence import gre2d
 
     from .. import ir
 
     system = pp.Opts()
     with tempfile.TemporaryDirectory(prefix="pulserver-warm-") as scratch:
-        first = Gre2DApp(system).write(Path(scratch) / "sequence.seq", offline=False)[0]
+        first = sequences.write(
+            Path(scratch) / "sequence.seq", gre2d(system), offline=False
+        )[0]
         ir.check(first, system)
         ir.convert(first, system)
 

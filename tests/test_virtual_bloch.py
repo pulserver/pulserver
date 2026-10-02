@@ -218,9 +218,10 @@ def test_a_span_of_no_time_or_a_scan_at_no_speed_is_refused(given, message, conv
 
 def _single_shot(path, fov_offset=None):
     """A single-shot 2D EPI of one 90 degree excitation, converted with ``fov_offset``."""
-    sequences.epi2D_sequence(
+    main = sequences.epi2D_sequence(
         n_x=32, n_y=32, n_dummy=0, flip_angle_deg=90.0, system=pp.Opts(B0=3.0)
-    ).write(str(path))
+    )[-1]
+    sequences.write(path, main)
     ir.convert(path, SYSTEM, fov_offset=fov_offset)
     return path
 

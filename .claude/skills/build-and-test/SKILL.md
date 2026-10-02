@@ -30,8 +30,8 @@ pre-commit and CI use, so a style failure in CI is reproducible here.
   pass.
 - The CUDA leg of the `device` fixture skips without a device.
 - The scanner-sequence plugins under `tests/plugins/` bind arguments of the
-  installed pypulseqpp's sequence applications. A failure naming an argument
-  `init_sequence` does not take means the plugin and the installed pypulseqpp
+  installed pypulseqpp's sequence functions. A failure naming an argument the
+  function does not take means the plugin and the installed pypulseqpp
   disagree; check `pip show pypulseqpp` against the floor in `pyproject.toml`
   before changing either.
 - `tests/test_docs.py` runs the user-guide doctests and holds every public name

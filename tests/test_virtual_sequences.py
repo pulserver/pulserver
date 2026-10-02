@@ -4,7 +4,7 @@ import numpy as np
 import pypulseqpp as pp
 import pytest
 from _virtual import OFF_RESONANCE_HZ, OFFSET, ORIENTATIONS, phantom, posed, precession
-from _zoo import SMALL
+from _zoo import SMALL, designed
 from pypulseqpp import sequences
 
 from pulserver import ir, virtual
@@ -18,7 +18,7 @@ def design(request, tmp_path_factory):
     """The design as its file holds it, which keeps six significant digits of an amplitude."""
     name = request.param
     path = tmp_path_factory.mktemp(name) / "scan.seq"
-    getattr(sequences, name)(**SMALL[name]).write(str(path))
+    sequences.write(path, designed(name))
     sequence = pp.Sequence()
     sequence.read(str(path))
     return name, sequence, path

@@ -1,13 +1,14 @@
 """pypulseqpp's 2D radial gradient echo bound to the scanner UI."""
 
-from pypulseqpp.sequences.sequence.gre_radial2D_sequence import GreRadial2DApp
+from pypulseqpp.sequences.sequence.gre_radial2D_sequence import gre_radial2d
 
+from pulserver._zoo._evaluation import evaluation
 from pulserver.design import FloatParam, IntParam, SequencePlugin, TimeParam
 from pulserver.protocol import TEPreset, TRPreset, UIParam
 
 
 class GreRadial2D(SequencePlugin):
-    app = GreRadial2DApp
+    app = gre_radial2d
     protocol = {
         UIParam.FLIP: FloatParam(
             "flip_angle_deg", unit="deg", range_min=1.0, range_max=90.0
@@ -30,3 +31,6 @@ class GreRadial2D(SequencePlugin):
             "slice_thickness", unit="mm", scale=1e-3, range_min=1.0, range_max=20.0
         ),
     }
+
+    def evaluate(self, system, protocol):
+        return evaluation(self, system, protocol)

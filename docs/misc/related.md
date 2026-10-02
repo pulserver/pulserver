@@ -2,7 +2,7 @@
 
 | Project | Relationship |
 | --- | --- |
-| [pypulseqpp](https://github.com/pulserver/pypulseqpp) | Sequence design engine: the sequence applications a scanner sequence binds, and the Pulseq reader and writer. |
+| [pypulseqpp](https://github.com/pulserver/pypulseqpp) | Sequence design engine: the sequence functions a scanner sequence binds, and the Pulseq reader and writer. |
 | [bartorch](https://github.com/mcencini/bartorch) | Reconstruction engine, imported into the spare reconstruction workers when installed. |
 | [FINUFFT](https://github.com/flatironinstitute/finufft) | Non-uniform FFT library whose type-2 transform the isochromat engine reads an ADC window under a changing gradient with, through the entry points of the `finufft` wheel. |
 | [Pulseq](https://pulseq.github.io/) | Open sequence-file specification of every design pulserver stores. |

@@ -15,20 +15,20 @@ designs with it, the scanner limits and the resolved protocol. Its identity is
 the SHA-256 hash of these ({func}`~pulserver.host.design_identity`):
 
 - the plugin name;
-- a digest of the plugin file, the source file of the application it binds,
+- a digest of the plugin file, the source file of the app it binds,
   and the installed versions of pypulseqpp and pulserver;
 - the scanner limits, design limits, conversion options and check limits,
   with the contents of the VOP file they name;
 - the resolved protocol, prescription included.
 
-A changed plugin, application or package gives a new design for an unchanged
+A changed plugin, app or package gives a new design for an unchanged
 protocol, and so does a VOP file rewritten at the same path. Because the hash
 is computed over the resolved protocol, two requests that differ only in a
 value the design replaces, such as a preset and the time it resolves to,
 identify the same design ({doc}`protocol`). A design is made from its resolved
 protocol: a request that resolves to itself, such as the value block of a
-`validate` reply sent back, constructs its application once, and one that resolves to other values
-is constructed again from those, so the files of a design are a function of
+`validate` reply sent back, is designed as it stands, and one that resolves to
+other values is designed from those, so the files of a design are a function of
 its identity.
 
 An imported chain is identified by the names and contents of its files, the

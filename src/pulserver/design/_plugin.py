@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import difflib
+import functools
 import importlib.util
 import inspect
 import logging
@@ -101,8 +102,9 @@ class SequencePlugin:
         returns a :class:`pypulseqpp.Sequence` or a list of them, which is a
         chain: the prescans first and the main sequence last. The defaults
         the listing shows are those of its signature, so a
-        :func:`functools.partial` is an app. It is called by :meth:`generate`
-        only.
+        :func:`functools.partial` is an app. :meth:`generate` calls it, and so
+        does an :meth:`evaluate` that designs the sequence; the default
+        :meth:`evaluate` does not.
 
         A sequence application is constructed under the scanner limits, which
         checks the prescription, and designed by :meth:`design`.
@@ -162,8 +164,9 @@ class SequencePlugin:
                 DeprecationWarning,
                 stacklevel=2,
             )
-        if inspect.isfunction(declared.get("app")):
-            cls.app = staticmethod(declared["app"])
+        app = declared.get("app")
+        if inspect.isfunction(app) or isinstance(app, functools.partial):
+            cls.app = staticmethod(app)
         if "ui" in declared:
             if "protocol" in declared:
                 raise ValueError(

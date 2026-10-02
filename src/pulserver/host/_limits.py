@@ -113,7 +113,7 @@ def _wave_budget(limits: Mapping[str, Any]) -> ir.WaveBudget | None:
 
 
 def design_system(limits: Mapping[str, Any]) -> pp.Opts:
-    """Return the scanner limits an application is designed under.
+    """Return the scanner limits an app is designed under.
 
     The scanner limits of :func:`split_limits`, with the gradient amplitude and
     slew rate capped by ``design_max_grad`` and ``design_max_slew`` where the

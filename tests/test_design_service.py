@@ -276,7 +276,7 @@ def test_a_plugin_declaring_recon_is_warned_and_ignored(tmp_path, store):
     (plugins / "declared.py").write_text(
         (PLUGINS / "tiny.py")
         .read_text()
-        .replace("    app = TinyApp\n", "    app = TinyApp\n    recon = 'crash'\n")
+        .replace("    app = tiny\n", "    app = tiny\n    recon = 'crash'\n")
     )
     with pytest.warns(DeprecationWarning, match="recon"):
         design = generated(generate(store, "declared", {"TE": 5000}, plugins=plugins))
@@ -291,9 +291,8 @@ def test_an_edited_plugin_is_another_design_of_the_same_protocol(tmp_path, store
     first = generated(generate(store, "tiny", {"TE": 8000}, plugins=plugins))
     plugin.write_text(
         plugin.read_text().replace(
-            "self.seq.add_block(pp.make_delay(self.te))",
-            "self.seq.add_block(pp.make_delay(self.te))\n"
-            "        self.seq.add_block(pp.make_delay(self.te))",
+            "seq.add_block(pp.make_delay(te))",
+            "seq.add_block(pp.make_delay(te))\n        seq.add_block(pp.make_delay(te))",
         )
     )
     stat = plugin.stat()

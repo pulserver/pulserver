@@ -1,13 +1,14 @@
 """pypulseqpp's 2D multi-echo gradient echo bound to the scanner UI."""
 
-from pypulseqpp.sequences.sequence.gre_multiecho2D_sequence import GreMultiecho2DApp
+from pypulseqpp.sequences.sequence.gre_multiecho2D_sequence import gre_multiecho2d
 
+from pulserver._zoo._evaluation import evaluation
 from pulserver.design import FloatParam, IntParam, SequencePlugin, TimeParam
 from pulserver.protocol import TEPreset, TRPreset, UIParam
 
 
 class GreMultiecho2D(SequencePlugin):
-    app = GreMultiecho2DApp
+    app = gre_multiecho2d
     protocol = {
         UIParam.FLIP: FloatParam(
             "flip_angle_deg", unit="deg", range_min=1.0, range_max=90.0
@@ -36,3 +37,6 @@ class GreMultiecho2D(SequencePlugin):
         ),
         UIParam.RY: IntParam("ry", range_min=1, range_max=4),
     }
+
+    def evaluate(self, system, protocol):
+        return evaluation(self, system, protocol)

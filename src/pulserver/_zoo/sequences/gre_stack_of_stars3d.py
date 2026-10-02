@@ -1,15 +1,16 @@
 """pypulseqpp's stack-of-stars gradient echo bound to the scanner UI, its partitions counted by the number of slices."""
 
 from pypulseqpp.sequences.sequence.gre_stack_of_stars3D_sequence import (
-    GreStackOfStars3DApp,
+    gre_stack_of_stars3d,
 )
 
+from pulserver._zoo._evaluation import evaluation
 from pulserver.design import FloatParam, IntParam, SequencePlugin, TimeParam
 from pulserver.protocol import TEPreset, TRPreset, UIParam
 
 
 class GreStackOfStars3D(SequencePlugin):
-    app = GreStackOfStars3DApp
+    app = gre_stack_of_stars3d
     protocol = {
         UIParam.FLIP: FloatParam(
             "flip_angle_deg", unit="deg", range_min=1.0, range_max=90.0
@@ -29,3 +30,6 @@ class GreStackOfStars3D(SequencePlugin):
         UIParam.NX: IntParam("n", range_min=32, range_max=512, range_incr=2),
         UIParam.NSLICES: IntParam("n_z", range_min=4, range_max=256),
     }
+
+    def evaluate(self, system, protocol):
+        return evaluation(self, system, protocol)

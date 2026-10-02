@@ -305,43 +305,31 @@ def test_the_cache_carries_the_variable_rf_amplitude_flag(tmp_path):
     assert summary(seq, SYSTEM, cache_ext=".pseg") == summary(seq, SYSTEM)
 
 
-class _ChainApp(sequences.SequenceApp):
-    MAX_GRAD = 40.0
-    MAX_SLEW = 150.0
-
-    def init_sequence(self, n_repetitions: int = 3) -> None:
-        self.n_repetitions = n_repetitions
-        self.adc = pp.make_adc(num_samples=64, duration=3.2e-3, system=self.system)
-
-    def prescans(self):
-        return {"dummy": self._dummy}
-
-    def _dummy(self) -> None:
-        self.seq.add_block(pp.make_delay(5e-3))
-
-    def loop(self) -> None:
-        for _ in range(self.n_repetitions):
-            self.kernel()
-
-    def kernel(self) -> None:
-        self.seq.add_block(self.adc)
-        self.seq.add_block(pp.make_delay(5e-3))
+def _prescan_chain(path):
+    """Write a prescan of one delay and a scan of three ADC repetitions as a chain; return its first file."""
+    adc = pp.make_adc(num_samples=64, duration=3.2e-3, system=SYSTEM)
+    prescan, scan = pp.Sequence(SYSTEM), pp.Sequence(SYSTEM)
+    prescan.add_block(pp.make_delay(5e-3))
+    for _ in range(3):
+        scan.add_block(adc)
+        scan.add_block(pp.make_delay(5e-3))
+    return Path(sequences.write(path, [prescan, scan])[0])
 
 
 def test_a_prescan_chain_converts_as_subsequences(tmp_path):
-    first = Path(_ChainApp(SYSTEM).write(tmp_path / "sequence.seq", offline=True)[0])
+    first = _prescan_chain(tmp_path / "sequence.seq")
     convert(first, SYSTEM)
     assert summary(first, SYSTEM)["num_subsequences"] == 2
 
 
 def test_a_chain_plays_its_prescan_file_then_its_scan(tmp_path):
-    first = Path(_ChainApp(SYSTEM).write(tmp_path / "sequence.seq", offline=True)[0])
+    first = _prescan_chain(tmp_path / "sequence.seq")
     convert(first, SYSTEM)
     _played_as_designed(first)
 
 
 def test_each_file_of_a_chain_carries_its_sar_ratios_into_the_cache(tmp_path):
-    first = Path(_ChainApp(SYSTEM).write(tmp_path / "sequence.seq", offline=True)[0])
+    first = _prescan_chain(tmp_path / "sequence.seq")
     ratios = [ir.SarRatio(0.25, 0.125), ir.SarRatio(0.75, 0.5)]
     convert(first, SYSTEM, sar_ratios=ratios)
     loaded = summary(first, SYSTEM, cache_ext=".pseg")["subsequences"]
@@ -351,7 +339,7 @@ def test_each_file_of_a_chain_carries_its_sar_ratios_into_the_cache(tmp_path):
 
 
 def test_a_chain_takes_one_sar_ratio_per_file(tmp_path):
-    first = Path(_ChainApp(SYSTEM).write(tmp_path / "sequence.seq", offline=True)[0])
+    first = _prescan_chain(tmp_path / "sequence.seq")
     with pytest.raises(ValueError, match="one SAR ratio per file"):
         convert(first, SYSTEM, sar_ratios=[ir.SarRatio(1.0, 1.0)])
 

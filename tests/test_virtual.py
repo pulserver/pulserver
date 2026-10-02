@@ -23,8 +23,8 @@ from _virtual import (
 )
 from pypulseqpp import sequences
 from pypulseqpp.sequences.preparation.fatsat import FAT_SHIFT_PPM
-from pypulseqpp.sequences.sequence.gre2D_sequence import Gre2DApp
-from pypulseqpp.sequences.sequence.se2D_sequence import Se2DApp
+from pypulseqpp.sequences.sequence.gre2D_sequence import gre2d
+from pypulseqpp.sequences.sequence.se2D_sequence import se2d
 
 from pulserver import ir, virtual
 from pulserver.host import DesignStore
@@ -121,10 +121,9 @@ def _excited(acquired, ideal):
 
 
 def _fat_saturated_epi(path, system):
-    """A 2D EPI that saturates fat before every shot, written to ``path`` and converted at ``system.B0``."""
-    sequences.epi2D_sequence(n_x=32, n_y=16, n_dummy=0, fat_saturation=True).write(
-        str(path)
-    )
+    """The main sequence of a 2D EPI that saturates fat before every shot, written to ``path`` and converted at ``system.B0``."""
+    main = sequences.epi2D_sequence(n_x=32, n_y=16, n_dummy=0, fat_saturation=True)[-1]
+    sequences.write(path, main)
     ir.convert(path, system)
     design = pp.Sequence()
     design.read(str(path))
@@ -256,12 +255,12 @@ def test_the_scanner_plays_an_rf_pulse_at_the_centre_its_design_records(tmp_path
 
 
 @pytest.mark.parametrize("rotation", ORIENTATIONS.values(), ids=ORIENTATIONS.keys())
-@pytest.mark.parametrize("application", [Gre2DApp, Se2DApp])
+@pytest.mark.parametrize("design", [gre2d, se2d])
 def test_an_object_posed_as_prescribed_is_acquired_as_at_the_isocentre(
-    application, rotation, tmp_path
+    design, rotation, tmp_path
 ):
     seq = tmp_path / "scan.seq"
-    application(SYSTEM, n_x=MATRIX, n_y=MATRIX).design().write(seq)
+    sequences.write(seq, design(SYSTEM, n_x=MATRIX, n_y=MATRIX))
     ir.convert(seq, SYSTEM, fov_offset=OFFSET)
     residual, gain = _residual(
         virtual.acquire(seq, posed(rotation), rotation=rotation),
@@ -290,19 +289,19 @@ def test_off_resonance_accrues_as_each_file_times_its_excitation(name, tmp_path)
     assert _precessed(seq) < 1e-4
 
 
-@pytest.mark.parametrize("application", [Gre2DApp, Se2DApp])
+@pytest.mark.parametrize("design", [gre2d, se2d])
 def test_off_resonance_accrues_from_the_excitation_and_refocuses_at_the_echo(
-    application, tmp_path
+    design, tmp_path
 ):
     seq = tmp_path / "scan.seq"
-    application(SYSTEM, n_x=MATRIX, n_y=MATRIX).design().write(seq)
+    sequences.write(seq, design(SYSTEM, n_x=MATRIX, n_y=MATRIX))
     ir.convert(seq, SYSTEM)
     assert _precessed(seq) < 1e-4
 
 
 def test_fat_precesses_at_its_chemical_shift_at_the_field_of_the_magnet(tmp_path):
     seq = tmp_path / "scan.seq"
-    Gre2DApp(SYSTEM, n_x=MATRIX, n_y=MATRIX).design().write(seq)
+    sequences.write(seq, gre2d(SYSTEM, n_x=MATRIX, n_y=MATRIX))
     ir.convert(seq, SYSTEM)
     tissue = water_and_fat()
     acquired = virtual.acquire(seq, tissue, field_t=SYSTEM.B0)
@@ -315,7 +314,7 @@ def test_fat_precesses_at_its_chemical_shift_at_the_field_of_the_magnet(tmp_path
 
 def test_a_phantom_with_a_chemical_shift_is_scanned_at_a_field(tmp_path):
     seq = tmp_path / "scan.seq"
-    Gre2DApp(SYSTEM, n_x=MATRIX, n_y=MATRIX).design().write(seq)
+    sequences.write(seq, gre2d(SYSTEM, n_x=MATRIX, n_y=MATRIX))
     ir.convert(seq, SYSTEM)
     with pytest.raises(ValueError, match="field_t"):
         virtual.acquire(seq, water_and_fat())
@@ -325,7 +324,7 @@ def test_a_phantom_with_a_chemical_shift_is_scanned_at_a_field(tmp_path):
     "build",
     [
         lambda path: _fat_saturated_epi(path, pp.Opts(B0=3.0)),
-        lambda path: _written(path, Se2DApp(SYSTEM, n_x=MATRIX, n_y=MATRIX).design()),
+        lambda path: _written(path, se2d(SYSTEM, n_x=MATRIX, n_y=MATRIX)),
     ],
     ids=["fat-saturated-epi", "spin-echo"],
 )
@@ -452,7 +451,7 @@ def test_a_saturation_band_selected_in_space_is_refused(tmp_path):
 
 def test_an_object_off_the_prescription_is_not_acquired_centred(tmp_path):
     seq = tmp_path / "scan.seq"
-    Gre2DApp(SYSTEM, n_x=MATRIX, n_y=MATRIX).design().write(seq)
+    sequences.write(seq, gre2d(SYSTEM, n_x=MATRIX, n_y=MATRIX))
     ir.convert(seq, SYSTEM)
     residual, _ = _residual(
         virtual.acquire(seq, phantom(OFFSET)), _ideal(seq, phantom())
@@ -469,7 +468,7 @@ def test_an_object_turned_otherwise_than_prescribed_is_not_acquired_as_at_the_is
     rotation, turned, tmp_path
 ):
     seq = tmp_path / "scan.seq"
-    Gre2DApp(SYSTEM, n_x=MATRIX, n_y=MATRIX).design().write(seq)
+    sequences.write(seq, gre2d(SYSTEM, n_x=MATRIX, n_y=MATRIX))
     ir.convert(seq, SYSTEM, fov_offset=OFFSET)
     residual, _ = _residual(
         virtual.acquire(seq, phantom(rotation @ OFFSET, turned), rotation=rotation),

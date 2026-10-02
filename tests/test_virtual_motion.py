@@ -5,7 +5,7 @@ import math
 import numpy as np
 import pypulseqpp as pp
 import pytest
-from _zoo import SMALL
+from _zoo import designed
 from pypulseqpp import sequences
 
 from pulserver import ir, virtual
@@ -295,7 +295,7 @@ def test_brainweb_refuses_t2_prime_or_diffusion_of_a_tissue_it_does_not_have():
 @pytest.fixture(scope="module")
 def balanced(tmp_path_factory):
     path = tmp_path_factory.mktemp("bssfp") / "scan.seq"
-    sequences.bssfp3D_sequence(**SMALL["bssfp3D_sequence"]).write(str(path))
+    sequences.write(path, designed("bssfp3D_sequence"))
     ir.convert(path, pp.Opts())
     return path
 

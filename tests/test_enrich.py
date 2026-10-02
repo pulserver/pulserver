@@ -6,6 +6,7 @@ import numpy as np
 import pypulseqpp as pp
 import pytest
 from _synthetic import DELTA_K, SAMPLES, add_readout
+from pypulseqpp import sequences
 
 from pulserver.mrd import AcquisitionFlag, EncodingSpace
 from pulserver.proxy._enrich import (
@@ -89,9 +90,9 @@ def enriched_encoding(table):
     return enriched.encoding[0]
 
 
-def designed(tmp_path, app):
+def designed(tmp_path, result):
     path = tmp_path / "designed.seq"
-    app.design().write(str(path))
+    sequences.write(path, result)
     return SequenceTable.read(path)
 
 
@@ -277,13 +278,11 @@ def test_the_header_lists_every_flip_angle_the_sequence_plays():
 
 
 def test_the_header_centres_k_space_where_the_design_puts_its_centre(tmp_path):
-    from pypulseqpp.sequences.sequence.gre3D_sequence import Gre3DApp
+    from pypulseqpp.sequences.sequence.gre3D_sequence import gre3d
 
     system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=170, slew_unit="T/m/s")
-    path = tmp_path / "gre3d.seq"
-    Gre3DApp(system, n_x=32, n_y=16, n_z=8).design().write(str(path))
     enriched = header()
-    enrich_header(enriched, SequenceTable.read(path))
+    enrich_header(enriched, designed(tmp_path, gre3d(system, n_x=32, n_y=16, n_z=8)))
     limits = enriched.encoding[0].encodingLimits
     line, partition = limits.kspace_encoding_step_1, limits.kspace_encoding_step_2
     assert (line.maximum, line.center) == (15, 8)
@@ -340,12 +339,12 @@ def test_the_limits_centre_is_the_middle_of_the_lines_when_the_sequence_defines_
 def test_the_encoded_readout_is_the_full_echo_with_its_oversampling(
     tmp_path, options, samples
 ):
-    from pypulseqpp.sequences.sequence.gre2D_sequence import Gre2DApp
+    from pypulseqpp.sequences.sequence.gre2D_sequence import gre2d
 
     system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=170, slew_unit="T/m/s")
-    app = Gre2DApp(system, fov_x=0.22, fov_y=0.22, n_x=32, n_y=16, **options)
+    seq = gre2d(system, fov_x=0.22, fov_y=0.22, n_x=32, n_y=16, **options)
 
-    encoding = enriched_encoding(designed(tmp_path, app))
+    encoding = enriched_encoding(designed(tmp_path, seq))
 
     encoded, recon = encoding.encodedSpace, encoding.reconSpace
     assert (encoded.matrixSize.x, encoded.matrixSize.y) == (samples, 16)

@@ -1,13 +1,14 @@
 """pypulseqpp's 2D radial spin echo bound to the scanner UI."""
 
-from pypulseqpp.sequences.sequence.se_radial2D_sequence import SeRadial2DApp
+from pypulseqpp.sequences.sequence.se_radial2D_sequence import se_radial2d
 
+from pulserver._zoo._evaluation import evaluation
 from pulserver.design import FloatParam, IntParam, SequencePlugin, TimeParam
 from pulserver.protocol import TEPreset, TRPreset, UIParam
 
 
 class SeRadial2D(SequencePlugin):
-    app = SeRadial2DApp
+    app = se_radial2d
     protocol = {
         UIParam.TE: TimeParam(
             "te",
@@ -34,3 +35,6 @@ class SeRadial2D(SequencePlugin):
             "slice_thickness", unit="mm", scale=1e-3, range_min=1.0, range_max=20.0
         ),
     }
+
+    def evaluate(self, system, protocol):
+        return evaluation(self, system, protocol)
