@@ -14,7 +14,13 @@ import pytest
 from _host import LIMITS, PLUGINS
 
 from pulserver.host._blocks import format_limits
-from pulserver.protocol import PROTOCOL_BEGIN, PROTOCOL_END
+from pulserver.host._server import answer
+from pulserver.protocol import (
+    PROTOCOL_BEGIN,
+    PROTOCOL_END,
+    parse_rf_definitions,
+    parse_rf_layout,
+)
 
 DEADLINE = 60.0
 
@@ -106,6 +112,73 @@ def test_a_forwarded_call_replies_as_the_call_answered_in_its_own_process(
             direct.stdout,
         )
         assert direct.returncode == 0
+
+
+def test_a_forwarded_rf_request_replies_as_the_call_answered_in_its_own_process(
+    server, limits_file
+):
+    common = [
+        "--plugins",
+        str(PLUGINS),
+        "--plugin",
+        "rf_train",
+        "--limits",
+        str(limits_file),
+    ]
+    forwarded = ["--socket", str(server.socket)]
+    for args, stdin, opens in (
+        (["list", *common], "", "PROTOCOL\n"),
+        (["list", *common, "--rf-definitions"], "", "[RfDefinitions]"),
+        (["validate", *common, "--rf-layout"], block({"etl": 4}), "[RfLayout]"),
+    ):
+        direct = command(*args, stdin=stdin)
+        through = command(*args, *forwarded, stdin=stdin)
+        assert (through.returncode, through.stdout) == (
+            direct.returncode,
+            direct.stdout,
+        )
+        assert direct.returncode == 0
+        assert opens in direct.stdout
+
+
+def test_a_listing_request_carrying_limits_and_store_answers_the_protocol(tmp_path):
+    store = tmp_path / "designs"
+    request = {
+        "call": "list",
+        "plugins": [str(PLUGINS)],
+        "plugin": "rf_train",
+        "store": str(store),
+        "limits": format_limits(LIMITS),
+    }
+
+    status, listed = answer(request)
+    asked_status, asked = answer({**request, "rf_definitions": True})
+
+    assert (status, asked_status) == (0, 0)
+    assert listed.startswith("PROTOCOL\n")
+    assert "[RfDefinitions" not in listed
+    assert asked.startswith(listed)
+    assert [d.use for d in parse_rf_definitions(asked)] == ["excitation", "refocusing"]
+    assert not store.exists()
+
+
+def test_a_validation_request_carries_the_rf_layout_only_when_it_asks(tmp_path):
+    request = {
+        "call": "validate",
+        "plugins": [str(PLUGINS)],
+        "plugin": "rf_train",
+        "store": str(tmp_path / "designs"),
+        "limits": format_limits(LIMITS),
+        "input": block({"etl": 4}),
+    }
+
+    status, plain = answer(request)
+    asked_status, asked = answer({**request, "rf_layout": True})
+
+    assert (status, asked_status) == (0, 0)
+    assert "[RfLayout" not in plain
+    assert asked.startswith(plain)
+    assert parse_rf_layout(asked).definition == (0, 1, 1, 1, 1)
 
 
 def test_a_crashing_plugin_fails_only_its_call(server, limits_file):
@@ -235,4 +308,29 @@ def test_a_forwarded_call_loads_no_design_engine(server, named_by):
         timeout=DEADLINE,
     )
     assert probe.stdout.startswith("PROTOCOL\n")
+    assert probe.stderr.strip().splitlines()[-1] == "0 []"
+
+
+def test_a_forwarded_rf_request_loads_no_design_engine(server, limits_file):
+    args = [
+        "design",
+        "list",
+        "--plugins",
+        str(PLUGINS),
+        "--plugin",
+        "rf_train",
+        "--limits",
+        str(limits_file),
+        "--rf-definitions",
+        "--socket",
+        str(server.socket),
+    ]
+    probe = subprocess.run(
+        [sys.executable, "-c", PROBE, *args],
+        capture_output=True,
+        text=True,
+        check=True,
+        timeout=DEADLINE,
+    )
+    assert "[RfDefinitions]" in probe.stdout
     assert probe.stderr.strip().splitlines()[-1] == "0 []"

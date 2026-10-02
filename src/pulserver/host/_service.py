@@ -11,6 +11,7 @@ import datetime
 import functools
 import hashlib
 import inspect
+import logging
 import shutil
 from collections.abc import Mapping
 from functools import lru_cache
@@ -21,13 +22,13 @@ import pypulseqpp as pp
 
 from .. import __version__, _plugins, ir
 from .._plugins import PluginPath
-from ..design import Protocol, SequencePlugin, load_plugin
+from ..design import RfLayout, SequencePlugin, load_plugin
 from ..protocol import (
     Parameter,
     ProtocolKey,
     Validation,
     format_listing,
-    format_pulses,
+    format_rf_definitions,
     format_validation,
     format_values,
     parse_values,
@@ -37,15 +38,12 @@ from ..protocol import (
 from ._blocks import parse_import
 from ._limits import design_system, split_limits
 from ._push import push as push_design
-from ._store import DesignStore, design_id, design_identity
+from ._store import DesignStore, design_identity
+
+_log = logging.getLogger("pulserver.host")
 
 # The file name the interpreter loads in a design.
 _ENTRY = "sequence.seq"
-
-
-#: Where a design records the RF it plays, for a scanner costing it while
-#: the operator prescribes.
-PULSES_FILE = "pulses.rf"
 
 
 class CallError(Exception):
@@ -67,32 +65,79 @@ def plugin_path(plugins: PluginPath, plugin: str) -> Path:
 
 
 def list_protocol(
-    plugins: PluginPath, plugin: str, store: DesignStore | None = None
+    plugins: PluginPath,
+    plugin: str,
+    limits: Mapping[str, Any] | None = None,
+    rf_definitions: bool = False,
 ) -> str:
-    """Reply ``PROTOCOL``, the plugin's listing block, and the RF it plays.
+    """Reply ``PROTOCOL`` and the plugin's listing block, and its RF definitions where asked.
 
     The listing depends on the plugin file and the installed packages only.
-    The pulses follow it where the plugin states them, so a scanner can cost
-    the RF while the operator is still prescribing, without asking for a
-    design at every interaction.
+    With ``rf_definitions``, the ``[RfDefinitions]`` block of the plugin's
+    evaluation at its default protocol under ``limits`` follows it, naming the
+    definitions, and the peak amplitudes, the RF layouts of later validations
+    refer to. No block follows where the evaluation states no RF layout. Where
+    it is invalid, a warning is logged and the listing is replied without the
+    block. ``limits`` is not read unless the definitions are asked for.
+
+    Raises
+    ------
+    CallError
+        If ``rf_definitions`` is asked without ``limits``.
     """
     path = str(plugin_path(plugins, plugin))
-    listing = _listing(path)
-    return "PROTOCOL\n" + format_listing(listing) + _stated_pulses(store, plugin)
+    reply = "PROTOCOL\n" + format_listing(_listing(path))
+    if not rf_definitions:
+        return reply
+    if limits is None:
+        raise CallError(
+            "the RF definitions are evaluated under scanner limits, and the call "
+            "carries none"
+        )
+    layout = _default_rf_layout(
+        path, _read(limits), f"the RF definitions of {plugin} are not listed"
+    )
+    if layout is not None:
+        reply += format_rf_definitions(layout.instances)
+    return reply
 
 
 def validate(
-    plugins: PluginPath, plugin: str, limits: Mapping[str, Any], block: str
+    plugins: PluginPath,
+    plugin: str,
+    limits: Mapping[str, Any],
+    block: str,
+    rf_layout: bool = False,
 ) -> str:
     """Reply ``VALID <seconds>`` or ``INVALID``, an ``INFO`` line and the value block.
 
     The plugin evaluates the request under the design limits; the sequence is
     not generated. The duration is ``?`` where the plugin states no scan time.
+    With ``rf_layout``, a valid reply ends with the ``[RfLayout]`` block of the
+    evaluation where the plugin states one, with amplitudes over the peaks the
+    listing states, read by evaluating the plugin again at its default
+    protocol. Where that evaluation is invalid, a warning is logged and the
+    amplitudes are the layout's own.
     """
     path = str(plugin_path(plugins, plugin))
     listing = _listing(path)
     request = _request(block, listing)
-    return format_validation(_validated(path, _read(limits), request), listing)
+    limits = _read(limits)
+    validation = _validated(path, limits, request)
+    listed: list[float] = []
+    if rf_layout and validation.valid and validation.rf_layout is not None:
+        default = _default_rf_layout(
+            path,
+            limits,
+            f"the RF layout of {plugin} is not stated over the listed peaks",
+        )
+        if default is not None:
+            listed = [
+                definition.peak_hz for definition in default.instances.definitions
+            ]
+    return format_validation(
+        validation, listing, rf_layout=rf_layout, listed_peak_hz=listed
+    )
 
 
 def generate(
@@ -158,14 +203,6 @@ def generate(
         (staged / "resolved.protocol").write_text(
             format_values(validation.values, listing)
         )
-        # The RF a scanner costs while the operator prescribes, read off the
-        # sequence just written rather than designed again for the purpose.
-        protocol = Protocol.from_wire(scanner.protocol, validation.values, design)
-        pulses = scanner.rf_pulses(paths[0], protocol.arguments)
-        if pulses:
-            (staged / PULSES_FILE).write_text(
-                format_pulses(pulses, design_id(identity))
-            )
         manifest = {
             **_record(limits),
             "plugin": plugin,
@@ -338,28 +375,6 @@ def _listing(path: str) -> dict[ProtocolKey, Parameter]:
     return _plugin(path).listing()
 
 
-def _stated_pulses(store: DesignStore | None, plugin: str) -> str:
-    """Return the RF block of the newest design of ``plugin``, or empty where there is none.
-
-    Nothing is designed to answer this. A sequence the store has never designed
-    states no RF, and a scanner costs it once it has a design of its own.
-    """
-    if store is None:
-        return ""
-    newest = ""
-    when = -1.0
-    for design in store:
-        if store.manifest(design).get("plugin") != plugin:
-            continue
-        held = store.directory(design) / PULSES_FILE
-        if not held.is_file():
-            continue
-        stamped = held.stat().st_mtime
-        if stamped > when:
-            newest, when = held.read_text(), stamped
-    return newest
-
-
 def _source(path: str) -> str:
     """Return a digest of the code that designs with the plugin at ``path``.
 
@@ -386,6 +401,22 @@ def _validated(
     path: str, limits: Mapping[str, Any], request: Mapping[ProtocolKey, Any]
 ) -> Validation:
     return _plugin(path).validate(design_system(limits), request)
+
+
+def _default_rf_layout(
+    path: str, limits: Mapping[str, Any], unavailable: str
+) -> RfLayout | None:
+    """Return the RF layout of the plugin's evaluation at its default protocol, the RF the listing states.
+
+    ``None`` where the evaluation states none. Where it is invalid, a warning
+    that begins with ``unavailable`` is logged and the result is ``None``.
+    """
+    evaluated = _validated(path, limits, {})
+    if not evaluated.valid:
+        _log.warning(
+            "%s: its default protocol is invalid: %s", unavailable, evaluated.info
+        )
+    return evaluated.rf_layout
 
 
 def _chain(first: str) -> list[str]:

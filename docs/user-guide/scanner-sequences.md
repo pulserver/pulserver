@@ -223,8 +223,9 @@ A plugin overrides {meth}`~pulserver.design.SequencePlugin.evaluate` to check a
 protocol and to state what the console shows with it. The hook takes the scanner
 limits and the requested {class}`~pulserver.design.Protocol`, in the units of the
 app's arguments, and returns an {class}`~pulserver.design.Evaluation`: the
-protocol holding the values the design achieves, the scan time in seconds and a
-note shown with the valid protocol. Returning `None` accepts the protocol
+protocol holding the values the design achieves, the scan time in seconds, a
+note shown with the valid protocol and, optionally, the RF layout
+({ref}`stating-the-rf-layout`). Returning `None` accepts the protocol
 unchanged. Raising an exception makes the protocol invalid:
 
 ```pycon
@@ -267,6 +268,47 @@ constructs it. A plugin overrides `generate` to return a sequence, or a list of
 them, built another way. `validate` and `design` are not overridden: they are the
 boundary between a request and the code of a plugin, and `design` writes nothing
 for an invalid request.
+
+(stating-the-rf-layout)=
+## Stating the RF layout
+
+An evaluation may state the RF its protocol plays, from which a scanner
+estimates the RF of a prescription before the design is generated.
+{meth}`RfLayout.of <pulserver.design.RfLayout.of>` takes the RF instances of a
+sequence, as {meth}`pypulseqpp.Sequence.rf_instances` returns them, and the
+control each instance's amplitude follows: the flip angle, `UIParam.FLIP`, or a
+float user entry, `UIParam.user_value(n)`, either declared in `protocol`. One
+control applies to every instance; a list gives one per instance in play order,
+`None` for an instance no entry scales. The scanner multiplies the amplitude of
+an instance by the ratio of the value of its control in the protocol it plays to
+the value in the evaluated protocol. The `period` is the time in seconds over
+which the instances repeat, and the duration of the sequence where omitted:
+
+```pycon
+>>> from pulserver.design import RfLayout
+>>> from pulserver.protocol import format_rf_layout
+>>> class Costed(PulseAcquire):
+...     def evaluate(self, system, protocol):
+...         seq = pulse_acquire(system, **protocol.arguments)
+...         layout = RfLayout.of(seq, UIParam.FLIP)
+...         return Evaluation(protocol, seq.duration()[0], rf_layout=layout)
+>>> reply = Costed().validate(system, {"nex": 4})
+>>> print(format_rf_layout(reply.rf_layout), end="")
+[RfLayout]
+period 0.4
+run 0 1 flip 4
+[RfLayout End]
+
+```
+
+An evaluation may build one representative repetition, a TR, a shot or a
+train, and state its `period`: `RfLayout.of(seq, UIParam.FLIP, period=tr)`.
+
+The layout is optional. An evaluation that states none is valid and states no
+estimate, and one whose control is not an entry of `protocol`, or has no
+positive value in the evaluated protocol, is invalid. What the scanner checks
+before the scan is the stored design, not the layout. The blocks that carry the
+layout are described in {doc}`../explanations/protocol`.
 
 ## See also
 

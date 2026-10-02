@@ -31,25 +31,33 @@ def answer(request: Mapping[str, Any]) -> tuple[int, str]:
     ``request`` carries ``call`` and, as the call takes them, ``plugins``
     (the plugin directories, in search order), ``plugin``, ``limits`` (the
     text of a ``[Limits]`` block), ``store``, ``push`` and ``input`` (the
-    block the command reads from standard input).
+    block the command reads from standard input). ``store`` is passed to
+    ``generate`` and ``import`` only, and ignored by the other calls.
+    ``rf_definitions``, for ``list``, and ``rf_layout``, for ``validate``, ask
+    when true for the RF block of the reply.
     """
     from . import _service
     from ._blocks import parse_limits
     from ._store import DesignStore
 
+    call = request.get("call")
     inputs: dict[str, Any] = {}
     if request.get("plugin") is not None:
         inputs["plugins"] = directories(request["plugins"])
         inputs["plugin"] = str(request["plugin"])
     if request.get("limits") is not None:
         inputs["limits"] = parse_limits(str(request["limits"]))
-    if request.get("store") is not None:
+    if request.get("store") is not None and call in ("generate", "import"):
         inputs["store"] = DesignStore(request["store"])
-    if request.get("call") in ("validate", "generate", "import"):
+    if call in ("validate", "generate", "import"):
         inputs["block"] = str(request.get("input", ""))
     if request.get("push"):
         inputs["push"] = str(request["push"])
-    return _service.call(str(request.get("call")), **inputs)
+    if call == "list" and request.get("rf_definitions"):
+        inputs["rf_definitions"] = True
+    if call == "validate" and request.get("rf_layout"):
+        inputs["rf_layout"] = True
+    return _service.call(str(call), **inputs)
 
 
 class DesignServer:

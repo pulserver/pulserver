@@ -202,9 +202,9 @@ def test_the_definitions_a_design_states_are_the_ones_a_scanner_reads(
 ):
     """A pulse is named by one number on both sides, or it is costed as another pulse.
 
-    ``played_rf`` numbers the definitions for a design service answering a
-    listing; the scanner reads them out of that design's cache. The two
-    numberings are arrived at independently, in different languages.
+    ``played_rf`` and ``Sequence.rf_instances`` number the definitions of a
+    sequence; the scanner reads them out of that design's cache. The numberings
+    are arrived at independently, in different languages.
     """
     sinc, _, hard = _pulses()
     half = pp.make_sinc_pulse(
@@ -227,12 +227,14 @@ def test_the_definitions_a_design_states_are_the_ones_a_scanner_reads(
         for parts in (line.split() for line in printed.splitlines())
         if parts[0] == "rf"
     ]
-    stated = played_rf(pp.io.read(path))
+    sequence = pp.io.read(path)
+    stated = played_rf(sequence)
 
     assert read, "the canonical repetition plays no RF"
     # The sinc and the half-angle sinc share a definition; the hard pulse does
     # not, so a numbering that collapsed or split them would differ here.
     assert len({definition for definition, _ in stated}) == 2
+    assert sequence.rf_instances().definition.tolist() == [0, 0, 1, 0, 0, 1]
     for definition, angle in read:
         assert any(
             definition == named and angle == pytest.approx(stated_angle, rel=1e-3)

@@ -10,6 +10,7 @@ import sys
 import warnings
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
+from numbers import Real
 from pathlib import Path
 from typing import Any, ClassVar
 
@@ -17,7 +18,6 @@ import numpy as np
 import pypulseqpp as pp
 from pypulseqpp import sequences
 
-from .. import ir
 from ..protocol import (
     FOV_OFFSET,
     FOV_ROTATION,
@@ -26,12 +26,12 @@ from ..protocol import (
     Kind,
     Parameter,
     ProtocolKey,
-    RfPulse,
     Validation,
     prescribed_rotation,
 )
 from ..protocol._keys import WIRE_NAMES
 from ._entries import Entry, Protocol, _parameter
+from ._rf import RfLayout
 
 _log = logging.getLogger("pulserver.design")
 
@@ -61,11 +61,18 @@ class Evaluation:
     info
         A note shown with the valid protocol. Whitespace, newlines included, is
         folded to single spaces on the wire.
+    rf_layout
+        The RF the protocol plays, from which a scanner estimates the RF of a
+        protocol before it is designed. ``()`` or ``[]``, the default, states no
+        estimate and is not invalid. Every control of the layout must be an
+        entry of :attr:`SequencePlugin.protocol` whose value in ``protocol`` is
+        positive, or the protocol is invalid.
     """
 
     protocol: Protocol
     duration: float = 0.0
     info: str = ""
+    rf_layout: RfLayout | tuple[()] = ()
 
 
 class SequencePlugin:
@@ -105,22 +112,6 @@ class SequencePlugin:
         :data:`~pulserver.protocol.ProtocolKey` that
         :class:`~pulserver.protocol.UIParam` collects. A plain string naming an
         entry is stored as its member. Empty by default.
-    follows : tuple of str
-        Which protocol parameter drives the angle of each pulse the sequence
-        plays: one entry per distinct pulse, in the order the sequence first
-        plays them, ``""`` for one the operator does not move. A sequence that
-        excites and then refocuses under the one control declares
-        ``(UIParam.FLIP, UIParam.FLIP)``.
-
-        It is declared rather than worked out: which control drives a pulse is
-        not a property of the pulse. Empty leaves a scanner to cost the RF when
-        it has the design, which is what it does with any sequence.
-
-        The angles are not declared. They are read from the sequence a design
-        wrote, and a pulse's share of its parameter is the angle it was
-        designed at over the value that parameter was designed with -- so a
-        refocusing train whose angles vary gets one share each without any of
-        them being written down.
 
     Raises
     ------
@@ -135,13 +126,14 @@ class SequencePlugin:
     DeprecationWarning
         When a subclass sets ``recon``, which has no effect: the reconstruction
         is named by the reconstruction client or, on a console, by the scan.
+        When a subclass sets ``follows``, which has no effect: the RF a scanner
+        scales is the :class:`RfLayout` an evaluation returns.
         When a subclass sets ``ui``, the deprecated name of ``protocol``, or
         subclasses :class:`ScannerSequence`, the deprecated name of this class.
     """
 
     app: ClassVar[Callable[..., Any]]
     protocol: ClassVar[Mapping[ProtocolKey, Entry]] = {}
-    follows: ClassVar[tuple[ProtocolKey | str, ...]] = ()
 
     _deprecated_alias: ClassVar[bool] = False
     _built: tuple[pp.Opts, dict[str, Any], sequences.SequenceApp] | None = None
@@ -160,6 +152,13 @@ class SequencePlugin:
             warnings.warn(
                 f"{cls.__name__} sets recon, which has no effect: the reconstruction "
                 "is named by the reconstruction client or by the scan",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+        if "follows" in declared:
+            warnings.warn(
+                f"{cls.__name__} sets follows, which has no effect: return an "
+                "RfLayout from evaluate",
                 DeprecationWarning,
                 stacklevel=2,
             )
@@ -315,9 +314,12 @@ class SequencePlugin:
         and the code of a plugin.
 
         A valid reply carries the evaluated protocol, the duration of the
-        evaluation, ``None`` where it is ``0.0``, and its note. An exception
-        raised by any of these steps makes the reply invalid, carrying the
-        request, and is logged with its traceback. ``ValueError`` and
+        evaluation, ``None`` where it is ``0.0``, its note and its RF layout,
+        ``None`` where it states none or plays no RF. An exception raised by
+        any of these steps makes the reply invalid, carrying the request, and
+        is logged with its traceback. A control of the RF layout that is not an
+        entry of :attr:`protocol`, or whose value in the evaluated protocol is
+        not positive, is a ``ValueError`` naming it. ``ValueError`` and
         ``AssertionError``, which pypulseqpp and PyPulseq raise for a protocol
         they cannot realize, are logged at WARNING and the message is the
         reply's ``info``. Any other exception is logged at ERROR, and the
@@ -375,75 +377,6 @@ class SequencePlugin:
         finally:
             self._built = None
 
-    def rf_pulses(
-        self, seq_path: Path | str, designed: Mapping[str, Any]
-    ) -> list[RfPulse]:
-        """Return the RF a design plays, as a scanner costs it while prescribing.
-
-        The pulses and their angles are read off the sequence a design wrote,
-        so nothing is designed to find them; which control drives each is
-        :attr:`follows`, declared. A pulse takes a share of its parameter: the
-        angle it was designed at over the value the parameter was designed
-        with, so a refocusing train whose angles vary gets one share each.
-
-        Parameters
-        ----------
-        seq_path
-            The design's first sequence file.
-        designed
-            The prescription as designed, by the name of the app argument each
-            entry binds.
-
-        Returns
-        -------
-        list of RfPulse
-            One entry per distinct pulse and angle. Empty where
-            :attr:`follows` declares nothing, which leaves a scanner to cost
-            the RF only once it has the design itself.
-
-        Raises
-        ------
-        ValueError
-            When the sequence does not play as many distinct pulses as
-            :attr:`follows` declares, which would silently cost pulses against
-            the wrong controls.
-        """
-        if not self.follows:
-            return []
-        played = ir.played_rf(pp.io.read(Path(seq_path)))
-        order: list[int] = []
-        for definition, _ in played:
-            if definition not in order:
-                order.append(definition)
-        if len(order) != len(self.follows):
-            raise ValueError(
-                f"{type(self).__name__} declares {len(self.follows)} pulses but its "
-                f"sequence plays {len(order)} distinct ones"
-            )
-        driving = {}
-        for parameter in self.follows:
-            entry = self.protocol.get(parameter or "")
-            driving[parameter or ""] = (
-                float(designed.get(entry.argument, 0.0) or 0.0) if entry else 0.0
-            )
-
-        found: dict[tuple[int, int], RfPulse] = {}
-        for definition, angle in played:
-            # One entry per angle: a definition played at several angles is a
-            # train, and each of its pulses is costed at its own.
-            key = (definition, round(angle * 1e3))
-            if key in found:
-                continue
-            parameter = self.follows[order.index(definition)] or ""
-            drives = driving[parameter]
-            found[key] = RfPulse(
-                definition=definition,
-                flip_deg=angle,
-                follows=parameter if drives else "",
-                factor=angle / drives if drives else 1.0,
-            )
-        return list(found.values())
-
     @classmethod
     def _is_application(cls) -> bool:
         return inspect.isclass(cls.app) and issubclass(cls.app, sequences.SequenceApp)
@@ -486,6 +419,7 @@ class SequencePlugin:
             evaluation = self.evaluate(system, protocol)
             if evaluation is None:
                 evaluation = Evaluation(protocol)
+            layout = _stated_layout(self.protocol, evaluation)
             wire = evaluation.protocol.to_wire()
             duration = float(evaluation.duration)
             info = evaluation.info
@@ -498,7 +432,7 @@ class SequencePlugin:
             message = f"{type(error).__name__} in {name}.evaluate"
             _log.error("%s", message, exc_info=True)
         else:
-            return Validation(True, duration or None, info, wire), protocol
+            return Validation(True, duration or None, info, wire, layout), protocol
         asked = {key: value for key, value in values.items() if key in listing}
         return Validation(False, None, message, asked), None
 
@@ -513,6 +447,41 @@ class ScannerSequence(SequencePlugin):
     """
 
     _deprecated_alias = True
+
+
+def _stated_layout(
+    declared: Mapping[ProtocolKey, Entry], evaluation: Evaluation
+) -> RfLayout | None:
+    """Return the RF layout of an evaluation, ``None`` where it states none or plays no RF.
+
+    Raises
+    ------
+    TypeError
+        If ``rf_layout`` is neither an :class:`RfLayout` nor empty.
+    ValueError
+        If a control is not an entry of ``declared``, or its value in the
+        evaluated protocol is not positive.
+    """
+    layout = evaluation.rf_layout
+    if not isinstance(layout, RfLayout):
+        if isinstance(layout, tuple | list) and not layout:
+            return None
+        raise TypeError(
+            f"rf_layout is an RfLayout or empty, not {type(layout).__name__}"
+        )
+    for control in dict.fromkeys(c for c in layout.control if c is not None):
+        if control not in declared:
+            raise ValueError(
+                f"the RF layout is scaled by {control}, which is not an entry of "
+                "the protocol"
+            )
+        value = evaluation.protocol.get(control)
+        if isinstance(value, bool) or not isinstance(value, Real) or not value > 0:
+            raise ValueError(
+                f"the RF layout is scaled by {control}, whose evaluated value "
+                f"{value!r} is not positive"
+            )
+    return layout if len(layout.instances.definition) else None
 
 
 def _write(

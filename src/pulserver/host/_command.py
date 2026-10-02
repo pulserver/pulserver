@@ -65,19 +65,35 @@ def _parser() -> argparse.ArgumentParser:
             )
         return sub
 
-    call(
+    listed = call(
         "list",
         "Reply the plugin's protocol listing.",
         plugin=True,
         limits=False,
         store=False,
     )
-    call(
+    listed.add_argument(
+        "--limits",
+        type=Path,
+        help="file holding the [Limits] block, which --rf-definitions evaluates under",
+    )
+    listed.add_argument(
+        "--rf-definitions",
+        action="store_true",
+        help="follow the listing with the [RfDefinitions] block of the plugin's "
+        "evaluation at its default protocol",
+    )
+    validated = call(
         "validate",
         "Resolve the value block on standard input.",
         plugin=True,
         limits=True,
         store=False,
+    )
+    validated.add_argument(
+        "--rf-layout",
+        action="store_true",
+        help="follow a valid reply with the [RfLayout] block of the evaluation",
     )
     call(
         "generate",
@@ -154,6 +170,10 @@ def request(args: argparse.Namespace, block: str) -> dict[str, Any]:
         found["limits"] = args.limits.read_text()
     if getattr(args, "store", None) is not None:
         found["store"] = str(args.store.absolute())
+    if getattr(args, "rf_definitions", False):
+        found["rf_definitions"] = True
+    if getattr(args, "rf_layout", False):
+        found["rf_layout"] = True
     if args.call in ("validate", "generate", "import"):
         found["input"] = block
     if args.call in ("generate", "import"):

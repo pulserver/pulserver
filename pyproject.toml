@@ -22,7 +22,14 @@ classifiers = [
   "Programming Language :: Python :: 3.13",
 ]
 
-dependencies = ["pypulseqpp>=0.0.20", "numpy>=2.2.6", "ismrmrd>=1.15.0", "pydicom>=3.0.2", "finufft>=2.3"]
+dependencies = [
+  # The upper bound holds until the shipped sequences move to pypulseqpp's sequence functions.
+  "pypulseqpp>=0.0.21,<0.0.22",
+  "numpy>=2.2.6",
+  "ismrmrd>=1.15.0",
+  "pydicom>=3.0.2",
+  "finufft>=2.3",
+]
 
 [project.optional-dependencies]
 brainweb = ["brainweb-dl>=0.4.6"]
