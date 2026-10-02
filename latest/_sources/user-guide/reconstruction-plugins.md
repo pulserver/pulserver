@@ -146,6 +146,8 @@ file of its own:
 | `cartesian` | A Cartesian FFT of the readouts placed by their encoding counters, partitions included; one image per slice, contrast, cardiac phase, set and repetition, averages summed |
 | `nufft` | The same images as `cartesian`, for a radial or spiral trajectory or a stack of them, each solved as `bart pics -t -R W` over `bart nlinv -t` sensitivities of the samples near the k-space centre. Needs the `coils` extra |
 | `pics` | `cartesian`'s images, its readouts cropped to the matrix as they arrive; each image solved as `bart pics -R W` over `bart nlinv` sensitivities of its low-resolution centre, then completed by `bart homodyne` along a partial-Fourier axis. Needs the `coils` extra |
+| `epi` | `pics`'s images from EPI readouts, each resampled off its ramps onto the matrix and corrected for its odd/even phase against the shot's navigator as it arrives (`bart` ramp operator, `estimate_epi_phase`). The phase-encode-reversed reference set is an image of its own, and with PyHySCO installed (GPL-3.0, not a dependency) each later image of its slice is corrected for susceptibility distortion against it. Needs the `coils` extra |
+| `pmc` | `pics`'s images, and a pose from each three-plane navigator (`NAV` or `RTFEEDBACK` readouts): planes gridded with Pipe-Menon density on one thread, coils combined by root sum of squares, registered against the first navigator and filtered by an extended Kalman filter. The pose is published to the scan when its design sets `EnablePmc`. Needs the `coils` extra |
 
 `simplefft` and `cartesian` combine their coils as a root sum of squares. A volume is sent as one
 image per partition. A plugin file that reexports one under another name,
