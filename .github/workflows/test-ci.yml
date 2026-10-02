@@ -128,6 +128,9 @@ jobs:
       - name: Run the coil tests
         run: pytest -q -ra tests/test_virtual_coils.py --cov
 
+      - name: Run the bartorch reconstructions, navigator poses included
+        run: pytest -q -ra --cov --cov-append tests/recon
+
       - name: Scan the console image's sequences, NUFFT reconstructions included
         run: pytest -q -ra --cov --cov-append --cov-report=xml tests/test_console_sequences.py
 
