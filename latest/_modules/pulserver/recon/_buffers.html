@@ -452,19 +452,23 @@
                 <article class="bd-article">
                   
   <h1>Source code for pulserver.recon._buffers</h1><div class="highlight"><pre>
-<span></span><span class="sd">"""K-space buffers laid out from the MRD header and filled one acquisition at a time.</span>
+<span></span><span class="sd">"""K-space buffers of a reconstruction unit, laid out from the MRD header and filled one acquisition at a time.</span>
 
-<span class="sd">One buffer per encoding space, sized from the header before data arrives and</span>
-<span class="sd">indexed by each acquisition's counters. Axes run coil first and readout last,</span>
-<span class="sd">with a placement axis only where the header says a counter varies.</span>
+<span class="sd">A unit holds one buffer for its imaging readouts and one for its</span>
+<span class="sd">parallel-imaging calibration readouts, each allocated when its first readout</span>
+<span class="sd">arrives and indexed by that readout's counters. Axes run coil first and</span>
+<span class="sd">readout last, with a placement axis only where the header says a counter</span>
+<span class="sd">varies.</span>
 <span class="sd">"""</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
 <span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"ReconBuffer"</span><span class="p">,</span> <span class="s2">"ReconData"</span><span class="p">]</span>
 
+<span class="kn">import</span><span class="w"> </span><span class="nn">math</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Iterator</span><span class="p">,</span> <span class="n">Mapping</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Mapping</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span><span class="p">,</span> <span class="n">field</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">ClassVar</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
@@ -473,7 +477,7 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">..mrd._metadata</span><span class="w"> </span><span class="kn">import</span> <span class="n">acquisition_label</span><span class="p">,</span> <span class="n">has_acquisition_flag</span>
 
 <span class="c1">#: Every name :meth:`ReconBuffer.select` accepts, whether or not a space varies it.</span>
-<span class="n">_AXIS_NAMES</span> <span class="o">=</span> <span class="nb">frozenset</span><span class="p">((</span><span class="o">*</span><span class="n">LOOP_COUNTERS</span><span class="p">,</span> <span class="s2">"partition"</span><span class="p">,</span> <span class="s2">"phase_encode"</span><span class="p">))</span>
+<span class="n">_AXIS_NAMES</span> <span class="o">=</span> <span class="nb">frozenset</span><span class="p">((</span><span class="o">*</span><span class="n">LOOP_COUNTERS</span><span class="p">,</span> <span class="s2">"segment"</span><span class="p">,</span> <span class="s2">"partition"</span><span class="p">,</span> <span class="s2">"phase_encode"</span><span class="p">))</span>
 
 
 <div class="viewcode-block" id="ReconBuffer">
@@ -482,7 +486,8 @@
 <span class="w">    </span><span class="sd">"""K-space of one encoding space, filled one acquisition at a time.</span>
 
 <span class="sd">    A readout shorter than the buffer is right-aligned, where a partial echo's</span>
-<span class="sd">    samples belong.</span>
+<span class="sd">    samples belong. The axes are those of ``space``: its counters that vary</span>
+<span class="sd">    and were asked for, then the encoded axes.</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
@@ -502,9 +507,6 @@
 <span class="sd">        Shaped as :attr:`axes` names.</span>
 <span class="sd">    mask : ndarray</span>
 <span class="sd">        Boolean, :attr:`kspace` without the coil axis: samples that were placed.</span>
-<span class="sd">    reference : ndarray</span>
-<span class="sd">        Boolean, shaped as :attr:`mask`: samples flagged as parallel-imaging</span>
-<span class="sd">        calibration.</span>
 <span class="sd">    trajectory : ndarray or None</span>
 <span class="sd">        ``(dimensions, ...)`` over the axes of :attr:`mask`, in the units the</span>
 <span class="sd">        acquisitions carry. ``None`` until an acquisition carries a trajectory;</span>
@@ -549,7 +551,6 @@
         <span class="n">shape</span> <span class="o">=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">coils</span><span class="p">,</span> <span class="o">*</span><span class="n">space</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">:</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">readout</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">kspace</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">shape</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">mask</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">:],</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">reference</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">:],</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">trajectory</span><span class="p">:</span> <span class="n">Any</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">center_sample</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">sample_time</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
@@ -658,12 +659,6 @@
             <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">kspace</span><span class="p">[(</span><span class="nb">slice</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">coils</span><span class="p">),</span> <span class="o">*</span><span class="n">where</span><span class="p">,</span> <span class="n">readout</span><span class="p">)]</span> <span class="o">=</span> <span class="n">data</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">mask</span><span class="p">[(</span><span class="o">*</span><span class="n">where</span><span class="p">,</span> <span class="n">readout</span><span class="p">)]</span> <span class="o">=</span> <span class="kc">True</span>
-        <span class="k">if</span> <span class="n">has_acquisition_flag</span><span class="p">(</span>
-            <span class="n">acquisition</span><span class="p">,</span> <span class="s2">"ACQ_IS_PARALLEL_CALIBRATION"</span>
-        <span class="p">)</span> <span class="ow">or</span> <span class="n">has_acquisition_flag</span><span class="p">(</span>
-            <span class="n">acquisition</span><span class="p">,</span> <span class="s2">"ACQ_IS_PARALLEL_CALIBRATION_AND_IMAGING"</span>
-        <span class="p">):</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">reference</span><span class="p">[(</span><span class="o">*</span><span class="n">where</span><span class="p">,</span> <span class="n">readout</span><span class="p">)]</span> <span class="o">=</span> <span class="kc">True</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_place_trajectory</span><span class="p">(</span><span class="n">acquisition</span><span class="p">,</span> <span class="n">where</span><span class="p">,</span> <span class="n">readout</span><span class="p">)</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">center_sample</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">center</span> <span class="o">=</span> <span class="n">acquisition_label</span><span class="p">(</span><span class="n">acquisition</span><span class="p">,</span> <span class="s2">"center_sample"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
@@ -682,7 +677,7 @@
 <span class="sd">        MRD trajectories are ``(samples, dimensions)`` and are stored transposed.</span>
 <span class="sd">        An acquisition may carry fewer trailing dimensions than its neighbours --</span>
 <span class="sd">        the centre partition of a slab traverses no kz -- and the rows it omits stay</span>
-<span class="sd">        0. A trajectory whose samples are not those placed, as after a chain</span>
+<span class="sd">        0. A trajectory whose samples are not those placed, as after a gadget</span>
 <span class="sd">        resampled the readout, is not stored.</span>
 <span class="sd">        """</span>
         <span class="n">traj</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">acquisition</span><span class="p">,</span> <span class="s2">"traj"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
@@ -830,117 +825,162 @@
 
 <div class="viewcode-block" id="ReconData">
 <a class="viewcode-back" href="../../../generated/pulserver.recon.ReconData.html#pulserver.recon.ReconData">[docs]</a>
-<span class="k">class</span><span class="w"> </span><span class="nc">ReconData</span><span class="p">(</span><span class="n">Mapping</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">"""Every encoding space of a scan, mapping space index to :class:`ReconBuffer`.</span>
+<span class="nd">@dataclass</span><span class="p">(</span><span class="n">eq</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">ReconData</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""The readouts of one reconstruction unit, as :meth:`ReconPlugin.recon` receives them.</span>
 
-<span class="sd">    A buffer is allocated when first indexed or when an acquisition first names</span>
-<span class="sd">    its space, sized in the latter case by that acquisition's coils and samples.</span>
-<span class="sd">    ``len`` and iteration cover allocated buffers only. Calibration acquired on</span>
-<span class="sd">    its own geometry is a separate subsequence and so a separate space;</span>
-<span class="sd">    calibration within a space is marked in :attr:`ReconBuffer.reference`.</span>
+<span class="sd">    A unit is the set of readouts of one branch and encoding space that share</span>
+<span class="sd">    every image counter not listed in the plugin's ``axes``; the plugin</span>
+<span class="sd">    documents how a unit is closed. A unit is allocated on its first readout</span>
+<span class="sd">    and released once :meth:`ReconPlugin.recon` has returned.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    branch : str</span>
+<span class="sd">        The branch the unit belongs to.</span>
+<span class="sd">    data : ReconBuffer or None</span>
+<span class="sd">        K-space of the imaging readouts, with the unit's ``axes`` along the</span>
+<span class="sd">        header's encoded axes. ``None`` when the unit placed none: the plugin</span>
+<span class="sd">        is not ``buffered``, the header describes no encoding space, or every</span>
+<span class="sd">        readout was calibration only.</span>
+<span class="sd">    ref : ReconBuffer or None</span>
+<span class="sd">        K-space of the parallel-imaging calibration readouts, laid out as</span>
+<span class="sd">        ``data``; ``None`` when the unit has none. A readout flagged as</span>
+<span class="sd">        calibration and imaging is in both buffers; one flagged as</span>
+<span class="sd">        calibration only is in ``ref`` alone; a phase-correction readout is in</span>
+<span class="sd">        neither.</span>
+<span class="sd">    counters : dict of str to int</span>
+<span class="sd">        The unit's image counters not listed in ``axes``, by MRD name.</span>
+<span class="sd">    waveforms : tuple</span>
+<span class="sd">        The waveforms received since the previous close; units that close</span>
+<span class="sd">        together share them.</span>
+<span class="sd">    acquisitions : list</span>
+<span class="sd">        Every readout the unit received, as received and in arrival order,</span>
+<span class="sd">        whichever buffer it was placed in. All a plugin that is not</span>
+<span class="sd">        ``buffered`` is given.</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    &gt;&gt;&gt; import pulserver.recon as recon</span>
+<span class="sd">    &gt;&gt;&gt; data = recon.ReconData("imaging", counters={"slice": 2})</span>
+<span class="sd">    &gt;&gt;&gt; data.counters["slice"], data.data is None</span>
+<span class="sd">    (2, True)</span>
+<span class="sd">    """</span>
+
+    <span class="n">branch</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">data</span><span class="p">:</span> <span class="n">ReconBuffer</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">ref</span><span class="p">:</span> <span class="n">ReconBuffer</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">counters</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">dict</span><span class="p">)</span>
+    <span class="n">waveforms</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">=</span> <span class="p">()</span>
+    <span class="n">acquisitions</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">list</span><span class="p">,</span> <span class="nb">repr</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span></div>
+
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">ReconUnit</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""The readouts of one unit as they arrive, placed into the buffers of :attr:`data`.</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
+<span class="sd">    key</span>
+<span class="sd">        ``(branch, encoding space, ((counter, value), ...))``, as</span>
+<span class="sd">        :func:`pulserver.recon._units.unit_key` states it.</span>
 <span class="sd">    spaces</span>
-<span class="sd">        Encoding spaces of the scan.</span>
+<span class="sd">        The header's encoding spaces by index, laid out along the plugin's</span>
+<span class="sd">        ``axes``. Empty when the header describes none, so nothing is placed.</span>
+<span class="sd">    buffered</span>
+<span class="sd">        Place readouts. ``False`` only records them in :attr:`ReconData.acquisitions`.</span>
 <span class="sd">    dtype</span>
 <span class="sd">        Complex dtype of the k-space arrays.</span>
 
 <span class="sd">    Attributes</span>
 <span class="sd">    ----------</span>
-<span class="sd">    spaces : dict</span>
-<span class="sd">        Encoding spaces by index.</span>
-<span class="sd">    data : dict</span>
-<span class="sd">        Allocated buffers by index.</span>
-
-<span class="sd">    Examples</span>
-<span class="sd">    --------</span>
-<span class="sd">    &gt;&gt;&gt; import pulserver.recon as recon</span>
-<span class="sd">    &gt;&gt;&gt; import pulserver.mrd as mrd</span>
-<span class="sd">    &gt;&gt;&gt; space = mrd.EncodingSpace(</span>
-<span class="sd">    ...     index=0, coils=4, readout=64, phase_encodes=32, partitions=1,</span>
-<span class="sd">    ...     loops=("slice",), loop_sizes=(2,), recon_matrix=(32, 32),</span>
-<span class="sd">    ... )</span>
-<span class="sd">    &gt;&gt;&gt; data = recon.ReconData([space])</span>
-<span class="sd">    &gt;&gt;&gt; len(data)</span>
-<span class="sd">    0</span>
-<span class="sd">    &gt;&gt;&gt; data[0].kspace.shape</span>
-<span class="sd">    (4, 2, 32, 64)</span>
-<span class="sd">    &gt;&gt;&gt; len(data)</span>
-<span class="sd">    1</span>
+<span class="sd">    data : ReconData</span>
+<span class="sd">        What the unit has collected, which is what the plugin receives.</span>
 <span class="sd">    """</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">spaces</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="p">(),</span> <span class="o">*</span><span class="p">,</span> <span class="n">dtype</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">complex64</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">spaces</span> <span class="o">=</span> <span class="p">{</span><span class="n">space</span><span class="o">.</span><span class="n">index</span><span class="p">:</span> <span class="n">space</span> <span class="k">for</span> <span class="n">space</span> <span class="ow">in</span> <span class="n">spaces</span><span class="p">}</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">dtype</span> <span class="o">=</span> <span class="n">dtype</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">ReconBuffer</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
-
-<div class="viewcode-block" id="ReconData.from_header">
-<a class="viewcode-back" href="../../../generated/pulserver.recon.ReconData.from_header.html#pulserver.recon.ReconData.from_header">[docs]</a>
-    <span class="nd">@classmethod</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">from_header</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">header</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">dtype</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">complex64</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ReconData</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""Lay out every encoding space of a parsed MRD header.</span>
-
-<span class="sd">        A header describing none gives a container whose :meth:`add` places nothing.</span>
-<span class="sd">        """</span>
-        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="n">EncodingSpace</span><span class="o">.</span><span class="n">all_from_header</span><span class="p">(</span><span class="n">header</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">)</span></div>
-
-
-<div class="viewcode-block" id="ReconData.buffer">
-<a class="viewcode-back" href="../../../generated/pulserver.recon.ReconData.buffer.html#pulserver.recon.ReconData.buffer">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">buffer</span><span class="p">(</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
-        <span class="n">encoding</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span>
+        <span class="n">key</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">],</span> <span class="o">...</span><span class="p">]],</span>
+        <span class="n">spaces</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">EncodingSpace</span><span class="p">],</span>
         <span class="o">*</span><span class="p">,</span>
-        <span class="n">coils</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">readout</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ReconBuffer</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""Return the buffer of one encoding space, allocating it on first use.</span>
+        <span class="n">buffered</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">dtype</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">complex64</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">branch</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">space_index</span><span class="p">,</span> <span class="n">counters</span> <span class="o">=</span> <span class="n">key</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">key</span> <span class="o">=</span> <span class="n">key</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">spaces</span> <span class="o">=</span> <span class="n">spaces</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">buffered</span> <span class="o">=</span> <span class="n">buffered</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dtype</span> <span class="o">=</span> <span class="n">dtype</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">data</span> <span class="o">=</span> <span class="n">ReconData</span><span class="p">(</span><span class="n">branch</span><span class="p">,</span> <span class="n">counters</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span><span class="n">counters</span><span class="p">))</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">combinations</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Number of positions along the unit's axes, 1 where its space is not described."""</span>
+        <span class="n">space</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">spaces</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">space_index</span><span class="p">)</span>
+        <span class="k">return</span> <span class="mi">1</span> <span class="k">if</span> <span class="n">space</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">math</span><span class="o">.</span><span class="n">prod</span><span class="p">(</span><span class="n">space</span><span class="o">.</span><span class="n">loop_sizes</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">add_acquisition</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">acquisition</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">readout</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Record one acquisition and place ``readout`` in the buffers its flags select.</span>
+
+<span class="sd">        A buffer is allocated at this readout's coils and samples when it is</span>
+<span class="sd">        the first the unit places in it.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        acquisition</span>
+<span class="sd">            The acquisition, for its counters and flags.</span>
+<span class="sd">        readout</span>
+<span class="sd">            ``(coils, samples)`` to place: the acquisition's data as the</span>
+<span class="sd">            gadgets left it.</span>
 
 <span class="sd">        Raises</span>
 <span class="sd">        ------</span>
 <span class="sd">        KeyError</span>
-<span class="sd">            If the header described no such encoding space.</span>
+<span class="sd">            If the header describes encoding spaces and not the one this unit</span>
+<span class="sd">            is in.</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            As :meth:`ReconBuffer.add`.</span>
 <span class="sd">        """</span>
-        <span class="k">if</span> <span class="n">encoding</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">spaces</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">"the header describes no encoding space </span><span class="si">{</span><span class="n">encoding</span><span class="si">}</span><span class="s2">; "</span>
-                <span class="sa">f</span><span class="s2">"it has </span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">spaces</span><span class="p">)</span><span class="si">}</span><span class="s2">"</span>
-            <span class="p">)</span>
-        <span class="k">if</span> <span class="n">encoding</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="n">encoding</span><span class="p">]</span> <span class="o">=</span> <span class="n">ReconBuffer</span><span class="p">(</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">spaces</span><span class="p">[</span><span class="n">encoding</span><span class="p">],</span> <span class="n">coils</span><span class="o">=</span><span class="n">coils</span><span class="p">,</span> <span class="n">readout</span><span class="o">=</span><span class="n">readout</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">dtype</span>
-            <span class="p">)</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="n">encoding</span><span class="p">]</span></div>
-
-
-<div class="viewcode-block" id="ReconData.add">
-<a class="viewcode-back" href="../../../generated/pulserver.recon.ReconData.add.html#pulserver.recon.ReconData.add">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">add</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">acquisition</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""Place one acquisition in the space its ``encoding_space_ref`` names.</span>
-
-<span class="sd">        See :meth:`ReconBuffer.add`.</span>
-<span class="sd">        """</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">spaces</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">acquisitions</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">acquisition</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">buffered</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">spaces</span><span class="p">):</span>
             <span class="k">return</span>
-        <span class="n">encoding</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">acquisition_label</span><span class="p">(</span><span class="n">acquisition</span><span class="p">,</span> <span class="s2">"encoding_space_ref"</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span> <span class="ow">or</span> <span class="mi">0</span><span class="p">)</span>
-        <span class="n">coils</span><span class="p">,</span> <span class="n">samples</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">shape</span><span class="p">(</span><span class="n">acquisition</span><span class="o">.</span><span class="n">data</span> <span class="k">if</span> <span class="n">data</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">data</span><span class="p">)[</span><span class="o">-</span><span class="mi">2</span><span class="p">:]</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">buffer</span><span class="p">(</span><span class="n">encoding</span><span class="p">,</span> <span class="n">coils</span><span class="o">=</span><span class="n">coils</span><span class="p">,</span> <span class="n">readout</span><span class="o">=</span><span class="n">samples</span><span class="p">)</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">acquisition</span><span class="p">,</span> <span class="n">data</span><span class="p">)</span></div>
+        <span class="n">in_data</span><span class="p">,</span> <span class="n">in_ref</span> <span class="o">=</span> <span class="n">readout_roles</span><span class="p">(</span><span class="n">acquisition</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">in_data</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_place</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">data</span><span class="p">,</span> <span class="n">acquisition</span><span class="p">,</span> <span class="n">readout</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">in_ref</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">ref</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_place</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">ref</span><span class="p">,</span> <span class="n">acquisition</span><span class="p">,</span> <span class="n">readout</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_place</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">buffer</span><span class="p">:</span> <span class="n">ReconBuffer</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">acquisition</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">readout</span><span class="p">:</span> <span class="n">Any</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ReconBuffer</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">buffer</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">space_index</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">spaces</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">"the header describes no encoding space </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">space_index</span><span class="si">}</span><span class="s2">; "</span>
+                    <span class="sa">f</span><span class="s2">"it has </span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">spaces</span><span class="p">)</span><span class="si">}</span><span class="s2">"</span>
+                <span class="p">)</span>
+            <span class="n">coils</span><span class="p">,</span> <span class="n">samples</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">shape</span><span class="p">(</span><span class="n">readout</span><span class="p">)[</span><span class="o">-</span><span class="mi">2</span><span class="p">:]</span>
+            <span class="n">buffer</span> <span class="o">=</span> <span class="n">ReconBuffer</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">spaces</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">space_index</span><span class="p">],</span>
+                <span class="n">coils</span><span class="o">=</span><span class="n">coils</span><span class="p">,</span>
+                <span class="n">readout</span><span class="o">=</span><span class="n">samples</span><span class="p">,</span>
+                <span class="n">dtype</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="n">buffer</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">acquisition</span><span class="p">,</span> <span class="n">readout</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">buffer</span>
 
 
-    <span class="k">def</span><span class="w"> </span><span class="fm">__getitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">encoding</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ReconBuffer</span><span class="p">:</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">buffer</span><span class="p">(</span><span class="n">encoding</span><span class="p">)</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">readout_roles</span><span class="p">(</span><span class="n">acquisition</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">bool</span><span class="p">,</span> <span class="nb">bool</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Return whether an acquisition belongs to a unit's imaging data and to its calibration data.</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="fm">__iter__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="nb">int</span><span class="p">]:</span>
-        <span class="k">return</span> <span class="nb">iter</span><span class="p">(</span><span class="nb">sorted</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">))</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="fm">__len__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
-        <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">)</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-        <span class="n">filled</span> <span class="o">=</span> <span class="s2">", "</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">repr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="n">key</span><span class="p">])</span> <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="nb">sorted</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">))</span>
-        <span class="k">return</span> <span class="sa">f</span><span class="s2">"ReconData(</span><span class="si">{</span><span class="n">filled</span><span class="si">}</span><span class="s2">)"</span></div>
-
+<span class="sd">    A readout flagged as calibration only is calibration; one flagged as</span>
+<span class="sd">    calibration and imaging is both; a phase-correction readout is neither</span>
+<span class="sd">    unless it is also calibration; any other readout is imaging.</span>
+<span class="sd">    """</span>
+    <span class="n">calibration</span> <span class="o">=</span> <span class="n">has_acquisition_flag</span><span class="p">(</span><span class="n">acquisition</span><span class="p">,</span> <span class="s2">"ACQ_IS_PARALLEL_CALIBRATION"</span><span class="p">)</span>
+    <span class="n">both</span> <span class="o">=</span> <span class="n">has_acquisition_flag</span><span class="p">(</span><span class="n">acquisition</span><span class="p">,</span> <span class="s2">"ACQ_IS_PARALLEL_CALIBRATION_AND_IMAGING"</span><span class="p">)</span>
+    <span class="n">phase_correction</span> <span class="o">=</span> <span class="n">has_acquisition_flag</span><span class="p">(</span><span class="n">acquisition</span><span class="p">,</span> <span class="s2">"ACQ_IS_PHASECORR_DATA"</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">both</span> <span class="ow">or</span> <span class="ow">not</span> <span class="p">(</span><span class="n">calibration</span> <span class="ow">or</span> <span class="n">phase_correction</span><span class="p">),</span> <span class="n">calibration</span> <span class="ow">or</span> <span class="n">both</span>
 </pre></div>
 
                 </article>

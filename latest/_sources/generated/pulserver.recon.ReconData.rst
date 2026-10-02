@@ -8,18 +8,17 @@
 
 
 
-.. rubric:: Methods
+
+
+.. rubric:: Attributes
 
 .. autosummary::
    :toctree:
    :nosignatures:
 
-   ~ReconData.add
-   ~ReconData.buffer
-   ~ReconData.from_header
-   ~ReconData.get
-   ~ReconData.items
-   ~ReconData.keys
-   ~ReconData.values
-
-
+   ~ReconData.data
+   ~ReconData.ref
+   ~ReconData.waveforms
+   ~ReconData.branch
+   ~ReconData.counters
+   ~ReconData.acquisitions

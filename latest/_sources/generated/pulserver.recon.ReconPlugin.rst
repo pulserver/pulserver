@@ -15,9 +15,11 @@
    :nosignatures:
 
    ~ReconPlugin.branch_for
+   ~ReconPlugin.finish
+   ~ReconPlugin.flush
    ~ReconPlugin.gadget
-   ~ReconPlugin.process
    ~ReconPlugin.receive
+   ~ReconPlugin.receive_waveform
    ~ReconPlugin.recon
    ~ReconPlugin.run
    ~ReconPlugin.spawn

@@ -1,6 +1,6 @@
-ReconData.get
+ReconData.ref
 =============
 
 .. currentmodule:: pulserver.recon
 
-.. automethod:: ReconData.get
+.. autoattribute:: ReconData.ref

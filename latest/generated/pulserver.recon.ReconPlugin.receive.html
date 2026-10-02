@@ -533,18 +533,22 @@
 <h1>ReconPlugin.receive<a class="headerlink" href="#reconplugin-receive" title="Link to this heading">#</a></h1>
 <dl class="py method">
 <dt class="sig sig-object py" id="pulserver.recon.ReconPlugin.receive">
-<span class="sig-prename descclassname"><span class="pre">ReconPlugin.</span></span><span class="sig-name descname"><span class="pre">receive</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pulserver/recon/plugin.html#ReconPlugin.receive"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.recon.ReconPlugin.receive" title="Link to this definition">#</a></dt>
-<dd><p>Run the chain on one acquisition, place it, and run the branch it closes.</p>
-<p>Placement follows <code class="docutils literal notranslate"><span class="pre">encoding_space_ref</span></code> and the acquisition’s counters.
-Override for placement the default cannot express, calling <a class="reference internal" href="pulserver.recon.ReconPlugin.process.html#pulserver.recon.ReconPlugin.process" title="pulserver.recon.ReconPlugin.process"><code class="xref py py-meth docutils literal notranslate"><span class="pre">process()</span></code></a>
-so the chain still runs.</p>
+<span class="property"><span class="k"><span class="pre">final</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">ReconPlugin.</span></span><span class="sig-name descname"><span class="pre">receive</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pulserver/recon/plugin.html#ReconPlugin.receive"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.recon.ReconPlugin.receive" title="Link to this definition">#</a></dt>
+<dd><p>Take in one acquisition and reconstruct the units it completes.</p>
+<p>In order: the acquisition must pass <code class="docutils literal notranslate"><span class="pre">require_flags</span></code> and
+<code class="docutils literal notranslate"><span class="pre">reject_flags</span></code>; the <code class="docutils literal notranslate"><span class="pre">gadgets</span></code> run, any of which may consume it;
+<a class="reference internal" href="pulserver.recon.ReconPlugin.branch_for.html#pulserver.recon.ReconPlugin.branch_for" title="pulserver.recon.ReconPlugin.branch_for"><code class="xref py py-meth docutils literal notranslate"><span class="pre">branch_for()</span></code></a> names its branch; it is added to its unit; the
+units that close are removed from the plugin and reconstructed by
+<a class="reference internal" href="pulserver.recon.ReconPlugin.recon.html#pulserver.recon.ReconPlugin.recon" title="pulserver.recon.ReconPlugin.recon"><code class="xref py py-meth docutils literal notranslate"><span class="pre">recon()</span></code></a>, in the order they opened. An acquisition carrying
+<code class="docutils literal notranslate"><span class="pre">LAST_IN_MEASUREMENT</span></code> closes every open unit instead, as <a class="reference internal" href="pulserver.recon.ReconPlugin.flush.html#pulserver.recon.ReconPlugin.flush" title="pulserver.recon.ReconPlugin.flush"><code class="xref py py-meth docutils literal notranslate"><span class="pre">flush()</span></code></a>
+does, whether or not it has samples: the stream’s end marker has none.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Returns<span class="colon">:</span></dt>
-<dd class="field-odd"><p>What <a class="reference internal" href="pulserver.recon.ReconPlugin.recon.html#pulserver.recon.ReconPlugin.recon" title="pulserver.recon.ReconPlugin.recon"><code class="xref py py-meth docutils literal notranslate"><span class="pre">recon()</span></code></a> returned, or <code class="docutils literal notranslate"><span class="pre">None</span></code> when the chain consumed the
-acquisition or it closed no branch.</p>
+<dd class="field-odd"><p><code class="docutils literal notranslate"><span class="pre">(data,</span> <span class="pre">output)</span></code> for each unit <a class="reference internal" href="pulserver.recon.ReconPlugin.recon.html#pulserver.recon.ReconPlugin.recon" title="pulserver.recon.ReconPlugin.recon"><code class="xref py py-meth docutils literal notranslate"><span class="pre">recon()</span></code></a> returned something
+for, <code class="docutils literal notranslate"><span class="pre">data</span></code> being what it was given.</p>
 </dd>
 <dt class="field-even">Return type<span class="colon">:</span></dt>
-<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#object" title="(in Python v3.14)">object</a> or None</p>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#list" title="(in Python v3.14)">list</a></p>
 </dd>
 </dl>
 </dd></dl>

@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>ReconData.buffer &#8212; pulserver documentation</title>
+    <title>ReconPlugin.finish &#8212; pulserver documentation</title>
   
   
   
@@ -52,7 +52,7 @@
     <script src="../_static/copybutton.js?v=f281be69"></script>
     <script src="../_static/sg-tags.js?v=d80f6fa4"></script>
     <script src="../_static/scripts/sphinx-book-theme.js?v=fab101a9"></script>
-    <script>DOCUMENTATION_OPTIONS.pagename = 'generated/pulserver.recon.ReconData.buffer';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'generated/pulserver.recon.ReconPlugin.finish';</script>
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
@@ -61,7 +61,7 @@
             true;
         </script>
     <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
-    <link rel="canonical" href="https://pulserver.github.io/pulserver/latest/generated/pulserver.recon.ReconData.buffer.html" />
+    <link rel="canonical" href="https://pulserver.github.io/pulserver/latest/generated/pulserver.recon.ReconPlugin.finish.html" />
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -377,7 +377,7 @@
       
       
       
-      <li><a href="https://github.com/pulserver/pulserver/edit/main/docs/generated/pulserver.recon.ReconData.buffer.rst" target="_blank"
+      <li><a href="https://github.com/pulserver/pulserver/edit/main/docs/generated/pulserver.recon.ReconPlugin.finish.rst" target="_blank"
    class="btn btn-sm btn-source-edit-button dropdown-item"
    title="Suggest edit"
    data-bs-placement="left" data-bs-toggle="tooltip"
@@ -394,7 +394,7 @@
       
       
       
-      <li><a href="https://github.com/pulserver/pulserver/issues/new?title=Issue%20on%20page%20%2Fgenerated/pulserver.recon.ReconData.buffer.html&body=Your%20issue%20content%20here." target="_blank"
+      <li><a href="https://github.com/pulserver/pulserver/issues/new?title=Issue%20on%20page%20%2Fgenerated/pulserver.recon.ReconPlugin.finish.html&body=Your%20issue%20content%20here." target="_blank"
    class="btn btn-sm btn-source-issues-button dropdown-item"
    title="Open an issue"
    data-bs-placement="left" data-bs-toggle="tooltip"
@@ -424,7 +424,7 @@
       
       
       
-      <li><a href="../_sources/generated/pulserver.recon.ReconData.buffer.rst" target="_blank"
+      <li><a href="../_sources/generated/pulserver.recon.ReconPlugin.finish.rst" target="_blank"
    class="btn btn-sm btn-download-source-button dropdown-item"
    title="Download source file"
    data-bs-placement="left" data-bs-toggle="tooltip"
@@ -507,7 +507,7 @@
               
 
 <div id="jb-print-docs-body" class="onlyprint">
-    <h1>ReconData.buffer</h1>
+    <h1>ReconPlugin.finish</h1>
     <!-- Table of contents -->
     <div id="print-main-content">
         <div id="jb-print-toc">
@@ -517,7 +517,7 @@
             </div>
             <nav aria-label="Page">
                 <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.recon.ReconData.buffer"><code class="docutils literal notranslate"><span class="pre">ReconData.buffer()</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.recon.ReconPlugin.finish"><code class="docutils literal notranslate"><span class="pre">ReconPlugin.finish()</span></code></a></li>
 </ul>
             </nav>
         </div>
@@ -529,17 +529,15 @@
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <section id="recondata-buffer">
-<h1>ReconData.buffer<a class="headerlink" href="#recondata-buffer" title="Link to this heading">#</a></h1>
+  <section id="reconplugin-finish">
+<h1>ReconPlugin.finish<a class="headerlink" href="#reconplugin-finish" title="Link to this heading">#</a></h1>
 <dl class="py method">
-<dt class="sig sig-object py" id="pulserver.recon.ReconData.buffer">
-<span class="sig-prename descclassname"><span class="pre">ReconData.</span></span><span class="sig-name descname"><span class="pre">buffer</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pulserver/recon/_buffers.html#ReconData.buffer"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.recon.ReconData.buffer" title="Link to this definition">#</a></dt>
-<dd><p>Return the buffer of one encoding space, allocating it on first use.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Raises<span class="colon">:</span></dt>
-<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#KeyError" title="(in Python v3.14)"><strong>KeyError</strong></a> – If the header described no such encoding space.</p>
-</dd>
-</dl>
+<dt class="sig sig-object py" id="pulserver.recon.ReconPlugin.finish">
+<span class="sig-prename descclassname"><span class="pre">ReconPlugin.</span></span><span class="sig-name descname"><span class="pre">finish</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pulserver/recon/plugin.html#ReconPlugin.finish"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.recon.ReconPlugin.finish" title="Link to this definition">#</a></dt>
+<dd><p>Run once, after the last unit has been reconstructed.</p>
+<p>A <a class="reference internal" href="pulserver.recon.ReconResult.html#pulserver.recon.ReconResult" title="pulserver.recon.ReconResult"><code class="xref py py-class docutils literal notranslate"><span class="pre">ReconResult</span></code></a> takes its geometry from an acquisition of its
+unit, and this has none, so it returns <code class="docutils literal notranslate"><span class="pre">ismrmrd</span></code> outputs or <code class="docutils literal notranslate"><span class="pre">None</span></code>.
+The default returns <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p>
 </dd></dl>
 
 </section>
@@ -573,7 +571,7 @@
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.recon.ReconData.buffer"><code class="docutils literal notranslate"><span class="pre">ReconData.buffer()</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.recon.ReconPlugin.finish"><code class="docutils literal notranslate"><span class="pre">ReconPlugin.finish()</span></code></a></li>
 </ul>
   </nav></div>
 

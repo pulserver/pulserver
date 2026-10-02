@@ -534,12 +534,14 @@
 <dl class="py method">
 <dt class="sig sig-object py" id="pulserver.recon.ReconPlugin.recon">
 <span class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">ReconPlugin.</span></span><span class="sig-name descname"><span class="pre">recon</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pulserver/recon/plugin.html#ReconPlugin.recon"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.recon.ReconPlugin.recon" title="Link to this definition">#</a></dt>
-<dd><p>Reconstruct one branch from the filled buffers.</p>
+<dd><p>Reconstruct one unit.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>branch</strong> – The branch name <a class="reference internal" href="pulserver.recon.ReconPlugin.receive.html#pulserver.recon.ReconPlugin.receive" title="pulserver.recon.ReconPlugin.receive"><code class="xref py py-meth docutils literal notranslate"><span class="pre">receive()</span></code></a> routed.</p></li>
 <li><p><strong>context</strong> – The scan context.</p></li>
+<li><p><strong>branch</strong> – The unit’s branch, <code class="docutils literal notranslate"><span class="pre">data.branch</span></code>.</p></li>
+<li><p><strong>data</strong> – The unit’s readouts. Nothing else keeps them, so a plugin that
+wants them later keeps the parts it needs.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>

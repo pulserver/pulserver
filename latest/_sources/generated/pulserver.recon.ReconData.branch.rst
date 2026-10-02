@@ -1,6 +1,6 @@
-ReconData.buffer
+ReconData.branch
 ================
 
 .. currentmodule:: pulserver.recon
 
-.. automethod:: ReconData.buffer
+.. autoattribute:: ReconData.branch

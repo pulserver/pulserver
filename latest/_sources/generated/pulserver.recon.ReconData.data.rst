@@ -1,6 +1,6 @@
-ReconData.keys
+ReconData.data
 ==============
 
 .. currentmodule:: pulserver.recon
 
-.. automethod:: ReconData.keys
+.. autoattribute:: ReconData.data

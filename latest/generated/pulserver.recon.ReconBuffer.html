@@ -537,7 +537,8 @@
 <dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/builtins/functions.html#object" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
 <p>K-space of one encoding space, filled one acquisition at a time.</p>
 <p>A readout shorter than the buffer is right-aligned, where a partial echo’s
-samples belong.</p>
+samples belong. The axes are those of <code class="docutils literal notranslate"><span class="pre">space</span></code>: its counters that vary
+and were asked for, then the encoded axes.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
@@ -552,8 +553,6 @@ header declares is valid, for data compressed before placement.</p></li>
 <dd class="field-even"><ul class="simple">
 <li><p><strong>kspace</strong> (<em>ndarray</em>) – Shaped as <a class="reference internal" href="pulserver.recon.ReconBuffer.axes.html#pulserver.recon.ReconBuffer.axes" title="pulserver.recon.ReconBuffer.axes"><code class="xref py py-attr docutils literal notranslate"><span class="pre">axes</span></code></a> names.</p></li>
 <li><p><strong>mask</strong> (<em>ndarray</em>) – Boolean, <code class="xref py py-attr docutils literal notranslate"><span class="pre">kspace</span></code> without the coil axis: samples that were placed.</p></li>
-<li><p><strong>reference</strong> (<em>ndarray</em>) – Boolean, shaped as <code class="xref py py-attr docutils literal notranslate"><span class="pre">mask</span></code>: samples flagged as parallel-imaging
-calibration.</p></li>
 <li><p><strong>trajectory</strong> (<em>ndarray or None</em>) – <code class="docutils literal notranslate"><span class="pre">(dimensions,</span> <span class="pre">...)</span></code> over the axes of <code class="xref py py-attr docutils literal notranslate"><span class="pre">mask</span></code>, in the units the
 acquisitions carry. <code class="docutils literal notranslate"><span class="pre">None</span></code> until an acquisition carries a trajectory;
 widened to the most dimensions any acquisition carried, missing trailing

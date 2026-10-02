@@ -880,7 +880,7 @@ from.</p>
 <td><p>Base class for reconstruction plugins.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.recon.Gadget.html#pulserver.recon.Gadget" title="pulserver.recon.Gadget"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Gadget</span></code></a></p></td>
-<td><p>One per-acquisition step of a plugin's <code class="docutils literal notranslate"><span class="pre">chain</span></code>.</p></td>
+<td><p>One per-acquisition step of a plugin's <code class="docutils literal notranslate"><span class="pre">gadgets</span></code>.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.recon.load_plugin.html#pulserver.recon.load_plugin" title="pulserver.recon.load_plugin"><code class="xref py py-obj docutils literal notranslate"><span class="pre">load_plugin</span></code></a></p></td>
 <td><p>Import a plugin file and return the <code class="docutils literal notranslate"><span class="pre">PLUGIN</span></code> instance it defines.</p></td>
@@ -904,7 +904,7 @@ from.</p>
 <td><p>Built-in immutable sequence.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.recon.ReconData.html#pulserver.recon.ReconData" title="pulserver.recon.ReconData"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ReconData</span></code></a></p></td>
-<td><p>Every encoding space of a scan, mapping space index to <a class="reference internal" href="generated/pulserver.recon.ReconBuffer.html#pulserver.recon.ReconBuffer" title="pulserver.recon.ReconBuffer"><code class="xref py py-class docutils literal notranslate"><span class="pre">ReconBuffer</span></code></a>.</p></td>
+<td><p>The readouts of one reconstruction unit, as <a class="reference internal" href="generated/pulserver.recon.ReconPlugin.recon.html#pulserver.recon.ReconPlugin.recon" title="pulserver.recon.ReconPlugin.recon"><code class="xref py py-meth docutils literal notranslate"><span class="pre">ReconPlugin.recon()</span></code></a> receives them.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.recon.ReconBuffer.html#pulserver.recon.ReconBuffer" title="pulserver.recon.ReconBuffer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ReconBuffer</span></code></a></p></td>
 <td><p>K-space of one encoding space, filled one acquisition at a time.</p></td>

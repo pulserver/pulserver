@@ -541,8 +541,9 @@ it over an MRD stream.</p>
 <code class="docutils literal notranslate"><span class="pre">PLUGIN</span></code> instance of it. The same hooks run over a live MRD stream in a worker
 of the reconstruction proxy, over an ISMRMRD HDF5 file
 (<a class="reference internal" href="../generated/pulserver.recon.ReconPlugin.run.html#pulserver.recon.ReconPlugin.run" title="pulserver.recon.ReconPlugin.run"><code class="xref py py-meth docutils literal notranslate"><span class="pre">ReconPlugin.run()</span></code></a>) and over an assembled
-<a class="reference internal" href="../generated/pulserver.mrd.AcquisitionBucket.html#pulserver.mrd.AcquisitionBucket" title="pulserver.mrd.AcquisitionBucket"><code class="xref py py-class docutils literal notranslate"><span class="pre">AcquisitionBucket</span></code></a> (calling the instance). Writing one is
-described in <a class="reference internal" href="../user-guide/reconstruction-plugins.html"><span class="doc">Reconstruction plugins</span></a>.</p>
+<a class="reference internal" href="../generated/pulserver.mrd.AcquisitionBucket.html#pulserver.mrd.AcquisitionBucket" title="pulserver.mrd.AcquisitionBucket"><code class="xref py py-class docutils literal notranslate"><span class="pre">AcquisitionBucket</span></code></a> (calling the instance). The plugin
+reconstructs one unit of readouts at a time, as <a class="reference internal" href="../generated/pulserver.recon.ReconData.html#pulserver.recon.ReconData" title="pulserver.recon.ReconData"><code class="xref py py-class docutils literal notranslate"><span class="pre">ReconData</span></code></a>. Writing one
+is described in <a class="reference internal" href="../user-guide/reconstruction-plugins.html"><span class="doc">Reconstruction plugins</span></a>.</p>
 <section id="plugin">
 <h2>Plugin<a class="headerlink" href="#plugin" title="Link to this heading">#</a></h2>
 <div class="pst-scrollable-table-container"><table class="table">
@@ -556,7 +557,7 @@ described in <a class="reference internal" href="../user-guide/reconstruction-pl
 <td><p>Base class for reconstruction plugins.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="../generated/pulserver.recon.Gadget.html#pulserver.recon.Gadget" title="pulserver.recon.Gadget"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Gadget</span></code></a></p></td>
-<td><p>One per-acquisition step of a plugin’s chain.</p></td>
+<td><p>One per-acquisition step, run before a readout is placed.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.recon.load_plugin.html#pulserver.recon.load_plugin" title="pulserver.recon.load_plugin"><code class="xref py py-obj docutils literal notranslate"><span class="pre">load_plugin</span></code></a></p></td>
 <td><p>Import a plugin file and return its <code class="docutils literal notranslate"><span class="pre">PLUGIN</span></code> instance.</p></td>
@@ -606,7 +607,7 @@ described in <a class="reference internal" href="../user-guide/reconstruction-pl
 </thead>
 <tbody>
 <tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.recon.ReconData.html#pulserver.recon.ReconData" title="pulserver.recon.ReconData"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ReconData</span></code></a></p></td>
-<td><p>Every encoding space of a scan, by space index.</p></td>
+<td><p>The readouts of one reconstruction unit: imaging and calibration k-space, counters and waveforms.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="../generated/pulserver.recon.ReconBuffer.html#pulserver.recon.ReconBuffer" title="pulserver.recon.ReconBuffer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ReconBuffer</span></code></a></p></td>
 <td><p>K-space of one encoding space, filled one acquisition at a time.</p></td>

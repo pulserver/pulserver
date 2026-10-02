@@ -534,8 +534,8 @@
 <dl class="py method">
 <dt class="sig sig-object py" id="pulserver.recon.ReconPlugin.startup">
 <span class="sig-prename descclassname"><span class="pre">ReconPlugin.</span></span><span class="sig-name descname"><span class="pre">startup</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pulserver/recon/plugin.html#ReconPlugin.startup"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.recon.ReconPlugin.startup" title="Link to this definition">#</a></dt>
-<dd><p>Start every gadget, then lay out <code class="xref py py-attr docutils literal notranslate"><span class="pre">buffers</span></code> from the header.</p>
-<p>No buffer is allocated until an acquisition names its space. Overrides call
+<dd><p>Start every gadget and lay out the units’ encoding spaces from the header.</p>
+<p>Nothing is allocated until a readout is placed. Overrides call
 <code class="docutils literal notranslate"><span class="pre">super().startup(context)</span></code>.</p>
 </dd></dl>
 

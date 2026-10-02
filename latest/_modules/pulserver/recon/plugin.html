@@ -457,7 +457,8 @@
 <span class="sd">A plugin module defines a :class:`ReconPlugin` subclass and a module-level</span>
 <span class="sd">``PLUGIN`` instance. The same hooks run over a live MRD stream, over an MRD</span>
 <span class="sd">file (:meth:`ReconPlugin.run`) and over an assembled bucket (calling the</span>
-<span class="sd">instance).</span>
+<span class="sd">instance). The plugin writes :meth:`ReconPlugin.recon`, which is given each</span>
+<span class="sd">reconstruction unit as it closes.</span>
 
 <span class="sd">Examples</span>
 <span class="sd">--------</span>
@@ -466,10 +467,9 @@
 <span class="sd">&gt;&gt;&gt; from pulserver.recon import ReconContext, ReconPlugin, ReconResult</span>
 <span class="sd">&gt;&gt;&gt; from pulserver.mrd import AcquisitionBucket</span>
 <span class="sd">&gt;&gt;&gt; class RootSumOfSquares(ReconPlugin):</span>
-<span class="sd">...     def recon(self, branch, context):</span>
-<span class="sd">...         del branch, context</span>
-<span class="sd">...         kspace = self.buffers[0].kspace</span>
-<span class="sd">...         return ReconResult(np.sqrt(np.sum(np.abs(kspace) ** 2, axis=0)))</span>
+<span class="sd">...     def recon(self, context, branch, data):</span>
+<span class="sd">...         del context, branch</span>
+<span class="sd">...         return ReconResult(np.sqrt(np.sum(np.abs(data.data.kspace) ** 2, axis=0)))</span>
 <span class="sd">&gt;&gt;&gt; matrix = SimpleNamespace(matrixSize=SimpleNamespace(x=8, y=4, z=1))</span>
 <span class="sd">&gt;&gt;&gt; header = SimpleNamespace(</span>
 <span class="sd">...     encoding=[SimpleNamespace(encodedSpace=matrix, reconSpace=matrix)],</span>
@@ -503,6 +503,7 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">pickle</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">threading</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">ABC</span><span class="p">,</span> <span class="n">abstractmethod</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">Callable</span><span class="p">,</span>
@@ -515,13 +516,15 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span><span class="p">,</span> <span class="n">field</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">threading</span><span class="w"> </span><span class="kn">import</span> <span class="n">RLock</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">final</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">..mrd._acquisitions</span><span class="w"> </span><span class="kn">import</span> <span class="n">AcquisitionBucket</span><span class="p">,</span> <span class="n">AcquisitionFlag</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">..mrd._header</span><span class="w"> </span><span class="kn">import</span> <span class="n">LOOP_COUNTERS</span><span class="p">,</span> <span class="n">EncodingSpace</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..mrd._metadata</span><span class="w"> </span><span class="kn">import</span> <span class="n">has_acquisition_flag</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">._buffers</span><span class="w"> </span><span class="kn">import</span> <span class="n">ReconBuffer</span><span class="p">,</span> <span class="n">ReconData</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">._buffers</span><span class="w"> </span><span class="kn">import</span> <span class="n">ReconBuffer</span><span class="p">,</span> <span class="n">ReconData</span><span class="p">,</span> <span class="n">ReconUnit</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">._units</span><span class="w"> </span><span class="kn">import</span> <span class="n">UnitKey</span><span class="p">,</span> <span class="n">_Closure</span><span class="p">,</span> <span class="n">_FlagClosure</span><span class="p">,</span> <span class="n">unit_key</span>
 
 
 <div class="viewcode-block" id="ReconResult">
@@ -961,11 +964,11 @@
 <div class="viewcode-block" id="Gadget">
 <a class="viewcode-back" href="../../../generated/pulserver.recon.Gadget.html#pulserver.recon.Gadget">[docs]</a>
 <span class="k">class</span><span class="w"> </span><span class="nc">Gadget</span><span class="p">(</span><span class="n">ABC</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">"""One per-acquisition step of a plugin's ``chain``.</span>
+<span class="w">    </span><span class="sd">"""One per-acquisition step of a plugin's ``gadgets``.</span>
 
 <span class="sd">    A gadget keeps what it learns from earlier acquisitions of its stream -- a</span>
 <span class="sd">    noise covariance, a coil basis -- on ``self``. :meth:`ReconPlugin.spawn`</span>
-<span class="sd">    copies the chain, so each stream has its own.</span>
+<span class="sd">    copies the gadgets, so each stream has its own.</span>
 
 <span class="sd">    Attributes</span>
 <span class="sd">    ----------</span>
@@ -1017,14 +1020,25 @@
 <span class="k">class</span><span class="w"> </span><span class="nc">ReconPlugin</span><span class="p">(</span><span class="n">ABC</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">"""Base class for reconstruction plugins.</span>
 
-<span class="sd">    The runtime drives three hooks over one MRD stream: :meth:`startup` once,</span>
-<span class="sd">    before any acquisition; :meth:`receive` for each accepted acquisition, as it</span>
-<span class="sd">    arrives; and :meth:`recon` for each branch :meth:`receive` routes. Only</span>
-<span class="sd">    :meth:`recon` is abstract. The default :meth:`receive` runs the ``chain``,</span>
-<span class="sd">    places the readout in :attr:`buffers` and routes by ``branches``, so a</span>
-<span class="sd">    plugin usually declares those two and writes only :meth:`recon`. When a</span>
-<span class="sd">    stream ends on acquisitions that closed no branch, :meth:`recon` runs once</span>
-<span class="sd">    more with ``"imaging"``.</span>
+<span class="sd">    The runtime drives one MRD stream through three hooks: :meth:`startup`</span>
+<span class="sd">    once, before any acquisition; :meth:`recon` for each reconstruction unit as</span>
+<span class="sd">    it closes; and :meth:`finish` once, after the last unit. Only :meth:`recon`</span>
+<span class="sd">    is abstract; the framework method :meth:`receive` is not overridden.</span>
+
+<span class="sd">    A *unit* is the set of readouts reconstructed together: those of one</span>
+<span class="sd">    branch and encoding space that share every image counter (slice, contrast,</span>
+<span class="sd">    phase, repetition, set, average) not listed in ``axes``. The counters in</span>
+<span class="sd">    ``axes`` are axes of the unit's k-space instead; ``segment`` and the user</span>
+<span class="sd">    counters separate no units unless ``segment`` is listed. Each accepted</span>
+<span class="sd">    acquisition runs through the ``gadgets``, then joins the unit of the branch</span>
+<span class="sd">    :meth:`branch_for` names, which places it by its flags (see</span>
+<span class="sd">    :class:`ReconData`). A unit closes when the flag ``triggers`` names for its</span>
+<span class="sd">    branch has arrived for every combination of the counters in ``axes``. It</span>
+<span class="sd">    leaves the plugin before :meth:`recon` runs, so its buffers are freed once</span>
+<span class="sd">    :meth:`recon` returns; the memory a stream holds is bounded by the units</span>
+<span class="sd">    open at once. Units still open at ``LAST_IN_MEASUREMENT`` or at the end of</span>
+<span class="sd">    the stream are reconstructed then, in the order they opened and under their</span>
+<span class="sd">    own branches.</span>
 
 <span class="sd">    Each stream runs on its own :meth:`spawn` of the module-level ``PLUGIN``, so</span>
 <span class="sd">    state set in the hooks belongs to one stream. ``context.exam`` is shared</span>
@@ -1032,32 +1046,40 @@
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
-<span class="sd">    chain</span>
-<span class="sd">        :class:`Gadget` steps applied to every readout on arrival, in order.</span>
-<span class="sd">    branches</span>
-<span class="sd">        ``{AcquisitionFlag: name}``, tried in order: the first flag the</span>
-<span class="sd">        acquisition carries names the branch. List larger units first, since the</span>
-<span class="sd">        last acquisition of a slice also closes its segment. Flags combined with</span>
-<span class="sd">        ``|`` route either one to the branch. The default routes</span>
-<span class="sd">        ``LAST_IN_MEASUREMENT`` to ``"imaging"``.</span>
+<span class="sd">    gadgets</span>
+<span class="sd">        :class:`Gadget` steps applied to every accepted readout on arrival, in</span>
+<span class="sd">        order, before it is placed.</span>
+<span class="sd">    triggers</span>
+<span class="sd">        ``{branch: flag}``: the :class:`~pulserver.mrd.AcquisitionFlag` that</span>
+<span class="sd">        closes a unit of the branch, combined with ``|`` for either of several.</span>
+<span class="sd">        The first branch declared receives the readouts :meth:`branch_for`</span>
+<span class="sd">        does not route elsewhere. The default is ``{"imaging":</span>
+<span class="sd">        LAST_IN_MEASUREMENT}``.</span>
+<span class="sd">    axes</span>
+<span class="sd">        Counters of a unit placed along axes of its k-space and waited for by</span>
+<span class="sd">        the closing flag, instead of separating units: any of ``repetition``,</span>
+<span class="sd">        ``phase``, ``slice``, ``contrast``, ``set``, ``average`` and</span>
+<span class="sd">        ``segment``. Their extents are the header's encoding limits.</span>
 <span class="sd">    require_flags</span>
 <span class="sd">        Flags an acquisition must all carry to be accepted. A combined</span>
 <span class="sd">        :class:`AcquisitionFlag` counts as its members.</span>
 <span class="sd">    reject_flags</span>
-<span class="sd">        Flags any one of which excludes an acquisition. The runtime never passes</span>
-<span class="sd">        excluded acquisitions to :meth:`receive`.</span>
+<span class="sd">        Flags any one of which excludes an acquisition.</span>
 <span class="sd">    buffered</span>
-<span class="sd">        Place acquisitions into :attr:`buffers`. Disable for streams whose header</span>
-<span class="sd">        does not describe their encoding spaces; the plugin then collects</span>
-<span class="sd">        acquisitions itself.</span>
+<span class="sd">        Place readouts in :attr:`ReconData.data` and :attr:`ReconData.ref`.</span>
+<span class="sd">        Disable for streams whose header does not describe their encoding</span>
+<span class="sd">        spaces; the plugin then reads :attr:`ReconData.acquisitions`, and a</span>
+<span class="sd">        unit closes at the first flag, whatever its ``axes``.</span>
+<span class="sd">    chain</span>
+<span class="sd">        Deprecated alias of ``gadgets``; warns.</span>
+<span class="sd">    branches</span>
+<span class="sd">        Deprecated alias of ``triggers``, mapping ``{flag: branch}``; warns.</span>
 
 <span class="sd">    Attributes</span>
 <span class="sd">    ----------</span>
-<span class="sd">    buffers : ReconData</span>
-<span class="sd">        Every encoding space of the scan, laid out by :meth:`startup`.</span>
-<span class="sd">    acquisition : object</span>
-<span class="sd">        The last acquisition the chain passed -- the one that closed the branch</span>
-<span class="sd">        :meth:`recon` is running -- or ``None``.</span>
+<span class="sd">    gadgets : tuple of Gadget</span>
+<span class="sd">    triggers : dict</span>
+<span class="sd">    axes : tuple of str</span>
 
 <span class="sd">    Examples</span>
 <span class="sd">    --------</span>
@@ -1071,36 +1093,63 @@
 <span class="sd">    &gt;&gt;&gt; class RootSumOfSquares(recon.ReconPlugin):</span>
 <span class="sd">    ...     def __init__(self):</span>
 <span class="sd">    ...         super().__init__(</span>
-<span class="sd">    ...             chain=[DropNoise()],</span>
-<span class="sd">    ...             branches={mrd.AcquisitionFlag.LAST_IN_SLICE: "imaging"},</span>
+<span class="sd">    ...             gadgets=[DropNoise()],</span>
+<span class="sd">    ...             triggers={"imaging": mrd.AcquisitionFlag.LAST_IN_SLICE},</span>
+<span class="sd">    ...             axes=("average",),</span>
 <span class="sd">    ...         )</span>
-<span class="sd">    ...     def recon(self, branch, context):</span>
-<span class="sd">    ...         kspace = self.buffers[0].kspace</span>
+<span class="sd">    ...     def recon(self, context, branch, data):</span>
+<span class="sd">    ...         kspace = data.data.kspace</span>
 <span class="sd">    ...         return recon.ReconResult(np.sqrt(np.sum(np.abs(kspace) ** 2, axis=0)))</span>
-<span class="sd">    &gt;&gt;&gt; RootSumOfSquares().branches[mrd.AcquisitionFlag.LAST_IN_SLICE]</span>
-<span class="sd">    'imaging'</span>
+<span class="sd">    &gt;&gt;&gt; RootSumOfSquares().triggers["imaging"]</span>
+<span class="sd">    &lt;AcquisitionFlag.LAST_IN_SLICE: 128&gt;</span>
 <span class="sd">    """</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="o">*</span><span class="p">,</span>
-        <span class="n">chain</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">(),</span>
-        <span class="n">branches</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">require_flags</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span> <span class="o">|</span> <span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">=</span> <span class="p">(),</span>
-        <span class="n">reject_flags</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span> <span class="o">|</span> <span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">=</span> <span class="p">(),</span>
+        <span class="n">gadgets</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">Gadget</span><span class="p">]</span> <span class="o">=</span> <span class="p">(),</span>
+        <span class="n">triggers</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">axes</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">(),</span>
+        <span class="n">require_flags</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span> <span class="o">|</span> <span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">|</span> <span class="n">AcquisitionFlag</span> <span class="o">=</span> <span class="p">(),</span>
+        <span class="n">reject_flags</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span> <span class="o">|</span> <span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">|</span> <span class="n">AcquisitionFlag</span> <span class="o">=</span> <span class="p">(),</span>
         <span class="n">buffered</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">chain</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">Gadget</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">branches</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">chain</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">chain</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">branches</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span>
-            <span class="p">{</span><span class="n">AcquisitionFlag</span><span class="o">.</span><span class="n">LAST_IN_MEASUREMENT</span><span class="p">:</span> <span class="s2">"imaging"</span><span class="p">}</span>
-            <span class="k">if</span> <span class="n">branches</span> <span class="ow">is</span> <span class="kc">None</span>
-            <span class="k">else</span> <span class="n">branches</span>
+        <span class="k">if</span> <span class="n">chain</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+                <span class="s2">"ReconPlugin(chain=...) is deprecated; pass gadgets="</span><span class="p">,</span>
+                <span class="ne">DeprecationWarning</span><span class="p">,</span>
+                <span class="n">stacklevel</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="k">if</span> <span class="n">gadgets</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">"pass gadgets, not both gadgets and chain"</span><span class="p">)</span>
+            <span class="n">gadgets</span> <span class="o">=</span> <span class="n">chain</span>
+        <span class="k">if</span> <span class="n">branches</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+                <span class="s2">"ReconPlugin(branches={flag: name}) is deprecated; "</span>
+                <span class="s2">"pass triggers={name: flag}"</span><span class="p">,</span>
+                <span class="ne">DeprecationWarning</span><span class="p">,</span>
+                <span class="n">stacklevel</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="k">if</span> <span class="n">triggers</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">"pass triggers, not both triggers and branches"</span><span class="p">)</span>
+            <span class="n">triggers</span> <span class="o">=</span> <span class="n">_triggers_of</span><span class="p">(</span><span class="n">branches</span><span class="p">)</span>
+        <span class="n">unknown</span> <span class="o">=</span> <span class="p">[</span><span class="n">name</span> <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">axes</span> <span class="k">if</span> <span class="n">name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">_AXES</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">unknown</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"axes </span><span class="si">{</span><span class="n">unknown</span><span class="si">}</span><span class="s2"> are not counters a unit can be laid out along; "</span>
+                <span class="sa">f</span><span class="s2">"they are </span><span class="si">{</span><span class="nb">list</span><span class="p">(</span><span class="n">_AXES</span><span class="p">)</span><span class="si">}</span><span class="s2">"</span>
+            <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">gadgets</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">gadgets</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">triggers</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span>
+            <span class="n">triggers</span> <span class="ow">or</span> <span class="p">{</span><span class="s2">"imaging"</span><span class="p">:</span> <span class="n">AcquisitionFlag</span><span class="o">.</span><span class="n">LAST_IN_MEASUREMENT</span><span class="p">}</span>
         <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">axes</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">axes</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">require_flags</span> <span class="o">=</span> <span class="n">_flag_members</span><span class="p">(</span><span class="n">require_flags</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">reject_flags</span> <span class="o">=</span> <span class="n">_flag_members</span><span class="p">(</span><span class="n">reject_flags</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">buffered</span> <span class="o">=</span> <span class="nb">bool</span><span class="p">(</span><span class="n">buffered</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">buffers</span> <span class="o">=</span> <span class="n">ReconData</span><span class="p">()</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">acquisition</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_reset</span><span class="p">()</span>
 
 <div class="viewcode-block" id="ReconPlugin.spawn">
 <a class="viewcode-back" href="../../../generated/pulserver.recon.ReconPlugin.spawn.html#pulserver.recon.ReconPlugin.spawn">[docs]</a>
@@ -1112,48 +1161,26 @@
 <span class="sd">        shared. Override to isolate anything else a shallow copy would share.</span>
 <span class="sd">        """</span>
         <span class="n">plugin</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">copy</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
-        <span class="n">plugin</span><span class="o">.</span><span class="n">chain</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">copy</span><span class="o">.</span><span class="n">copy</span><span class="p">(</span><span class="n">gadget</span><span class="p">)</span> <span class="k">for</span> <span class="n">gadget</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">chain</span><span class="p">)</span>
+        <span class="n">plugin</span><span class="o">.</span><span class="n">gadgets</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">copy</span><span class="o">.</span><span class="n">copy</span><span class="p">(</span><span class="n">gadget</span><span class="p">)</span> <span class="k">for</span> <span class="n">gadget</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">gadgets</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">plugin</span></div>
 
 
 <div class="viewcode-block" id="ReconPlugin.startup">
 <a class="viewcode-back" href="../../../generated/pulserver.recon.ReconPlugin.startup.html#pulserver.recon.ReconPlugin.startup">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">startup</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">context</span><span class="p">:</span> <span class="n">ReconContext</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""Start every gadget, then lay out :attr:`buffers` from the header.</span>
+<span class="w">        </span><span class="sd">"""Start every gadget and lay out the units' encoding spaces from the header.</span>
 
-<span class="sd">        No buffer is allocated until an acquisition names its space. Overrides call</span>
+<span class="sd">        Nothing is allocated until a readout is placed. Overrides call</span>
 <span class="sd">        ``super().startup(context)``.</span>
 <span class="sd">        """</span>
-        <span class="k">for</span> <span class="n">gadget</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">chain</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_reset</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">gadget</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">gadgets</span><span class="p">:</span>
             <span class="n">gadget</span><span class="o">.</span><span class="n">startup</span><span class="p">(</span><span class="n">context</span><span class="p">)</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">buffered</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">buffers</span> <span class="o">=</span> <span class="n">ReconData</span><span class="o">.</span><span class="n">from_header</span><span class="p">(</span><span class="n">context</span><span class="o">.</span><span class="n">header</span><span class="p">)</span></div>
-
-
-<div class="viewcode-block" id="ReconPlugin.process">
-<a class="viewcode-back" href="../../../generated/pulserver.recon.ReconPlugin.process.html#pulserver.recon.ReconPlugin.process">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">process</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">acquisition</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""Run the chain over one readout and return what it left.</span>
-
-<span class="sd">        Parameters</span>
-<span class="sd">        ----------</span>
-<span class="sd">        acquisition</span>
-<span class="sd">            The acquisition, for its flags and counters.</span>
-<span class="sd">        data</span>
-<span class="sd">            The readout to start from; ``None`` takes ``acquisition.data``.</span>
-
-<span class="sd">        Returns</span>
-<span class="sd">        -------</span>
-<span class="sd">        ndarray or None</span>
-<span class="sd">            The corrected readout, or ``None`` when a step consumed it.</span>
-<span class="sd">        """</span>
-        <span class="k">if</span> <span class="n">data</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">data</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">acquisition</span><span class="o">.</span><span class="n">data</span><span class="p">)</span>
-        <span class="k">for</span> <span class="n">gadget</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">chain</span><span class="p">:</span>
-            <span class="n">data</span> <span class="o">=</span> <span class="n">gadget</span><span class="p">(</span><span class="n">acquisition</span><span class="p">,</span> <span class="n">data</span><span class="p">)</span>
-            <span class="k">if</span> <span class="n">data</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="k">return</span> <span class="kc">None</span>
-        <span class="k">return</span> <span class="n">data</span></div>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_spaces</span> <span class="o">=</span> <span class="p">{</span>
+                <span class="n">space</span><span class="o">.</span><span class="n">index</span><span class="p">:</span> <span class="n">space</span>
+                <span class="k">for</span> <span class="n">space</span> <span class="ow">in</span> <span class="n">EncodingSpace</span><span class="o">.</span><span class="n">all_from_header</span><span class="p">(</span><span class="n">context</span><span class="o">.</span><span class="n">header</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">axes</span><span class="p">)</span>
+            <span class="p">}</span></div>
 
 
 <div class="viewcode-block" id="ReconPlugin.gadget">
@@ -1161,69 +1188,117 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">gadget</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">kind</span><span class="p">:</span> <span class="nb">type</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">"""Return this stream's first gadget of type ``kind``.</span>
 
-<span class="sd">        Hooks reach gadgets through this rather than through ``PLUGIN``, whose chain</span>
+<span class="sd">        Hooks reach gadgets through this rather than through ``PLUGIN``, whose gadgets</span>
 <span class="sd">        :meth:`spawn` copied.</span>
 
 <span class="sd">        Raises</span>
 <span class="sd">        ------</span>
 <span class="sd">        LookupError</span>
-<span class="sd">            If the chain holds no gadget of that type.</span>
+<span class="sd">            If the plugin holds no gadget of that type.</span>
 <span class="sd">        """</span>
-        <span class="k">for</span> <span class="n">gadget</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">chain</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">gadget</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">gadgets</span><span class="p">:</span>
             <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">gadget</span><span class="p">,</span> <span class="n">kind</span><span class="p">):</span>
                 <span class="k">return</span> <span class="n">gadget</span>
-        <span class="k">raise</span> <span class="ne">LookupError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"this plugin's chain has no </span><span class="si">{</span><span class="n">kind</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span></div>
+        <span class="k">raise</span> <span class="ne">LookupError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"this plugin has no </span><span class="si">{</span><span class="n">kind</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="ReconPlugin.branch_for">
 <a class="viewcode-back" href="../../../generated/pulserver.recon.ReconPlugin.branch_for.html#pulserver.recon.ReconPlugin.branch_for">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">branch_for</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">acquisition</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""Return the branch the acquisition closes, or ``None``; see ``branches``."""</span>
-        <span class="k">if</span> <span class="n">acquisition</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Return the branch an acquisition belongs to, or ``None`` to drop it.</span>
+
+<span class="sd">        Noise measurements belong to none. Navigator readouts belong to</span>
+<span class="sd">        ``"navigator"`` when ``triggers`` declares it, else to none. Anything</span>
+<span class="sd">        else belongs to the first branch ``triggers`` declares.</span>
+<span class="sd">        """</span>
+        <span class="k">if</span> <span class="n">has_acquisition_flag</span><span class="p">(</span><span class="n">acquisition</span><span class="p">,</span> <span class="s2">"ACQ_IS_NOISE_MEASUREMENT"</span><span class="p">):</span>
             <span class="k">return</span> <span class="kc">None</span>
-        <span class="k">for</span> <span class="n">flag</span><span class="p">,</span> <span class="n">branch</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">branches</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
-            <span class="k">if</span> <span class="n">_closes</span><span class="p">(</span><span class="n">acquisition</span><span class="p">,</span> <span class="n">flag</span><span class="p">):</span>
-                <span class="k">return</span> <span class="n">branch</span>
-        <span class="k">return</span> <span class="kc">None</span></div>
+        <span class="k">if</span> <span class="n">has_acquisition_flag</span><span class="p">(</span><span class="n">acquisition</span><span class="p">,</span> <span class="s2">"ACQ_IS_NAVIGATION_DATA"</span><span class="p">):</span>
+            <span class="k">return</span> <span class="s2">"navigator"</span> <span class="k">if</span> <span class="s2">"navigator"</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">triggers</span> <span class="k">else</span> <span class="kc">None</span>
+        <span class="k">return</span> <span class="nb">next</span><span class="p">(</span><span class="nb">iter</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">triggers</span><span class="p">))</span></div>
 
 
 <div class="viewcode-block" id="ReconPlugin.receive">
 <a class="viewcode-back" href="../../../generated/pulserver.recon.ReconPlugin.receive.html#pulserver.recon.ReconPlugin.receive">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">receive</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">acquisition</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">context</span><span class="p">:</span> <span class="n">ReconContext</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""Run the chain on one acquisition, place it, and run the branch it closes.</span>
+    <span class="nd">@final</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">receive</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">acquisition</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">context</span><span class="p">:</span> <span class="n">ReconContext</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="n">ReconData</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">"""Take in one acquisition and reconstruct the units it completes.</span>
 
-<span class="sd">        Placement follows ``encoding_space_ref`` and the acquisition's counters.</span>
-<span class="sd">        Override for placement the default cannot express, calling :meth:`process`</span>
-<span class="sd">        so the chain still runs.</span>
+<span class="sd">        In order: the acquisition must pass ``require_flags`` and</span>
+<span class="sd">        ``reject_flags``; the ``gadgets`` run, any of which may consume it;</span>
+<span class="sd">        :meth:`branch_for` names its branch; it is added to its unit; the</span>
+<span class="sd">        units that close are removed from the plugin and reconstructed by</span>
+<span class="sd">        :meth:`recon`, in the order they opened. An acquisition carrying</span>
+<span class="sd">        ``LAST_IN_MEASUREMENT`` closes every open unit instead, as :meth:`flush`</span>
+<span class="sd">        does, whether or not it has samples: the stream's end marker has none.</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
-<span class="sd">        object or None</span>
-<span class="sd">            What :meth:`recon` returned, or ``None`` when the chain consumed the</span>
-<span class="sd">            acquisition or it closed no branch.</span>
+<span class="sd">        list</span>
+<span class="sd">            ``(data, output)`` for each unit :meth:`recon` returned something</span>
+<span class="sd">            for, ``data`` being what it was given.</span>
 <span class="sd">        """</span>
-        <span class="n">data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">process</span><span class="p">(</span><span class="n">acquisition</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">data</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">return</span> <span class="kc">None</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">acquisition</span> <span class="o">=</span> <span class="n">acquisition</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">buffered</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">buffers</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">acquisition</span><span class="p">,</span> <span class="n">data</span><span class="p">)</span>
-        <span class="n">branch</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">branch_for</span><span class="p">(</span><span class="n">acquisition</span><span class="p">)</span>
-        <span class="k">return</span> <span class="kc">None</span> <span class="k">if</span> <span class="n">branch</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">recon</span><span class="p">(</span><span class="n">branch</span><span class="p">,</span> <span class="n">context</span><span class="p">)</span></div>
+        <span class="n">emitted</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="n">ReconData</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_accepts</span><span class="p">(</span><span class="n">acquisition</span><span class="p">):</span>
+            <span class="n">readout</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_process</span><span class="p">(</span><span class="n">acquisition</span><span class="p">)</span>
+            <span class="n">branch</span> <span class="o">=</span> <span class="kc">None</span> <span class="k">if</span> <span class="n">readout</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">branch_for</span><span class="p">(</span><span class="n">acquisition</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">branch</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_unit</span><span class="p">(</span><span class="n">branch</span><span class="p">,</span> <span class="n">acquisition</span><span class="p">)</span><span class="o">.</span><span class="n">add_acquisition</span><span class="p">(</span><span class="n">acquisition</span><span class="p">,</span> <span class="n">readout</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">has_acquisition_flag</span><span class="p">(</span><span class="n">acquisition</span><span class="p">,</span> <span class="s2">"ACQ_LAST_IN_MEASUREMENT"</span><span class="p">):</span>
+                <span class="n">emitted</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">flush</span><span class="p">(</span><span class="n">context</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="n">branch</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">closed</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_closure</span><span class="o">.</span><span class="n">closed</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_units</span><span class="p">,</span> <span class="n">acquisition</span><span class="p">,</span> <span class="n">branch</span><span class="p">)</span>
+                <span class="n">emitted</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_reconstruct</span><span class="p">(</span><span class="n">closed</span><span class="p">,</span> <span class="n">context</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">emitted</span></div>
+
+
+<div class="viewcode-block" id="ReconPlugin.receive_waveform">
+<a class="viewcode-back" href="../../../generated/pulserver.recon.ReconPlugin.receive_waveform.html#pulserver.recon.ReconPlugin.receive_waveform">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">receive_waveform</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">waveform</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Hold a waveform for the next units that close; see :attr:`ReconData.waveforms`."""</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_waveforms</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">waveform</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="ReconPlugin.flush">
+<a class="viewcode-back" href="../../../generated/pulserver.recon.ReconPlugin.flush.html#pulserver.recon.ReconPlugin.flush">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">flush</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">context</span><span class="p">:</span> <span class="n">ReconContext</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="n">ReconData</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">"""Reconstruct every unit still open under its own branch, then call :meth:`finish`.</span>
+
+<span class="sd">        :meth:`receive` calls it at ``LAST_IN_MEASUREMENT`` and the runtime at</span>
+<span class="sd">        the end of the stream; :meth:`finish` runs the first time only.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        list</span>
+<span class="sd">            As :meth:`receive`; the output of :meth:`finish`, if any, comes last</span>
+<span class="sd">            and with ``None`` for ``data``.</span>
+<span class="sd">        """</span>
+        <span class="n">emitted</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_reconstruct</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_units</span><span class="p">),</span> <span class="n">context</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_finished</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_finished</span> <span class="o">=</span> <span class="kc">True</span>
+            <span class="n">output</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">finish</span><span class="p">(</span><span class="n">context</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">output</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">emitted</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="kc">None</span><span class="p">,</span> <span class="n">output</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">emitted</span></div>
 
 
 <div class="viewcode-block" id="ReconPlugin.recon">
 <a class="viewcode-back" href="../../../generated/pulserver.recon.ReconPlugin.recon.html#pulserver.recon.ReconPlugin.recon">[docs]</a>
     <span class="nd">@abstractmethod</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">recon</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">branch</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">context</span><span class="p">:</span> <span class="n">ReconContext</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""Reconstruct one branch from the filled buffers.</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">recon</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">context</span><span class="p">:</span> <span class="n">ReconContext</span><span class="p">,</span> <span class="n">branch</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">ReconData</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Reconstruct one unit.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
-<span class="sd">        branch</span>
-<span class="sd">            The branch name :meth:`receive` routed.</span>
 <span class="sd">        context</span>
 <span class="sd">            The scan context.</span>
+<span class="sd">        branch</span>
+<span class="sd">            The unit's branch, ``data.branch``.</span>
+<span class="sd">        data</span>
+<span class="sd">            The unit's readouts. Nothing else keeps them, so a plugin that</span>
+<span class="sd">            wants them later keeps the parts it needs.</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
@@ -1232,6 +1307,19 @@
 <span class="sd">            :class:`ReconResult`), a sequence of these, or ``None``.</span>
 <span class="sd">        """</span>
         <span class="o">...</span></div>
+
+
+<div class="viewcode-block" id="ReconPlugin.finish">
+<a class="viewcode-back" href="../../../generated/pulserver.recon.ReconPlugin.finish.html#pulserver.recon.ReconPlugin.finish">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">finish</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">context</span><span class="p">:</span> <span class="n">ReconContext</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Run once, after the last unit has been reconstructed.</span>
+
+<span class="sd">        A :class:`ReconResult` takes its geometry from an acquisition of its</span>
+<span class="sd">        unit, and this has none, so it returns ``ismrmrd`` outputs or ``None``.</span>
+<span class="sd">        The default returns ``None``.</span>
+<span class="sd">        """</span>
+        <span class="k">del</span> <span class="n">context</span>
+        <span class="k">return</span> <span class="kc">None</span></div>
 
 
 <div class="viewcode-block" id="ReconPlugin.run">
@@ -1288,40 +1376,80 @@
     <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">bucket</span><span class="p">:</span> <span class="n">AcquisitionBucket</span><span class="p">,</span> <span class="n">context</span><span class="p">:</span> <span class="n">ReconContext</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">"""Reconstruct an assembled bucket on a new :meth:`spawn`.</span>
 
-<span class="sd">        Runs :meth:`startup`, then :meth:`receive` for every acquisition in arrival</span>
-<span class="sd">        order, and returns the last output that was not ``None``. When there was</span>
-<span class="sd">        none and the last acquisition closes no branch, returns :meth:`recon` with</span>
-<span class="sd">        ``"imaging"``. ``require_flags`` and ``reject_flags`` are not applied.</span>
+<span class="sd">        Runs :meth:`startup`, delivers the bucket's waveforms, then runs</span>
+<span class="sd">        :meth:`receive` for every acquisition in arrival order and :meth:`flush`,</span>
+<span class="sd">        and returns the last output that was not ``None``.</span>
 <span class="sd">        """</span>
         <span class="n">plugin</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">spawn</span><span class="p">()</span>
         <span class="n">plugin</span><span class="o">.</span><span class="n">startup</span><span class="p">(</span><span class="n">context</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">waveform</span> <span class="ow">in</span> <span class="n">bucket</span><span class="o">.</span><span class="n">waveforms</span><span class="p">:</span>
+            <span class="n">plugin</span><span class="o">.</span><span class="n">receive_waveform</span><span class="p">(</span><span class="n">waveform</span><span class="p">)</span>
         <span class="n">output</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="k">for</span> <span class="n">acquisition</span> <span class="ow">in</span> <span class="n">bucket</span><span class="o">.</span><span class="n">acquisitions</span><span class="p">:</span>
-            <span class="n">received</span> <span class="o">=</span> <span class="n">plugin</span><span class="o">.</span><span class="n">receive</span><span class="p">(</span><span class="n">acquisition</span><span class="p">,</span> <span class="n">context</span><span class="p">)</span>
-            <span class="k">if</span> <span class="n">received</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="n">output</span> <span class="o">=</span> <span class="n">received</span>
-        <span class="k">if</span> <span class="n">output</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">plugin</span><span class="o">.</span><span class="n">branch_for</span><span class="p">(</span><span class="n">_last</span><span class="p">(</span><span class="n">bucket</span><span class="o">.</span><span class="n">acquisitions</span><span class="p">))</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">output</span> <span class="o">=</span> <span class="n">plugin</span><span class="o">.</span><span class="n">recon</span><span class="p">(</span><span class="s2">"imaging"</span><span class="p">,</span> <span class="n">context</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">output</span></div>
+            <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">result</span> <span class="ow">in</span> <span class="n">plugin</span><span class="o">.</span><span class="n">receive</span><span class="p">(</span><span class="n">acquisition</span><span class="p">,</span> <span class="n">context</span><span class="p">):</span>
+                <span class="n">output</span> <span class="o">=</span> <span class="n">result</span>
+        <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">result</span> <span class="ow">in</span> <span class="n">plugin</span><span class="o">.</span><span class="n">flush</span><span class="p">(</span><span class="n">context</span><span class="p">):</span>
+            <span class="n">output</span> <span class="o">=</span> <span class="n">result</span>
+        <span class="k">return</span> <span class="n">output</span>
 
+    <span class="k">def</span><span class="w"> </span><span class="nf">_reset</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Begin a stream with no unit open."""</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_spaces</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">EncodingSpace</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_closure</span><span class="p">:</span> <span class="n">_Closure</span> <span class="o">=</span> <span class="n">_FlagClosure</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">triggers</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">axes</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_units</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="n">UnitKey</span><span class="p">,</span> <span class="n">ReconUnit</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_waveforms</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_finished</span> <span class="o">=</span> <span class="kc">False</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_accepts</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">acquisition</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+        <span class="k">return</span> <span class="nb">all</span><span class="p">(</span>
+            <span class="n">has_acquisition_flag</span><span class="p">(</span><span class="n">acquisition</span><span class="p">,</span> <span class="n">flag</span><span class="p">)</span> <span class="k">for</span> <span class="n">flag</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">require_flags</span>
+        <span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">any</span><span class="p">(</span>
+            <span class="n">has_acquisition_flag</span><span class="p">(</span><span class="n">acquisition</span><span class="p">,</span> <span class="n">flag</span><span class="p">)</span> <span class="k">for</span> <span class="n">flag</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">reject_flags</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_process</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">acquisition</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Run the gadgets over one readout; ``None`` when one consumed it or it has no samples."""</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">acquisition</span><span class="o">.</span><span class="n">data</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">data</span><span class="o">.</span><span class="n">size</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">None</span>
+        <span class="k">for</span> <span class="n">gadget</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">gadgets</span><span class="p">:</span>
+            <span class="n">data</span> <span class="o">=</span> <span class="n">gadget</span><span class="p">(</span><span class="n">acquisition</span><span class="p">,</span> <span class="n">data</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">data</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">return</span> <span class="kc">None</span>
+        <span class="k">return</span> <span class="n">data</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_unit</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">branch</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">acquisition</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ReconUnit</span><span class="p">:</span>
+        <span class="n">key</span> <span class="o">=</span> <span class="n">unit_key</span><span class="p">(</span><span class="n">branch</span><span class="p">,</span> <span class="n">acquisition</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">axes</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">key</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_units</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_units</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">ReconUnit</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_spaces</span><span class="p">,</span> <span class="n">buffered</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">buffered</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_units</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_reconstruct</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">keys</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">UnitKey</span><span class="p">],</span> <span class="n">context</span><span class="p">:</span> <span class="n">ReconContext</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="n">ReconData</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">keys</span><span class="p">:</span>
+            <span class="k">return</span> <span class="p">[]</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">keys</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">closing</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">keys</span><span class="p">)</span>
+            <span class="n">keys</span> <span class="o">=</span> <span class="p">[</span><span class="n">key</span> <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_units</span> <span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">closing</span><span class="p">]</span>
+        <span class="n">waveforms</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_waveforms</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_waveforms</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
+        <span class="n">emitted</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="n">ReconData</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">keys</span><span class="p">:</span>
+            <span class="n">data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_units</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="n">key</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>
+            <span class="n">data</span><span class="o">.</span><span class="n">waveforms</span> <span class="o">=</span> <span class="n">waveforms</span>
+            <span class="n">output</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">recon</span><span class="p">(</span><span class="n">context</span><span class="p">,</span> <span class="n">data</span><span class="o">.</span><span class="n">branch</span><span class="p">,</span> <span class="n">data</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">output</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">emitted</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">data</span><span class="p">,</span> <span class="n">output</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">emitted</span></div>
+
+
+
+<span class="c1">#: Counters a unit can be laid out along, as ``axes`` names them.</span>
+<span class="n">_AXES</span> <span class="o">=</span> <span class="p">(</span><span class="o">*</span><span class="n">LOOP_COUNTERS</span><span class="p">,</span> <span class="s2">"segment"</span><span class="p">)</span>
 
 
 <span class="c1"># %% private module subroutines</span>
-
-
-<span class="k">def</span><span class="w"> </span><span class="nf">_closes</span><span class="p">(</span><span class="n">acquisition</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">flag</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""Whether this acquisition carries the boundary named.</span>
-
-<span class="sd">    A combined :class:`AcquisitionFlag` names several at once, and carrying any</span>
-<span class="sd">    of them closes the branch it was mapped to.</span>
-<span class="sd">    """</span>
-    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">flag</span><span class="p">,</span> <span class="n">AcquisitionFlag</span><span class="p">):</span>
-        <span class="k">return</span> <span class="nb">any</span><span class="p">(</span>
-            <span class="n">has_acquisition_flag</span><span class="p">(</span><span class="n">acquisition</span><span class="p">,</span> <span class="n">member</span><span class="o">.</span><span class="n">flag</span><span class="p">)</span>
-            <span class="k">for</span> <span class="n">member</span> <span class="ow">in</span> <span class="n">AcquisitionFlag</span>
-            <span class="k">if</span> <span class="n">member</span> <span class="ow">in</span> <span class="n">flag</span>
-        <span class="p">)</span>
-    <span class="k">return</span> <span class="n">has_acquisition_flag</span><span class="p">(</span><span class="n">acquisition</span><span class="p">,</span> <span class="n">flag</span><span class="p">)</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_flag_members</span><span class="p">(</span><span class="n">flags</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="o">...</span><span class="p">]:</span>
@@ -1335,9 +1463,17 @@
     <span class="k">return</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">flags</span><span class="p">)</span>
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_last</span><span class="p">(</span><span class="n">acquisitions</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="o">...</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">Any</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""Return the acquisition that ended a bucket, or ``None`` for an empty one."""</span>
-    <span class="k">return</span> <span class="n">acquisitions</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="k">if</span> <span class="n">acquisitions</span> <span class="k">else</span> <span class="kc">None</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_triggers_of</span><span class="p">(</span><span class="n">branches</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="nb">str</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Return ``{branch: flag}`` for the deprecated ``{flag: branch}``."""</span>
+    <span class="n">triggers</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">flag</span><span class="p">,</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">branches</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+        <span class="k">if</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">triggers</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"branches maps two flags to </span><span class="si">{</span><span class="n">name</span><span class="si">!r}</span><span class="s2">; declare "</span>
+                <span class="sa">f</span><span class="s2">"triggers=</span><span class="se">{{</span><span class="si">{</span><span class="n">name</span><span class="si">!r}</span><span class="s2">: first | second</span><span class="se">}}</span><span class="s2"> instead"</span>
+            <span class="p">)</span>
+        <span class="n">triggers</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">flag</span>
+    <span class="k">return</span> <span class="n">triggers</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_replace</span><span class="p">(</span><span class="n">path</span><span class="p">:</span> <span class="n">Path</span><span class="p">,</span> <span class="n">payload</span><span class="p">:</span> <span class="nb">bytes</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>

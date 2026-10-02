@@ -458,6 +458,7 @@
 
 <span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"LOOP_COUNTERS"</span><span class="p">,</span> <span class="s2">"EncodingSpace"</span><span class="p">]</span>
 
+<span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Iterable</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span>
 
@@ -471,6 +472,9 @@
     <span class="s2">"set"</span><span class="p">,</span>
     <span class="s2">"average"</span><span class="p">,</span>
 <span class="p">)</span>
+
+<span class="c1">#: The counters a buffer can be laid out along: ``segment`` is one only when asked for.</span>
+<span class="n">_LAYOUT_COUNTERS</span> <span class="o">=</span> <span class="p">(</span><span class="o">*</span><span class="n">LOOP_COUNTERS</span><span class="p">,</span> <span class="s2">"segment"</span><span class="p">)</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_is_cartesian</span><span class="p">(</span><span class="n">encoding</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
@@ -520,7 +524,9 @@
 <span class="sd">    phase_encodes, partitions</span>
 <span class="sd">        Extent along ``kspace_encode_step_1`` and ``kspace_encode_step_2``.</span>
 <span class="sd">    loops</span>
-<span class="sd">        Counters of :data:`LOOP_COUNTERS` that vary in this space, outermost first.</span>
+<span class="sd">        Counters that vary in this space and are laid out as axes, outermost</span>
+<span class="sd">        first: those of :data:`LOOP_COUNTERS`, and ``segment`` when</span>
+<span class="sd">        :meth:`from_header` was asked for it.</span>
 <span class="sd">    loop_sizes</span>
 <span class="sd">        Extent of each counter in ``loops``.</span>
 <span class="sd">    recon_matrix</span>
@@ -555,7 +561,9 @@
 <div class="viewcode-block" id="EncodingSpace.from_header">
 <a class="viewcode-back" href="../../../generated/pulserver.mrd.EncodingSpace.from_header.html#pulserver.mrd.EncodingSpace.from_header">[docs]</a>
     <span class="nd">@classmethod</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">from_header</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">header</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">index</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">EncodingSpace</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">from_header</span><span class="p">(</span>
+        <span class="bp">cls</span><span class="p">,</span> <span class="n">header</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">index</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span> <span class="n">loops</span><span class="p">:</span> <span class="n">Iterable</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">EncodingSpace</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">"""Read encoding space ``index`` of a parsed MRD header.</span>
 
 <span class="sd">        For a Cartesian space ``phase_encodes`` is the larger of the encoded matrix</span>
@@ -564,6 +572,17 @@
 <span class="sd">        views, or the encoded matrix when no limit is stated. ``partitions`` is</span>
 <span class="sd">        always the larger of the two. ``recon_matrix`` and ``recon_fov`` fall</span>
 <span class="sd">        back to the encoded space when the header has no ``reconSpace``.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        header</span>
+<span class="sd">            Parsed MRD header.</span>
+<span class="sd">        index</span>
+<span class="sd">            Position in the header's encoding list.</span>
+<span class="sd">        loops</span>
+<span class="sd">            Counters to lay out as axes where the header gives them more than one</span>
+<span class="sd">            value, in the order of :data:`LOOP_COUNTERS` followed by ``segment``;</span>
+<span class="sd">            ``None`` takes every counter of :data:`LOOP_COUNTERS`.</span>
 
 <span class="sd">        Raises</span>
 <span class="sd">        ------</span>
@@ -575,12 +594,13 @@
         <span class="n">encoded</span> <span class="o">=</span> <span class="n">encoding</span><span class="o">.</span><span class="n">encodedSpace</span><span class="o">.</span><span class="n">matrixSize</span>
         <span class="n">limits</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">encoding</span><span class="p">,</span> <span class="s2">"encodingLimits"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
 
-        <span class="n">loops</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">wanted</span> <span class="o">=</span> <span class="n">LOOP_COUNTERS</span> <span class="k">if</span> <span class="n">loops</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="nb">set</span><span class="p">(</span><span class="n">loops</span><span class="p">)</span>
+        <span class="n">names</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="n">sizes</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
-        <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">LOOP_COUNTERS</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">_LAYOUT_COUNTERS</span><span class="p">:</span>
             <span class="n">extent</span> <span class="o">=</span> <span class="n">_limit</span><span class="p">(</span><span class="n">limits</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span>
-            <span class="k">if</span> <span class="n">extent</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
-                <span class="n">loops</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">name</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">wanted</span> <span class="ow">and</span> <span class="n">extent</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="n">names</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">name</span><span class="p">)</span>
                 <span class="n">sizes</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">extent</span><span class="p">)</span>
 
         <span class="n">system</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">header</span><span class="p">,</span> <span class="s2">"acquisitionSystemInformation"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
@@ -605,7 +625,7 @@
             <span class="k">else</span> <span class="n">views</span> <span class="ow">or</span> <span class="nb">int</span><span class="p">(</span><span class="n">encoded</span><span class="o">.</span><span class="n">y</span><span class="p">),</span>
             <span class="c1"># A stack is Cartesian along z whatever it does in plane.</span>
             <span class="n">partitions</span><span class="o">=</span><span class="nb">max</span><span class="p">(</span><span class="n">partitions</span><span class="p">,</span> <span class="nb">int</span><span class="p">(</span><span class="n">encoded</span><span class="o">.</span><span class="n">z</span><span class="p">)),</span>
-            <span class="n">loops</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(</span><span class="n">loops</span><span class="p">),</span>
+            <span class="n">loops</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(</span><span class="n">names</span><span class="p">),</span>
             <span class="n">loop_sizes</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(</span><span class="n">sizes</span><span class="p">),</span>
             <span class="n">recon_matrix</span><span class="o">=</span><span class="n">recon_matrix</span><span class="p">,</span>
             <span class="n">recon_fov</span><span class="o">=</span><span class="n">_fov</span><span class="p">(</span><span class="n">encoding</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">recon_matrix</span><span class="p">)),</span>
@@ -615,10 +635,17 @@
 <div class="viewcode-block" id="EncodingSpace.all_from_header">
 <a class="viewcode-back" href="../../../generated/pulserver.mrd.EncodingSpace.all_from_header.html#pulserver.mrd.EncodingSpace.all_from_header">[docs]</a>
     <span class="nd">@classmethod</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">all_from_header</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">header</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">EncodingSpace</span><span class="p">,</span> <span class="o">...</span><span class="p">]:</span>
-<span class="w">        </span><span class="sd">"""Read every encoding space of a parsed MRD header, in index order."""</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">all_from_header</span><span class="p">(</span>
+        <span class="bp">cls</span><span class="p">,</span> <span class="n">header</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">loops</span><span class="p">:</span> <span class="n">Iterable</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">EncodingSpace</span><span class="p">,</span> <span class="o">...</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""Read every encoding space of a parsed MRD header, in index order.</span>
+
+<span class="sd">        ``loops`` is as for :meth:`from_header`.</span>
+<span class="sd">        """</span>
         <span class="n">encodings</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">header</span><span class="p">,</span> <span class="s2">"encoding"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">or</span> <span class="p">()</span>
-        <span class="k">return</span> <span class="nb">tuple</span><span class="p">(</span><span class="bp">cls</span><span class="o">.</span><span class="n">from_header</span><span class="p">(</span><span class="n">header</span><span class="p">,</span> <span class="n">index</span><span class="p">)</span> <span class="k">for</span> <span class="n">index</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">encodings</span><span class="p">)))</span></div>
+        <span class="k">return</span> <span class="nb">tuple</span><span class="p">(</span>
+            <span class="bp">cls</span><span class="o">.</span><span class="n">from_header</span><span class="p">(</span><span class="n">header</span><span class="p">,</span> <span class="n">index</span><span class="p">,</span> <span class="n">loops</span><span class="p">)</span> <span class="k">for</span> <span class="n">index</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">encodings</span><span class="p">))</span>
+        <span class="p">)</span></div>
 
 
     <span class="nd">@property</span>

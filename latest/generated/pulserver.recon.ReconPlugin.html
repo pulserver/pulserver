@@ -536,40 +536,57 @@
 <span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">pulserver.recon.</span></span><span class="sig-name descname"><span class="pre">ReconPlugin</span></span><a class="reference internal" href="../_modules/pulserver/recon/plugin.html#ReconPlugin"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.recon.ReconPlugin" title="Link to this definition">#</a></dt>
 <dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/library/abc.html#abc.ABC" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">ABC</span></code></a></p>
 <p>Base class for reconstruction plugins.</p>
-<p>The runtime drives three hooks over one MRD stream: <a class="reference internal" href="pulserver.recon.ReconPlugin.startup.html#pulserver.recon.ReconPlugin.startup" title="pulserver.recon.ReconPlugin.startup"><code class="xref py py-meth docutils literal notranslate"><span class="pre">startup()</span></code></a> once,
-before any acquisition; <a class="reference internal" href="pulserver.recon.ReconPlugin.receive.html#pulserver.recon.ReconPlugin.receive" title="pulserver.recon.ReconPlugin.receive"><code class="xref py py-meth docutils literal notranslate"><span class="pre">receive()</span></code></a> for each accepted acquisition, as it
-arrives; and <a class="reference internal" href="pulserver.recon.ReconPlugin.recon.html#pulserver.recon.ReconPlugin.recon" title="pulserver.recon.ReconPlugin.recon"><code class="xref py py-meth docutils literal notranslate"><span class="pre">recon()</span></code></a> for each branch <a class="reference internal" href="pulserver.recon.ReconPlugin.receive.html#pulserver.recon.ReconPlugin.receive" title="pulserver.recon.ReconPlugin.receive"><code class="xref py py-meth docutils literal notranslate"><span class="pre">receive()</span></code></a> routes. Only
-<a class="reference internal" href="pulserver.recon.ReconPlugin.recon.html#pulserver.recon.ReconPlugin.recon" title="pulserver.recon.ReconPlugin.recon"><code class="xref py py-meth docutils literal notranslate"><span class="pre">recon()</span></code></a> is abstract. The default <a class="reference internal" href="pulserver.recon.ReconPlugin.receive.html#pulserver.recon.ReconPlugin.receive" title="pulserver.recon.ReconPlugin.receive"><code class="xref py py-meth docutils literal notranslate"><span class="pre">receive()</span></code></a> runs the <code class="docutils literal notranslate"><span class="pre">chain</span></code>,
-places the readout in <code class="xref py py-attr docutils literal notranslate"><span class="pre">buffers</span></code> and routes by <code class="docutils literal notranslate"><span class="pre">branches</span></code>, so a
-plugin usually declares those two and writes only <a class="reference internal" href="pulserver.recon.ReconPlugin.recon.html#pulserver.recon.ReconPlugin.recon" title="pulserver.recon.ReconPlugin.recon"><code class="xref py py-meth docutils literal notranslate"><span class="pre">recon()</span></code></a>. When a
-stream ends on acquisitions that closed no branch, <a class="reference internal" href="pulserver.recon.ReconPlugin.recon.html#pulserver.recon.ReconPlugin.recon" title="pulserver.recon.ReconPlugin.recon"><code class="xref py py-meth docutils literal notranslate"><span class="pre">recon()</span></code></a> runs once
-more with <code class="docutils literal notranslate"><span class="pre">&quot;imaging&quot;</span></code>.</p>
+<p>The runtime drives one MRD stream through three hooks: <a class="reference internal" href="pulserver.recon.ReconPlugin.startup.html#pulserver.recon.ReconPlugin.startup" title="pulserver.recon.ReconPlugin.startup"><code class="xref py py-meth docutils literal notranslate"><span class="pre">startup()</span></code></a>
+once, before any acquisition; <a class="reference internal" href="pulserver.recon.ReconPlugin.recon.html#pulserver.recon.ReconPlugin.recon" title="pulserver.recon.ReconPlugin.recon"><code class="xref py py-meth docutils literal notranslate"><span class="pre">recon()</span></code></a> for each reconstruction unit as
+it closes; and <a class="reference internal" href="pulserver.recon.ReconPlugin.finish.html#pulserver.recon.ReconPlugin.finish" title="pulserver.recon.ReconPlugin.finish"><code class="xref py py-meth docutils literal notranslate"><span class="pre">finish()</span></code></a> once, after the last unit. Only <a class="reference internal" href="pulserver.recon.ReconPlugin.recon.html#pulserver.recon.ReconPlugin.recon" title="pulserver.recon.ReconPlugin.recon"><code class="xref py py-meth docutils literal notranslate"><span class="pre">recon()</span></code></a>
+is abstract; the framework method <a class="reference internal" href="pulserver.recon.ReconPlugin.receive.html#pulserver.recon.ReconPlugin.receive" title="pulserver.recon.ReconPlugin.receive"><code class="xref py py-meth docutils literal notranslate"><span class="pre">receive()</span></code></a> is not overridden.</p>
+<p>A <em>unit</em> is the set of readouts reconstructed together: those of one
+branch and encoding space that share every image counter (slice, contrast,
+phase, repetition, set, average) not listed in <code class="docutils literal notranslate"><span class="pre">axes</span></code>. The counters in
+<code class="docutils literal notranslate"><span class="pre">axes</span></code> are axes of the unit’s k-space instead; <code class="docutils literal notranslate"><span class="pre">segment</span></code> and the user
+counters separate no units unless <code class="docutils literal notranslate"><span class="pre">segment</span></code> is listed. Each accepted
+acquisition runs through the <code class="docutils literal notranslate"><span class="pre">gadgets</span></code>, then joins the unit of the branch
+<a class="reference internal" href="pulserver.recon.ReconPlugin.branch_for.html#pulserver.recon.ReconPlugin.branch_for" title="pulserver.recon.ReconPlugin.branch_for"><code class="xref py py-meth docutils literal notranslate"><span class="pre">branch_for()</span></code></a> names, which places it by its flags (see
+<a class="reference internal" href="pulserver.recon.ReconData.html#pulserver.recon.ReconData" title="pulserver.recon.ReconData"><code class="xref py py-class docutils literal notranslate"><span class="pre">ReconData</span></code></a>). A unit closes when the flag <code class="docutils literal notranslate"><span class="pre">triggers</span></code> names for its
+branch has arrived for every combination of the counters in <code class="docutils literal notranslate"><span class="pre">axes</span></code>. It
+leaves the plugin before <a class="reference internal" href="pulserver.recon.ReconPlugin.recon.html#pulserver.recon.ReconPlugin.recon" title="pulserver.recon.ReconPlugin.recon"><code class="xref py py-meth docutils literal notranslate"><span class="pre">recon()</span></code></a> runs, so its buffers are freed once
+<a class="reference internal" href="pulserver.recon.ReconPlugin.recon.html#pulserver.recon.ReconPlugin.recon" title="pulserver.recon.ReconPlugin.recon"><code class="xref py py-meth docutils literal notranslate"><span class="pre">recon()</span></code></a> returns; the memory a stream holds is bounded by the units
+open at once. Units still open at <code class="docutils literal notranslate"><span class="pre">LAST_IN_MEASUREMENT</span></code> or at the end of
+the stream are reconstructed then, in the order they opened and under their
+own branches.</p>
 <p>Each stream runs on its own <a class="reference internal" href="pulserver.recon.ReconPlugin.spawn.html#pulserver.recon.ReconPlugin.spawn" title="pulserver.recon.ReconPlugin.spawn"><code class="xref py py-meth docutils literal notranslate"><span class="pre">spawn()</span></code></a> of the module-level <code class="docutils literal notranslate"><span class="pre">PLUGIN</span></code>, so
 state set in the hooks belongs to one stream. <code class="docutils literal notranslate"><span class="pre">context.exam</span></code> is shared
 across the series of an exam; a plugin adds to it and never clears it.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>chain</strong> – <a class="reference internal" href="pulserver.recon.Gadget.html#pulserver.recon.Gadget" title="pulserver.recon.Gadget"><code class="xref py py-class docutils literal notranslate"><span class="pre">Gadget</span></code></a> steps applied to every readout on arrival, in order.</p></li>
-<li><p><strong>branches</strong> – <code class="docutils literal notranslate"><span class="pre">{AcquisitionFlag:</span> <span class="pre">name}</span></code>, tried in order: the first flag the
-acquisition carries names the branch. List larger units first, since the
-last acquisition of a slice also closes its segment. Flags combined with
-<code class="docutils literal notranslate"><span class="pre">|</span></code> route either one to the branch. The default routes
-<code class="docutils literal notranslate"><span class="pre">LAST_IN_MEASUREMENT</span></code> to <code class="docutils literal notranslate"><span class="pre">&quot;imaging&quot;</span></code>.</p></li>
+<li><p><strong>gadgets</strong> – <a class="reference internal" href="pulserver.recon.Gadget.html#pulserver.recon.Gadget" title="pulserver.recon.Gadget"><code class="xref py py-class docutils literal notranslate"><span class="pre">Gadget</span></code></a> steps applied to every accepted readout on arrival, in
+order, before it is placed.</p></li>
+<li><p><strong>triggers</strong> – <code class="docutils literal notranslate"><span class="pre">{branch:</span> <span class="pre">flag}</span></code>: the <a class="reference internal" href="pulserver.mrd.AcquisitionFlag.html#pulserver.mrd.AcquisitionFlag" title="pulserver.mrd.AcquisitionFlag"><code class="xref py py-class docutils literal notranslate"><span class="pre">AcquisitionFlag</span></code></a> that
+closes a unit of the branch, combined with <code class="docutils literal notranslate"><span class="pre">|</span></code> for either of several.
+The first branch declared receives the readouts <a class="reference internal" href="pulserver.recon.ReconPlugin.branch_for.html#pulserver.recon.ReconPlugin.branch_for" title="pulserver.recon.ReconPlugin.branch_for"><code class="xref py py-meth docutils literal notranslate"><span class="pre">branch_for()</span></code></a>
+does not route elsewhere. The default is <code class="docutils literal notranslate"><span class="pre">{&quot;imaging&quot;:</span>
+<span class="pre">LAST_IN_MEASUREMENT}</span></code>.</p></li>
+<li><p><strong>axes</strong> – Counters of a unit placed along axes of its k-space and waited for by
+the closing flag, instead of separating units: any of <code class="docutils literal notranslate"><span class="pre">repetition</span></code>,
+<code class="docutils literal notranslate"><span class="pre">phase</span></code>, <code class="docutils literal notranslate"><span class="pre">slice</span></code>, <code class="docutils literal notranslate"><span class="pre">contrast</span></code>, <code class="docutils literal notranslate"><span class="pre">set</span></code>, <code class="docutils literal notranslate"><span class="pre">average</span></code> and
+<code class="docutils literal notranslate"><span class="pre">segment</span></code>. Their extents are the header’s encoding limits.</p></li>
 <li><p><strong>require_flags</strong> – Flags an acquisition must all carry to be accepted. A combined
 <code class="xref py py-class docutils literal notranslate"><span class="pre">AcquisitionFlag</span></code> counts as its members.</p></li>
-<li><p><strong>reject_flags</strong> – Flags any one of which excludes an acquisition. The runtime never passes
-excluded acquisitions to <a class="reference internal" href="pulserver.recon.ReconPlugin.receive.html#pulserver.recon.ReconPlugin.receive" title="pulserver.recon.ReconPlugin.receive"><code class="xref py py-meth docutils literal notranslate"><span class="pre">receive()</span></code></a>.</p></li>
-<li><p><strong>buffered</strong> – Place acquisitions into <code class="xref py py-attr docutils literal notranslate"><span class="pre">buffers</span></code>. Disable for streams whose header
-does not describe their encoding spaces; the plugin then collects
-acquisitions itself.</p></li>
+<li><p><strong>reject_flags</strong> – Flags any one of which excludes an acquisition.</p></li>
+<li><p><strong>buffered</strong> – Place readouts in <a class="reference internal" href="pulserver.recon.ReconData.data.html#pulserver.recon.ReconData.data" title="pulserver.recon.ReconData.data"><code class="xref py py-attr docutils literal notranslate"><span class="pre">ReconData.data</span></code></a> and <a class="reference internal" href="pulserver.recon.ReconData.ref.html#pulserver.recon.ReconData.ref" title="pulserver.recon.ReconData.ref"><code class="xref py py-attr docutils literal notranslate"><span class="pre">ReconData.ref</span></code></a>.
+Disable for streams whose header does not describe their encoding
+spaces; the plugin then reads <a class="reference internal" href="pulserver.recon.ReconData.acquisitions.html#pulserver.recon.ReconData.acquisitions" title="pulserver.recon.ReconData.acquisitions"><code class="xref py py-attr docutils literal notranslate"><span class="pre">ReconData.acquisitions</span></code></a>, and a
+unit closes at the first flag, whatever its <code class="docutils literal notranslate"><span class="pre">axes</span></code>.</p></li>
+<li><p><strong>chain</strong> – Deprecated alias of <code class="docutils literal notranslate"><span class="pre">gadgets</span></code>; warns.</p></li>
+<li><p><strong>branches</strong> – Deprecated alias of <code class="docutils literal notranslate"><span class="pre">triggers</span></code>, mapping <code class="docutils literal notranslate"><span class="pre">{flag:</span> <span class="pre">branch}</span></code>; warns.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Attributes<span class="colon">:</span></dt>
 <dd class="field-even"><ul class="simple">
-<li><p><strong>buffers</strong> (<em>ReconData</em>) – Every encoding space of the scan, laid out by <a class="reference internal" href="pulserver.recon.ReconPlugin.startup.html#pulserver.recon.ReconPlugin.startup" title="pulserver.recon.ReconPlugin.startup"><code class="xref py py-meth docutils literal notranslate"><span class="pre">startup()</span></code></a>.</p></li>
-<li><p><strong>acquisition</strong> (<em>object</em>) – The last acquisition the chain passed – the one that closed the branch
-<a class="reference internal" href="pulserver.recon.ReconPlugin.recon.html#pulserver.recon.ReconPlugin.recon" title="pulserver.recon.ReconPlugin.recon"><code class="xref py py-meth docutils literal notranslate"><span class="pre">recon()</span></code></a> is running – or <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
+<li><p><strong>gadgets</strong> (<em>tuple of Gadget</em>)</p></li>
+<li><p><strong>triggers</strong> (<em>dict</em>)</p></li>
+<li><p><strong>axes</strong> (<em>tuple of str</em>)</p></li>
 </ul>
 </dd>
 </dl>
@@ -584,14 +601,15 @@ acquisitions itself.</p></li>
 <span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">RootSumOfSquares</span><span class="p">(</span><span class="n">recon</span><span class="o">.</span><span class="n">ReconPlugin</span><span class="p">):</span>
 <span class="gp">... </span>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="gp">... </span>        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span>
-<span class="gp">... </span>            <span class="n">chain</span><span class="o">=</span><span class="p">[</span><span class="n">DropNoise</span><span class="p">()],</span>
-<span class="gp">... </span>            <span class="n">branches</span><span class="o">=</span><span class="p">{</span><span class="n">mrd</span><span class="o">.</span><span class="n">AcquisitionFlag</span><span class="o">.</span><span class="n">LAST_IN_SLICE</span><span class="p">:</span> <span class="s2">"imaging"</span><span class="p">},</span>
+<span class="gp">... </span>            <span class="n">gadgets</span><span class="o">=</span><span class="p">[</span><span class="n">DropNoise</span><span class="p">()],</span>
+<span class="gp">... </span>            <span class="n">triggers</span><span class="o">=</span><span class="p">{</span><span class="s2">"imaging"</span><span class="p">:</span> <span class="n">mrd</span><span class="o">.</span><span class="n">AcquisitionFlag</span><span class="o">.</span><span class="n">LAST_IN_SLICE</span><span class="p">},</span>
+<span class="gp">... </span>            <span class="n">axes</span><span class="o">=</span><span class="p">(</span><span class="s2">"average"</span><span class="p">,),</span>
 <span class="gp">... </span>        <span class="p">)</span>
-<span class="gp">... </span>    <span class="k">def</span><span class="w"> </span><span class="nf">recon</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">branch</span><span class="p">,</span> <span class="n">context</span><span class="p">):</span>
-<span class="gp">... </span>        <span class="n">kspace</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">buffers</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">kspace</span>
+<span class="gp">... </span>    <span class="k">def</span><span class="w"> </span><span class="nf">recon</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">context</span><span class="p">,</span> <span class="n">branch</span><span class="p">,</span> <span class="n">data</span><span class="p">):</span>
+<span class="gp">... </span>        <span class="n">kspace</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">kspace</span>
 <span class="gp">... </span>        <span class="k">return</span> <span class="n">recon</span><span class="o">.</span><span class="n">ReconResult</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">kspace</span><span class="p">)</span> <span class="o">**</span> <span class="mi">2</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)))</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">RootSumOfSquares</span><span class="p">()</span><span class="o">.</span><span class="n">branches</span><span class="p">[</span><span class="n">mrd</span><span class="o">.</span><span class="n">AcquisitionFlag</span><span class="o">.</span><span class="n">LAST_IN_SLICE</span><span class="p">]</span>
-<span class="go">'imaging'</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">RootSumOfSquares</span><span class="p">()</span><span class="o">.</span><span class="n">triggers</span><span class="p">[</span><span class="s2">"imaging"</span><span class="p">]</span>
+<span class="go">&lt;AcquisitionFlag.LAST_IN_SLICE: 128&gt;</span>
 </pre></div>
 </div>
 </dd></dl>
@@ -600,19 +618,25 @@ acquisitions itself.</p></li>
 <div class="pst-scrollable-table-container"><table class="autosummary longtable table">
 <tbody>
 <tr class="row-odd"><td><p><a class="reference internal" href="pulserver.recon.ReconPlugin.branch_for.html#pulserver.recon.ReconPlugin.branch_for" title="pulserver.recon.ReconPlugin.branch_for"><code class="xref py py-obj docutils literal notranslate"><span class="pre">branch_for</span></code></a></p></td>
-<td><p>Return the branch the acquisition closes, or <code class="docutils literal notranslate"><span class="pre">None</span></code>; see <code class="docutils literal notranslate"><span class="pre">branches</span></code>.</p></td>
+<td><p>Return the branch an acquisition belongs to, or <code class="docutils literal notranslate"><span class="pre">None</span></code> to drop it.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pulserver.recon.ReconPlugin.finish.html#pulserver.recon.ReconPlugin.finish" title="pulserver.recon.ReconPlugin.finish"><code class="xref py py-obj docutils literal notranslate"><span class="pre">finish</span></code></a></p></td>
+<td><p>Run once, after the last unit has been reconstructed.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.recon.ReconPlugin.flush.html#pulserver.recon.ReconPlugin.flush" title="pulserver.recon.ReconPlugin.flush"><code class="xref py py-obj docutils literal notranslate"><span class="pre">flush</span></code></a></p></td>
+<td><p>Reconstruct every unit still open under its own branch, then call <code class="xref py py-meth docutils literal notranslate"><span class="pre">finish()</span></code>.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="pulserver.recon.ReconPlugin.gadget.html#pulserver.recon.ReconPlugin.gadget" title="pulserver.recon.ReconPlugin.gadget"><code class="xref py py-obj docutils literal notranslate"><span class="pre">gadget</span></code></a></p></td>
 <td><p>Return this stream's first gadget of type <code class="docutils literal notranslate"><span class="pre">kind</span></code>.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.recon.ReconPlugin.process.html#pulserver.recon.ReconPlugin.process" title="pulserver.recon.ReconPlugin.process"><code class="xref py py-obj docutils literal notranslate"><span class="pre">process</span></code></a></p></td>
-<td><p>Run the chain over one readout and return what it left.</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.recon.ReconPlugin.receive.html#pulserver.recon.ReconPlugin.receive" title="pulserver.recon.ReconPlugin.receive"><code class="xref py py-obj docutils literal notranslate"><span class="pre">receive</span></code></a></p></td>
+<td><p>Take in one acquisition and reconstruct the units it completes.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pulserver.recon.ReconPlugin.receive.html#pulserver.recon.ReconPlugin.receive" title="pulserver.recon.ReconPlugin.receive"><code class="xref py py-obj docutils literal notranslate"><span class="pre">receive</span></code></a></p></td>
-<td><p>Run the chain on one acquisition, place it, and run the branch it closes.</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pulserver.recon.ReconPlugin.receive_waveform.html#pulserver.recon.ReconPlugin.receive_waveform" title="pulserver.recon.ReconPlugin.receive_waveform"><code class="xref py py-obj docutils literal notranslate"><span class="pre">receive_waveform</span></code></a></p></td>
+<td><p>Hold a waveform for the next units that close; see <a class="reference internal" href="pulserver.recon.ReconData.waveforms.html#pulserver.recon.ReconData.waveforms" title="pulserver.recon.ReconData.waveforms"><code class="xref py py-attr docutils literal notranslate"><span class="pre">ReconData.waveforms</span></code></a>.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="pulserver.recon.ReconPlugin.recon.html#pulserver.recon.ReconPlugin.recon" title="pulserver.recon.ReconPlugin.recon"><code class="xref py py-obj docutils literal notranslate"><span class="pre">recon</span></code></a></p></td>
-<td><p>Reconstruct one branch from the filled buffers.</p></td>
+<td><p>Reconstruct one unit.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="pulserver.recon.ReconPlugin.run.html#pulserver.recon.ReconPlugin.run" title="pulserver.recon.ReconPlugin.run"><code class="xref py py-obj docutils literal notranslate"><span class="pre">run</span></code></a></p></td>
 <td><p>Reconstruct one ISMRMRD HDF5 file in this process, through the same hooks.</p></td>
@@ -621,7 +645,7 @@ acquisitions itself.</p></li>
 <td><p>Return the instance one stream runs on.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="pulserver.recon.ReconPlugin.startup.html#pulserver.recon.ReconPlugin.startup" title="pulserver.recon.ReconPlugin.startup"><code class="xref py py-obj docutils literal notranslate"><span class="pre">startup</span></code></a></p></td>
-<td><p>Start every gadget, then lay out <code class="xref py py-attr docutils literal notranslate"><span class="pre">buffers</span></code> from the header.</p></td>
+<td><p>Start every gadget and lay out the units' encoding spaces from the header.</p></td>
 </tr>
 </tbody>
 </table>

@@ -535,10 +535,10 @@
 <dt class="sig sig-object py" id="pulserver.recon.Gadget">
 <span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">pulserver.recon.</span></span><span class="sig-name descname"><span class="pre">Gadget</span></span><a class="reference internal" href="../_modules/pulserver/recon/plugin.html#Gadget"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.recon.Gadget" title="Link to this definition">#</a></dt>
 <dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/library/abc.html#abc.ABC" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">ABC</span></code></a></p>
-<p>One per-acquisition step of a plugin’s <code class="docutils literal notranslate"><span class="pre">chain</span></code>.</p>
+<p>One per-acquisition step of a plugin’s <code class="docutils literal notranslate"><span class="pre">gadgets</span></code>.</p>
 <p>A gadget keeps what it learns from earlier acquisitions of its stream – a
 noise covariance, a coil basis – on <code class="docutils literal notranslate"><span class="pre">self</span></code>. <a class="reference internal" href="pulserver.recon.ReconPlugin.spawn.html#pulserver.recon.ReconPlugin.spawn" title="pulserver.recon.ReconPlugin.spawn"><code class="xref py py-meth docutils literal notranslate"><span class="pre">ReconPlugin.spawn()</span></code></a>
-copies the chain, so each stream has its own.</p>
+copies the gadgets, so each stream has its own.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Attributes<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>context</strong> (<em>ReconContext</em>) – Set by <a class="reference internal" href="pulserver.recon.Gadget.startup.html#pulserver.recon.Gadget.startup" title="pulserver.recon.Gadget.startup"><code class="xref py py-meth docutils literal notranslate"><span class="pre">startup()</span></code></a>.</p>

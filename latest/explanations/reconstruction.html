@@ -521,6 +521,7 @@
                 <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#enrichment">Enrichment</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#trajectory">Trajectory</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#reconstruction-units">Reconstruction units</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#workers">Workers</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#reconstruction-server">Reconstruction server</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#see-also">See also</a></li>
@@ -603,6 +604,38 @@ trajectory type. An acquisition’s trajectory is integrated again when it is
 enriched, from the range holding it, and the table keeps the ranges it
 integrated last. The k-space locations the proxy holds therefore do not grow
 with the length of the scan.</p>
+</section>
+<section id="reconstruction-units">
+<h2>Reconstruction units<a class="headerlink" href="#reconstruction-units" title="Link to this heading">#</a></h2>
+<p>A reconstruction takes the readouts of one image, or of several images
+reconstructed together, such as the echoes of a slice. The stream states where
+those readouts end only through the encoding counters and flags that
+enrichment supplies. A <em>reconstruction unit</em> is the set of readouts of one
+branch and one encoding space that share their slice, contrast, cardiac phase,
+repetition, set and average counters; a branch is a kind of readout a plugin
+reconstructs separately, such as <code class="docutils literal notranslate"><span class="pre">imaging</span></code> or <code class="docutils literal notranslate"><span class="pre">navigator</span></code>. The <code class="docutils literal notranslate"><span class="pre">segment</span></code> and
+user counters name positions within a readout train and do not separate units.
+A plugin names in its <code class="docutils literal notranslate"><span class="pre">axes</span></code> the counters it takes as axes of the unit’s
+k-space instead, such as the echoes of a multi-echo acquisition, and these do
+not separate units either.</p>
+<p>A unit allocates its k-space when its first readout arrives, from the encoding
+space the header gives it, and places each readout by its counters. The flags
+of a readout select its buffer as Gadgetron’s acquisition bucket divides
+readouts: parallel-imaging calibration readouts are placed in <code class="docutils literal notranslate"><span class="pre">ref</span></code>, readouts
+flagged as calibration and imaging in <code class="docutils literal notranslate"><span class="pre">ref</span></code> and <code class="docutils literal notranslate"><span class="pre">data</span></code>, phase-correction
+readouts in neither, and any other readout in <code class="docutils literal notranslate"><span class="pre">data</span></code>.</p>
+<p>A unit closes when the flag its branch declares has arrived at every position
+along its axes. Enrichment sets the last-in flag of a counter within each
+combination of the encoding space and the other image-selecting counters, so
+<code class="docutils literal notranslate"><span class="pre">LAST_IN_SLICE</span></code> arrives once per echo or average of a slice, and a plugin with
+those counters as axes waits for all of them. Readouts of different units may
+be interleaved: slices acquired line by line each close at their own flagged
+readout.</p>
+<p>A closed unit leaves the plugin before its reconstruction runs, and nothing in
+the runtime holds it afterwards, so the memory a series holds is that of the
+units open at once, not that of the series. A unit still open at the last
+readout of the measurement or at the end of the stream is reconstructed then,
+under its own branch, in the order the units opened.</p>
 </section>
 <section id="workers">
 <h2>Workers<a class="headerlink" href="#workers" title="Link to this heading">#</a></h2>
@@ -732,6 +765,7 @@ relays, and the client receives a text naming the message’s type.</p>
     <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#enrichment">Enrichment</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#trajectory">Trajectory</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#reconstruction-units">Reconstruction units</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#workers">Workers</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#reconstruction-server">Reconstruction server</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#see-also">See also</a></li>

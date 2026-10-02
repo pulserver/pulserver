@@ -542,8 +542,17 @@ views, or the encoded matrix when no limit is stated. <code class="docutils lite
 always the larger of the two. <code class="docutils literal notranslate"><span class="pre">recon_matrix</span></code> and <code class="docutils literal notranslate"><span class="pre">recon_fov</span></code> fall
 back to the encoded space when the header has no <code class="docutils literal notranslate"><span class="pre">reconSpace</span></code>.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Raises<span class="colon">:</span></dt>
-<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#IndexError" title="(in Python v3.14)"><strong>IndexError</strong></a> – If the header describes no such encoding space.</p>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>header</strong> – Parsed MRD header.</p></li>
+<li><p><strong>index</strong> – Position in the header’s encoding list.</p></li>
+<li><p><strong>loops</strong> – Counters to lay out as axes where the header gives them more than one
+value, in the order of <a class="reference internal" href="pulserver.mrd.LOOP_COUNTERS.html#pulserver.mrd.LOOP_COUNTERS" title="pulserver.mrd.LOOP_COUNTERS"><code class="xref py py-data docutils literal notranslate"><span class="pre">LOOP_COUNTERS</span></code></a> followed by <code class="docutils literal notranslate"><span class="pre">segment</span></code>;
+<code class="docutils literal notranslate"><span class="pre">None</span></code> takes every counter of <a class="reference internal" href="pulserver.mrd.LOOP_COUNTERS.html#pulserver.mrd.LOOP_COUNTERS" title="pulserver.mrd.LOOP_COUNTERS"><code class="xref py py-data docutils literal notranslate"><span class="pre">LOOP_COUNTERS</span></code></a>.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#IndexError" title="(in Python v3.14)"><strong>IndexError</strong></a> – If the header describes no such encoding space.</p>
 </dd>
 </dl>
 </dd></dl>
