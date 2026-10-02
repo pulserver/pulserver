@@ -464,6 +464,7 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Mapping</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">numbers</span><span class="w"> </span><span class="kn">import</span> <span class="n">Real</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">ClassVar</span>
 
@@ -471,7 +472,6 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">pypulseqpp</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pp</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">pypulseqpp</span><span class="w"> </span><span class="kn">import</span> <span class="n">sequences</span>
 
-<span class="kn">from</span><span class="w"> </span><span class="nn">..</span><span class="w"> </span><span class="kn">import</span> <span class="n">ir</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..protocol</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">FOV_OFFSET</span><span class="p">,</span>
     <span class="n">FOV_ROTATION</span><span class="p">,</span>
@@ -480,12 +480,12 @@
     <span class="n">Kind</span><span class="p">,</span>
     <span class="n">Parameter</span><span class="p">,</span>
     <span class="n">ProtocolKey</span><span class="p">,</span>
-    <span class="n">RfPulse</span><span class="p">,</span>
     <span class="n">Validation</span><span class="p">,</span>
     <span class="n">prescribed_rotation</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..protocol._keys</span><span class="w"> </span><span class="kn">import</span> <span class="n">WIRE_NAMES</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">._entries</span><span class="w"> </span><span class="kn">import</span> <span class="n">Entry</span><span class="p">,</span> <span class="n">Protocol</span><span class="p">,</span> <span class="n">_parameter</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">._rf</span><span class="w"> </span><span class="kn">import</span> <span class="n">RfLayout</span>
 
 <span class="n">_log</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="s2">"pulserver.design"</span><span class="p">)</span>
 
@@ -517,11 +517,18 @@
 <span class="sd">    info</span>
 <span class="sd">        A note shown with the valid protocol. Whitespace, newlines included, is</span>
 <span class="sd">        folded to single spaces on the wire.</span>
+<span class="sd">    rf_layout</span>
+<span class="sd">        The RF the protocol plays, from which a scanner estimates the RF of a</span>
+<span class="sd">        protocol before it is designed. ``()`` or ``[]``, the default, states no</span>
+<span class="sd">        estimate and is not invalid. Every control of the layout must be an</span>
+<span class="sd">        entry of :attr:`SequencePlugin.protocol` whose value in ``protocol`` is</span>
+<span class="sd">        positive, or the protocol is invalid.</span>
 <span class="sd">    """</span>
 
     <span class="n">protocol</span><span class="p">:</span> <span class="n">Protocol</span>
     <span class="n">duration</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span>
-    <span class="n">info</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">""</span></div>
+    <span class="n">info</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">""</span>
+    <span class="n">rf_layout</span><span class="p">:</span> <span class="n">RfLayout</span> <span class="o">|</span> <span class="nb">tuple</span><span class="p">[()]</span> <span class="o">=</span> <span class="p">()</span></div>
 
 
 
@@ -564,22 +571,6 @@
 <span class="sd">        :data:`~pulserver.protocol.ProtocolKey` that</span>
 <span class="sd">        :class:`~pulserver.protocol.UIParam` collects. A plain string naming an</span>
 <span class="sd">        entry is stored as its member. Empty by default.</span>
-<span class="sd">    follows : tuple of str</span>
-<span class="sd">        Which protocol parameter drives the angle of each pulse the sequence</span>
-<span class="sd">        plays: one entry per distinct pulse, in the order the sequence first</span>
-<span class="sd">        plays them, ``""`` for one the operator does not move. A sequence that</span>
-<span class="sd">        excites and then refocuses under the one control declares</span>
-<span class="sd">        ``(UIParam.FLIP, UIParam.FLIP)``.</span>
-
-<span class="sd">        It is declared rather than worked out: which control drives a pulse is</span>
-<span class="sd">        not a property of the pulse. Empty leaves a scanner to cost the RF when</span>
-<span class="sd">        it has the design, which is what it does with any sequence.</span>
-
-<span class="sd">        The angles are not declared. They are read from the sequence a design</span>
-<span class="sd">        wrote, and a pulse's share of its parameter is the angle it was</span>
-<span class="sd">        designed at over the value that parameter was designed with -- so a</span>
-<span class="sd">        refocusing train whose angles vary gets one share each without any of</span>
-<span class="sd">        them being written down.</span>
 
 <span class="sd">    Raises</span>
 <span class="sd">    ------</span>
@@ -594,13 +585,14 @@
 <span class="sd">    DeprecationWarning</span>
 <span class="sd">        When a subclass sets ``recon``, which has no effect: the reconstruction</span>
 <span class="sd">        is named by the reconstruction client or, on a console, by the scan.</span>
+<span class="sd">        When a subclass sets ``follows``, which has no effect: the RF a scanner</span>
+<span class="sd">        scales is the :class:`RfLayout` an evaluation returns.</span>
 <span class="sd">        When a subclass sets ``ui``, the deprecated name of ``protocol``, or</span>
 <span class="sd">        subclasses :class:`ScannerSequence`, the deprecated name of this class.</span>
 <span class="sd">    """</span>
 
     <span class="n">app</span><span class="p">:</span> <span class="n">ClassVar</span><span class="p">[</span><span class="n">Callable</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span>
     <span class="n">protocol</span><span class="p">:</span> <span class="n">ClassVar</span><span class="p">[</span><span class="n">Mapping</span><span class="p">[</span><span class="n">ProtocolKey</span><span class="p">,</span> <span class="n">Entry</span><span class="p">]]</span> <span class="o">=</span> <span class="p">{}</span>
-    <span class="n">follows</span><span class="p">:</span> <span class="n">ClassVar</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="n">ProtocolKey</span> <span class="o">|</span> <span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">]]</span> <span class="o">=</span> <span class="p">()</span>
 
     <span class="n">_deprecated_alias</span><span class="p">:</span> <span class="n">ClassVar</span><span class="p">[</span><span class="nb">bool</span><span class="p">]</span> <span class="o">=</span> <span class="kc">False</span>
     <span class="n">_built</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">pp</span><span class="o">.</span><span class="n">Opts</span><span class="p">,</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span> <span class="n">sequences</span><span class="o">.</span><span class="n">SequenceApp</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
@@ -619,6 +611,13 @@
             <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
                 <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="bp">cls</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> sets recon, which has no effect: the reconstruction "</span>
                 <span class="s2">"is named by the reconstruction client or by the scan"</span><span class="p">,</span>
+                <span class="ne">DeprecationWarning</span><span class="p">,</span>
+                <span class="n">stacklevel</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="s2">"follows"</span> <span class="ow">in</span> <span class="n">declared</span><span class="p">:</span>
+            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="bp">cls</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> sets follows, which has no effect: return an "</span>
+                <span class="s2">"RfLayout from evaluate"</span><span class="p">,</span>
                 <span class="ne">DeprecationWarning</span><span class="p">,</span>
                 <span class="n">stacklevel</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
             <span class="p">)</span>
@@ -785,9 +784,12 @@
 <span class="sd">        and the code of a plugin.</span>
 
 <span class="sd">        A valid reply carries the evaluated protocol, the duration of the</span>
-<span class="sd">        evaluation, ``None`` where it is ``0.0``, and its note. An exception</span>
-<span class="sd">        raised by any of these steps makes the reply invalid, carrying the</span>
-<span class="sd">        request, and is logged with its traceback. ``ValueError`` and</span>
+<span class="sd">        evaluation, ``None`` where it is ``0.0``, its note and its RF layout,</span>
+<span class="sd">        ``None`` where it states none or plays no RF. An exception raised by</span>
+<span class="sd">        any of these steps makes the reply invalid, carrying the request, and</span>
+<span class="sd">        is logged with its traceback. A control of the RF layout that is not an</span>
+<span class="sd">        entry of :attr:`protocol`, or whose value in the evaluated protocol is</span>
+<span class="sd">        not positive, is a ``ValueError`` naming it. ``ValueError`` and</span>
 <span class="sd">        ``AssertionError``, which pypulseqpp and PyPulseq raise for a protocol</span>
 <span class="sd">        they cannot realize, are logged at WARNING and the message is the</span>
 <span class="sd">        reply's ``info``. Any other exception is logged at ERROR, and the</span>
@@ -849,78 +851,6 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">_built</span> <span class="o">=</span> <span class="kc">None</span></div>
 
 
-<div class="viewcode-block" id="SequencePlugin.rf_pulses">
-<a class="viewcode-back" href="../../../generated/pulserver.design.SequencePlugin.rf_pulses.html#pulserver.design.SequencePlugin.rf_pulses">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">rf_pulses</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span> <span class="n">seq_path</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span><span class="p">,</span> <span class="n">designed</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">RfPulse</span><span class="p">]:</span>
-<span class="w">        </span><span class="sd">"""Return the RF a design plays, as a scanner costs it while prescribing.</span>
-
-<span class="sd">        The pulses and their angles are read off the sequence a design wrote,</span>
-<span class="sd">        so nothing is designed to find them; which control drives each is</span>
-<span class="sd">        :attr:`follows`, declared. A pulse takes a share of its parameter: the</span>
-<span class="sd">        angle it was designed at over the value the parameter was designed</span>
-<span class="sd">        with, so a refocusing train whose angles vary gets one share each.</span>
-
-<span class="sd">        Parameters</span>
-<span class="sd">        ----------</span>
-<span class="sd">        seq_path</span>
-<span class="sd">            The design's first sequence file.</span>
-<span class="sd">        designed</span>
-<span class="sd">            The prescription as designed, by the name of the app argument each</span>
-<span class="sd">            entry binds.</span>
-
-<span class="sd">        Returns</span>
-<span class="sd">        -------</span>
-<span class="sd">        list of RfPulse</span>
-<span class="sd">            One entry per distinct pulse and angle. Empty where</span>
-<span class="sd">            :attr:`follows` declares nothing, which leaves a scanner to cost</span>
-<span class="sd">            the RF only once it has the design itself.</span>
-
-<span class="sd">        Raises</span>
-<span class="sd">        ------</span>
-<span class="sd">        ValueError</span>
-<span class="sd">            When the sequence does not play as many distinct pulses as</span>
-<span class="sd">            :attr:`follows` declares, which would silently cost pulses against</span>
-<span class="sd">            the wrong controls.</span>
-<span class="sd">        """</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">follows</span><span class="p">:</span>
-            <span class="k">return</span> <span class="p">[]</span>
-        <span class="n">played</span> <span class="o">=</span> <span class="n">ir</span><span class="o">.</span><span class="n">played_rf</span><span class="p">(</span><span class="n">pp</span><span class="o">.</span><span class="n">io</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="n">seq_path</span><span class="p">)))</span>
-        <span class="n">order</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
-        <span class="k">for</span> <span class="n">definition</span><span class="p">,</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">played</span><span class="p">:</span>
-            <span class="k">if</span> <span class="n">definition</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">order</span><span class="p">:</span>
-                <span class="n">order</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">definition</span><span class="p">)</span>
-        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">order</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">follows</span><span class="p">):</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> declares </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">follows</span><span class="p">)</span><span class="si">}</span><span class="s2"> pulses but its "</span>
-                <span class="sa">f</span><span class="s2">"sequence plays </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">order</span><span class="p">)</span><span class="si">}</span><span class="s2"> distinct ones"</span>
-            <span class="p">)</span>
-        <span class="n">driving</span> <span class="o">=</span> <span class="p">{}</span>
-        <span class="k">for</span> <span class="n">parameter</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">follows</span><span class="p">:</span>
-            <span class="n">entry</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">protocol</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">parameter</span> <span class="ow">or</span> <span class="s2">""</span><span class="p">)</span>
-            <span class="n">driving</span><span class="p">[</span><span class="n">parameter</span> <span class="ow">or</span> <span class="s2">""</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
-                <span class="nb">float</span><span class="p">(</span><span class="n">designed</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">entry</span><span class="o">.</span><span class="n">argument</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span> <span class="ow">or</span> <span class="mf">0.0</span><span class="p">)</span> <span class="k">if</span> <span class="n">entry</span> <span class="k">else</span> <span class="mf">0.0</span>
-            <span class="p">)</span>
-
-        <span class="n">found</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">],</span> <span class="n">RfPulse</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
-        <span class="k">for</span> <span class="n">definition</span><span class="p">,</span> <span class="n">angle</span> <span class="ow">in</span> <span class="n">played</span><span class="p">:</span>
-            <span class="c1"># One entry per angle: a definition played at several angles is a</span>
-            <span class="c1"># train, and each of its pulses is costed at its own.</span>
-            <span class="n">key</span> <span class="o">=</span> <span class="p">(</span><span class="n">definition</span><span class="p">,</span> <span class="nb">round</span><span class="p">(</span><span class="n">angle</span> <span class="o">*</span> <span class="mf">1e3</span><span class="p">))</span>
-            <span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">found</span><span class="p">:</span>
-                <span class="k">continue</span>
-            <span class="n">parameter</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">follows</span><span class="p">[</span><span class="n">order</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="n">definition</span><span class="p">)]</span> <span class="ow">or</span> <span class="s2">""</span>
-            <span class="n">drives</span> <span class="o">=</span> <span class="n">driving</span><span class="p">[</span><span class="n">parameter</span><span class="p">]</span>
-            <span class="n">found</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">RfPulse</span><span class="p">(</span>
-                <span class="n">definition</span><span class="o">=</span><span class="n">definition</span><span class="p">,</span>
-                <span class="n">flip_deg</span><span class="o">=</span><span class="n">angle</span><span class="p">,</span>
-                <span class="n">follows</span><span class="o">=</span><span class="n">parameter</span> <span class="k">if</span> <span class="n">drives</span> <span class="k">else</span> <span class="s2">""</span><span class="p">,</span>
-                <span class="n">factor</span><span class="o">=</span><span class="n">angle</span> <span class="o">/</span> <span class="n">drives</span> <span class="k">if</span> <span class="n">drives</span> <span class="k">else</span> <span class="mf">1.0</span><span class="p">,</span>
-            <span class="p">)</span>
-        <span class="k">return</span> <span class="nb">list</span><span class="p">(</span><span class="n">found</span><span class="o">.</span><span class="n">values</span><span class="p">())</span></div>
-
-
     <span class="nd">@classmethod</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">_is_application</span><span class="p">(</span><span class="bp">cls</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">inspect</span><span class="o">.</span><span class="n">isclass</span><span class="p">(</span><span class="bp">cls</span><span class="o">.</span><span class="n">app</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">issubclass</span><span class="p">(</span><span class="bp">cls</span><span class="o">.</span><span class="n">app</span><span class="p">,</span> <span class="n">sequences</span><span class="o">.</span><span class="n">SequenceApp</span><span class="p">)</span>
@@ -963,6 +893,7 @@
             <span class="n">evaluation</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">evaluate</span><span class="p">(</span><span class="n">system</span><span class="p">,</span> <span class="n">protocol</span><span class="p">)</span>
             <span class="k">if</span> <span class="n">evaluation</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="n">evaluation</span> <span class="o">=</span> <span class="n">Evaluation</span><span class="p">(</span><span class="n">protocol</span><span class="p">)</span>
+            <span class="n">layout</span> <span class="o">=</span> <span class="n">_stated_layout</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">protocol</span><span class="p">,</span> <span class="n">evaluation</span><span class="p">)</span>
             <span class="n">wire</span> <span class="o">=</span> <span class="n">evaluation</span><span class="o">.</span><span class="n">protocol</span><span class="o">.</span><span class="n">to_wire</span><span class="p">()</span>
             <span class="n">duration</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">evaluation</span><span class="o">.</span><span class="n">duration</span><span class="p">)</span>
             <span class="n">info</span> <span class="o">=</span> <span class="n">evaluation</span><span class="o">.</span><span class="n">info</span>
@@ -975,7 +906,7 @@
             <span class="n">message</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">error</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> in </span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">.evaluate"</span>
             <span class="n">_log</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">"</span><span class="si">%s</span><span class="s2">"</span><span class="p">,</span> <span class="n">message</span><span class="p">,</span> <span class="n">exc_info</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="k">return</span> <span class="n">Validation</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="n">duration</span> <span class="ow">or</span> <span class="kc">None</span><span class="p">,</span> <span class="n">info</span><span class="p">,</span> <span class="n">wire</span><span class="p">),</span> <span class="n">protocol</span>
+            <span class="k">return</span> <span class="n">Validation</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="n">duration</span> <span class="ow">or</span> <span class="kc">None</span><span class="p">,</span> <span class="n">info</span><span class="p">,</span> <span class="n">wire</span><span class="p">,</span> <span class="n">layout</span><span class="p">),</span> <span class="n">protocol</span>
         <span class="n">asked</span> <span class="o">=</span> <span class="p">{</span><span class="n">key</span><span class="p">:</span> <span class="n">value</span> <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">values</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">listing</span><span class="p">}</span>
         <span class="k">return</span> <span class="n">Validation</span><span class="p">(</span><span class="kc">False</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="n">message</span><span class="p">,</span> <span class="n">asked</span><span class="p">),</span> <span class="kc">None</span></div>
 
@@ -994,6 +925,41 @@
 
     <span class="n">_deprecated_alias</span> <span class="o">=</span> <span class="kc">True</span></div>
 
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_stated_layout</span><span class="p">(</span>
+    <span class="n">declared</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="n">ProtocolKey</span><span class="p">,</span> <span class="n">Entry</span><span class="p">],</span> <span class="n">evaluation</span><span class="p">:</span> <span class="n">Evaluation</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">RfLayout</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return the RF layout of an evaluation, ``None`` where it states none or plays no RF.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    TypeError</span>
+<span class="sd">        If ``rf_layout`` is neither an :class:`RfLayout` nor empty.</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If a control is not an entry of ``declared``, or its value in the</span>
+<span class="sd">        evaluated protocol is not positive.</span>
+<span class="sd">    """</span>
+    <span class="n">layout</span> <span class="o">=</span> <span class="n">evaluation</span><span class="o">.</span><span class="n">rf_layout</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">layout</span><span class="p">,</span> <span class="n">RfLayout</span><span class="p">):</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">layout</span><span class="p">,</span> <span class="nb">tuple</span> <span class="o">|</span> <span class="nb">list</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">layout</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">None</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"rf_layout is an RfLayout or empty, not </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">layout</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">"</span>
+        <span class="p">)</span>
+    <span class="k">for</span> <span class="n">control</span> <span class="ow">in</span> <span class="nb">dict</span><span class="o">.</span><span class="n">fromkeys</span><span class="p">(</span><span class="n">c</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">layout</span><span class="o">.</span><span class="n">control</span> <span class="k">if</span> <span class="n">c</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">control</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">declared</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"the RF layout is scaled by </span><span class="si">{</span><span class="n">control</span><span class="si">}</span><span class="s2">, which is not an entry of "</span>
+                <span class="s2">"the protocol"</span>
+            <span class="p">)</span>
+        <span class="n">value</span> <span class="o">=</span> <span class="n">evaluation</span><span class="o">.</span><span class="n">protocol</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">control</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="nb">bool</span><span class="p">)</span> <span class="ow">or</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">Real</span><span class="p">)</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">value</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"the RF layout is scaled by </span><span class="si">{</span><span class="n">control</span><span class="si">}</span><span class="s2">, whose evaluated value "</span>
+                <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">value</span><span class="si">!r}</span><span class="s2"> is not positive"</span>
+            <span class="p">)</span>
+    <span class="k">return</span> <span class="n">layout</span> <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">layout</span><span class="o">.</span><span class="n">instances</span><span class="o">.</span><span class="n">definition</span><span class="p">)</span> <span class="k">else</span> <span class="kc">None</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_write</span><span class="p">(</span>

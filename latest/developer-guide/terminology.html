@@ -633,8 +633,12 @@ that designs the sequence. A <em>scanner sequence</em> is the pulserver
 <code class="docutils literal notranslate"><span class="pre">SequencePlugin</span></code> that binds an <em>app</em>, a sequence application or a function
 returning sequences, to protocol entries. A <em>plugin</em> is the file either kind is
 loaded from; say which kind. The <em>evaluation</em> of a prescription is what the
-scanner sequence’s <code class="docutils literal notranslate"><span class="pre">evaluate</span></code> returns: the resolved protocol, the scan time and
-a note.</p>
+scanner sequence’s <code class="docutils literal notranslate"><span class="pre">evaluate</span></code> returns: the resolved protocol, the scan time, a
+note and, optionally, the <em>RF layout</em>. An RF layout is the RF <em>definitions</em> of a
+sequence, its RF <em>instances</em> in play order, and for each instance the <em>control</em>
+its amplitude follows, the flip angle or a float user entry. The <code class="docutils literal notranslate"><span class="pre">list</span></code> and
+<code class="docutils literal notranslate"><span class="pre">validate</span></code> replies carry it when asked, as an estimate; the design the
+interpreter plays is the stored one.</p>
 <p><strong>Storage.</strong> A <em>design</em> is one generated or imported chain with its IR cache,
 immutable once written. Its <em>identity</em> is the hash of what it depends on; its
 <em>identifier</em> is the first 18 hexadecimal digits of the identity. The <em>design
@@ -732,43 +736,46 @@ verb that classifies the operation: “Return…”, “Read…”, “Format…
 <tr class="row-odd"><td><p>Scan time in a <code class="docutils literal notranslate"><span class="pre">VALIDATE</span></code> reply</p></td>
 <td><p>s; <code class="docutils literal notranslate"><span class="pre">?</span></code> where the evaluation states none</p></td>
 </tr>
-<tr class="row-even"><td><p>Rasters passed to the IR conversion</p></td>
+<tr class="row-even"><td><p>Times, frequencies and flip angles of an RF block</p></td>
+<td><p>s, Hz and degrees; the amplitude of an instance in an <code class="docutils literal notranslate"><span class="pre">[RfLayout]</span></code> block is unitless, the peak RF amplitude over the <code class="docutils literal notranslate"><span class="pre">peak_hz</span></code> the listing states for its definition</p></td>
+</tr>
+<tr class="row-odd"><td><p>Rasters passed to the IR conversion</p></td>
 <td><p>s in <code class="docutils literal notranslate"><span class="pre">pypulseqpp.Opts</span></code>, µs in the cache</p></td>
 </tr>
-<tr class="row-odd"><td><p>Gyromagnetic ratio, field strength</p></td>
+<tr class="row-even"><td><p>Gyromagnetic ratio, field strength</p></td>
 <td><p>Hz/T, T</p></td>
 </tr>
-<tr class="row-even"><td><p>Field-of-view offset in a protocol or an import block</p></td>
+<tr class="row-odd"><td><p>Field-of-view offset in a protocol or an import block</p></td>
 <td><p>mm</p></td>
 </tr>
-<tr class="row-odd"><td><p>Field-of-view offset passed to <code class="docutils literal notranslate"><span class="pre">ir.convert</span></code> and <code class="docutils literal notranslate"><span class="pre">ir.prescribe</span></code></p></td>
+<tr class="row-even"><td><p>Field-of-view offset passed to <code class="docutils literal notranslate"><span class="pre">ir.convert</span></code> and <code class="docutils literal notranslate"><span class="pre">ir.prescribe</span></code></p></td>
 <td><p>m</p></td>
 </tr>
-<tr class="row-even"><td><p>Prescription rotation (<code class="docutils literal notranslate"><span class="pre">fov_rotation_ij</span></code>)</p></td>
+<tr class="row-odd"><td><p>Prescription rotation (<code class="docutils literal notranslate"><span class="pre">fov_rotation_ij</span></code>)</p></td>
 <td><p>unitless, element (i, j) of an orthonormal matrix</p></td>
 </tr>
-<tr class="row-odd"><td><p>PNS limit (<code class="docutils literal notranslate"><span class="pre">pns_limit</span></code>)</p></td>
+<tr class="row-even"><td><p>PNS limit (<code class="docutils literal notranslate"><span class="pre">pns_limit</span></code>)</p></td>
 <td><p>fraction of the nerve model’s threshold</p></td>
 </tr>
-<tr class="row-even"><td><p>Forbidden band</p></td>
+<tr class="row-odd"><td><p>Forbidden band</p></td>
 <td><p>Hz; amplitude allowed in it in mT/m</p></td>
 </tr>
-<tr class="row-odd"><td><p>SAR ratio (<code class="docutils literal notranslate"><span class="pre">vop_sar_ratio</span></code>, <code class="docutils literal notranslate"><span class="pre">vop_global_sar_ratio</span></code>)</p></td>
+<tr class="row-even"><td><p>SAR ratio (<code class="docutils literal notranslate"><span class="pre">vop_sar_ratio</span></code>, <code class="docutils literal notranslate"><span class="pre">vop_global_sar_ratio</span></code>)</p></td>
 <td><p>unitless: energy over that of the reference repetition</p></td>
 </tr>
-<tr class="row-even"><td><p>Default channel weights (<code class="docutils literal notranslate"><span class="pre">vop_default_shim</span></code>)</p></td>
+<tr class="row-odd"><td><p>Default channel weights (<code class="docutils literal notranslate"><span class="pre">vop_default_shim</span></code>)</p></td>
 <td><p>unitless magnitude, phase in rad</p></td>
 </tr>
-<tr class="row-odd"><td><p>Dwell time in an enriched acquisition (<code class="docutils literal notranslate"><span class="pre">sample_time_us</span></code>)</p></td>
+<tr class="row-even"><td><p>Dwell time in an enriched acquisition (<code class="docutils literal notranslate"><span class="pre">sample_time_us</span></code>)</p></td>
 <td><p>µs</p></td>
 </tr>
-<tr class="row-even"><td><p>k-space trajectory</p></td>
+<tr class="row-odd"><td><p>k-space trajectory</p></td>
 <td><p>1/m, as pypulseqpp reports it</p></td>
 </tr>
-<tr class="row-odd"><td><p>Grid trajectory (<code class="docutils literal notranslate"><span class="pre">ReconBuffer.grid_trajectory</span></code>)</p></td>
+<tr class="row-even"><td><p>Grid trajectory (<code class="docutils literal notranslate"><span class="pre">ReconBuffer.grid_trajectory</span></code>)</p></td>
 <td><p>k times the reconstructed field of view; an N-point matrix spans [-N/2, N/2)</p></td>
 </tr>
-<tr class="row-even"><td><p>Design identifier</p></td>
+<tr class="row-odd"><td><p>Design identifier</p></td>
 <td><p>18 hexadecimal digits: three 24-bit integers, each exact in a float32</p></td>
 </tr>
 </tbody>

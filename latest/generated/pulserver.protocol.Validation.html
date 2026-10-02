@@ -540,8 +540,11 @@
 <dt class="field-odd">Attributes<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>duration</strong> (<em>float | None</em>) – Scan time in seconds; <code class="docutils literal notranslate"><span class="pre">None</span></code> when the plugin reports none.</p></li>
-<li><p><strong>values</strong> (<em>dict[pulserver.protocol._keys.FloatKey | pulserver.protocol._keys.IntKey | pulserver.protocol._keys.BoolKey | pulserver.protocol._keys.EnumKey | pulserver.protocol._keys.ConfigKey | pulserver.protocol._keys.UserKey | pulserver.protocol._keys.UserNameKey, float | int | bool | str]</em>) – The resolved protocol for a valid request, the request itself for an
+<li><p><strong>values</strong> (<em>dict[ProtocolKey, float | int | bool | str]</em>) – The resolved protocol for a valid request, the request itself for an
 invalid one, as wire values by key.</p></li>
+<li><p><strong>rf_layout</strong> (<em>RfLayout | None</em>) – The RF layout of a valid evaluation; <code class="docutils literal notranslate"><span class="pre">None</span></code> where the plugin states
+none or plays no RF, for an invalid request, and for a reply read from
+text. Excluded from equality and from the representation.</p></li>
 </ul>
 </dd>
 </dl>
@@ -550,16 +553,19 @@ invalid one, as wire values by key.</p></li>
 <p class="rubric">Attributes</p>
 <div class="pst-scrollable-table-container"><table class="autosummary longtable table">
 <tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.protocol.Validation.valid.html#pulserver.protocol.Validation.valid" title="pulserver.protocol.Validation.valid"><code class="xref py py-obj docutils literal notranslate"><span class="pre">valid</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.protocol.Validation.rf_layout.html#pulserver.protocol.Validation.rf_layout" title="pulserver.protocol.Validation.rf_layout"><code class="xref py py-obj docutils literal notranslate"><span class="pre">rf_layout</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pulserver.protocol.Validation.duration.html#pulserver.protocol.Validation.duration" title="pulserver.protocol.Validation.duration"><code class="xref py py-obj docutils literal notranslate"><span class="pre">duration</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pulserver.protocol.Validation.valid.html#pulserver.protocol.Validation.valid" title="pulserver.protocol.Validation.valid"><code class="xref py py-obj docutils literal notranslate"><span class="pre">valid</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.protocol.Validation.info.html#pulserver.protocol.Validation.info" title="pulserver.protocol.Validation.info"><code class="xref py py-obj docutils literal notranslate"><span class="pre">info</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.protocol.Validation.duration.html#pulserver.protocol.Validation.duration" title="pulserver.protocol.Validation.duration"><code class="xref py py-obj docutils literal notranslate"><span class="pre">duration</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pulserver.protocol.Validation.values.html#pulserver.protocol.Validation.values" title="pulserver.protocol.Validation.values"><code class="xref py py-obj docutils literal notranslate"><span class="pre">values</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pulserver.protocol.Validation.info.html#pulserver.protocol.Validation.info" title="pulserver.protocol.Validation.info"><code class="xref py py-obj docutils literal notranslate"><span class="pre">info</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.protocol.Validation.values.html#pulserver.protocol.Validation.values" title="pulserver.protocol.Validation.values"><code class="xref py py-obj docutils literal notranslate"><span class="pre">values</span></code></a></p></td>
 <td><p></p></td>
 </tr>
 </tbody>

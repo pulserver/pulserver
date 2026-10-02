@@ -18,7 +18,6 @@
    ~ScannerSequence.evaluate
    ~ScannerSequence.generate
    ~ScannerSequence.listing
-   ~ScannerSequence.rf_pulses
    ~ScannerSequence.validate
 
 
@@ -29,6 +28,5 @@
    :toctree:
    :nosignatures:
 
-   ~ScannerSequence.follows
    ~ScannerSequence.protocol
    ~ScannerSequence.app

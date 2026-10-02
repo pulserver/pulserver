@@ -520,6 +520,7 @@
             <nav aria-label="Page">
                 <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#sequence">Sequence</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#rf-layout">RF layout</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#ui-entries">UI entries</a></li>
 </ul>
             </nav>
@@ -557,7 +558,7 @@ the precision of a float32 control variable, are described in
 <td><p>A sequence app bound to the scanner protocol.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="../generated/pulserver.design.Evaluation.html#pulserver.design.Evaluation" title="pulserver.design.Evaluation"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Evaluation</span></code></a></p></td>
-<td><p>The outcome of evaluating a valid protocol: the protocol the design achieves, its scan time and a note.</p></td>
+<td><p>The outcome of evaluating a valid protocol: the protocol the design achieves, its scan time, a note and optionally its RF layout.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.design.Protocol.html#pulserver.design.Protocol" title="pulserver.design.Protocol"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Protocol</span></code></a></p></td>
 <td><p>The values of a protocol in the units of the app’s arguments, convertible from and to the wire values.</p></td>
@@ -567,6 +568,28 @@ the precision of a float32 control variable, are described in
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.design.load_plugin.html#pulserver.design.load_plugin" title="pulserver.design.load_plugin"><code class="xref py py-obj docutils literal notranslate"><span class="pre">load_plugin</span></code></a></p></td>
 <td><p>Import a plugin file and instantiate the sequence plugin it defines.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section id="rf-layout">
+<h2>RF layout<a class="headerlink" href="#rf-layout" title="Link to this heading">#</a></h2>
+<p>The RF an evaluation states: the RF definitions of a sequence, its instances in
+play order and the protocol entry each instance’s amplitude follows
+(<a class="reference internal" href="../explanations/protocol.html"><span class="doc">Protocol resolution</span></a>).</p>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Object</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.design.RfLayout.html#pulserver.design.RfLayout" title="pulserver.design.RfLayout"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RfLayout</span></code></a></p></td>
+<td><p>The RF definitions a plugin plays and the instances of one repetition, each with the control its amplitude follows.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="../generated/pulserver.design.RfControl.html#pulserver.design.RfControl" title="pulserver.design.RfControl"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RfControl</span></code></a></p></td>
+<td><p>A control an RF amplitude follows: the flip angle or a float user entry.</p></td>
 </tr>
 </tbody>
 </table>
@@ -659,6 +682,7 @@ the precision of a float32 control variable, are described in
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#sequence">Sequence</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#rf-layout">RF layout</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#ui-entries">UI entries</a></li>
 </ul>
   </nav></div>

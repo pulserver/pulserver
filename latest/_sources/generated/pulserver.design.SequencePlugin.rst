@@ -18,7 +18,6 @@
    ~SequencePlugin.evaluate
    ~SequencePlugin.generate
    ~SequencePlugin.listing
-   ~SequencePlugin.rf_pulses
    ~SequencePlugin.validate
 
 
@@ -29,6 +28,5 @@
    :toctree:
    :nosignatures:
 
-   ~SequencePlugin.follows
    ~SequencePlugin.protocol
    ~SequencePlugin.app

@@ -545,6 +545,11 @@ achieves, such as the shortest echo time.</p></li>
 the reply then reports an unknown scan time.</p></li>
 <li><p><strong>info</strong> (<em>str</em>) – A note shown with the valid protocol. Whitespace, newlines included, is
 folded to single spaces on the wire.</p></li>
+<li><p><strong>rf_layout</strong> (<em>pulserver.design._rf.RfLayout | tuple[()]</em>) – The RF the protocol plays, from which a scanner estimates the RF of a
+protocol before it is designed. <code class="docutils literal notranslate"><span class="pre">()</span></code> or <code class="docutils literal notranslate"><span class="pre">[]</span></code>, the default, states no
+estimate and is not invalid. Every control of the layout must be an
+entry of <a class="reference internal" href="pulserver.design.SequencePlugin.protocol.html#pulserver.design.SequencePlugin.protocol" title="pulserver.design.SequencePlugin.protocol"><code class="xref py py-attr docutils literal notranslate"><span class="pre">SequencePlugin.protocol</span></code></a> whose value in <code class="docutils literal notranslate"><span class="pre">protocol</span></code> is
+positive, or the protocol is invalid.</p></li>
 </ul>
 </dd>
 </dl>
@@ -559,7 +564,10 @@ folded to single spaces on the wire.</p></li>
 <tr class="row-even"><td><p><a class="reference internal" href="pulserver.design.Evaluation.info.html#pulserver.design.Evaluation.info" title="pulserver.design.Evaluation.info"><code class="xref py py-obj docutils literal notranslate"><span class="pre">info</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.design.Evaluation.protocol.html#pulserver.design.Evaluation.protocol" title="pulserver.design.Evaluation.protocol"><code class="xref py py-obj docutils literal notranslate"><span class="pre">protocol</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.design.Evaluation.rf_layout.html#pulserver.design.Evaluation.rf_layout" title="pulserver.design.Evaluation.rf_layout"><code class="xref py py-obj docutils literal notranslate"><span class="pre">rf_layout</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pulserver.design.Evaluation.protocol.html#pulserver.design.Evaluation.protocol" title="pulserver.design.Evaluation.protocol"><code class="xref py py-obj docutils literal notranslate"><span class="pre">protocol</span></code></a></p></td>
 <td><p></p></td>
 </tr>
 </tbody>

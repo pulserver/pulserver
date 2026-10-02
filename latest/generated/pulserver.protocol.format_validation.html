@@ -535,7 +535,10 @@
 <dt class="sig sig-object py" id="pulserver.protocol.format_validation">
 <span class="sig-prename descclassname"><span class="pre">pulserver.protocol.</span></span><span class="sig-name descname"><span class="pre">format_validation</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pulserver/protocol/_wire.html#format_validation"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.protocol.format_validation" title="Link to this definition">#</a></dt>
 <dd><p>Format a <code class="docutils literal notranslate"><span class="pre">validate</span></code> reply: status line, info line, value block.</p>
-<p>Whitespace in the info text, newlines included, is folded to single spaces.</p>
+<p>Whitespace in the info text, newlines included, is folded to single spaces.
+With <code class="docutils literal notranslate"><span class="pre">rf_layout</span></code>, a valid reply that holds an RF layout ends with its
+<code class="docutils literal notranslate"><span class="pre">[RfLayout]</span></code> block, as <a class="reference internal" href="pulserver.protocol.format_rf_layout.html#pulserver.protocol.format_rf_layout" title="pulserver.protocol.format_rf_layout"><code class="xref py py-func docutils literal notranslate"><span class="pre">format_rf_layout()</span></code></a> formats it over
+<code class="docutils literal notranslate"><span class="pre">listed_peak_hz</span></code>.</p>
 </dd></dl>
 
 </section>

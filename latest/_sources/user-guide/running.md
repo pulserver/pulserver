@@ -16,8 +16,8 @@ series to it.
 ## Design calls
 
 ```bash
-pulserver design list     --plugins DIR --plugin NAME
-pulserver design validate --plugins DIR --plugin NAME --limits FILE < VALUES
+pulserver design list     --plugins DIR --plugin NAME [--limits FILE --rf-definitions]
+pulserver design validate --plugins DIR --plugin NAME --limits FILE [--rf-layout] < VALUES
 pulserver design generate --plugins DIR --plugin NAME --limits FILE --store DIR [--push URL] < VALUES
 pulserver design import   --limits FILE --store DIR [--push URL] < IMPORT
 pulserver design push     --store DIR --to URL ID...
@@ -32,12 +32,22 @@ that holds it. `--store` is the design store, created when missing.
 
 | Call | Reply |
 | --- | --- |
-| `list` | `PROTOCOL` and the plugin's listing block |
-| `validate` | `VALID <seconds>` or `INVALID`, an `INFO` line and the value block of the resolved protocol |
+| `list` | `PROTOCOL` and the plugin's listing block; with `--rf-definitions`, the `[RfDefinitions]` block |
+| `validate` | `VALID <seconds>` or `INVALID`, an `INFO` line and the value block of the resolved protocol; with `--rf-layout`, a valid reply ends with the `[RfLayout]` block |
 | `generate` | `GENERATED <id>`: the identifier of the design in the store |
 | `import` | `IMPORTED <id>` |
 | `push` | `PUSHED <count>`: the designs sent, not counting those the intake holds already |
 | `prune` | `PRUNED <count>` |
+
+The RF blocks are sent only when asked, and only where the plugin's evaluation
+states an RF layout ({ref}`stating-the-rf-layout`). `--rf-definitions` evaluates
+the plugin at its default protocol under `--limits`, which it requires, and
+follows the listing with the RF definitions of that evaluation. `--rf-layout`
+follows a valid reply with the RF layout of the evaluation of the request, its
+amplitudes over the peaks the listing states, which it reads by evaluating the
+plugin at its default protocol as well. Both blocks are described in
+{doc}`../explanations/protocol`. Without a flag, `list` reads no limits and
+`validate` replies no RF block.
 
 A call that fails replies `ERROR <message>` and exits with status 1; a plugin
 that ends its process ends the call without a reply and with a nonzero exit
@@ -179,8 +189,9 @@ design stays stored, and the same call made again pushes it without designing
 again. `push` replies `ERROR design <id> is not pushed: <reason>` for the first
 design it cannot send.
 
-`list` depends on the plugin file and the installed packages only, so its reply
-can be written when they are installed and read without a call.
+Without `--rf-definitions`, `list` depends on the plugin file and the installed
+packages only, so its reply can be written when they are installed and read
+without a call. With it, the reply depends on the limits as well.
 
 ### Warm server
 

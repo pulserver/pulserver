@@ -566,20 +566,6 @@ names, which are the members of
 <a class="reference internal" href="pulserver.protocol.ProtocolKey.html#pulserver.protocol.ProtocolKey" title="pulserver.protocol.ProtocolKey"><code class="xref py py-data docutils literal notranslate"><span class="pre">ProtocolKey</span></code></a> that
 <a class="reference internal" href="pulserver.protocol.UIParam.html#pulserver.protocol.UIParam" title="pulserver.protocol.UIParam"><code class="xref py py-class docutils literal notranslate"><span class="pre">UIParam</span></code></a> collects. A plain string naming an
 entry is stored as its member. Empty by default.</p></li>
-<li><p><strong>follows</strong> (<em>tuple of str</em>) – Which protocol parameter drives the angle of each pulse the sequence
-plays: one entry per distinct pulse, in the order the sequence first
-plays them, <code class="docutils literal notranslate"><span class="pre">&quot;&quot;</span></code> for one the operator does not move. A sequence that
-excites and then refocuses under the one control declares
-<code class="docutils literal notranslate"><span class="pre">(UIParam.FLIP,</span> <span class="pre">UIParam.FLIP)</span></code>.</p>
-<p>It is declared rather than worked out: which control drives a pulse is
-not a property of the pulse. Empty leaves a scanner to cost the RF when
-it has the design, which is what it does with any sequence.</p>
-<p>The angles are not declared. They are read from the sequence a design
-wrote, and a pulse’s share of its parameter is the angle it was
-designed at over the value that parameter was designed with – so a
-refocusing train whose angles vary gets one share each without any of
-them being written down.</p>
-</li>
 </ul>
 </dd>
 <dt class="field-even">Raises<span class="colon">:</span></dt>
@@ -591,6 +577,8 @@ them being written down.</p>
 <dt class="field-odd">Warns<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>DeprecationWarning</strong> – When a subclass sets <code class="docutils literal notranslate"><span class="pre">recon</span></code>, which has no effect: the reconstruction
 is named by the reconstruction client or, on a console, by the scan.
+When a subclass sets <code class="docutils literal notranslate"><span class="pre">follows</span></code>, which has no effect: the RF a scanner
+scales is the <a class="reference internal" href="pulserver.design.RfLayout.html#pulserver.design.RfLayout" title="pulserver.design.RfLayout"><code class="xref py py-class docutils literal notranslate"><span class="pre">RfLayout</span></code></a> an evaluation returns.
 When a subclass sets <code class="docutils literal notranslate"><span class="pre">ui</span></code>, the deprecated name of <code class="docutils literal notranslate"><span class="pre">protocol</span></code>, or
 subclasses <a class="reference internal" href="pulserver.design.ScannerSequence.html#pulserver.design.ScannerSequence" title="pulserver.design.ScannerSequence"><code class="xref py py-class docutils literal notranslate"><span class="pre">ScannerSequence</span></code></a>, the deprecated name of this class.</p>
 </dd>
@@ -612,10 +600,7 @@ subclasses <a class="reference internal" href="pulserver.design.ScannerSequence.
 <tr class="row-even"><td><p><a class="reference internal" href="pulserver.design.SequencePlugin.listing.html#pulserver.design.SequencePlugin.listing" title="pulserver.design.SequencePlugin.listing"><code class="xref py py-obj docutils literal notranslate"><span class="pre">listing</span></code></a></p></td>
 <td><p>Return the protocol with its schema, valued at the app's defaults.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.design.SequencePlugin.rf_pulses.html#pulserver.design.SequencePlugin.rf_pulses" title="pulserver.design.SequencePlugin.rf_pulses"><code class="xref py py-obj docutils literal notranslate"><span class="pre">rf_pulses</span></code></a></p></td>
-<td><p>Return the RF a design plays, as a scanner costs it while prescribing.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pulserver.design.SequencePlugin.validate.html#pulserver.design.SequencePlugin.validate" title="pulserver.design.SequencePlugin.validate"><code class="xref py py-obj docutils literal notranslate"><span class="pre">validate</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.design.SequencePlugin.validate.html#pulserver.design.SequencePlugin.validate" title="pulserver.design.SequencePlugin.validate"><code class="xref py py-obj docutils literal notranslate"><span class="pre">validate</span></code></a></p></td>
 <td><p>Return the validation of a request, as the wire carries it.</p></td>
 </tr>
 </tbody>
@@ -624,13 +609,10 @@ subclasses <a class="reference internal" href="pulserver.design.ScannerSequence.
 <p class="rubric">Attributes</p>
 <div class="pst-scrollable-table-container"><table class="autosummary longtable table">
 <tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.design.SequencePlugin.follows.html#pulserver.design.SequencePlugin.follows" title="pulserver.design.SequencePlugin.follows"><code class="xref py py-obj docutils literal notranslate"><span class="pre">follows</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.design.SequencePlugin.protocol.html#pulserver.design.SequencePlugin.protocol" title="pulserver.design.SequencePlugin.protocol"><code class="xref py py-obj docutils literal notranslate"><span class="pre">protocol</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pulserver.design.SequencePlugin.protocol.html#pulserver.design.SequencePlugin.protocol" title="pulserver.design.SequencePlugin.protocol"><code class="xref py py-obj docutils literal notranslate"><span class="pre">protocol</span></code></a></p></td>
-<td><p></p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.design.SequencePlugin.app.html#pulserver.design.SequencePlugin.app" title="pulserver.design.SequencePlugin.app"><code class="xref py py-obj docutils literal notranslate"><span class="pre">app</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pulserver.design.SequencePlugin.app.html#pulserver.design.SequencePlugin.app" title="pulserver.design.SequencePlugin.app"><code class="xref py py-obj docutils literal notranslate"><span class="pre">app</span></code></a></p></td>
 <td><p></p></td>
 </tr>
 </tbody>

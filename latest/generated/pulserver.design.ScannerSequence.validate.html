@@ -541,9 +541,12 @@ prescription rotation is checked to be orthonormal, and <a class="reference inte
 runs; nothing is generated. This is the one boundary between a request
 and the code of a plugin.</p>
 <p>A valid reply carries the evaluated protocol, the duration of the
-evaluation, <code class="docutils literal notranslate"><span class="pre">None</span></code> where it is <code class="docutils literal notranslate"><span class="pre">0.0</span></code>, and its note. An exception
-raised by any of these steps makes the reply invalid, carrying the
-request, and is logged with its traceback. <code class="docutils literal notranslate"><span class="pre">ValueError</span></code> and
+evaluation, <code class="docutils literal notranslate"><span class="pre">None</span></code> where it is <code class="docutils literal notranslate"><span class="pre">0.0</span></code>, its note and its RF layout,
+<code class="docutils literal notranslate"><span class="pre">None</span></code> where it states none or plays no RF. An exception raised by
+any of these steps makes the reply invalid, carrying the request, and
+is logged with its traceback. A control of the RF layout that is not an
+entry of <a class="reference internal" href="pulserver.design.ScannerSequence.protocol.html#pulserver.design.ScannerSequence.protocol" title="pulserver.design.ScannerSequence.protocol"><code class="xref py py-attr docutils literal notranslate"><span class="pre">protocol</span></code></a>, or whose value in the evaluated protocol is
+not positive, is a <code class="docutils literal notranslate"><span class="pre">ValueError</span></code> naming it. <code class="docutils literal notranslate"><span class="pre">ValueError</span></code> and
 <code class="docutils literal notranslate"><span class="pre">AssertionError</span></code>, which pypulseqpp and PyPulseq raise for a protocol
 they cannot realize, are logged at WARNING and the message is the
 reply’s <code class="docutils literal notranslate"><span class="pre">info</span></code>. Any other exception is logged at ERROR, and the

@@ -520,6 +520,7 @@
             <nav aria-label="Page">
                 <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#resolution">Resolution</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#rf-layout">RF layout</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#keys-and-values">Keys and values</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#presets">Presets</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#units-and-precision">Units and precision</a></li>
@@ -565,7 +566,8 @@ for a prescription it cannot realize. The evaluation of a function app
 accepts the protocol unchanged and builds nothing; a plugin overrides
 <a class="reference internal" href="../generated/pulserver.design.SequencePlugin.evaluate.html#pulserver.design.SequencePlugin.evaluate" title="pulserver.design.SequencePlugin.evaluate"><code class="xref py py-meth docutils literal notranslate"><span class="pre">evaluate()</span></code></a> to check or complete it.</p></li>
 <li><p>The evaluation returns the protocol the design achieves, converted back to
-wire values, with the scan time and a note. For a sequence application, the
+wire values, with the scan time, a note and, optionally, the RF layout
+(<a class="reference internal" href="#rf-layout"><span class="std std-ref">RF layout</span></a>). For a sequence application, the
 value each argument took in the design, as the application records it
 (<a class="reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.sequences.SequenceApp.resolved.html#pypulseqpp.sequences.SequenceApp.resolved" title="(in pypulseqpp latest)"><code class="xref py py-attr docutils literal notranslate"><span class="pre">resolved</span></code></a>), replaces the
 requested one; an argument the application does not record keeps its
@@ -591,6 +593,45 @@ the entry.</p>
 seconds: for a sequence application,
 <a class="reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.sequences.SequenceApp.scan_time.html#pypulseqpp.sequences.SequenceApp.scan_time" title="(in pypulseqpp latest)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">scan_time()</span></code></a>. An evaluation that states
 no scan time, <code class="docutils literal notranslate"><span class="pre">0.0</span></code>, is valid, and the reply reports the scan time as unknown.</p>
+</section>
+<section id="rf-layout">
+<span id="id1"></span><h2>RF layout<a class="headerlink" href="#rf-layout" title="Link to this heading">#</a></h2>
+<p>The RF a protocol plays depends on the protocol. An evaluation may state it as
+an <a class="reference internal" href="../generated/pulserver.design.RfLayout.html#pulserver.design.RfLayout" title="pulserver.design.RfLayout"><code class="xref py py-class docutils literal notranslate"><span class="pre">RfLayout</span></code></a>, from which a scanner estimates the RF of
+a prescription without designing it: the RF definitions of a sequence, its RF
+instances in play order, and for each instance the protocol entry its amplitude
+follows.</p>
+<p>A definition is one RF pulse: a complex waveform at unit peak magnitude, its
+timing and its use. Instances of a definition differ in amplitude and in
+frequency and phase offset. In the sequence an evaluation builds, the amplitude
+of an instance is relative to the first instance of its definition with a
+nonzero amplitude, so a refocusing train with a flip angle schedule is one
+definition with one instance per pulse, and RF spoiling, which steps the phase
+offset, adds no definition (<a class="reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.Sequence.rf_instances.html#pypulseqpp.Sequence.rf_instances" title="(in pypulseqpp latest)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">pypulseqpp.Sequence.rf_instances()</span></code></a>).</p>
+<p>A control of an instance is the flip angle, or a float user entry, of the
+plugin’s protocol. It states that the amplitude of the instance is proportional
+to the entry: a scanner that plays a protocol with another value of the entry
+multiplies the amplitude by the ratio of that value to the value in the
+evaluated protocol, which is positive. An instance without a control is played
+at the amplitude it was evaluated at.</p>
+<p>A validation states the amplitude of an instance over the <code class="docutils literal notranslate"><span class="pre">peak_hz</span></code> the listing
+states for its definition, not over the first instance of the definition in the
+evaluation of the validation. A protocol that changes a flip angle changes the
+peak of the definition in its own evaluation, and the amplitude stated includes
+that change, so that the product of the amplitude and the listed <code class="docutils literal notranslate"><span class="pre">peak_hz</span></code> is the
+peak RF amplitude the instance plays.</p>
+<p>The layout need not hold the scan. The instances repeat over a period, and an
+evaluation that builds one representative repetition, a TR, a shot or a train,
+states the instances of that repetition and its <code class="docutils literal notranslate"><span class="pre">period</span></code>, so that the size of
+the layout does not depend on the matrix. A definition is named by its number in
+the sequence the evaluation builds, in the order of first play. The listing
+carries the definitions of the evaluation at the default protocol, and a layout
+names the pulses of the listing only where the protocol does not change which
+pulses are played first: the length of a train, a flip angle schedule and the
+matrix do not, and a protocol that adds a preparation pulse does.</p>
+<p>The layout is an estimate for the prescription. An evaluation that states none
+states no estimate and is valid, and what the scanner checks before the scan is
+the stored design (<a class="reference internal" href="designs.html"><span class="doc">Designs and the design store</span></a>).</p>
 </section>
 <section id="keys-and-values">
 <h2>Keys and values<a class="headerlink" href="#keys-and-values" title="Link to this heading">#</a></h2>
@@ -660,6 +701,52 @@ chosen option and the options:</p>
 <p>A value block carries <code class="docutils literal notranslate"><span class="pre">name:</span> <span class="pre">value</span></code> lines only, a string list as the index of
 its chosen option. The grammar is implemented in <code class="xref py py-mod docutils literal notranslate"><span class="pre">pulserver.protocol</span></code> for
 the host and in <code class="docutils literal notranslate"><span class="pre">pulseg_protocol.h</span></code> for the interpreter.</p>
+<p>The RF blocks follow a reply when the call asks for them, and no block follows
+where the evaluation is invalid or states no layout. They are lists of numbers:
+each number is ASCII decimal with nine significant digits, the numbers of a list
+are separated by single spaces, and each list is one line, so that a reader
+takes tokens. <code class="docutils literal notranslate"><span class="pre">[RfDefinitions]</span></code> follows the listing of a <code class="docutils literal notranslate"><span class="pre">list</span></code> call asked with
+<code class="docutils literal notranslate"><span class="pre">rf_definitions</span></code>, which evaluates the plugin at its default protocol under the
+scanner limits. Each definition is a <code class="docutils literal notranslate"><span class="pre">definition</span></code> line, then the sample times,
+then the real and the imaginary parts of each channel:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>[RfDefinitions]
+definition &lt;index&gt; &lt;use&gt; &lt;flip_deg&gt; &lt;peak_hz&gt; &lt;bandwidth_hz&gt; &lt;delay_s&gt; &lt;center_s&gt; &lt;duration_s&gt; &lt;channels&gt; &lt;samples&gt;
+&lt;time_s&gt; ...
+&lt;real&gt; ...
+&lt;imaginary&gt; ...
+[RfDefinitions End]
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">index</span></code> is the number the runs of a layout name the definition by, from 0 in the
+order of first play, and <code class="docutils literal notranslate"><span class="pre">use</span></code> is the RF use of pypulseqpp. <code class="docutils literal notranslate"><span class="pre">flip_deg</span></code> and
+<code class="docutils literal notranslate"><span class="pre">peak_hz</span></code>, in degrees and Hz, are those of the first instance with a nonzero
+amplitude, and <code class="docutils literal notranslate"><span class="pre">bandwidth_hz</span></code> is the bandwidth that
+<a class="reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.calc_rf_bandwidth.html#pypulseqpp.calc_rf_bandwidth" title="(in pypulseqpp latest)"><code class="xref py py-func docutils literal notranslate"><span class="pre">pypulseqpp.calc_rf_bandwidth()</span></code></a> measures on the sum of the channels, in Hz.
+<code class="docutils literal notranslate"><span class="pre">delay_s</span></code> is the delay of the RF event in its block; <code class="docutils literal notranslate"><span class="pre">center_s</span></code>, <code class="docutils literal notranslate"><span class="pre">duration_s</span></code> and
+the sample times are in seconds from the start of the event, its delay excluded.
+The channels share the sample times. The waveform is scaled to unit peak
+magnitude over all channels and samples, with the RF shim applied; the frequency
+and phase offsets of the event are playout parameters and are not applied.</p>
+<p><code class="docutils literal notranslate"><span class="pre">[RfLayout]</span></code> follows the value block of a valid <code class="docutils literal notranslate"><span class="pre">validate</span></code> reply asked with
+<code class="docutils literal notranslate"><span class="pre">rf_layout</span></code>. The instances are run-length encoded in play order, one <code class="docutils literal notranslate"><span class="pre">run</span></code>
+line for consecutive instances of one definition, control and printed
+amplitude, and carry no samples:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>[RfLayout]
+period &lt;s&gt;
+run &lt;index&gt; &lt;amplitude&gt; &lt;control|-&gt; &lt;count&gt;
+[RfLayout End]
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">period</span></code> is the time in seconds over which the instances repeat. The <code class="docutils literal notranslate"><span class="pre">amplitude</span></code>
+of a run is unitless: the peak RF amplitude of its instances over the <code class="docutils literal notranslate"><span class="pre">peak_hz</span></code>
+the listing states for the definition, so that <code class="docutils literal notranslate"><span class="pre">amplitude</span> <span class="pre">×</span> <span class="pre">peak_hz</span> <span class="pre">×</span> <span class="pre">waveform</span></code>
+is what an instance plays. The host reads those peaks by evaluating the plugin
+at its default protocol as well. A run whose definition the listing does not
+state, or states with a peak of zero, carries its amplitude relative to the first
+instance of its definition with a nonzero amplitude in the evaluation of the
+request, as does every run where the evaluation at the default protocol is
+invalid. <code class="docutils literal notranslate"><span class="pre">control</span></code> is the wire name of the entry the amplitude is proportional
+to, or <code class="docutils literal notranslate"><span class="pre">-</span></code>. A reader skips the blocks it does not know.</p>
 </section>
 <section id="see-also">
 <h2>See also<a class="headerlink" href="#see-also" title="Link to this heading">#</a></h2>
@@ -720,6 +807,7 @@ the host and in <code class="docutils literal notranslate"><span class="pre">pul
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#resolution">Resolution</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#rf-layout">RF layout</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#keys-and-values">Keys and values</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#presets">Presets</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#units-and-precision">Units and precision</a></li>

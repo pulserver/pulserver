@@ -19,6 +19,8 @@ from.
    Protocol
    ScannerSequence
    load_plugin
+   RfLayout
+   RfControl
    TimeParam
    FloatParam
    IntParam
@@ -121,9 +123,6 @@ from.
    PROTOCOL_BEGIN
    PROTOCOL_END
    format_listing
-   RfPulse
-   format_pulses
-   parse_pulses
    parse_listing
    format_values
    parse_values
@@ -132,6 +131,12 @@ from.
    Validation
    format_validation
    parse_validation
+   RfDefinitionRecord
+   format_rf_definitions
+   parse_rf_definitions
+   RfLayoutRecord
+   format_rf_layout
+   parse_rf_layout
 
 .. autosummary::
    :toctree: generated

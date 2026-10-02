@@ -557,8 +557,8 @@ their own, a reconstruction server runs there and the proxy forwards each
 series to it.</p>
 <section id="design-calls">
 <h2>Design calls<a class="headerlink" href="#design-calls" title="Link to this heading">#</a></h2>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pulserver<span class="w"> </span>design<span class="w"> </span>list<span class="w">     </span>--plugins<span class="w"> </span>DIR<span class="w"> </span>--plugin<span class="w"> </span>NAME
-pulserver<span class="w"> </span>design<span class="w"> </span>validate<span class="w"> </span>--plugins<span class="w"> </span>DIR<span class="w"> </span>--plugin<span class="w"> </span>NAME<span class="w"> </span>--limits<span class="w"> </span>FILE<span class="w"> </span>&lt;<span class="w"> </span>VALUES
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pulserver<span class="w"> </span>design<span class="w"> </span>list<span class="w">     </span>--plugins<span class="w"> </span>DIR<span class="w"> </span>--plugin<span class="w"> </span>NAME<span class="w"> </span><span class="o">[</span>--limits<span class="w"> </span>FILE<span class="w"> </span>--rf-definitions<span class="o">]</span>
+pulserver<span class="w"> </span>design<span class="w"> </span>validate<span class="w"> </span>--plugins<span class="w"> </span>DIR<span class="w"> </span>--plugin<span class="w"> </span>NAME<span class="w"> </span>--limits<span class="w"> </span>FILE<span class="w"> </span><span class="o">[</span>--rf-layout<span class="o">]</span><span class="w"> </span>&lt;<span class="w"> </span>VALUES
 pulserver<span class="w"> </span>design<span class="w"> </span>generate<span class="w"> </span>--plugins<span class="w"> </span>DIR<span class="w"> </span>--plugin<span class="w"> </span>NAME<span class="w"> </span>--limits<span class="w"> </span>FILE<span class="w"> </span>--store<span class="w"> </span>DIR<span class="w"> </span><span class="o">[</span>--push<span class="w"> </span>URL<span class="o">]</span><span class="w"> </span>&lt;<span class="w"> </span>VALUES
 pulserver<span class="w"> </span>design<span class="w"> </span>import<span class="w">   </span>--limits<span class="w"> </span>FILE<span class="w"> </span>--store<span class="w"> </span>DIR<span class="w"> </span><span class="o">[</span>--push<span class="w"> </span>URL<span class="o">]</span><span class="w"> </span>&lt;<span class="w"> </span>IMPORT
 pulserver<span class="w"> </span>design<span class="w"> </span>push<span class="w">     </span>--store<span class="w"> </span>DIR<span class="w"> </span>--to<span class="w"> </span>URL<span class="w"> </span>ID...
@@ -578,10 +578,10 @@ that holds it. <code class="docutils literal notranslate"><span class="pre">--st
 </thead>
 <tbody>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">list</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">PROTOCOL</span></code> and the plugin’s listing block</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">PROTOCOL</span></code> and the plugin’s listing block; with <code class="docutils literal notranslate"><span class="pre">--rf-definitions</span></code>, the <code class="docutils literal notranslate"><span class="pre">[RfDefinitions]</span></code> block</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">validate</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">VALID</span> <span class="pre">&lt;seconds&gt;</span></code> or <code class="docutils literal notranslate"><span class="pre">INVALID</span></code>, an <code class="docutils literal notranslate"><span class="pre">INFO</span></code> line and the value block of the resolved protocol</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">VALID</span> <span class="pre">&lt;seconds&gt;</span></code> or <code class="docutils literal notranslate"><span class="pre">INVALID</span></code>, an <code class="docutils literal notranslate"><span class="pre">INFO</span></code> line and the value block of the resolved protocol; with <code class="docutils literal notranslate"><span class="pre">--rf-layout</span></code>, a valid reply ends with the <code class="docutils literal notranslate"><span class="pre">[RfLayout]</span></code> block</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">generate</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">GENERATED</span> <span class="pre">&lt;id&gt;</span></code>: the identifier of the design in the store</p></td>
@@ -598,6 +598,15 @@ that holds it. <code class="docutils literal notranslate"><span class="pre">--st
 </tbody>
 </table>
 </div>
+<p>The RF blocks are sent only when asked, and only where the plugin’s evaluation
+states an RF layout (<a class="reference internal" href="scanner-sequences.html#stating-the-rf-layout"><span class="std std-ref">Stating the RF layout</span></a>). <code class="docutils literal notranslate"><span class="pre">--rf-definitions</span></code> evaluates
+the plugin at its default protocol under <code class="docutils literal notranslate"><span class="pre">--limits</span></code>, which it requires, and
+follows the listing with the RF definitions of that evaluation. <code class="docutils literal notranslate"><span class="pre">--rf-layout</span></code>
+follows a valid reply with the RF layout of the evaluation of the request, its
+amplitudes over the peaks the listing states, which it reads by evaluating the
+plugin at its default protocol as well. Both blocks are described in
+<a class="reference internal" href="../explanations/protocol.html"><span class="doc">Protocol resolution</span></a>. Without a flag, <code class="docutils literal notranslate"><span class="pre">list</span></code> reads no limits and
+<code class="docutils literal notranslate"><span class="pre">validate</span></code> replies no RF block.</p>
 <p>A call that fails replies <code class="docutils literal notranslate"><span class="pre">ERROR</span> <span class="pre">&lt;message&gt;</span></code> and exits with status 1; a plugin
 that ends its process ends the call without a reply and with a nonzero exit
 status. The value blocks are those of <code class="xref py py-mod docutils literal notranslate"><span class="pre">pulserver.protocol</span></code>, and the import
@@ -781,8 +790,9 @@ so the interpreter receives no identifier of a design the intake lacks. The
 design stays stored, and the same call made again pushes it without designing
 again. <code class="docutils literal notranslate"><span class="pre">push</span></code> replies <code class="docutils literal notranslate"><span class="pre">ERROR</span> <span class="pre">design</span> <span class="pre">&lt;id&gt;</span> <span class="pre">is</span> <span class="pre">not</span> <span class="pre">pushed:</span> <span class="pre">&lt;reason&gt;</span></code> for the first
 design it cannot send.</p>
-<p><code class="docutils literal notranslate"><span class="pre">list</span></code> depends on the plugin file and the installed packages only, so its reply
-can be written when they are installed and read without a call.</p>
+<p>Without <code class="docutils literal notranslate"><span class="pre">--rf-definitions</span></code>, <code class="docutils literal notranslate"><span class="pre">list</span></code> depends on the plugin file and the installed
+packages only, so its reply can be written when they are installed and read
+without a call. With it, the reply depends on the limits as well.</p>
 </section>
 <section id="warm-server">
 <h3>Warm server<a class="headerlink" href="#warm-server" title="Link to this heading">#</a></h3>

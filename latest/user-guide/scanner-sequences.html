@@ -524,6 +524,7 @@
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#shipped-sequences">Shipped sequences</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#resolving-a-protocol">Resolving a protocol</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#evaluating-a-protocol">Evaluating a protocol</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#stating-the-rf-layout">Stating the RF layout</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#see-also">See also</a></li>
 </ul>
             </nav>
@@ -784,8 +785,9 @@ stores it (<a class="reference internal" href="../explanations/designs.html"><sp
 protocol and to state what the console shows with it. The hook takes the scanner
 limits and the requested <a class="reference internal" href="../generated/pulserver.design.Protocol.html#pulserver.design.Protocol" title="pulserver.design.Protocol"><code class="xref py py-class docutils literal notranslate"><span class="pre">Protocol</span></code></a>, in the units of the
 app’s arguments, and returns an <a class="reference internal" href="../generated/pulserver.design.Evaluation.html#pulserver.design.Evaluation" title="pulserver.design.Evaluation"><code class="xref py py-class docutils literal notranslate"><span class="pre">Evaluation</span></code></a>: the
-protocol holding the values the design achieves, the scan time in seconds and a
-note shown with the valid protocol. Returning <code class="docutils literal notranslate"><span class="pre">None</span></code> accepts the protocol
+protocol holding the values the design achieves, the scan time in seconds, a
+note shown with the valid protocol and, optionally, the RF layout
+(<a class="reference internal" href="#stating-the-rf-layout"><span class="std std-ref">Stating the RF layout</span></a>). Returning <code class="docutils literal notranslate"><span class="pre">None</span></code> accepts the protocol
 unchanged. Raising an exception makes the protocol invalid:</p>
 <div class="highlight-pycon notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">pulserver.design</span><span class="w"> </span><span class="kn">import</span> <span class="n">Evaluation</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">Timed</span><span class="p">(</span><span class="n">PulseAcquire</span><span class="p">):</span>
@@ -824,6 +826,43 @@ constructs it. A plugin overrides <code class="docutils literal notranslate"><sp
 them, built another way. <code class="docutils literal notranslate"><span class="pre">validate</span></code> and <code class="docutils literal notranslate"><span class="pre">design</span></code> are not overridden: they are the
 boundary between a request and the code of a plugin, and <code class="docutils literal notranslate"><span class="pre">design</span></code> writes nothing
 for an invalid request.</p>
+</section>
+<section id="stating-the-rf-layout">
+<span id="id4"></span><h2>Stating the RF layout<a class="headerlink" href="#stating-the-rf-layout" title="Link to this heading">#</a></h2>
+<p>An evaluation may state the RF its protocol plays, from which a scanner
+estimates the RF of a prescription before the design is generated.
+<a class="reference internal" href="../generated/pulserver.design.RfLayout.of.html#pulserver.design.RfLayout.of" title="pulserver.design.RfLayout.of"><code class="xref py py-meth docutils literal notranslate"><span class="pre">RfLayout.of</span></code></a> takes the RF instances of a
+sequence, as <a class="reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.Sequence.rf_instances.html#pypulseqpp.Sequence.rf_instances" title="(in pypulseqpp latest)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">pypulseqpp.Sequence.rf_instances()</span></code></a> returns them, and the
+control each instance’s amplitude follows: the flip angle, <code class="docutils literal notranslate"><span class="pre">UIParam.FLIP</span></code>, or a
+float user entry, <code class="docutils literal notranslate"><span class="pre">UIParam.user_value(n)</span></code>, either declared in <code class="docutils literal notranslate"><span class="pre">protocol</span></code>. One
+control applies to every instance; a list gives one per instance in play order,
+<code class="docutils literal notranslate"><span class="pre">None</span></code> for an instance no entry scales. The scanner multiplies the amplitude of
+an instance by the ratio of the value of its control in the protocol it plays to
+the value in the evaluated protocol. The <code class="docutils literal notranslate"><span class="pre">period</span></code> is the time in seconds over
+which the instances repeat, and the duration of the sequence where omitted:</p>
+<div class="highlight-pycon notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">pulserver.design</span><span class="w"> </span><span class="kn">import</span> <span class="n">RfLayout</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">pulserver.protocol</span><span class="w"> </span><span class="kn">import</span> <span class="n">format_rf_layout</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">Costed</span><span class="p">(</span><span class="n">PulseAcquire</span><span class="p">):</span>
+<span class="gp">... </span>    <span class="k">def</span><span class="w"> </span><span class="nf">evaluate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">system</span><span class="p">,</span> <span class="n">protocol</span><span class="p">):</span>
+<span class="gp">... </span>        <span class="n">seq</span> <span class="o">=</span> <span class="n">pulse_acquire</span><span class="p">(</span><span class="n">system</span><span class="p">,</span> <span class="o">**</span><span class="n">protocol</span><span class="o">.</span><span class="n">arguments</span><span class="p">)</span>
+<span class="gp">... </span>        <span class="n">layout</span> <span class="o">=</span> <span class="n">RfLayout</span><span class="o">.</span><span class="n">of</span><span class="p">(</span><span class="n">seq</span><span class="p">,</span> <span class="n">UIParam</span><span class="o">.</span><span class="n">FLIP</span><span class="p">)</span>
+<span class="gp">... </span>        <span class="k">return</span> <span class="n">Evaluation</span><span class="p">(</span><span class="n">protocol</span><span class="p">,</span> <span class="n">seq</span><span class="o">.</span><span class="n">duration</span><span class="p">()[</span><span class="mi">0</span><span class="p">],</span> <span class="n">rf_layout</span><span class="o">=</span><span class="n">layout</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">reply</span> <span class="o">=</span> <span class="n">Costed</span><span class="p">()</span><span class="o">.</span><span class="n">validate</span><span class="p">(</span><span class="n">system</span><span class="p">,</span> <span class="p">{</span><span class="s2">"nex"</span><span class="p">:</span> <span class="mi">4</span><span class="p">})</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">format_rf_layout</span><span class="p">(</span><span class="n">reply</span><span class="o">.</span><span class="n">rf_layout</span><span class="p">),</span> <span class="n">end</span><span class="o">=</span><span class="s2">""</span><span class="p">)</span>
+<span class="go">[RfLayout]</span>
+<span class="go">period 0.4</span>
+<span class="go">run 0 1 flip 4</span>
+<span class="go">[RfLayout End]</span>
+
+</pre></div>
+</div>
+<p>An evaluation may build one representative repetition, a TR, a shot or a
+train, and state its <code class="docutils literal notranslate"><span class="pre">period</span></code>: <code class="docutils literal notranslate"><span class="pre">RfLayout.of(seq,</span> <span class="pre">UIParam.FLIP,</span> <span class="pre">period=tr)</span></code>.</p>
+<p>The layout is optional. An evaluation that states none is valid and states no
+estimate, and one whose control is not an entry of <code class="docutils literal notranslate"><span class="pre">protocol</span></code>, or has no
+positive value in the evaluated protocol, is invalid. What the scanner checks
+before the scan is the stored design, not the layout. The blocks that carry the
+layout are described in <a class="reference internal" href="../explanations/protocol.html"><span class="doc">Protocol resolution</span></a>.</p>
 </section>
 <section id="see-also">
 <h2>See also<a class="headerlink" href="#see-also" title="Link to this heading">#</a></h2>
@@ -886,6 +925,7 @@ for an invalid request.</p>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#shipped-sequences">Shipped sequences</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#resolving-a-protocol">Resolving a protocol</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#evaluating-a-protocol">Evaluating a protocol</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#stating-the-rf-layout">Stating the RF layout</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#see-also">See also</a></li>
 </ul>
   </nav></div>
