@@ -8,7 +8,7 @@ import numpy as np
 
 from ...mrd._header import EncodingSpace
 from ...mrd._metadata import acquisition_label, has_acquisition_flag
-from .._buffers import ReconData
+from .._buffers import ReconData, discards, echo_centre
 from ..plugin import Gadget
 from .pics import PicsRecon
 
@@ -20,9 +20,11 @@ class RampSampling(Gadget):
     proxy's enrichment writes in 1/m; the grid is the reconstruction matrix's
     readout at its field of view, so readout oversampling is removed with it
     (:func:`bartorch.tools.epi_ramp_operator`). A reversed readout is
-    resampled onto the grid in its own direction. A space that states no
-    matrix, such as the navigators', takes the geometry of the first space
-    that does. Readouts without a trajectory pass unchanged.
+    resampled onto the grid in its own direction. The resampled readout is a
+    full echo of the matrix's readout: its ``center_sample`` is the grid's
+    centre, and it has no discards. A space that states no matrix, such as the
+    navigators', takes the geometry of the first space that does. Readouts
+    without a trajectory pass unchanged.
     """
 
     def startup(self, context):
@@ -71,6 +73,10 @@ class RampSampling(Gadget):
                 .numpy()
                 .T
             )
+        acquisition.center_sample = (
+            columns - 1 - columns // 2 if positions[-1] < positions[0] else columns // 2
+        )
+        acquisition.discard_pre = acquisition.discard_post = 0
         return data @ self.operators[key]
 
 
@@ -80,10 +86,11 @@ class EpiPhaseCorrection(Gadget):
     Navigator readouts (``NAV``) are consumed: each run of three, of
     alternating polarity, gives the phase
     (:func:`bartorch.tools.estimate_epi_phase`) applied to the reversed
-    readouts (``REV``) that follow it, which are then flipped into forward
-    order (:func:`bartorch.tools.correct_lines`). A run of polarity ``- + -``
-    measures the phase of the forward readout against the reversed ones, the
-    negative of the correction.
+    readouts (``REV``) that follow it. Each of those is flipped into forward
+    order (:func:`bartorch.tools.correct_lines`), and its ``center_sample``
+    and discards are mirrored with it. A run of polarity ``- + -`` measures
+    the phase of the forward readout against the reversed ones, the negative
+    of the correction.
     """
 
     def startup(self, context):
@@ -104,6 +111,11 @@ class EpiPhaseCorrection(Gadget):
                 self.phase = -phase if self.navigator[0][1] else phase
                 self.navigator = []
             return None
+        if reverse:
+            samples = data.shape[-1]
+            acquisition.center_sample = samples - 1 - echo_centre(acquisition, samples)
+            before, after = discards(acquisition)
+            acquisition.discard_pre, acquisition.discard_post = after, before
         return tools.correct_lines([line], self.phase)[0].numpy()
 
 

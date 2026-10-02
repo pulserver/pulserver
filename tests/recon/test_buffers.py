@@ -2,9 +2,10 @@
 
 What is checked here is that a plugin gets sorted k-space without sorting
 anything: that the layout comes off the header rather than off the data, that
-each acquisition lands where its own counters say, and that the arrangements a
-real scan produces -- several encoding spaces, a calibration region, a partial
-echo, an undersampled grid -- come out of it read correctly.
+each acquisition lands where its echo and its counters, taken about the
+centre the header's limits state, say, and that the arrangements a real scan
+produces -- several encoding spaces, a calibration region, a partial echo, an
+undersampled or partial-Fourier grid -- come out of it read correctly.
 """
 
 from __future__ import annotations
@@ -33,10 +34,20 @@ COILS = 4
 
 
 def limits(**counters):
-    """An ``encodingLimits`` stating the extent of each named counter."""
+    """An ``encodingLimits`` stating each named counter's extent, or its ``(minimum, maximum, center)``."""
     return SimpleNamespace(
         **{
-            name: SimpleNamespace(minimum=0, maximum=extent - 1, center=extent // 2)
+            name: SimpleNamespace(
+                **dict(
+                    zip(
+                        ("minimum", "maximum", "center"),
+                        (0, extent - 1, extent // 2)
+                        if isinstance(extent, int)
+                        else extent,
+                        strict=True,
+                    )
+                )
+            )
             for name, extent in counters.items()
         }
     )
@@ -70,10 +81,12 @@ def header(*spaces, coils=COILS):
     )
 
 
-def acquire(samples=N_X, coils=COILS, value=None, flags=(), **idx):
+def acquire(samples=N_X, coils=COILS, value=None, flags=(), centre=None, **idx):
+    """A readout of ``samples`` samples whose echo is at ``centre``, by default a centred full echo."""
     acquisition = ismrmrd.Acquisition()
     acquisition.resize(samples, coils)
     acquisition.data[:] = np.arange(samples) if value is None else value
+    acquisition.center_sample = samples // 2 if centre is None else centre
     for name, index in idx.items():
         setattr(acquisition.idx, name, index)
     for flag in flags:
@@ -87,7 +100,7 @@ def fill(hdr, *acquisitions, axes=LOOP_COUNTERS, dtype=np.complex64):
     unit = ReconUnit(unit_key("imaging", acquisitions[0], axes), spaces, dtype=dtype)
     for acquisition in acquisitions:
         unit.add_acquisition(acquisition, acquisition.data)
-    return unit.data
+    return unit.close()
 
 
 # --------------------------------------------------------------------------
@@ -229,21 +242,111 @@ def test_a_line_that_never_arrives_stays_unsampled():
     assert list(buffer.mask[:, 0]) == [True, False] * 4
 
 
-def test_a_partial_echo_is_right_aligned():
-    """Truncating the samples before the echo is what a partial echo does, so
-    the acquired window ends where a full one would."""
+def test_an_echo_missing_its_start_is_placed_by_its_centre():
+    """The echo is at sample 1 of 5, so the readout is the end of the full
+    echo of 8 samples whose echo is at 4: it occupies samples 3 to 7."""
     buffer = fill(
-        header(space(x=8)), acquire(samples=5, value=1.0, kspace_encode_step_1=0)
+        header(space(x=8)),
+        acquire(samples=5, centre=1, value=np.arange(1, 6), kspace_encode_step_1=0),
     ).data
 
     assert list(buffer.mask[0]) == [False] * 3 + [True] * 5
-    assert np.array_equal(buffer.kspace[0, 0].real, [0, 0, 0, 1, 1, 1, 1, 1])
+    assert np.array_equal(buffer.kspace[0, 0].real, [0, 0, 0, 1, 2, 3, 4, 5])
+    assert (buffer.readout, buffer.center_sample) == ((3, 7), 4)
 
 
-def test_the_echo_position_follows_the_alignment():
-    acquisition = acquire(samples=5)
-    acquisition.center_sample = 1
-    assert fill(header(space(x=8)), acquisition).data.center_sample == 4
+def test_an_echo_missing_its_end_is_placed_by_its_centre():
+    """The echo is at sample 3 of 5, so the readout is the start of the full
+    echo of 6 samples whose echo is at 3: it occupies samples 0 to 4."""
+    buffer = fill(
+        header(space(x=6)),
+        acquire(samples=5, centre=3, value=np.arange(1, 6), kspace_encode_step_1=0),
+    ).data
+
+    assert list(buffer.mask[0]) == [True] * 5 + [False]
+    assert np.array_equal(buffer.kspace[0, 0].real, [1, 2, 3, 4, 5, 0])
+    assert (buffer.readout, buffer.center_sample) == ((0, 4), 3)
+
+
+def test_every_echo_is_placed_with_its_centre_at_the_middle_of_the_buffer():
+    """Whichever side of the echo a readout is missing, its echo is at the same
+    sample, so lines of different partial echoes line up."""
+    centred, early, late = (
+        acquire(samples=8, centre=4, kspace_encode_step_1=0),
+        acquire(samples=6, centre=2, kspace_encode_step_1=1),
+        acquire(samples=6, centre=4, kspace_encode_step_1=2),
+    )
+    buffer = fill(header(space(x=8, y=3)), centred, early, late).data
+
+    # The echo of each line is at sample 4, which holds the sample at its centre.
+    np.testing.assert_array_equal(buffer.kspace[0, :, 4].real, [4, 2, 4])
+    assert [list(np.flatnonzero(row)) for row in buffer.mask] == [
+        list(range(8)),
+        list(range(2, 8)),
+        list(range(6)),
+    ]
+    assert buffer.readout == (0, 7)
+
+
+def test_discarded_samples_are_not_placed():
+    """The samples a readout declares discarded are left where the buffer has
+    zero fill, and the rest keep their places about the echo."""
+    acquisition = acquire(
+        samples=8, centre=4, value=np.arange(1, 9), kspace_encode_step_1=0
+    )
+    acquisition.discard_pre = 2
+    acquisition.discard_post = 1
+
+    buffer = fill(header(space(x=8)), acquisition).data
+
+    assert list(buffer.mask[0]) == [False] * 2 + [True] * 5 + [False]
+    assert np.array_equal(buffer.kspace[0, 0].real, [0, 0, 3, 4, 5, 6, 7, 0])
+    assert buffer.readout == (2, 6)
+
+
+def test_a_discarded_trajectory_is_cut_with_the_samples():
+    acquisition = ismrmrd.Acquisition()
+    acquisition.resize(8, COILS, 1)
+    acquisition.center_sample = 4
+    acquisition.discard_pre = 2
+    acquisition.discard_post = 1
+    acquisition.traj[:] = np.arange(8, dtype=np.float32)[:, None]
+    acquisition.idx.kspace_encode_step_1 = 0
+
+    buffer = fill(header(space(x=8)), acquisition).data
+
+    assert np.array_equal(buffer.trajectory[0, 0], [0, 0, 2, 3, 4, 5, 6, 0])
+
+
+def test_an_echo_that_leaves_the_buffer_is_refused():
+    """An echo at sample 1 of 5 needs a full echo of 8: a buffer of 6 cannot hold it."""
+    with pytest.raises(ValueError, match="does not fit the 6 samples"):
+        fill(
+            header(space(x=6)),
+            acquire(samples=5, centre=1, kspace_encode_step_1=0),
+        )
+
+
+def test_a_buffer_is_as_wide_as_the_first_readout_when_that_is_a_centred_full_echo():
+    """A readout completed to its full echo, oversampling included, is the
+    echo whatever width the header's encoded matrix states."""
+    unit = fill(
+        header(space(x=8)),
+        acquire(samples=16, kspace_encode_step_1=0),
+        acquire(samples=12, centre=6, kspace_encode_step_1=1),
+    )
+
+    assert unit.data.kspace.shape[-1] == 16
+    assert list(unit.data.mask[1]) == [False] * 2 + [True] * 12 + [False] * 2
+
+
+def test_a_buffer_is_as_wide_as_the_encoded_matrix_when_the_first_readout_is_a_partial_echo():
+    unit = fill(
+        header(space(x=16)),
+        acquire(samples=12, centre=4, kspace_encode_step_1=0),
+    )
+
+    assert unit.data.kspace.shape[-1] == 16
 
 
 def test_readout_oversampling_widens_the_buffer_rather_than_being_refused():
@@ -256,6 +359,145 @@ def test_readout_oversampling_widens_the_buffer_rather_than_being_refused():
 def test_an_acquisition_that_does_not_fit_says_so():
     with pytest.raises(ValueError, match=r"kspace_encode_step_1=9"):
         fill(header(space(y=4)), acquire(kspace_encode_step_1=9))
+
+
+def _lines_at(buffer):
+    return [int(line) for line in np.flatnonzero(buffer.mask[:, 0])]
+
+
+def test_lines_are_placed_by_the_limits_centre():
+    """The counter of the k-space centre lands at the middle of the grid,
+    wherever the counters start and however far the centre is from the middle
+    of the lines acquired."""
+    unit = fill(
+        header(space(y=16, kspace_encoding_step_1=(3, 12, 7))),
+        *(acquire(value=line, kspace_encode_step_1=line) for line in range(3, 13)),
+    )
+
+    assert _lines_at(unit.data) == list(range(4, 14))
+    np.testing.assert_array_equal(
+        unit.data.kspace[0, :, 0].real, [0] * 4 + list(range(3, 13)) + [0] * 2
+    )
+    assert unit.data.kspace[0, 16 // 2, 0] == 7
+
+
+def test_a_partial_fourier_scan_keeps_its_lines_where_the_centre_puts_them():
+    """Lines from the centre to the edge of the grid are the half of it
+    beyond the centre, however the counters are numbered."""
+    unit = fill(
+        header(space(y=16, kspace_encoding_step_1=(8, 15, 8))),
+        *(acquire(kspace_encode_step_1=line) for line in range(8, 16)),
+    )
+
+    assert _lines_at(unit.data) == list(range(8, 16))
+
+
+def test_a_scan_whose_counters_start_at_one_is_placed_by_its_centre():
+    unit = fill(
+        header(space(y=8, kspace_encoding_step_1=(1, 8, 5))),
+        *(acquire(kspace_encode_step_1=line) for line in range(1, 9)),
+    )
+
+    assert _lines_at(unit.data) == list(range(8))
+
+
+def test_partitions_are_placed_by_the_limits_centre_in_a_volume():
+    unit = fill(
+        header(space(y=4, z=8, kspace_encoding_step_2=(0, 6, 3))),
+        *(
+            acquire(value=partition, kspace_encode_step_2=partition)
+            for partition in range(7)
+        ),
+    )
+
+    assert unit.data.axes == ("coil", "partition", "phase_encode", "readout")
+    np.testing.assert_array_equal(
+        unit.data.kspace[0, :, 0, 0].real, [0, 0, 1, 2, 3, 4, 5, 6]
+    )
+
+
+def test_a_slice_selects_no_partition_in_a_plane():
+    """A plane has one partition, so the centre of ``kspace_encoding_step_2``
+    places nothing."""
+    unit = fill(
+        header(space(y=4, z=1, kspace_encoding_step_2=(0, 0, 3))),
+        acquire(kspace_encode_step_1=1),
+    )
+
+    assert unit.data.axes == ("coil", "phase_encode", "readout")
+    assert _lines_at(unit.data) == [1]
+
+
+def test_a_line_placed_outside_the_grid_by_the_limits_centre_is_refused():
+    with pytest.raises(
+        ValueError,
+        match=r"kspace_encode_step_1=15 \(16 once placed about the limits' centre\)",
+    ):
+        fill(
+            header(space(y=16, kspace_encoding_step_1=(0, 15, 7))),
+            acquire(kspace_encode_step_1=15),
+        )
+
+
+def test_a_header_that_states_no_centre_places_a_counter_where_it_says():
+    unit = fill(header(space(y=8)), acquire(kspace_encode_step_1=5))
+
+    assert _lines_at(unit.data) == [5]
+
+
+def test_a_non_cartesian_space_places_a_view_where_its_counter_says():
+    """A view counter bears no relation to the centre of a grid, so no shift."""
+    unit = fill(
+        header(
+            space(
+                x=4,
+                y=1,
+                trajectory="radial",
+                kspace_encoding_step_1=(0, 5, 3),
+            )
+        ),
+        acquire(samples=4, kspace_encode_step_1=5),
+    )
+
+    assert _lines_at(unit.data) == [5]
+
+
+def test_a_non_cartesian_readout_is_right_aligned_whatever_its_echo():
+    """Gridded k-space has no echo to place: a trajectory says where each
+    sample was taken, and the samples stay as they were acquired."""
+    unit = fill(
+        header(space(x=8, trajectory="radial", kspace_encoding_step_1=2)),
+        acquire(samples=5, centre=0, value=np.arange(1, 6), kspace_encode_step_1=0),
+    )
+
+    assert np.array_equal(unit.data.kspace[0, 0].real, [0, 0, 0, 1, 2, 3, 4, 5])
+
+
+def test_a_buffer_cropped_to_some_lines_holds_only_those():
+    grid = EncodingSpace.from_header(header(space(y=16)))
+    buffer = ReconBuffer(grid, crop={"phase_encode": (4, 8)})
+
+    assert buffer.kspace.shape == (COILS, 4, N_X)
+    assert buffer.origin == {"phase_encode": 4}
+    buffer.add(acquire(kspace_encode_step_1=5))
+    assert _lines_at(buffer) == [1]
+    with pytest.raises(ValueError, match="outside the 4 from 4"):
+        buffer.add(acquire(kspace_encode_step_1=9))
+
+
+@pytest.mark.parametrize(
+    ("crop", "message"),
+    [
+        ({"slice": (0, 1)}, "only"),
+        ({"phase_encode": (4, 20)}, "cannot crop"),
+        ({"phase_encode": (6, 6)}, "cannot crop"),
+    ],
+)
+def test_a_crop_that_is_not_a_part_of_an_encoded_axis_is_refused(crop, message):
+    grid = EncodingSpace.from_header(header(space(y=16, slice=2)))
+
+    with pytest.raises(ValueError, match=message):
+        ReconBuffer(grid, crop=crop)
 
 
 # --------------------------------------------------------------------------
@@ -314,7 +556,11 @@ def _lines(*lines):
 
 
 def _sampled(buffer):
-    return [] if buffer is None else list(np.flatnonzero(buffer.mask.any(axis=-1)))
+    """The lines of the grid ``buffer`` holds samples of."""
+    if buffer is None:
+        return []
+    first = buffer.origin.get("phase_encode", 0)
+    return [first + int(line) for line in np.flatnonzero(buffer.mask.any(axis=-1))]
 
 
 def test_a_calibration_readout_is_reference_only():
@@ -342,6 +588,39 @@ def test_a_phase_correction_readout_is_in_neither():
 
 def test_a_unit_without_calibration_has_no_reference_buffer():
     assert _lines((2, ())).ref is None
+
+
+def test_the_reference_holds_the_lines_it_covers_and_says_where_they_are():
+    """A calibration region is a few lines of a large grid: its buffer is those
+    lines, and ``origin`` is where the first is on the grid."""
+    calibration = ("ACQ_IS_PARALLEL_CALIBRATION",)
+    unit = _lines((0, ()), (3, calibration), (5, calibration))
+
+    assert unit.ref.origin == {"phase_encode": 3}
+    assert unit.ref.kspace.shape == (COILS, 3, N_X)
+    assert unit.ref.mask[:, 0].tolist() == [True, False, True]
+    assert unit.data.origin == {"phase_encode": 0}
+    assert unit.data.kspace.shape == (COILS, 8, N_X)
+
+
+def test_a_reference_is_placed_about_the_limits_centre_before_it_is_cropped():
+    """The reference's origin is a position on the same grid the imaging data
+    is placed on, so the two are read against each other."""
+    calibration = ("ACQ_IS_PARALLEL_CALIBRATION_AND_IMAGING",)
+    unit = fill(
+        header(space(y=16, kspace_encoding_step_1=(3, 12, 7))),
+        *(
+            acquire(
+                kspace_encode_step_1=line, flags=calibration if 6 <= line <= 8 else ()
+            )
+            for line in range(3, 13)
+        ),
+    )
+
+    assert unit.ref.origin == {"phase_encode": 7}
+    assert unit.ref.mask[:, 0].tolist() == [True] * 3
+    assert _sampled(unit.data) == list(range(4, 14))
+    assert _sampled(unit.ref) == [7, 8, 9]
 
 
 def test_a_unit_that_places_nothing_still_lists_what_it_received():
@@ -524,6 +803,7 @@ def test_a_trajectory_is_placed_beside_the_data():
     for view in range(3):
         acquisition = ismrmrd.Acquisition()
         acquisition.resize(4, COILS, 2)
+        acquisition.center_sample = 2
         acquisition.data[:] = view
         acquisition.traj[:] = np.stack([np.full(4, view), np.arange(4)], axis=-1)
         acquisition.idx.kspace_encode_step_1 = view
@@ -555,6 +835,7 @@ def test_an_axis_a_readout_never_traversed_reads_back_as_the_zero_it_was():
         for view, dimensions in enumerate(order):
             acquisition = ismrmrd.Acquisition()
             acquisition.resize(4, COILS, dimensions)
+            acquisition.center_sample = 2
             acquisition.traj[:] = np.arange(1, 4 * dimensions + 1).reshape(
                 4, dimensions
             )
@@ -635,6 +916,7 @@ def test_the_grid_trajectory_is_what_bartorch_nufft_takes():
 def test_a_trajectory_without_its_field_of_view_is_refused():
     acquisition = ismrmrd.Acquisition()
     acquisition.resize(4, COILS, 2)
+    acquisition.center_sample = 2
     buffer = fill(header(space(x=4, y=3)), acquisition).data
     with pytest.raises(ValueError, match="field of view"):
         buffer.grid_trajectory()

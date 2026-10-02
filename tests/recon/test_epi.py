@@ -70,3 +70,87 @@ def test_the_navigator_phase_is_removed_from_the_reversed_readouts():
     corrected = gadget(_acquisition(backward), reversed_line)
 
     np.testing.assert_allclose(corrected[0], line, atol=1e-4 * np.abs(line).max())
+
+
+def _ramp_positions():
+    """Twofold oversampled positions, denser on the ramps, in cycles per pixel."""
+    u = np.linspace(-1, 1, 2 * COLUMNS)
+    return 0.5 * np.sin(0.5 * np.pi * u)
+
+
+def _ramp_gadget():
+    gadget = RampSampling()
+    gadget.geometry, gadget.operators = [(COLUMNS, FOV)], {}
+    return gadget
+
+
+def test_a_resampled_readout_is_a_full_echo_of_the_readout_grid():
+    positions = _ramp_positions()
+    acquisition = _acquisition(traj=(positions * COLUMNS / FOV)[:, None])
+    acquisition.center_sample = 3
+    acquisition.discard_pre, acquisition.discard_post = 2, 1
+
+    out = _ramp_gadget()(acquisition, _sampled(positions)[None])
+
+    assert out.shape == (1, COLUMNS)
+    assert acquisition.center_sample == COLUMNS // 2
+    assert (acquisition.discard_pre, acquisition.discard_post) == (0, 0)
+
+
+def test_a_reversed_readout_is_resampled_with_the_grid_centre_counted_from_its_end():
+    positions = _ramp_positions()[::-1]
+    acquisition = _acquisition(
+        AcquisitionFlag.IS_REVERSE, traj=(positions * COLUMNS / FOV)[:, None]
+    )
+
+    _ramp_gadget()(acquisition, _sampled(positions)[None])
+
+    assert acquisition.center_sample == COLUMNS - 1 - COLUMNS // 2
+
+
+def test_flipping_a_reversed_readout_mirrors_its_echo_and_its_discards():
+    gadget = EpiPhaseCorrection()
+    gadget.startup(SimpleNamespace(header=None))
+    acquisition = _acquisition(AcquisitionFlag.IS_REVERSE)
+    acquisition.center_sample = 10
+    acquisition.discard_pre, acquisition.discard_post = 4, 2
+
+    gadget(acquisition, np.ones((1, COLUMNS), dtype=complex))
+
+    assert acquisition.center_sample == COLUMNS - 1 - 10
+    assert (acquisition.discard_pre, acquisition.discard_post) == (2, 4)
+
+
+def test_a_forward_readout_keeps_its_echo_and_its_discards():
+    gadget = EpiPhaseCorrection()
+    gadget.startup(SimpleNamespace(header=None))
+    acquisition = _acquisition()
+    acquisition.center_sample = 10
+    acquisition.discard_pre, acquisition.discard_post = 4, 2
+
+    gadget(acquisition, np.ones((1, COLUMNS), dtype=complex))
+
+    assert acquisition.center_sample == 10
+    assert (acquisition.discard_pre, acquisition.discard_post) == (4, 2)
+
+
+def test_forward_and_reversed_lines_leave_the_gadgets_in_one_direction_with_one_echo():
+    positions = _ramp_positions()
+    ramp = _ramp_gadget()
+    correction = EpiPhaseCorrection()
+    correction.startup(SimpleNamespace(header=None))
+    lines = []
+    for flags, order in (
+        (AcquisitionFlag(0), slice(None)),
+        (AcquisitionFlag.IS_REVERSE, slice(None, None, -1)),
+    ):
+        acquisition = _acquisition(
+            flags, traj=(positions[order] * COLUMNS / FOV)[:, None]
+        )
+        data = correction(
+            acquisition, ramp(acquisition, _sampled(positions[order])[None])
+        )
+        lines.append((acquisition.center_sample, data[0]))
+
+    assert [echo for echo, _ in lines] == [COLUMNS // 2, COLUMNS // 2]
+    np.testing.assert_allclose(lines[1][1], lines[0][1], atol=1e-3)

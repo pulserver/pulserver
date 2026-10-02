@@ -23,9 +23,11 @@ PLUGIN = Pics()
 
 `data` is the {class}`~pulserver.recon.ReconData` of one reconstruction unit,
 and `data.data` its k-space, `(coils, ..., readout)`, with the axes
-`data.data.axes` names. Readouts are placed by their encoding counters, which a
-sequence sets with `self.labels(LIN=line)` in its kernel or `pp.make_label` as
-in PyPulseq; a readout placed over another is warned about.
+`data.data.axes` names. Readouts are placed by their echo along the readout and
+by their encoding counters along the encoded axes
+({ref}`reconstruction-placement`); a sequence sets the counters with
+`self.labels(LIN=line)` in its kernel or `pp.make_label` as in PyPulseq, and a
+readout placed over another is warned about.
 The proxy runs the plugin in a worker process, one per series, over an MRD
 stream enriched from the sequence's design
 ({doc}`../explanations/reconstruction`). The client names the plugin of a series
@@ -62,7 +64,7 @@ then, under its own branch, in the order the units opened.
 | Attribute | Holds |
 | --- | --- |
 | `data` | the k-space of the imaging readouts, a {class}`~pulserver.recon.ReconBuffer`, or `None` when the unit placed none |
-| `ref` | the k-space of the parallel-imaging calibration readouts laid out as `data`, or `None` |
+| `ref` | the k-space of the parallel-imaging calibration readouts, laid out as `data` but holding only the lines of the phase-encode and partition axes its readouts cover, which start at `ref.origin` on the grid of `data`; `None` when the unit has none |
 | `counters` | the unit's image counters not in `axes`, by MRD name |
 | `waveforms` | the waveforms received since the previous unit closed |
 | `acquisitions` | every readout the unit received, as it arrived |
@@ -124,6 +126,39 @@ series pickled, as a copy without its `cleanup`.
 `context.device` is the GPU the proxy gave the series, such as `"cuda:0"`, or
 `None`. A child process started with the `spawn` method runs functions from
 importable modules, not from the plugin file.
+
+## Readout placement
+
+A readout of a Cartesian encoding space is placed so that its echo,
+`center_sample`, lies at sample `N // 2` of the readout axis, the samples from
+`discard_pre` to `number_of_samples - discard_post` being the ones copied. The
+counter of a line is placed at `counter - center + extent // 2` along the
+encoded axis, `center` being the counter of the k-space centre in the header's
+encoding limits, so the counters of a partial-Fourier or undersampled scan
+need not start at 0. A readout or a line that falls outside the buffer raises a
+`ValueError`. `data.data.readout` is the first and last sample placed.
+
+A plugin brings its readouts to the reconstruction matrix with two gadgets,
+run in this order. {class}`~pulserver.recon.AsymmetricEcho` zero-fills a
+partial echo to the full echo that is symmetric about its `center_sample`, and
+declares the zeros as discarded so that they are not placed.
+{class}`~pulserver.recon.RemoveReadoutOversampling` crops a full echo to the
+readout field of view of the reconstruction, the ratio of the header's encoded
+to reconstructed field of view along the readout, and needs bartorch (the
+`coils` extra). A gadget states the echo of the readout it returns by assigning
+`center_sample`, `discard_pre` and `discard_post` of the acquisition it is
+given, which is a copy of the one the stream delivered:
+
+```pycon
+>>> import ismrmrd
+>>> acquisition = ismrmrd.Acquisition()
+>>> acquisition.resize(5, 2)
+>>> acquisition.center_sample = 1
+>>> full = recon.AsymmetricEcho()(acquisition, np.ones((2, 5), dtype=np.complex64))
+>>> full.shape[-1], acquisition.discard_pre, acquisition.center_sample
+(8, 3, 4)
+
+```
 
 ## Non-Cartesian data
 
@@ -191,7 +226,7 @@ its own:
 | `simplefft` | A two-dimensional Cartesian FFT of the lines in arrival order, one image per slice |
 | `cartesian` | A Cartesian FFT of the readouts placed by their encoding counters, partitions included; one image per slice, contrast, cardiac phase, set and repetition, averages summed |
 | `nufft` | The same images as `cartesian`, for a radial or spiral trajectory or a stack of them, each solved as `bart pics -t -R W` over `bart nlinv -t` sensitivities of the samples near the k-space centre. Needs the `coils` extra |
-| `pics` | `cartesian`'s images, its readouts cropped to the matrix as they arrive; each image solved as `bart pics -R W` over `bart nlinv` sensitivities of its low-resolution centre, then completed by `bart homodyne` along a partial-Fourier axis. Needs the `coils` extra |
+| `pics` | `cartesian`'s images, its readouts completed to full echoes and cropped to the reconstruction field of view as they arrive (`AsymmetricEcho`, `RemoveReadoutOversampling`); each image solved as `bart pics -R W` over `bart nlinv` sensitivities of its low-resolution centre, then completed by `bart homodyne` along a partial-Fourier axis. Needs the `coils` extra |
 | `epi` | `pics`'s images from EPI readouts, each resampled off its ramps onto the matrix and corrected for its odd/even phase against the shot's navigator as it arrives (`bart` ramp operator, `estimate_epi_phase`). The phase-encode-reversed reference set is an image of its own, and with PyHySCO installed (GPL-3.0, not a dependency) each later image of its slice is corrected for susceptibility distortion against it. Needs the `coils` extra |
 | `pmc` | `pics`'s images, and a pose from each three-plane navigator (`NAV` or `RTFEEDBACK` readouts): planes gridded with Pipe-Menon density on one thread, coils combined by root sum of squares, registered against the first navigator and filtered by an extended Kalman filter. The pose is published to the scan when its design sets `EnablePmc`. Needs the `coils` extra |
 
