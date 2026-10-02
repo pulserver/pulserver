@@ -36,18 +36,32 @@ def main(argv: list[str] | None = None) -> int:
         "named, the recording is asked for from that vendor's tooling",
     )
     parser.add_argument(
-        "--shift-us",
+        "--dead-time-us",
         type=float,
         default=0.0,
-        help="move the recording in time before comparing, in microseconds: a "
-        "machine drives its transmit and gradient channels on separate "
-        "timelines and records each as it was driven",
+        help="what the recording's times run ahead of the sequence's by, on "
+        "every channel",
+    )
+    parser.add_argument(
+        "--rf-wait-us",
+        type=float,
+        default=0.0,
+        help="what the transmit channels run ahead by on top of that: a "
+        "machine drives transmit and gradients on separate timelines and "
+        "records each as it drove it",
     )
     parser.add_argument(
         "--tolerance",
         type=float,
-        default=0.05,
-        help="the largest difference that still counts as agreement, in mT/m",
+        default=None,
+        help="the largest gradient difference that counts as agreement, in "
+        "mT/m; taken from the slew rate and the raster of --limits when unset",
+    )
+    parser.add_argument(
+        "--rf-tolerance",
+        type=float,
+        default=1.0,
+        help="the largest transmit difference, as a percentage of the peak",
     )
     parser.add_argument(
         "--limits",
@@ -72,8 +86,10 @@ def main(argv: list[str] | None = None) -> int:
             args.seq,
             vendor=args.vendor,
             played=args.played,
-            shift_us=args.shift_us,
+            dead_time_us=args.dead_time_us,
+            rf_wait_us=args.rf_wait_us,
             tolerance_mt_per_m=args.tolerance,
+            rf_tolerance_percent=args.rf_tolerance,
             cache_ext=args.cache_ext,
             system=system,
         )

@@ -15,6 +15,24 @@ GAMMA_HZ_PER_T = 42.576e6
 #: A gradient in hertz per metre, in millitesla per metre.
 _HZ_PER_M_IN_MT_PER_M = 1.0e3 / GAMMA_HZ_PER_T
 
+#: How many raster steps of slew two renderings of a gradient may differ by and
+#: still be the same gradient. A recording holds a value per raster point, and
+#: the two renderings need not step on the same one.
+_STEPS_OF_SLEW = 3.0
+
+
+def gradient_tolerance_mt_per_m(
+    max_slew_t_per_m_per_s: float, raster_us: float
+) -> float:
+    """Return how far two renderings of a gradient may differ and still agree.
+
+    The amplitude a machine can legitimately be away by is what it can slew
+    through in the few raster steps the two renderings may be apart, so the
+    tolerance is the hardware's and not a number chosen here.
+    """
+    # A slew in T/m/s over a raster in us is mT/m once per thousand.
+    return _STEPS_OF_SLEW * max_slew_t_per_m_per_s * raster_us * 1e-3
+
 
 @dataclass(frozen=True)
 class ChannelAgreement:
@@ -64,6 +82,8 @@ class Comparison:
     reference: str
     channels: tuple[ChannelAgreement, ...]
     shift_us: float = 0.0
+    rf_shift_us: float = 0.0
+    magnitude_scale: float = 1.0
 
     @property
     def agrees(self) -> bool:
@@ -73,8 +93,16 @@ class Comparison:
     def __str__(self) -> str:
         verdict = "agrees with" if self.agrees else "DIFFERS from"
         lines = [f"the sequence {verdict} the {self.reference} waveforms"]
-        if self.shift_us:
-            lines.append(f"  reference shifted by {self.shift_us:.0f} us")
+        if self.shift_us or self.rf_shift_us:
+            lines.append(
+                f"  reference shifted by {self.shift_us:.0f} us, "
+                f"its transmit by {self.rf_shift_us:.0f} us"
+            )
+        if self.magnitude_scale != 1.0:
+            lines.append(
+                f"  transmit magnitude compared by shape, at "
+                f"{self.magnitude_scale:.6g} Hz per recorded count"
+            )
         for channel in self.channels:
             mark = " " if channel.agrees else "*"
             lines.append(
@@ -83,6 +111,54 @@ class Comparison:
                 f"({100 * channel.relative_difference:.2f}%)"
             )
         return "\n".join(lines)
+
+
+def compare_shape(
+    asked_time_us: NDArray[np.float64],
+    asked: NDArray[np.float64],
+    played_time_us: NDArray[np.float64],
+    played: NDArray[np.float64],
+    *,
+    channel: str,
+    tolerance_percent: float,
+) -> tuple[ChannelAgreement, float]:
+    """Compare two renderings of a channel whose scale is not known, by shape.
+
+    The transmit magnitude a machine records is in its converter's own numbers,
+    and what turns them into hertz is the peak transmit field of the scan being
+    played, which the recording does not carry. So the recording is scaled to
+    the peak the sequence asks for and the two are compared as shapes; the
+    scale that took is returned, because it is the quantity a machine's own
+    calibration would have to supply.
+
+    The difference is the root mean square against the peak, as a percentage.
+    """
+    if not played_time_us.size or not asked_time_us.size:
+        return (
+            ChannelAgreement(
+                channel=channel, peak=0.0, largest_difference=0.0, agrees=True
+            ),
+            1.0,
+        )
+    resampled = np.interp(played_time_us, asked_time_us, asked, left=0.0, right=0.0)
+    peak_asked = float(np.max(np.abs(resampled)))
+    peak_played = float(np.max(np.abs(played)))
+    scale = peak_asked / peak_played if peak_played else 1.0
+    difference = resampled - played * scale
+    error = (
+        float(np.sqrt(np.mean(difference**2))) / peak_asked * 100.0
+        if peak_asked
+        else 0.0
+    )
+    return (
+        ChannelAgreement(
+            channel=channel,
+            peak=peak_asked,
+            largest_difference=error,
+            agrees=error <= tolerance_percent,
+        ),
+        scale,
+    )
 
 
 def compare_gradients(

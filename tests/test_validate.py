@@ -144,7 +144,7 @@ def test_a_recording_that_plays_a_gradient_the_sequence_never_asked_for_is_caugh
     wrong[len(wrong) // 2] += 1.0  # 10 mT/m where the sequence asks for none
     channels["gx"] = (times, wrong)
     played = _recording(tmp_path / "r.xml", channels)
-    comparison = validate(seq, vendor="ge", played=played)
+    comparison = validate(seq, vendor="ge", played=played, tolerance_mt_per_m=0.05)
     assert not comparison.agrees
     assert not next(c for c in comparison.channels if c.channel == "gx").agrees
 
@@ -158,8 +158,91 @@ def test_a_recording_offset_in_time_agrees_once_the_offset_is_stated(tmp_path):
         for axis, (times, amplitudes) in asked.items()
     }
     played = _recording(tmp_path / "r.xml", channels)
-    assert not validate(seq, vendor="ge", played=played).agrees
-    assert validate(seq, vendor="ge", played=played, shift_us=404.0).agrees
+    loose = {"tolerance_mt_per_m": 0.05}
+    assert not validate(seq, vendor="ge", played=played, **loose).agrees
+    assert validate(seq, vendor="ge", played=played, dead_time_us=404.0, **loose).agrees
+
+
+# %% the transmit channels
+
+
+def _transmit_of(seq_path):
+    """The pulse a sequence asks for, as (time_us, complex envelope in Hz)."""
+    import pypulseqpp as pp2
+
+    channels = pp2.io.read(seq_path).waveforms(append_RF=True)
+    envelope = np.asarray(channels[3])
+    return envelope[0].real * 1e6, envelope[1]
+
+
+def test_a_transmit_magnitude_agrees_whatever_the_converter_counts_in(tmp_path):
+    """Nothing says what a recorded count is worth, so the shape is what agrees."""
+    seq = _copied("gre_2d_3sl.seq", tmp_path)
+    times, envelope = _transmit_of(seq)
+    counts = np.abs(envelope) / np.max(np.abs(envelope)) * 32767.0
+    played = _recording(
+        tmp_path / "r.xml",
+        {"gx": ([0], [0.0]), "rho": (times, counts)},
+    )
+    comparison = validate(seq, vendor="ge", played=played, tolerance_mt_per_m=1e9)
+    rho = next(c for c in comparison.channels if c.channel == "rho")
+    assert rho.agrees, str(comparison)
+    assert comparison.magnitude_scale == pytest.approx(
+        float(np.max(np.abs(envelope))) / 32767.0, rel=1e-6
+    )
+
+
+def test_a_transmit_magnitude_of_another_shape_is_caught(tmp_path):
+    """Scaling to the peak must not turn a different pulse into the same pulse."""
+    seq = _copied("gre_2d_3sl.seq", tmp_path)
+    times, envelope = _transmit_of(seq)
+    counts = np.abs(envelope) / np.max(np.abs(envelope)) * 32767.0
+    counts[: len(counts) // 2] *= 0.3
+    played = _recording(
+        tmp_path / "r.xml",
+        {"gx": ([0], [0.0]), "rho": (times, counts)},
+    )
+    comparison = validate(seq, vendor="ge", played=played, tolerance_mt_per_m=1e9)
+    assert not next(c for c in comparison.channels if c.channel == "rho").agrees
+
+
+def test_the_recorded_phase_runs_the_other_way_from_the_one_asked_for(tmp_path):
+    """A recording stores the turn negated, over a converter spanning one turn."""
+    seq = _copied("gre_2d_3sl.seq", tmp_path)
+    times, envelope = _transmit_of(seq)
+    counts = -np.angle(envelope) / np.pi * 2**23
+    played = _recording(
+        tmp_path / "r.xml",
+        {"gx": ([0], [0.0]), "theta": (times, counts)},
+    )
+    comparison = validate(seq, vendor="ge", played=played, tolerance_mt_per_m=1e9)
+    theta = next(c for c in comparison.channels if c.channel == "theta")
+    assert theta.agrees, str(comparison)
+
+
+def test_a_phase_recorded_in_the_same_sense_is_caught(tmp_path):
+    """Getting the sense wrong is the error the convention exists to prevent."""
+    seq = _copied("gre_2d_3sl.seq", tmp_path)
+    times, envelope = _transmit_of(seq)
+    turned = np.angle(envelope * np.exp(1j * 1.0))
+    counts = turned / np.pi * 2**23  # not negated
+    played = _recording(
+        tmp_path / "r.xml",
+        {"gx": ([0], [0.0]), "theta": (times, counts)},
+    )
+    comparison = validate(seq, vendor="ge", played=played, tolerance_mt_per_m=1e9)
+    assert not next(c for c in comparison.channels if c.channel == "theta").agrees
+
+
+# %% the tolerance
+
+
+def test_the_gradient_tolerance_is_what_the_hardware_can_slew_through(tmp_path):
+    """A number from the machine, not one chosen here."""
+    from pulserver.validate import gradient_tolerance_mt_per_m
+
+    assert gradient_tolerance_mt_per_m(150.0, 4.0) == pytest.approx(1.8)
+    assert gradient_tolerance_mt_per_m(200.0, 4.0) == pytest.approx(2.4)
 
 
 # %% what it refuses
@@ -196,7 +279,9 @@ def test_the_command_fails_where_the_machine_played_something_else(tmp_path, cap
     wrong[len(wrong) // 2] += 1.0
     channels["gx"] = (times, wrong)
     played = _recording(tmp_path / "r.xml", channels)
-    status = validate_command([str(seq), "--vendor", "ge", "--played", str(played)])
+    status = validate_command(
+        [str(seq), "--vendor", "ge", "--played", str(played), "--tolerance", "0.05"]
+    )
     assert status == 1
     assert "DIFFERS" in capsys.readouterr().out
 

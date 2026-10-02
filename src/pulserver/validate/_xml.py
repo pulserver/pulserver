@@ -25,6 +25,10 @@ CHANNELS = {
 #: One gauss per centimetre in millitesla per metre.
 _GAUSS_PER_CM_IN_MT_PER_M = 10.0
 
+#: The transmit phase spans a turn over a signed 24-bit converter, so one of
+#: its counts is this many radians.
+_PHASE_COUNT_IN_RAD = np.pi / 2**23
+
 
 @dataclass
 class PlayedWaveforms:
@@ -33,9 +37,11 @@ class PlayedWaveforms:
     One pair of arrays per channel: the time of each sample in microseconds,
     and its amplitude in the unit that channel is stored in. The gradients are
     in gauss per centimetre, and :meth:`gradient_mt_per_m` converts them. The
-    transmit channels are stored as the converter's own numbers, and the scale
-    that turns them into hertz and radians belongs to the machine, so nothing
-    here invents one.
+    transmit channels are stored as the converter's own numbers.
+    :meth:`phase_rad` converts the phase, whose converter spans a turn. The
+    magnitude's scale is the peak transmit field of the scan being played,
+    which is not in the file, so nothing here invents one: a magnitude is
+    compared by its shape.
 
     Attributes
     ----------
@@ -65,6 +71,15 @@ class PlayedWaveforms:
         """Return a gradient channel in millitesla per metre."""
         time_us, amplitude = self.get(name)
         return time_us, amplitude * _GAUSS_PER_CM_IN_MT_PER_M
+
+    def phase_rad(self) -> tuple[NDArray[np.int64], NDArray[np.float64]]:
+        """Return the transmit phase in radians, wrapped to one turn.
+
+        The recorded phase runs the other way from the one a sequence states,
+        so it is negated here and the two are read in the same sense.
+        """
+        time_us, counts = self.get("theta")
+        return time_us, np.angle(np.exp(-1j * counts * _PHASE_COUNT_IN_RAD))
 
 
 def read_waveform_xml(path: Path | str) -> PlayedWaveforms:

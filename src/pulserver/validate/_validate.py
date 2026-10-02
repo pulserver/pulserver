@@ -12,7 +12,15 @@ from typing import Any
 import numpy as np
 import pypulseqpp as pp
 
-from ._compare import Comparison, compare_gradients, gradients_of_sequence
+from ._compare import (
+    GAMMA_HZ_PER_T,
+    ChannelAgreement,
+    Comparison,
+    compare_gradients,
+    compare_shape,
+    gradient_tolerance_mt_per_m,
+    gradients_of_sequence,
+)
 from ._xml import read_waveform_xml
 
 #: The machines a recording can be read from. A sequence checked without naming
@@ -26,8 +34,10 @@ def validate(
     *,
     vendor: str | None = None,
     played: Path | str | None = None,
-    shift_us: float = 0.0,
-    tolerance_mt_per_m: float = 0.05,
+    dead_time_us: float = 0.0,
+    rf_wait_us: float = 0.0,
+    tolerance_mt_per_m: float | None = None,
+    rf_tolerance_percent: float = 1.0,
     cache_ext: str = ".pseg",
     system: Any = None,
 ) -> Comparison:
@@ -52,12 +62,19 @@ def validate(
     played
         A recording to compare against. Absent, and with a vendor named, one is
         asked for from that vendor's tooling if it is installed here.
-    shift_us
-        Moves the recording in time before comparing. A machine drives its
-        transmit and gradient channels on separate timelines, so a recording
-        holds them offset by that machine's own constant.
+    dead_time_us
+        What a recording's times run ahead of the sequence's by, on every
+        channel: a machine starts a unit before it plays anything of it.
+    rf_wait_us
+        What the transmit channels run ahead by on top of that. A machine
+        drives transmit and gradients on separate timelines and records each as
+        it drove it, so the two meet only once both constants are stated.
     tolerance_mt_per_m
-        The largest difference that still counts as agreement.
+        The largest gradient difference that still counts as agreement. Taken
+        from the slew rate and the gradient raster when a system is given,
+        which is what the hardware can legitimately be away by; 0.05 otherwise.
+    rf_tolerance_percent
+        The largest transmit difference, as a percentage of the peak.
     cache_ext
         Extension of the cache read when comparing against it.
     system
@@ -79,6 +96,15 @@ def validate(
     seq_path = Path(seq_path)
     sequence = pp.io.read(seq_path)
     asked = gradients_of_sequence(sequence)
+    if tolerance_mt_per_m is None:
+        tolerance_mt_per_m = (
+            gradient_tolerance_mt_per_m(
+                float(system.max_slew) / GAMMA_HZ_PER_T,
+                float(system.grad_raster_time) * 1e6,
+            )
+            if system is not None
+            else 0.05
+        )
 
     if vendor is None:
         return compare_gradients(
@@ -99,12 +125,22 @@ def validate(
     if played is None:
         played = _record(seq_path)
     recording = read_waveform_xml(played)
-    return compare_gradients(
+    gradients = compare_gradients(
         asked,
         {axis: recording.gradient_mt_per_m(axis) for axis in ("gx", "gy", "gz")},
         reference="played",
-        shift_us=shift_us,
+        shift_us=dead_time_us,
         tolerance_mt_per_m=tolerance_mt_per_m,
+    )
+    transmit, scale = _compare_transmit(
+        sequence, recording, dead_time_us + rf_wait_us, rf_tolerance_percent
+    )
+    return Comparison(
+        reference="played",
+        channels=gradients.channels + transmit,
+        shift_us=dead_time_us,
+        rf_shift_us=dead_time_us + rf_wait_us,
+        magnitude_scale=scale,
     )
 
 
@@ -181,3 +217,53 @@ def _gradients_of_cache(
                 np.array([], dtype=np.float64),
             )
     return out
+
+
+#: The share of its peak a pulse must reach for its phase to mean anything.
+_PULSE_FLOOR = 0.01
+
+
+def _compare_transmit(
+    sequence: Any,
+    recording: Any,
+    shift_us: float,
+    tolerance_percent: float,
+) -> tuple[tuple[ChannelAgreement, ...], float]:
+    """Compare the transmit magnitude and phase, by shape and in radians."""
+    channels = sequence.waveforms(append_RF=True)
+    if len(channels) < 4 or np.asarray(channels[3]).size == 0:
+        return (), 1.0
+    envelope = np.asarray(channels[3])
+    asked_time_us = envelope[0].real * 1e6
+    asked = envelope[1]
+
+    magnitude_time, magnitude = recording.get("rho")
+    rho, scale = compare_shape(
+        asked_time_us,
+        np.abs(asked),
+        np.asarray(magnitude_time, dtype=np.float64) - shift_us,
+        np.abs(np.asarray(magnitude, dtype=np.float64)),
+        channel="rho",
+        tolerance_percent=tolerance_percent,
+    )
+
+    phase_time, phase = recording.phase_rad()
+    at = np.asarray(phase_time, dtype=np.float64) - shift_us
+    # Read as a turn rather than as an angle: interpolating a wrapped angle
+    # walks the long way round wherever it crosses the branch, and a phase is
+    # only a phase where there is a pulse to carry it.
+    asked_turn = np.interp(at, asked_time_us, asked.real, left=0.0, right=0.0) + 1j * (
+        np.interp(at, asked_time_us, asked.imag, left=0.0, right=0.0)
+    )
+    carried = np.abs(asked_turn) > _PULSE_FLOOR * float(np.max(np.abs(asked)))
+    apart = np.angle(
+        asked_turn[carried] * np.conj(np.exp(1j * np.asarray(phase)[carried]))
+    )
+    largest = float(np.max(np.abs(apart))) if apart.size else 0.0
+    theta = ChannelAgreement(
+        channel="theta",
+        peak=float(np.pi),
+        largest_difference=largest,
+        agrees=largest <= np.pi * tolerance_percent / 100.0,
+    )
+    return (rho, theta), scale
