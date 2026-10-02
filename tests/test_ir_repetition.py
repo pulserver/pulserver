@@ -113,11 +113,20 @@ def test_the_repetition_time_counts_each_delay_at_the_duration_it_plays(tmp_path
 
 
 def test_a_hyper_tr_declared_as_pypulseqpp_writes_it_is_the_repeating_unit(tmp_path):
+    """The declaration wins over the period the blocks would otherwise show.
+
+    The name is pypulseqpp's, which owns the definition and reads it, so the
+    two are checked against each other rather than only against this number:
+    a sequence declaring one size and segmented at another is the drift this
+    guards.
+    """
+
     def build(sequence):
         alternating_delays_around_a_gradient(sequence)
-        sequence.set_definition("TRsize", 6)
+        sequence.set_definition("TRSize", 6)
 
     sequence = read(written(tmp_path, "declared_hyper_tr.seq", build))
+    assert sequence.repetition()[0] == 6
     assert segmented(sequence)["tr_size"] == 6
 
 
