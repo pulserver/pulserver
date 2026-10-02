@@ -280,6 +280,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../api/proxy.html">Reconstruction proxy</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/recon.html">Reconstruction plugins</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/mrd.html">MRD data</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/validate.html">Validation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/virtual.html">Virtual scanner</a></li>
 </ul>
 </details></li>
@@ -527,6 +528,7 @@
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#reconstruction-proxy">Reconstruction proxy</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#reconstruction-server">Reconstruction server</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#checking-a-sequence-plays-as-it-was-written">Checking a sequence plays as it was written</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#see-also">See also</a></li>
 </ul>
             </nav>
@@ -927,6 +929,72 @@ authenticated nor encrypted, and <code class="docutils literal notranslate"><spa
 reaches it on. It stops on <code class="docutils literal notranslate"><span class="pre">SIGINT</span></code> or <code class="docutils literal notranslate"><span class="pre">SIGTERM</span></code> and waits for the series it is
 running.</p>
 </section>
+<section id="checking-a-sequence-plays-as-it-was-written">
+<h2>Checking a sequence plays as it was written<a class="headerlink" href="#checking-a-sequence-plays-as-it-was-written" title="Link to this heading">#</a></h2>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pulserver<span class="w"> </span>validate<span class="w"> </span>SEQ<span class="w"> </span><span class="o">[</span>--vendor<span class="w"> </span>ge<span class="o">]</span><span class="w"> </span><span class="o">[</span>--played<span class="w"> </span>FILE<span class="o">]</span><span class="w"> </span><span class="o">[</span>--dead-time-us<span class="w"> </span>N<span class="o">]</span><span class="w"> </span><span class="o">[</span>--rf-wait-us<span class="w"> </span>N<span class="o">]</span><span class="w"> </span><span class="o">[</span>--tolerance<span class="w"> </span>MT<span class="o">]</span><span class="w"> </span><span class="o">[</span>--rf-tolerance<span class="w"> </span>PCT<span class="o">]</span><span class="w"> </span><span class="o">[</span>--limits<span class="w"> </span>FILE<span class="o">]</span>
+</pre></div>
+</div>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Option</p></th>
+<th class="head"><p>Meaning</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">SEQ</span></code></p></td>
+<td><p>The sequence file to check</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--vendor</span></code></p></td>
+<td><p>Which machine the recording came from. Without one the check is against the sequence’s own IR cache</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--played</span></code></p></td>
+<td><p>The recording to check against; without one, and with a vendor named, the recording is asked for from that vendor’s tooling if it is installed</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--dead-time-us</span></code></p></td>
+<td><p>What the recording’s times run ahead of the sequence’s by, on every channel</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--rf-wait-us</span></code></p></td>
+<td><p>What the transmit channels run ahead by on top of that</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--tolerance</span></code></p></td>
+<td><p>The largest gradient difference that counts as agreement, in mT/m; taken from the slew rate and raster of <code class="docutils literal notranslate"><span class="pre">--limits</span></code> when unset</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--rf-tolerance</span></code></p></td>
+<td><p>The largest transmit difference, as a percentage of the peak; 1 by default</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--limits</span></code></p></td>
+<td><p>The <code class="docutils literal notranslate"><span class="pre">[Limits]</span></code> block, for a sequence that has no cache yet</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>The command exits 0 where the two agree, 1 where they differ, and 2 where it
+could not compare, and prints the largest difference on each gradient axis
+against the peak that axis reaches.</p>
+<p>Naming a vendor compares against a recording of a machine playing the sequence,
+which establishes that the machine plays what was written. Naming none compares
+against the waveforms the sequence’s own IR cache holds, which establishes only
+that the conversion kept the sequence — a conversion and a playout that are
+wrong in the same way agree with each other. The output says which of the two
+ran.</p>
+<p>The gradients are compared in millitesla per metre, and the transmit channels
+as the recording stores them: the phase over a converter that spans a turn, and
+the magnitude by its shape, because what turns a recorded count into hertz is
+the peak transmit field of the scan being played and the recording does not
+carry it. The scale that the shape took is printed, which is the number a
+machine’s own calibration would have to supply.</p>
+<p>A machine starts a unit before it plays anything of it, and drives its transmit
+and gradient channels on separate timelines, so a recording runs ahead of the
+sequence by one constant on every channel and by a second on the transmit
+channels. <code class="docutils literal notranslate"><span class="pre">--dead-time-us</span></code> and <code class="docutils literal notranslate"><span class="pre">--rf-wait-us</span></code> state them. Nothing estimates
+them, because a comparison that quietly aligns two waveforms can align away the
+disagreement it exists to find.</p>
+<p>The gradient tolerance is the hardware’s: what the gradients can slew through
+in the few raster steps the two renderings may be apart. A fixed number would
+be either too tight for a fast machine or too loose for a careful one.</p>
+<p>Checking a sequence leaves nothing beside it: where no cache is there already,
+one is built beside a copy and discarded.</p>
+</section>
 <section id="see-also">
 <h2>See also<a class="headerlink" href="#see-also" title="Link to this heading">#</a></h2>
 <ul class="simple">
@@ -994,6 +1062,7 @@ running.</p>
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#reconstruction-proxy">Reconstruction proxy</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#reconstruction-server">Reconstruction server</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#checking-a-sequence-plays-as-it-was-written">Checking a sequence plays as it was written</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#see-also">See also</a></li>
 </ul>
   </nav></div>

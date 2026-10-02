@@ -182,6 +182,19 @@ from.
    ReconBuffer
    ReconResult
 
+.. currentmodule:: pulserver.validate
+
+.. autosummary::
+   :toctree: generated
+   :nosignatures:
+
+   validate
+   Comparison
+   ChannelAgreement
+   read_waveform_xml
+   PlayedWaveforms
+   VENDORS
+
 .. currentmodule:: pulserver.virtual
 
 .. autosummary::
