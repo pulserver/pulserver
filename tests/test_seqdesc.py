@@ -3,6 +3,7 @@
 import base64
 import json
 import socket
+import threading
 
 import ismrmrd
 import numpy as np
@@ -157,12 +158,21 @@ def test_a_pulse_integrated_over_its_sample_times_turns_through_its_angle(raster
 def _sent_and_read(text):
     """Send ``text`` and one acquisition over a socket; return what the far end reads."""
     near, far = socket.socketpair()
-    with near, far:
+    far.settimeout(60.0)
+
+    def send():
         sending = Connection(near)
         sending.send(text)
         sending.send(ismrmrd.Acquisition.from_array(np.ones((1, 4), np.complex64)))
         sending.send_close()
-        return list(Connection(far))
+
+    # A socket pair buffers a few kilobytes on macOS, less than the message.
+    sender = threading.Thread(target=send, daemon=True)
+    with near, far:
+        sender.start()
+        read = list(Connection(far))
+        sender.join()
+    return read
 
 
 def _decoded(text):
