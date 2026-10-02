@@ -12,15 +12,15 @@ from ._keys import FloatKey
 #: The translation of the field-of-view centre along the logical readout,
 #: phase and slice axes, in mm.
 FOV_OFFSET = (
-    str(FloatKey.FOV_OFFSET_X),
-    str(FloatKey.FOV_OFFSET_Y),
-    str(FloatKey.FOV_OFFSET_Z),
+    FloatKey.FOV_OFFSET_X,
+    FloatKey.FOV_OFFSET_Y,
+    FloatKey.FOV_OFFSET_Z,
 )
 
 #: The rotation from the logical to the physical axes, row-major:
 #: ``fov_rotation_ij`` is element ``(i, j)`` of ``R`` in physical = R logical.
 FOV_ROTATION = tuple(
-    str(FloatKey[f"FOV_ROTATION_{i}{j}"]) for i in (1, 2, 3) for j in (1, 2, 3)
+    FloatKey[f"FOV_ROTATION_{i}{j}"] for i in (1, 2, 3) for j in (1, 2, 3)
 )
 
 #: The entries a protocol carries for the scanner's prescription. The

@@ -23,6 +23,7 @@ from .._plugins import PluginPath
 from ..design import ScannerSequence, load_plugin
 from ..protocol import (
     Parameter,
+    ProtocolKey,
     Validation,
     format_listing,
     format_pulses,
@@ -128,7 +129,7 @@ def generate(
     system, options, checked = split_limits(limits)
     design = design_system(limits)
     scanner = _plugin(path)
-    requested = {name: p.value for name, p in listing.items() if p.editable}
+    requested = {key: p.value for key, p in listing.items() if p.editable}
     requested.update(request)
     app, validation = scanner.resolve(design, requested)
     if app is not None and validation.values != requested:
@@ -291,7 +292,9 @@ def _pushed(store: DesignStore, design: str, push: str | None) -> str:
     return design
 
 
-def _request(block: str, listing: Mapping[str, Parameter]) -> dict[str, Any]:
+def _request(
+    block: str, listing: Mapping[ProtocolKey, Parameter]
+) -> dict[ProtocolKey, Any]:
     try:
         return parse_values(block, listing)
     except ValueError as error:
@@ -327,7 +330,7 @@ def _plugin(path: str) -> ScannerSequence:
     return _cached(path, Path(path).stat().st_mtime_ns)
 
 
-def _listing(path: str) -> dict[str, Parameter]:
+def _listing(path: str) -> dict[ProtocolKey, Parameter]:
     return _plugin(path).listing()
 
 
@@ -373,7 +376,7 @@ def _source(path: str) -> str:
 
 
 def _validated(
-    path: str, limits: Mapping[str, Any], request: Mapping[str, Any]
+    path: str, limits: Mapping[str, Any], request: Mapping[ProtocolKey, Any]
 ) -> Validation:
     return _plugin(path).validate(design_system(limits), request)
 

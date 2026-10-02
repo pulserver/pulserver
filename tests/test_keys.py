@@ -3,9 +3,10 @@
 import re
 from pathlib import Path
 
+import pypulseqpp as pp
 import pytest
 
-from pulserver.design import IntParam, ScannerSequence
+from pulserver.design import IntParam, Protocol, ScannerSequence, load_plugin
 from pulserver.protocol import (
     BoolKey,
     ConfigKey,
@@ -15,13 +16,19 @@ from pulserver.protocol import (
     IntKey,
     Kind,
     Parameter,
+    ProtocolKey,
+    TEPreset,
     UIParam,
+    UserKey,
+    UserNameKey,
     format_listing,
 )
 from pulserver.protocol._keys import NUM_USER_ENTRIES
 
 TABLE = Path(__file__).parents[1] / "src" / "c" / "io" / "pulseg_protocol.c"
 USER = re.compile(r"user\d+_(value|name)")
+PLUGINS = Path(__file__).parent / "plugins"
+SYSTEM = pp.Opts(max_grad=40.0, grad_unit="mT/m", max_slew=150.0, slew_unit="T/m/s")
 
 
 def _table():
@@ -52,10 +59,24 @@ def test_each_key_enum_is_its_type_in_the_interpreter_table(kind, keys):
 
 def test_the_user_entries_are_the_interpreter_tables():
     table = _table()
-    values = {UIParam.user_value(n) for n in range(NUM_USER_ENTRIES)}
-    names = {UIParam.user_name(n) for n in range(NUM_USER_ENTRIES)}
-    assert values == {name for name in table["FLOAT"] if USER.fullmatch(name)}
-    assert names == table["DESCRIPTION"]
+    assert {key.value for key in UserKey} == {
+        name for name in table["FLOAT"] if USER.fullmatch(name)
+    }
+    assert {key.value for key in UserNameKey} == table["DESCRIPTION"]
+
+
+def test_a_user_entry_key_is_the_member_of_its_enum_that_the_function_returns():
+    for n in range(NUM_USER_ENTRIES):
+        assert UIParam.user_value(n) is UserKey[f"USER{n}"]
+        assert UIParam.user_value(n) == f"user{n}_value"
+        assert UIParam.user_name(n) is UserNameKey[f"USER{n}"]
+        assert UIParam.user_name(n) == f"user{n}_name"
+
+
+def test_every_key_enum_is_a_protocol_key():
+    enums = (FloatKey, IntKey, BoolKey, EnumKey, ConfigKey, UserKey, UserNameKey)
+    assert all(isinstance(key, ProtocolKey) for keys in enums for key in keys)
+    assert not isinstance("TE", ProtocolKey)
 
 
 def test_ui_param_carries_every_typed_key():
@@ -78,12 +99,42 @@ def test_a_scanner_sequence_refuses_a_name_the_interpreter_does_not_know():
             ui = {"Nx": IntParam("n_x")}
 
 
-def test_an_enum_key_is_stored_and_sent_as_its_wire_name():
+def test_a_scanner_sequence_stores_its_entries_under_key_members():
     class Keyed(ScannerSequence):
         ui = {UIParam.NX: IntParam("n_x"), UIParam.user_value(0): IntParam("n_y")}
 
-    assert [type(name) for name in Keyed.ui] == [str, str]
+    assert [type(key) for key in Keyed.ui] == [IntKey, UserKey]
     assert list(Keyed.ui) == ["nx", "user0_value"]
+
+
+def test_a_plain_string_naming_an_entry_is_stored_as_its_member():
+    class Plain(ScannerSequence):
+        ui = {"nx": IntParam("n_x"), "user0_name": IntParam("n_y")}
+
+    assert [type(key) for key in Plain.ui] == [IntKey, UserNameKey]
+    assert Plain.ui[IntKey.NX] == IntParam("n_x")
+
+
+@pytest.fixture(scope="module")
+def typed():
+    return load_plugin(PLUGINS / "typed.py")
+
+
+def test_a_protocol_keeps_its_typed_keys(typed):
+    listing = typed.listing()
+    wire = {key: p.value for key, p in listing.items() if p.editable}
+    protocol = Protocol.from_wire(typed.ui, wire, SYSTEM)
+    stages = {
+        "ui": typed.ui,
+        "listing": listing,
+        "protocol": protocol,
+        "replaced": protocol.replace({UIParam.NX: 3}),
+        "to_wire": protocol.to_wire(),
+        "validation": typed.validate(SYSTEM, {UIParam.TE: TEPreset.MINIMUM}).values,
+    }
+    for stage, keyed in stages.items():
+        assert keyed, stage
+        assert all(isinstance(key, ProtocolKey) for key in keyed), stage
 
 
 def test_string_list_options_travel_as_their_values():

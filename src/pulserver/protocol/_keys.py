@@ -139,6 +139,68 @@ class ConfigKey(StrEnum):
     ENABLE_SAR_BURST_MODE = "enable_sar_burst_mode"
 
 
+class UserKey(StrEnum):
+    """Keys of the float user entries, ``user0_value`` to ``user18_value``.
+
+    ``UserKey.USER3`` is ``UIParam.user_value(3)``. The entry is a
+    :class:`~pulserver.design.FloatParam`; the description naming it is bound
+    to the matching :class:`UserNameKey` member.
+    """
+
+    USER0 = "user0_value"
+    USER1 = "user1_value"
+    USER2 = "user2_value"
+    USER3 = "user3_value"
+    USER4 = "user4_value"
+    USER5 = "user5_value"
+    USER6 = "user6_value"
+    USER7 = "user7_value"
+    USER8 = "user8_value"
+    USER9 = "user9_value"
+    USER10 = "user10_value"
+    USER11 = "user11_value"
+    USER12 = "user12_value"
+    USER13 = "user13_value"
+    USER14 = "user14_value"
+    USER15 = "user15_value"
+    USER16 = "user16_value"
+    USER17 = "user17_value"
+    USER18 = "user18_value"
+
+
+class UserNameKey(StrEnum):
+    """Keys of the descriptions naming the user entries, ``user0_name`` to ``user18_name``.
+
+    ``UserNameKey.USER3`` is ``UIParam.user_name(3)``. The entry is a
+    :class:`~pulserver.design.Description`.
+    """
+
+    USER0 = "user0_name"
+    USER1 = "user1_name"
+    USER2 = "user2_name"
+    USER3 = "user3_name"
+    USER4 = "user4_name"
+    USER5 = "user5_name"
+    USER6 = "user6_name"
+    USER7 = "user7_name"
+    USER8 = "user8_name"
+    USER9 = "user9_name"
+    USER10 = "user10_name"
+    USER11 = "user11_name"
+    USER12 = "user12_name"
+    USER13 = "user13_name"
+    USER14 = "user14_name"
+    USER15 = "user15_name"
+    USER16 = "user16_name"
+    USER17 = "user17_name"
+    USER18 = "user18_name"
+
+
+#: A key of the protocol: the wire name of any entry the interpreter knows,
+#: as the member of the enum that groups it.
+ProtocolKey = FloatKey | IntKey | BoolKey | EnumKey | ConfigKey | UserKey | UserNameKey
+
+
 def _check_user_index(n: int) -> None:
     if not 0 <= n < NUM_USER_ENTRIES:
         raise ValueError(f"user entries are numbered 0 to {NUM_USER_ENTRIES - 1}")
@@ -158,7 +220,7 @@ class UIParam:
     >>> f"{UIParam.PHASE_FOV}"
     'phase_fov'
     >>> UIParam.user_value(3)
-    'user3_value'
+    <UserKey.USER3: 'user3_value'>
     """
 
     SAT_X_LOC1 = FloatKey.SAT_X_LOC1
@@ -231,7 +293,7 @@ class UIParam:
     TRIGGER_TYPE = EnumKey.TRIGGER_TYPE
 
     @staticmethod
-    def user_value(n: int) -> str:
+    def user_value(n: int) -> UserKey:
         """Return the key of float user entry ``n``, 0 to 18.
 
         Raises
@@ -240,10 +302,10 @@ class UIParam:
             If ``n`` is out of range.
         """
         _check_user_index(n)
-        return f"user{n}_value"
+        return UserKey[f"USER{n}"]
 
     @staticmethod
-    def user_name(n: int) -> str:
+    def user_name(n: int) -> UserNameKey:
         """Return the key of the description naming user entry ``n``, 0 to 18.
 
         Raises
@@ -252,7 +314,7 @@ class UIParam:
             If ``n`` is out of range.
         """
         _check_user_index(n)
-        return f"user{n}_name"
+        return UserNameKey[f"USER{n}"]
 
 
 class SequenceType(StrEnum):
@@ -288,14 +350,9 @@ class TriggerType(StrEnum):
     ECG = "physio2"
 
 
-WIRE_NAMES = frozenset(
-    {
-        *FloatKey,
-        *IntKey,
-        *BoolKey,
-        *EnumKey,
-        *ConfigKey,
-        *(UIParam.user_value(n) for n in range(NUM_USER_ENTRIES)),
-        *(UIParam.user_name(n) for n in range(NUM_USER_ENTRIES)),
-    }
-)
+#: Every wire name of the interpreter's parameter table, with its key.
+WIRE_NAMES: dict[str, ProtocolKey] = {
+    key.value: key
+    for keys in (FloatKey, IntKey, BoolKey, EnumKey, ConfigKey, UserKey, UserNameKey)
+    for key in keys
+}

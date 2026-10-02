@@ -8,7 +8,7 @@ import inspect
 import math
 import sys
 import warnings
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass, field
 from decimal import Decimal
 from pathlib import Path
@@ -26,11 +26,14 @@ from ..protocol import (
     InputMode,
     Kind,
     Parameter,
+    ProtocolKey,
     RfPulse,
+    TEPreset,
+    TRPreset,
     Validation,
     prescribed_rotation,
 )
-from ..protocol._keys import WIRE_NAMES
+from ..protocol._keys import WIRE_NAMES, StrEnum
 
 Preset = float | Callable[[pp.Opts], float] | None
 #: Range of each prescription entry, in mm either side of the isocentre.
@@ -113,17 +116,19 @@ class BoolParam:
 
 
 @dataclass(frozen=True)
-class StringListParam:
-    """A choice among option strings, bound to an ``init_sequence`` argument.
+class ChoiceParam:
+    """A choice among the members of a ``StrEnum``, bound to an ``init_sequence`` argument.
 
-    The argument receives the chosen string, not its index. ``default`` is the
-    option the protocol starts at; ``None`` starts it at the application's
-    default.
+    The argument receives the chosen member, a ``str`` equal to its option. The
+    options are the members in definition order, and the wire carries the index
+    of the chosen one. ``default`` is the member the protocol starts at;
+    ``None`` starts it at the application's default, which has to be a member
+    or the value of one.
     """
 
     argument: str
-    options: tuple[str, ...]
-    default: str | None = None
+    choices: type[StrEnum]
+    default: StrEnum | None = None
 
 
 @dataclass(frozen=True)
@@ -145,10 +150,36 @@ Entry = (
     | TimeParam
     | IntParam
     | BoolParam
-    | StringListParam
+    | ChoiceParam
     | ConfigParam
     | Description
 )
+
+
+def StringListParam(
+    argument: str, options: tuple[str, ...], default: str | None = None
+) -> ChoiceParam:
+    """Return a :class:`ChoiceParam` over a ``StrEnum`` built from option strings.
+
+    Deprecated: declare the enum and use :class:`ChoiceParam`. The argument
+    receives the member of the chosen option, a ``str`` equal to it.
+    ``default`` is the option the protocol starts at; ``None`` starts it at the
+    application's default.
+
+    Warns
+    -----
+    DeprecationWarning
+        On every call.
+    """
+    warnings.warn(
+        "StringListParam is deprecated; use ChoiceParam with a StrEnum",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    choices = StrEnum(
+        "Options", {f"OPTION_{n}": option for n, option in enumerate(options)}
+    )
+    return ChoiceParam(argument, choices, None if default is None else choices(default))
 
 
 def _ui_float(value: float) -> float:
@@ -172,7 +203,18 @@ def _to_seconds(microseconds: int) -> float:
     return float(Decimal(int(microseconds)) * _MICROSECOND)
 
 
-def _parameter(name: str, entry: Entry, defaults: Mapping[str, Any]) -> Parameter:
+def _member(key: ProtocolKey, entry: ChoiceParam, value: Any) -> StrEnum:
+    """Return the member of the entry's choices that ``value`` is or names."""
+    try:
+        return entry.choices(value)
+    except ValueError:
+        options = ", ".join(entry.choices)
+        raise ValueError(f"{key}: {value!r} is not one of {options}") from None
+
+
+def _parameter(
+    name: ProtocolKey, entry: Entry, defaults: Mapping[str, Any]
+) -> Parameter:
     if isinstance(entry, ConfigParam):
         return Parameter(Kind.CONFIG, entry.value, InputMode.OFF)
     if isinstance(entry, Description):
@@ -238,12 +280,192 @@ def _parameter(name: str, entry: Entry, defaults: Mapping[str, Any]) -> Paramete
         )
     if isinstance(entry, BoolParam):
         return Parameter(Kind.BOOL, default if entry.default is None else entry.default)
+    default = default if entry.default is None else entry.default
     return Parameter(
         Kind.STRINGLIST,
-        default if entry.default is None else entry.default,
+        _member(name, entry, default),
         InputMode.DROPDOWN,
-        options=entry.options,
+        options=tuple(entry.choices),
     )
+
+
+class Protocol(Mapping[ProtocolKey, Any]):
+    """The values of a scanner sequence's protocol, in the units of its application's arguments.
+
+    An immutable mapping from :data:`~pulserver.protocol.ProtocolKey` to value.
+    A time is in seconds and a float in the unit of the argument it binds,
+    metres for a length; an integer is an ``int``, a checkbox a ``bool`` and a
+    choice a member of its enum. A time entry showing a preset holds what the
+    preset requests, a number of seconds or ``None`` for the application's own
+    shortest choice, and :meth:`preset` names the preset. The prescription
+    entries bind no argument and keep the units of the wire: mm for the
+    offset, unitless for the rotation.
+
+    The wire carries integer microseconds for a time and the entry's own unit
+    for a float, to six significant digits. :meth:`from_wire` and
+    :meth:`to_wire` are the only conversions between the two.
+
+    Parameters
+    ----------
+    entries
+        The declared entries the values belong to, as
+        :attr:`ScannerSequence.ui` holds them.
+    values
+        The value of each key, in argument units.
+    presets
+        The preset each time key shows, by the key its entry declares it with.
+    """
+
+    def __init__(
+        self,
+        entries: Mapping[ProtocolKey, Entry],
+        values: Mapping[ProtocolKey, Any],
+        presets: Mapping[ProtocolKey, TEPreset | TRPreset] | None = None,
+    ) -> None:
+        self._entries = entries
+        self._values = dict(values)
+        self._presets = dict(presets or {})
+
+    def __getitem__(self, key: ProtocolKey) -> Any:
+        return self._values[key]
+
+    def __iter__(self) -> Iterator[ProtocolKey]:
+        return iter(self._values)
+
+    def __len__(self) -> int:
+        return len(self._values)
+
+    def __repr__(self) -> str:
+        items = ", ".join(f"{key}: {value!r}" for key, value in self._values.items())
+        return f"Protocol({{{items}}})"
+
+    @classmethod
+    def from_wire(
+        cls,
+        entries: Mapping[ProtocolKey, Entry],
+        values: Mapping[ProtocolKey, Any],
+        system: pp.Opts,
+    ) -> Protocol:
+        """Return the protocol that wire values stand for.
+
+        Parameters
+        ----------
+        entries
+            The declared entries: :attr:`ScannerSequence.ui`.
+        values
+            Wire values by key: integer microseconds or a preset code for a
+            time, the entry's unit for a float, an option for a choice. A key
+            of a config or description entry, which holds no value, is left
+            out.
+        system
+            The scanner limits a callable preset is a function of.
+
+        Raises
+        ------
+        ValueError
+            If a key is neither a declared entry nor a prescription entry, a
+            time is a preset its entry does not offer, or a choice is not one
+            of its options.
+        """
+        converted: dict[ProtocolKey, Any] = {}
+        presets: dict[ProtocolKey, TEPreset | TRPreset] = {}
+        for key, value in values.items():
+            entry = entries.get(key)
+            if isinstance(entry, ConfigParam | Description):
+                continue
+            if entry is None:
+                if key not in PRESCRIPTION:
+                    raise ValueError(f"{key} is not an entry of this protocol")
+                converted[key] = float(value)
+            elif isinstance(entry, TimeParam):
+                if entry.presets and value < 0:
+                    code = next((c for c in entry.presets if c == value), None)
+                    if code is None:
+                        raise ValueError(f"{key} does not offer preset {value}")
+                    preset = entry.presets[code]
+                    presets[key] = code
+                    converted[key] = preset(system) if callable(preset) else preset
+                else:
+                    converted[key] = _to_seconds(value)
+            elif isinstance(entry, FloatParam):
+                converted[key] = _to_si(value, entry.scale)
+            elif isinstance(entry, IntParam):
+                converted[key] = int(value)
+            elif isinstance(entry, BoolParam):
+                converted[key] = bool(value)
+            else:
+                converted[key] = _member(key, entry, value)
+        return cls(entries, converted, presets)
+
+    def to_wire(self) -> dict[ProtocolKey, float | int | bool | str]:
+        """Return the wire values of the protocol, the inverse of :meth:`from_wire`.
+
+        A time showing a preset is its preset code. A float is rounded to six
+        significant digits, the precision of a float32 parameter, and a time
+        to the nearest microsecond, ties to even.
+        """
+        wire: dict[ProtocolKey, Any] = {}
+        for key, value in self._values.items():
+            entry = self._entries.get(key)
+            if key in self._presets:
+                wire[key] = self._presets[key]
+            elif isinstance(entry, TimeParam):
+                wire[key] = _to_microseconds(value)
+            elif isinstance(entry, FloatParam):
+                wire[key] = _to_ui(value, entry.scale)
+            elif isinstance(entry, IntParam):
+                wire[key] = int(value)
+            elif isinstance(entry, BoolParam):
+                wire[key] = bool(value)
+            else:
+                wire[key] = value
+        return wire
+
+    @property
+    def arguments(self) -> dict[str, Any]:
+        """The values by the name of the ``init_sequence`` argument each binds.
+
+        The prescription entries bind no argument and are left out.
+        """
+        arguments = {}
+        for key, value in self._values.items():
+            argument = getattr(self._entries.get(key), "argument", None)
+            if argument is not None:
+                arguments[argument] = value
+        return arguments
+
+    def preset(self, key: ProtocolKey) -> TEPreset | TRPreset | None:
+        """Return the preset a time key shows, or ``None`` where it shows none.
+
+        The preset is the key of the entry's ``presets`` the wire value
+        selected: a :class:`~pulserver.protocol.TEPreset` or
+        :class:`~pulserver.protocol.TRPreset` member.
+        """
+        return self._presets.get(key)
+
+    def replace(self, changes: Mapping[ProtocolKey, Any]) -> Protocol:
+        """Return a protocol holding ``changes`` in place of the values they name.
+
+        The values are in argument units, and a time given in seconds no
+        longer shows a preset.
+
+        Raises
+        ------
+        ValueError
+            If a key is not in the protocol, or a choice is not one of its
+            options.
+        """
+        unknown = sorted(key for key in changes if key not in self._values)
+        if unknown:
+            raise ValueError(f"not entries of this protocol: {', '.join(unknown)}")
+        values, presets = dict(self._values), dict(self._presets)
+        for key, value in changes.items():
+            entry = self._entries.get(key)
+            if isinstance(entry, ChoiceParam):
+                value = _member(key, entry, value)
+            values[key] = value
+            presets.pop(key, None)
+        return Protocol(self._entries, values, presets)
 
 
 class ScannerSequence:
@@ -251,16 +473,17 @@ class ScannerSequence:
 
     A subclass sets :attr:`app` and, for the arguments the operator edits,
     :attr:`ui`; without ``ui`` the application plays its defaults. The keys of
-    ``ui`` are the interpreter's parameter names: members of
-    :class:`~pulserver.protocol.UIParam` or :class:`~pulserver.protocol.ConfigKey`,
-    or user-entry keys. They are stored as plain strings. Entries a request
-    omits keep their initial values, the entry's ``default`` or else the
-    application's. An entry resolves to the value its
-    argument took in the design, as the application records it with
-    ``SequenceApp.resolve``, and otherwise keeps the requested value. Times
-    travel as integer microseconds; other float values are read and reported
-    to six significant digits, the precision of a float32 parameter. Either way
-    a reply stored in scanner parameters and sent back resolves to itself.
+    ``ui`` are the interpreter's parameter names: the members of
+    :data:`~pulserver.protocol.ProtocolKey`, which
+    :class:`~pulserver.protocol.UIParam` collects. A plain string naming an
+    entry is stored as its member. Entries a request omits keep their initial
+    values, the entry's ``default`` or else the application's. An entry
+    resolves to the value its argument took in the design, as the application
+    records it with ``SequenceApp.resolve``, and otherwise keeps the requested
+    value. Times travel as integer microseconds; other float values are read
+    and reported to six significant digits, the precision of a float32
+    parameter. Either way a reply stored in scanner parameters and sent back
+    resolves to itself.
 
     Attributes
     ----------
@@ -296,8 +519,8 @@ class ScannerSequence:
     """
 
     app: ClassVar[type[sequences.SequenceApp]]
-    ui: ClassVar[Mapping[str, Entry]] = {}
-    follows: ClassVar[tuple[str, ...]] = ()
+    ui: ClassVar[Mapping[ProtocolKey, Entry]] = {}
+    follows: ClassVar[tuple[ProtocolKey | str, ...]] = ()
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
@@ -310,9 +533,9 @@ class ScannerSequence:
             )
         if "ui" not in cls.__dict__:
             return
-        unknown = sorted(str(name) for name in cls.ui if name not in WIRE_NAMES)
+        unknown = sorted(name for name in cls.ui if name not in WIRE_NAMES)
         if unknown:
-            names = {str(name).lower(): str(name) for name in WIRE_NAMES}
+            names = {name.lower(): name for name in WIRE_NAMES}
             close = sorted(
                 {
                     names[m]
@@ -325,15 +548,16 @@ class ScannerSequence:
                 f"{cls.__name__} declares entries the interpreter does not know: "
                 f"{unknown}{hint}"
             )
-        reserved = sorted(str(name) for name in cls.ui if str(name) in PRESCRIPTION)
+        ui = {WIRE_NAMES[name]: entry for name, entry in cls.ui.items()}
+        reserved = sorted(key.value for key in ui if key in PRESCRIPTION)
         if reserved:
             raise ValueError(
                 f"{cls.__name__} binds the prescription entries {reserved}, which "
                 "pulserver applies when it builds the IR"
             )
-        cls.ui = {str(name): entry for name, entry in cls.ui.items()}
+        cls.ui = ui
 
-    def listing(self) -> dict[str, Parameter]:
+    def listing(self) -> dict[ProtocolKey, Parameter]:
         """Return the protocol with its schema, valued at the application's defaults.
 
         An argument defaulting to ``None`` shows the preset that requests ``None``.
@@ -343,10 +567,10 @@ class ScannerSequence:
         """
         defaults = self.app.protocol()
         listing = {
-            name: _parameter(name, entry, defaults) for name, entry in self.ui.items()
+            key: _parameter(key, entry, defaults) for key, entry in self.ui.items()
         }
-        for name in FOV_OFFSET:
-            listing[name] = Parameter(
+        for key in FOV_OFFSET:
+            listing[key] = Parameter(
                 Kind.FLOAT,
                 0.0,
                 InputMode.OFF,
@@ -355,8 +579,8 @@ class ScannerSequence:
                 0.1,
                 "mm",
             )
-        for name, value in zip(FOV_ROTATION, np.eye(3).ravel(), strict=True):
-            listing[name] = Parameter(
+        for key, value in zip(FOV_ROTATION, np.eye(3).ravel(), strict=True):
+            listing[key] = Parameter(
                 Kind.FLOAT, float(value), InputMode.OFF, -1.0, 1.0, 1e-6, ""
             )
         return listing
@@ -408,8 +632,8 @@ class ScannerSequence:
             )
         driving = {}
         for parameter in self.follows:
-            entry = self.ui.get(str(parameter or ""))
-            driving[str(parameter or "")] = (
+            entry = self.ui.get(parameter or "")
+            driving[parameter or ""] = (
                 float(designed.get(entry.argument, 0.0) or 0.0) if entry else 0.0
             )
 
@@ -420,7 +644,7 @@ class ScannerSequence:
             key = (definition, round(angle * 1e3))
             if key in found:
                 continue
-            parameter = str(self.follows[order.index(definition)] or "")
+            parameter = self.follows[order.index(definition)] or ""
             drives = driving[parameter]
             found[key] = RfPulse(
                 definition=definition,
@@ -430,7 +654,9 @@ class ScannerSequence:
             )
         return list(found.values())
 
-    def validate(self, system: pp.Opts, request: Mapping[str, Any]) -> Validation:
+    def validate(
+        self, system: pp.Opts, request: Mapping[ProtocolKey, Any]
+    ) -> Validation:
         """Resolve a request into the protocol the application will play.
 
         A valid reply carries the resolved values, as the application's
@@ -446,7 +672,7 @@ class ScannerSequence:
         return self.resolve(system, request)[1]
 
     def generate(
-        self, system: pp.Opts, request: Mapping[str, Any], directory: Path
+        self, system: pp.Opts, request: Mapping[ProtocolKey, Any], directory: Path
     ) -> tuple[Validation, list[str]]:
         """Write the resolved design into ``directory``, as :meth:`write` does.
 
@@ -475,12 +701,14 @@ class ScannerSequence:
         return app.write(Path(directory) / "sequence.seq", offline=False)
 
     def resolve(
-        self, system: pp.Opts, request: Mapping[str, Any]
+        self, system: pp.Opts, request: Mapping[ProtocolKey, Any]
     ) -> tuple[sequences.SequenceApp | None, Validation]:
         """Return the application a request constructs, and the validation of :meth:`validate`.
 
-        The application is ``None`` for an invalid request. It is constructed
-        once and not designed, so :meth:`write` designs it.
+        The request is in wire values and so is the validation, which a
+        :class:`Protocol` converts to and from the argument units the
+        application takes. The application is ``None`` for an invalid request.
+        It is constructed once and not designed, so :meth:`write` designs it.
 
         Raises
         ------
@@ -491,51 +719,27 @@ class ScannerSequence:
         unknown = set(request) - set(listing)
         if unknown:
             raise ValueError(f"not entries of this protocol: {sorted(unknown)}")
-        values = {name: p.value for name, p in listing.items() if p.editable}
+        values = {key: p.value for key, p in listing.items() if p.editable}
         values.update(request)
         try:
             prescribed_rotation(values)
-            app = self.app(system, **self._arguments(system, values))
+            protocol = Protocol.from_wire(self.ui, values, system)
+            app = self.app(system, **protocol.arguments)
             scan_time = app.scan_time()
         except Exception as error:  # a design refuses a protocol by raising
             return None, Validation(
                 False, None, str(error) or type(error).__name__, values
             )
 
-        resolved = dict(values)
         readback = app.resolved
-        for name, entry in self.ui.items():
+        recorded = {}
+        for key, entry in self.ui.items():
             value = readback.get(getattr(entry, "argument", None))
-            if value is None:
-                continue
-            if isinstance(entry, TimeParam):
-                resolved[name] = _to_microseconds(value)
-            elif isinstance(entry, FloatParam):
-                resolved[name] = _to_ui(value, entry.scale)
-            elif isinstance(entry, IntParam):
-                resolved[name] = int(value)
-            else:
-                resolved[name] = value
-        return app, Validation(True, scan_time, "", resolved)
-
-    def _arguments(self, system: pp.Opts, values: Mapping[str, Any]) -> dict[str, Any]:
-        arguments = {}
-        for name, entry in self.ui.items():
-            if isinstance(entry, ConfigParam | Description):
-                continue
-            value = values[name]
-            if isinstance(entry, TimeParam):
-                if entry.presets and value < 0:
-                    if value not in entry.presets:
-                        raise ValueError(f"{name} does not offer preset {value}")
-                    preset = entry.presets[value]
-                    value = preset(system) if callable(preset) else preset
-                else:
-                    value = _to_seconds(value)
-            elif isinstance(entry, FloatParam):
-                value = _to_si(value, entry.scale)
-            arguments[entry.argument] = value
-        return arguments
+            if value is not None:
+                recorded[key] = value
+        return app, Validation(
+            True, scan_time, "", protocol.replace(recorded).to_wire()
+        )
 
 
 def load_plugin(path: Path) -> ScannerSequence:
