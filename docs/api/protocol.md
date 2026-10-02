@@ -29,16 +29,21 @@ interpreter side.
 
 The names of the interpreter's parameter table, grouped by the value type the
 table declares, and the options of its string-list parameters. A scanner
-sequence names its entries with them.
+sequence names its entries with them. Each name is a member of a `StrEnum`, so
+a key is a `str` that equals and hashes as its wire name; the keys of a
+protocol stay members until a wire block formats them.
 
 | Object | Description |
 | --- | --- |
-| {obj}`~pulserver.protocol.UIParam` | The keys of every UI control, and the user-entry keys. |
+| {obj}`~pulserver.protocol.ProtocolKey` | A key of the protocol: a member of any of the key enums below. |
+| {obj}`~pulserver.protocol.UIParam` | Collects the keys of every UI control, and returns the user-entry keys. |
 | {obj}`~pulserver.protocol.FloatKey` | Keys declared as float. |
 | {obj}`~pulserver.protocol.IntKey` | Keys declared as integer. |
 | {obj}`~pulserver.protocol.BoolKey` | Keys declared as boolean. |
 | {obj}`~pulserver.protocol.EnumKey` | Keys declared as string lists. |
 | {obj}`~pulserver.protocol.ConfigKey` | Keys the sequence declares to the interpreter rather than shows. |
+| {obj}`~pulserver.protocol.UserKey` | Keys of the float user entries, `user0_value` to `user18_value`. |
+| {obj}`~pulserver.protocol.UserNameKey` | Keys of the descriptions naming the user entries, `user0_name` to `user18_name`. |
 | {obj}`~pulserver.protocol.SequenceType` | Options of `sequence_type`. |
 | {obj}`~pulserver.protocol.ImagingMode` | Options of `imaging_mode`. |
 | {obj}`~pulserver.protocol.PreparationType` | Options of `preparation_type`. |
@@ -53,9 +58,9 @@ the design in the physical frame the orientation gives.
 
 | Object | Description |
 | --- | --- |
-| {obj}`~pulserver.protocol.PRESCRIPTION` | Names of every prescription entry: the offset's, then the rotation's. |
-| {obj}`~pulserver.protocol.FOV_OFFSET` | Names of the field-of-view offset entries, in mm along the logical readout, phase and slice axes. |
-| {obj}`~pulserver.protocol.FOV_ROTATION` | Names of the rotation entries, row-major: element `(i, j)` of `R` in physical = R logical. |
+| {obj}`~pulserver.protocol.PRESCRIPTION` | Keys of every prescription entry: the offset's, then the rotation's. |
+| {obj}`~pulserver.protocol.FOV_OFFSET` | Keys of the field-of-view offset entries, in mm along the logical readout, phase and slice axes. |
+| {obj}`~pulserver.protocol.FOV_ROTATION` | Keys of the rotation entries, row-major: element `(i, j)` of `R` in physical = R logical. |
 | {obj}`~pulserver.protocol.prescribed_offset` | Field-of-view offset that protocol values carry, in metres. |
 | {obj}`~pulserver.protocol.prescribed_rotation` | Rotation from logical to physical axes that protocol values carry, made orthonormal. |
 
@@ -63,7 +68,10 @@ the design in the physical frame the orientation gives.
 
 A listing carries every entry with its schema, as the `list` design call replies
 it; a value block carries values only, as the `validate` and `generate` calls
-read and reply them.
+read and reply them. These functions are the only place where keys and values
+become text and text becomes them. The parsers return the key members for the
+names they read, and a value block parsed against a listing returns each
+string list as one of the listing's options.
 
 | Object | Description |
 | --- | --- |
@@ -76,6 +84,8 @@ read and reply them.
 | {obj}`~pulserver.protocol.parse_listing` | Read a protocol with its schema from a listing block. |
 | {obj}`~pulserver.protocol.format_values` | Format a value block. |
 | {obj}`~pulserver.protocol.parse_values` | Read a value block against the listing it was edited from. |
+| {obj}`~pulserver.protocol.format_prescription` | Format prescription entries as the `name: value` lines of a block. |
+| {obj}`~pulserver.protocol.parse_prescription` | Read the prescription entries out of the `name: value` lines of a block. |
 | {obj}`~pulserver.protocol.Validation` | Reply to `VALIDATE`: validity, scan time, information line and values. |
 | {obj}`~pulserver.protocol.format_validation` | Format a `VALIDATE` reply. |
 | {obj}`~pulserver.protocol.parse_validation` | Read a `VALIDATE` reply. |

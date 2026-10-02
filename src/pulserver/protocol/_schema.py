@@ -62,8 +62,10 @@ class Parameter:
     Mirrors ``pulseg_protocol_value`` in the interpreter. Numeric entries carry
     a mode, range, increment, unit and, as a dropdown, up to five options; a
     negative option of a time entry is a preset. A stringlist's options are
-    its choices and its value is one of them. ``config`` and ``description``
-    entries are declared by the sequence and never edited.
+    its choices and its value is one of them, as the option object: a member
+    where the options are the members of an enum, a string otherwise.
+    ``config`` and ``description`` entries are declared by the sequence and
+    never edited.
 
     Raises
     ------
@@ -97,9 +99,11 @@ class Parameter:
                     f"got {len(self.options)}"
                 )
         elif kind is Kind.STRINGLIST:
-            object.__setattr__(self, "options", tuple(str(o) for o in self.options))
-            if self.value not in self.options:
-                raise ValueError(f"{self.value!r} is not one of {self.options}")
+            options = tuple(self.options)
+            if self.value not in options:
+                raise ValueError(f"{self.value!r} is not one of {', '.join(options)}")
+            object.__setattr__(self, "options", options)
+            object.__setattr__(self, "value", options[options.index(self.value)])
         elif kind is Kind.BOOL:
             object.__setattr__(self, "value", bool(self.value))
         elif kind is Kind.CONFIG:
@@ -114,7 +118,7 @@ class Parameter:
         """Read a value of this entry from its wire text.
 
         A stringlist accepts an option, or failing an exact match, an option
-        index.
+        index, and returns the option object.
 
         Raises
         ------
@@ -130,9 +134,8 @@ class Parameter:
             return text.lower() in ("true", "1")
         if self.kind is Kind.STRINGLIST:
             if text in self.options:
-                return text
-            index = int(text)
-            if not 0 <= index < len(self.options):
-                raise ValueError(f"option index {index} is out of range")
-            return self.options[index]
+                return self.options[self.options.index(text)]
+            if not text.isdecimal() or int(text) >= len(self.options):
+                raise ValueError(f"{text!r} is not one of {', '.join(self.options)}")
+            return self.options[int(text)]
         return text.replace("\\n", "\n")

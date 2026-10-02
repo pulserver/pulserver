@@ -1,7 +1,9 @@
 """Text form of a protocol on the interpreter wire.
 
 The block grammar is the one ``pulseg_protocol_parse`` reads: listings carry
-``name: kind|…`` schema lines, value blocks carry ``name: value`` lines.
+``name: kind|…`` schema lines, value blocks carry ``name: value`` lines. Keys
+and values are typed everywhere else: this module is where they become text,
+and where text becomes them.
 """
 
 from __future__ import annotations
@@ -10,6 +12,8 @@ import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
+from ._keys import WIRE_NAMES, ProtocolKey
+from ._prescription import PRESCRIPTION
 from ._schema import InputMode, Kind, Parameter
 
 #: First and last lines of every protocol block, listing or values.
@@ -33,13 +37,18 @@ class Validation:
         Scan time in seconds; ``None`` when the plugin reports none.
     values
         The resolved protocol for a valid request, the request itself for an
-        invalid one.
+        invalid one, as wire values by key.
     """
 
     valid: bool
     duration: float | None
     info: str
-    values: dict[str, float | int | bool | str]
+    values: dict[ProtocolKey, float | int | bool | str]
+
+
+def _key(name: str) -> ProtocolKey | str:
+    """Return the key a wire name stands for; a name the interpreter does not know stays text."""
+    return WIRE_NAMES.get(name, name)
 
 
 def _number(value: float) -> str:
@@ -51,7 +60,7 @@ def _number(value: float) -> str:
     return repr(value)
 
 
-def _listing_line(name: str, p: Parameter) -> str:
+def _listing_line(name: ProtocolKey, p: Parameter) -> str:
     if p.kind in (Kind.FLOAT, Kind.INT):
         fields = [
             p.kind.value,
@@ -94,16 +103,17 @@ def _block_lines(text: str) -> list[tuple[str, str]]:
     return entries
 
 
-def format_listing(parameters: Mapping[str, Parameter]) -> str:
+def format_listing(parameters: Mapping[ProtocolKey, Parameter]) -> str:
     """Format a protocol with its schema, as the ``list`` design call replies it."""
     lines = [_listing_line(name, p) for name, p in parameters.items()]
     return "\n".join([PROTOCOL_BEGIN, *lines, PROTOCOL_END]) + "\n"
 
 
-def parse_listing(text: str) -> dict[str, Parameter]:
+def parse_listing(text: str) -> dict[ProtocolKey, Parameter]:
     """Read a protocol with its schema from a listing block."""
     parameters = {}
-    for name, value in _block_lines(text):
+    for wire_name, value in _block_lines(text):
+        name = _key(wire_name)
         kind, *fields = value.split("|")
         kind = Kind(kind)
         if kind in (Kind.FLOAT, Kind.INT):
@@ -135,7 +145,8 @@ def parse_listing(text: str) -> dict[str, Parameter]:
 
 
 def format_values(
-    values: Mapping[str, float | int | bool | str], listing: Mapping[str, Parameter]
+    values: Mapping[ProtocolKey, float | int | bool | str],
+    listing: Mapping[ProtocolKey, Parameter],
 ) -> str:
     """Format a value block, as requests and replies carry it.
 
@@ -158,11 +169,13 @@ def format_values(
 
 
 def parse_values(
-    text: str, listing: Mapping[str, Parameter]
-) -> dict[str, float | int | bool | str]:
+    text: str, listing: Mapping[ProtocolKey, Parameter]
+) -> dict[ProtocolKey, float | int | bool | str]:
     """Read a value block against the listing it was edited from.
 
-    Lines for read-only entries are ignored.
+    Lines for read-only entries are ignored. A stringlist's value is the
+    option object the listing holds, which is a member of the choices' enum
+    where the listing comes from a scanner sequence.
 
     Raises
     ------
@@ -176,11 +189,40 @@ def parse_values(
             raise ValueError(f"{name!r} is not a parameter of this protocol")
         p = listing[name]
         if p.editable:
-            values[name] = p.coerce(value)
+            values[_key(name)] = p.coerce(value)
     return values
 
 
-def format_validation(validation: Validation, listing: Mapping[str, Parameter]) -> str:
+def format_prescription(values: Mapping[ProtocolKey, float]) -> list[str]:
+    """Format prescription entries as the ``name: value`` lines of a block.
+
+    The offset is in mm and the rotation unitless, as the entries of a
+    protocol carry them.
+    """
+    return [f"{name}: {_number(value)}" for name, value in values.items()]
+
+
+def parse_prescription(text: str) -> dict[ProtocolKey, float]:
+    """Read the prescription entries out of the ``name: value`` lines of a block.
+
+    Other lines are left out.
+
+    Raises
+    ------
+    ValueError
+        If a prescription line is not a number.
+    """
+    found = {}
+    for line in text.splitlines():
+        name, _, value = line.partition(": ")
+        if name in PRESCRIPTION:
+            found[_key(name)] = float(value)
+    return found
+
+
+def format_validation(
+    validation: Validation, listing: Mapping[ProtocolKey, Parameter]
+) -> str:
     """Format a ``validate`` reply: status line, info line, value block.
 
     Whitespace in the info text, newlines included, is folded to single spaces.
@@ -194,7 +236,7 @@ def format_validation(validation: Validation, listing: Mapping[str, Parameter]) 
     return f"{status}\nINFO {info}\n" + format_values(validation.values, listing)
 
 
-def parse_validation(text: str, listing: Mapping[str, Parameter]) -> Validation:
+def parse_validation(text: str, listing: Mapping[ProtocolKey, Parameter]) -> Validation:
     """Read a ``validate`` reply."""
     status, info, block = text.split("\n", 2)
     word, _, duration = status.partition(" ")

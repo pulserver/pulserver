@@ -300,7 +300,13 @@ def _design_call(args: argparse.Namespace, store: Path) -> tuple[int, str]:
     """Import or generate the design, as ``pulserver design`` does; return its status and reply."""
     from ..host._blocks import format_import
     from ..host._server import answer
-    from ..protocol import FOV_OFFSET, FOV_ROTATION, PROTOCOL_BEGIN, PROTOCOL_END
+    from ..protocol import (
+        FOV_OFFSET,
+        FOV_ROTATION,
+        PROTOCOL_BEGIN,
+        PROTOCOL_END,
+        format_prescription,
+    )
 
     rotation, offset = prescription(args)
     call: dict[str, Any] = {
@@ -325,7 +331,7 @@ def _design_call(args: argparse.Namespace, store: Path) -> tuple[int, str]:
         if line.strip() not in (PROTOCOL_BEGIN, PROTOCOL_END)
         and line.partition(": ")[0] not in prescribed
     ]
-    lines = [f"{name}: {float(value)!r}" for name, value in prescribed.items()]
+    lines = format_prescription(prescribed)
     call.update(
         call="generate",
         plugins=[str(path.absolute()) for path in args.plugins],

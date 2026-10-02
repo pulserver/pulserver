@@ -5,10 +5,12 @@
 from ..protocol import TEPreset, TRPreset, UIParam
 from ._scanner import (
     BoolParam,
+    ChoiceParam,
     ConfigParam,
     Description,
     FloatParam,
     IntParam,
+    Protocol,
     ScannerSequence,
     StringListParam,
     TimeParam,
@@ -17,10 +19,12 @@ from ._scanner import (
 
 __all__ = [
     "BoolParam",
+    "ChoiceParam",
     "ConfigParam",
     "Description",
     "FloatParam",
     "IntParam",
+    "Protocol",
     "ScannerSequence",
     "StringListParam",
     "TimeParam",

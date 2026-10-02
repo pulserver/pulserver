@@ -7,7 +7,13 @@ from typing import Any
 
 import numpy as np
 
-from ..protocol import FOV_OFFSET, FOV_ROTATION, prescribed_rotation
+from ..protocol import (
+    FOV_OFFSET,
+    FOV_ROTATION,
+    format_prescription,
+    parse_prescription,
+    prescribed_rotation,
+)
 
 LIMITS_BEGIN = "[Limits]"
 LIMITS_END = "[Limits End]"
@@ -55,19 +61,16 @@ def parse_import(
         If the block has no ``file`` line, a prescription line is not a
         number, or the rotation is not orthonormal.
     """
-    path, offset, rotation = None, dict.fromkeys(FOV_OFFSET, 0.0), {}
+    path = None
     for line in block.splitlines():
         name, _, value = line.partition(": ")
         if name == "file":
             path = Path(value.strip())
-        elif name in offset:
-            offset[name] = float(value)
-        elif name in FOV_ROTATION:
-            rotation[name] = float(value)
+    prescribed = parse_prescription(block)
     if path is None:
         raise ValueError("IMPORT needs a file line")
-    x, y, z = offset.values()
-    return path, (x, y, z), prescribed_rotation(rotation)
+    x, y, z = (prescribed.get(key, 0.0) for key in FOV_OFFSET)
+    return path, (x, y, z), prescribed_rotation(prescribed)
 
 
 def format_import(
@@ -75,16 +78,11 @@ def format_import(
     fov_offset_mm: tuple[float, float, float] | None = None,
     fov_rotation: np.ndarray | None = None,
 ) -> str:
-    lines = [IMPORT_BEGIN, f"file: {path}"]
+    prescribed = {}
     if fov_offset_mm is not None:
-        lines += [
-            f"{name}: {value!r}"
-            for name, value in zip(FOV_OFFSET, fov_offset_mm, strict=True)
-        ]
+        prescribed.update(zip(FOV_OFFSET, fov_offset_mm, strict=True))
     if fov_rotation is not None:
         matrix = np.asarray(fov_rotation, dtype=float).ravel()
-        lines += [
-            f"{name}: {float(value)!r}"
-            for name, value in zip(FOV_ROTATION, matrix, strict=True)
-        ]
+        prescribed.update(zip(FOV_ROTATION, matrix, strict=True))
+    lines = [IMPORT_BEGIN, f"file: {path}", *format_prescription(prescribed)]
     return "\n".join([*lines, IMPORT_END]) + "\n"
