@@ -153,8 +153,11 @@ class ReconResult:
 #:
 #: ``B0_MAP`` is off-resonance in Hz, ``B1_MAP`` the transmit field as a
 #: fraction of what was asked for, and ``COIL_SENSITIVITIES`` the receive
-#: sensitivity of each coil. Each is stored in the frame it was measured in;
-#: a series at another prescription resamples it.
+#: sensitivity of each coil, a :class:`~pulserver.recon.CoilSensitivities`. A
+#: value is stored as measured, in the frame and on the grid it was measured
+#: on. Nothing resamples, regrids or reslices it: a series whose geometry or
+#: matrix differs does not reuse it. :func:`~pulserver.recon.coil_maps` makes
+#: that comparison for the coil sensitivities.
 B0_MAP = "b0_map"
 B1_MAP = "b1_map"
 COIL_SENSITIVITIES = "coil_sensitivities"
@@ -163,6 +166,17 @@ COIL_SENSITIVITIES = "coil_sensitivities"
 #: Each is its own key in the exam cache, so a hook reaching one by attribute
 #: and a hook reaching it through :attr:`ReconContext.exam` reach the same map.
 EXAM_ARTIFACTS = (B0_MAP, B1_MAP, COIL_SENSITIVITIES)
+
+#: Where a noise scan leaves the prewhitening of its exam: the whitening matrix
+#: with the coil labels and dwell time it was measured at. A
+#: :class:`~pulserver.recon.Prewhiten` of a later series loads it when its coil
+#: labels are those of the series. It is not an attribute of
+#: :class:`ReconContext`; it is read as ``context.exam[NOISE_COVARIANCE]``.
+NOISE_COVARIANCE = "noise_covariance"
+
+#: The attributes of a :class:`ReconContext` that hold the state of one stream
+#: and that a hook may assign.
+_STREAM = ("coil_maps", "noise", "coil_compression")
 
 
 class ExamCache(MutableMapping[Hashable, Any]):
@@ -434,6 +448,13 @@ class ReconContext:
     instead of being stored where nothing looks for it. A plugin carrying an
     artifact of its own puts it in :attr:`exam` under a key it chooses.
 
+    The calibration helpers keep the state of one stream on the context, empty
+    when the stream starts and not shared with other series. :attr:`coil_maps`
+    maps a slice counter to the :class:`CoilSensitivities` the stream holds for
+    it, :attr:`noise` is the prewhitening a :class:`Prewhiten` applies and
+    :attr:`coil_compression` the basis a :class:`CoilCompression` applies; the
+    last two are ``None`` until the stream has them. A hook may assign them.
+
     The scan context itself does not change once built: assigning to
     :attr:`header`, :attr:`exam`, :attr:`config` or :attr:`device` raises.
 
@@ -470,6 +491,9 @@ class ReconContext:
     exam: ExamCache
     config: Any = None
     device: str | None = None
+    coil_maps: dict[int, Any] = field(default_factory=dict, init=False, repr=False)
+    noise: Any = field(default=None, init=False, repr=False)
+    coil_compression: Any = field(default=None, init=False, repr=False)
 
     def __getattr__(self, name: str) -> Any:
         # Reached only where normal lookup failed, so never for a field.
@@ -481,6 +505,9 @@ class ReconContext:
     def __setattr__(self, name: str, value: Any) -> None:
         if name in EXAM_ARTIFACTS:
             self.exam[name] = value
+            return
+        if name in _STREAM:
+            object.__setattr__(self, name, value)
             return
         if name in self.__dataclass_fields__ and name not in self.__dict__:
             object.__setattr__(self, name, value)

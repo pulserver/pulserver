@@ -71,7 +71,9 @@ def test_the_default_location_is_the_hosts_not_a_process_of_its_own():
     assert "pulserver-exams" in str(DEFAULT_EXAM_DIRECTORY)
 
 
-@pytest.mark.parametrize("name", ["B0_MAP", "B1_MAP", "COIL_SENSITIVITIES"])
+@pytest.mark.parametrize(
+    "name", ["B0_MAP", "B1_MAP", "COIL_SENSITIVITIES", "NOISE_COVARIANCE"]
+)
 def test_a_shared_name_survives_the_crossing(tmp_path, name):
     """What one proxy writes under a name, another reads under it."""
     value = [1.5, 2.5]

@@ -203,6 +203,87 @@ The partitions of a stack of spokes or spirals are placed by their
 `kspace_encode_step_2` counter and carry no kz: the partition axis is
 transformed with an FFT before the in-plane NUFFT.
 
+## Coil sensitivities, noise and compression
+
+{func}`~pulserver.recon.coil_maps` returns the coil sensitivities of a unit as
+a complex torch tensor `(coils, [z,] y, x)` on `context.device`. They are
+estimated by the function the plugin passes, from the unit's calibration
+k-space `data.ref`, or taken from the maps the stream or the exam holds
+({doc}`../explanations/calibration` states the order and the conditions for
+reuse). {class}`~pulserver.recon.Prewhiten` is a gadget and
+{class}`~pulserver.recon.CoilCompression` a step called from `recon`. All three
+need bartorch, which the `coils` extra installs.
+
+```python
+# recon/gre.py
+import torch
+from bartorch import apps, priors
+from pulserver import mrd, recon
+
+class Pics(recon.ReconPlugin):
+    def __init__(self):
+        super().__init__(
+            gadgets=[
+                recon.Prewhiten(),
+                recon.AsymmetricEcho(),
+                recon.RemoveReadoutOversampling(),
+            ],
+            triggers={"imaging": mrd.AcquisitionFlag.LAST_IN_SLICE},
+        )
+        self.compression = recon.CoilCompression(8)
+
+    def recon(self, context, branch, data):
+        data = self.compression(context, data)
+        maps = recon.coil_maps(context, data, estimate=apps.nlinv_maps)
+        if data.data is None:  # a unit of calibration readouts only
+            return None
+        kspace = torch.from_numpy(data.data.kspace).to(context.device)
+        image = apps.pics(kspace, maps, regularizers=priors.Wavelet((-1, -2), 0.005))
+        return recon.ReconResult(image.abs().cpu().numpy())
+
+PLUGIN = Pics()
+```
+
+`Prewhiten` consumes the noise readouts of the stream and whitens every other
+readout with them, or with the noise covariance a noise series left in the exam.
+Without either it passes readouts unchanged and logs a warning once;
+`Prewhiten(required=True)` raises instead. `CoilCompression(n)` keeps `n`
+virtual channels, at most the channels of the first unit, with the basis of
+that unit's calibration k-space (its imaging k-space where it has none), and
+projects every later unit onto it. A unit is compressed before its maps are
+requested, so that they are estimated in the basis of the data they are used
+with.
+
+A calibration unit, whose `data.data` is `None`, stores its maps for its slice,
+and the imaging units of that slice take them from the stream. A series that is
+only a calibration leaves its maps to the exam by assigning
+`context.coil_sensitivities`, and a noise series leaves its whitening with
+{meth}`~pulserver.recon.Prewhiten.publish`:
+
+```python
+class Calibration(recon.ReconPlugin):
+    def recon(self, context, branch, data):
+        recon.coil_maps(context, data, estimate=apps.nlinv_maps)
+        context.coil_sensitivities = context.coil_maps[data.counters["slice"]]
+
+class Noise(recon.ReconPlugin):
+    def __init__(self):
+        super().__init__(gadgets=[recon.Prewhiten()])
+
+    def recon(self, context, branch, data):
+        return None
+
+    def finish(self, context):
+        self.gadget(recon.Prewhiten).publish()
+```
+
+The exam holds one set of maps. A later series is given them only where the
+coil labels, the whitening, the compression and the geometry equal its own, and
+otherwise {class}`~pulserver.recon.MissingCalibration` is raised, naming the
+first field that differs with both values. The failure text the client
+receives carries the message. `required=False` returns `None` instead of
+raising.
+
 ## Running a plugin offline
 
 {meth}`~pulserver.recon.ReconPlugin.run` reconstructs an ISMRMRD HDF5 file in
