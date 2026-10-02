@@ -56,8 +56,12 @@ that designs the sequence. A *scanner sequence* is the pulserver
 `SequencePlugin` that binds an *app*, a sequence application or a function
 returning sequences, to protocol entries. A *plugin* is the file either kind is
 loaded from; say which kind. The *evaluation* of a prescription is what the
-scanner sequence's `evaluate` returns: the resolved protocol, the scan time and
-a note.
+scanner sequence's `evaluate` returns: the resolved protocol, the scan time, a
+note and, optionally, the *RF layout*. An RF layout is the RF *definitions* of a
+sequence, its RF *instances* in play order, and for each instance the *control*
+its amplitude follows, the flip angle or a float user entry. The `list` and
+`validate` replies carry it when asked, as an estimate; the design the
+interpreter plays is the stored one.
 
 **Storage.** A *design* is one generated or imported chain with its IR cache,
 immutable once written. Its *identity* is the hash of what it depends on; its
@@ -151,6 +155,7 @@ Every documented quantity carries its unit.
 | Time argument of a sequence application | s |
 | Float protocol entry | the entry's `unit`; the argument is the value times `scale` |
 | Scan time in a `VALIDATE` reply | s; `?` where the evaluation states none |
+| Times, frequencies and flip angles of an RF block | s, Hz and degrees; the amplitude of an instance in an `[RfLayout]` block is unitless, relative to the first instance of its definition with a nonzero amplitude |
 | Rasters passed to the IR conversion | s in `pypulseqpp.Opts`, µs in the cache |
 | Gyromagnetic ratio, field strength | Hz/T, T |
 | Field-of-view offset in a protocol or an import block | mm |

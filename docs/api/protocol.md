@@ -73,19 +73,27 @@ become text and text becomes them. The parsers return the key members for the
 names they read, and a value block parsed against a listing returns each
 string list as one of the listing's options.
 
+The RF blocks follow a reply when the call asks for them: `[RfDefinitions]`
+after the listing and `[RfLayout]` after the value block of a valid
+validation. Their readers ignore every other block, and the readers of the
+listing and the value block ignore these.
+
 | Object | Description |
 | --- | --- |
 | {obj}`~pulserver.protocol.PROTOCOL_BEGIN` | First line of every protocol block. |
 | {obj}`~pulserver.protocol.PROTOCOL_END` | Last line of every protocol block. |
 | {obj}`~pulserver.protocol.format_listing` | Format a protocol with its schema. |
-| {obj}`~pulserver.protocol.RfPulse` | One pulse a sequence plays, and the protocol parameter its flip angle follows. |
-| {obj}`~pulserver.protocol.format_pulses` | Format the RF a design plays, as the `list` design call replies it. |
-| {obj}`~pulserver.protocol.parse_pulses` | Read the design and the RF it plays from a listing. |
 | {obj}`~pulserver.protocol.parse_listing` | Read a protocol with its schema from a listing block. |
 | {obj}`~pulserver.protocol.format_values` | Format a value block. |
 | {obj}`~pulserver.protocol.parse_values` | Read a value block against the listing it was edited from. |
 | {obj}`~pulserver.protocol.format_prescription` | Format prescription entries as the `name: value` lines of a block. |
 | {obj}`~pulserver.protocol.parse_prescription` | Read the prescription entries out of the `name: value` lines of a block. |
-| {obj}`~pulserver.protocol.Validation` | Reply to `VALIDATE`: validity, scan time, information line and values. |
+| {obj}`~pulserver.protocol.Validation` | Reply to `VALIDATE`: validity, scan time, information line, values and the RF layout of a valid evaluation. |
 | {obj}`~pulserver.protocol.format_validation` | Format a `VALIDATE` reply. |
 | {obj}`~pulserver.protocol.parse_validation` | Read a `VALIDATE` reply. |
+| {obj}`~pulserver.protocol.RfDefinitionRecord` | One RF definition of an `[RfDefinitions]` block. |
+| {obj}`~pulserver.protocol.format_rf_definitions` | Format the RF definitions of an evaluation, as the `list` design call replies them. |
+| {obj}`~pulserver.protocol.parse_rf_definitions` | Read the `[RfDefinitions]` block of a `list` reply. |
+| {obj}`~pulserver.protocol.RfLayoutRecord` | The contents of an `[RfLayout]` block, one entry per instance in play order. |
+| {obj}`~pulserver.protocol.format_rf_layout` | Format the RF layout of a validation, as the `validate` design call replies it. |
+| {obj}`~pulserver.protocol.parse_rf_layout` | Read the `[RfLayout]` block of a `validate` reply. |

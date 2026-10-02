@@ -67,10 +67,11 @@ These are listed so nobody starts them here. Each needs the private interpreter
 repository and vendor tooling that is not available in this environment.
 
 - **Radiofrequency costing while the operator prescribes.** The design service
-  states the pulses a design plays and the control that drives each, and the
-  scanner-side parser reads that statement — both are checked, end to end, in
-  the interpreter repository. What has never run is the costing built on it,
-  because it lives in a mode the test suite does not drive.
+  replies the RF definitions of a plugin's evaluation with the listing and the
+  RF layout of a protocol with its validation, when asked, and a plugin states a
+  layout by returning it from `evaluate`. Reading these blocks and costing the
+  RF of a prescription from them are work in the interpreter repository, and
+  neither has run on a scanner.
 - **Gradient heating on a dense repetition.** The model is evaluated over a
   whole repetition. Whether that is right for a dense, short-repetition
   sequence is untested: in every fixture the squeezed core costs less than the

@@ -15,6 +15,7 @@ from ._entries import (
     TimeParam,
 )
 from ._plugin import Evaluation, ScannerSequence, SequencePlugin, load_plugin
+from ._rf import RfControl, RfLayout
 
 __all__ = [
     "BoolParam",
@@ -25,6 +26,8 @@ __all__ = [
     "FloatParam",
     "IntParam",
     "Protocol",
+    "RfControl",
+    "RfLayout",
     "ScannerSequence",
     "SequencePlugin",
     "StringListParam",

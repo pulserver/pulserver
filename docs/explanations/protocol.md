@@ -28,7 +28,8 @@ request proceeds in three steps.
    accepts the protocol unchanged and builds nothing; a plugin overrides
    {meth}`~pulserver.design.SequencePlugin.evaluate` to check or complete it.
 3. The evaluation returns the protocol the design achieves, converted back to
-   wire values, with the scan time and a note. For a sequence application, the
+   wire values, with the scan time, a note and, optionally, the RF layout
+   ({ref}`rf-layout`). For a sequence application, the
    value each argument took in the design, as the application records it
    ({attr}`~pypulseqpp.sequences.SequenceApp.resolved`), replaces the
    requested one; an argument the application does not record keeps its
@@ -56,6 +57,44 @@ A valid reply carries the resolved values, a note, and the scan time in
 seconds: for a sequence application,
 {meth}`~pypulseqpp.sequences.SequenceApp.scan_time`. An evaluation that states
 no scan time, `0.0`, is valid, and the reply reports the scan time as unknown.
+
+(rf-layout)=
+## RF layout
+
+The RF a protocol plays depends on the protocol. An evaluation may state it as
+an {class}`~pulserver.design.RfLayout`, from which a scanner estimates the RF of
+a prescription without designing it: the RF definitions of a sequence, its RF
+instances in play order, and for each instance the protocol entry its amplitude
+follows.
+
+A definition is one RF pulse: a complex waveform at unit peak magnitude, its
+timing and its use. Instances of a definition differ in amplitude and in
+frequency and phase offset. The amplitude of an instance is relative to the
+first instance of its definition with a nonzero amplitude, so a refocusing
+train with a flip angle schedule is one definition with one instance per pulse,
+and RF spoiling, which steps the phase offset, adds no definition
+({meth}`pypulseqpp.Sequence.rf_instances`).
+
+A control of an instance is the flip angle, or a float user entry, of the
+plugin's protocol. It states that the amplitude of the instance is proportional
+to the entry: a scanner that plays a protocol with another value of the entry
+multiplies the amplitude by the ratio of that value to the value in the
+evaluated protocol, which is positive. An instance without a control is played
+at the amplitude it was evaluated at.
+
+The layout need not hold the scan. The instances repeat over a period, and an
+evaluation that builds one representative repetition, a TR, a shot or a train,
+states the instances of that repetition and its `period`, so that the size of
+the layout does not depend on the matrix. A definition is named by its number in
+the sequence the evaluation builds, in the order of first play. The listing
+carries the definitions of the evaluation at the default protocol, and a layout
+names the pulses of the listing only where the protocol does not change which
+pulses are played first: the length of a train, a flip angle schedule and the
+matrix do not, and a protocol that adds a preparation pulse does.
+
+The layout is an estimate for the prescription. An evaluation that states none
+states no estimate and is valid, and what the scanner checks before the scan is
+the stored design ({doc}`designs`).
 
 ## Keys and values
 
@@ -131,6 +170,53 @@ imaging_mode: stringlist|1|2d|3d
 A value block carries `name: value` lines only, a string list as the index of
 its chosen option. The grammar is implemented in {mod}`pulserver.protocol` for
 the host and in `pulseg_protocol.h` for the interpreter.
+
+The RF blocks follow a reply when the call asks for them, and no block follows
+where the evaluation is invalid or states no layout. They are lists of numbers:
+each number is ASCII decimal with nine significant digits, the numbers of a list
+are separated by single spaces, and each list is one line, so that a reader
+takes tokens. `[RfDefinitions]` follows the listing of a `list` call asked with
+`rf_definitions`, which evaluates the plugin at its default protocol under the
+scanner limits. Each definition is a `definition` line, then the sample times,
+then the real and the imaginary parts of each channel:
+
+```text
+[RfDefinitions]
+definition <index> <use> <flip_deg> <peak_hz> <bandwidth_hz> <delay_s> <center_s> <duration_s> <channels> <samples>
+<time_s> ...
+<real> ...
+<imaginary> ...
+[RfDefinitions End]
+```
+
+`index` is the number the runs of a layout name the definition by, from 0 in the
+order of first play, and `use` is the RF use of pypulseqpp. `flip_deg` and
+`peak_hz`, in degrees and Hz, are those of the first instance with a nonzero
+amplitude, and `bandwidth_hz` is the bandwidth that
+{func}`pypulseqpp.calc_rf_bandwidth` measures on the sum of the channels, in Hz.
+`delay_s` is the delay of the RF event in its block; `center_s`, `duration_s` and
+the sample times are in seconds from the start of the event, its delay excluded.
+The channels share the sample times. The waveform is scaled to unit peak
+magnitude over all channels and samples, with the RF shim applied; the frequency
+and phase offsets of the event are playout parameters and are not applied.
+
+`[RfLayout]` follows the value block of a valid `validate` reply asked with
+`rf_layout`. The instances are run-length encoded in play order, one `run`
+line for consecutive instances of one definition, control and printed
+amplitude, and carry no samples:
+
+```text
+[RfLayout]
+period <s>
+run <index> <amplitude> <control|-> <count>
+[RfLayout End]
+```
+
+`period` is the time in seconds over which the instances repeat, the
+`amplitude` of a run is unitless, relative to the first instance of its
+definition with a nonzero amplitude, and `control` is the wire name of the
+entry the amplitude is proportional to, or `-`. A reader skips the blocks it
+does not know.
 
 ## See also
 

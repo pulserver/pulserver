@@ -390,4 +390,4 @@ def test_a_shipped_or_test_plugin_declares_no_deprecated_name(path):
         plugin = load_plugin(path)
 
     assert isinstance(plugin, SequencePlugin)
-    assert not {"ui", "recon"} & set(vars(type(plugin)))
+    assert not {"ui", "recon", "follows"} & set(vars(type(plugin)))

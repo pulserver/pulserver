@@ -21,10 +21,21 @@ the precision of a float32 control variable, are described in
 | Object | Description |
 | --- | --- |
 | {obj}`~pulserver.design.SequencePlugin` | A sequence app bound to the scanner protocol. |
-| {obj}`~pulserver.design.Evaluation` | The outcome of evaluating a valid protocol: the protocol the design achieves, its scan time and a note. |
+| {obj}`~pulserver.design.Evaluation` | The outcome of evaluating a valid protocol: the protocol the design achieves, its scan time, a note and optionally its RF layout. |
 | {obj}`~pulserver.design.Protocol` | The values of a protocol in the units of the app's arguments, convertible from and to the wire values. |
 | {obj}`~pulserver.design.ScannerSequence` | Deprecated name of {class}`~pulserver.design.SequencePlugin`. |
 | {obj}`~pulserver.design.load_plugin` | Import a plugin file and instantiate the sequence plugin it defines. |
+
+## RF layout
+
+The RF an evaluation states: the RF definitions of a sequence, its instances in
+play order and the protocol entry each instance's amplitude follows
+({doc}`../explanations/protocol`).
+
+| Object | Description |
+| --- | --- |
+| {obj}`~pulserver.design.RfLayout` | The RF definitions a plugin plays and the instances of one repetition, each with the control its amplitude follows. |
+| {obj}`~pulserver.design.RfControl` | A control an RF amplitude follows: the flip angle or a float user entry. |
 
 ## UI entries
 
