@@ -12,6 +12,7 @@ Conceptual background is in {doc}`../explanations/index` and procedures in the
 | {doc}`proxy` | `pulserver.proxy` | The reconstruction proxy, the designs it resolves a series to, and the enrichment it applies. |
 | {doc}`recon` | `pulserver.recon` | {class}`~pulserver.recon.ReconPlugin`, the context and buffers its hooks receive, and the results they return. |
 | {doc}`mrd` | `pulserver.mrd` | MRD acquisitions, header entries and images, and the definitions and readouts a sequence states. |
+| {doc}`validate` | `pulserver.validate` | Checking that a sequence plays as it was written, against a recording of a machine playing it or against its own cache. |
 | {doc}`virtual` | `pulserver.virtual` | The virtual scanner: the trajectory a cache plays, a phantom acquired along it, and the virtual reconstruction client. |
 
 The C library a scanner interpreter links is documented in its public headers,
@@ -28,5 +29,6 @@ ir
 proxy
 recon
 mrd
+validate
 virtual
 ```

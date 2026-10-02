@@ -301,6 +301,41 @@ authenticated nor encrypted, and `--host` names the interface the proxy
 reaches it on. It stops on `SIGINT` or `SIGTERM` and waits for the series it is
 running.
 
+## Checking a sequence plays as it was written
+
+```bash
+pulserver validate SEQ [--vendor ge] [--played FILE] [--shift-us N] [--tolerance MT] [--limits FILE]
+```
+
+| Option | Meaning |
+| --- | --- |
+| `SEQ` | The sequence file to check |
+| `--vendor` | Which machine the recording came from. Without one the check is against the sequence's own IR cache |
+| `--played` | The recording to check against; without one, and with a vendor named, the recording is asked for from that vendor's tooling if it is installed |
+| `--shift-us` | Move the recording in time before comparing, in microseconds |
+| `--tolerance` | The largest difference that still counts as agreement, in mT/m; 0.05 by default |
+| `--limits` | The `[Limits]` block, for a sequence that has no cache yet |
+
+The command exits 0 where the two agree, 1 where they differ, and 2 where it
+could not compare, and prints the largest difference on each gradient axis
+against the peak that axis reaches.
+
+Naming a vendor compares against a recording of a machine playing the sequence,
+which establishes that the machine plays what was written. Naming none compares
+against the waveforms the sequence's own IR cache holds, which establishes only
+that the conversion kept the sequence — a conversion and a playout that are
+wrong in the same way agree with each other. The output says which of the two
+ran.
+
+A machine drives its transmit and gradient channels on separate timelines and
+records each as it drove it, so a recording holds them offset by that machine's
+own constant; `--shift-us` states it. Nothing estimates it, because a
+comparison that quietly aligns two waveforms can align away the disagreement it
+exists to find.
+
+Checking a sequence leaves nothing beside it: where no cache is there already,
+one is built beside a copy and discarded.
+
 ## See also
 
 * {doc}`../explanations/architecture` — the services and what passes between them.

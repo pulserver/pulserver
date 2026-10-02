@@ -55,6 +55,7 @@ The default branch is `main`; pull requests target it.
 | `src/pulserver/proxy/` | Reconstruction proxy: design lookup, MRD enrichment, workers, queue |
 | `src/pulserver/recon/` | Reconstruction plugin contract and the runtime that drives it over MRD |
 | `src/pulserver/mrd/` | MRD acquisitions, header entries, images and readout tables |
+| `src/pulserver/validate/` | Checking a sequence against a recording of a machine playing it, or against its own cache |
 | `src/pulserver/virtual/` | The virtual scanner: the cache played on a phantom or on isochromats, the scan clock, the console and the raw-data client |
 | `src/cpp/` | The extension `pulserver._ext`: the IR passes in `ir/`, the virtual scanner's isochromat engine in `bloch/`, and pocketfft, vendored, in `third_party/` |
 | `src/c/` | The C89 library a scanner links: cache reader and writer, accessors, protocol |
