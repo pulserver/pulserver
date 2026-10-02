@@ -544,7 +544,9 @@ of the reconstruction proxy, over an ISMRMRD HDF5 file
 (<a class="reference internal" href="../generated/pulserver.recon.ReconPlugin.run.html#pulserver.recon.ReconPlugin.run" title="pulserver.recon.ReconPlugin.run"><code class="xref py py-meth docutils literal notranslate"><span class="pre">ReconPlugin.run()</span></code></a>) and over an assembled
 <a class="reference internal" href="../generated/pulserver.mrd.AcquisitionBucket.html#pulserver.mrd.AcquisitionBucket" title="pulserver.mrd.AcquisitionBucket"><code class="xref py py-class docutils literal notranslate"><span class="pre">AcquisitionBucket</span></code></a> (calling the instance). The plugin
 reconstructs one unit of readouts at a time, as <a class="reference internal" href="../generated/pulserver.recon.ReconData.html#pulserver.recon.ReconData" title="pulserver.recon.ReconData"><code class="xref py py-class docutils literal notranslate"><span class="pre">ReconData</span></code></a>. Writing one
-is described in <a class="reference internal" href="../user-guide/reconstruction-plugins.html"><span class="doc">Reconstruction plugins</span></a>.</p>
+is described in <a class="reference internal" href="../user-guide/reconstruction-plugins.html"><span class="doc">Reconstruction plugins</span></a>. The image a
+<a class="reference internal" href="../generated/pulserver.recon.ReconResult.html#pulserver.recon.ReconResult" title="pulserver.recon.ReconResult"><code class="xref py py-class docutils literal notranslate"><span class="pre">ReconResult</span></code></a> becomes takes its geometry from its unit and its values
+from its array, as <a class="reference internal" href="../explanations/reconstruction.html"><span class="doc">Raw-data enrichment and routing</span></a> states.</p>
 <section id="plugin">
 <h2>Plugin<a class="headerlink" href="#plugin" title="Link to this heading">#</a></h2>
 <div class="pst-scrollable-table-container"><table class="table">
@@ -630,10 +632,10 @@ is described in <a class="reference internal" href="../user-guide/reconstruction
 <td><p>The readouts of one reconstruction unit: imaging and calibration k-space, counters and waveforms.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="../generated/pulserver.recon.ReconBuffer.html#pulserver.recon.ReconBuffer" title="pulserver.recon.ReconBuffer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ReconBuffer</span></code></a></p></td>
-<td><p>K-space of one encoding space, filled one acquisition at a time.</p></td>
+<td><p>K-space of one encoding space, filled one acquisition at a time, with the acquisition nearest the k-space centre.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.recon.ReconResult.html#pulserver.recon.ReconResult" title="pulserver.recon.ReconResult"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ReconResult</span></code></a></p></td>
-<td><p>Image array the runtime packages as an MRD image or DICOM dataset.</p></td>
+<td><p>Image array the runtime packages as an MRD image or DICOM dataset, with the acquisition its geometry is taken from and the rescale of its DICOM pixels.</p></td>
 </tr>
 </tbody>
 </table>

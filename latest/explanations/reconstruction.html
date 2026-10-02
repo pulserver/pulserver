@@ -523,6 +523,12 @@
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#trajectory">Trajectory</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#reconstruction-units">Reconstruction units</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#placement">Placement</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#images">Images</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#header">Header</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#values">Values</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#dicom-pixels">DICOM pixels</a></li>
+</ul>
+</li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#workers">Workers</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#reconstruction-server">Reconstruction server</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#see-also">See also</a></li>
@@ -693,6 +699,82 @@ states the echo of the readout it returns by assigning <code class="docutils lit
 of the acquisition: neither the stream’s acquisition nor
 <code class="docutils literal notranslate"><span class="pre">ReconData.acquisitions</span></code> changes.</p>
 </section>
+<section id="images">
+<h2>Images<a class="headerlink" href="#images" title="Link to this heading">#</a></h2>
+<p>A <a class="reference internal" href="../generated/pulserver.recon.ReconResult.html#pulserver.recon.ReconResult" title="pulserver.recon.ReconResult"><code class="xref py py-class docutils literal notranslate"><span class="pre">ReconResult</span></code></a> becomes an MRD image whose header the
+runtime builds from the unit that produced it. The values of the image are those
+of the array the plugin returned.</p>
+<section id="header">
+<h3>Header<a class="headerlink" href="#header" title="Link to this heading">#</a></h3>
+<p>The field of view is that of the reconstruction space of the unit’s encoding
+space, <code class="docutils literal notranslate"><span class="pre">(x,</span> <span class="pre">y,</span> <span class="pre">z)</span></code> in mm, so the images of a unit in the second encoding space
+carry the second space’s field of view. The matrix is the shape of the returned
+array, which is <a class="reference internal" href="../generated/pulserver.recon.ReconBuffer.image_shape.html#pulserver.recon.ReconBuffer.image_shape" title="pulserver.recon.ReconBuffer.image_shape"><code class="xref py py-attr docutils literal notranslate"><span class="pre">image_shape</span></code></a>, the
+reconstruction matrix of the unit’s space, for a plugin that uses it.</p>
+<p>The position, the orientation (<code class="docutils literal notranslate"><span class="pre">read_dir</span></code>, <code class="docutils literal notranslate"><span class="pre">phase_dir</span></code>, <code class="docutils literal notranslate"><span class="pre">slice_dir</span></code>), the
+patient table position, the physiology time stamps and the user fields are those
+of the unit’s <em>reference acquisition</em>, the imaging acquisition placed nearest the
+k-space centre, as Gadgetron selects it for an image header. The centre lies at
+<code class="docutils literal notranslate"><span class="pre">extent</span> <span class="pre">//</span> <span class="pre">2</span></code> along the phase-encoding axis and, where the encoded space has more
+than one partition, the partition axis, as described under
+<a class="reference internal" href="#reconstruction-placement"><span class="std std-ref">Placement</span></a>; nearness is the Euclidean distance from it in
+grid positions. Of acquisitions at the same distance, the first placed is the
+reference. The acquisition time stamp of the image is the earliest of the unit’s
+imaging acquisitions.</p>
+<p>A plugin reads the reference acquisition as
+<a class="reference internal" href="../generated/pulserver.recon.ReconBuffer.reference.html#pulserver.recon.ReconBuffer.reference" title="pulserver.recon.ReconBuffer.reference"><code class="xref py py-attr docutils literal notranslate"><span class="pre">reference</span></code></a>, and takes the geometry from
+another acquisition by passing it as <code class="docutils literal notranslate"><span class="pre">ReconResult.reference</span></code>.</p>
+</section>
+<section id="values">
+<h3>Values<a class="headerlink" href="#values" title="Link to this heading">#</a></h3>
+<p>The MRD image holds the values the plugin returned: <code class="docutils literal notranslate"><span class="pre">float32</span></code> for real
+floating-point data, <code class="docutils literal notranslate"><span class="pre">complex64</span></code> for complex data, wider types being converted
+to these, and integer data in its own type. No scale or normalisation is
+applied, so the ratios between the images of a series, such as the decay across
+the echoes of a multi-echo acquisition or the ratios between frames, are those
+of the reconstruction. The units are the reconstruction’s own.</p>
+<p>A <code class="docutils literal notranslate"><span class="pre">(z,</span> <span class="pre">y,</span> <span class="pre">x)</span></code> result becomes one image per partition. Each image states the
+smallest and largest finite value of the result, of its magnitude where it is
+complex, in the meta attributes <code class="docutils literal notranslate"><span class="pre">ArrayMinimum</span></code> and <code class="docutils literal notranslate"><span class="pre">ArrayMaximum</span></code>.</p>
+</section>
+<section id="dicom-pixels">
+<h3>DICOM pixels<a class="headerlink" href="#dicom-pixels" title="Link to this heading">#</a></h3>
+<p>A DICOM dataset stores integer pixels, and the integers are made when a result
+with <code class="docutils literal notranslate"><span class="pre">dicom=True</span></code> is converted, from the image the plugin returned. The
+dataset’s rescale maps them to the values of the image,
+<code class="docutils literal notranslate"><span class="pre">value</span> <span class="pre">=</span> <span class="pre">stored</span> <span class="pre">×</span> <span class="pre">RescaleSlope</span> <span class="pre">+</span> <span class="pre">RescaleIntercept</span></code>, with one mapping for each
+DICOM series, a series being the images that share <code class="docutils literal notranslate"><span class="pre">image_series_index</span></code>.</p>
+<ul class="simple">
+<li><p>An integer image is stored as it is. Its dataset carries a rescale only when
+the attributes of the result state one.</p></li>
+<li><p>The first floating-point image of a series fixes the mapping of the series.
+The intercept is 0, so that zero is stored as zero, and the slope stores the
+peak magnitude of the image at half the stored range, which leaves headroom
+for later images of the series up to twice as large. The stored type is
+16-bit, signed when that image has a negative value and unsigned when it has
+none. An image that states <code class="docutils literal notranslate"><span class="pre">ArrayMinimum</span></code> and <code class="docutils literal notranslate"><span class="pre">ArrayMaximum</span></code> is mapped as the
+array of images it belongs to, so the mapping of a series that begins with a
+volume does not depend on which partition arrives first. A complex image is
+stored as its magnitude. An image with no nonzero finite value fixes no
+mapping.</p></li>
+<li><p>Every later image of the series is stored under the mapping of the series, so
+the ratios between the values of its images are the ratios between their
+stored integers.</p></li>
+<li><p>A mapping stated in the attributes of a result, <code class="docutils literal notranslate"><span class="pre">RescaleSlope</span></code> or
+<code class="docutils literal notranslate"><span class="pre">RescaleIntercept</span></code>, is the mapping of that image:
+<code class="docutils literal notranslate"><span class="pre">stored</span> <span class="pre">=</span> <span class="pre">round((value</span> <span class="pre">-</span> <span class="pre">intercept)</span> <span class="pre">/</span> <span class="pre">slope)</span></code>, a slope left out being 1 and an
+intercept left out 0. It is also the mapping of the series when the image is
+the first floating-point image of the series, and the images that follow it
+and state none are stored under it. The slope is nonzero and both are finite.</p></li>
+<li><p>A value outside the range of the stored type is clipped to the nearest end of
+the range, never wrapped, and NaN is stored as 0. The clipped pixels are
+counted for each series, and the first clipping of a series is logged with its
+count. An image whose peak exceeds twice the peak its series was mapped from
+clips under the mapping of the series, unless the plugin states a mapping.</p></li>
+</ul>
+<p><code class="docutils literal notranslate"><span class="pre">RescaleType</span></code> is <code class="docutils literal notranslate"><span class="pre">US</span></code>, unspecified: the units are those of the reconstruction.</p>
+</section>
+</section>
 <section id="workers">
 <h2>Workers<a class="headerlink" href="#workers" title="Link to this heading">#</a></h2>
 <p>Each series is reconstructed in its own worker process, with the reconstruction
@@ -823,6 +905,12 @@ relays, and the client receives a text naming the message’s type.</p>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#trajectory">Trajectory</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#reconstruction-units">Reconstruction units</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#placement">Placement</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#images">Images</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#header">Header</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#values">Values</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#dicom-pixels">DICOM pixels</a></li>
+</ul>
+</li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#workers">Workers</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#reconstruction-server">Reconstruction server</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#see-also">See also</a></li>

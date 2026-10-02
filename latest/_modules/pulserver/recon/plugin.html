@@ -500,6 +500,7 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">copy</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">hashlib</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numbers</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">pickle</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">threading</span>
@@ -532,27 +533,44 @@
 <a class="viewcode-back" href="../../../generated/pulserver.recon.ReconResult.html#pulserver.recon.ReconResult">[docs]</a>
 <span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 <span class="k">class</span><span class="w"> </span><span class="nc">ReconResult</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""Image array for the runtime to package as an MRD image.</span>
+<span class="w">    </span><span class="sd">"""Image array for the runtime to package as an MRD image, or as DICOM.</span>
 
-<span class="sd">    Geometry and timing come from a reference acquisition, so a plugin builds no</span>
-<span class="sd">    image header. Plugins may return ``ismrmrd.Image`` objects instead.</span>
+<span class="sd">    The runtime builds the image header, so a plugin builds none. The field of</span>
+<span class="sd">    view and matrix are those of the unit's own encoding space; position,</span>
+<span class="sd">    orientation, table position and physiology time stamps are those of</span>
+<span class="sd">    ``reference``; the acquisition time stamp is the earliest of the unit's</span>
+<span class="sd">    imaging acquisitions. Plugins may return ``ismrmrd.Image`` objects instead.</span>
+
+<span class="sd">    The MRD image holds the values of ``data`` unchanged, in ``float32`` for</span>
+<span class="sd">    real floating-point data and ``complex64`` for complex data; wider types are</span>
+<span class="sd">    downcast and integer types are kept. Integers are made only where DICOM is</span>
+<span class="sd">    written, from the floating-point values, by one rescale mapping per</span>
+<span class="sd">    ``series_index``.</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
 <span class="sd">    data</span>
-<span class="sd">        NumPy array or Torch tensor, on any device.</span>
+<span class="sd">        NumPy array or Torch tensor, on any device. A ``(z, y, x)`` array</span>
+<span class="sd">        becomes one image per partition, each stating the smallest and largest</span>
+<span class="sd">        value of the array, of its magnitude when complex, in its meta</span>
+<span class="sd">        attributes ``ArrayMinimum`` and ``ArrayMaximum``.</span>
 <span class="sd">    reference</span>
-<span class="sd">        Index into the imaging acquisitions of the unit being emitted; negative</span>
-<span class="sd">        values count from the end, ``-1`` being the acquisition that closed it.</span>
+<span class="sd">        Acquisition the image takes its geometry from, such as an element of</span>
+<span class="sd">        :attr:`ReconBuffer.headers`. ``None`` is the unit's reference</span>
+<span class="sd">        acquisition, :attr:`ReconBuffer.reference`. An integer indexes the</span>
+<span class="sd">        imaging acquisitions of the unit, negative values counting from the</span>
+<span class="sd">        end, and is deprecated.</span>
 <span class="sd">    series_index</span>
-<span class="sd">        MRD ``image_series_index``.</span>
+<span class="sd">        MRD ``image_series_index``, which also selects the DICOM series.</span>
 <span class="sd">    image_index</span>
 <span class="sd">        MRD ``image_index``; ``None`` numbers images consecutively.</span>
 <span class="sd">    image_type</span>
 <span class="sd">        ``"magnitude"``, ``"phase"``, ``"real"``, ``"imaginary"`` or</span>
 <span class="sd">        ``"complex"``.</span>
 <span class="sd">    attributes</span>
-<span class="sd">        MRD meta attributes, merged over the runtime's defaults.</span>
+<span class="sd">        MRD meta attributes, merged over the runtime's defaults. In a DICOM</span>
+<span class="sd">        image ``RescaleSlope`` and ``RescaleIntercept`` state the mapping</span>
+<span class="sd">        ``value = stored * slope + intercept`` of its stored integers.</span>
 <span class="sd">    dicom</span>
 <span class="sd">        Convert the image to DICOM before sending it.</span>
 
@@ -566,12 +584,21 @@
 <span class="sd">    """</span>
 
     <span class="n">data</span><span class="p">:</span> <span class="n">Any</span>
-    <span class="n">reference</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">reference</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">series_index</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>
     <span class="n">image_index</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">image_type</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"magnitude"</span>
     <span class="n">attributes</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">dict</span><span class="p">)</span>
-    <span class="n">dicom</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span></div>
+    <span class="n">dicom</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">__post_init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">reference</span><span class="p">,</span> <span class="n">numbers</span><span class="o">.</span><span class="n">Integral</span><span class="p">):</span>
+            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+                <span class="s2">"ReconResult(reference=&lt;int&gt;) is deprecated; pass an acquisition, "</span>
+                <span class="s2">"or None for the unit's reference acquisition"</span><span class="p">,</span>
+                <span class="ne">DeprecationWarning</span><span class="p">,</span>
+                <span class="n">stacklevel</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>
+            <span class="p">)</span></div>
 
 
 

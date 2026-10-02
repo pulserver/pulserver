@@ -689,9 +689,25 @@ other readout belongs to the first branch <code class="docutils literal notransl
 
 </pre></div>
 </div>
-<p>A <a class="reference internal" href="../generated/pulserver.recon.ReconResult.html#pulserver.recon.ReconResult" title="pulserver.recon.ReconResult"><code class="xref py py-class docutils literal notranslate"><span class="pre">ReconResult</span></code></a> is packaged as an MRD image whose
-geometry and timing come from a reference acquisition, so a plugin builds no
-image header; <code class="docutils literal notranslate"><span class="pre">dicom=True</span></code> sends it as DICOM instead.</p>
+<p>A <a class="reference internal" href="../generated/pulserver.recon.ReconResult.html#pulserver.recon.ReconResult" title="pulserver.recon.ReconResult"><code class="xref py py-class docutils literal notranslate"><span class="pre">ReconResult</span></code></a> is packaged as an MRD image, so a
+plugin builds no image header. The field of view is that of the unit’s encoding
+space, the position, orientation and physiology time stamps are those of the
+unit’s reference acquisition, <code class="docutils literal notranslate"><span class="pre">data.data.reference</span></code>, and the time stamp is the
+earliest of the unit’s acquisitions. <code class="docutils literal notranslate"><span class="pre">reference=&lt;acquisition&gt;</span></code> takes the
+geometry from another acquisition. The MRD image holds the array as returned,
+<code class="docutils literal notranslate"><span class="pre">float32</span></code> or <code class="docutils literal notranslate"><span class="pre">complex64</span></code>, with no scale applied.</p>
+<p><code class="docutils literal notranslate"><span class="pre">dicom=True</span></code> sends the result as DICOM instead, and the integer pixels are made
+then. The first floating-point image of a series fixes the rescale of its
+DICOM pixels, and a result states its own in its attributes:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">return</span> <span class="n">recon</span><span class="o">.</span><span class="n">ReconResult</span><span class="p">(</span>
+    <span class="n">image</span><span class="p">,</span>
+    <span class="n">dicom</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="n">attributes</span><span class="o">=</span><span class="p">{</span><span class="s2">"RescaleSlope"</span><span class="p">:</span> <span class="mf">1e-4</span><span class="p">,</span> <span class="s2">"RescaleIntercept"</span><span class="p">:</span> <span class="mf">0.0</span><span class="p">},</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>A value outside the range of the stored integers is clipped and counted; see
+<a class="reference internal" href="../explanations/reconstruction.html"><span class="doc">Raw-data enrichment and routing</span></a>.</p>
 <p>Each series runs on its own copy of <code class="docutils literal notranslate"><span class="pre">PLUGIN</span></code>
 (<a class="reference internal" href="../generated/pulserver.recon.ReconPlugin.spawn.html#pulserver.recon.ReconPlugin.spawn" title="pulserver.recon.ReconPlugin.spawn"><code class="xref py py-meth docutils literal notranslate"><span class="pre">spawn()</span></code></a>). <code class="docutils literal notranslate"><span class="pre">context.exam</span></code>, an
 <a class="reference internal" href="../generated/pulserver.recon.ExamCache.html#pulserver.recon.ExamCache" title="pulserver.recon.ExamCache"><code class="xref py py-class docutils literal notranslate"><span class="pre">ExamCache</span></code></a>, is shared by the series of one exam, such
@@ -782,8 +798,8 @@ describe the encoded space and the receiver channels:</p>
 
 </pre></div>
 </div>
-<p>Six shipped plugins are complete reconstructions, each image scaled to the
-header’s largest stored value. They are searched after every reconstruction
+<p>Six shipped plugins are complete reconstructions, returning the values of their
+transform or solve unscaled. They are searched after every reconstruction
 plugin directory, so a client can name one, such as <code class="docutils literal notranslate"><span class="pre">nufft</span></code>, without a file of
 its own:</p>
 <div class="pst-scrollable-table-container"><table class="table">

@@ -32,3 +32,4 @@
    ~ReconBuffer.extents
    ~ReconBuffer.image_shape
    ~ReconBuffer.readout_time
+   ~ReconBuffer.reference
