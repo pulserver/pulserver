@@ -539,7 +539,10 @@
 config text, the header, one acquisition per readout of the chain and a
 <code class="docutils literal notranslate"><span class="pre">CLOSE</span></code>. The header’s <code class="docutils literal notranslate"><span class="pre">pulserver_design</span></code> names the design of the store
 the series was played from; its readout table enriches the header and
-every acquisition. The readouts arrive demodulated to the
+every acquisition, and the reconstruction receives the chain’s sequence
+description as a text message after the header and before the first
+acquisition (<code class="xref py py-func docutils literal notranslate"><span class="pre">message()</span></code>), which is not
+sent back to the client. The readouts arrive demodulated to the
 prescribed field-of-view centre by the playout
 (<a class="reference internal" href="pulserver.ir.prescribe.html#pulserver.ir.prescribe" title="pulserver.ir.prescribe"><code class="xref py py-func docutils literal notranslate"><span class="pre">pulserver.ir.prescribe()</span></code></a>), and their samples are passed on as
 received. The reconstruction plugin is the design’s, falling back to

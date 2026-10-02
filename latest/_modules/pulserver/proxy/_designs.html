@@ -462,12 +462,15 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">threading</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">collections</span><span class="w"> </span><span class="kn">import</span> <span class="n">OrderedDict</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">functools</span><span class="w"> </span><span class="kn">import</span> <span class="n">cached_property</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">..host._store</span><span class="w"> </span><span class="kn">import</span> <span class="n">ID_DIGITS</span><span class="p">,</span> <span class="n">MANIFEST</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..mrd._metadata</span><span class="w"> </span><span class="kn">import</span> <span class="n">user_parameter</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">..mrd._sequence</span><span class="w"> </span><span class="kn">import</span> <span class="n">read_chain</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">._enrich</span><span class="w"> </span><span class="kn">import</span> <span class="n">SequenceTable</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">._seqdesc</span><span class="w"> </span><span class="kn">import</span> <span class="n">describe</span><span class="p">,</span> <span class="n">message</span>
 
 <span class="c1">#: Header user parameter naming the design a stream was played from: its</span>
 <span class="c1">#: identifier, as ``GENERATED`` or ``IMPORTED`` replied it.</span>
@@ -504,7 +507,21 @@
     <span class="n">directory</span><span class="p">:</span> <span class="n">Path</span>
     <span class="n">recon</span><span class="p">:</span> <span class="nb">str</span>
     <span class="n">table</span><span class="p">:</span> <span class="n">SequenceTable</span>
-    <span class="n">prospective_motion</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span></div>
+    <span class="n">prospective_motion</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+
+    <span class="nd">@cached_property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">description</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The MRD text message describing the chain to a simulation.</span>
+
+<span class="sd">        See :func:`~pulserver.proxy._seqdesc.message`. Built on first use and</span>
+<span class="sd">        kept with the design.</span>
+<span class="sd">        """</span>
+        <span class="k">return</span> <span class="n">message</span><span class="p">(</span>
+            <span class="p">[</span>
+                <span class="n">describe</span><span class="p">(</span><span class="n">seq</span><span class="p">,</span> <span class="n">subsequence_index</span><span class="o">=</span><span class="n">index</span><span class="p">)</span>
+                <span class="k">for</span> <span class="n">index</span><span class="p">,</span> <span class="p">(</span><span class="n">_</span><span class="p">,</span> <span class="n">seq</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">read_chain</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">directory</span> <span class="o">/</span> <span class="n">_ENTRY</span><span class="p">))</span>
+            <span class="p">]</span>
+        <span class="p">)</span></div>
 
 
 

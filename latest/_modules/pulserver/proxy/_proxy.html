@@ -488,6 +488,7 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">._enrich</span><span class="w"> </span><span class="kn">import</span> <span class="n">enrich_acquisition</span><span class="p">,</span> <span class="n">enrich_header</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">._motion</span><span class="w"> </span><span class="kn">import</span> <span class="n">FILENAME</span><span class="p">,</span> <span class="n">MotionWriter</span><span class="p">,</span> <span class="n">Pose</span><span class="p">,</span> <span class="n">pose_of</span><span class="p">,</span> <span class="n">pose_waveform</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">._queue</span><span class="w"> </span><span class="kn">import</span> <span class="n">QueueFile</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">._seqdesc</span><span class="w"> </span><span class="kn">import</span> <span class="n">is_message</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">._workers</span><span class="w"> </span><span class="kn">import</span> <span class="n">WorkerPool</span>
 
 <span class="n">_log</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="s2">"pulserver.proxy"</span><span class="p">)</span>
@@ -603,7 +604,10 @@
 <span class="sd">    config text, the header, one acquisition per readout of the chain and a</span>
 <span class="sd">    ``CLOSE``. The header's ``pulserver_design`` names the design of the store</span>
 <span class="sd">    the series was played from; its readout table enriches the header and</span>
-<span class="sd">    every acquisition. The readouts arrive demodulated to the</span>
+<span class="sd">    every acquisition, and the reconstruction receives the chain's sequence</span>
+<span class="sd">    description as a text message after the header and before the first</span>
+<span class="sd">    acquisition (:func:`~pulserver.proxy._seqdesc.message`), which is not</span>
+<span class="sd">    sent back to the client. The readouts arrive demodulated to the</span>
 <span class="sd">    prescribed field-of-view centre by the playout</span>
 <span class="sd">    (:func:`pulserver.ir.prescribe`), and their samples are passed on as</span>
 <span class="sd">    received. The reconstruction plugin is the design's, falling back to</span>
@@ -776,7 +780,7 @@
                 <span class="n">config</span><span class="p">,</span>
                 <span class="n">header</span><span class="p">,</span>
                 <span class="n">plugin</span><span class="p">,</span>
-                <span class="n">_enriched</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="n">design</span><span class="p">),</span>
+                <span class="n">itertools</span><span class="o">.</span><span class="n">chain</span><span class="p">((</span><span class="n">design</span><span class="o">.</span><span class="n">description</span><span class="p">,),</span> <span class="n">_enriched</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="n">design</span><span class="p">)),</span>
                 <span class="n">motion</span><span class="o">=</span><span class="n">design</span><span class="o">.</span><span class="n">directory</span> <span class="o">/</span> <span class="n">FILENAME</span>
                 <span class="k">if</span> <span class="n">design</span><span class="o">.</span><span class="n">prospective_motion</span>
                 <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
@@ -1448,7 +1452,8 @@
 
 <span class="sd">    ``convert`` turns each image into what is sent in its place. ``poses``</span>
 <span class="sd">    takes each pose the reconstruction states, which is not sent on: a pose is</span>
-<span class="sd">    addressed to the scan, not to whoever asked for the images. A message</span>
+<span class="sd">    addressed to the scan, not to whoever asked for the images; nor is the</span>
+<span class="sd">    sequence description, which a reconstruction may echo. A message</span>
 <span class="sd">    ``source`` has no reader for ends the relay, and the client is told its</span>
 <span class="sd">    type, because what followed it in the stream cannot be read.</span>
 <span class="sd">    """</span>
@@ -1456,6 +1461,8 @@
         <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">source</span><span class="p">:</span>
             <span class="k">if</span> <span class="n">_is_close_marker</span><span class="p">(</span><span class="n">item</span><span class="p">):</span>
                 <span class="k">break</span>
+            <span class="k">if</span> <span class="n">is_message</span><span class="p">(</span><span class="n">item</span><span class="p">):</span>
+                <span class="k">continue</span>
             <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">item</span><span class="p">,</span> <span class="n">ismrmrd</span><span class="o">.</span><span class="n">Waveform</span><span class="p">):</span>
                 <span class="n">found</span> <span class="o">=</span> <span class="n">pose_of</span><span class="p">(</span><span class="n">item</span><span class="p">)</span>
                 <span class="k">if</span> <span class="n">found</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>

@@ -885,6 +885,14 @@ reconstruction plugin, which a reconstruction server runs, or the
 selects its pipeline by. The client’s config text is not forwarded. What the
 server returns is relayed to the client; a message the proxy has no reader for
 ends the relay, and the client receives a <code class="docutils literal notranslate"><span class="pre">pulserver:</span></code> text naming its type.</p>
+<p>Whether forwarded or reconstructed by a worker, the series carries, after its
+header and before its first acquisition, one <code class="docutils literal notranslate"><span class="pre">TEXT</span></code> message (5) describing the
+sequence chain to a simulation: a JSON object under the key
+<code class="docutils literal notranslate"><span class="pre">pulserver_sequence_description</span></code>, holding per file of the chain one row per
+block, RF at the pulse centre and ADC at the sample nearest the centre of
+k-space, and the pulses the RF rows name. It is meant for a reconstruction
+server that simulates the signal, which chooses the signal model the rows
+drive, and is not relayed back to the client.</p>
 <p>With <code class="docutils literal notranslate"><span class="pre">--intake-port</span></code>, the proxy runs a design intake beside it
 (<a class="reference internal" href="../generated/pulserver.proxy.DesignIntake.html#pulserver.proxy.DesignIntake" title="pulserver.proxy.DesignIntake"><code class="xref py py-class docutils literal notranslate"><span class="pre">DesignIntake</span></code></a>), an HTTP endpoint that writes the
 designs pushed to it into <code class="docutils literal notranslate"><span class="pre">--store</span></code>: <code class="docutils literal notranslate"><span class="pre">HEAD</span> <span class="pre">/designs/&lt;id&gt;</span></code> answers 200 when the
