@@ -313,24 +313,15 @@ docker run -d --restart unless-stopped --name pulserver \
   --spins 4 --diffusion --nod 2 8
 ```
 
-Its sequences are pypulseqpp's, reconstructed by the built-in plugins of
-{doc}`reconstruction-plugins`, and each protocol starts at values the image's
-limits play:
-
-| Plugin | Sequence | Reconstruction |
-| --- | --- | --- |
-| `gre2d` | 2D gradient echo | `pics` |
-| `gre_multiecho2d` | 2D multi-echo gradient echo, one image per echo | `pics` |
-| `se2d` | 2D spin echo | `pics` |
-| `bssfp2d` | 2D balanced SSFP | `pics` |
-| `gre_radial2d` | 2D radial gradient echo | `nufft` |
-| `gre_spiral2d` | 2D spiral gradient echo | `nufft` |
+Its sequences are the ones listed under {ref}`shipped-sequences`,
+reconstructed by the shipped plugins of {doc}`reconstruction-plugins`, and each
+protocol starts at values the image's limits play.
 
 Directories mounted at `/console/user/plugins` and `/console/user/recon` add
-sequences and reconstructions to the image's. They are searched first, so a
-file there takes the place of the image's file of that name. A link must
-resolve inside the container, as a relative link within the mounted directory
-does. A file added or changed is used from the next call on:
+sequences and reconstructions to those pulserver ships. They are searched
+first, so a file there takes the place of the shipped file of that name. A
+link must resolve inside the container, as a relative link within the mounted
+directory does. A file added or changed is used from the next call on:
 
 ```bash
 docker run -d --restart unless-stopped --name pulserver \
