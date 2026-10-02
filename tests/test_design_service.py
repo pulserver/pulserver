@@ -1,6 +1,7 @@
 """The stateless design calls and the store of the designs they write."""
 
 import hashlib
+import logging
 import os
 import shutil
 import struct
@@ -37,7 +38,7 @@ import os
 import pypulseqpp as pp
 from pypulseqpp import sequences
 
-from pulserver.design import ScannerSequence, TimeParam
+from pulserver.design import SequencePlugin, TimeParam
 from pulserver.protocol import TEPreset, UIParam
 
 
@@ -58,13 +59,95 @@ class CountedApp(sequences.SequenceApp):
         self.seq.add_block(pp.make_delay(self.te))
 
 
-class Counted(ScannerSequence):
+class Counted(SequencePlugin):
     app = CountedApp
-    ui = {
+    protocol = {
         UIParam.TE: TimeParam(
             "te", range_min=1000, range_max=80000, presets={TEPreset.MINIMUM: None}
         )
     }
+'''
+
+EVALUATING = '''"""A function app; its evaluation rejects 80 lines, fails on 13 and states a scan time for 20."""
+
+import pypulseqpp as pp
+
+from pulserver.design import Evaluation, IntParam, SequencePlugin
+from pulserver.protocol import UIParam
+
+
+def delays(system, nx=8):
+    seq = pp.Sequence(system)
+    for _ in range(nx):
+        seq.add_block(pp.make_delay(1e-3))
+    return seq
+
+
+class Evaluating(SequencePlugin):
+    app = delays
+    protocol = {UIParam.NX: IntParam("nx", range_max=100)}
+
+    def evaluate(self, system, protocol):
+        lines = protocol[UIParam.NX]
+        if lines == 80:
+            raise ValueError("80 lines do not fit the receiver buffer")
+        if lines == 13:
+            raise TypeError("a defect in the evaluation")
+        if lines == 20:
+            return Evaluation(protocol, 20e-3, "a note shown with the protocol")
+        return super().evaluate(system, protocol)
+'''
+
+CHAINED = '''"""A function app returning a calibration and the scan: a chain of two sequences."""
+
+import pypulseqpp as pp
+
+from pulserver.design import IntParam, SequencePlugin
+from pulserver.protocol import UIParam
+
+
+def chain(system, nx=8):
+    calibration, scan = pp.Sequence(system), pp.Sequence(system)
+    calibration.add_block(pp.make_delay(1e-3))
+    for _ in range(nx):
+        scan.add_block(pp.make_delay(2e-3))
+    return [calibration, scan]
+
+
+class Chained(SequencePlugin):
+    app = chain
+    protocol = {UIParam.NX: IntParam("nx", range_max=100)}
+'''
+
+HELPER = """import pypulseqpp as pp
+
+
+def delays(system, nx=8):
+    seq = pp.Sequence(system)
+    for _ in range(nx):
+        seq.add_block(pp.make_delay(1e-3))
+    return seq
+"""
+
+PARTIAL = '''"""A function app that is a partial of a function in another file."""
+
+import functools
+import importlib.util
+from pathlib import Path
+
+from pulserver.design import IntParam, SequencePlugin
+from pulserver.protocol import UIParam
+
+spec = importlib.util.spec_from_file_location(
+    "delay_helper", Path(__file__).with_name("delay_helper.py")
+)
+helper = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(helper)
+
+
+class Partial(SequencePlugin):
+    app = functools.partial(helper.delays, nx=4)
+    protocol = {UIParam.NX: IntParam("nx", range_max=100)}
 '''
 
 
@@ -78,6 +161,16 @@ def store(tmp_path):
     return DesignStore(tmp_path / "designs")
 
 
+@pytest.fixture
+def function_plugins(tmp_path):
+    """A plugin directory holding the function-app plugins ``evaluating`` and ``chained``."""
+    plugins = tmp_path / "function_plugins"
+    plugins.mkdir()
+    (plugins / "evaluating.py").write_text(EVALUATING)
+    (plugins / "chained.py").write_text(CHAINED)
+    return plugins
+
+
 def generate(store, plugin, values, limits=LIMITS, plugins=PLUGINS):
     return service.call(
         "generate",
@@ -86,6 +179,16 @@ def generate(store, plugin, values, limits=LIMITS, plugins=PLUGINS):
         limits=limits,
         block=block(values),
         store=store,
+    )
+
+
+def validate(plugins, plugin, values, limits=LIMITS):
+    return service.call(
+        "validate",
+        plugins=plugins,
+        plugin=plugin,
+        limits=limits,
+        block=block(values),
     )
 
 
@@ -211,6 +314,109 @@ def test_an_invalid_protocol_is_an_error_and_stores_nothing(store):
     assert text.startswith("ERROR ") and "shorter than" in text
     assert not list(store)
     assert not any(store.root.iterdir())
+
+
+@pytest.mark.parametrize(
+    ("nx", "level", "info", "logged"),
+    [
+        pytest.param(
+            80,
+            logging.WARNING,
+            "80 lines do not fit the receiver buffer",
+            "ValueError: 80 lines do not fit the receiver buffer",
+            id="expected-rejection",
+        ),
+        pytest.param(
+            13,
+            logging.ERROR,
+            "TypeError in Evaluating.evaluate",
+            "TypeError: a defect in the evaluation",
+            id="unexpected-error",
+        ),
+    ],
+)
+def test_an_evaluate_error_is_an_invalid_protocol(
+    function_plugins, caplog, nx, level, info, logged
+):
+    with caplog.at_level(logging.WARNING, logger="pulserver.design"):
+        status, reply = validate(function_plugins, "evaluating", {"nx": nx})
+
+    assert status == 0
+    assert reply.startswith(f"INVALID\nINFO {info}\n")
+    assert f"nx: {nx}\n" in reply
+    [record] = caplog.records
+    assert (record.name, record.levelno) == ("pulserver.design", level)
+    assert logged in caplog.text
+
+
+def test_a_zero_duration_is_valid_and_sent_as_unknown(function_plugins, store):
+    status, reply = validate(function_plugins, "evaluating", {"nx": 8})
+    assert (status, reply.split("\n")[:2]) == (0, ["VALID ?", "INFO "])
+
+    design = generated(
+        generate(store, "evaluating", {"nx": 8}, plugins=function_plugins)
+    )
+    assert store.manifest(design)["scan_time"] is None
+
+
+def test_a_valid_reply_carries_the_duration_and_note_of_the_evaluation(
+    function_plugins,
+):
+    status, reply = validate(function_plugins, "evaluating", {"nx": 20})
+    assert status == 0
+    assert reply.startswith("VALID 0.02\nINFO a note shown with the protocol\n")
+
+
+def test_a_function_app_is_designed_into_a_stored_design(function_plugins, store):
+    def designed(nx):
+        return generated(
+            generate(store, "evaluating", {"nx": nx}, plugins=function_plugins)
+        )
+
+    design = designed(8)
+    assert designed(8) == design
+    assert designed(9) != design
+    written = store.directory(design) / "sequence.seq"
+    assert b"[BLOCKS]" not in written.read_bytes()
+    assert pp.io.read(written).duration()[0] == pytest.approx(8e-3)
+
+
+def test_a_chain_returned_by_a_function_app_is_one_stored_design(
+    function_plugins, store
+):
+    design = generated(generate(store, "chained", {"nx": 4}, plugins=function_plugins))
+    directory = store.directory(design)
+    assert sorted(store.manifest(design)["files"]) == [
+        "resolved.protocol",
+        "sequence.pseg",
+        "sequence.seq",
+        "sequence_main.seq",
+    ]
+    first = pp.io.read(directory / "sequence.seq")
+    assert first.get_definition("NextSequence") == "sequence_main.seq"
+    scan = pp.io.read(directory / "sequence_main.seq")
+    assert scan.duration()[0] == pytest.approx(4 * 2e-3)
+
+
+def test_a_partial_app_is_covered_by_the_source_file_of_its_function(tmp_path, store):
+    plugins = tmp_path / "partial_plugins"
+    plugins.mkdir()
+    helper, plugin = plugins / "delay_helper.py", plugins / "partial.py"
+    helper.write_text(HELPER)
+    plugin.write_text(PARTIAL)
+    first = generated(generate(store, "partial", {}, plugins=plugins))
+
+    helper.write_text(HELPER.replace("1e-3", "0.002"))
+    stat = plugin.stat()
+    os.utime(plugin, ns=(stat.st_atime_ns, stat.st_mtime_ns + 10**9))
+    second = generated(generate(store, "partial", {}, plugins=plugins))
+
+    assert second != first
+    durations = [
+        pp.io.read(store.directory(design) / "sequence.seq").duration()[0]
+        for design in (first, second)
+    ]
+    assert durations == [pytest.approx(4e-3), pytest.approx(8e-3)]
 
 
 def test_a_design_carries_its_cache_tagged_with_the_vendor(store):

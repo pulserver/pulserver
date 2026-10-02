@@ -10,7 +10,7 @@ from pulserver.design import (
     Description,
     FloatParam,
     IntParam,
-    ScannerSequence,
+    SequencePlugin,
     TimeParam,
 )
 from pulserver.protocol import (
@@ -60,9 +60,9 @@ class TypedApp(sequences.SequenceApp):
         self.seq.add_block(pp.make_delay(self.te))
 
 
-class Typed(ScannerSequence):
+class Typed(SequencePlugin):
     app = TypedApp
-    ui = {
+    protocol = {
         UIParam.TE: TimeParam(
             "te",
             range_min=1000,

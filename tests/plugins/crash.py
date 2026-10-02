@@ -4,7 +4,7 @@ import os
 
 from pypulseqpp import sequences
 
-from pulserver.design import ScannerSequence, TimeParam
+from pulserver.design import SequencePlugin, TimeParam
 from pulserver.protocol import UIParam
 
 
@@ -22,6 +22,6 @@ class CrashApp(sequences.SequenceApp):
         pass
 
 
-class Crash(ScannerSequence):
+class Crash(SequencePlugin):
     app = CrashApp
-    ui = {UIParam.TE: TimeParam("te", range_min=1000, range_max=80000)}
+    protocol = {UIParam.TE: TimeParam("te", range_min=1000, range_max=80000)}

@@ -46,19 +46,20 @@ the checks pypulseqpp provides does not establish scanner or patient safety.
 pip install pulserver bartorch
 ```
 
-A sequence plugin binds a pypulseqpp `SequenceApp` to the scanner protocol, and
-a reconstruction plugin reconstructs the series it acquires. The client of a
-scan chooses the reconstruction, independently of the sequence:
+A sequence plugin binds a pypulseqpp `SequenceApp`, or a function returning
+sequences, to the scanner protocol, and a reconstruction plugin reconstructs
+the series it acquires. The client of a scan chooses the reconstruction,
+independently of the sequence:
 
 ```python
 # sequences/gre.py
 from pypulseqpp.sequences.sequence.gre2D_sequence import Gre2DApp
-from pulserver.design import ScannerSequence, TimeParam, UIParam
+from pulserver.design import SequencePlugin, TimeParam, UIParam
 
 
-class Gre(ScannerSequence):
+class Gre(SequencePlugin):
     app = Gre2DApp
-    ui = {UIParam.TE: TimeParam("te", range_min=3000, range_max=20000)}  # µs
+    protocol = {UIParam.TE: TimeParam("te", range_min=3000, range_max=20000)}  # µs
 ```
 
 ```python

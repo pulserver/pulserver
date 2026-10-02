@@ -2,13 +2,13 @@
 
 from pypulseqpp.sequences.sequence.se_radial2D_sequence import SeRadial2DApp
 
-from pulserver.design import FloatParam, IntParam, ScannerSequence, TimeParam
+from pulserver.design import FloatParam, IntParam, SequencePlugin, TimeParam
 from pulserver.protocol import TEPreset, TRPreset, UIParam
 
 
-class SeRadial2D(ScannerSequence):
+class SeRadial2D(SequencePlugin):
     app = SeRadial2DApp
-    ui = {
+    protocol = {
         UIParam.TE: TimeParam(
             "te",
             range_min=2000,

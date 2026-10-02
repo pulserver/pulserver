@@ -48,7 +48,7 @@ The default branch is `main`; pull requests target it.
 
 | Path | Purpose |
 |---|---|
-| `src/pulserver/design/` | `ScannerSequence`: a pypulseqpp application bound to the scanner protocol |
+| `src/pulserver/design/` | `SequencePlugin`: a pypulseqpp application, or a function returning sequences, bound to the scanner protocol |
 | `src/pulserver/protocol/` | Protocol parameters and the text blocks that carry them to the interpreter |
 | `src/pulserver/host/` | The design calls, the `pulserver design` command and its warm server, and the design store |
 | `src/pulserver/ir/` | Conversion of a `NextSequence` chain into the IR cache |

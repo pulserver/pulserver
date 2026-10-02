@@ -3,7 +3,7 @@
 import pypulseqpp as pp
 from pypulseqpp import sequences
 
-from pulserver.design import ScannerSequence
+from pulserver.design import SequencePlugin
 
 DESIGNED_FOR = pp.Opts(max_grad=80, grad_unit="mT/m", max_slew=200, slew_unit="T/m/s")
 
@@ -31,6 +31,6 @@ class StrongApp(sequences.SequenceApp):
         )
 
 
-class Strong(ScannerSequence):
+class Strong(SequencePlugin):
     app = StrongApp
-    ui = {}
+    protocol = {}

@@ -2,13 +2,13 @@
 
 from pypulseqpp.sequences.sequence.bssfp2D_sequence import Bssfp2DApp
 
-from pulserver.design import FloatParam, IntParam, ScannerSequence, TimeParam
+from pulserver.design import FloatParam, IntParam, SequencePlugin, TimeParam
 from pulserver.protocol import TRPreset, UIParam
 
 
-class Bssfp2D(ScannerSequence):
+class Bssfp2D(SequencePlugin):
     app = Bssfp2DApp
-    ui = {
+    protocol = {
         UIParam.FLIP: FloatParam(
             "flip_angle_deg", unit="deg", range_min=1.0, range_max=90.0
         ),

@@ -4,13 +4,13 @@ from pypulseqpp.sequences.sequence.gre_stack_of_stars3D_sequence import (
     GreStackOfStars3DApp,
 )
 
-from pulserver.design import FloatParam, IntParam, ScannerSequence, TimeParam
+from pulserver.design import FloatParam, IntParam, SequencePlugin, TimeParam
 from pulserver.protocol import TEPreset, TRPreset, UIParam
 
 
-class GreStackOfStars3D(ScannerSequence):
+class GreStackOfStars3D(SequencePlugin):
     app = GreStackOfStars3DApp
-    ui = {
+    protocol = {
         UIParam.FLIP: FloatParam(
             "flip_angle_deg", unit="deg", range_min=1.0, range_max=90.0
         ),

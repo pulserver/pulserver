@@ -3,7 +3,7 @@
 import pypulseqpp as pp
 from pypulseqpp import sequences
 
-from pulserver.design import IntParam, ScannerSequence, TimeParam
+from pulserver.design import IntParam, SequencePlugin, TimeParam
 from pulserver.protocol import TEPreset, UIParam
 
 
@@ -30,9 +30,9 @@ class TinyApp(sequences.SequenceApp):
         self.seq.add_block(pp.make_delay(self.te))
 
 
-class Tiny(ScannerSequence):
+class Tiny(SequencePlugin):
     app = TinyApp
-    ui = {
+    protocol = {
         UIParam.TE: TimeParam(
             "te",
             range_min=1000,
