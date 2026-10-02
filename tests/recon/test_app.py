@@ -21,18 +21,14 @@ from pulserver.recon._runtime.exam import ExamCacheManager, resolve_exam_id
 
 
 class SumRecon(ReconPlugin):
-    def startup(self, context):
-        del context
-        self.lines: list[np.ndarray] = []
+    def __init__(self):
+        super().__init__(axes=("slice",), buffered=False)
 
-    def receive(self, acquisition, context):
-        self.lines.append(np.asarray(acquisition.data))
-        return super().receive(acquisition, context)
-
-    def recon(self, branch, context):
+    def recon(self, context, branch, data):
         del branch
         scale = context.exam.get_or_create("scale", lambda: 2.0)
-        return ReconResult(np.stack(self.lines).sum(axis=1) * scale)
+        lines = [np.asarray(acquisition.data) for acquisition in data.acquisitions]
+        return ReconResult(np.stack(lines).sum(axis=1) * scale)
 
 
 def _header(exam_id: str | None = None, study_uid: str | None = None):
@@ -60,7 +56,7 @@ def test_plugin_runs_unchanged_offline():
     )
     context = ReconContext.offline(exam_id="offline-test")
 
-    result = SumRecon(buffered=False)(bucket, context)
+    result = SumRecon()(bucket, context)
 
     assert isinstance(result, ReconResult)
     np.testing.assert_array_equal(result.data, np.full((4, 8), 6.0))

@@ -8,9 +8,9 @@ from pulserver.recon import ReconPlugin, ReconResult
 
 class DeviceRecon(ReconPlugin):
     def __init__(self):
-        super().__init__(branches={AcquisitionFlag.LAST_IN_MEASUREMENT: "device"})
+        super().__init__(triggers={"device": AcquisitionFlag.LAST_IN_MEASUREMENT})
 
-    def recon(self, branch, context):
+    def recon(self, context, branch, data):
         index = 0 if context.device is None else int(context.device.split(":")[1]) + 1
         return ReconResult(np.full((2, 2), index, dtype=np.float32))
 

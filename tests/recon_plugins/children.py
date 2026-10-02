@@ -10,9 +10,9 @@ from pulserver.recon import ReconPlugin, ReconResult
 
 class ChildProcessRecon(ReconPlugin):
     def __init__(self):
-        super().__init__(branches={AcquisitionFlag.LAST_IN_MEASUREMENT: "image"})
+        super().__init__(triggers={"image": AcquisitionFlag.LAST_IN_MEASUREMENT})
 
-    def recon(self, branch, context):
+    def recon(self, context, branch, data):
         # A spawned child imports what it runs by module name, which this
         # file, loaded from a path, does not have.
         with multiprocessing.get_context("spawn").Pool(1) as pool:

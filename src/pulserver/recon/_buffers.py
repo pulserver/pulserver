@@ -1,16 +1,20 @@
-"""K-space buffers laid out from the MRD header and filled one acquisition at a time.
+"""K-space buffers of a reconstruction unit, laid out from the MRD header and filled one acquisition at a time.
 
-One buffer per encoding space, sized from the header before data arrives and
-indexed by each acquisition's counters. Axes run coil first and readout last,
-with a placement axis only where the header says a counter varies.
+A unit holds one buffer for its imaging readouts and one for its
+parallel-imaging calibration readouts, each allocated when its first readout
+arrives and indexed by that readout's counters. Axes run coil first and
+readout last, with a placement axis only where the header says a counter
+varies.
 """
 
 from __future__ import annotations
 
 __all__ = ["ReconBuffer", "ReconData"]
 
+import math
 import warnings
-from collections.abc import Iterator, Mapping
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 from typing import Any, ClassVar
 
 import numpy as np
@@ -19,14 +23,15 @@ from ..mrd._header import LOOP_COUNTERS, EncodingSpace
 from ..mrd._metadata import acquisition_label, has_acquisition_flag
 
 #: Every name :meth:`ReconBuffer.select` accepts, whether or not a space varies it.
-_AXIS_NAMES = frozenset((*LOOP_COUNTERS, "partition", "phase_encode"))
+_AXIS_NAMES = frozenset((*LOOP_COUNTERS, "segment", "partition", "phase_encode"))
 
 
 class ReconBuffer:
     """K-space of one encoding space, filled one acquisition at a time.
 
     A readout shorter than the buffer is right-aligned, where a partial echo's
-    samples belong.
+    samples belong. The axes are those of ``space``: its counters that vary
+    and were asked for, then the encoded axes.
 
     Parameters
     ----------
@@ -46,9 +51,6 @@ class ReconBuffer:
         Shaped as :attr:`axes` names.
     mask : ndarray
         Boolean, :attr:`kspace` without the coil axis: samples that were placed.
-    reference : ndarray
-        Boolean, shaped as :attr:`mask`: samples flagged as parallel-imaging
-        calibration.
     trajectory : ndarray or None
         ``(dimensions, ...)`` over the axes of :attr:`mask`, in the units the
         acquisitions carry. ``None`` until an acquisition carries a trajectory;
@@ -93,7 +95,6 @@ class ReconBuffer:
         shape = (self.coils, *space.shape[1:-1], self.readout)
         self.kspace = np.zeros(shape, dtype=dtype)
         self.mask = np.zeros(shape[1:], dtype=bool)
-        self.reference = np.zeros(shape[1:], dtype=bool)
         self.trajectory: Any | None = None
         self.center_sample: int | None = None
         self.sample_time: float | None = None
@@ -197,12 +198,6 @@ class ReconBuffer:
             )
         self.kspace[(slice(0, coils), *where, readout)] = data
         self.mask[(*where, readout)] = True
-        if has_acquisition_flag(
-            acquisition, "ACQ_IS_PARALLEL_CALIBRATION"
-        ) or has_acquisition_flag(
-            acquisition, "ACQ_IS_PARALLEL_CALIBRATION_AND_IMAGING"
-        ):
-            self.reference[(*where, readout)] = True
         self._place_trajectory(acquisition, where, readout)
         if self.center_sample is None:
             center = acquisition_label(acquisition, "center_sample", None)
@@ -220,7 +215,7 @@ class ReconBuffer:
         MRD trajectories are ``(samples, dimensions)`` and are stored transposed.
         An acquisition may carry fewer trailing dimensions than its neighbours --
         the centre partition of a slab traverses no kz -- and the rows it omits stay
-        0. A trajectory whose samples are not those placed, as after a chain
+        0. A trajectory whose samples are not those placed, as after a gadget
         resampled the readout, is not stored.
         """
         traj = getattr(acquisition, "traj", None)
@@ -356,104 +351,158 @@ class ReconBuffer:
         return f"ReconBuffer(encoding={self.space.index}, {named})"
 
 
-class ReconData(Mapping):
-    """Every encoding space of a scan, mapping space index to :class:`ReconBuffer`.
+@dataclass(eq=False)
+class ReconData:
+    """The readouts of one reconstruction unit, as :meth:`ReconPlugin.recon` receives them.
 
-    A buffer is allocated when first indexed or when an acquisition first names
-    its space, sized in the latter case by that acquisition's coils and samples.
-    ``len`` and iteration cover allocated buffers only. Calibration acquired on
-    its own geometry is a separate subsequence and so a separate space;
-    calibration within a space is marked in :attr:`ReconBuffer.reference`.
+    A unit is the set of readouts of one branch and encoding space that share
+    every image counter not listed in the plugin's ``axes``; the plugin
+    documents how a unit is closed. A unit is allocated on its first readout
+    and released once :meth:`ReconPlugin.recon` has returned.
+
+    Attributes
+    ----------
+    branch : str
+        The branch the unit belongs to.
+    data : ReconBuffer or None
+        K-space of the imaging readouts, with the unit's ``axes`` along the
+        header's encoded axes. ``None`` when the unit placed none: the plugin
+        is not ``buffered``, the header describes no encoding space, or every
+        readout was calibration only.
+    ref : ReconBuffer or None
+        K-space of the parallel-imaging calibration readouts, laid out as
+        ``data``; ``None`` when the unit has none. A readout flagged as
+        calibration and imaging is in both buffers; one flagged as
+        calibration only is in ``ref`` alone; a phase-correction readout is in
+        neither.
+    counters : dict of str to int
+        The unit's image counters not listed in ``axes``, by MRD name.
+    waveforms : tuple
+        The waveforms received since the previous close; units that close
+        together share them.
+    acquisitions : list
+        Every readout the unit received, as received and in arrival order,
+        whichever buffer it was placed in. All a plugin that is not
+        ``buffered`` is given.
+
+    Examples
+    --------
+    >>> import pulserver.recon as recon
+    >>> data = recon.ReconData("imaging", counters={"slice": 2})
+    >>> data.counters["slice"], data.data is None
+    (2, True)
+    """
+
+    branch: str
+    data: ReconBuffer | None = None
+    ref: ReconBuffer | None = None
+    counters: dict[str, int] = field(default_factory=dict)
+    waveforms: tuple[Any, ...] = ()
+    acquisitions: list[Any] = field(default_factory=list, repr=False)
+
+
+class ReconUnit:
+    """The readouts of one unit as they arrive, placed into the buffers of :attr:`data`.
 
     Parameters
     ----------
+    key
+        ``(branch, encoding space, ((counter, value), ...))``, as
+        :func:`pulserver.recon._units.unit_key` states it.
     spaces
-        Encoding spaces of the scan.
+        The header's encoding spaces by index, laid out along the plugin's
+        ``axes``. Empty when the header describes none, so nothing is placed.
+    buffered
+        Place readouts. ``False`` only records them in :attr:`ReconData.acquisitions`.
     dtype
         Complex dtype of the k-space arrays.
 
     Attributes
     ----------
-    spaces : dict
-        Encoding spaces by index.
-    data : dict
-        Allocated buffers by index.
-
-    Examples
-    --------
-    >>> import pulserver.recon as recon
-    >>> import pulserver.mrd as mrd
-    >>> space = mrd.EncodingSpace(
-    ...     index=0, coils=4, readout=64, phase_encodes=32, partitions=1,
-    ...     loops=("slice",), loop_sizes=(2,), recon_matrix=(32, 32),
-    ... )
-    >>> data = recon.ReconData([space])
-    >>> len(data)
-    0
-    >>> data[0].kspace.shape
-    (4, 2, 32, 64)
-    >>> len(data)
-    1
+    data : ReconData
+        What the unit has collected, which is what the plugin receives.
     """
 
-    def __init__(self, spaces: Any = (), *, dtype: Any = np.complex64) -> None:
-        self.spaces = {space.index: space for space in spaces}
-        self.dtype = dtype
-        self.data: dict[int, ReconBuffer] = {}
-
-    @classmethod
-    def from_header(cls, header: Any, *, dtype: Any = np.complex64) -> ReconData:
-        """Lay out every encoding space of a parsed MRD header.
-
-        A header describing none gives a container whose :meth:`add` places nothing.
-        """
-        return cls(EncodingSpace.all_from_header(header), dtype=dtype)
-
-    def buffer(
+    def __init__(
         self,
-        encoding: int = 0,
+        key: tuple[str, int, tuple[tuple[str, int], ...]],
+        spaces: Mapping[int, EncodingSpace],
         *,
-        coils: int | None = None,
-        readout: int | None = None,
-    ) -> ReconBuffer:
-        """Return the buffer of one encoding space, allocating it on first use.
+        buffered: bool = True,
+        dtype: Any = np.complex64,
+    ) -> None:
+        branch, self.space_index, counters = key
+        self.key = key
+        self.spaces = spaces
+        self.buffered = buffered
+        self.dtype = dtype
+        self.data = ReconData(branch, counters=dict(counters))
+
+    @property
+    def combinations(self) -> int:
+        """Number of positions along the unit's axes, 1 where its space is not described."""
+        space = self.spaces.get(self.space_index)
+        return 1 if space is None else math.prod(space.loop_sizes)
+
+    def add_acquisition(self, acquisition: Any, readout: Any) -> None:
+        """Record one acquisition and place ``readout`` in the buffers its flags select.
+
+        A buffer is allocated at this readout's coils and samples when it is
+        the first the unit places in it.
+
+        Parameters
+        ----------
+        acquisition
+            The acquisition, for its counters and flags.
+        readout
+            ``(coils, samples)`` to place: the acquisition's data as the
+            gadgets left it.
 
         Raises
         ------
         KeyError
-            If the header described no such encoding space.
+            If the header describes encoding spaces and not the one this unit
+            is in.
+        ValueError
+            As :meth:`ReconBuffer.add`.
         """
-        if encoding not in self.spaces:
-            raise KeyError(
-                f"the header describes no encoding space {encoding}; "
-                f"it has {sorted(self.spaces)}"
-            )
-        if encoding not in self.data:
-            self.data[encoding] = ReconBuffer(
-                self.spaces[encoding], coils=coils, readout=readout, dtype=self.dtype
-            )
-        return self.data[encoding]
-
-    def add(self, acquisition: Any, data: Any = None) -> None:
-        """Place one acquisition in the space its ``encoding_space_ref`` names.
-
-        See :meth:`ReconBuffer.add`.
-        """
-        if not self.spaces:
+        self.data.acquisitions.append(acquisition)
+        if not (self.buffered and self.spaces):
             return
-        encoding = int(acquisition_label(acquisition, "encoding_space_ref", 0) or 0)
-        coils, samples = np.shape(acquisition.data if data is None else data)[-2:]
-        self.buffer(encoding, coils=coils, readout=samples).add(acquisition, data)
+        in_data, in_ref = readout_roles(acquisition)
+        if in_data:
+            self.data.data = self._place(self.data.data, acquisition, readout)
+        if in_ref:
+            self.data.ref = self._place(self.data.ref, acquisition, readout)
 
-    def __getitem__(self, encoding: int) -> ReconBuffer:
-        return self.buffer(encoding)
+    def _place(
+        self, buffer: ReconBuffer | None, acquisition: Any, readout: Any
+    ) -> ReconBuffer:
+        if buffer is None:
+            if self.space_index not in self.spaces:
+                raise KeyError(
+                    f"the header describes no encoding space {self.space_index}; "
+                    f"it has {sorted(self.spaces)}"
+                )
+            coils, samples = np.shape(readout)[-2:]
+            buffer = ReconBuffer(
+                self.spaces[self.space_index],
+                coils=coils,
+                readout=samples,
+                dtype=self.dtype,
+            )
+        buffer.add(acquisition, readout)
+        return buffer
 
-    def __iter__(self) -> Iterator[int]:
-        return iter(sorted(self.data))
 
-    def __len__(self) -> int:
-        return len(self.data)
+def readout_roles(acquisition: Any) -> tuple[bool, bool]:
+    """Return whether an acquisition belongs to a unit's imaging data and to its calibration data.
 
-    def __repr__(self) -> str:
-        filled = ", ".join(repr(self.data[key]) for key in sorted(self.data))
-        return f"ReconData({filled})"
+    A readout flagged as calibration only is calibration; one flagged as
+    calibration and imaging is both; a phase-correction readout is neither
+    unless it is also calibration; any other readout is imaging.
+    """
+    calibration = has_acquisition_flag(acquisition, "ACQ_IS_PARALLEL_CALIBRATION")
+    both = has_acquisition_flag(acquisition, "ACQ_IS_PARALLEL_CALIBRATION_AND_IMAGING")
+    phase_correction = has_acquisition_flag(acquisition, "ACQ_IS_PHASECORR_DATA")
+    return both or not (calibration or phase_correction), calibration or both

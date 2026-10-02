@@ -30,8 +30,8 @@ class TracedFft(SimpleFftRecon):
         elif self.trace is not None:
             time.sleep(HOLD_SECONDS)
 
-    def recon(self, branch, context):
-        result = super().recon(branch, context)
+    def recon(self, context, branch, data):
+        result = super().recon(context, branch, data)
         time.sleep(self.delay)
         if self.trace is not None:
             path = self.trace / f"{os.getpid()}.json"

@@ -2,6 +2,7 @@
 
 from types import SimpleNamespace
 
+import ismrmrd
 import numpy as np
 import pytest
 
@@ -56,6 +57,17 @@ def test_a_readout_at_the_matrix_passes_unchanged():
     readout = np.ones((1, COLUMNS), dtype=complex)
 
     assert _gadget()(_echo(COLUMNS, COLUMNS // 2), readout) is readout
+
+
+@pytest.mark.parametrize(
+    "flag", [ismrmrd.ACQ_IS_NAVIGATION_DATA, ismrmrd.ACQ_IS_RTFEEDBACK_DATA]
+)
+def test_a_navigator_readout_passes_the_oversampling_removal_unchanged(flag):
+    navigator = _echo(2 * COLUMNS, COLUMNS)
+    navigator.flags = 1 << (flag - 1)
+    readout = np.ones((1, 2 * COLUMNS), dtype=complex)
+
+    assert _gadget()(navigator, readout) is readout
 
 
 @pytest.mark.parametrize("high", [False, True])

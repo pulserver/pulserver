@@ -1,4 +1,4 @@
-"""``ReconData`` -- the header lays the buffers out, the counters fill them.
+"""``ReconBuffer`` and the unit that allocates it -- the header lays the buffers out, the counters fill them.
 
 What is checked here is that a plugin gets sorted k-space without sorting
 anything: that the layout comes off the header rather than off the data, that
@@ -16,15 +16,17 @@ import numpy as np
 import pytest
 
 from pulserver.mrd import (
+    LOOP_COUNTERS,
     AcquisitionBucket,
     EncodingSpace,
 )
 from pulserver.recon import (
     ReconBuffer,
     ReconContext,
-    ReconData,
     ReconPlugin,
 )
+from pulserver.recon._buffers import ReconUnit
+from pulserver.recon._units import unit_key
 
 N_X = 8
 COILS = 4
@@ -79,6 +81,15 @@ def acquire(samples=N_X, coils=COILS, value=None, flags=(), **idx):
     return acquisition
 
 
+def fill(hdr, *acquisitions, axes=LOOP_COUNTERS, dtype=np.complex64):
+    """The data of the unit ``acquisitions`` make up, laid out along ``axes`` as its plugin declares."""
+    spaces = {s.index: s for s in EncodingSpace.all_from_header(hdr, axes)}
+    unit = ReconUnit(unit_key("imaging", acquisitions[0], axes), spaces, dtype=dtype)
+    for acquisition in acquisitions:
+        unit.add_acquisition(acquisition, acquisition.data)
+    return unit.data
+
+
 # --------------------------------------------------------------------------
 # What the header says
 # --------------------------------------------------------------------------
@@ -123,6 +134,20 @@ def test_segment_is_not_a_loop_axis():
     assert "segment" not in EncodingSpace.from_header(header(space(segment=4))).loops
 
 
+def test_segment_is_an_axis_when_it_is_asked_for():
+    asked = EncodingSpace.from_header(header(space(segment=4)), loops=("segment",))
+    assert (asked.loops, asked.loop_sizes) == (("segment",), (4,))
+
+
+def test_only_the_counters_asked_for_become_axes():
+    """A unit spans the counters its plugin declares, and holds the others fixed."""
+    asked = EncodingSpace.from_header(
+        header(space(slice=3, contrast=2)), loops=("contrast",)
+    )
+    assert asked.axes == ("coil", "contrast", "phase_encode", "readout")
+    assert EncodingSpace.from_header(header(space(slice=3)), loops=()).loops == ()
+
+
 def test_a_grid_wider_than_its_sampled_lines_keeps_the_grid():
     """An undersampled Cartesian scan acquires fewer lines than its matrix, and
     the buffer is the matrix -- the gaps are the point."""
@@ -159,9 +184,9 @@ def test_a_header_that_does_not_say_is_read_as_cartesian():
 def test_a_header_describing_nothing_buffers_nothing():
     """An offline bucket assembled from arrays carries no header, and nothing
     said where its acquisitions go."""
-    buffers = ReconData.from_header(None)
-    buffers.add(acquire())
-    assert len(buffers) == 0
+    unit = fill(None, acquire())
+    assert unit.data is None
+    assert len(unit.acquisitions) == 1
 
 
 # --------------------------------------------------------------------------
@@ -170,23 +195,25 @@ def test_a_header_describing_nothing_buffers_nothing():
 
 
 def test_each_acquisition_lands_where_its_own_counters_say():
-    buffers = ReconData.from_header(header(space(slice=2, contrast=3)))
-    for sl in range(2):
-        for echo in range(3):
-            for line in range(N_X):
-                buffers.add(
-                    acquire(
-                        value=sl * 100 + echo * 10 + line,
-                        slice=sl,
-                        contrast=echo,
-                        kspace_encode_step_1=line,
-                    )
-                )
+    buffer = fill(
+        header(space(slice=2, contrast=3)),
+        *(
+            acquire(
+                value=sl * 100 + echo * 10 + line,
+                slice=sl,
+                contrast=echo,
+                kspace_encode_step_1=line,
+            )
+            for sl in range(2)
+            for echo in range(3)
+            for line in range(N_X)
+        ),
+    ).data
 
-    kspace = buffers[0].kspace
-    assert buffers[0].axes == ("coil", "slice", "contrast", "phase_encode", "readout")
+    kspace = buffer.kspace
+    assert buffer.axes == ("coil", "slice", "contrast", "phase_encode", "readout")
     assert kspace.shape == (COILS, 2, 3, N_X, N_X)
-    assert buffers[0].mask.all()
+    assert buffer.mask.all()
     expected = np.arange(2)[:, None, None] * 100 + np.arange(3)[None, :, None] * 10
     assert np.array_equal(kspace[0, :, :, :, 0].real, expected + np.arange(N_X))
 
@@ -194,44 +221,41 @@ def test_each_acquisition_lands_where_its_own_counters_say():
 def test_a_line_that_never_arrives_stays_unsampled():
     """Which is how an undersampled scan is read: not by counting what came,
     but by asking the mask what did."""
-    buffers = ReconData.from_header(header(space(y=8)))
-    for line in range(0, 8, 2):
-        buffers.add(acquire(kspace_encode_step_1=line))
+    buffer = fill(
+        header(space(y=8)),
+        *(acquire(kspace_encode_step_1=line) for line in range(0, 8, 2)),
+    ).data
 
-    assert list(buffers[0].mask[:, 0]) == [True, False] * 4
+    assert list(buffer.mask[:, 0]) == [True, False] * 4
 
 
 def test_a_partial_echo_is_right_aligned():
     """Truncating the samples before the echo is what a partial echo does, so
     the acquired window ends where a full one would."""
-    buffers = ReconData.from_header(header(space(x=8)))
-    buffers.add(acquire(samples=5, value=1.0, kspace_encode_step_1=0))
+    buffer = fill(
+        header(space(x=8)), acquire(samples=5, value=1.0, kspace_encode_step_1=0)
+    ).data
 
-    buffer = buffers[0]
     assert list(buffer.mask[0]) == [False] * 3 + [True] * 5
     assert np.array_equal(buffer.kspace[0, 0].real, [0, 0, 0, 1, 1, 1, 1, 1])
 
 
 def test_the_echo_position_follows_the_alignment():
-    buffers = ReconData.from_header(header(space(x=8)))
     acquisition = acquire(samples=5)
     acquisition.center_sample = 1
-    buffers.add(acquisition)
-    assert buffers[0].center_sample == 4
+    assert fill(header(space(x=8)), acquisition).data.center_sample == 4
 
 
 def test_readout_oversampling_widens_the_buffer_rather_than_being_refused():
     """The encoded matrix need not have counted the oversampling, and the first
     acquisition is what actually says how wide a readout is."""
-    buffers = ReconData.from_header(header(space(x=8)))
-    buffers.add(acquire(samples=16, kspace_encode_step_1=0))
-    assert buffers[0].kspace.shape[-1] == 16
+    buffer = fill(header(space(x=8)), acquire(samples=16, kspace_encode_step_1=0)).data
+    assert buffer.kspace.shape[-1] == 16
 
 
 def test_an_acquisition_that_does_not_fit_says_so():
-    buffers = ReconData.from_header(header(space(y=4)))
     with pytest.raises(ValueError, match=r"kspace_encode_step_1=9"):
-        buffers.add(acquire(kspace_encode_step_1=9))
+        fill(header(space(y=4)), acquire(kspace_encode_step_1=9))
 
 
 # --------------------------------------------------------------------------
@@ -239,37 +263,41 @@ def test_an_acquisition_that_does_not_fit_says_so():
 # --------------------------------------------------------------------------
 
 
-def test_acquisitions_are_routed_by_the_space_they_name():
+def test_a_unit_is_laid_out_as_the_space_its_readouts_name():
     """One space per subsequence, and each acquisition says which it belongs
     to -- so a calibration subsequence and an imaging one sort themselves."""
-    buffers = ReconData.from_header(header(space(x=8, y=8), space(x=16, y=4)))
+    hdr = header(space(x=8, y=8), space(x=16, y=4))
     imaging = acquire(samples=8, kspace_encode_step_1=3)
     calibration = acquire(samples=16, kspace_encode_step_1=1)
     calibration.encoding_space_ref = 1
-    buffers.add(imaging)
-    buffers.add(calibration)
 
-    assert buffers[0].kspace.shape == (COILS, 8, 8)
-    assert buffers[1].kspace.shape == (COILS, 4, 16)
-    assert buffers[0].mask.sum() == 8
-    assert buffers[1].mask.sum() == 16
+    first = fill(hdr, imaging).data
+    second = fill(hdr, calibration).data
+
+    assert first.kspace.shape == (COILS, 8, 8)
+    assert second.kspace.shape == (COILS, 4, 16)
+    assert first.mask.sum() == 8
+    assert second.mask.sum() == 16
 
 
-def test_a_space_nothing_fills_costs_nothing():
+def test_a_buffer_is_allocated_by_the_first_readout_it_holds():
     """A navigator space is in the header of every scan that has one, whether
-    or not this reconstruction reads it."""
-    buffers = ReconData.from_header(header(space(), space(x=1024, y=1024, z=64)))
-    buffers.add(acquire(kspace_encode_step_1=0))
-    assert set(buffers) == {0}
-    assert 1 not in buffers.data
+    or not this reconstruction reads it: nothing is allocated for it."""
+    hdr = header(space(), space(x=1024, y=1024, z=64))
+    spaces = {s.index: s for s in EncodingSpace.all_from_header(hdr, ())}
+    readout = acquire(kspace_encode_step_1=0)
+    unit = ReconUnit(unit_key("imaging", readout, ()), spaces)
+
+    assert unit.data.data is None
+    unit.add_acquisition(readout, readout.data)
+    assert unit.data.data.space.index == 0
 
 
 def test_a_space_the_header_never_described_is_refused():
-    buffers = ReconData.from_header(header(space()))
     stray = acquire(kspace_encode_step_1=0)
     stray.encoding_space_ref = 7
     with pytest.raises(KeyError, match="no encoding space 7"):
-        buffers.add(stray)
+        fill(header(space()), stray)
 
 
 # --------------------------------------------------------------------------
@@ -277,47 +305,51 @@ def test_a_space_the_header_never_described_is_refused():
 # --------------------------------------------------------------------------
 
 
-def test_a_calibration_line_is_marked_where_it_landed_not_moved_elsewhere():
-    """One grid per encoding space: a calibration acquired on a grid of its own
-    is a subsequence of its own, and so a space of its own."""
-    buffers = ReconData.from_header(header(space(y=8)))
-    for line, flags in (
-        (2, ()),
-        (3, ("ACQ_IS_PARALLEL_CALIBRATION",)),
-        (4, ("ACQ_IS_PARALLEL_CALIBRATION_AND_IMAGING",)),
-    ):
-        buffers.add(acquire(kspace_encode_step_1=line, flags=flags))
-
-    buffer = buffers[0]
-    assert (
-        list(buffer.mask.any(axis=-1)) == [False, False, True, True, True] + [False] * 3
-    )
-    assert (
-        list(buffer.reference.any(axis=-1)) == [False] * 3 + [True, True] + [False] * 3
+def _lines(*lines):
+    """The data of one unit of an eight-line grid holding ``(line, flags)`` readouts."""
+    return fill(
+        header(space(y=8)),
+        *(acquire(kspace_encode_step_1=line, flags=flags) for line, flags in lines),
     )
 
 
-def test_calibration_lines_are_available_to_the_image_as_well():
-    """A solve that takes an arbitrary sampling mask wants every line that was
-    acquired, whichever flag the sequence put on it."""
-    buffers = ReconData.from_header(header(space(y=8)))
-    for line in range(0, 8, 2):
-        buffers.add(acquire(kspace_encode_step_1=line))
-    for line in (3, 5):
-        buffers.add(
-            acquire(kspace_encode_step_1=line, flags=("ACQ_IS_PARALLEL_CALIBRATION",))
-        )
+def _sampled(buffer):
+    return [] if buffer is None else list(np.flatnonzero(buffer.mask.any(axis=-1)))
 
-    assert list(buffers[0].mask.any(axis=-1)) == [
-        True,
-        False,
-        True,
-        True,
-        True,
-        True,
-        True,
-        False,
-    ]
+
+def test_a_calibration_readout_is_reference_only():
+    """The imaging data is what was acquired to be imaged; a line acquired only
+    to calibrate a coil sensitivity is not part of it."""
+    unit = _lines((2, ()), (3, ("ACQ_IS_PARALLEL_CALIBRATION",)))
+
+    assert _sampled(unit.data) == [2]
+    assert _sampled(unit.ref) == [3]
+
+
+def test_a_calibration_and_imaging_readout_is_in_both():
+    unit = _lines((2, ()), (4, ("ACQ_IS_PARALLEL_CALIBRATION_AND_IMAGING",)))
+
+    assert _sampled(unit.data) == [2, 4]
+    assert _sampled(unit.ref) == [4]
+
+
+def test_a_phase_correction_readout_is_in_neither():
+    unit = _lines((2, ()), (3, ("ACQ_IS_PHASECORR_DATA",)))
+
+    assert _sampled(unit.data) == [2]
+    assert unit.ref is None
+
+
+def test_a_unit_without_calibration_has_no_reference_buffer():
+    assert _lines((2, ())).ref is None
+
+
+def test_a_unit_that_places_nothing_still_lists_what_it_received():
+    """What is not placed is still what the unit was given."""
+    unit = _lines((3, ("ACQ_IS_PHASECORR_DATA",)))
+
+    assert unit.data is None
+    assert len(unit.acquisitions) == 1
 
 
 # --------------------------------------------------------------------------
@@ -326,19 +358,18 @@ def test_calibration_lines_are_available_to_the_image_as_well():
 
 
 def test_select_names_the_position_instead_of_counting_axes():
-    buffers = ReconData.from_header(header(space(slice=2, contrast=3)))
-    for sl in range(2):
-        for echo in range(3):
-            buffers.add(
-                acquire(
-                    value=sl * 10 + echo,
-                    slice=sl,
-                    contrast=echo,
-                    kspace_encode_step_1=0,
-                )
+    buffer = fill(
+        header(space(slice=2, contrast=3)),
+        *(
+            acquire(
+                value=sl * 10 + echo, slice=sl, contrast=echo, kspace_encode_step_1=0
             )
+            for sl in range(2)
+            for echo in range(3)
+        ),
+    ).data
 
-    kspace, mask = buffers[0].select(slice=1, contrast=2)
+    kspace, mask = buffer.select(slice=1, contrast=2)
     assert kspace.shape == (COILS, N_X, N_X)
     assert mask.shape == (N_X, N_X)
     assert kspace[0, 0, 0].real == 12
@@ -347,40 +378,36 @@ def test_select_names_the_position_instead_of_counting_axes():
 def test_an_axis_that_does_not_vary_still_has_a_position_zero():
     """So a plugin writes ``select(slice=index)`` without first asking whether
     the scan has more than one slice."""
-    buffers = ReconData.from_header(header(space(slice=1)))
-    buffers.add(acquire(kspace_encode_step_1=0))
-    kspace, _ = buffers[0].select(slice=0, contrast=0)
+    buffer = fill(header(space(slice=1)), acquire(kspace_encode_step_1=0)).data
+    kspace, _ = buffer.select(slice=0, contrast=0)
     assert kspace.shape == (COILS, N_X, N_X)
 
 
 def test_selecting_past_the_end_of_a_flat_axis_says_so():
-    buffers = ReconData.from_header(header(space(slice=1)))
-    buffers.add(acquire(kspace_encode_step_1=0))
+    buffer = fill(header(space(slice=1)), acquire(kspace_encode_step_1=0)).data
     with pytest.raises(IndexError, match="slice=2"):
-        buffers[0].select(slice=2)
+        buffer.select(slice=2)
 
 
 def test_selecting_something_that_is_not_an_encoding_axis_says_so():
-    buffers = ReconData.from_header(header(space(slice=2)))
-    buffers.add(acquire(kspace_encode_step_1=0))
+    buffer = fill(header(space(slice=2)), acquire(kspace_encode_step_1=0)).data
     with pytest.raises(KeyError, match="coil"):
-        buffers[0].select(coil=0)
+        buffer.select(coil=0)
 
 
 def test_an_axis_that_does_not_vary_is_not_an_axis():
     """A two-dimensional scan has no partition axis and a single-slice one no
     slice axis, so a buffer is the array a reconstruction would have built."""
-    buffers = ReconData.from_header(header(space(slice=1, z=1)))
-    buffers.add(acquire(kspace_encode_step_1=0))
-    assert buffers[0].axes == ("coil", "phase_encode", "readout")
+    buffer = fill(header(space(slice=1, z=1)), acquire(kspace_encode_step_1=0)).data
+    assert buffer.axes == ("coil", "phase_encode", "readout")
 
 
 def test_the_buffer_names_its_own_axes():
     """So a plugin reads the layout off the buffer rather than knowing it by
     convention."""
-    buffers = ReconData.from_header(header(space(slice=2, average=3)))
-    buffers.add(acquire(kspace_encode_step_1=0))
-    buffer = buffers[0]
+    buffer = fill(
+        header(space(slice=2, average=3)), acquire(kspace_encode_step_1=0)
+    ).data
     assert dict(zip(buffer.axes, buffer.kspace.shape, strict=True)) == {
         "coil": COILS,
         "slice": 2,
@@ -391,17 +418,17 @@ def test_the_buffer_names_its_own_axes():
 
 
 def test_a_buffer_keeps_the_headers_it_placed():
-    buffers = ReconData.from_header(header(space()))
     sent = [acquire(kspace_encode_step_1=line) for line in range(3)]
-    for acquisition in sent:
-        buffers.add(acquisition)
-    assert buffers[0].headers == sent
+    unit = fill(header(space()), *sent)
+    assert unit.data.headers == sent
+    assert unit.acquisitions == sent
 
 
 def test_the_dtype_is_the_callers_to_choose():
-    buffers = ReconData.from_header(header(space()), dtype=np.complex128)
-    buffers.add(acquire(kspace_encode_step_1=0))
-    assert buffers[0].kspace.dtype == np.complex128
+    buffer = fill(
+        header(space()), acquire(kspace_encode_step_1=0), dtype=np.complex128
+    ).data
+    assert buffer.kspace.dtype == np.complex128
 
 
 def test_a_buffer_can_be_laid_out_without_a_header():
@@ -429,57 +456,60 @@ def test_a_buffer_can_be_laid_out_without_a_header():
 # --------------------------------------------------------------------------
 
 
-class Sink(ReconPlugin):
-    """A plugin overriding nothing but the reconstruction itself."""
+class Collect(ReconPlugin):
+    """A plugin overriding nothing but the reconstruction itself, which keeps what it is given."""
 
-    def recon(self, bucket, context):
-        del bucket, context
-        return None
+    def __init__(self, **options):
+        super().__init__(**options)
+        self.units = []
+
+    def recon(self, context, branch, data):
+        del context, branch
+        self.units.append(data)
 
 
 def test_a_plugin_that_overrides_nothing_still_gets_sorted_kspace():
     """The point of the whole layer: placing is not a plugin's work."""
-    plugin = Sink().spawn()
+    template = Collect(axes=("slice",))
+    plugin = template.spawn()
     context = ReconContext.offline(header(space(slice=2)))
     plugin.startup(context)
     for sl in range(2):
         for line in range(N_X):
             plugin.receive(acquire(slice=sl, kspace_encode_step_1=line), context)
+    plugin.flush(context)
 
-    assert plugin.buffers[0].kspace.shape == (COILS, 2, N_X, N_X)
-    assert plugin.buffers[0].mask.all()
+    (unit,) = template.units
+    assert unit.data.kspace.shape == (COILS, 2, N_X, N_X)
+    assert unit.data.mask.all()
 
 
 def test_replaying_a_bucket_offline_fills_the_same_buffers():
     """A plugin has one behaviour, not a streamed one and an assembled one."""
-    seen = {}
-
-    class Recorder(ReconPlugin):
-        def recon(self, bucket, context):
-            del bucket, context
-            seen["mask"] = self.buffers[0].mask.copy()
-            return None
-
+    recorder = Collect()
     bucket = AcquisitionBucket(
         data=tuple(acquire(kspace_encode_step_1=line) for line in range(N_X))
     )
-    Recorder()(bucket, ReconContext.offline(header(space())))
-    assert seen["mask"].all()
+
+    recorder(bucket, ReconContext.offline(header(space())))
+
+    (unit,) = recorder.units
+    assert unit.data.mask.all()
 
 
-def test_two_streams_do_not_share_a_buffer():
-    """``spawn`` is what keeps concurrent connections apart, and the buffers
-    are assigned by the lifecycle, so they are per-stream."""
-    template = Sink()
+def test_two_streams_do_not_share_a_unit():
+    """``spawn`` is what keeps concurrent connections apart, and the units
+    are created by the lifecycle, so they are per-stream."""
+    template = Collect()
     context = ReconContext.offline(header(space()))
     first, second = template.spawn(), template.spawn()
     first.startup(context)
     second.startup(context)
     first.receive(acquire(kspace_encode_step_1=0), context)
 
-    assert first.buffers[0].mask.any()
-    assert 0 not in second.buffers.data
-    assert 0 not in template.buffers.data
+    assert len(first._units) == 1
+    assert not second._units
+    assert not template._units
 
 
 # --------------------------------------------------------------------------
@@ -490,16 +520,16 @@ def test_two_streams_do_not_share_a_buffer():
 def test_a_trajectory_is_placed_beside_the_data():
     """A non-Cartesian scan needs where each sample was taken, and the
     acquisition carries it -- so it is placed the same way the data is."""
-    buffers = ReconData.from_header(header(space(x=4, y=3)))
+    views = []
     for view in range(3):
         acquisition = ismrmrd.Acquisition()
         acquisition.resize(4, COILS, 2)
         acquisition.data[:] = view
         acquisition.traj[:] = np.stack([np.full(4, view), np.arange(4)], axis=-1)
         acquisition.idx.kspace_encode_step_1 = view
-        buffers.add(acquisition)
+        views.append(acquisition)
 
-    trajectory = buffers[0].trajectory
+    trajectory = fill(header(space(x=4, y=3)), *views).data.trajectory
     assert trajectory.shape == (2, 3, 4)
     assert np.array_equal(trajectory[0, :, 0], [0, 1, 2])
     assert np.array_equal(trajectory[1, 2], [0, 1, 2, 3])
@@ -507,9 +537,9 @@ def test_a_trajectory_is_placed_beside_the_data():
 
 def test_a_cartesian_scan_holds_no_trajectory():
     """Nothing to hold: its acquisitions carry none."""
-    buffers = ReconData.from_header(header(space()))
-    buffers.add(acquire(kspace_encode_step_1=0))
-    assert buffers[0].trajectory is None
+    assert (
+        fill(header(space()), acquire(kspace_encode_step_1=0)).data.trajectory is None
+    )
 
 
 def test_an_axis_a_readout_never_traversed_reads_back_as_the_zero_it_was():
@@ -521,7 +551,7 @@ def test_an_axis_a_readout_never_traversed_reads_back_as_the_zero_it_was():
     the narrow one left off reads back as zero.
     """
     for order in ([3, 2], [2, 3]):
-        buffers = ReconData.from_header(header(space(x=4, y=3)))
+        views = []
         for view, dimensions in enumerate(order):
             acquisition = ismrmrd.Acquisition()
             acquisition.resize(4, COILS, dimensions)
@@ -529,9 +559,9 @@ def test_an_axis_a_readout_never_traversed_reads_back_as_the_zero_it_was():
                 4, dimensions
             )
             acquisition.idx.kspace_encode_step_1 = view
-            buffers.add(acquisition)
+            views.append(acquisition)
 
-        trajectory = buffers[0].trajectory
+        trajectory = fill(header(space(x=4, y=3)), *views).data.trajectory
         assert trajectory.shape == (3, 3, 4)
         narrow = order.index(2)
         assert np.array_equal(trajectory[2, narrow], np.zeros(4))
@@ -548,18 +578,8 @@ def test_the_field_of_view_is_read_in_metres_in_the_order_of_the_matrix():
 
 def radial(position, n=32, spokes=24, fov=0.2):
     """A radial buffer of a point at ``position`` (m), with k in 1/m as enrichment writes it."""
-    data = ReconData.from_header(
-        header(
-            space(
-                x=n,
-                y=n,
-                trajectory="radial",
-                fov_mm=(1e3 * fov, 1e3 * fov, 5.0),
-                kspace_encoding_step_1=spokes,
-            )
-        )
-    )
     radius = (np.arange(n) - n // 2) / fov
+    views = []
     for view in range(spokes):
         angle = np.pi * view / spokes
         k = np.stack([np.cos(angle) * radius, np.sin(angle) * radius], axis=-1)
@@ -568,8 +588,19 @@ def radial(position, n=32, spokes=24, fov=0.2):
         acquisition.traj[:] = k
         acquisition.data[:] = np.exp(-2j * np.pi * (k @ np.asarray(position)))
         acquisition.idx.kspace_encode_step_1 = view
-        data.add(acquisition)
-    return data[0]
+        views.append(acquisition)
+    return fill(
+        header(
+            space(
+                x=n,
+                y=n,
+                trajectory="radial",
+                fov_mm=(1e3 * fov, 1e3 * fov, 5.0),
+                kspace_encoding_step_1=spokes,
+            )
+        ),
+        *views,
+    ).data
 
 
 #: A point 5 pixels along x and -3 along y from the centre of a 32-point, 0.2 m grid.
@@ -602,12 +633,11 @@ def test_the_grid_trajectory_is_what_bartorch_nufft_takes():
 
 
 def test_a_trajectory_without_its_field_of_view_is_refused():
-    data = ReconData.from_header(header(space(x=4, y=3)))
     acquisition = ismrmrd.Acquisition()
     acquisition.resize(4, COILS, 2)
-    data.add(acquisition)
+    buffer = fill(header(space(x=4, y=3)), acquisition).data
     with pytest.raises(ValueError, match="field of view"):
-        data[0].grid_trajectory()
+        buffer.grid_trajectory()
 
 
 def test_a_readout_placed_over_another_warns_that_the_sequence_does_not_label_them():

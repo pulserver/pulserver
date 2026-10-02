@@ -8,6 +8,7 @@ import numpy as np
 
 from ...mrd._header import EncodingSpace
 from ...mrd._metadata import acquisition_label, has_acquisition_flag
+from .._buffers import ReconData
 from ..plugin import Gadget
 from .pics import PicsRecon
 
@@ -121,22 +122,23 @@ class EpiRecon(PicsRecon):
 
     def __init__(self, wavelet: float = 0.005, iterations: int = 30) -> None:
         super().__init__(wavelet, iterations)
-        self.chain = (RampSampling(), EpiPhaseCorrection())
+        self.gadgets = (RampSampling(), EpiPhaseCorrection())
 
     def startup(self, context):
         super().startup(context)
         self.references = {}
 
-    def image(self, kspace, shape, device):
+    def image(self, kspace, shape, device, data: ReconData | None = None):
         image = super().image(kspace, shape, device)
-        where = self.closing.idx
-        if int(where.set) == 1:
-            self.references[int(where.slice)] = image
+        if data is None:
             return image
-        reference = self.references.get(int(where.slice))
+        if int(data.counters.get("set", 0)) == 1:
+            self.references[int(data.counters.get("slice", 0))] = image
+            return image
+        reference = self.references.get(int(data.counters.get("slice", 0)))
         if reference is None or image.ndim != 2:
             return image
-        space = self.buffers.spaces[int(self.closing.encoding_space_ref)]
+        space = data.data.space
         if not space.recon_fov:
             return image
         voxel = tuple(

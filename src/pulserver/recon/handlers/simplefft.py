@@ -16,13 +16,14 @@ import numpy.fft as fft
 from ...mrd._acquisitions import AcquisitionFlag
 from ...mrd._images import center_crop, coil_combine
 from ...mrd._metadata import max_stored_value
+from .._buffers import ReconData
 from ..plugin import ReconContext, ReconPlugin, ReconResult
 
 
 class SimpleFftRecon(ReconPlugin):
     """Root-sum-of-squares FFT image of each slice, made at its ``LAST_IN_SLICE`` line.
 
-    Lines are collected in arrival order rather than placed by their counters,
+    Lines are taken in arrival order rather than placed by their counters,
     so a header that does not describe the encoding is enough. Noise and
     phase-correction lines are rejected. Images are ``int16``, scaled so their
     maximum is the header's largest stored value, and cropped to the first
@@ -31,28 +32,21 @@ class SimpleFftRecon(ReconPlugin):
 
     def __init__(self) -> None:
         super().__init__(
-            branches={AcquisitionFlag.LAST_IN_SLICE: "imaging"},
+            triggers={"imaging": AcquisitionFlag.LAST_IN_SLICE},
             reject_flags=AcquisitionFlag.IS_NOISE_MEASUREMENT
             | AcquisitionFlag.IS_PHASECORR_DATA,
             buffered=False,
         )
 
-    def startup(self, context: ReconContext) -> None:
-        del context
-        self.lines: list[Any] = []
-
-    def receive(self, acquisition: Any, context: ReconContext) -> Any:
-        self.lines.append(acquisition)
-        return super().receive(acquisition, context)
-
-    def recon(self, branch: str, context: ReconContext) -> ReconResult | None:
+    def recon(
+        self, context: ReconContext, branch: str, data: ReconData
+    ) -> ReconResult | None:
         del branch
-        if not self.lines:
+        if not data.acquisitions:
             return None
-        data = _reconstruct(self.lines, context.header)
-        self.lines = []
+        image = _reconstruct(data.acquisitions, context.header)
         return ReconResult(
-            data.transpose(),
+            image.transpose(),
             attributes={
                 "ImageProcessingHistory": ["PULSERVER", "PYTHON", "FFT"],
                 "WindowCenter": str((max_stored_value(context.header) + 1) // 2),

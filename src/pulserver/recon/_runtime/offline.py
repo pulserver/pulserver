@@ -30,7 +30,7 @@ class _FileConnection:
         return _enriched(self._items(), self._design)
 
     def _items(self) -> Any:
-        # Waveforms first, so every emitted unit carries all of them.
+        # Waveforms first, so the first unit to close carries all of them.
         for index in range(_count(self._dataset.number_of_waveforms)):
             yield self._dataset.read_waveform(index)
         for index in range(_count(self._dataset.number_of_acquisitions)):
