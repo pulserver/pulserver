@@ -13,7 +13,9 @@ of the reconstruction proxy, over an ISMRMRD HDF5 file
 ({meth}`ReconPlugin.run`) and over an assembled
 {class}`~pulserver.mrd.AcquisitionBucket` (calling the instance). The plugin
 reconstructs one unit of readouts at a time, as {class}`ReconData`. Writing one
-is described in {doc}`../user-guide/reconstruction-plugins`.
+is described in {doc}`../user-guide/reconstruction-plugins`. The image a
+{class}`ReconResult` becomes takes its geometry from its unit and its values
+from its array, as {doc}`../explanations/reconstruction` states.
 
 ## Plugin
 
@@ -46,5 +48,5 @@ is described in {doc}`../user-guide/reconstruction-plugins`.
 | Object | Description |
 | --- | --- |
 | {obj}`~pulserver.recon.ReconData` | The readouts of one reconstruction unit: imaging and calibration k-space, counters and waveforms. |
-| {obj}`~pulserver.recon.ReconBuffer` | K-space of one encoding space, filled one acquisition at a time. |
-| {obj}`~pulserver.recon.ReconResult` | Image array the runtime packages as an MRD image or DICOM dataset. |
+| {obj}`~pulserver.recon.ReconBuffer` | K-space of one encoding space, filled one acquisition at a time, with the acquisition nearest the k-space centre. |
+| {obj}`~pulserver.recon.ReconResult` | Image array the runtime packages as an MRD image or DICOM dataset, with the acquisition its geometry is taken from and the rescale of its DICOM pixels. |

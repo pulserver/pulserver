@@ -6,9 +6,11 @@ python-ismrmrd-server (Copyright (c) 2024 Kelvin Chow; MIT, see ``LICENSES/pytho
 
 __all__ = ["DicomWithName", "MrdDicomBuilder"]
 
+import collections
 import copy
 import dataclasses
 import logging
+import math
 from typing import Any
 
 import ismrmrd
@@ -60,6 +62,11 @@ STRING_VRS = {
     "UT",
 }
 
+#: The first floating-point image of a DICOM series is stored with its peak at
+#: ``1 / _HEADROOM`` of the stored range, so a later image of the series may be
+#: this many times larger before it clips.
+_HEADROOM = 2.0
+
 
 def to_dicom_date(value: Any) -> str:
     """Return an ISMRMRD ``XmlDate`` as DICOM DA (``YYYYMMDD``), any other value as ``str``."""
@@ -103,12 +110,16 @@ def convert_string_vrs(ds: pydicom.Dataset) -> pydicom.Dataset:
 
 
 class MrdDicomBuilder:
-    """Converts the images of one series to DICOM, numbering instances from 1.
+    """Converts MRD images to DICOM, numbering instances from 1.
 
     Patient, study, series, system and imaging-frequency fields are read from the
     MRD header once. Header sections that fail to convert are logged and skipped.
     ``relativeTablePosition`` is not converted: the MR image has no attribute
     for it.
+
+    One builder serves a whole connection. Its series, told apart by
+    ``image_series_index``, each have their own rescale mapping and their own
+    clipping count; the instance numbers run across them.
 
     Parameters
     ----------
@@ -127,6 +138,9 @@ class MrdDicomBuilder:
         Template every image starts from.
     instanceNumber : int
         ``InstanceNumber`` of the next image.
+    clipped : collections.Counter
+        Pixels clipped to the stored range so far, by ``image_series_index``;
+        0 for a series that has clipped none.
     """
 
     def __init__(self, mrdHead: ismrmrd.xsd.ismrmrdHeader) -> None:
@@ -340,22 +354,54 @@ class MrdDicomBuilder:
         # Image numbers start at 1: a scanner's image database can reject a
         # C-STORE with image number 0 (A700 OutOfResources).
         self.instanceNumber = 1
+        self.clipped: collections.Counter[int] = collections.Counter()
+        self._scales: dict[int, _Scale] = {}
+        self._reported: set[int] = set()
 
     def __call__(self, mrdImg: ismrmrd.Image) -> DicomWithName:
         """Convert one image and increment :attr:`instanceNumber`.
 
         Returns ``DicomWithName(None, "")`` for RGB, multi-slice or multi-channel
-        images. Floating-point pixels are quantised to ``uint16`` with
-        ``RescaleIntercept`` and ``RescaleSlope``; integer pixels are stored as they
-        are. The default window spans the 5th to 95th pixel percentile. Image meta
-        attributes override the series description, image comment, image type,
-        orientation, rescale, window, TE and TI. When the manufacturer names GE, the
+        images. Integer pixels are stored as they are. Floating-point pixels, and
+        the magnitude of complex ones, are stored as 16-bit integers under the
+        mapping ``value = stored * RescaleSlope + RescaleIntercept``, so that the
+        values of one series keep their ratios across its images:
+
+        - Meta attributes that state ``RescaleSlope`` or ``RescaleIntercept``
+          are the mapping, a member left out reading as 1 or 0, and
+          ``stored = round((value - intercept) / slope)``. On the first
+          floating-point image of a series it is the mapping of the series.
+        - Otherwise the mapping is the series', fixed by its first
+          floating-point image: intercept 0, and a slope that stores the peak
+          magnitude of that image at half the stored range. The images that
+          follow use the same mapping. A first image with no nonzero finite
+          value fixes none.
+        - An image whose meta attributes state ``ArrayMinimum`` and
+          ``ArrayMaximum``, as the runtime states them for each partition of
+          a ``(z, y, x)`` result, is the first image of its series as that
+          array: the peak and the sign are the array's.
+        - The stored type is ``int16`` when the first floating-point image of
+          the series has a negative value under its mapping, else ``uint16``;
+          later images of the series use it too.
+        - A value outside the stored range is clipped to its end, never wrapped,
+          and counted in :attr:`clipped`; the first clipping of a series is
+          logged. NaN is stored as 0.
+
+        The default window spans the 5th to 95th percentile of the values. Image
+        meta attributes override the series description, image comment, image
+        type, orientation, window, TE and TI. When the manufacturer names GE, the
         series number is the header's ``measurementID`` and the image type is
         written to a private tag.
 
         ``PixelSpacing`` is the row spacing, along ``phase_dir``, then the column
         spacing, along ``read_dir``. MRD's ``position`` is the image centre;
         ``ImagePositionPatient`` is the centre of the first pixel.
+
+        Raises
+        ------
+        ValueError
+            If the meta attributes state a slope that is zero or not finite, or
+            an intercept that is not finite.
         """
         dicomDset = copy.deepcopy(self.dicomDset)
         mrdHead = self.mrdHead
@@ -463,14 +509,16 @@ class MrdDicomBuilder:
         dicomDset.Rows = mrdImg.data.shape[2]
         dicomDset.Columns = mrdImg.data.shape[3]
 
-        # DICOM stores integers. A reconstruction produces real numbers, and
-        # the mapping back to them is what RescaleSlope and RescaleIntercept
-        # are for, so a floating-point image is quantised here rather than
-        # having its bytes reinterpreted as integers.
-        pixels, rescale = _quantize(np.squeeze(mrdImg.data))
+        meta = ismrmrd.Meta.deserialize(mrdImg.attribute_string)
+        values = np.squeeze(mrdImg.data)
+        image_type = mrdImg.image_type
+        if np.iscomplexobj(values):
+            values, image_type = np.abs(values), ismrmrd.IMTYPE_MAGNITUDE
+        pixels, rescale, real = self._store(mrdImg.image_series_index, values, meta)
         if rescale is not None:
-            dicomDset.RescaleIntercept, dicomDset.RescaleSlope = rescale
-            dicomDset.RescaleType = "normalized"
+            dicomDset.RescaleSlope, dicomDset.RescaleIntercept = rescale
+            dicomDset.RescaleType = "US"
+        dicomDset.PixelRepresentation = int(pixels.dtype.kind == "i")
 
         if (pixels.dtype == "uint16") or (pixels.dtype == "int16"):
             dicomDset.BitsAllocated = 16
@@ -484,8 +532,8 @@ class MrdDicomBuilder:
             logging.warning("Unsupported data type: %s", pixels.dtype)
 
         # Default window, in the real units a viewer sees after rescaling.
-        windowMin = float(np.percentile(mrdImg.data, 5))
-        windowMax = float(np.percentile(mrdImg.data, 95))
+        finite = real[np.isfinite(real)]
+        windowMin, windowMax = np.percentile(finite, (5, 95)) if finite.size else (0, 0)
         dicomDset.WindowWidth = f"{windowMax - windowMin:.6g}"
         dicomDset.WindowCenter = f"{0.5 * (windowMin + windowMax):.6g}"
 
@@ -495,11 +543,11 @@ class MrdDicomBuilder:
         if "GE" in vendor.upper():
             dicomDset.add(
                 pydicom.DataElement(
-                    (0x0043, 0x102F), "SS", IMTYPE_MAPS[mrdImg.image_type][vendor]
+                    (0x0043, 0x102F), "SS", IMTYPE_MAPS[image_type][vendor]
                 )
             )
         else:
-            dicomDset.ImageType[2] = str(IMTYPE_MAPS[mrdImg.image_type][vendor])
+            dicomDset.ImageType[2] = str(IMTYPE_MAPS[image_type][vendor])
 
         measurement = getattr(mrdHead, "measurementInformation", None)
         measurement_id = getattr(measurement, "measurementID", None)
@@ -542,7 +590,6 @@ class MrdDicomBuilder:
         dicomDset.TriggerTime = mrdImg.physiology_time_stamp[0] / 2.5
 
         # ----- Update DICOM header from MRD Image MetaAttributes -----
-        meta = ismrmrd.Meta.deserialize(mrdImg.attribute_string)
         if meta.get("SeriesDescription") is not None:
             dicomDset.SeriesDescription = meta["SeriesDescription"]
 
@@ -568,12 +615,6 @@ class MrdDicomBuilder:
                 float(meta["ImageColumnDir"][1]),
                 float(meta["ImageColumnDir"][2]),
             ]
-
-        if meta.get("RescaleIntercept") is not None:
-            dicomDset.RescaleIntercept = meta["RescaleIntercept"]
-
-        if meta.get("RescaleSlope") is not None:
-            dicomDset.RescaleSlope = meta["RescaleSlope"]
 
         if meta.get("WindowCenter") is not None:
             dicomDset.WindowCenter = meta["WindowCenter"]
@@ -615,37 +656,134 @@ class MrdDicomBuilder:
 
         return DicomWithName(dset=dicomDset, filename=fileName)
 
+    def _store(
+        self, series: int, values: np.ndarray, meta: Any
+    ) -> tuple[np.ndarray, tuple[float, float] | None, np.ndarray]:
+        """Return the pixels of one image of ``series``, their ``(slope, intercept)``, and the real values they stand for.
 
-def _quantize(image: np.ndarray) -> tuple[np.ndarray, tuple[float, float] | None]:
-    """Return an image as DICOM stores it, with the mapping back to its real values.
+        The mapping is ``None`` for an integer image whose meta attributes state
+        none, which is stored as it is. A floating-point image fixes the
+        series' mapping when it is the first to; see :meth:`__call__`.
+        """
+        stated = _stated_mapping(meta)
+        if np.issubdtype(values.dtype, np.integer):
+            if stated is None:
+                return values, None, values
+            return values, stated, values * stated[0] + stated[1]
 
-    DICOM pixels are integers. An integer image is already storable and passes
-    through untouched; a floating-point one is mapped onto the full unsigned
-    16-bit range, and the ``(intercept, slope)`` returned is what recovers the
-    values it came from -- ``stored * slope + intercept``.
+        known = self._scales.get(series)
+        scale = known
+        if stated is not None or known is None:
+            scale = _first_scale(values, stated, _array_range(meta))
+            if scale is not None and known is not None:
+                scale = dataclasses.replace(scale, signed=known.signed)
+        if scale is None:
+            return np.zeros(values.shape, dtype=np.uint16), (1.0, 0.0), values
+        if known is None:
+            self._scales[series] = scale
 
-    Parameters
-    ----------
-    image
-        The reconstructed image, any real dtype.
+        pixels, clipped = _quantize(values, scale)
+        if clipped:
+            self.clipped[series] += clipped
+            if series not in self._reported:
+                self._reported.add(series)
+                logging.warning(
+                    "DICOM series %d: %d pixels lie outside the stored range of "
+                    "RescaleSlope %g and RescaleIntercept %g and were clipped; "
+                    "later clipping is counted in MrdDicomBuilder.clipped",
+                    series,
+                    clipped,
+                    scale.slope,
+                    scale.intercept,
+                )
+        return pixels, (scale.slope, scale.intercept), values
 
-    Returns
-    -------
-    tuple
-        The pixels to store, and their ``(RescaleIntercept, RescaleSlope)``, or
-        ``None`` when the image was already integral and needs no rescaling.
+
+@dataclasses.dataclass(frozen=True)
+class _Scale:
+    """Mapping of a DICOM series between its 16-bit stored integers and its real values, ``value = stored * slope + intercept``."""
+
+    slope: float
+    intercept: float
+    signed: bool
+
+    @property
+    def dtype(self) -> type[np.integer]:
+        return np.int16 if self.signed else np.uint16
+
+
+def _stated_mapping(meta: Any) -> tuple[float, float] | None:
+    """Return the ``(slope, intercept)`` the meta attributes state, a member left out reading as 1 or 0; ``None`` when they state neither.
+
+    Raises
+    ------
+    ValueError
+        If the slope is zero or not finite, or the intercept is not finite.
     """
-    if not np.issubdtype(image.dtype, np.floating):
-        return image, None
+    slope, intercept = meta.get("RescaleSlope"), meta.get("RescaleIntercept")
+    if slope is None and intercept is None:
+        return None
+    slope = 1.0 if slope is None else float(slope)
+    intercept = 0.0 if intercept is None else float(intercept)
+    if slope == 0.0 or not (math.isfinite(slope) and math.isfinite(intercept)):
+        raise ValueError(
+            f"RescaleSlope {slope} and RescaleIntercept {intercept} are not a "
+            "mapping: the slope must be nonzero and both finite"
+        )
+    return slope, intercept
 
-    finite = image[np.isfinite(image)]
-    low = float(finite.min()) if finite.size else 0.0
-    high = float(finite.max()) if finite.size else 0.0
-    span = high - low
-    if span <= 0.0:
-        # A constant image: one stored value, and the intercept carries it.
-        return np.zeros(image.shape, dtype=np.uint16), (low, 1.0)
 
-    full = float(np.iinfo(np.uint16).max)
-    stored = np.rint((np.nan_to_num(image, nan=low) - low) * (full / span))
-    return stored.astype(np.uint16), (low, span / full)
+def _array_range(meta: Any) -> tuple[float, float] | None:
+    """Return the ``(ArrayMinimum, ArrayMaximum)`` the meta attributes state, ``None`` when they state either not, or one is not finite."""
+    low, high = meta.get("ArrayMinimum"), meta.get("ArrayMaximum")
+    if low is None or high is None:
+        return None
+    low, high = float(low), float(high)
+    return (low, high) if math.isfinite(low) and math.isfinite(high) else None
+
+
+def _first_scale(
+    values: np.ndarray,
+    stated: tuple[float, float] | None,
+    array: tuple[float, float] | None = None,
+) -> _Scale | None:
+    """Return the mapping a series takes from its first floating-point image ``values``.
+
+    That is the stated mapping, if any. Otherwise intercept 0 and the slope
+    that stores the peak magnitude at ``1 / _HEADROOM`` of the stored range,
+    ``int16`` when the smallest value is negative and ``uint16`` when it is
+    not; ``None`` when no finite value is nonzero. The range is that of
+    ``values``, or ``array``, the ``(minimum, maximum)`` of the array of images
+    ``values`` is one of, when there is one.
+    """
+    if array is None:
+        finite = values[np.isfinite(values)]
+        if finite.size:
+            array = (float(finite.min()), float(finite.max()))
+    if array is None:
+        return None if stated is None else _Scale(*stated, signed=False)
+    low, high = array
+    if stated is not None:
+        slope, intercept = stated
+        ends = np.rint((np.array(array) - intercept) / slope)
+        return _Scale(slope, intercept, bool((ends < 0).any()))
+    peak = max(abs(low), abs(high))
+    if peak == 0.0:
+        return None
+    full = np.iinfo(np.int16 if low < 0 else np.uint16).max
+    return _Scale(_HEADROOM * peak / full, 0.0, low < 0)
+
+
+def _quantize(values: np.ndarray, scale: _Scale) -> tuple[np.ndarray, int]:
+    """Return ``values`` as the integers of ``scale`` and the number of pixels clipped.
+
+    A value is stored as ``round((value - intercept) / slope)``. One outside
+    the range of the stored type, an infinite one included, is clipped to the
+    nearest end of it. NaN is stored as 0 and is not counted.
+    """
+    limits = np.iinfo(scale.dtype)
+    scaled = (values.astype(np.float64) - scale.intercept) / scale.slope
+    stored = np.rint(np.where(np.isnan(scaled), 0.0, scaled))
+    outside = (stored < limits.min) | (stored > limits.max)
+    clipped = np.clip(stored, limits.min, limits.max).astype(scale.dtype)
+    return clipped, int(outside.sum())

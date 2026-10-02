@@ -8,7 +8,6 @@ import numpy as np
 
 from ...mrd._acquisitions import AcquisitionFlag
 from ...mrd._images import center_crop, coil_combine
-from ...mrd._metadata import max_stored_value
 from .._buffers import ReconBuffer, ReconData
 from ..plugin import ReconContext, ReconPlugin, ReconResult
 
@@ -23,9 +22,9 @@ class CartesianRecon(ReconPlugin):
     measurement for any that never closed. Its partition axis, when its
     encoding space has one, its phase encodes and its readout are Fourier
     transformed, its coils combined as a root sum of squares, and it is cropped
-    to the reconstruction matrix and scaled to ``int16``, its maximum the
-    header's largest stored value. Noise and phase-correction readouts are
-    rejected, and a unit with no imaging readout makes no image.
+    to the reconstruction matrix. The values are those of the transform,
+    unscaled. Noise and phase-correction readouts are rejected, and a unit with
+    no imaging readout makes no image.
     """
 
     def __init__(self) -> None:
@@ -44,16 +43,8 @@ class CartesianRecon(ReconPlugin):
         if buffer is None:
             return None
         image = self.image(averaged(buffer), buffer.image_shape, context.device, data)
-        peak = float(image.max(initial=0.0))
-        if peak > 0.0:
-            image *= max_stored_value(context.header) / peak
         return ReconResult(
-            np.around(image).astype(np.int16),
-            attributes={
-                "ImageProcessingHistory": ["PULSERVER", "PYTHON", "FFT"],
-                "WindowCenter": str((max_stored_value(context.header) + 1) // 2),
-                "WindowWidth": str(max_stored_value(context.header) + 1),
-            },
+            image, attributes={"ImageProcessingHistory": ["PULSERVER", "PYTHON", "FFT"]}
         )
 
     def image(

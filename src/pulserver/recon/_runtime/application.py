@@ -6,6 +6,7 @@ __all__ = ["run_application"]
 
 import ctypes
 import dataclasses
+import numbers
 from collections.abc import Iterable, Mapping
 from typing import Any
 
@@ -13,9 +14,10 @@ import ismrmrd
 import numpy as np
 
 from ...mrd._acquisitions import AcquisitionBucket, AcquisitionBucketStats
+from ...mrd._header import EncodingSpace
 from ...mrd._images import as_numpy
 from ...mrd._metadata import acquisition_label
-from .._buffers import ReconData, readout_roles
+from .._buffers import ReconData, nearest_to_centre, readout_roles
 from ..plugin import ReconContext, ReconPlugin, ReconResult
 from .mrd2dicom import MrdDicomBuilder
 
@@ -36,7 +38,9 @@ def run_application(
     :class:`~pulserver.recon.ReconResult` outputs become MRD images, or DICOM
     when requested; a ``(z, y, x)`` volume becomes one image per partition
     along ``slice_dir``, partition ``z // 2`` at the volume's centre, as an FFT
-    places it.
+    places it, each stating the range of the volume in its meta attributes
+    ``ArrayMinimum`` and ``ArrayMaximum``. One DICOM builder serves the whole
+    stream, so a series has one rescale mapping across its images.
     """
     app = plugin.spawn()
     image_index = 1
@@ -152,23 +156,24 @@ def _make_images(
     app_name: str,
 ) -> tuple[list[ismrmrd.Image], int]:
     data = as_numpy(result.data)
+    unit = _unit_header(result, bucket, context.header)
     if data.ndim != 3 or data.shape[0] == 1:
-        image, next_image_index = _make_image(
-            result, bucket, context, next_image_index, app_name
-        )
+        image, next_image_index = _make_image(result, unit, next_image_index, app_name)
         return [image], next_image_index
     images = []
+    attributes = {**_array_range(data), **result.attributes}
     for partition, plane in enumerate(data):
         image, next_image_index = _make_image(
             dataclasses.replace(
                 result,
                 data=plane,
+                reference=None,
+                attributes=attributes,
                 image_index=None
                 if result.image_index is None
                 else result.image_index + partition,
             ),
-            bucket,
-            context,
+            unit,
             next_image_index,
             app_name,
         )
@@ -184,34 +189,78 @@ def _make_images(
     return images, next_image_index
 
 
-def _make_image(
-    result: ReconResult,
-    bucket: AcquisitionBucket,
-    context: ReconContext,
-    next_image_index: int,
-    app_name: str,
-) -> tuple[ismrmrd.Image, int]:
+def _array_range(array: np.ndarray) -> dict[str, float]:
+    """Return the smallest and largest finite value of a floating-point ``array``, of its magnitude when it is complex, as meta attributes."""
+    if not np.issubdtype(array.dtype, np.inexact):
+        return {}
+    values = np.abs(array) if np.iscomplexobj(array) else array
+    finite = values[np.isfinite(values)]
+    if not finite.size:
+        return {}
+    return {
+        "ArrayMinimum": float(finite.min()),
+        "ArrayMaximum": float(finite.max()),
+    }
+
+
+def _unit_header(
+    result: ReconResult, bucket: AcquisitionBucket, header: Any
+) -> dict[str, Any]:
+    """Return the ``Image.from_array`` arguments shared by the images of one result.
+
+    The reference acquisition is the result's, or the unit's imaging
+    acquisition nearest the k-space centre. The field of view is that of the
+    reconstruction space of the unit's encoding space, ``(x, y, z)`` in mm, and
+    the time stamp the earliest of the unit's imaging acquisitions.
+    """
     # A result must name a real acquisition for its geometry.
     if not bucket.data:
         raise ValueError("ReconResult requires at least one imaging acquisition")
-    if not -len(bucket.data) <= result.reference < len(bucket.data):
-        raise IndexError(
-            f"ReconResult reference {result.reference} is outside a bucket of "
-            f"{len(bucket.data)} acquisitions"
-        )
-    acquisition = bucket.data[result.reference]
-    data = as_numpy(result.data)
+    space = int(acquisition_label(bucket.data[0], "encoding_space_ref", 0) or 0)
+    reference = result.reference
+    if reference is None:
+        reference = _reference_acquisition(bucket.data, header, space)
+    elif isinstance(reference, numbers.Integral):
+        if not -len(bucket.data) <= reference < len(bucket.data):
+            raise IndexError(
+                f"ReconResult reference {reference} is outside a bucket of "
+                f"{len(bucket.data)} acquisitions"
+            )
+        reference = bucket.data[reference]
+    return {
+        "acquisition": reference,
+        "field_of_view": _field_of_view(header, space),
+        "acquisition_time_stamp": min(
+            int(acquisition.acquisition_time_stamp) for acquisition in bucket.data
+        ),
+    }
+
+
+def _reference_acquisition(acquisitions: Any, header: Any, space: int) -> Any:
+    """Return the acquisition nearest the k-space centre of encoding space ``space``, the first when the header does not describe it."""
+    try:
+        encoding = EncodingSpace.from_header(header, space)
+    except (AttributeError, IndexError, TypeError):
+        return acquisitions[0]
+    return nearest_to_centre(encoding, acquisitions)
+
+
+def _make_image(
+    result: ReconResult,
+    unit: Mapping[str, Any],
+    next_image_index: int,
+    app_name: str,
+) -> tuple[ismrmrd.Image, int]:
+    data = _image_values(as_numpy(result.data))
     image_index = (
         next_image_index if result.image_index is None else int(result.image_index)
     )
-    field_of_view = _field_of_view(context.header)
     image = ismrmrd.Image.from_array(
         data,
-        acquisition=acquisition,
         image_index=image_index,
         image_type=_image_type(result.image_type),
-        field_of_view=field_of_view,
         transpose=False,
+        **unit,
     )
     image.image_series_index = int(result.series_index)
 
@@ -232,6 +281,15 @@ def _make_image(
     return image, max(next_image_index + 1, image_index + 1)
 
 
+def _image_values(data: np.ndarray) -> np.ndarray:
+    """Return ``data`` as an MRD image stores it: floating point as ``float32``, complex as ``complex64``, integers as they are."""
+    if np.issubdtype(data.dtype, np.complexfloating):
+        return data.astype(np.complex64, copy=False)
+    if np.issubdtype(data.dtype, np.floating):
+        return data.astype(np.float32, copy=False)
+    return data
+
+
 def _image_type(name: str) -> int:
     types = {
         "magnitude": ismrmrd.IMTYPE_MAGNITUDE,
@@ -246,9 +304,11 @@ def _image_type(name: str) -> int:
         raise ValueError(f"unknown MRD image type {name!r}") from error
 
 
-def _field_of_view(header: Any) -> tuple[ctypes.c_float, ...] | None:
+def _field_of_view(header: Any, space: int) -> tuple[ctypes.c_float, ...] | None:
     try:
-        fov = header.encoding[0].reconSpace.fieldOfView_mm
+        encoding = header.encoding[space]
+        region = getattr(encoding, "reconSpace", None) or encoding.encodedSpace
+        fov = region.fieldOfView_mm
         return tuple(ctypes.c_float(float(value)) for value in (fov.x, fov.y, fov.z))
     except (AttributeError, IndexError, TypeError):
         return None

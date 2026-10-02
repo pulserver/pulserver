@@ -8,7 +8,6 @@ import numpy as np
 
 from ...mrd._acquisitions import AcquisitionFlag
 from ...mrd._images import center_crop
-from ...mrd._metadata import max_stored_value
 from .._buffers import ReconData
 from ..plugin import ReconContext, ReconPlugin, ReconResult
 from .cartesian import averaged
@@ -25,9 +24,9 @@ class NufftRecon(ReconPlugin):
     normal operator (``bart pics -e``). The trajectory is the one the proxy's enrichment writes, which
     :meth:`~pulserver.recon.ReconBuffer.grid_trajectory` scales to the image
     grid. A stack of spokes or spirals is Fourier transformed along its
-    partitions first and fitted partition by partition. Images close and are
-    scaled as :class:`~pulserver.recon.handlers.cartesian.CartesianRecon`
-    makes them, their averages summed.
+    partitions first and fitted partition by partition. Images close as
+    :class:`~pulserver.recon.handlers.cartesian.CartesianRecon` makes them,
+    their averages summed, and their values are those of the solve, unscaled.
     bartorch is imported when the first image is made, which the ``coils``
     extra installs.
 
@@ -66,16 +65,9 @@ class NufftRecon(ReconPlugin):
         image = self._fitted(
             averaged(buffer), trajectory, buffer.image_shape, context.device
         )
-        peak = float(image.max(initial=0.0))
-        if peak > 0.0:
-            image *= max_stored_value(context.header) / peak
         return ReconResult(
-            np.around(image).astype(np.int16),
-            attributes={
-                "ImageProcessingHistory": ["PULSERVER", "PYTHON", "PICS"],
-                "WindowCenter": str((max_stored_value(context.header) + 1) // 2),
-                "WindowWidth": str(max_stored_value(context.header) + 1),
-            },
+            image,
+            attributes={"ImageProcessingHistory": ["PULSERVER", "PYTHON", "PICS"]},
         )
 
     def _fitted(

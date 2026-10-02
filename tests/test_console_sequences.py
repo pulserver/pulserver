@@ -135,14 +135,16 @@ def test_a_console_sequence_images_the_vials_where_the_cartesian_gradient_echo_d
 
 
 def test_the_cartesian_reconstruction_of_a_gradient_echo_is_the_simple_fft(tmp_path):
-    """Lines placed by their counters are the lines in arrival order when they arrive in order."""
+    """Lines placed by their counters are the lines in arrival order when they arrive in order, to within one stored integer."""
     placed = _images(_console(tmp_path), "gre2d", SMALL, recon="cartesian")
     arrived = _images(
         _console(tmp_path, [PLUGINS], [RECON_PLUGINS]), "gre2d", SMALL, recon="gre2d"
     )
 
     assert len(placed) == len(arrived) == 1
-    np.testing.assert_array_equal(placed[0], arrived[0])
+    np.testing.assert_allclose(
+        placed[0].astype(float), arrived[0].astype(float), rtol=0, atol=1
+    )
 
 
 def test_every_shipped_sequence_is_paired_with_a_shipped_reconstruction():

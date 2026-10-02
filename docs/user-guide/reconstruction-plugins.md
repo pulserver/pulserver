@@ -113,9 +113,28 @@ other readout belongs to the first branch `triggers` declares.
 
 ```
 
-A {class}`~pulserver.recon.ReconResult` is packaged as an MRD image whose
-geometry and timing come from a reference acquisition, so a plugin builds no
-image header; `dicom=True` sends it as DICOM instead.
+A {class}`~pulserver.recon.ReconResult` is packaged as an MRD image, so a
+plugin builds no image header. The field of view is that of the unit's encoding
+space, the position, orientation and physiology time stamps are those of the
+unit's reference acquisition, `data.data.reference`, and the time stamp is the
+earliest of the unit's acquisitions. `reference=<acquisition>` takes the
+geometry from another acquisition. The MRD image holds the array as returned,
+`float32` or `complex64`, with no scale applied.
+
+`dicom=True` sends the result as DICOM instead, and the integer pixels are made
+then. The first floating-point image of a series fixes the rescale of its
+DICOM pixels, and a result states its own in its attributes:
+
+```python
+return recon.ReconResult(
+    image,
+    dicom=True,
+    attributes={"RescaleSlope": 1e-4, "RescaleIntercept": 0.0},
+)
+```
+
+A value outside the range of the stored integers is clipped and counted; see
+{doc}`../explanations/reconstruction`.
 
 Each series runs on its own copy of `PLUGIN`
 ({meth}`~pulserver.recon.ReconPlugin.spawn`). `context.exam`, an
@@ -216,8 +235,8 @@ describe the encoded space and the receiver channels:
 
 ```
 
-Six shipped plugins are complete reconstructions, each image scaled to the
-header's largest stored value. They are searched after every reconstruction
+Six shipped plugins are complete reconstructions, returning the values of their
+transform or solve unscaled. They are searched after every reconstruction
 plugin directory, so a client can name one, such as `nufft`, without a file of
 its own:
 
