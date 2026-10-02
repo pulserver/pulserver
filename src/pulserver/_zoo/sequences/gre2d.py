@@ -1,4 +1,4 @@
-"""pypulseqpp's 2D gradient echo bound to the scanner UI, reconstructed by pics."""
+"""pypulseqpp's 2D gradient echo bound to the scanner UI."""
 
 from pypulseqpp.sequences.sequence.gre2D_sequence import Gre2DApp
 
@@ -8,7 +8,6 @@ from pulserver.protocol import TEPreset, TRPreset, UIParam
 
 class Gre2D(ScannerSequence):
     app = Gre2DApp
-    recon = "pics"
     ui = {
         UIParam.TE: TimeParam(
             "te",

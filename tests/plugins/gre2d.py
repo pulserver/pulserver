@@ -8,7 +8,6 @@ from pulserver.protocol import TEPreset, TRPreset, UIParam
 
 class Gre2D(ScannerSequence):
     app = Gre2DApp
-    recon = "gre2d"
     ui = {
         UIParam.TE: TimeParam(
             "te",

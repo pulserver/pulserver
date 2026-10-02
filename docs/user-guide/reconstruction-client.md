@@ -8,9 +8,9 @@ the same connection.
 
 The proxy replaces the encoding counters, flags, encoding spaces and trajectory
 of the series with those the sequence states ({doc}`../explanations/reconstruction`).
-The client therefore sends what the scanner measured and the identity of the
-design the series was played from, and leaves the Pulseq structure of the scan
-to the proxy.
+The client therefore sends what the scanner measured, the identity of the
+design the series was played from and the reconstruction plugin to run, and
+leaves the Pulseq structure of the scan to the proxy.
 
 ## Messages
 
@@ -18,11 +18,16 @@ A series is sent in this order:
 
 | Message | Identifier | Content |
 | --- | --- | --- |
-| `CONFIG` | 2 | Optional. The reconstruction plugin, as a bare name or under `parameters.config` of a JSON, YAML or XML text, used when the design names none |
+| `CONFIG` | 2 | The reconstruction plugin, as a bare name or the path of its `<plugin>.py` file, or as either under `parameters.config` of a JSON, YAML or XML text |
 | `HEADER` | 3 | The MRD XML header, once |
 | `ACQUISITION` | 1008 | One per readout of the sequence chain, in play order |
 | `WAVEFORM` | 1026 | Optional, anywhere after the header: physiological waveforms, passed to the reconstruction unchanged |
 | `CLOSE` | 4 | The end of the series |
+
+The design names no reconstruction, so the proxy refuses a series whose config
+names none, unless it forwards with a `--forward-config`. A path ending in `.py`
+names the plugin its file is called, without the extension; the proxy searches
+its own `--plugins` directories for that name, whatever the path's directory.
 
 The client then reads until the proxy's `CLOSE`: images (`IMAGE`, 1022),
 DICOM datasets (`DICOM_WITHNAME`, 1018) and texts (`TEXT`, 5), in the order the

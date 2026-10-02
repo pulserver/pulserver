@@ -1,4 +1,4 @@
-"""pypulseqpp's 2D balanced SSFP bound to the scanner UI, reconstructed by pics."""
+"""pypulseqpp's 2D balanced SSFP bound to the scanner UI."""
 
 from pypulseqpp.sequences.sequence.bssfp2D_sequence import Bssfp2DApp
 
@@ -8,7 +8,6 @@ from pulserver.protocol import TRPreset, UIParam
 
 class Bssfp2D(ScannerSequence):
     app = Bssfp2DApp
-    recon = "pics"
     ui = {
         UIParam.FLIP: FloatParam(
             "flip_angle_deg", unit="deg", range_min=1.0, range_max=90.0

@@ -7,6 +7,7 @@ import importlib.util
 import inspect
 import math
 import sys
+import warnings
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from decimal import Decimal
@@ -263,10 +264,6 @@ class ScannerSequence:
 
     Attributes
     ----------
-    recon : str
-        Reconstruction plugin the data of this sequence is reconstructed with,
-        recorded in every design generated from it. Empty leaves the choice
-        to the reconstruction client.
     follows : tuple of str
         Which protocol parameter drives the angle of each pulse the sequence
         plays: one entry per distinct pulse, in the order the sequence first
@@ -290,15 +287,27 @@ class ScannerSequence:
         When a subclass is defined with a ``ui`` key the interpreter does not
         know, which its parser would drop, or with one of the prescription
         entries, which pulserver applies itself.
+
+    Warns
+    -----
+    DeprecationWarning
+        When a subclass sets ``recon``, which has no effect: the reconstruction
+        is named by the reconstruction client or, on a console, by the scan.
     """
 
     app: ClassVar[type[sequences.SequenceApp]]
     ui: ClassVar[Mapping[str, Entry]] = {}
-    recon: ClassVar[str] = ""
     follows: ClassVar[tuple[str, ...]] = ()
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
+        if "recon" in cls.__dict__:
+            warnings.warn(
+                f"{cls.__name__} sets recon, which has no effect: the reconstruction "
+                "is named by the reconstruction client or by the scan",
+                DeprecationWarning,
+                stacklevel=2,
+            )
         if "ui" not in cls.__dict__:
             return
         unknown = sorted(str(name) for name in cls.ui if name not in WIRE_NAMES)

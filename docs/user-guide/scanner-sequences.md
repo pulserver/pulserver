@@ -24,9 +24,10 @@ they cap the scanner's limits, which the design call passes in.
 
 `ui` maps {class}`~pulserver.protocol.UIParam` members, the parameters of the
 interpreter's table, to entries; a name outside that table is refused when the
-class is defined. An entry names the `init_sequence` argument it sets. `recon`
-names the reconstruction plugin of the sequence's data
-({doc}`reconstruction-plugins`).
+class is defined. An entry names the `init_sequence` argument it sets. The class
+does not name a reconstruction: the console's scan or the reconstruction client
+does ({doc}`reconstruction-plugins`). A `recon` attribute has no effect, and
+defining one raises a `DeprecationWarning`.
 
 ```pycon
 >>> from pypulseqpp.sequences.sequence.gre2D_sequence import Gre2DApp
@@ -34,7 +35,6 @@ names the reconstruction plugin of the sequence's data
 ...                               TimeParam, TRPreset, UIParam)
 >>> class Gre2D(ScannerSequence):
 ...     app = Gre2DApp
-...     recon = "gre2d"
 ...     ui = {
 ...         UIParam.TE: TimeParam("te", range_min=1000, range_max=80000, range_incr=10,
 ...                         presets={TEPreset.MINIMUM: None}),
@@ -76,12 +76,17 @@ scanner with weaker gradients than the application assumes can play.
 pulserver ships a plugin for each of these pypulseqpp sequences, searched after
 every `--plugins` directory, so a file of the same name there replaces it:
 
-| Plugin | Reconstruction |
+| Plugin | Paired reconstruction |
 | --- | --- |
 | `gre2d`, `se2d`, `bssfp2d`, `gre_multiecho2d`, `gre3d`, `se3d` | `pics` |
 | `gre_radial2d`, `gre_spiral2d`, `se_radial2d`, `se_spiral2d` | `nufft` |
 | `gre_stack_of_stars3d`, `gre_stack_of_spirals3d`, `se_stack_of_stars3d`, `se_stack_of_spirals3d` | `nufft` |
 | `epi2d` | `epi` |
+
+The pair is what a console reconstructs a shipped sequence with when the scan
+names no reconstruction ({doc}`virtual-scanner`); a scan can name another, and
+the reconstruction client of a scanner names one in its config
+({doc}`reconstruction-client`).
 
 A 3D sequence takes its number of partitions from the number of slices. The
 Cartesian ones take `Ry`, and the 3D ones `Rz`, as their undersampling.

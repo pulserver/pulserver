@@ -31,6 +31,7 @@ from pulserver.proxy import (
     _designs,
     _held,
 )
+from pulserver.proxy._proxy import _config_plugin
 from pulserver.proxy._seqdesc import is_message
 from pulserver.recon import load_plugin
 from pulserver.recon._runtime import concurrency
@@ -71,13 +72,13 @@ class Series:
 
 @pytest.fixture(scope="module")
 def bucket(tmp_path_factory):
-    """A store holding one design bound to a reconstruction and one unbound."""
+    """A store holding the designs of the plugins ``gre2d`` and ``gre2d_raw``."""
     store = DesignStore(tmp_path_factory.mktemp("proxy") / "designs")
     series = {}
-    for plugin, name in (("gre2d", "bound"), ("gre2d_raw", "raw")):
+    for plugin in ("gre2d", "gre2d_raw"):
         design = generate(store, plugin, MATRIX)
         table = SequenceTable.read(store.directory(design) / "sequence.seq")
-        series[name] = Series(design, table)
+        series[plugin] = Series(design, table)
     return store.root, series
 
 
@@ -180,7 +181,7 @@ def stream(
     port,
     series,
     *,
-    config="",
+    config="gre2d",
     data=flat,
     counters=None,
     exam=None,
@@ -193,14 +194,16 @@ def stream(
 ):
     """Play one series' readouts as the scanner client does; return what came back.
 
-    ``config`` ``None`` sends no config message. ``counters`` numbers the
-    acquisitions' ``scan_counter``; unnumbered by default. ``exam`` is the
-    header's ``ExamID``; none by default. ``headers`` is how many times the
-    header is sent, ``readouts`` how many readouts are, all of them by default,
-    ``last`` the acquisition flagged ``LAST_IN_MEASUREMENT``, none by default,
-    ``design`` the header's ``pulserver_design``, the series' by default, and
-    ``measurement`` its ``measurementID``, none by default. With ``leave`` the
-    client closes its connection once it has sent the series, reading nothing.
+    ``config`` is the text of the config message, which names the
+    reconstruction plugin: the traced FFT ``gre2d`` by default; ``None`` sends
+    no config message. ``counters`` numbers the acquisitions' ``scan_counter``;
+    unnumbered by default. ``exam`` is the header's ``ExamID``; none by
+    default. ``headers`` is how many times the header is sent, ``readouts`` how
+    many readouts are, all of them by default, ``last`` the acquisition flagged
+    ``LAST_IN_MEASUREMENT``, none by default, ``design`` the header's
+    ``pulserver_design``, the series' by default, and ``measurement`` its
+    ``measurementID``, none by default. With ``leave`` the client closes its
+    connection once it has sent the series, reading nothing.
     """
     stream = socket.create_connection(("127.0.0.1", port), timeout=DEADLINE)
     connection = Connection(stream)
@@ -245,7 +248,7 @@ def closed(received):
 def test_a_series_returns_images_then_closes(start_proxy, bucket):
     _, series = bucket
     proxy = start_proxy(slots=1)
-    received = stream(proxy.port, series["bound"])
+    received = stream(proxy.port, series["gre2d"])
     assert closed(received)
     assert [np.squeeze(image.data).shape for image in images(received)] == [
         (MATRIX["ny"], MATRIX["nx"])
@@ -263,7 +266,7 @@ def test_a_second_series_waits_for_a_slot_and_still_returns_images(
     received = {}
 
     def play(name):
-        received[name] = stream(proxy.port, series["bound"], config=config)
+        received[name] = stream(proxy.port, series["gre2d"], config=config)
 
     threads = [threading.Thread(target=play, args=(name,)) for name in ("a", "b")]
     for thread in threads:
@@ -287,7 +290,7 @@ def test_a_reconstruction_outlasting_the_worker_timeout_still_returns_its_image(
     monkeypatch.setattr("pulserver.proxy._proxy._WORKER_TIMEOUT", 1.0)
     proxy = start_proxy(slots=1)
     config = json.dumps({"parameters": {"config": "gre2d", "delay": 3.0}})
-    received = stream(proxy.port, series["bound"], config=config)
+    received = stream(proxy.port, series["gre2d"], config=config)
     assert closed(received)
     assert len(images(received)) == 1
 
@@ -299,18 +302,18 @@ def test_a_reconstruction_past_the_recon_timeout_is_stopped_and_reported(
     proxy = start_proxy(slots=1, recon_timeout=1.0)
     config = json.dumps({"parameters": {"config": "gre2d", "delay": 60.0}})
     started = time.monotonic()
-    received = stream(proxy.port, series["bound"], config=config)
+    received = stream(proxy.port, series["gre2d"], config=config)
     assert time.monotonic() - started < 30
     assert not images(received)
     assert any(isinstance(item, str) and "did not finish" in item for item in received)
-    assert len(images(stream(proxy.port, series["bound"]))) == 1
+    assert len(images(stream(proxy.port, series["gre2d"]))) == 1
 
 
 def test_a_stream_numbered_without_gaps_is_reconstructed(start_proxy, bucket):
     _, series = bucket
     proxy = start_proxy(slots=1)
-    counters = [index + 1 for index in range(len(series["bound"].table))]
-    assert len(images(stream(proxy.port, series["bound"], counters=counters))) == 1
+    counters = [index + 1 for index in range(len(series["gre2d"].table))]
+    assert len(images(stream(proxy.port, series["gre2d"], counters=counters))) == 1
 
 
 def test_a_gap_in_the_scan_counters_stops_the_series_unreconstructed(
@@ -318,12 +321,12 @@ def test_a_gap_in_the_scan_counters_stops_the_series_unreconstructed(
 ):
     _, series = bucket
     proxy = start_proxy(slots=1)
-    readouts = len(series["bound"].table)
+    readouts = len(series["gre2d"].table)
     counters = [index + 1 + (index >= readouts // 2) for index in range(readouts)]
-    received = stream(proxy.port, series["bound"], counters=counters)
+    received = stream(proxy.port, series["gre2d"], counters=counters)
     assert not images(received)
     assert any(isinstance(item, str) and "scan counter" in item for item in received)
-    assert len(images(stream(proxy.port, series["bound"]))) == 1
+    assert len(images(stream(proxy.port, series["gre2d"]))) == 1
 
 
 def _refused(received, reason):
@@ -332,21 +335,47 @@ def _refused(received, reason):
     )
 
 
-def test_a_series_opening_with_its_header_is_reconstructed_as_its_design_names(
+def test_a_series_opening_with_its_header_names_no_reconstruction_and_is_refused(
     start_proxy, bucket
 ):
     _, series = bucket
     proxy = start_proxy(slots=1)
-    assert len(images(stream(proxy.port, series["bound"], config=None))) == 1
+    received = stream(proxy.port, series["gre2d"], config=None)
+    assert _refused(received, "the config names no reconstruction")
+
+
+@pytest.mark.parametrize(
+    ("config", "plugin"),
+    [
+        ("recon3", "recon3"),
+        ("/any/dir/recon3.py", "recon3"),
+        ("recon3.py\n", "recon3"),
+        ('{"parameters": {"config": "/any/dir/recon3.py"}}', "recon3"),
+        ('{\n  "parameters": {\n    "config": "/any/dir/recon3.py"\n  }\n}', "recon3"),
+        ('{"parameters": {}}', ""),
+        ("", ""),
+    ],
+)
+def test_the_proxy_resolves_a_plugin_file_path_to_its_stem(config, plugin):
+    assert _config_plugin(config) == plugin
+
+
+def test_a_series_whose_config_is_the_path_of_a_plugin_file_is_reconstructed_by_it(
+    start_proxy, bucket, tmp_path
+):
+    _, series = bucket
+    proxy = start_proxy(slots=1)
+    path = tmp_path / "elsewhere" / "gre2d.py"
+    assert len(images(stream(proxy.port, series["gre2d"], config=str(path)))) == 1
 
 
 def test_a_series_that_ends_before_its_last_readout_is_refused(start_proxy, bucket):
     _, series = bucket
     proxy = start_proxy(slots=1)
-    readouts = len(series["bound"].table)
-    received = stream(proxy.port, series["bound"], readouts=readouts - 1)
+    readouts = len(series["gre2d"].table)
+    received = stream(proxy.port, series["gre2d"], readouts=readouts - 1)
     assert _refused(received, f"ended after {readouts - 1} of the {readouts} readouts")
-    assert len(images(stream(proxy.port, series["bound"]))) == 1
+    assert len(images(stream(proxy.port, series["gre2d"]))) == 1
 
 
 @pytest.mark.parametrize("position", ["middle", "end"])
@@ -355,9 +384,9 @@ def test_only_the_last_readout_may_be_flagged_last_in_measurement(
 ):
     _, series = bucket
     proxy = start_proxy(slots=1)
-    readouts = len(series["bound"].table)
+    readouts = len(series["gre2d"].table)
     last = readouts // 2 if position == "middle" else readouts - 1
-    received = stream(proxy.port, series["bound"], last=last)
+    received = stream(proxy.port, series["gre2d"], last=last)
     if position == "middle":
         assert _refused(received, f"acquisition {last} is flagged LAST_IN_MEASUREMENT")
     else:
@@ -376,24 +405,24 @@ def test_a_series_carrying_no_header_or_two_is_refused(
 ):
     _, series = bucket
     proxy = start_proxy(slots=1)
-    assert _refused(stream(proxy.port, series["bound"], headers=headers), reason)
+    assert _refused(stream(proxy.port, series["gre2d"], headers=headers), reason)
 
 
 def test_a_stream_closed_before_its_header_is_refused(start_proxy, bucket):
     _, series = bucket
     proxy = start_proxy(slots=1)
-    received = stream(proxy.port, series["bound"], config=None, headers=0, readouts=0)
+    received = stream(proxy.port, series["gre2d"], config=None, headers=0, readouts=0)
     assert _refused(received, "where its MRD header belongs")
 
 
 def test_a_crashing_plugin_closes_its_series_and_frees_the_slot(start_proxy, bucket):
     _, series = bucket
     proxy = start_proxy(slots=1)
-    crashed = stream(proxy.port, series["raw"], config="crash")
+    crashed = stream(proxy.port, series["gre2d_raw"], config="crash")
     assert closed(crashed)
     assert not images(crashed)
     assert any(isinstance(item, str) and "always fails" in item for item in crashed)
-    assert len(images(stream(proxy.port, series["bound"]))) == 1
+    assert len(images(stream(proxy.port, series["gre2d"]))) == 1
 
 
 def test_the_spare_worker_is_replaced_after_each_series(start_proxy, bucket):
@@ -401,11 +430,11 @@ def test_the_spare_worker_is_replaced_after_each_series(start_proxy, bucket):
     proxy = start_proxy(slots=1, spares=1)
     warm = proxy.workers.spare_pids()
     assert len(warm) == 1
-    assert len(images(stream(proxy.port, series["bound"]))) == 1
+    assert len(images(stream(proxy.port, series["gre2d"]))) == 1
     replaced = proxy.workers.spare_pids()
     assert len(replaced) == 1
     assert replaced != warm
-    assert len(images(stream(proxy.port, series["bound"]))) == 1
+    assert len(images(stream(proxy.port, series["gre2d"]))) == 1
     assert proxy.workers.spare_pids() not in (warm, replaced)
 
 
@@ -423,7 +452,7 @@ def test_a_series_with_every_slot_busy_is_held_on_disk_until_one_frees(
     received = {}
 
     def play(name, config):
-        received[name] = stream(proxy.port, series["bound"], config=config)
+        received[name] = stream(proxy.port, series["gre2d"], config=config)
 
     first = threading.Thread(target=play, args=("held", held))
     first.start()
@@ -462,7 +491,7 @@ def test_a_point_off_the_centre_reconstructs_where_it_was_acquired(start_proxy, 
     """The readouts arrive demodulated by the playout, and the proxy leaves them so."""
     _, series = bucket
     proxy = start_proxy(slots=1)
-    table = series["bound"].table
+    table = series["gre2d"].table
     fov_mm = table.spaces[0].fov_mm
     pixel_mm = (fov_mm[0] / MATRIX["nx"], fov_mm[1] / MATRIX["ny"])
     position = 1e-3 * np.array((2 * pixel_mm[0], 3 * pixel_mm[1], 0.0))
@@ -470,7 +499,7 @@ def test_a_point_off_the_centre_reconstructs_where_it_was_acquired(start_proxy, 
     def kspace(table, index):
         return point(table, index, position)
 
-    received = stream(proxy.port, series["bound"], data=kspace)
+    received = stream(proxy.port, series["gre2d"], data=kspace)
 
     centre = (MATRIX["ny"] // 2, MATRIX["nx"] // 2)
     assert peak(images(received)[0]) == (centre[0] + 3, centre[1] + 2)
@@ -546,7 +575,9 @@ def test_the_series_of_one_exam_share_its_exam_cache(start_proxy, bucket):
     counts = [
         [
             int(np.abs(image.data).max())
-            for image in images(stream(port, series["raw"], config="exam", exam=exam))
+            for image in images(
+                stream(port, series["gre2d_raw"], config="exam", exam=exam)
+            )
         ]
         for exam in ("E1", "E1", "E2", "E1")
     ]
@@ -568,7 +599,7 @@ def test_a_closed_proxy_leaves_the_exam_root_for_the_proxies_still_running(tmp_p
 
 def test_a_reconstruction_may_start_processes_of_its_own(start_proxy, bucket):
     _, series = bucket
-    received = stream(start_proxy(slots=1).port, series["raw"], config="children")
+    received = stream(start_proxy(slots=1).port, series["gre2d_raw"], config="children")
     assert [np.abs(image.data).max() for image in images(received)] == [1.0]
 
 
@@ -583,7 +614,7 @@ def test_a_series_reads_the_gpu_its_slot_holds(
     values = [
         int(np.abs(image.data).max())
         for _ in range(2)
-        for image in images(stream(port, series["raw"], config="device"))
+        for image in images(stream(port, series["gre2d_raw"], config="device"))
     ]
     assert values == read
 
@@ -614,14 +645,14 @@ def test_a_motion_corrected_series_publishes_its_poses_to_the_scan(
 
     monkeypatch.setattr(_designs, "_asks_for_motion_correction", lambda _: True)
     root, series = bucket
-    path = Path(root) / series["raw"].design / FILENAME
+    path = Path(root) / series["gre2d_raw"].design / FILENAME
     path.unlink(missing_ok=True)
     if forwarded:
         server = start_server(slots=1)
         proxy = start_proxy(forward=("127.0.0.1", server.port), forward_config="pose")
     else:
         proxy = start_proxy(slots=1)
-    received = stream(proxy.port, series["raw"], config="pose")
+    received = stream(proxy.port, series["gre2d_raw"], config="pose")
 
     assert closed(received)
     assert len(images(received)) == 1
@@ -635,8 +666,8 @@ def test_a_series_not_corrected_for_motion_writes_no_pose_file(start_proxy, buck
     from pulserver.proxy._motion import FILENAME
 
     root, series = bucket
-    path = Path(root) / series["bound"].design / FILENAME
-    stream(start_proxy(slots=1).port, series["bound"])
+    path = Path(root) / series["gre2d"].design / FILENAME
+    stream(start_proxy(slots=1).port, series["gre2d"])
     assert not path.exists()
 
 
@@ -659,7 +690,7 @@ def test_images_whose_client_has_gone_reach_it_when_it_returns(
     for measurement, position in positions.items():
         stream(
             port,
-            series["raw"],
+            series["gre2d_raw"],
             config=config,
             data=_at(position),
             measurement=measurement,
@@ -670,12 +701,17 @@ def test_images_whose_client_has_gone_reach_it_when_it_returns(
         "the outputs of the series whose clients left were not held",
     )
     for measurement in reversed(positions):
-        received = stream(port, series["raw"], readouts=0, measurement=measurement)
+        received = stream(
+            port, series["gre2d_raw"], readouts=0, measurement=measurement
+        )
         assert closed(received)
         (image,) = images(received)
         (live,) = images(
             stream(
-                port, series["raw"], config="gre2d", data=_at(positions[measurement])
+                port,
+                series["gre2d_raw"],
+                config="gre2d",
+                data=_at(positions[measurement]),
             )
         )
         np.testing.assert_array_equal(image.data, live.data)
@@ -688,7 +724,7 @@ def test_a_client_that_stays_leaves_nothing_held(
     monkeypatch.setattr(_held, "DEFAULT_HELD_DIRECTORY", tmp_path)
     _, series = bucket
     received = stream(
-        start_proxy(slots=1).port, series["raw"], config="gre2d", measurement="M3"
+        start_proxy(slots=1).port, series["gre2d_raw"], config="gre2d", measurement="M3"
     )
     assert len(images(received)) == 1
     assert list(tmp_path.iterdir()) == []
@@ -746,7 +782,7 @@ def test_a_series_naming_no_stored_design_is_refused(
 ):
     _, series = bucket
     proxy = start_proxy(slots=1)
-    received = stream(proxy.port, series["bound"], design=design)
+    received = stream(proxy.port, series["gre2d"], design=design)
     assert _refused(received, reason)
 
 
@@ -761,8 +797,8 @@ def test_a_forwarded_series_returns_the_image_a_local_worker_returns(
     def kspace(table, index):
         return point(table, index, (0.004, -0.002, 0.0))
 
-    forwarded = stream(forwarding.port, series["bound"], data=kspace)
-    reconstructed = stream(local.port, series["bound"], data=kspace)
+    forwarded = stream(forwarding.port, series["gre2d"], data=kspace)
+    reconstructed = stream(local.port, series["gre2d"], data=kspace)
 
     assert closed(forwarded)
     assert forwarding.workers is None
@@ -779,7 +815,7 @@ def _in_process(
     data=flat,
     readouts=None,
     design=None,
-    config="",
+    config="gre2d",
     plugins=RECON_PLUGINS,
 ):
     """Reconstruct one series with :class:`LocalReconstruction`; return whether it was, and what it sent."""
@@ -805,8 +841,8 @@ def test_a_series_reconstructed_in_this_process_returns_the_image_a_worker_retur
     def kspace(table, index):
         return point(table, index, (0.004, -0.002, 0.0))
 
-    done, received = _in_process(root, series["bound"], data=kspace)
-    reconstructed = stream(proxy.port, series["bound"], data=kspace)
+    done, received = _in_process(root, series["gre2d"], data=kspace)
+    reconstructed = stream(proxy.port, series["gre2d"], data=kspace)
 
     assert done
     assert len(images(received)) == len(images(reconstructed)) == 1
@@ -820,9 +856,9 @@ def test_in_this_process_a_reconstruction_is_found_in_any_of_the_plugin_director
 ):
     root, series = bucket
 
-    alone, received_alone = _in_process(root, series["bound"])
+    alone, received_alone = _in_process(root, series["gre2d"])
     searched, received = _in_process(
-        root, series["bound"], plugins=[tmp_path / "absent", RECON_PLUGINS]
+        root, series["gre2d"], plugins=[tmp_path / "absent", RECON_PLUGINS]
     )
 
     assert alone and searched
@@ -840,7 +876,7 @@ def test_in_this_process_a_reconstruction_is_found_in_any_of_the_plugin_director
             {"config": "crash"},
             "pulserver: crash failed: this reconstruction always fails",
         ),
-        ({"config": ""}, "pulserver: neither the design nor the config names"),
+        ({"config": ""}, "pulserver: the config names no reconstruction"),
         (
             {"config": '{"parameters": {"config": "../gre2d"}}'},
             "pulserver: invalid plugin name '../gre2d'",
@@ -852,13 +888,30 @@ def test_in_this_process_a_series_is_refused_or_fails_with_the_proxys_text(
     bucket, options, reason
 ):
     root, series = bucket
-    name = "raw" if "config" in options else "bound"
 
-    done, received = _in_process(root, series[name], **options)
+    done, received = _in_process(root, series["gre2d"], **options)
 
     assert not done
     assert not images(received)
     assert [item for item in received if isinstance(item, str)][-1].startswith(reason)
+
+
+def test_a_manifest_naming_a_reconstruction_is_read_and_the_name_ignored(
+    bucket, tmp_path
+):
+    """A store written when a design named its reconstruction still reads."""
+    root, series = bucket
+    design = series["gre2d"].design
+    shutil.copytree(Path(root) / design, tmp_path / design)
+    manifest = tmp_path / design / "manifest.json"
+    manifest.write_text(
+        json.dumps({**json.loads(manifest.read_text()), "recon": "crash"})
+    )
+
+    done, received = _in_process(tmp_path, series["gre2d"])
+
+    assert done
+    assert len(images(received)) == 1
 
 
 @pytest.mark.parametrize("configured", [None, "default.xml"])
@@ -871,14 +924,15 @@ def test_a_forwarded_series_names_its_reconstruction_in_a_config_file_message(
         forward=("127.0.0.1", recording.port), forward_config=configured
     )
 
-    received = stream(proxy.port, series["bound"], config='{"parameters": {}}')
+    config = '{"parameters": {"config": "gre2d"}}'
+    received = stream(proxy.port, series["gre2d"], config=config)
     recording.join()
 
     name, header, description, *acquisitions = recording.received
     assert name == (configured or "gre2d")
     assert is_message(description)
     assert header.encoding[0].encodedSpace.matrixSize.x == MATRIX["nx"]
-    assert len(acquisitions) == len(series["bound"].table)
+    assert len(acquisitions) == len(series["gre2d"].table)
     assert "forwarded" in received
     assert closed(received)
 
@@ -894,7 +948,7 @@ def test_a_message_the_proxy_cannot_read_ends_the_output_with_its_type(
 
     recording = _RecordingServer(unreadable)
     proxy = start_proxy(forward=("127.0.0.1", recording.port))
-    received = stream(proxy.port, series["bound"])
+    received = stream(proxy.port, series["gre2d"])
     recording.join()
 
     assert "first" in received
@@ -910,7 +964,7 @@ def test_the_reconstruction_reads_the_sequence_description_before_any_acquisitio
     _, series = bucket
     recording = _RecordingServer(_texts)
     proxy = start_proxy(forward=("127.0.0.1", recording.port))
-    stream(proxy.port, series["bound"])
+    stream(proxy.port, series["gre2d"])
     recording.join()
 
     kinds = [
@@ -925,7 +979,7 @@ def test_the_sequence_description_is_not_sent_back_to_the_client(start_proxy, bu
     """A reconstruction echoes what it does not read, and the scanner did not ask for it."""
     _, series = bucket
     proxy = start_proxy(slots=1)
-    received = stream(proxy.port, series["bound"])
+    received = stream(proxy.port, series["gre2d"])
     assert images(received)
     assert not any(is_message(item) for item in received)
 
@@ -936,7 +990,7 @@ def test_forwarded_images_come_back_as_dicom_when_asked(
     _, series = bucket
     server = start_server(slots=1)
     proxy = start_proxy(forward=("127.0.0.1", server.port), forward_dicom=True)
-    received = stream(proxy.port, series["bound"])
+    received = stream(proxy.port, series["gre2d"])
 
     assert not images(received)
     assert sum(isinstance(item, DicomWithName) for item in received) == 1
@@ -950,7 +1004,7 @@ def test_a_forwarded_series_past_the_recon_timeout_is_stopped_and_reported(
     released = threading.Event()
     recording = _RecordingServer(lambda *_: released.wait(DEADLINE))
     proxy = start_proxy(forward=("127.0.0.1", recording.port), recon_timeout=1.0)
-    received = stream(proxy.port, series["bound"])
+    received = stream(proxy.port, series["gre2d"])
     released.set()
     recording.join()
     assert _refused(
@@ -975,7 +1029,7 @@ def test_a_series_forwarded_to_no_server_is_refused(start_proxy, bucket):
     with socket.create_server(("127.0.0.1", 0)) as unused:
         port = unused.getsockname()[1]
     proxy = start_proxy(forward=("127.0.0.1", port))
-    received = stream(proxy.port, series["bound"])
+    received = stream(proxy.port, series["gre2d"])
     assert _refused(received, f"the reconstruction server at 127.0.0.1:{port}")
 
 
@@ -984,7 +1038,7 @@ def test_a_series_whose_config_names_no_plugin_is_refused_by_the_server(
 ):
     _, series = bucket
     server = start_server(slots=1)
-    received = stream(server.port, series["bound"], config="")
+    received = stream(server.port, series["gre2d"], config="")
     assert _refused(received, "the config names no reconstruction")
 
 
@@ -1022,21 +1076,21 @@ def test_a_recorded_series_run_offline_against_its_store_gives_the_proxys_image(
     bucket, tmp_path
 ):
     root, series = bucket
-    bound = series["bound"]
+    played = series["gre2d"]
 
     def kspace(table, index):
         return point(table, index, (0.004, -0.002, 0.0))
 
     path = str(tmp_path / "scan.h5")
     dataset = ismrmrd.Dataset(path, "dataset", create_if_needed=True)
-    dataset.write_xml_header(header_xml(bound))
-    for index in range(len(bound.table)):
+    dataset.write_xml_header(header_xml(played))
+    for index in range(len(played.table)):
         dataset.append_acquisition(
-            ismrmrd.Acquisition.from_array(kspace(bound.table, index))
+            ismrmrd.Acquisition.from_array(kspace(played.table, index))
         )
     dataset.close()
 
     offline = load_plugin(RECON_PLUGINS / "gre2d.py").run(path, store=root)
-    _, received = _in_process(root, bound, data=kspace)
+    _, received = _in_process(root, played, data=kspace)
 
     np.testing.assert_array_equal(images(offline)[0].data, images(received)[0].data)

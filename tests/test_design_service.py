@@ -146,7 +146,7 @@ def test_a_manifest_records_what_the_design_depends_on(store):
     design = generated(generate(store, "gre2d", GRE))
     manifest = store.manifest(design)
     assert manifest["id"] == design == design_id(manifest["identity"])
-    assert (manifest["plugin"], manifest["recon"]) == ("gre2d", "gre2d")
+    assert manifest["plugin"] == "gre2d"
     assert manifest["limits"] == LIMITS
     assert manifest["versions"]["pypulseqpp"] == pp.__version__
     assert manifest["scan_time"] > 0
@@ -160,11 +160,24 @@ def test_a_manifest_records_what_the_design_depends_on(store):
     ]
 
 
-def test_a_design_names_the_reconstruction_its_sequence_binds(store):
-    bound = generated(generate(store, "gre2d", {"nx": 32, "ny": 16, "TE": 5000}))
-    unbound = generated(generate(store, "gre2d_raw", {"nx": 32, "ny": 16, "TE": 5000}))
-    assert store.manifest(bound)["recon"] == "gre2d"
-    assert store.manifest(unbound)["recon"] == ""
+def test_a_stored_manifest_names_no_reconstruction(store):
+    designed = generated(generate(store, "gre2d", {"nx": 32, "ny": 16, "TE": 5000}))
+    copied = generated(imported(store, FIXTURES / "dedup_gre_pair.seq"))
+    assert "recon" not in store.manifest(designed)
+    assert "recon" not in store.manifest(copied)
+
+
+def test_a_plugin_declaring_recon_is_warned_and_ignored(tmp_path, store):
+    plugins = tmp_path / "plugins"
+    plugins.mkdir()
+    (plugins / "declared.py").write_text(
+        (PLUGINS / "tiny.py")
+        .read_text()
+        .replace("    app = TinyApp\n", "    app = TinyApp\n    recon = 'crash'\n")
+    )
+    with pytest.warns(DeprecationWarning, match="recon"):
+        design = generated(generate(store, "declared", {"TE": 5000}, plugins=plugins))
+    assert "recon" not in store.manifest(design)
 
 
 def test_an_edited_plugin_is_another_design_of_the_same_protocol(tmp_path, store):

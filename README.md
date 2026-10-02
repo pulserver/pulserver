@@ -47,7 +47,8 @@ pip install pulserver bartorch
 ```
 
 A sequence plugin binds a pypulseqpp `SequenceApp` to the scanner protocol, and
-a reconstruction plugin reconstructs the series it acquires:
+a reconstruction plugin reconstructs the series it acquires. The client of a
+scan chooses the reconstruction, independently of the sequence:
 
 ```python
 # sequences/gre.py
@@ -57,7 +58,6 @@ from pulserver.design import ScannerSequence, TimeParam, UIParam
 
 class Gre(ScannerSequence):
     app = Gre2DApp
-    recon = "gre"
     ui = {UIParam.TE: TimeParam("te", range_min=3000, range_max=20000)}  # µs
 ```
 
@@ -85,13 +85,16 @@ Scan a phantom on the virtual scanner and reconstruct it:
 ```bash
 printf '[Limits]\nB0: 3.0\n[Limits End]\n' > limits.txt
 python -m pulserver.proxy --store designs --port 9002 --plugins recon &
-pulserver scan --plugins sequences --plugin gre --limits limits.txt \
-  --store designs --recon 127.0.0.1:9002 --output images
+pulserver scan --plugins sequences --plugin gre --reconstruction gre \
+  --limits limits.txt --store designs --recon 127.0.0.1:9002 --output images
 ```
 
 The shipped sequences and reconstructions are found by name after the given
-directories, so `--plugin gre_radial2d` or `recon = "pics"` needs no file of its own. On a scanner,
-the interpreter makes the same design calls and streams to the same proxy.
+directories, so `--plugin gre_radial2d` or `--reconstruction pics` needs no file
+of its own. A scan of a shipped sequence that names no reconstruction uses the
+shipped reconstruction paired with it. On a scanner, the interpreter makes the
+same design calls, and the reconstruction client streams to the same proxy and
+names its reconstruction in its config.
 
 ## Documentation
 

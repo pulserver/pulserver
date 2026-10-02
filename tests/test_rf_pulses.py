@@ -178,5 +178,5 @@ def test_declaring_a_different_number_of_pulses_than_the_sequence_plays_is_refus
 
 def test_declaring_nothing_states_no_rf(tmp_path):
     """The default: a scanner costs the RF at download, from the cache."""
-    plugin, seq_path, designed = _designed(_plugin(tmp_path, "recon = ''"), tmp_path)
+    plugin, seq_path, designed = _designed(_plugin(tmp_path, "pass"), tmp_path)
     assert plugin.rf_pulses(seq_path, designed) == []

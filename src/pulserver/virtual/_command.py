@@ -14,6 +14,7 @@ from typing import Any
 
 import numpy as np
 
+from .._zoo import ZOO_PAIRS
 from ._coils import COILS
 
 _DESCRIPTION = """\
@@ -138,6 +139,11 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--sound", type=Path, help="WAV file to write the sound to")
     parser.add_argument(
         "--recon", help="HOST:PORT of a reconstruction proxy to stream the series to"
+    )
+    parser.add_argument(
+        "--reconstruction",
+        help="reconstruction plugin the proxy reconstructs the series with; the "
+        "shipped one paired with a shipped --plugin without it, which --seq has not",
     )
     parser.add_argument(
         "--output",
@@ -266,6 +272,30 @@ def prescription(args: argparse.Namespace) -> tuple[np.ndarray, np.ndarray]:
     return rotation, rotation.T @ np.asarray(args.center, dtype=float)
 
 
+def reconstruction_plugin(sequence_plugin: str, named: str | None = None) -> str:
+    """Return the reconstruction plugin a scan of a design uses.
+
+    ``named`` is the plugin the scan names. Without one, it is the shipped
+    reconstruction paired with ``sequence_plugin``, the name of the
+    scanner-sequence plugin the design was generated from, in
+    ``pulserver._zoo.ZOO_PAIRS``.
+
+    Raises
+    ------
+    ValueError
+        If the scan names none and ``sequence_plugin`` is not a shipped
+        scanner sequence, as is the empty name of an imported design.
+    """
+    if named:
+        return named
+    if sequence_plugin in ZOO_PAIRS:
+        return ZOO_PAIRS[sequence_plugin]
+    raise ValueError(
+        "the scan must name its reconstruction: the design is not of a shipped "
+        "scanner sequence"
+    )
+
+
 def _design_call(args: argparse.Namespace, store: Path) -> tuple[int, str]:
     """Import or generate the design, as ``pulserver design`` does; return its status and reply."""
     from ..host._blocks import format_import
@@ -360,17 +390,30 @@ def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     if args.plugin is not None and args.plugins is None:
         _parser().error("--plugin needs --plugins")
+    if args.reconstruction is not None and args.recon is None:
+        _parser().error("--reconstruction needs --recon")
+    recon_plugin = None
+    if args.recon is not None:
+        try:
+            recon_plugin = reconstruction_plugin(args.plugin or "", args.reconstruction)
+        except ValueError as error:
+            _parser().error(str(error))
     with tempfile.TemporaryDirectory() as temporary:
         store = args.store or Path(temporary)
         status, reply = _design_call(args, store)
         sys.stdout.write(reply)
         if status != 0:
             return status
-        return _scan(args, store, reply.split()[1])
+        return _scan(args, store, reply.split()[1], recon_plugin)
 
 
-def _scan(args: argparse.Namespace, store: Path, design: str) -> int:
-    """Scan the stored design; return the exit status."""
+def _scan(
+    args: argparse.Namespace, store: Path, design: str, recon_plugin: str | None
+) -> int:
+    """Scan the stored design; return the exit status.
+
+    The proxy at ``--recon`` reconstructs the series with ``recon_plugin``.
+    """
     import pypulseqpp as pp
 
     from ..host import DesignStore
@@ -421,8 +464,10 @@ def _scan(args: argparse.Namespace, store: Path, design: str) -> int:
             acquired = []
             host, _, port = args.recon.rpartition(":")
             sent = _kept(readouts, acquired) if args.mrd is not None else readouts
+            config = json.dumps({"parameters": {"config": recon_plugin}})
             status = _received(
-                send((host, int(port)), design, sent, **series), args.output
+                send((host, int(port)), design, sent, config=config, **series),
+                args.output,
             )
     if args.mrd is not None:
         record(args.mrd, design, acquired, **series)

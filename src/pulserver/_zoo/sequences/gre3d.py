@@ -1,4 +1,4 @@
-"""pypulseqpp's 3D gradient echo bound to the scanner UI, reconstructed by pics, its partitions counted by the number of slices."""
+"""pypulseqpp's 3D gradient echo bound to the scanner UI, its partitions counted by the number of slices."""
 
 from pypulseqpp.sequences.sequence.gre3D_sequence import Gre3DApp
 
@@ -8,7 +8,6 @@ from pulserver.protocol import TEPreset, TRPreset, UIParam
 
 class Gre3D(ScannerSequence):
     app = Gre3DApp
-    recon = "pics"
     ui = {
         UIParam.FLIP: FloatParam(
             "flip_angle_deg", unit="deg", range_min=1.0, range_max=90.0

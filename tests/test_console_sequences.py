@@ -10,8 +10,10 @@ import pytest
 from _host import PLUGINS, value_block
 
 from pulserver._plugins import RECONSTRUCTIONS, SEQUENCES
-from pulserver.design import load_plugin
+from pulserver._zoo import ZOO_PAIRS
+from pulserver.host import DesignStore
 from pulserver.protocol import FOV_OFFSET, FOV_ROTATION
+from pulserver.proxy import _local
 from pulserver.virtual._console import Console
 
 ROOT = Path(__file__).parents[1]
@@ -68,7 +70,8 @@ def _console(tmp_path, plugins=(), recon=()):
     )
 
 
-def _images(console, name, values):
+def _images(console, name, values, recon=None):
+    """The images of a scan of ``name`` reconstructed by ``recon``, or by the plugin shipped with it."""
     reply = console.design("generate", name, _prescription(**values))
     assert "design" in reply, reply
     console.exam("vials")
@@ -78,6 +81,7 @@ def _images(console, name, values):
         rotation=np.eye(3),
         centre_mm=(0.0, 0.0, 0.0),
         emit=messages.append,
+        recon=recon,
     )
     assert status == 0, messages[-1:]
     return [
@@ -97,7 +101,7 @@ def _correlation(a, b):
 def reference(tmp_path_factory):
     """The Cartesian gradient echo's image of the vials."""
     console = _console(tmp_path_factory.mktemp("reference"), [PLUGINS], [RECON_PLUGINS])
-    (image,) = _images(console, "gre2d", SMALL)
+    (image,) = _images(console, "gre2d", SMALL, recon="gre2d")
     return image.astype(float)
 
 
@@ -114,7 +118,7 @@ def test_a_console_sequence_designs_its_default_protocol_under_the_console_limit
 def test_a_console_sequence_images_the_vials_where_the_cartesian_gradient_echo_does(
     tmp_path, name, reference
 ):
-    if load_plugin(SEQUENCES / f"{name}.py").recon != "cartesian":
+    if ZOO_PAIRS[name] != "cartesian":
         pytest.importorskip("bartorch")
     console = _console(tmp_path)
 
@@ -132,25 +136,36 @@ def test_a_console_sequence_images_the_vials_where_the_cartesian_gradient_echo_d
 
 def test_the_cartesian_reconstruction_of_a_gradient_echo_is_the_simple_fft(tmp_path):
     """Lines placed by their counters are the lines in arrival order when they arrive in order."""
-    plugins = tmp_path / "fft"
-    plugins.mkdir()
-    (plugins / "gre2d_fft.py").write_text(
-        (SEQUENCES / "gre2d.py")
-        .read_text()
-        .replace('recon = "pics"', 'recon = "cartesian"')
+    placed = _images(_console(tmp_path), "gre2d", SMALL, recon="cartesian")
+    arrived = _images(
+        _console(tmp_path, [PLUGINS], [RECON_PLUGINS]), "gre2d", SMALL, recon="gre2d"
     )
-    placed = _images(_console(tmp_path, [plugins]), "gre2d_fft", SMALL)
-    arrived = _images(_console(tmp_path, [PLUGINS], [RECON_PLUGINS]), "gre2d", SMALL)
 
     assert len(placed) == len(arrived) == 1
     np.testing.assert_array_equal(placed[0], arrived[0])
 
 
-def test_a_shipped_sequence_names_a_shipped_reconstruction():
+def test_every_shipped_sequence_is_paired_with_a_shipped_reconstruction():
     shipped = {path.stem for path in RECONSTRUCTIONS.glob("*.py")}
 
-    for name in SHIPPED:
-        assert load_plugin(SEQUENCES / f"{name}.py").recon in shipped
+    assert set(ZOO_PAIRS) == set(SHIPPED)
+    assert set(ZOO_PAIRS.values()) <= shipped
+
+
+def test_one_design_reconstructs_under_two_reconstructions(tmp_path, monkeypatch):
+    loaded = []
+    load = _local.load_plugin
+    monkeypatch.setattr(
+        _local, "load_plugin", lambda path: loaded.append(path.stem) or load(path)
+    )
+    console = _console(tmp_path)
+
+    cartesian = _images(console, "gre2d", SMALL, recon="cartesian")
+    simple = _images(console, "gre2d", SMALL, recon="simplefft")
+
+    assert loaded == ["cartesian", "simplefft"]
+    assert len(list(DesignStore(tmp_path / "designs"))) == 1
+    assert len(cartesian) == len(simple) == 1
 
 
 def test_no_shipped_reconstruction_shares_a_name_with_a_shipped_sequence():
