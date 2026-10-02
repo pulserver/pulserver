@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>ScannerSequence.resolve &#8212; pulserver documentation</title>
+    <title>SequencePlugin.design &#8212; pulserver documentation</title>
   
   
   
@@ -52,7 +52,7 @@
     <script src="../_static/copybutton.js?v=f281be69"></script>
     <script src="../_static/sg-tags.js?v=d80f6fa4"></script>
     <script src="../_static/scripts/sphinx-book-theme.js?v=fab101a9"></script>
-    <script>DOCUMENTATION_OPTIONS.pagename = 'generated/pulserver.design.ScannerSequence.resolve';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'generated/pulserver.design.SequencePlugin.design';</script>
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
@@ -61,7 +61,7 @@
             true;
         </script>
     <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
-    <link rel="canonical" href="https://pulserver.github.io/pulserver/latest/generated/pulserver.design.ScannerSequence.resolve.html" />
+    <link rel="canonical" href="https://pulserver.github.io/pulserver/latest/generated/pulserver.design.SequencePlugin.design.html" />
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -377,7 +377,7 @@
       
       
       
-      <li><a href="https://github.com/pulserver/pulserver/edit/main/docs/generated/pulserver.design.ScannerSequence.resolve.rst" target="_blank"
+      <li><a href="https://github.com/pulserver/pulserver/edit/main/docs/generated/pulserver.design.SequencePlugin.design.rst" target="_blank"
    class="btn btn-sm btn-source-edit-button dropdown-item"
    title="Suggest edit"
    data-bs-placement="left" data-bs-toggle="tooltip"
@@ -394,7 +394,7 @@
       
       
       
-      <li><a href="https://github.com/pulserver/pulserver/issues/new?title=Issue%20on%20page%20%2Fgenerated/pulserver.design.ScannerSequence.resolve.html&body=Your%20issue%20content%20here." target="_blank"
+      <li><a href="https://github.com/pulserver/pulserver/issues/new?title=Issue%20on%20page%20%2Fgenerated/pulserver.design.SequencePlugin.design.html&body=Your%20issue%20content%20here." target="_blank"
    class="btn btn-sm btn-source-issues-button dropdown-item"
    title="Open an issue"
    data-bs-placement="left" data-bs-toggle="tooltip"
@@ -424,7 +424,7 @@
       
       
       
-      <li><a href="../_sources/generated/pulserver.design.ScannerSequence.resolve.rst" target="_blank"
+      <li><a href="../_sources/generated/pulserver.design.SequencePlugin.design.rst" target="_blank"
    class="btn btn-sm btn-download-source-button dropdown-item"
    title="Download source file"
    data-bs-placement="left" data-bs-toggle="tooltip"
@@ -507,7 +507,7 @@
               
 
 <div id="jb-print-docs-body" class="onlyprint">
-    <h1>ScannerSequence.resolve</h1>
+    <h1>SequencePlugin.design</h1>
     <!-- Table of contents -->
     <div id="print-main-content">
         <div id="jb-print-toc">
@@ -517,7 +517,7 @@
             </div>
             <nav aria-label="Page">
                 <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.design.ScannerSequence.resolve"><code class="docutils literal notranslate"><span class="pre">ScannerSequence.resolve()</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.design.SequencePlugin.design"><code class="docutils literal notranslate"><span class="pre">SequencePlugin.design()</span></code></a></li>
 </ul>
             </nav>
         </div>
@@ -529,19 +529,34 @@
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <section id="scannersequence-resolve">
-<h1>ScannerSequence.resolve<a class="headerlink" href="#scannersequence-resolve" title="Link to this heading">#</a></h1>
+  <section id="sequenceplugin-design">
+<h1>SequencePlugin.design<a class="headerlink" href="#sequenceplugin-design" title="Link to this heading">#</a></h1>
 <dl class="py method">
-<dt class="sig sig-object py" id="pulserver.design.ScannerSequence.resolve">
-<span class="sig-prename descclassname"><span class="pre">ScannerSequence.</span></span><span class="sig-name descname"><span class="pre">resolve</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pulserver/design/_scanner.html#ScannerSequence.resolve"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.design.ScannerSequence.resolve" title="Link to this definition">#</a></dt>
-<dd><p>Return the application a request constructs, and the validation of <a class="reference internal" href="pulserver.design.ScannerSequence.validate.html#pulserver.design.ScannerSequence.validate" title="pulserver.design.ScannerSequence.validate"><code class="xref py py-meth docutils literal notranslate"><span class="pre">validate()</span></code></a>.</p>
-<p>The request is in wire values and so is the validation, which a
-<a class="reference internal" href="pulserver.design.Protocol.html#pulserver.design.Protocol" title="pulserver.design.Protocol"><code class="xref py py-class docutils literal notranslate"><span class="pre">Protocol</span></code></a> converts to and from the argument units the
-application takes. The application is <code class="docutils literal notranslate"><span class="pre">None</span></code> for an invalid request.
-It is constructed once and not designed, so <a class="reference internal" href="pulserver.design.ScannerSequence.write.html#pulserver.design.ScannerSequence.write" title="pulserver.design.ScannerSequence.write"><code class="xref py py-meth docutils literal notranslate"><span class="pre">write()</span></code></a> designs it.</p>
+<dt class="sig sig-object py" id="pulserver.design.SequencePlugin.design">
+<span class="sig-prename descclassname"><span class="pre">SequencePlugin.</span></span><span class="sig-name descname"><span class="pre">design</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pulserver/design/_plugin.html#SequencePlugin.design"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.design.SequencePlugin.design" title="Link to this definition">#</a></dt>
+<dd><p>Write the sequence of a request into <code class="docutils literal notranslate"><span class="pre">directory</span></code> as signed binary Pulseq.</p>
+<p>The request is evaluated as in <a class="reference internal" href="pulserver.design.SequencePlugin.validate.html#pulserver.design.SequencePlugin.validate" title="pulserver.design.SequencePlugin.validate"><code class="xref py py-meth docutils literal notranslate"><span class="pre">validate()</span></code></a>, <a class="reference internal" href="pulserver.design.SequencePlugin.generate.html#pulserver.design.SequencePlugin.generate" title="pulserver.design.SequencePlugin.generate"><code class="xref py py-meth docutils literal notranslate"><span class="pre">generate()</span></code></a>
+builds the sequence of the requested protocol, and each sequence is
+written into <code class="docutils literal notranslate"><span class="pre">directory</span></code>, which must exist. The request is designed
+as it stands: a request that evaluates to other values is designed
+from the values it was given, so a design that is a function of the
+evaluated protocol is made from <code class="docutils literal notranslate"><span class="pre">validate(...).values</span></code>.</p>
+<p>The first file is <code class="docutils literal notranslate"><span class="pre">sequence.seq</span></code>. Each later file of a chain is
+<code class="docutils literal notranslate"><span class="pre">sequence_&lt;name&gt;.seq</span></code>, <code class="docutils literal notranslate"><span class="pre">main</span></code> for the last, and each file names the
+next as its <code class="docutils literal notranslate"><span class="pre">NextSequence</span></code> definition, so the chain is one scan.
+<code class="docutils literal notranslate"><span class="pre">name</span></code> is the name of the prescan for a sequence application, and
+<code class="docutils literal notranslate"><span class="pre">prescan&lt;n&gt;</span></code> for a list of sequences, <code class="docutils literal notranslate"><span class="pre">n</span></code> counting from 2.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Raises<span class="colon">:</span></dt>
-<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If the request names an entry the UI does not declare.</p>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p><ul class="simple">
+<li><p><em>Validation</em> – As <a class="reference internal" href="pulserver.design.SequencePlugin.validate.html#pulserver.design.SequencePlugin.validate" title="pulserver.design.SequencePlugin.validate"><code class="xref py py-meth docutils literal notranslate"><span class="pre">validate()</span></code></a> returns it.</p></li>
+<li><p><em>list of str</em> – Written paths in play order, prescans first; empty for an invalid
+request, for which nothing is written.</p></li>
+</ul>
+</p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#TypeError" title="(in Python v3.14)"><strong>TypeError</strong></a> – If a function app returns neither a sequence nor a list of them.</p>
 </dd>
 </dl>
 </dd></dl>
@@ -577,7 +592,7 @@ It is constructed once and not designed, so <a class="reference internal" href="
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.design.ScannerSequence.resolve"><code class="docutils literal notranslate"><span class="pre">ScannerSequence.resolve()</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.design.SequencePlugin.design"><code class="docutils literal notranslate"><span class="pre">SequencePlugin.design()</span></code></a></li>
 </ul>
   </nav></div>
 

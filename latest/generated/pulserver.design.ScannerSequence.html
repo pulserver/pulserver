@@ -533,46 +533,12 @@
 <h1>ScannerSequence<a class="headerlink" href="#scannersequence" title="Link to this heading">#</a></h1>
 <dl class="py class">
 <dt class="sig sig-object py" id="pulserver.design.ScannerSequence">
-<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">pulserver.design.</span></span><span class="sig-name descname"><span class="pre">ScannerSequence</span></span><a class="reference internal" href="../_modules/pulserver/design/_scanner.html#ScannerSequence"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.design.ScannerSequence" title="Link to this definition">#</a></dt>
-<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/builtins/functions.html#object" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
-<p>A pypulseqpp application exposed to the scanner UI.</p>
-<p>A subclass sets <a class="reference internal" href="pulserver.design.ScannerSequence.app.html#pulserver.design.ScannerSequence.app" title="pulserver.design.ScannerSequence.app"><code class="xref py py-attr docutils literal notranslate"><span class="pre">app</span></code></a> and, for the arguments the operator edits,
-<a class="reference internal" href="pulserver.design.ScannerSequence.ui.html#pulserver.design.ScannerSequence.ui" title="pulserver.design.ScannerSequence.ui"><code class="xref py py-attr docutils literal notranslate"><span class="pre">ui</span></code></a>; without <code class="docutils literal notranslate"><span class="pre">ui</span></code> the application plays its defaults. The keys of
-<code class="docutils literal notranslate"><span class="pre">ui</span></code> are the interpreter’s parameter names: the members of
-<a class="reference internal" href="pulserver.protocol.ProtocolKey.html#pulserver.protocol.ProtocolKey" title="pulserver.protocol.ProtocolKey"><code class="xref py py-data docutils literal notranslate"><span class="pre">ProtocolKey</span></code></a>, which
-<a class="reference internal" href="pulserver.protocol.UIParam.html#pulserver.protocol.UIParam" title="pulserver.protocol.UIParam"><code class="xref py py-class docutils literal notranslate"><span class="pre">UIParam</span></code></a> collects. A plain string naming an
-entry is stored as its member. Entries a request omits keep their initial
-values, the entry’s <code class="docutils literal notranslate"><span class="pre">default</span></code> or else the application’s. An entry
-resolves to the value its argument took in the design, as the application
-records it with <code class="docutils literal notranslate"><span class="pre">SequenceApp.resolve</span></code>, and otherwise keeps the requested
-value. Times travel as integer microseconds; other float values are read
-and reported to six significant digits, the precision of a float32
-parameter. Either way a reply stored in scanner parameters and sent back
-resolves to itself.</p>
-<dl class="field-list">
-<dt class="field-odd">Attributes<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>follows</strong> (<em>tuple of str</em>) – Which protocol parameter drives the angle of each pulse the sequence
-plays: one entry per distinct pulse, in the order the sequence first
-plays them, <code class="docutils literal notranslate"><span class="pre">&quot;&quot;</span></code> for one the operator does not move. A sequence that
-excites and then refocuses under the one control declares
-<code class="docutils literal notranslate"><span class="pre">(UIParam.FLIP,</span> <span class="pre">UIParam.FLIP)</span></code>.</p>
-<p>It is declared rather than worked out: which control drives a pulse is
-not a property of the pulse. Empty leaves a scanner to cost the RF when
-it has the design, which is what it does with any sequence.</p>
-<p>The angles are not declared. They are read from a design at the
-application’s defaults, and a pulse’s share of its parameter is the
-angle it was designed at over the value that parameter was designed
-with – so a refocusing train whose angles vary gets one share each
-without any of them being written down.</p>
-</dd>
-<dt class="field-even">Raises<span class="colon">:</span></dt>
-<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – When a subclass is defined with a <code class="docutils literal notranslate"><span class="pre">ui</span></code> key the interpreter does not
-    know, which its parser would drop, or with one of the prescription
-    entries, which pulserver applies itself.</p>
-</dd>
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">pulserver.design.</span></span><span class="sig-name descname"><span class="pre">ScannerSequence</span></span><a class="reference internal" href="../_modules/pulserver/design/_plugin.html#ScannerSequence"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.design.ScannerSequence" title="Link to this definition">#</a></dt>
+<dd><p>Bases: <a class="reference internal" href="pulserver.design.SequencePlugin.html#pulserver.design.SequencePlugin" title="pulserver.design._plugin.SequencePlugin"><code class="xref py py-class docutils literal notranslate"><span class="pre">SequencePlugin</span></code></a></p>
+<p>Deprecated name of <a class="reference internal" href="pulserver.design.SequencePlugin.html#pulserver.design.SequencePlugin" title="pulserver.design.SequencePlugin"><code class="xref py py-class docutils literal notranslate"><span class="pre">SequencePlugin</span></code></a>.</p>
+<dl class="field-list simple">
 <dt class="field-odd">Warns<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>DeprecationWarning</strong> – When a subclass sets <code class="docutils literal notranslate"><span class="pre">recon</span></code>, which has no effect: the reconstruction
-is named by the reconstruction client or, on a console, by the scan.</p>
+<dd class="field-odd"><p><strong>DeprecationWarning</strong> – When a class subclasses it.</p>
 </dd>
 </dl>
 </dd></dl>
@@ -580,23 +546,23 @@ is named by the reconstruction client or, on a console, by the scan.</p>
 <p class="rubric">Methods</p>
 <div class="pst-scrollable-table-container"><table class="autosummary longtable table">
 <tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.design.ScannerSequence.design.html#pulserver.design.ScannerSequence.design" title="pulserver.design.ScannerSequence.design"><code class="xref py py-obj docutils literal notranslate"><span class="pre">design</span></code></a></p></td>
+<td><p>Write the sequence of a request into <code class="docutils literal notranslate"><span class="pre">directory</span></code> as signed binary Pulseq.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pulserver.design.ScannerSequence.evaluate.html#pulserver.design.ScannerSequence.evaluate" title="pulserver.design.ScannerSequence.evaluate"><code class="xref py py-obj docutils literal notranslate"><span class="pre">evaluate</span></code></a></p></td>
+<td><p>Evaluate a requested protocol, or refuse it by raising.</p></td>
+</tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="pulserver.design.ScannerSequence.generate.html#pulserver.design.ScannerSequence.generate" title="pulserver.design.ScannerSequence.generate"><code class="xref py py-obj docutils literal notranslate"><span class="pre">generate</span></code></a></p></td>
-<td><p>Write the resolved design into <code class="docutils literal notranslate"><span class="pre">directory</span></code>, as <code class="xref py py-meth docutils literal notranslate"><span class="pre">write()</span></code> does.</p></td>
+<td><p>Return what <code class="xref py py-meth docutils literal notranslate"><span class="pre">design()</span></code> writes for a protocol.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="pulserver.design.ScannerSequence.listing.html#pulserver.design.ScannerSequence.listing" title="pulserver.design.ScannerSequence.listing"><code class="xref py py-obj docutils literal notranslate"><span class="pre">listing</span></code></a></p></td>
-<td><p>Return the protocol with its schema, valued at the application's defaults.</p></td>
+<td><p>Return the protocol with its schema, valued at the app's defaults.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.design.ScannerSequence.resolve.html#pulserver.design.ScannerSequence.resolve" title="pulserver.design.ScannerSequence.resolve"><code class="xref py py-obj docutils literal notranslate"><span class="pre">resolve</span></code></a></p></td>
-<td><p>Return the application a request constructs, and the validation of <code class="xref py py-meth docutils literal notranslate"><span class="pre">validate()</span></code>.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pulserver.design.ScannerSequence.rf_pulses.html#pulserver.design.ScannerSequence.rf_pulses" title="pulserver.design.ScannerSequence.rf_pulses"><code class="xref py py-obj docutils literal notranslate"><span class="pre">rf_pulses</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.design.ScannerSequence.rf_pulses.html#pulserver.design.ScannerSequence.rf_pulses" title="pulserver.design.ScannerSequence.rf_pulses"><code class="xref py py-obj docutils literal notranslate"><span class="pre">rf_pulses</span></code></a></p></td>
 <td><p>Return the RF a design plays, as a scanner costs it while prescribing.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.design.ScannerSequence.validate.html#pulserver.design.ScannerSequence.validate" title="pulserver.design.ScannerSequence.validate"><code class="xref py py-obj docutils literal notranslate"><span class="pre">validate</span></code></a></p></td>
-<td><p>Resolve a request into the protocol the application will play.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pulserver.design.ScannerSequence.write.html#pulserver.design.ScannerSequence.write" title="pulserver.design.ScannerSequence.write"><code class="xref py py-obj docutils literal notranslate"><span class="pre">write</span></code></a></p></td>
-<td><p>Write a resolved application into <code class="docutils literal notranslate"><span class="pre">directory</span></code> as signed binary Pulseq.</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pulserver.design.ScannerSequence.validate.html#pulserver.design.ScannerSequence.validate" title="pulserver.design.ScannerSequence.validate"><code class="xref py py-obj docutils literal notranslate"><span class="pre">validate</span></code></a></p></td>
+<td><p>Return the validation of a request, as the wire carries it.</p></td>
 </tr>
 </tbody>
 </table>
@@ -607,7 +573,7 @@ is named by the reconstruction client or, on a console, by the scan.</p>
 <tr class="row-odd"><td><p><a class="reference internal" href="pulserver.design.ScannerSequence.follows.html#pulserver.design.ScannerSequence.follows" title="pulserver.design.ScannerSequence.follows"><code class="xref py py-obj docutils literal notranslate"><span class="pre">follows</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pulserver.design.ScannerSequence.ui.html#pulserver.design.ScannerSequence.ui" title="pulserver.design.ScannerSequence.ui"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ui</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pulserver.design.ScannerSequence.protocol.html#pulserver.design.ScannerSequence.protocol" title="pulserver.design.ScannerSequence.protocol"><code class="xref py py-obj docutils literal notranslate"><span class="pre">protocol</span></code></a></p></td>
 <td><p></p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="pulserver.design.ScannerSequence.app.html#pulserver.design.ScannerSequence.app" title="pulserver.design.ScannerSequence.app"><code class="xref py py-obj docutils literal notranslate"><span class="pre">app</span></code></a></p></td>

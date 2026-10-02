@@ -630,8 +630,11 @@ block</em> carries values only. A <em>preset</em> is a negative time value stand
 design choice, not a time.</p>
 <p><strong>Design.</strong> A <em>sequence application</em> is the pypulseqpp <code class="docutils literal notranslate"><span class="pre">SequenceApp</span></code> subclass
 that designs the sequence. A <em>scanner sequence</em> is the pulserver
-<code class="docutils literal notranslate"><span class="pre">ScannerSequence</span></code> that binds an application to protocol entries. A <em>plugin</em> is
-the file either kind is loaded from; say which kind.</p>
+<code class="docutils literal notranslate"><span class="pre">SequencePlugin</span></code> that binds an <em>app</em>, a sequence application or a function
+returning sequences, to protocol entries. A <em>plugin</em> is the file either kind is
+loaded from; say which kind. The <em>evaluation</em> of a prescription is what the
+scanner sequence’s <code class="docutils literal notranslate"><span class="pre">evaluate</span></code> returns: the resolved protocol, the scan time and
+a note.</p>
 <p><strong>Storage.</strong> A <em>design</em> is one generated or imported chain with its IR cache,
 immutable once written. Its <em>identity</em> is the hash of what it depends on; its
 <em>identifier</em> is the first 18 hexadecimal digits of the identity. The <em>design
@@ -727,7 +730,7 @@ verb that classifies the operation: “Return…”, “Read…”, “Format…
 <td><p>the entry’s <code class="docutils literal notranslate"><span class="pre">unit</span></code>; the argument is the value times <code class="docutils literal notranslate"><span class="pre">scale</span></code></p></td>
 </tr>
 <tr class="row-odd"><td><p>Scan time in a <code class="docutils literal notranslate"><span class="pre">VALIDATE</span></code> reply</p></td>
-<td><p>s</p></td>
+<td><p>s; <code class="docutils literal notranslate"><span class="pre">?</span></code> where the evaluation states none</p></td>
 </tr>
 <tr class="row-even"><td><p>Rasters passed to the IR conversion</p></td>
 <td><p>s in <code class="docutils literal notranslate"><span class="pre">pypulseqpp.Opts</span></code>, µs in the cache</p></td>
@@ -795,7 +798,7 @@ establish scanner or patient safety.</p>
 <ul class="simple">
 <li><p>Never write “safe”, “validated”, “compliant” or “approved” of a sequence, a
 protocol or a design.</p></li>
-<li><p>A valid <code class="docutils literal notranslate"><span class="pre">VALIDATE</span></code> reply means the sequence application designed the
+<li><p>A valid <code class="docutils literal notranslate"><span class="pre">VALIDATE</span></code> reply means the plugin’s evaluation accepted the
 prescription under the scanner limits it was given. State that, not more.</p></li>
 </ul>
 </section>

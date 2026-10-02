@@ -533,13 +533,14 @@
 <h1>load_plugin<a class="headerlink" href="#load-plugin" title="Link to this heading">#</a></h1>
 <dl class="py function">
 <dt class="sig sig-object py" id="pulserver.design.load_plugin">
-<span class="sig-prename descclassname"><span class="pre">pulserver.design.</span></span><span class="sig-name descname"><span class="pre">load_plugin</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pulserver/design/_scanner.html#load_plugin"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.design.load_plugin" title="Link to this definition">#</a></dt>
-<dd><p>Import a plugin file and instantiate the one ScannerSequence it defines.</p>
+<span class="sig-prename descclassname"><span class="pre">pulserver.design.</span></span><span class="sig-name descname"><span class="pre">load_plugin</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pulserver/design/_plugin.html#load_plugin"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.design.load_plugin" title="Link to this definition">#</a></dt>
+<dd><p>Import a plugin file and instantiate the one SequencePlugin it defines.</p>
 <p>The module is registered as <code class="docutils literal notranslate"><span class="pre">pulserver_plugin_&lt;file</span> <span class="pre">stem&gt;</span></code>; loading
-another file with the same stem replaces it.</p>
+another file with the same stem replaces it. A subclass of
+<a class="reference internal" href="pulserver.design.ScannerSequence.html#pulserver.design.ScannerSequence" title="pulserver.design.ScannerSequence"><code class="xref py py-class docutils literal notranslate"><span class="pre">ScannerSequence</span></code></a> is a plugin too.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Raises<span class="colon">:</span></dt>
-<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If the file defines no ScannerSequence subclass, or more than one.</p>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If the file defines no SequencePlugin subclass, or more than one.</p>
 </dd>
 </dl>
 </dd></dl>

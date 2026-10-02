@@ -533,14 +533,14 @@
 <h1>Protocol<a class="headerlink" href="#protocol" title="Link to this heading">#</a></h1>
 <dl class="py class">
 <dt class="sig sig-object py" id="pulserver.design.Protocol">
-<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">pulserver.design.</span></span><span class="sig-name descname"><span class="pre">Protocol</span></span><a class="reference internal" href="../_modules/pulserver/design/_scanner.html#Protocol"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.design.Protocol" title="Link to this definition">#</a></dt>
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">pulserver.design.</span></span><span class="sig-name descname"><span class="pre">Protocol</span></span><a class="reference internal" href="../_modules/pulserver/design/_entries.html#Protocol"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.design.Protocol" title="Link to this definition">#</a></dt>
 <dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Mapping" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Mapping</span></code></a>[<a class="reference internal" href="pulserver.protocol.FloatKey.html#pulserver.protocol.FloatKey" title="pulserver.protocol._keys.FloatKey"><code class="xref py py-class docutils literal notranslate"><span class="pre">FloatKey</span></code></a> | <a class="reference internal" href="pulserver.protocol.IntKey.html#pulserver.protocol.IntKey" title="pulserver.protocol._keys.IntKey"><code class="xref py py-class docutils literal notranslate"><span class="pre">IntKey</span></code></a> | <a class="reference internal" href="pulserver.protocol.BoolKey.html#pulserver.protocol.BoolKey" title="pulserver.protocol._keys.BoolKey"><code class="xref py py-class docutils literal notranslate"><span class="pre">BoolKey</span></code></a> | <a class="reference internal" href="pulserver.protocol.EnumKey.html#pulserver.protocol.EnumKey" title="pulserver.protocol._keys.EnumKey"><code class="xref py py-class docutils literal notranslate"><span class="pre">EnumKey</span></code></a> | <a class="reference internal" href="pulserver.protocol.ConfigKey.html#pulserver.protocol.ConfigKey" title="pulserver.protocol._keys.ConfigKey"><code class="xref py py-class docutils literal notranslate"><span class="pre">ConfigKey</span></code></a> | <a class="reference internal" href="pulserver.protocol.UserKey.html#pulserver.protocol.UserKey" title="pulserver.protocol._keys.UserKey"><code class="xref py py-class docutils literal notranslate"><span class="pre">UserKey</span></code></a> | <a class="reference internal" href="pulserver.protocol.UserNameKey.html#pulserver.protocol.UserNameKey" title="pulserver.protocol._keys.UserNameKey"><code class="xref py py-class docutils literal notranslate"><span class="pre">UserNameKey</span></code></a>, <a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Any</span></code></a>]</p>
-<p>The values of a scanner sequence’s protocol, in the units of its application’s arguments.</p>
+<p>The values of a plugin’s protocol, in the units of the app’s arguments.</p>
 <p>An immutable mapping from <a class="reference internal" href="pulserver.protocol.ProtocolKey.html#pulserver.protocol.ProtocolKey" title="pulserver.protocol.ProtocolKey"><code class="xref py py-data docutils literal notranslate"><span class="pre">ProtocolKey</span></code></a> to value.
 A time is in seconds and a float in the unit of the argument it binds,
 metres for a length; an integer is an <code class="docutils literal notranslate"><span class="pre">int</span></code>, a checkbox a <code class="docutils literal notranslate"><span class="pre">bool</span></code> and a
 choice a member of its enum. A time entry showing a preset holds what the
-preset requests, a number of seconds or <code class="docutils literal notranslate"><span class="pre">None</span></code> for the application’s own
+preset requests, a number of seconds or <code class="docutils literal notranslate"><span class="pre">None</span></code> for the app’s own
 shortest choice, and <a class="reference internal" href="pulserver.design.Protocol.preset.html#pulserver.design.Protocol.preset" title="pulserver.design.Protocol.preset"><code class="xref py py-meth docutils literal notranslate"><span class="pre">preset()</span></code></a> names the preset. The prescription
 entries bind no argument and keep the units of the wire: mm for the
 offset, unitless for the rotation.</p>
@@ -551,7 +551,7 @@ for a float, to six significant digits. <a class="reference internal" href="puls
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>entries</strong> – The declared entries the values belong to, as
-<a class="reference internal" href="pulserver.design.ScannerSequence.ui.html#pulserver.design.ScannerSequence.ui" title="pulserver.design.ScannerSequence.ui"><code class="xref py py-attr docutils literal notranslate"><span class="pre">ScannerSequence.ui</span></code></a> holds them.</p></li>
+<a class="reference internal" href="pulserver.design.SequencePlugin.protocol.html#pulserver.design.SequencePlugin.protocol" title="pulserver.design.SequencePlugin.protocol"><code class="xref py py-attr docutils literal notranslate"><span class="pre">SequencePlugin.protocol</span></code></a> holds them.</p></li>
 <li><p><strong>values</strong> – The value of each key, in argument units.</p></li>
 <li><p><strong>presets</strong> – The preset each time key shows, by the key its entry declares it with.</p></li>
 </ul>
@@ -593,7 +593,7 @@ for a float, to six significant digits. <a class="reference internal" href="puls
 <div class="pst-scrollable-table-container"><table class="autosummary longtable table">
 <tbody>
 <tr class="row-odd"><td><p><a class="reference internal" href="pulserver.design.Protocol.arguments.html#pulserver.design.Protocol.arguments" title="pulserver.design.Protocol.arguments"><code class="xref py py-obj docutils literal notranslate"><span class="pre">arguments</span></code></a></p></td>
-<td><p>The values by the name of the <code class="docutils literal notranslate"><span class="pre">init_sequence</span></code> argument each binds.</p></td>
+<td><p>The values by the name of the app argument each binds.</p></td>
 </tr>
 </tbody>
 </table>

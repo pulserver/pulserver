@@ -1,6 +1,6 @@
-ScannerSequence.ui
+SequencePlugin.app
 ==================
 
 .. currentmodule:: pulserver.design
 
-.. autoattribute:: ScannerSequence.ui
+.. autoattribute:: SequencePlugin.app

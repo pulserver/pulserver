@@ -7,7 +7,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>pulserver.design._scanner &#8212; pulserver documentation</title>
+    <title>pulserver.design._entries &#8212; pulserver documentation</title>
   
   
   
@@ -51,7 +51,7 @@
     <script src="../../../_static/copybutton.js?v=f281be69"></script>
     <script src="../../../_static/sg-tags.js?v=d80f6fa4"></script>
     <script src="../../../_static/scripts/sphinx-book-theme.js?v=fab101a9"></script>
-    <script>DOCUMENTATION_OPTIONS.pagename = '_modules/pulserver/design/_scanner';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = '_modules/pulserver/design/_entries';</script>
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
@@ -60,7 +60,7 @@
             true;
         </script>
     <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
-    <link rel="canonical" href="https://pulserver.github.io/pulserver/latest/_modules/pulserver/design/_scanner.html" />
+    <link rel="canonical" href="https://pulserver.github.io/pulserver/latest/_modules/pulserver/design/_entries.html" />
     <link rel="index" title="Index" href="../../../genindex.html" />
     <link rel="search" title="Search" href="../../../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -374,7 +374,7 @@
       
       
       
-      <li><a href="https://github.com/pulserver/pulserver/issues/new?title=Issue%20on%20page%20%2F_modules/pulserver/design/_scanner.html&body=Your%20issue%20content%20here." target="_blank"
+      <li><a href="https://github.com/pulserver/pulserver/issues/new?title=Issue%20on%20page%20%2F_modules/pulserver/design/_entries.html&body=Your%20issue%20content%20here." target="_blank"
    class="btn btn-sm btn-source-issues-button dropdown-item"
    title="Open an issue"
    data-bs-placement="left" data-bs-toggle="tooltip"
@@ -451,47 +451,32 @@
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <h1>Source code for pulserver.design._scanner</h1><div class="highlight"><pre>
-<span></span><span class="sd">"""Scanner sequences: a pypulseqpp application bound to the scanner protocol."""</span>
+  <h1>Source code for pulserver.design._entries</h1><div class="highlight"><pre>
+<span></span><span class="sd">"""The entries a scanner-sequence plugin declares its protocol with, and the values they hold."""</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
-<span class="kn">import</span><span class="w"> </span><span class="nn">difflib</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">importlib.util</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">inspect</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">math</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">sys</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Iterator</span><span class="p">,</span> <span class="n">Mapping</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span><span class="p">,</span> <span class="n">field</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">decimal</span><span class="w"> </span><span class="kn">import</span> <span class="n">Decimal</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">ClassVar</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span>
 
-<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">pypulseqpp</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pp</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">pypulseqpp</span><span class="w"> </span><span class="kn">import</span> <span class="n">sequences</span>
 
-<span class="kn">from</span><span class="w"> </span><span class="nn">..</span><span class="w"> </span><span class="kn">import</span> <span class="n">ir</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..protocol</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
-    <span class="n">FOV_OFFSET</span><span class="p">,</span>
-    <span class="n">FOV_ROTATION</span><span class="p">,</span>
     <span class="n">PRESCRIPTION</span><span class="p">,</span>
     <span class="n">InputMode</span><span class="p">,</span>
     <span class="n">Kind</span><span class="p">,</span>
     <span class="n">Parameter</span><span class="p">,</span>
     <span class="n">ProtocolKey</span><span class="p">,</span>
-    <span class="n">RfPulse</span><span class="p">,</span>
     <span class="n">TEPreset</span><span class="p">,</span>
     <span class="n">TRPreset</span><span class="p">,</span>
-    <span class="n">Validation</span><span class="p">,</span>
-    <span class="n">prescribed_rotation</span><span class="p">,</span>
 <span class="p">)</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">..protocol._keys</span><span class="w"> </span><span class="kn">import</span> <span class="n">WIRE_NAMES</span><span class="p">,</span> <span class="n">StrEnum</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">..protocol._keys</span><span class="w"> </span><span class="kn">import</span> <span class="n">StrEnum</span>
 
 <span class="n">Preset</span> <span class="o">=</span> <span class="nb">float</span> <span class="o">|</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">pp</span><span class="o">.</span><span class="n">Opts</span><span class="p">],</span> <span class="nb">float</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span>
-<span class="c1">#: Range of each prescription entry, in mm either side of the isocentre.</span>
-<span class="n">OFFSET_LIMIT_MM</span> <span class="o">=</span> <span class="mf">1000.0</span>
 
 <span class="c1"># FLT_DIG: the significant decimal digits a float32 parameter holds through a round trip.</span>
 <span class="n">_SIGNIFICANT_DIGITS</span> <span class="o">=</span> <span class="mi">6</span>
@@ -502,11 +487,11 @@
 <a class="viewcode-back" href="../../../generated/pulserver.design.FloatParam.html#pulserver.design.FloatParam">[docs]</a>
 <span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 <span class="k">class</span><span class="w"> </span><span class="nc">FloatParam</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""A float UI entry bound to an ``init_sequence`` argument.</span>
+<span class="w">    </span><span class="sd">"""A float UI entry bound to an argument of the app.</span>
 
 <span class="sd">    The UI value is the argument divided by ``scale``, in ``unit``; a dropdown</span>
 <span class="sd">    when it has options. ``default`` is the UI value the protocol starts at;</span>
-<span class="sd">    ``None`` starts it at the application's default.</span>
+<span class="sd">    ``None`` starts it at the app's default.</span>
 <span class="sd">    """</span>
 
     <span class="n">argument</span><span class="p">:</span> <span class="nb">str</span>
@@ -524,16 +509,16 @@
 <a class="viewcode-back" href="../../../generated/pulserver.design.TimeParam.html#pulserver.design.TimeParam">[docs]</a>
 <span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 <span class="k">class</span><span class="w"> </span><span class="nc">TimeParam</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""A time UI entry bound to an ``init_sequence`` argument in seconds.</span>
+<span class="w">    </span><span class="sd">"""A time UI entry bound to an argument of the app, in seconds.</span>
 
 <span class="sd">    Values, ranges and options are integer microseconds, the unit of the</span>
 <span class="sd">    scanner's time parameters, so the value a parameter holds is the value the design</span>
 <span class="sd">    reported. Each key of ``presets`` is a dropdown preset; its value is the</span>
-<span class="sd">    time it requests: seconds, ``None`` for the application's own shortest</span>
+<span class="sd">    time it requests: seconds, ``None`` for the app's own shortest</span>
 <span class="sd">    choice, or a function of the scanner limits. The entry is a dropdown when</span>
 <span class="sd">    it has options or presets. ``default``, microseconds or a key of</span>
 <span class="sd">    ``presets``, is the value the protocol starts at; ``None`` starts it at the</span>
-<span class="sd">    application's default.</span>
+<span class="sd">    app's default.</span>
 <span class="sd">    """</span>
 
     <span class="n">argument</span><span class="p">:</span> <span class="nb">str</span>
@@ -550,10 +535,10 @@
 <a class="viewcode-back" href="../../../generated/pulserver.design.IntParam.html#pulserver.design.IntParam">[docs]</a>
 <span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 <span class="k">class</span><span class="w"> </span><span class="nc">IntParam</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""An integer UI entry bound to an ``init_sequence`` argument; a dropdown when it has options.</span>
+<span class="w">    </span><span class="sd">"""An integer UI entry bound to an argument of the app; a dropdown when it has options.</span>
 
 <span class="sd">    ``default`` is the value the protocol starts at; ``None`` starts it at the</span>
-<span class="sd">    application's default.</span>
+<span class="sd">    app's default.</span>
 <span class="sd">    """</span>
 
     <span class="n">argument</span><span class="p">:</span> <span class="nb">str</span>
@@ -570,10 +555,10 @@
 <a class="viewcode-back" href="../../../generated/pulserver.design.BoolParam.html#pulserver.design.BoolParam">[docs]</a>
 <span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 <span class="k">class</span><span class="w"> </span><span class="nc">BoolParam</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""A checkbox UI entry bound to an ``init_sequence`` argument.</span>
+<span class="w">    </span><span class="sd">"""A checkbox UI entry bound to an argument of the app.</span>
 
 <span class="sd">    ``default`` is the value the protocol starts at; ``None`` starts it at the</span>
-<span class="sd">    application's default.</span>
+<span class="sd">    app's default.</span>
 <span class="sd">    """</span>
 
     <span class="n">argument</span><span class="p">:</span> <span class="nb">str</span>
@@ -585,12 +570,12 @@
 <a class="viewcode-back" href="../../../generated/pulserver.design.ChoiceParam.html#pulserver.design.ChoiceParam">[docs]</a>
 <span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 <span class="k">class</span><span class="w"> </span><span class="nc">ChoiceParam</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""A choice among the members of a ``StrEnum``, bound to an ``init_sequence`` argument.</span>
+<span class="w">    </span><span class="sd">"""A choice among the members of a ``StrEnum``, bound to an argument of the app.</span>
 
 <span class="sd">    The argument receives the chosen member, a ``str`` equal to its option. The</span>
 <span class="sd">    options are the members in definition order, and the wire carries the index</span>
 <span class="sd">    of the chosen one. ``default`` is the member the protocol starts at;</span>
-<span class="sd">    ``None`` starts it at the application's default, which has to be a member</span>
+<span class="sd">    ``None`` starts it at the app's default, which has to be a member</span>
 <span class="sd">    or the value of one.</span>
 <span class="sd">    """</span>
 
@@ -641,7 +626,7 @@
 <span class="sd">    Deprecated: declare the enum and use :class:`ChoiceParam`. The argument</span>
 <span class="sd">    receives the member of the chosen option, a ``str`` equal to it.</span>
 <span class="sd">    ``default`` is the option the protocol starts at; ``None`` starts it at the</span>
-<span class="sd">    application's default.</span>
+<span class="sd">    app's default.</span>
 
 <span class="sd">    Warns</span>
 <span class="sd">    -----</span>
@@ -699,7 +684,7 @@
         <span class="k">return</span> <span class="n">Parameter</span><span class="p">(</span><span class="n">Kind</span><span class="o">.</span><span class="n">DESCRIPTION</span><span class="p">,</span> <span class="n">entry</span><span class="o">.</span><span class="n">text</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">entry</span><span class="o">.</span><span class="n">argument</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">defaults</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-            <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2"> binds </span><span class="si">{</span><span class="n">entry</span><span class="o">.</span><span class="n">argument</span><span class="si">!r}</span><span class="s2">, which init_sequence does not take"</span>
+            <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2"> binds </span><span class="si">{</span><span class="n">entry</span><span class="o">.</span><span class="n">argument</span><span class="si">!r}</span><span class="s2">, which the app does not take"</span>
         <span class="p">)</span>
     <span class="n">default</span> <span class="o">=</span> <span class="n">defaults</span><span class="p">[</span><span class="n">entry</span><span class="o">.</span><span class="n">argument</span><span class="p">]</span>
     <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">entry</span><span class="p">,</span> <span class="n">TimeParam</span><span class="p">):</span>
@@ -770,13 +755,13 @@
 <div class="viewcode-block" id="Protocol">
 <a class="viewcode-back" href="../../../generated/pulserver.design.Protocol.html#pulserver.design.Protocol">[docs]</a>
 <span class="k">class</span><span class="w"> </span><span class="nc">Protocol</span><span class="p">(</span><span class="n">Mapping</span><span class="p">[</span><span class="n">ProtocolKey</span><span class="p">,</span> <span class="n">Any</span><span class="p">]):</span>
-<span class="w">    </span><span class="sd">"""The values of a scanner sequence's protocol, in the units of its application's arguments.</span>
+<span class="w">    </span><span class="sd">"""The values of a plugin's protocol, in the units of the app's arguments.</span>
 
 <span class="sd">    An immutable mapping from :data:`~pulserver.protocol.ProtocolKey` to value.</span>
 <span class="sd">    A time is in seconds and a float in the unit of the argument it binds,</span>
 <span class="sd">    metres for a length; an integer is an ``int``, a checkbox a ``bool`` and a</span>
 <span class="sd">    choice a member of its enum. A time entry showing a preset holds what the</span>
-<span class="sd">    preset requests, a number of seconds or ``None`` for the application's own</span>
+<span class="sd">    preset requests, a number of seconds or ``None`` for the app's own</span>
 <span class="sd">    shortest choice, and :meth:`preset` names the preset. The prescription</span>
 <span class="sd">    entries bind no argument and keep the units of the wire: mm for the</span>
 <span class="sd">    offset, unitless for the rotation.</span>
@@ -789,7 +774,7 @@
 <span class="sd">    ----------</span>
 <span class="sd">    entries</span>
 <span class="sd">        The declared entries the values belong to, as</span>
-<span class="sd">        :attr:`ScannerSequence.ui` holds them.</span>
+<span class="sd">        :attr:`SequencePlugin.protocol` holds them.</span>
 <span class="sd">    values</span>
 <span class="sd">        The value of each key, in argument units.</span>
 <span class="sd">    presets</span>
@@ -833,7 +818,7 @@
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
 <span class="sd">        entries</span>
-<span class="sd">            The declared entries: :attr:`ScannerSequence.ui`.</span>
+<span class="sd">            The declared entries: :attr:`SequencePlugin.protocol`.</span>
 <span class="sd">        values</span>
 <span class="sd">            Wire values by key: integer microseconds or a preset code for a</span>
 <span class="sd">            time, the entry's unit for a float, an option for a choice. A key</span>
@@ -909,7 +894,7 @@
 
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">arguments</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
-<span class="w">        </span><span class="sd">"""The values by the name of the ``init_sequence`` argument each binds.</span>
+<span class="w">        </span><span class="sd">"""The values by the name of the app argument each binds.</span>
 
 <span class="sd">        The prescription entries bind no argument and are left out.</span>
 <span class="sd">        """</span>
@@ -958,335 +943,6 @@
             <span class="n">presets</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">Protocol</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_entries</span><span class="p">,</span> <span class="n">values</span><span class="p">,</span> <span class="n">presets</span><span class="p">)</span></div>
 </div>
-
-
-
-<div class="viewcode-block" id="ScannerSequence">
-<a class="viewcode-back" href="../../../generated/pulserver.design.ScannerSequence.html#pulserver.design.ScannerSequence">[docs]</a>
-<span class="k">class</span><span class="w"> </span><span class="nc">ScannerSequence</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""A pypulseqpp application exposed to the scanner UI.</span>
-
-<span class="sd">    A subclass sets :attr:`app` and, for the arguments the operator edits,</span>
-<span class="sd">    :attr:`ui`; without ``ui`` the application plays its defaults. The keys of</span>
-<span class="sd">    ``ui`` are the interpreter's parameter names: the members of</span>
-<span class="sd">    :data:`~pulserver.protocol.ProtocolKey`, which</span>
-<span class="sd">    :class:`~pulserver.protocol.UIParam` collects. A plain string naming an</span>
-<span class="sd">    entry is stored as its member. Entries a request omits keep their initial</span>
-<span class="sd">    values, the entry's ``default`` or else the application's. An entry</span>
-<span class="sd">    resolves to the value its argument took in the design, as the application</span>
-<span class="sd">    records it with ``SequenceApp.resolve``, and otherwise keeps the requested</span>
-<span class="sd">    value. Times travel as integer microseconds; other float values are read</span>
-<span class="sd">    and reported to six significant digits, the precision of a float32</span>
-<span class="sd">    parameter. Either way a reply stored in scanner parameters and sent back</span>
-<span class="sd">    resolves to itself.</span>
-
-<span class="sd">    Attributes</span>
-<span class="sd">    ----------</span>
-<span class="sd">    follows : tuple of str</span>
-<span class="sd">        Which protocol parameter drives the angle of each pulse the sequence</span>
-<span class="sd">        plays: one entry per distinct pulse, in the order the sequence first</span>
-<span class="sd">        plays them, ``""`` for one the operator does not move. A sequence that</span>
-<span class="sd">        excites and then refocuses under the one control declares</span>
-<span class="sd">        ``(UIParam.FLIP, UIParam.FLIP)``.</span>
-
-<span class="sd">        It is declared rather than worked out: which control drives a pulse is</span>
-<span class="sd">        not a property of the pulse. Empty leaves a scanner to cost the RF when</span>
-<span class="sd">        it has the design, which is what it does with any sequence.</span>
-
-<span class="sd">        The angles are not declared. They are read from a design at the</span>
-<span class="sd">        application's defaults, and a pulse's share of its parameter is the</span>
-<span class="sd">        angle it was designed at over the value that parameter was designed</span>
-<span class="sd">        with -- so a refocusing train whose angles vary gets one share each</span>
-<span class="sd">        without any of them being written down.</span>
-
-<span class="sd">    Raises</span>
-<span class="sd">    ------</span>
-<span class="sd">    ValueError</span>
-<span class="sd">        When a subclass is defined with a ``ui`` key the interpreter does not</span>
-<span class="sd">        know, which its parser would drop, or with one of the prescription</span>
-<span class="sd">        entries, which pulserver applies itself.</span>
-
-<span class="sd">    Warns</span>
-<span class="sd">    -----</span>
-<span class="sd">    DeprecationWarning</span>
-<span class="sd">        When a subclass sets ``recon``, which has no effect: the reconstruction</span>
-<span class="sd">        is named by the reconstruction client or, on a console, by the scan.</span>
-<span class="sd">    """</span>
-
-    <span class="n">app</span><span class="p">:</span> <span class="n">ClassVar</span><span class="p">[</span><span class="nb">type</span><span class="p">[</span><span class="n">sequences</span><span class="o">.</span><span class="n">SequenceApp</span><span class="p">]]</span>
-    <span class="n">ui</span><span class="p">:</span> <span class="n">ClassVar</span><span class="p">[</span><span class="n">Mapping</span><span class="p">[</span><span class="n">ProtocolKey</span><span class="p">,</span> <span class="n">Entry</span><span class="p">]]</span> <span class="o">=</span> <span class="p">{}</span>
-    <span class="n">follows</span><span class="p">:</span> <span class="n">ClassVar</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="n">ProtocolKey</span> <span class="o">|</span> <span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">]]</span> <span class="o">=</span> <span class="p">()</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="nf">__init_subclass__</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">__init_subclass__</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
-        <span class="k">if</span> <span class="s2">"recon"</span> <span class="ow">in</span> <span class="bp">cls</span><span class="o">.</span><span class="vm">__dict__</span><span class="p">:</span>
-            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="bp">cls</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> sets recon, which has no effect: the reconstruction "</span>
-                <span class="s2">"is named by the reconstruction client or by the scan"</span><span class="p">,</span>
-                <span class="ne">DeprecationWarning</span><span class="p">,</span>
-                <span class="n">stacklevel</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
-            <span class="p">)</span>
-        <span class="k">if</span> <span class="s2">"ui"</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">cls</span><span class="o">.</span><span class="vm">__dict__</span><span class="p">:</span>
-            <span class="k">return</span>
-        <span class="n">unknown</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">name</span> <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="bp">cls</span><span class="o">.</span><span class="n">ui</span> <span class="k">if</span> <span class="n">name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">WIRE_NAMES</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">unknown</span><span class="p">:</span>
-            <span class="n">names</span> <span class="o">=</span> <span class="p">{</span><span class="n">name</span><span class="o">.</span><span class="n">lower</span><span class="p">():</span> <span class="n">name</span> <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">WIRE_NAMES</span><span class="p">}</span>
-            <span class="n">close</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span>
-                <span class="p">{</span>
-                    <span class="n">names</span><span class="p">[</span><span class="n">m</span><span class="p">]</span>
-                    <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="n">unknown</span>
-                    <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="n">difflib</span><span class="o">.</span><span class="n">get_close_matches</span><span class="p">(</span><span class="n">n</span><span class="o">.</span><span class="n">lower</span><span class="p">(),</span> <span class="n">names</span><span class="p">)</span>
-                <span class="p">}</span>
-            <span class="p">)</span>
-            <span class="n">hint</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"; did you mean </span><span class="si">{</span><span class="n">close</span><span class="si">}</span><span class="s2">?"</span> <span class="k">if</span> <span class="n">close</span> <span class="k">else</span> <span class="s2">""</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="bp">cls</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> declares entries the interpreter does not know: "</span>
-                <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">unknown</span><span class="si">}{</span><span class="n">hint</span><span class="si">}</span><span class="s2">"</span>
-            <span class="p">)</span>
-        <span class="n">ui</span> <span class="o">=</span> <span class="p">{</span><span class="n">WIRE_NAMES</span><span class="p">[</span><span class="n">name</span><span class="p">]:</span> <span class="n">entry</span> <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">entry</span> <span class="ow">in</span> <span class="bp">cls</span><span class="o">.</span><span class="n">ui</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span>
-        <span class="n">reserved</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">key</span><span class="o">.</span><span class="n">value</span> <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">ui</span> <span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">PRESCRIPTION</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">reserved</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="bp">cls</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> binds the prescription entries </span><span class="si">{</span><span class="n">reserved</span><span class="si">}</span><span class="s2">, which "</span>
-                <span class="s2">"pulserver applies when it builds the IR"</span>
-            <span class="p">)</span>
-        <span class="bp">cls</span><span class="o">.</span><span class="n">ui</span> <span class="o">=</span> <span class="n">ui</span>
-
-<div class="viewcode-block" id="ScannerSequence.listing">
-<a class="viewcode-back" href="../../../generated/pulserver.design.ScannerSequence.listing.html#pulserver.design.ScannerSequence.listing">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">listing</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="n">ProtocolKey</span><span class="p">,</span> <span class="n">Parameter</span><span class="p">]:</span>
-<span class="w">        </span><span class="sd">"""Return the protocol with its schema, valued at the application's defaults.</span>
-
-<span class="sd">        An argument defaulting to ``None`` shows the preset that requests ``None``.</span>
-<span class="sd">        The ``PRESCRIPTION`` entries of :mod:`pulserver.protocol` follow the</span>
-<span class="sd">        declared ones, not editable in the UI: the offset at zero, the rotation</span>
-<span class="sd">        at the identity.</span>
-<span class="sd">        """</span>
-        <span class="n">defaults</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">app</span><span class="o">.</span><span class="n">protocol</span><span class="p">()</span>
-        <span class="n">listing</span> <span class="o">=</span> <span class="p">{</span>
-            <span class="n">key</span><span class="p">:</span> <span class="n">_parameter</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">entry</span><span class="p">,</span> <span class="n">defaults</span><span class="p">)</span> <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">entry</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">ui</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
-        <span class="p">}</span>
-        <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">FOV_OFFSET</span><span class="p">:</span>
-            <span class="n">listing</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">Parameter</span><span class="p">(</span>
-                <span class="n">Kind</span><span class="o">.</span><span class="n">FLOAT</span><span class="p">,</span>
-                <span class="mf">0.0</span><span class="p">,</span>
-                <span class="n">InputMode</span><span class="o">.</span><span class="n">OFF</span><span class="p">,</span>
-                <span class="o">-</span><span class="n">OFFSET_LIMIT_MM</span><span class="p">,</span>
-                <span class="n">OFFSET_LIMIT_MM</span><span class="p">,</span>
-                <span class="mf">0.1</span><span class="p">,</span>
-                <span class="s2">"mm"</span><span class="p">,</span>
-            <span class="p">)</span>
-        <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">FOV_ROTATION</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span><span class="o">.</span><span class="n">ravel</span><span class="p">(),</span> <span class="n">strict</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
-            <span class="n">listing</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">Parameter</span><span class="p">(</span>
-                <span class="n">Kind</span><span class="o">.</span><span class="n">FLOAT</span><span class="p">,</span> <span class="nb">float</span><span class="p">(</span><span class="n">value</span><span class="p">),</span> <span class="n">InputMode</span><span class="o">.</span><span class="n">OFF</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="mf">1e-6</span><span class="p">,</span> <span class="s2">""</span>
-            <span class="p">)</span>
-        <span class="k">return</span> <span class="n">listing</span></div>
-
-
-<div class="viewcode-block" id="ScannerSequence.rf_pulses">
-<a class="viewcode-back" href="../../../generated/pulserver.design.ScannerSequence.rf_pulses.html#pulserver.design.ScannerSequence.rf_pulses">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">rf_pulses</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span> <span class="n">seq_path</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span><span class="p">,</span> <span class="n">designed</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">RfPulse</span><span class="p">]:</span>
-<span class="w">        </span><span class="sd">"""Return the RF a design plays, as a scanner costs it while prescribing.</span>
-
-<span class="sd">        The pulses and their angles are read off the sequence a design wrote,</span>
-<span class="sd">        so nothing is designed to find them; which control drives each is</span>
-<span class="sd">        :attr:`follows`, declared. A pulse takes a share of its parameter: the</span>
-<span class="sd">        angle it was designed at over the value the parameter was designed</span>
-<span class="sd">        with, so a refocusing train whose angles vary gets one share each.</span>
-
-<span class="sd">        Parameters</span>
-<span class="sd">        ----------</span>
-<span class="sd">        seq_path</span>
-<span class="sd">            The design's first sequence file.</span>
-<span class="sd">        designed</span>
-<span class="sd">            The prescription as designed, by the application's own argument</span>
-<span class="sd">            names: ``SequenceApp.resolved``.</span>
-
-<span class="sd">        Returns</span>
-<span class="sd">        -------</span>
-<span class="sd">        list of RfPulse</span>
-<span class="sd">            One entry per distinct pulse and angle. Empty where</span>
-<span class="sd">            :attr:`follows` declares nothing, which leaves a scanner to cost</span>
-<span class="sd">            the RF only once it has the design itself.</span>
-
-<span class="sd">        Raises</span>
-<span class="sd">        ------</span>
-<span class="sd">        ValueError</span>
-<span class="sd">            When the sequence does not play as many distinct pulses as</span>
-<span class="sd">            :attr:`follows` declares, which would silently cost pulses against</span>
-<span class="sd">            the wrong controls.</span>
-<span class="sd">        """</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">follows</span><span class="p">:</span>
-            <span class="k">return</span> <span class="p">[]</span>
-        <span class="n">played</span> <span class="o">=</span> <span class="n">ir</span><span class="o">.</span><span class="n">played_rf</span><span class="p">(</span><span class="n">pp</span><span class="o">.</span><span class="n">io</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="n">seq_path</span><span class="p">)))</span>
-        <span class="n">order</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
-        <span class="k">for</span> <span class="n">definition</span><span class="p">,</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">played</span><span class="p">:</span>
-            <span class="k">if</span> <span class="n">definition</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">order</span><span class="p">:</span>
-                <span class="n">order</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">definition</span><span class="p">)</span>
-        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">order</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">follows</span><span class="p">):</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> declares </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">follows</span><span class="p">)</span><span class="si">}</span><span class="s2"> pulses but its "</span>
-                <span class="sa">f</span><span class="s2">"sequence plays </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">order</span><span class="p">)</span><span class="si">}</span><span class="s2"> distinct ones"</span>
-            <span class="p">)</span>
-        <span class="n">driving</span> <span class="o">=</span> <span class="p">{}</span>
-        <span class="k">for</span> <span class="n">parameter</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">follows</span><span class="p">:</span>
-            <span class="n">entry</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">ui</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">parameter</span> <span class="ow">or</span> <span class="s2">""</span><span class="p">)</span>
-            <span class="n">driving</span><span class="p">[</span><span class="n">parameter</span> <span class="ow">or</span> <span class="s2">""</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
-                <span class="nb">float</span><span class="p">(</span><span class="n">designed</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">entry</span><span class="o">.</span><span class="n">argument</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span> <span class="ow">or</span> <span class="mf">0.0</span><span class="p">)</span> <span class="k">if</span> <span class="n">entry</span> <span class="k">else</span> <span class="mf">0.0</span>
-            <span class="p">)</span>
-
-        <span class="n">found</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">],</span> <span class="n">RfPulse</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
-        <span class="k">for</span> <span class="n">definition</span><span class="p">,</span> <span class="n">angle</span> <span class="ow">in</span> <span class="n">played</span><span class="p">:</span>
-            <span class="c1"># One entry per angle: a definition played at several angles is a</span>
-            <span class="c1"># train, and each of its pulses is costed at its own.</span>
-            <span class="n">key</span> <span class="o">=</span> <span class="p">(</span><span class="n">definition</span><span class="p">,</span> <span class="nb">round</span><span class="p">(</span><span class="n">angle</span> <span class="o">*</span> <span class="mf">1e3</span><span class="p">))</span>
-            <span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">found</span><span class="p">:</span>
-                <span class="k">continue</span>
-            <span class="n">parameter</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">follows</span><span class="p">[</span><span class="n">order</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="n">definition</span><span class="p">)]</span> <span class="ow">or</span> <span class="s2">""</span>
-            <span class="n">drives</span> <span class="o">=</span> <span class="n">driving</span><span class="p">[</span><span class="n">parameter</span><span class="p">]</span>
-            <span class="n">found</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">RfPulse</span><span class="p">(</span>
-                <span class="n">definition</span><span class="o">=</span><span class="n">definition</span><span class="p">,</span>
-                <span class="n">flip_deg</span><span class="o">=</span><span class="n">angle</span><span class="p">,</span>
-                <span class="n">follows</span><span class="o">=</span><span class="n">parameter</span> <span class="k">if</span> <span class="n">drives</span> <span class="k">else</span> <span class="s2">""</span><span class="p">,</span>
-                <span class="n">factor</span><span class="o">=</span><span class="n">angle</span> <span class="o">/</span> <span class="n">drives</span> <span class="k">if</span> <span class="n">drives</span> <span class="k">else</span> <span class="mf">1.0</span><span class="p">,</span>
-            <span class="p">)</span>
-        <span class="k">return</span> <span class="nb">list</span><span class="p">(</span><span class="n">found</span><span class="o">.</span><span class="n">values</span><span class="p">())</span></div>
-
-
-<div class="viewcode-block" id="ScannerSequence.validate">
-<a class="viewcode-back" href="../../../generated/pulserver.design.ScannerSequence.validate.html#pulserver.design.ScannerSequence.validate">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">validate</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span> <span class="n">system</span><span class="p">:</span> <span class="n">pp</span><span class="o">.</span><span class="n">Opts</span><span class="p">,</span> <span class="n">request</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="n">ProtocolKey</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Validation</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""Resolve a request into the protocol the application will play.</span>
-
-<span class="sd">        A valid reply carries the resolved values, as the application's</span>
-<span class="sd">        ``resolved`` reports them, and its ``scan_time()``, which plays the</span>
-<span class="sd">        chain only when the application states no ``duration``. An invalid</span>
-<span class="sd">        one carries the request and the error the design raised.</span>
-
-<span class="sd">        Raises</span>
-<span class="sd">        ------</span>
-<span class="sd">        ValueError</span>
-<span class="sd">            If the request names an entry the UI does not declare.</span>
-<span class="sd">        """</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">resolve</span><span class="p">(</span><span class="n">system</span><span class="p">,</span> <span class="n">request</span><span class="p">)[</span><span class="mi">1</span><span class="p">]</span></div>
-
-
-<div class="viewcode-block" id="ScannerSequence.generate">
-<a class="viewcode-back" href="../../../generated/pulserver.design.ScannerSequence.generate.html#pulserver.design.ScannerSequence.generate">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">generate</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span> <span class="n">system</span><span class="p">:</span> <span class="n">pp</span><span class="o">.</span><span class="n">Opts</span><span class="p">,</span> <span class="n">request</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="n">ProtocolKey</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span> <span class="n">directory</span><span class="p">:</span> <span class="n">Path</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">Validation</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]]:</span>
-<span class="w">        </span><span class="sd">"""Write the resolved design into ``directory``, as :meth:`write` does.</span>
-
-<span class="sd">        Returns</span>
-<span class="sd">        -------</span>
-<span class="sd">        Validation</span>
-<span class="sd">            As :meth:`validate` returns it.</span>
-<span class="sd">        list of str</span>
-<span class="sd">            Written paths in play order, prescans first; empty for an invalid</span>
-<span class="sd">            request, for which nothing is written.</span>
-<span class="sd">        """</span>
-        <span class="n">app</span><span class="p">,</span> <span class="n">validation</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">resolve</span><span class="p">(</span><span class="n">system</span><span class="p">,</span> <span class="n">request</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">app</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">return</span> <span class="n">validation</span><span class="p">,</span> <span class="p">[]</span>
-        <span class="k">return</span> <span class="n">validation</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">app</span><span class="p">,</span> <span class="n">directory</span><span class="p">)</span></div>
-
-
-<div class="viewcode-block" id="ScannerSequence.write">
-<a class="viewcode-back" href="../../../generated/pulserver.design.ScannerSequence.write.html#pulserver.design.ScannerSequence.write">[docs]</a>
-    <span class="nd">@staticmethod</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">write</span><span class="p">(</span><span class="n">app</span><span class="p">:</span> <span class="n">sequences</span><span class="o">.</span><span class="n">SequenceApp</span><span class="p">,</span> <span class="n">directory</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
-<span class="w">        </span><span class="sd">"""Write a resolved application into ``directory`` as signed binary Pulseq.</span>
-
-<span class="sd">        The first file is ``sequence.seq``. The files keep the ``.seq`` name a</span>
-<span class="sd">        chain names them by; what is in them is the binary form, which the</span>
-<span class="sd">        scanner IR conversion reads. Returns the written paths in play order,</span>
-<span class="sd">        prescans first.</span>
-<span class="sd">        """</span>
-        <span class="k">return</span> <span class="n">app</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="n">directory</span><span class="p">)</span> <span class="o">/</span> <span class="s2">"sequence.seq"</span><span class="p">,</span> <span class="n">offline</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span></div>
-
-
-<div class="viewcode-block" id="ScannerSequence.resolve">
-<a class="viewcode-back" href="../../../generated/pulserver.design.ScannerSequence.resolve.html#pulserver.design.ScannerSequence.resolve">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">resolve</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span> <span class="n">system</span><span class="p">:</span> <span class="n">pp</span><span class="o">.</span><span class="n">Opts</span><span class="p">,</span> <span class="n">request</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="n">ProtocolKey</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">sequences</span><span class="o">.</span><span class="n">SequenceApp</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">Validation</span><span class="p">]:</span>
-<span class="w">        </span><span class="sd">"""Return the application a request constructs, and the validation of :meth:`validate`.</span>
-
-<span class="sd">        The request is in wire values and so is the validation, which a</span>
-<span class="sd">        :class:`Protocol` converts to and from the argument units the</span>
-<span class="sd">        application takes. The application is ``None`` for an invalid request.</span>
-<span class="sd">        It is constructed once and not designed, so :meth:`write` designs it.</span>
-
-<span class="sd">        Raises</span>
-<span class="sd">        ------</span>
-<span class="sd">        ValueError</span>
-<span class="sd">            If the request names an entry the UI does not declare.</span>
-<span class="sd">        """</span>
-        <span class="n">listing</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">listing</span><span class="p">()</span>
-        <span class="n">unknown</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">request</span><span class="p">)</span> <span class="o">-</span> <span class="nb">set</span><span class="p">(</span><span class="n">listing</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">unknown</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"not entries of this protocol: </span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="n">unknown</span><span class="p">)</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
-        <span class="n">values</span> <span class="o">=</span> <span class="p">{</span><span class="n">key</span><span class="p">:</span> <span class="n">p</span><span class="o">.</span><span class="n">value</span> <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">listing</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">p</span><span class="o">.</span><span class="n">editable</span><span class="p">}</span>
-        <span class="n">values</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">request</span><span class="p">)</span>
-        <span class="k">try</span><span class="p">:</span>
-            <span class="n">prescribed_rotation</span><span class="p">(</span><span class="n">values</span><span class="p">)</span>
-            <span class="n">protocol</span> <span class="o">=</span> <span class="n">Protocol</span><span class="o">.</span><span class="n">from_wire</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">ui</span><span class="p">,</span> <span class="n">values</span><span class="p">,</span> <span class="n">system</span><span class="p">)</span>
-            <span class="n">app</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">app</span><span class="p">(</span><span class="n">system</span><span class="p">,</span> <span class="o">**</span><span class="n">protocol</span><span class="o">.</span><span class="n">arguments</span><span class="p">)</span>
-            <span class="n">scan_time</span> <span class="o">=</span> <span class="n">app</span><span class="o">.</span><span class="n">scan_time</span><span class="p">()</span>
-        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">error</span><span class="p">:</span>  <span class="c1"># a design refuses a protocol by raising</span>
-            <span class="k">return</span> <span class="kc">None</span><span class="p">,</span> <span class="n">Validation</span><span class="p">(</span>
-                <span class="kc">False</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">error</span><span class="p">)</span> <span class="ow">or</span> <span class="nb">type</span><span class="p">(</span><span class="n">error</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="p">,</span> <span class="n">values</span>
-            <span class="p">)</span>
-
-        <span class="n">readback</span> <span class="o">=</span> <span class="n">app</span><span class="o">.</span><span class="n">resolved</span>
-        <span class="n">recorded</span> <span class="o">=</span> <span class="p">{}</span>
-        <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">entry</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">ui</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
-            <span class="n">value</span> <span class="o">=</span> <span class="n">readback</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="n">entry</span><span class="p">,</span> <span class="s2">"argument"</span><span class="p">,</span> <span class="kc">None</span><span class="p">))</span>
-            <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="n">recorded</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
-        <span class="k">return</span> <span class="n">app</span><span class="p">,</span> <span class="n">Validation</span><span class="p">(</span>
-            <span class="kc">True</span><span class="p">,</span> <span class="n">scan_time</span><span class="p">,</span> <span class="s2">""</span><span class="p">,</span> <span class="n">protocol</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="n">recorded</span><span class="p">)</span><span class="o">.</span><span class="n">to_wire</span><span class="p">()</span>
-        <span class="p">)</span></div>
-</div>
-
-
-
-<div class="viewcode-block" id="load_plugin">
-<a class="viewcode-back" href="../../../generated/pulserver.design.load_plugin.html#pulserver.design.load_plugin">[docs]</a>
-<span class="k">def</span><span class="w"> </span><span class="nf">load_plugin</span><span class="p">(</span><span class="n">path</span><span class="p">:</span> <span class="n">Path</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ScannerSequence</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""Import a plugin file and instantiate the one ScannerSequence it defines.</span>
-
-<span class="sd">    The module is registered as ``pulserver_plugin_&lt;file stem&gt;``; loading</span>
-<span class="sd">    another file with the same stem replaces it.</span>
-
-<span class="sd">    Raises</span>
-<span class="sd">    ------</span>
-<span class="sd">    ValueError</span>
-<span class="sd">        If the file defines no ScannerSequence subclass, or more than one.</span>
-<span class="sd">    """</span>
-    <span class="n">path</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
-    <span class="n">name</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"pulserver_plugin_</span><span class="si">{</span><span class="n">path</span><span class="o">.</span><span class="n">stem</span><span class="si">}</span><span class="s2">"</span>
-    <span class="n">spec</span> <span class="o">=</span> <span class="n">importlib</span><span class="o">.</span><span class="n">util</span><span class="o">.</span><span class="n">spec_from_file_location</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">path</span><span class="p">)</span>
-    <span class="n">module</span> <span class="o">=</span> <span class="n">importlib</span><span class="o">.</span><span class="n">util</span><span class="o">.</span><span class="n">module_from_spec</span><span class="p">(</span><span class="n">spec</span><span class="p">)</span>
-    <span class="n">sys</span><span class="o">.</span><span class="n">modules</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">module</span>
-    <span class="n">spec</span><span class="o">.</span><span class="n">loader</span><span class="o">.</span><span class="n">exec_module</span><span class="p">(</span><span class="n">module</span><span class="p">)</span>
-    <span class="n">found</span> <span class="o">=</span> <span class="p">[</span>
-        <span class="n">obj</span>
-        <span class="k">for</span> <span class="n">obj</span> <span class="ow">in</span> <span class="nb">vars</span><span class="p">(</span><span class="n">module</span><span class="p">)</span><span class="o">.</span><span class="n">values</span><span class="p">()</span>
-        <span class="k">if</span> <span class="n">inspect</span><span class="o">.</span><span class="n">isclass</span><span class="p">(</span><span class="n">obj</span><span class="p">)</span>
-        <span class="ow">and</span> <span class="nb">issubclass</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="n">ScannerSequence</span><span class="p">)</span>
-        <span class="ow">and</span> <span class="n">obj</span><span class="o">.</span><span class="vm">__module__</span> <span class="o">==</span> <span class="n">name</span>
-    <span class="p">]</span>
-    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">found</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">1</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-            <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">path</span><span class="si">}</span><span class="s2"> defines </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">found</span><span class="p">)</span><span class="si">}</span><span class="s2"> ScannerSequence subclasses; a plugin defines one"</span>
-        <span class="p">)</span>
-    <span class="k">return</span> <span class="n">found</span><span class="p">[</span><span class="mi">0</span><span class="p">]()</span></div>
 
 </pre></div>
 

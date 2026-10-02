@@ -462,6 +462,7 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">datetime</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">functools</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">hashlib</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">inspect</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">shutil</span>
@@ -474,7 +475,7 @@
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">..</span><span class="w"> </span><span class="kn">import</span> <span class="n">__version__</span><span class="p">,</span> <span class="n">_plugins</span><span class="p">,</span> <span class="n">ir</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.._plugins</span><span class="w"> </span><span class="kn">import</span> <span class="n">PluginPath</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">..design</span><span class="w"> </span><span class="kn">import</span> <span class="n">ScannerSequence</span><span class="p">,</span> <span class="n">load_plugin</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">..design</span><span class="w"> </span><span class="kn">import</span> <span class="n">Protocol</span><span class="p">,</span> <span class="n">SequencePlugin</span><span class="p">,</span> <span class="n">load_plugin</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..protocol</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">Parameter</span><span class="p">,</span>
     <span class="n">ProtocolKey</span><span class="p">,</span>
@@ -539,8 +540,8 @@
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Reply ``VALID &lt;seconds&gt;`` or ``INVALID``, an ``INFO`` line and the value block.</span>
 
-<span class="sd">    The application is constructed under the design limits and its scan</span>
-<span class="sd">    time computed; the sequence is not designed.</span>
+<span class="sd">    The plugin evaluates the request under the design limits; the sequence is</span>
+<span class="sd">    not generated. The duration is ``?`` where the plugin states no scan time.</span>
 <span class="sd">    """</span>
     <span class="n">path</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">plugin_path</span><span class="p">(</span><span class="n">plugins</span><span class="p">,</span> <span class="n">plugin</span><span class="p">))</span>
     <span class="n">listing</span> <span class="o">=</span> <span class="n">_listing</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
@@ -560,7 +561,7 @@
 
 <span class="sd">    A design already stored for the resolved protocol, the plugin source, the</span>
 <span class="sd">    package versions and the limits is returned without designing again.</span>
-<span class="sd">    Otherwise the application is designed once, under the scanner limits</span>
+<span class="sd">    Otherwise the sequence is designed once, under the scanner limits</span>
 <span class="sd">    capped by the design limits ``design_max_grad`` and ``design_max_slew``,</span>
 <span class="sd">    written in the logical frame, checked in the physical frame of the</span>
 <span class="sd">    prescription rotation against the scanner limits with</span>
@@ -585,10 +586,10 @@
     <span class="n">scanner</span> <span class="o">=</span> <span class="n">_plugin</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
     <span class="n">requested</span> <span class="o">=</span> <span class="p">{</span><span class="n">key</span><span class="p">:</span> <span class="n">p</span><span class="o">.</span><span class="n">value</span> <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">listing</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">p</span><span class="o">.</span><span class="n">editable</span><span class="p">}</span>
     <span class="n">requested</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">request</span><span class="p">)</span>
-    <span class="n">app</span><span class="p">,</span> <span class="n">validation</span> <span class="o">=</span> <span class="n">scanner</span><span class="o">.</span><span class="n">resolve</span><span class="p">(</span><span class="n">design</span><span class="p">,</span> <span class="n">requested</span><span class="p">)</span>
-    <span class="k">if</span> <span class="n">app</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">validation</span><span class="o">.</span><span class="n">values</span> <span class="o">!=</span> <span class="n">requested</span><span class="p">:</span>
-        <span class="n">app</span><span class="p">,</span> <span class="n">validation</span> <span class="o">=</span> <span class="n">scanner</span><span class="o">.</span><span class="n">resolve</span><span class="p">(</span><span class="n">design</span><span class="p">,</span> <span class="n">validation</span><span class="o">.</span><span class="n">values</span><span class="p">)</span>
-    <span class="k">if</span> <span class="n">app</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="n">validation</span> <span class="o">=</span> <span class="n">scanner</span><span class="o">.</span><span class="n">validate</span><span class="p">(</span><span class="n">design</span><span class="p">,</span> <span class="n">requested</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">validation</span><span class="o">.</span><span class="n">valid</span> <span class="ow">and</span> <span class="n">validation</span><span class="o">.</span><span class="n">values</span> <span class="o">!=</span> <span class="n">requested</span><span class="p">:</span>
+        <span class="n">validation</span> <span class="o">=</span> <span class="n">scanner</span><span class="o">.</span><span class="n">validate</span><span class="p">(</span><span class="n">design</span><span class="p">,</span> <span class="n">validation</span><span class="o">.</span><span class="n">values</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">validation</span><span class="o">.</span><span class="n">valid</span><span class="p">:</span>
         <span class="k">raise</span> <span class="n">CallError</span><span class="p">(</span><span class="n">validation</span><span class="o">.</span><span class="n">info</span><span class="p">)</span>
     <span class="n">source</span> <span class="o">=</span> <span class="n">_source</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
     <span class="n">identity</span> <span class="o">=</span> <span class="n">design_identity</span><span class="p">(</span>
@@ -599,7 +600,9 @@
         <span class="k">return</span> <span class="sa">f</span><span class="s2">"GENERATED </span><span class="si">{</span><span class="n">_pushed</span><span class="p">(</span><span class="n">store</span><span class="p">,</span><span class="w"> </span><span class="n">found</span><span class="p">,</span><span class="w"> </span><span class="n">push</span><span class="p">)</span><span class="si">}</span><span class="se">\n</span><span class="s2">"</span>
     <span class="n">staged</span> <span class="o">=</span> <span class="n">store</span><span class="o">.</span><span class="n">stage</span><span class="p">()</span>
     <span class="k">try</span><span class="p">:</span>
-        <span class="n">paths</span> <span class="o">=</span> <span class="n">scanner</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">app</span><span class="p">,</span> <span class="n">staged</span><span class="p">)</span>
+        <span class="n">accepted</span><span class="p">,</span> <span class="n">paths</span> <span class="o">=</span> <span class="n">scanner</span><span class="o">.</span><span class="n">design</span><span class="p">(</span><span class="n">design</span><span class="p">,</span> <span class="n">validation</span><span class="o">.</span><span class="n">values</span><span class="p">,</span> <span class="n">staged</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">accepted</span><span class="o">.</span><span class="n">valid</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">CallError</span><span class="p">(</span><span class="n">accepted</span><span class="o">.</span><span class="n">info</span><span class="p">)</span>
         <span class="n">rotation</span> <span class="o">=</span> <span class="n">prescribed_rotation</span><span class="p">(</span><span class="n">validation</span><span class="o">.</span><span class="n">values</span><span class="p">)</span>
         <span class="n">problems</span> <span class="o">=</span> <span class="n">ir</span><span class="o">.</span><span class="n">check</span><span class="p">(</span><span class="n">paths</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">system</span><span class="p">,</span> <span class="n">rotation</span><span class="o">=</span><span class="n">rotation</span><span class="p">,</span> <span class="n">limits</span><span class="o">=</span><span class="n">checked</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">problems</span><span class="p">:</span>
@@ -611,7 +614,8 @@
         <span class="p">)</span>
         <span class="c1"># The RF a scanner costs while the operator prescribes, read off the</span>
         <span class="c1"># sequence just written rather than designed again for the purpose.</span>
-        <span class="n">pulses</span> <span class="o">=</span> <span class="n">scanner</span><span class="o">.</span><span class="n">rf_pulses</span><span class="p">(</span><span class="n">paths</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">app</span><span class="o">.</span><span class="n">resolved</span><span class="p">)</span>
+        <span class="n">protocol</span> <span class="o">=</span> <span class="n">Protocol</span><span class="o">.</span><span class="n">from_wire</span><span class="p">(</span><span class="n">scanner</span><span class="o">.</span><span class="n">protocol</span><span class="p">,</span> <span class="n">validation</span><span class="o">.</span><span class="n">values</span><span class="p">,</span> <span class="n">design</span><span class="p">)</span>
+        <span class="n">pulses</span> <span class="o">=</span> <span class="n">scanner</span><span class="o">.</span><span class="n">rf_pulses</span><span class="p">(</span><span class="n">paths</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">protocol</span><span class="o">.</span><span class="n">arguments</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">pulses</span><span class="p">:</span>
             <span class="p">(</span><span class="n">staged</span> <span class="o">/</span> <span class="n">PULSES_FILE</span><span class="p">)</span><span class="o">.</span><span class="n">write_text</span><span class="p">(</span>
                 <span class="n">format_pulses</span><span class="p">(</span><span class="n">pulses</span><span class="p">,</span> <span class="n">design_id</span><span class="p">(</span><span class="n">identity</span><span class="p">))</span>
@@ -778,11 +782,11 @@
 
 
 <span class="nd">@lru_cache</span><span class="p">(</span><span class="n">maxsize</span><span class="o">=</span><span class="mi">32</span><span class="p">)</span>
-<span class="k">def</span><span class="w"> </span><span class="nf">_cached</span><span class="p">(</span><span class="n">path</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">mtime_ns</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ScannerSequence</span><span class="p">:</span>  <span class="c1"># noqa: ARG001 -- part of the key</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_cached</span><span class="p">(</span><span class="n">path</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">mtime_ns</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">SequencePlugin</span><span class="p">:</span>  <span class="c1"># noqa: ARG001 -- part of the key</span>
     <span class="k">return</span> <span class="n">load_plugin</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="n">path</span><span class="p">))</span>
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_plugin</span><span class="p">(</span><span class="n">path</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ScannerSequence</span><span class="p">:</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_plugin</span><span class="p">(</span><span class="n">path</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">SequencePlugin</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Return the plugin at ``path``, imported again when the file changed."""</span>
     <span class="k">return</span> <span class="n">_cached</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">Path</span><span class="p">(</span><span class="n">path</span><span class="p">)</span><span class="o">.</span><span class="n">stat</span><span class="p">()</span><span class="o">.</span><span class="n">st_mtime_ns</span><span class="p">)</span>
 
@@ -816,14 +820,17 @@
 <span class="k">def</span><span class="w"> </span><span class="nf">_source</span><span class="p">(</span><span class="n">path</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Return a digest of the code that designs with the plugin at ``path``.</span>
 
-<span class="sd">    Covers the plugin file, the source file of the application it binds, and</span>
-<span class="sd">    the installed versions of pypulseqpp and pulserver. Modules the</span>
-<span class="sd">    application imports from elsewhere are covered only through those</span>
-<span class="sd">    versions.</span>
+<span class="sd">    Covers the plugin file, the source file of the app it binds, and the</span>
+<span class="sd">    installed versions of pypulseqpp and pulserver. A :func:`functools.partial`</span>
+<span class="sd">    app is covered through the function it wraps. Modules the app imports from</span>
+<span class="sd">    elsewhere are covered only through those versions.</span>
 <span class="sd">    """</span>
     <span class="n">digest</span> <span class="o">=</span> <span class="n">hashlib</span><span class="o">.</span><span class="n">sha256</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="n">path</span><span class="p">)</span><span class="o">.</span><span class="n">read_bytes</span><span class="p">())</span>
+    <span class="n">app</span> <span class="o">=</span> <span class="n">_plugin</span><span class="p">(</span><span class="n">path</span><span class="p">)</span><span class="o">.</span><span class="n">app</span>
+    <span class="k">while</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">app</span><span class="p">,</span> <span class="n">functools</span><span class="o">.</span><span class="n">partial</span><span class="p">):</span>
+        <span class="n">app</span> <span class="o">=</span> <span class="n">app</span><span class="o">.</span><span class="n">func</span>
     <span class="k">try</span><span class="p">:</span>
-        <span class="n">module</span> <span class="o">=</span> <span class="n">inspect</span><span class="o">.</span><span class="n">getsourcefile</span><span class="p">(</span><span class="n">_plugin</span><span class="p">(</span><span class="n">path</span><span class="p">)</span><span class="o">.</span><span class="n">app</span><span class="p">)</span>
+        <span class="n">module</span> <span class="o">=</span> <span class="n">inspect</span><span class="o">.</span><span class="n">getsourcefile</span><span class="p">(</span><span class="n">app</span><span class="p">)</span>
     <span class="k">except</span> <span class="ne">TypeError</span><span class="p">:</span>
         <span class="n">module</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="k">if</span> <span class="n">module</span><span class="p">:</span>

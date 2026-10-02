@@ -533,7 +533,7 @@
 <h1>ScannerSequence.rf_pulses<a class="headerlink" href="#scannersequence-rf-pulses" title="Link to this heading">#</a></h1>
 <dl class="py method">
 <dt class="sig sig-object py" id="pulserver.design.ScannerSequence.rf_pulses">
-<span class="sig-prename descclassname"><span class="pre">ScannerSequence.</span></span><span class="sig-name descname"><span class="pre">rf_pulses</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pulserver/design/_scanner.html#ScannerSequence.rf_pulses"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.design.ScannerSequence.rf_pulses" title="Link to this definition">#</a></dt>
+<span class="sig-prename descclassname"><span class="pre">ScannerSequence.</span></span><span class="sig-name descname"><span class="pre">rf_pulses</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#pulserver.design.ScannerSequence.rf_pulses" title="Link to this definition">#</a></dt>
 <dd><p>Return the RF a design plays, as a scanner costs it while prescribing.</p>
 <p>The pulses and their angles are read off the sequence a design wrote,
 so nothing is designed to find them; which control drives each is
@@ -544,8 +544,8 @@ with, so a refocusing train whose angles vary gets one share each.</p>
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>seq_path</strong> – The design’s first sequence file.</p></li>
-<li><p><strong>designed</strong> – The prescription as designed, by the application’s own argument
-names: <code class="docutils literal notranslate"><span class="pre">SequenceApp.resolved</span></code>.</p></li>
+<li><p><strong>designed</strong> – The prescription as designed, by the name of the app argument each
+entry binds.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>

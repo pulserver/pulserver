@@ -582,17 +582,18 @@ stream, an ISMRMRD file or an assembled acquisition bucket.</p></li>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span>pulserver<span class="w"> </span>bartorch
 </pre></div>
 </div>
-<p>A sequence plugin binds a pypulseqpp <code class="docutils literal notranslate"><span class="pre">SequenceApp</span></code> to the scanner protocol, and
-a reconstruction plugin reconstructs the series it acquires. The client of a
-scan chooses the reconstruction, independently of the sequence:</p>
+<p>A sequence plugin binds a pypulseqpp <code class="docutils literal notranslate"><span class="pre">SequenceApp</span></code>, or a function returning
+sequences, to the scanner protocol, and a reconstruction plugin reconstructs
+the series it acquires. The client of a scan chooses the reconstruction,
+independently of the sequence:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># sequences/gre.py</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">pypulseqpp.sequences.sequence.gre2D_sequence</span><span class="w"> </span><span class="kn">import</span> <span class="n">Gre2DApp</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">pulserver.design</span><span class="w"> </span><span class="kn">import</span> <span class="n">ScannerSequence</span><span class="p">,</span> <span class="n">TimeParam</span><span class="p">,</span> <span class="n">UIParam</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pulserver.design</span><span class="w"> </span><span class="kn">import</span> <span class="n">SequencePlugin</span><span class="p">,</span> <span class="n">TimeParam</span><span class="p">,</span> <span class="n">UIParam</span>
 
 
-<span class="k">class</span><span class="w"> </span><span class="nc">Gre</span><span class="p">(</span><span class="n">ScannerSequence</span><span class="p">):</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">Gre</span><span class="p">(</span><span class="n">SequencePlugin</span><span class="p">):</span>
     <span class="n">app</span> <span class="o">=</span> <span class="n">Gre2DApp</span>
-    <span class="n">ui</span> <span class="o">=</span> <span class="p">{</span><span class="n">UIParam</span><span class="o">.</span><span class="n">TE</span><span class="p">:</span> <span class="n">TimeParam</span><span class="p">(</span><span class="s2">"te"</span><span class="p">,</span> <span class="n">range_min</span><span class="o">=</span><span class="mi">3000</span><span class="p">,</span> <span class="n">range_max</span><span class="o">=</span><span class="mi">20000</span><span class="p">)}</span>  <span class="c1"># µs</span>
+    <span class="n">protocol</span> <span class="o">=</span> <span class="p">{</span><span class="n">UIParam</span><span class="o">.</span><span class="n">TE</span><span class="p">:</span> <span class="n">TimeParam</span><span class="p">(</span><span class="s2">"te"</span><span class="p">,</span> <span class="n">range_min</span><span class="o">=</span><span class="mi">3000</span><span class="p">,</span> <span class="n">range_max</span><span class="o">=</span><span class="mi">20000</span><span class="p">)}</span>  <span class="c1"># µs</span>
 </pre></div>
 </div>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># recon/gre.py</span>

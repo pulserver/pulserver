@@ -533,16 +533,25 @@
 <h1>ScannerSequence.generate<a class="headerlink" href="#scannersequence-generate" title="Link to this heading">#</a></h1>
 <dl class="py method">
 <dt class="sig sig-object py" id="pulserver.design.ScannerSequence.generate">
-<span class="sig-prename descclassname"><span class="pre">ScannerSequence.</span></span><span class="sig-name descname"><span class="pre">generate</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pulserver/design/_scanner.html#ScannerSequence.generate"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.design.ScannerSequence.generate" title="Link to this definition">#</a></dt>
-<dd><p>Write the resolved design into <code class="docutils literal notranslate"><span class="pre">directory</span></code>, as <a class="reference internal" href="pulserver.design.ScannerSequence.write.html#pulserver.design.ScannerSequence.write" title="pulserver.design.ScannerSequence.write"><code class="xref py py-meth docutils literal notranslate"><span class="pre">write()</span></code></a> does.</p>
+<span class="sig-prename descclassname"><span class="pre">ScannerSequence.</span></span><span class="sig-name descname"><span class="pre">generate</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#pulserver.design.ScannerSequence.generate" title="Link to this definition">#</a></dt>
+<dd><p>Return what <a class="reference internal" href="pulserver.design.ScannerSequence.design.html#pulserver.design.ScannerSequence.design" title="pulserver.design.ScannerSequence.design"><code class="xref py py-meth docutils literal notranslate"><span class="pre">design()</span></code></a> writes for a protocol.</p>
+<p>The hook a subclass overrides to build the sequence. The default for a
+function app returns <code class="docutils literal notranslate"><span class="pre">app(system,</span> <span class="pre">**protocol.arguments)</span></code>. The default
+for a sequence application returns the application constructed from the
+arguments; <a class="reference internal" href="pulserver.design.ScannerSequence.design.html#pulserver.design.ScannerSequence.design" title="pulserver.design.ScannerSequence.design"><code class="xref py py-meth docutils literal notranslate"><span class="pre">design()</span></code></a> designs it, with its prescans.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Returns<span class="colon">:</span></dt>
-<dd class="field-odd"><p><ul class="simple">
-<li><p><em>Validation</em> – As <a class="reference internal" href="pulserver.design.ScannerSequence.validate.html#pulserver.design.ScannerSequence.validate" title="pulserver.design.ScannerSequence.validate"><code class="xref py py-meth docutils literal notranslate"><span class="pre">validate()</span></code></a> returns it.</p></li>
-<li><p><em>list of str</em> – Written paths in play order, prescans first; empty for an invalid
-request, for which nothing is written.</p></li>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>system</strong> – The scanner limits the sequence is designed under.</p></li>
+<li><p><strong>protocol</strong> – The requested protocol, in the units of the app’s arguments.</p></li>
 </ul>
-</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>A sequence, or a chain of them, prescans first and the main
+sequence last, or an application that designs its own chain.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.Sequence.html#pypulseqpp.Sequence" title="(in pypulseqpp latest)">pypulseqpp.Sequence</a> or <a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#list" title="(in Python v3.14)">list</a> of <a class="reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.Sequence.html#pypulseqpp.Sequence" title="(in pypulseqpp latest)">pypulseqpp.Sequence</a> or SequenceApp</p>
 </dd>
 </dl>
 </dd></dl>

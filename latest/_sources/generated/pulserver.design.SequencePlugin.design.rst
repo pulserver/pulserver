@@ -1,6 +1,6 @@
-ScannerSequence.write
+SequencePlugin.design
 =====================
 
 .. currentmodule:: pulserver.design
 
-.. automethod:: ScannerSequence.write
+.. automethod:: SequencePlugin.design

@@ -14,12 +14,12 @@
    :toctree:
    :nosignatures:
 
+   ~ScannerSequence.design
+   ~ScannerSequence.evaluate
    ~ScannerSequence.generate
    ~ScannerSequence.listing
-   ~ScannerSequence.resolve
    ~ScannerSequence.rf_pulses
    ~ScannerSequence.validate
-   ~ScannerSequence.write
 
 
 
@@ -30,5 +30,5 @@
    :nosignatures:
 
    ~ScannerSequence.follows
-   ~ScannerSequence.ui
+   ~ScannerSequence.protocol
    ~ScannerSequence.app

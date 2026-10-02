@@ -14,8 +14,10 @@ from.
    :toctree: generated
    :nosignatures:
 
-   ScannerSequence
+   SequencePlugin
+   Evaluation
    Protocol
+   ScannerSequence
    load_plugin
    TimeParam
    FloatParam

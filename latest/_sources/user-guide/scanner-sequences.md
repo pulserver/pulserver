@@ -1,20 +1,22 @@
 # Scanner sequences
 
 A scanner sequence is a plugin file, `<name>.py` in a `--plugins` directory,
-that binds a pypulseqpp {class}`~pypulseqpp.sequences.SequenceApp` to the
-scanner protocol with one {class}`~pulserver.design.ScannerSequence` subclass:
+that binds an app to the scanner protocol with one
+{class}`~pulserver.design.SequencePlugin` subclass. The app is a pypulseqpp
+{class}`~pypulseqpp.sequences.SequenceApp`, as here, or a function that returns
+the designed sequences ({ref}`function-apps`):
 
 ```python
 # sequences/gre.py
 from pypulseqpp.sequences.sequence.gre2D_sequence import Gre2DApp
-from pulserver.design import ScannerSequence
+from pulserver.design import SequencePlugin
 
-class Gre(ScannerSequence):
+class Gre(SequencePlugin):
     app = Gre2DApp
 ```
 
-The interpreter names it `--plugin gre`. Without `ui`, the protocol is the
-application's defaults. A PyPulseq script becomes a `SequenceApp` by moving
+The interpreter names it `--plugin gre`. Without `protocol`, the protocol is the
+app's defaults. A PyPulseq script becomes a `SequenceApp` by moving
 what precedes its loop into `init_sequence` and the loop body into `kernel`
 ([from a PyPulseq script](https://pulserver.github.io/pypulseqpp/latest/user-guide/from-pypulseq.html)).
 `MAX_GRAD` (mT/m) and `MAX_SLEW` (T/m/s) are required on every application:
@@ -22,22 +24,25 @@ they cap the scanner's limits, which the design call passes in.
 
 ## Binding the protocol
 
-`ui` maps the parameters of the interpreter's table, the members of
+`protocol` maps the parameters of the interpreter's table, the members of
 {data}`~pulserver.protocol.ProtocolKey`, to entries;
 {class}`~pulserver.protocol.UIParam` collects those of the UI controls. A plain
 string naming a parameter is stored as its member, and a name outside the table
-is refused when the class is defined. An entry names the `init_sequence`
-argument it sets. The class does not name a reconstruction: the console's scan
+is refused when the class is defined. An entry names the argument of the app it
+sets: an `init_sequence` argument of a sequence application, a keyword argument
+of a function. The class does not name a reconstruction: the console's scan
 or the reconstruction client does ({doc}`reconstruction-plugins`). A `recon`
 attribute has no effect, and defining one raises a `DeprecationWarning`.
+`ui` and `ScannerSequence` are deprecated names of `protocol` and
+`SequencePlugin`, and a class using either warns with a `DeprecationWarning`.
 
 ```pycon
 >>> from pypulseqpp.sequences.sequence.gre2D_sequence import Gre2DApp
->>> from pulserver.design import (FloatParam, IntParam, ScannerSequence, TEPreset,
+>>> from pulserver.design import (FloatParam, IntParam, SequencePlugin, TEPreset,
 ...                               TimeParam, TRPreset, UIParam)
->>> class Gre2D(ScannerSequence):
+>>> class Gre2D(SequencePlugin):
 ...     app = Gre2DApp
-...     ui = {
+...     protocol = {
 ...         UIParam.TE: TimeParam("te", range_min=1000, range_max=80000, range_incr=10,
 ...                         presets={TEPreset.MINIMUM: None}),
 ...         UIParam.TR: TimeParam("tr", range_min=1000, range_max=5_000_000,
@@ -75,6 +80,43 @@ shortest echo time. An entry's `default` replaces the application's default as
 the initial value, in UI units: `default=TEPreset.MINIMUM` offers a protocol a
 scanner with weaker gradients than the application assumes can play.
 
+(function-apps)=
+## Function apps
+
+A function app takes the scanner limits, a {class}`pypulseqpp.Opts`, and one
+keyword argument for each entry of `protocol`, and returns the designed
+{class}`pypulseqpp.Sequence`. A list of sequences is a chain, the prescans first
+and the main sequence last; each file names the next as its `NextSequence`
+definition. The initial value of an entry is the default of its argument in the
+signature, so a {func}`functools.partial` is an app too. The function is called
+when the design is generated, not when a protocol is evaluated
+({ref}`evaluating-a-protocol`).
+
+```pycon
+>>> import numpy as np
+>>> import pypulseqpp as pp
+>>> def pulse_acquire(system, flip=90.0, tr=100e-3, averages=8):
+...     seq = pp.Sequence(system)
+...     rf = pp.make_block_pulse(np.deg2rad(flip), duration=1e-3, system=system)
+...     adc = pp.make_adc(256, duration=10e-3, system=system)
+...     for _ in range(averages):
+...         seq.add_block(rf)
+...         seq.add_block(adc)
+...         seq.add_block(pp.make_delay(tr - 11e-3))
+...     return seq
+>>> class PulseAcquire(SequencePlugin):
+...     app = pulse_acquire
+...     protocol = {
+...         UIParam.FLIP: FloatParam("flip", unit="deg", range_min=1.0, range_max=180.0),
+...         UIParam.TR: TimeParam("tr", range_min=20000, range_max=5_000_000),
+...         UIParam.NEX: IntParam("averages", range_min=1, range_max=64),
+...     }
+>>> listing = PulseAcquire().listing()
+>>> {key.value: listing[key].value for key in PulseAcquire.protocol}
+{'flip': 90.0, 'TR': 100000, 'nex': 8}
+
+```
+
 (shipped-sequences)=
 ## Shipped sequences
 
@@ -98,7 +140,7 @@ Cartesian ones take `Ry`, and the 3D ones `Rz`, as their undersampling.
 
 ## Resolving a protocol
 
-{meth}`~pulserver.design.ScannerSequence.listing` is the protocol with its
+{meth}`~pulserver.design.SequencePlugin.listing` is the protocol with its
 schema, as the `list` design call replies it:
 
 ```pycon
@@ -130,9 +172,9 @@ the scanner's: the field-of-view offset, which the host applies when it builds
 the IR, and the rotation from the logical to the physical axes, in whose frame
 the host checks the design ({doc}`../explanations/ir-cache`).
 
-{meth}`~pulserver.design.ScannerSequence.validate` constructs the application
-under the scanner limits and returns the protocol it will play. Entries the
-request omits keep their initial values:
+{meth}`~pulserver.design.SequencePlugin.validate` evaluates a request under the
+scanner limits and returns the protocol the design plays. Entries the request
+omits keep their initial values:
 
 ```pycon
 >>> import pypulseqpp as pp
@@ -145,14 +187,15 @@ request omits keep their initial values:
 
 ```
 
-The resolved `TE` is the echo time the design achieved, as `init_sequence`
-records it with {meth}`~pypulseqpp.sequences.SequenceApp.resolve`; an argument
-the application does not record keeps the requested value. Values are rounded
-to the precision a scanner parameter stores, so a resolved protocol sent back
-resolves to itself.
+For a sequence application, the resolved `TE` is the echo time the design
+achieved, as `init_sequence` records it with
+{meth}`~pypulseqpp.sequences.SequenceApp.resolve`; an argument the application
+does not record keeps the requested value. Values are rounded to the precision
+a scanner parameter stores, so a resolved protocol sent back resolves to
+itself.
 
-A protocol the design refuses is invalid, and the error the application raised
-is the reply's `info`:
+A protocol the evaluation rejects is invalid, and the message of the error it
+raised is the reply's `info`:
 
 ```pycon
 >>> reply = Gre2D().validate(system, {"TE": 1000})
@@ -161,14 +204,69 @@ is the reply's `info`:
 
 ```
 
-`duration` is the scan time in seconds,
+`duration` is the scan time in seconds. For a sequence application it is
 {meth}`~pypulseqpp.sequences.SequenceApp.scan_time`: the `duration`
 `init_sequence` states, otherwise the summed duration of the designed prescans
-and main sequence.
+and main sequence. A duration of `0.0` states no estimate: the protocol is
+valid, `duration` is `None`, and the reply reports the scan time as unknown.
 
-{meth}`~pulserver.design.ScannerSequence.generate` writes the design as signed
-binary Pulseq, prescans first; the `generate` design call converts it to the IR
-cache and stores it ({doc}`../explanations/designs`).
+{meth}`~pulserver.design.SequencePlugin.design` generates the design, writes it
+as signed binary Pulseq, prescans first, and returns the written paths. The first file
+is `sequence.seq`, and each file names the next as its `NextSequence`
+definition. The `generate` design call converts the design to the IR cache and
+stores it ({doc}`../explanations/designs`).
+
+(evaluating-a-protocol)=
+## Evaluating a protocol
+
+A plugin overrides {meth}`~pulserver.design.SequencePlugin.evaluate` to check a
+protocol and to state what the console shows with it. The hook takes the scanner
+limits and the requested {class}`~pulserver.design.Protocol`, in the units of the
+app's arguments, and returns an {class}`~pulserver.design.Evaluation`: the
+protocol holding the values the design achieves, the scan time in seconds and a
+note shown with the valid protocol. Returning `None` accepts the protocol
+unchanged. Raising an exception makes the protocol invalid:
+
+```pycon
+>>> from pulserver.design import Evaluation
+>>> class Timed(PulseAcquire):
+...     def evaluate(self, system, protocol):
+...         if protocol[UIParam.TR] < 12e-3:
+...             raise ValueError("the TR is shorter than the pulse and the readout")
+...         scan_time = protocol[UIParam.NEX] * protocol[UIParam.TR]
+...         return Evaluation(protocol, scan_time, "256 samples per average")
+>>> reply = Timed().validate(system, {"TR": 50000, "nex": 4})
+>>> reply.valid, reply.duration, reply.info
+(True, 0.2, '256 samples per average')
+>>> reply = Timed().validate(system, {"TR": 10000})
+>>> reply.valid, reply.info
+(False, 'the TR is shorter than the pulse and the readout')
+
+```
+
+The default for a sequence application constructs it and returns its scan time
+and the values it recorded. The default for a function app accepts the protocol
+unchanged, states no scan time and does not call the app. A protocol the
+function cannot realize is then found when the sequence is generated, as an
+error of that call, and not reported as invalid while the operator edits it. An
+`evaluate` that builds or checks the design rejects the protocol when it is
+evaluated.
+
+`ValueError` and `AssertionError`, which pypulseqpp and PyPulseq raise for an
+event or a timing they cannot realize, reject the protocol with the message of
+the error as `info`, and are logged as a warning with their traceback. Any
+other exception also makes the protocol invalid, but the reply names only its
+type, as in `TypeError in Timed.evaluate`, and the exception is logged as an
+error with its traceback. A request that names an entry the protocol does not
+declare, or an option a choice does not offer, is invalid in the same way.
+
+{meth}`~pulserver.design.SequencePlugin.generate` is the hook that builds the
+sequence of a requested protocol. The default for a function app calls the app
+with the arguments of the protocol, and the default for a sequence application
+constructs it. A plugin overrides `generate` to return a sequence, or a list of
+them, built another way. `validate` and `design` are not overridden: they are the
+boundary between a request and the code of a plugin, and `design` writes nothing
+for an invalid request.
 
 ## See also
 

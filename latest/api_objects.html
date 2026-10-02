@@ -525,29 +525,35 @@ writing them here keeps them out of the toctree the sidebar is built
 from.</p>
 <div class="pst-scrollable-table-container"><table class="autosummary longtable table">
 <tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.design.ScannerSequence.html#pulserver.design.ScannerSequence" title="pulserver.design.ScannerSequence"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ScannerSequence</span></code></a></p></td>
-<td><p>A pypulseqpp application exposed to the scanner UI.</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.design.SequencePlugin.html#pulserver.design.SequencePlugin" title="pulserver.design.SequencePlugin"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SequencePlugin</span></code></a></p></td>
+<td><p>A sequence app bound to the entries of the scanner protocol.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.design.Protocol.html#pulserver.design.Protocol" title="pulserver.design.Protocol"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Protocol</span></code></a></p></td>
-<td><p>The values of a scanner sequence's protocol, in the units of its application's arguments.</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.design.Evaluation.html#pulserver.design.Evaluation" title="pulserver.design.Evaluation"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Evaluation</span></code></a></p></td>
+<td><p>The outcome of <a class="reference internal" href="generated/pulserver.design.SequencePlugin.evaluate.html#pulserver.design.SequencePlugin.evaluate" title="pulserver.design.SequencePlugin.evaluate"><code class="xref py py-meth docutils literal notranslate"><span class="pre">SequencePlugin.evaluate()</span></code></a> for a valid protocol.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.design.Protocol.html#pulserver.design.Protocol" title="pulserver.design.Protocol"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Protocol</span></code></a></p></td>
+<td><p>The values of a plugin's protocol, in the units of the app's arguments.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.design.ScannerSequence.html#pulserver.design.ScannerSequence" title="pulserver.design.ScannerSequence"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ScannerSequence</span></code></a></p></td>
+<td><p>Deprecated name of <a class="reference internal" href="generated/pulserver.design.SequencePlugin.html#pulserver.design.SequencePlugin" title="pulserver.design.SequencePlugin"><code class="xref py py-class docutils literal notranslate"><span class="pre">SequencePlugin</span></code></a>.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.design.load_plugin.html#pulserver.design.load_plugin" title="pulserver.design.load_plugin"><code class="xref py py-obj docutils literal notranslate"><span class="pre">load_plugin</span></code></a></p></td>
-<td><p>Import a plugin file and instantiate the one ScannerSequence it defines.</p></td>
+<td><p>Import a plugin file and instantiate the one SequencePlugin it defines.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.design.TimeParam.html#pulserver.design.TimeParam" title="pulserver.design.TimeParam"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TimeParam</span></code></a></p></td>
-<td><p>A time UI entry bound to an <code class="docutils literal notranslate"><span class="pre">init_sequence</span></code> argument in seconds.</p></td>
+<td><p>A time UI entry bound to an argument of the app, in seconds.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.design.FloatParam.html#pulserver.design.FloatParam" title="pulserver.design.FloatParam"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FloatParam</span></code></a></p></td>
-<td><p>A float UI entry bound to an <code class="docutils literal notranslate"><span class="pre">init_sequence</span></code> argument.</p></td>
+<td><p>A float UI entry bound to an argument of the app.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.design.IntParam.html#pulserver.design.IntParam" title="pulserver.design.IntParam"><code class="xref py py-obj docutils literal notranslate"><span class="pre">IntParam</span></code></a></p></td>
-<td><p>An integer UI entry bound to an <code class="docutils literal notranslate"><span class="pre">init_sequence</span></code> argument; a dropdown when it has options.</p></td>
+<td><p>An integer UI entry bound to an argument of the app; a dropdown when it has options.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.design.BoolParam.html#pulserver.design.BoolParam" title="pulserver.design.BoolParam"><code class="xref py py-obj docutils literal notranslate"><span class="pre">BoolParam</span></code></a></p></td>
-<td><p>A checkbox UI entry bound to an <code class="docutils literal notranslate"><span class="pre">init_sequence</span></code> argument.</p></td>
+<td><p>A checkbox UI entry bound to an argument of the app.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.design.ChoiceParam.html#pulserver.design.ChoiceParam" title="pulserver.design.ChoiceParam"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ChoiceParam</span></code></a></p></td>
-<td><p>A choice among the members of a <code class="docutils literal notranslate"><span class="pre">StrEnum</span></code>, bound to an <code class="docutils literal notranslate"><span class="pre">init_sequence</span></code> argument.</p></td>
+<td><p>A choice among the members of a <code class="docutils literal notranslate"><span class="pre">StrEnum</span></code>, bound to an argument of the app.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.design.StringListParam.html#pulserver.design.StringListParam" title="pulserver.design.StringListParam"><code class="xref py py-obj docutils literal notranslate"><span class="pre">StringListParam</span></code></a></p></td>
 <td><p>Return a <a class="reference internal" href="generated/pulserver.design.ChoiceParam.html#pulserver.design.ChoiceParam" title="pulserver.design.ChoiceParam"><code class="xref py py-class docutils literal notranslate"><span class="pre">ChoiceParam</span></code></a> over a <code class="docutils literal notranslate"><span class="pre">StrEnum</span></code> built from option strings.</p></td>

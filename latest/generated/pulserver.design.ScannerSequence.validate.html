@@ -533,15 +533,26 @@
 <h1>ScannerSequence.validate<a class="headerlink" href="#scannersequence-validate" title="Link to this heading">#</a></h1>
 <dl class="py method">
 <dt class="sig sig-object py" id="pulserver.design.ScannerSequence.validate">
-<span class="sig-prename descclassname"><span class="pre">ScannerSequence.</span></span><span class="sig-name descname"><span class="pre">validate</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pulserver/design/_scanner.html#ScannerSequence.validate"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.design.ScannerSequence.validate" title="Link to this definition">#</a></dt>
-<dd><p>Resolve a request into the protocol the application will play.</p>
-<p>A valid reply carries the resolved values, as the application’s
-<code class="docutils literal notranslate"><span class="pre">resolved</span></code> reports them, and its <code class="docutils literal notranslate"><span class="pre">scan_time()</span></code>, which plays the
-chain only when the application states no <code class="docutils literal notranslate"><span class="pre">duration</span></code>. An invalid
-one carries the request and the error the design raised.</p>
+<span class="sig-prename descclassname"><span class="pre">ScannerSequence.</span></span><span class="sig-name descname"><span class="pre">validate</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#pulserver.design.ScannerSequence.validate" title="Link to this definition">#</a></dt>
+<dd><p>Return the validation of a request, as the wire carries it.</p>
+<p>The request is in wire values, completed with the initial values of the
+entries it omits. It is converted to a <a class="reference internal" href="pulserver.design.Protocol.html#pulserver.design.Protocol" title="pulserver.design.Protocol"><code class="xref py py-class docutils literal notranslate"><span class="pre">Protocol</span></code></a>, its
+prescription rotation is checked to be orthonormal, and <a class="reference internal" href="pulserver.design.ScannerSequence.evaluate.html#pulserver.design.ScannerSequence.evaluate" title="pulserver.design.ScannerSequence.evaluate"><code class="xref py py-meth docutils literal notranslate"><span class="pre">evaluate()</span></code></a>
+runs; nothing is generated. This is the one boundary between a request
+and the code of a plugin.</p>
+<p>A valid reply carries the evaluated protocol, the duration of the
+evaluation, <code class="docutils literal notranslate"><span class="pre">None</span></code> where it is <code class="docutils literal notranslate"><span class="pre">0.0</span></code>, and its note. An exception
+raised by any of these steps makes the reply invalid, carrying the
+request, and is logged with its traceback. <code class="docutils literal notranslate"><span class="pre">ValueError</span></code> and
+<code class="docutils literal notranslate"><span class="pre">AssertionError</span></code>, which pypulseqpp and PyPulseq raise for a protocol
+they cannot realize, are logged at WARNING and the message is the
+reply’s <code class="docutils literal notranslate"><span class="pre">info</span></code>. Any other exception is logged at ERROR, and the
+<code class="docutils literal notranslate"><span class="pre">info</span></code> is <code class="docutils literal notranslate"><span class="pre">&quot;&lt;ExceptionType&gt;</span> <span class="pre">in</span> <span class="pre">&lt;Plugin&gt;.evaluate&quot;</span></code>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Raises<span class="colon">:</span></dt>
-<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If the request names an entry the UI does not declare.</p>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If the declared entries are inconsistent with the app, as
+    <a class="reference internal" href="pulserver.design.ScannerSequence.listing.html#pulserver.design.ScannerSequence.listing" title="pulserver.design.ScannerSequence.listing"><code class="xref py py-meth docutils literal notranslate"><span class="pre">listing()</span></code></a> reports; this is a defect of the plugin and not of
+    the request.</p>
 </dd>
 </dl>
 </dd></dl>
