@@ -692,23 +692,26 @@
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">identified_limits</span><span class="p">(</span><span class="n">limits</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
-<span class="w">    </span><span class="sd">"""Return limits with the digest of the VOP file they name.</span>
+<span class="w">    </span><span class="sd">"""Return limits with the digest of each file they name: the VOP and vendor files.</span>
 
-<span class="sd">    A design whose SAR ratios came from one VOP file is not the design of</span>
-<span class="sd">    another file written to the same path.</span>
+<span class="sd">    A design converted under one file is not the design of another file</span>
+<span class="sd">    written to the same path.</span>
 
 <span class="sd">    Raises</span>
 <span class="sd">    ------</span>
 <span class="sd">    CallError</span>
-<span class="sd">        If the VOP file cannot be read.</span>
+<span class="sd">        If a named file cannot be read.</span>
 <span class="sd">    """</span>
-    <span class="k">if</span> <span class="s2">"vop_file"</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">limits</span><span class="p">:</span>
-        <span class="k">return</span> <span class="nb">dict</span><span class="p">(</span><span class="n">limits</span><span class="p">)</span>
-    <span class="k">try</span><span class="p">:</span>
-        <span class="n">digest</span> <span class="o">=</span> <span class="n">hashlib</span><span class="o">.</span><span class="n">sha256</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">limits</span><span class="p">[</span><span class="s2">"vop_file"</span><span class="p">]))</span><span class="o">.</span><span class="n">read_bytes</span><span class="p">())</span><span class="o">.</span><span class="n">hexdigest</span><span class="p">()</span>
-    <span class="k">except</span> <span class="ne">OSError</span> <span class="k">as</span> <span class="n">error</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="n">CallError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"cannot read the VOP file: </span><span class="si">{</span><span class="n">error</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="kc">None</span>
-    <span class="k">return</span> <span class="p">{</span><span class="o">**</span><span class="n">limits</span><span class="p">,</span> <span class="s2">"vop_file_sha256"</span><span class="p">:</span> <span class="n">digest</span><span class="p">}</span>
+    <span class="n">identified</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">limits</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"vop_file"</span><span class="p">,</span> <span class="s2">"ir_vendor_file"</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">key</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">limits</span><span class="p">:</span>
+            <span class="k">continue</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">content</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">limits</span><span class="p">[</span><span class="n">key</span><span class="p">]))</span><span class="o">.</span><span class="n">read_bytes</span><span class="p">()</span>
+        <span class="k">except</span> <span class="ne">OSError</span> <span class="k">as</span> <span class="n">error</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">CallError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"cannot read the </span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">error</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="kc">None</span>
+        <span class="n">identified</span><span class="p">[</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2">_sha256"</span><span class="p">]</span> <span class="o">=</span> <span class="n">hashlib</span><span class="o">.</span><span class="n">sha256</span><span class="p">(</span><span class="n">content</span><span class="p">)</span><span class="o">.</span><span class="n">hexdigest</span><span class="p">()</span>
+    <span class="k">return</span> <span class="n">identified</span>
 
 
 <div class="viewcode-block" id="call">

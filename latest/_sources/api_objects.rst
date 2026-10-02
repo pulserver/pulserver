@@ -54,6 +54,7 @@ from.
    WaveBudget
    Grouping
    VendorProfile
+   read_vendor
    Quantity
    sample_wave
    playout

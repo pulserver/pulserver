@@ -637,19 +637,22 @@ Further options are for the IR conversion:</p>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">ir_cache_ext</span></code></p></td>
 <td><p>Extension of the cache file, <code class="docutils literal notranslate"><span class="pre">.pseg</span></code> by default</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">ir_wave_max_samples</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">ir_vendor_file</span></code></p></td>
+<td><p>Vendor file the cache is grouped and stored under, read by <a class="reference internal" href="../generated/pulserver.ir.read_vendor.html#pulserver.ir.read_vendor" title="pulserver.ir.read_vendor"><code class="xref py py-func docutils literal notranslate"><span class="pre">read_vendor()</span></code></a>; a file it cannot read refuses the call</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">ir_wave_max_samples</span></code></p></td>
 <td><p>Samples each gradient axis of the playout’s waveform memory holds for waves</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">ir_wave_raster_us</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">ir_wave_raster_us</span></code></p></td>
 <td><p>The playout’s gradient raster, in µs per sample</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">ir_wave_load_us_per_sample</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">ir_wave_load_us_per_sample</span></code></p></td>
 <td><p>Time the playout takes to load one sample on one axis, in µs; 0, the default, leaves the loading unchecked</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">ir_wave_headroom</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">ir_wave_headroom</span></code></p></td>
 <td><p>Share of the playout’s time its loading may take, 0.5 by default</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">ir_wave_slots</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">ir_wave_slots</span></code></p></td>
 <td><p>Slots per segment position that a playout streaming the waves rings through, 2 by default</p></td>
 </tr>
 </tbody>
