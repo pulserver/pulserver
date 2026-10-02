@@ -71,6 +71,41 @@ enriched, from the range holding it, and the table keeps the ranges it
 integrated last. The k-space locations the proxy holds therefore do not grow
 with the length of the scan.
 
+## Reconstruction units
+
+A reconstruction takes the readouts of one image, or of several images
+reconstructed together, such as the echoes of a slice. The stream states where
+those readouts end only through the encoding counters and flags that
+enrichment supplies. A *reconstruction unit* is the set of readouts of one
+branch and one encoding space that share their slice, contrast, cardiac phase,
+repetition, set and average counters; a branch is a kind of readout a plugin
+reconstructs separately, such as `imaging` or `navigator`. The `segment` and
+user counters name positions within a readout train and do not separate units.
+A plugin names in its `axes` the counters it takes as axes of the unit's
+k-space instead, such as the echoes of a multi-echo acquisition, and these do
+not separate units either.
+
+A unit allocates its k-space when its first readout arrives, from the encoding
+space the header gives it, and places each readout by its counters. The flags
+of a readout select its buffer as Gadgetron's acquisition bucket divides
+readouts: parallel-imaging calibration readouts are placed in `ref`, readouts
+flagged as calibration and imaging in `ref` and `data`, phase-correction
+readouts in neither, and any other readout in `data`.
+
+A unit closes when the flag its branch declares has arrived at every position
+along its axes. Enrichment sets the last-in flag of a counter within each
+combination of the encoding space and the other image-selecting counters, so
+`LAST_IN_SLICE` arrives once per echo or average of a slice, and a plugin with
+those counters as axes waits for all of them. Readouts of different units may
+be interleaved: slices acquired line by line each close at their own flagged
+readout.
+
+A closed unit leaves the plugin before its reconstruction runs, and nothing in
+the runtime holds it afterwards, so the memory a series holds is that of the
+units open at once, not that of the series. A unit still open at the last
+readout of the measurement or at the end of the stream is reconstructed then,
+under its own branch, in the order the units opened.
+
 ## Workers
 
 Each series is reconstructed in its own worker process, with the reconstruction

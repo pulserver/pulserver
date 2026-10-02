@@ -60,9 +60,10 @@ def _poses(rotations):
     plugin.startup(context)
     poses = []
     for rotation in rotations:
-        outputs = [plugin.receive(a, context) for a in _navigator(rotation)]
-        assert outputs[:2] == [None, None]
-        poses.append(pose_of(outputs[2]))
+        emitted = [plugin.receive(a, context) for a in _navigator(rotation)]
+        assert emitted[:2] == [[], []]
+        ((_, waveform),) = emitted[2]
+        poses.append(pose_of(waveform))
     return poses
 
 
@@ -74,3 +75,17 @@ def test_the_first_navigator_states_the_identity_and_a_turned_object_its_rotatio
         np.reshape(turned.rotation, (3, 3)), _about_z(8.0), atol=0.05
     )
     np.testing.assert_allclose(turned.translation_m, 0.0, atol=2e-3)
+
+
+def test_navigator_readouts_are_the_navigator_branch_and_the_rest_imaging():
+    plugin = PmcRecon()
+    imaging = ismrmrd.Acquisition()
+    rtfeedback = ismrmrd.Acquisition()
+    rtfeedback.set_flag(ismrmrd.ACQ_IS_RTFEEDBACK_DATA)
+    noise = ismrmrd.Acquisition()
+    noise.set_flag(ismrmrd.ACQ_IS_NOISE_MEASUREMENT)
+
+    assert plugin.branch_for(_navigator(np.eye(3))[0]) == "navigator"
+    assert plugin.branch_for(rtfeedback) == "navigator"
+    assert plugin.branch_for(imaging) == "imaging"
+    assert plugin.branch_for(noise) is None

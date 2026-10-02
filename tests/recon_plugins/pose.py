@@ -14,7 +14,7 @@ POSES = (
 
 
 class PoseRecon(ReconPlugin):
-    def recon(self, branch, context):
+    def recon(self, context, branch, data):
         return [
             *(pose_waveform(Pose(rotation=rotation)) for rotation in POSES),
             ReconResult(np.ones((2, 2), dtype=np.float32)),

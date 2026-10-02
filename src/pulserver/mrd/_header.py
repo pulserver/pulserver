@@ -4,6 +4,7 @@ from __future__ import annotations
 
 __all__ = ["LOOP_COUNTERS", "EncodingSpace"]
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any
 
@@ -17,6 +18,9 @@ LOOP_COUNTERS = (
     "set",
     "average",
 )
+
+#: The counters a buffer can be laid out along: ``segment`` is one only when asked for.
+_LAYOUT_COUNTERS = (*LOOP_COUNTERS, "segment")
 
 
 def _is_cartesian(encoding: Any) -> bool:
@@ -64,7 +68,9 @@ class EncodingSpace:
     phase_encodes, partitions
         Extent along ``kspace_encode_step_1`` and ``kspace_encode_step_2``.
     loops
-        Counters of :data:`LOOP_COUNTERS` that vary in this space, outermost first.
+        Counters that vary in this space and are laid out as axes, outermost
+        first: those of :data:`LOOP_COUNTERS`, and ``segment`` when
+        :meth:`from_header` was asked for it.
     loop_sizes
         Extent of each counter in ``loops``.
     recon_matrix
@@ -97,7 +103,9 @@ class EncodingSpace:
     recon_fov: tuple[float, ...] | None = None
 
     @classmethod
-    def from_header(cls, header: Any, index: int = 0) -> EncodingSpace:
+    def from_header(
+        cls, header: Any, index: int = 0, loops: Iterable[str] | None = None
+    ) -> EncodingSpace:
         """Read encoding space ``index`` of a parsed MRD header.
 
         For a Cartesian space ``phase_encodes`` is the larger of the encoded matrix
@@ -106,6 +114,17 @@ class EncodingSpace:
         views, or the encoded matrix when no limit is stated. ``partitions`` is
         always the larger of the two. ``recon_matrix`` and ``recon_fov`` fall
         back to the encoded space when the header has no ``reconSpace``.
+
+        Parameters
+        ----------
+        header
+            Parsed MRD header.
+        index
+            Position in the header's encoding list.
+        loops
+            Counters to lay out as axes where the header gives them more than one
+            value, in the order of :data:`LOOP_COUNTERS` followed by ``segment``;
+            ``None`` takes every counter of :data:`LOOP_COUNTERS`.
 
         Raises
         ------
@@ -117,12 +136,13 @@ class EncodingSpace:
         encoded = encoding.encodedSpace.matrixSize
         limits = getattr(encoding, "encodingLimits", None)
 
-        loops: list[str] = []
+        wanted = LOOP_COUNTERS if loops is None else set(loops)
+        names: list[str] = []
         sizes: list[int] = []
-        for name in LOOP_COUNTERS:
+        for name in _LAYOUT_COUNTERS:
             extent = _limit(limits, name)
-            if extent > 1:
-                loops.append(name)
+            if name in wanted and extent > 1:
+                names.append(name)
                 sizes.append(extent)
 
         system = getattr(header, "acquisitionSystemInformation", None)
@@ -147,17 +167,24 @@ class EncodingSpace:
             else views or int(encoded.y),
             # A stack is Cartesian along z whatever it does in plane.
             partitions=max(partitions, int(encoded.z)),
-            loops=tuple(loops),
+            loops=tuple(names),
             loop_sizes=tuple(sizes),
             recon_matrix=recon_matrix,
             recon_fov=_fov(encoding, len(recon_matrix)),
         )
 
     @classmethod
-    def all_from_header(cls, header: Any) -> tuple[EncodingSpace, ...]:
-        """Read every encoding space of a parsed MRD header, in index order."""
+    def all_from_header(
+        cls, header: Any, loops: Iterable[str] | None = None
+    ) -> tuple[EncodingSpace, ...]:
+        """Read every encoding space of a parsed MRD header, in index order.
+
+        ``loops`` is as for :meth:`from_header`.
+        """
         encodings = getattr(header, "encoding", None) or ()
-        return tuple(cls.from_header(header, index) for index in range(len(encodings)))
+        return tuple(
+            cls.from_header(header, index, loops) for index in range(len(encodings))
+        )
 
     @property
     def extents(self) -> tuple[tuple[str, int], ...]:

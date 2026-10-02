@@ -14,7 +14,8 @@ import numpy as np
 
 from ...mrd._acquisitions import AcquisitionBucket, AcquisitionBucketStats
 from ...mrd._images import as_numpy
-from ...mrd._metadata import acquisition_label, has_acquisition_flag
+from ...mrd._metadata import acquisition_label
+from .._buffers import ReconData, readout_roles
 from ..plugin import ReconContext, ReconPlugin, ReconResult
 from .mrd2dicom import MrdDicomBuilder
 
@@ -26,101 +27,71 @@ def run_application(
 ) -> None:
     """Run ``plugin`` over one MRD stream and send what it emits on ``connection``.
 
-    The stream runs on ``plugin.spawn()``. Acquisitions the plugin's flags accept
-    go to :meth:`~pulserver.recon.ReconPlugin.receive` as they arrive; waveforms
-    are collected, and each emitted unit carries all received so far; any other
-    item is sent back unchanged. :class:`~pulserver.recon.ReconResult` outputs
-    become MRD images, or DICOM when requested; a ``(z, y, x)`` volume becomes
-    one image per partition along ``slice_dir``, partition ``z // 2`` at
-    the volume's centre, as an FFT places it. When the stream ends on
-    acquisitions that closed no branch, ``"imaging"`` is reconstructed once more.
+    The stream runs on ``plugin.spawn()``. Acquisitions go to
+    :meth:`~pulserver.recon.ReconPlugin.receive` as they arrive, and each unit
+    it closes is emitted at once; waveforms are held for the next unit that
+    closes; any other item is sent back unchanged. When the stream ends the
+    units still open are reconstructed and
+    :meth:`~pulserver.recon.ReconPlugin.finish` runs.
+    :class:`~pulserver.recon.ReconResult` outputs become MRD images, or DICOM
+    when requested; a ``(z, y, x)`` volume becomes one image per partition
+    along ``slice_dir``, partition ``z // 2`` at the volume's centre, as an FFT
+    places it.
     """
     app = plugin.spawn()
-    acquisitions: list[Any] = []
-    waveforms: list[Any] = []
     image_index = 1
     dicom_builder: MrdDicomBuilder | None = None
 
-    def emit(output: Any, bucket: AcquisitionBucket) -> None:
+    def emit(emitted: list[tuple[ReconData | None, Any]]) -> None:
         nonlocal image_index, dicom_builder
-        for item in _outputs(output):
-            if isinstance(item, ReconResult):
+        for data, output in emitted:
+            bucket = _make_bucket(data)
+            for item in _outputs(output):
+                if not isinstance(item, ReconResult):
+                    connection.send(item)
+                    continue
                 images, image_index = _make_images(
-                    item,
-                    bucket,
-                    context,
-                    image_index,
-                    type(app).__name__,
+                    item, bucket, context, image_index, type(app).__name__
                 )
-                for emitted in images:
+                for image in images:
                     if item.dicom:
                         if dicom_builder is None:
                             dicom_builder = MrdDicomBuilder(context.header)
-                        emitted = dicom_builder(emitted)
-                    connection.send(emitted)
-            else:
-                connection.send(item)
-
-    def deliver(output: Any) -> None:
-        nonlocal acquisitions
-        if output is None:
-            return
-        # Waveforms belong to the measurement, not the unit, so every unit
-        # carries all of them.
-        bucket = _make_bucket(acquisitions, waveforms)
-        acquisitions = []
-        emit(output, bucket)
+                        image = dicom_builder(image)
+                    connection.send(image)
 
     app.startup(context)
-    last: Any = None
     for item in connection:
         if isinstance(item, ismrmrd.Acquisition):
-            if _accept(item, app):
-                acquisitions.append(item)
-                last = item
-                deliver(app.receive(item, context))
+            emit(app.receive(item, context))
         elif isinstance(item, ismrmrd.Waveform):
-            waveforms.append(item)
+            app.receive_waveform(item)
         else:
             connection.send(item)
-
-    if acquisitions and app.branch_for(last) is None:
-        deliver(app.recon("imaging", context))
+    emit(app.flush(context))
 
 
 # %% private module subroutines
 
 
-def _accept(acquisition: Any, app: ReconPlugin) -> bool:
-    return all(
-        has_acquisition_flag(acquisition, flag) for flag in app.require_flags
-    ) and not any(has_acquisition_flag(acquisition, flag) for flag in app.reject_flags)
-
-
-def _make_bucket(
-    acquisitions: list[Any],
-    waveforms: list[Any],
-) -> AcquisitionBucket:
-    data: list[Any] = []
+def _make_bucket(data: ReconData | None) -> AcquisitionBucket:
+    """Return a unit's acquisitions split as Gadgetron's bucket splits them."""
+    acquisitions = () if data is None else tuple(data.acquisitions)
+    imaging: list[Any] = []
     reference: list[Any] = []
     for acquisition in acquisitions:
-        calibration = has_acquisition_flag(acquisition, "ACQ_IS_PARALLEL_CALIBRATION")
-        calibration_and_imaging = has_acquisition_flag(
-            acquisition, "ACQ_IS_PARALLEL_CALIBRATION_AND_IMAGING"
-        )
-        phase_correction = has_acquisition_flag(acquisition, "ACQ_IS_PHASECORR_DATA")
-        if calibration or calibration_and_imaging:
+        in_data, in_ref = readout_roles(acquisition)
+        if in_data:
+            imaging.append(acquisition)
+        if in_ref:
             reference.append(acquisition)
-        if not calibration and not phase_correction:
-            data.append(acquisition)
-
     return AcquisitionBucket(
-        data=tuple(data),
-        datastats=_bucket_stats(data),
+        data=tuple(imaging),
+        datastats=_bucket_stats(imaging),
         ref=tuple(reference),
         refstats=_bucket_stats(reference),
-        waveforms=tuple(waveforms),
-        acquisitions=tuple(acquisitions),
+        waveforms=() if data is None else data.waveforms,
+        acquisitions=acquisitions,
     )
 
 
@@ -223,9 +194,6 @@ def _make_image(
     # A result must name a real acquisition for its geometry.
     if not bucket.data:
         raise ValueError("ReconResult requires at least one imaging acquisition")
-    # Negative indices count from the end, so -1 names the acquisition that
-    # triggered the bucket -- which is the one belonging to the unit just
-    # completed when the bucket also carries earlier units.
     if not -len(bucket.data) <= result.reference < len(bucket.data):
         raise IndexError(
             f"ReconResult reference {result.reference} is outside a bucket of "

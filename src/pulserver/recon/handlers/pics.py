@@ -6,11 +6,18 @@ __all__ = ["PLUGIN", "PicsRecon", "RemoveReadoutOversampling"]
 
 import numpy as np
 
+from ...mrd._acquisitions import AcquisitionFlag
 from ...mrd._header import EncodingSpace
 from ...mrd._images import center_crop
 from ...mrd._metadata import acquisition_label
+from .._buffers import ReconData
+from .._units import carries
 from ..plugin import Gadget
 from .cartesian import CartesianRecon
+
+#: The flags either of which marks a navigator readout: pypulseqpp's ``NAV``
+#: label, or ``RTFEEDBACK``.
+NAVIGATOR = AcquisitionFlag.IS_NAVIGATION_DATA | AcquisitionFlag.IS_RTFEEDBACK_DATA
 
 
 class RemoveReadoutOversampling(Gadget):
@@ -21,7 +28,8 @@ class RemoveReadoutOversampling(Gadget):
     ``RemoveROOversamplingGadget``. A partial echo is zero-filled to the full
     echo for the transform, ``center_sample`` locating the echo, and only its
     acquired part is returned, so the buffer still sees a partial echo.
-    Readouts no longer than the matrix pass unchanged.
+    Readouts not longer than the matrix pass unchanged, and so do navigator
+    readouts (:data:`NAVIGATOR`), which are not sampled on the imaging grid.
     """
 
     def startup(self, context):
@@ -40,7 +48,7 @@ class RemoveReadoutOversampling(Gadget):
         samples = data.shape[-1]
         centre = int(acquisition_label(acquisition, "center_sample", 0) or 0)
         full = max(samples, 2 * (samples - centre))
-        if full <= columns:
+        if full <= columns or carries(acquisition, NAVIGATOR):
             return data
         echo = np.zeros((data.shape[0], full), dtype=np.complex64)
         echo[:, full - samples :] = data
@@ -76,13 +84,18 @@ class PicsRecon(CartesianRecon):
 
     def __init__(self, wavelet: float = 0.005, iterations: int = 30) -> None:
         super().__init__()
-        self.chain = (RemoveReadoutOversampling(),)
+        self.gadgets = (RemoveReadoutOversampling(),)
         self.wavelet = wavelet
         self.iterations = iterations
 
     def image(
-        self, kspace: np.ndarray, shape: tuple[int, ...], device: str | None
+        self,
+        kspace: np.ndarray,
+        shape: tuple[int, ...],
+        device: str | None,
+        data: ReconData | None = None,
     ) -> np.ndarray:
+        del data
         import torch
         from bartorch import apps, priors, tools
 

@@ -12,8 +12,8 @@ from bartorch import apps, priors
 from pulserver import recon
 
 class Pics(recon.ReconPlugin):
-    def recon(self, branch, context):
-        kspace = torch.from_numpy(self.buffers[0].kspace)  # (coils, y, x)
+    def recon(self, context, branch, data):
+        kspace = torch.from_numpy(data.data.kspace)  # (coils, y, x)
         maps = bt.ecalib(kspace, maps=1)
         image = apps.pics(kspace, maps, regularizers=priors.Wavelet((-1, -2), 0.005))
         return recon.ReconResult(image.abs().numpy())
@@ -21,15 +21,55 @@ class Pics(recon.ReconPlugin):
 PLUGIN = Pics()
 ```
 
-`self.buffers[0].kspace` is the first encoding space, `(coils, ..., readout)`,
-with the axes `buffers[0].axes` names. Readouts are placed by their encoding
-counters, which a sequence sets with `self.labels(LIN=line)` in its kernel or
-`pp.make_label` as in PyPulseq; a readout placed over another is warned about.
+`data` is the {class}`~pulserver.recon.ReconData` of one reconstruction unit,
+and `data.data` its k-space, `(coils, ..., readout)`, with the axes
+`data.data.axes` names. Readouts are placed by their encoding counters, which a
+sequence sets with `self.labels(LIN=line)` in its kernel or `pp.make_label` as
+in PyPulseq; a readout placed over another is warned about.
 The proxy runs the plugin in a worker process, one per series, over an MRD
 stream enriched from the sequence's design
 ({doc}`../explanations/reconstruction`). The client names the plugin of a series
 in its config text ({doc}`reconstruction-client`), independently of the
 scanner-sequence plugin the series was played from.
+
+## Reconstruction units
+
+A *reconstruction unit* is the set of readouts reconstructed together. It
+holds the readouts of one branch and one encoding space that share their
+slice, contrast, cardiac phase, repetition, set and average counters; the
+`segment` and user counters do not separate units. A counter named in `axes`
+becomes an axis of the unit's k-space instead, so that the echoes or averages
+of an image are one unit.
+
+A unit closes when the flag `triggers` names for its branch has arrived at every
+position along its `axes`, and `recon` is called with it once. A unit is
+released when `recon` returns: no reference to it remains, so a series holds
+only the units open at once, and a plugin that needs the data of an earlier unit
+keeps the parts it needs. A unit still open at the last readout of the
+measurement (`LAST_IN_MEASUREMENT`) or at the end of the stream is reconstructed
+then, under its own branch, in the order the units opened.
+
+| Argument | Sets |
+| --- | --- |
+| `gadgets` | {class}`~pulserver.recon.Gadget` steps run over each readout before it is placed |
+| `triggers` | `{branch: flag}`, the {class}`~pulserver.mrd.AcquisitionFlag` closing a unit of the branch, several combined with `\|`. The first branch is that of every readout `branch_for` does not route elsewhere. The default is `{"imaging": LAST_IN_MEASUREMENT}` |
+| `axes` | the counters that are axes of a unit instead of separating units |
+| `require_flags`, `reject_flags` | the flags an acquisition must all carry, and those any one of which excludes it |
+| `buffered` | whether readouts are placed in `data.data` and `data.ref`; with `False` a plugin reads `data.acquisitions` and a unit closes at its first flag, whatever its `axes` |
+
+`recon` receives the unit as a {class}`~pulserver.recon.ReconData`:
+
+| Attribute | Holds |
+| --- | --- |
+| `data` | the k-space of the imaging readouts, a {class}`~pulserver.recon.ReconBuffer`, or `None` when the unit placed none |
+| `ref` | the k-space of the parallel-imaging calibration readouts laid out as `data`, or `None` |
+| `counters` | the unit's image counters not in `axes`, by MRD name |
+| `waveforms` | the waveforms received since the previous unit closed |
+| `acquisitions` | every readout the unit received, as it arrived |
+
+A readout flagged `IS_PARALLEL_CALIBRATION` is placed in `ref` only, one flagged
+`IS_PARALLEL_CALIBRATION_AND_IMAGING` in both, and one flagged
+`IS_PHASECORR_DATA` in neither unless it is also a calibration readout.
 
 ## Hooks
 
@@ -38,14 +78,17 @@ The runtime calls three hooks over one stream:
 | Hook | Called |
 | --- | --- |
 | {meth}`~pulserver.recon.ReconPlugin.startup` | once, before any acquisition |
-| {meth}`~pulserver.recon.ReconPlugin.receive` | for each accepted acquisition, as it arrives |
-| {meth}`~pulserver.recon.ReconPlugin.recon` | for each branch `receive` routes |
+| {meth}`~pulserver.recon.ReconPlugin.recon` | for each unit, as it closes |
+| {meth}`~pulserver.recon.ReconPlugin.finish` | once, after the last unit |
 
-Only `recon` has to be written. The default `receive` runs the `chain` of
-{class}`~pulserver.recon.Gadget` steps over the readout, places it in
-`self.buffers` by its encoding counters, and routes by `branches`: the first
-{class}`~pulserver.mrd.AcquisitionFlag` the acquisition carries names the
-branch to reconstruct.
+Only `recon` has to be written. The runtime passes every acquisition to
+{meth}`~pulserver.recon.ReconPlugin.receive`, which is not overridden: it
+applies `require_flags` and `reject_flags`, runs the `gadgets` over the readout,
+adds it to the unit of the branch
+{meth}`~pulserver.recon.ReconPlugin.branch_for` names, and calls `recon` for each
+unit that closes. `branch_for` returns no branch for a noise measurement, nor for
+a navigator readout unless `triggers` declares a `"navigator"` branch; every
+other readout belongs to the first branch `triggers` declares.
 
 ```pycon
 >>> import numpy as np
@@ -58,11 +101,11 @@ branch to reconstruct.
 >>> class RootSumOfSquares(recon.ReconPlugin):
 ...     def __init__(self):
 ...         super().__init__(
-...             chain=[DropNoise()],
-...             branches={mrd.AcquisitionFlag.LAST_IN_SLICE: "imaging"},
+...             gadgets=[DropNoise()],
+...             triggers={"imaging": mrd.AcquisitionFlag.LAST_IN_SLICE},
 ...         )
-...     def recon(self, branch, context):
-...         image = np.fft.fftshift(np.fft.ifft2(self.buffers[0].kspace))
+...     def recon(self, context, branch, data):
+...         image = np.fft.fftshift(np.fft.ifft2(data.data.kspace))
 ...         return recon.ReconResult(np.sqrt(np.sum(np.abs(image) ** 2, axis=0)))
 >>> PLUGIN = RootSumOfSquares()
 
@@ -94,7 +137,7 @@ units and layout `bartorch.linop.NUFFT` takes, with the coils of the buffer's
 import torch
 from bartorch.linop import NUFFT
 
-buffer = self.buffers[0]
+buffer = data.data
 nufft = NUFFT(
     torch.from_numpy(buffer.grid_trajectory()),
     image_shape=(buffer.coils, *buffer.image_shape),
@@ -117,7 +160,8 @@ images = PLUGIN.run("raw.h5", store="designs")
 ```
 
 Calling the plugin on an {class}`~pulserver.mrd.AcquisitionBucket` runs
-`startup`, places every readout and reconstructs once. A header only needs to
+`startup`, passes every acquisition to `receive`, reconstructs the units still
+open and runs `finish`, and returns the last output. A header only needs to
 describe the encoded space and the receiver channels:
 
 ```pycon
@@ -137,7 +181,7 @@ describe the encoded space and the receiver channels:
 
 ```
 
-Four shipped plugins are complete reconstructions, each image scaled to the
+Six shipped plugins are complete reconstructions, each image scaled to the
 header's largest stored value. They are searched after every reconstruction
 plugin directory, so a client can name one, such as `nufft`, without a file of
 its own:

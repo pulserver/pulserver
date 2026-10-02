@@ -3,7 +3,8 @@
 A plugin module defines a :class:`ReconPlugin` subclass and a module-level
 ``PLUGIN`` instance. The same hooks run over a live MRD stream, over an MRD
 file (:meth:`ReconPlugin.run`) and over an assembled bucket (calling the
-instance).
+instance). The plugin writes :meth:`ReconPlugin.recon`, which is given each
+reconstruction unit as it closes.
 
 Examples
 --------
@@ -12,10 +13,9 @@ Examples
 >>> from pulserver.recon import ReconContext, ReconPlugin, ReconResult
 >>> from pulserver.mrd import AcquisitionBucket
 >>> class RootSumOfSquares(ReconPlugin):
-...     def recon(self, branch, context):
-...         del branch, context
-...         kspace = self.buffers[0].kspace
-...         return ReconResult(np.sqrt(np.sum(np.abs(kspace) ** 2, axis=0)))
+...     def recon(self, context, branch, data):
+...         del context, branch
+...         return ReconResult(np.sqrt(np.sum(np.abs(data.data.kspace) ** 2, axis=0)))
 >>> matrix = SimpleNamespace(matrixSize=SimpleNamespace(x=8, y=4, z=1))
 >>> header = SimpleNamespace(
 ...     encoding=[SimpleNamespace(encodedSpace=matrix, reconSpace=matrix)],
@@ -49,6 +49,7 @@ import logging
 import os
 import pickle
 import threading
+import warnings
 from abc import ABC, abstractmethod
 from collections.abc import (
     Callable,
@@ -61,13 +62,15 @@ from collections.abc import (
 from dataclasses import dataclass, field
 from pathlib import Path
 from threading import RLock
-from typing import Any
+from typing import Any, final
 
 import numpy as np
 
 from ..mrd._acquisitions import AcquisitionBucket, AcquisitionFlag
+from ..mrd._header import LOOP_COUNTERS, EncodingSpace
 from ..mrd._metadata import has_acquisition_flag
-from ._buffers import ReconBuffer, ReconData
+from ._buffers import ReconBuffer, ReconData, ReconUnit
+from ._units import UnitKey, _Closure, _FlagClosure, unit_key
 
 
 @dataclass(frozen=True)
@@ -478,11 +481,11 @@ class ReconContext:
 
 
 class Gadget(ABC):
-    """One per-acquisition step of a plugin's ``chain``.
+    """One per-acquisition step of a plugin's ``gadgets``.
 
     A gadget keeps what it learns from earlier acquisitions of its stream -- a
     noise covariance, a coil basis -- on ``self``. :meth:`ReconPlugin.spawn`
-    copies the chain, so each stream has its own.
+    copies the gadgets, so each stream has its own.
 
     Attributes
     ----------
@@ -528,14 +531,25 @@ class Gadget(ABC):
 class ReconPlugin(ABC):
     """Base class for reconstruction plugins.
 
-    The runtime drives three hooks over one MRD stream: :meth:`startup` once,
-    before any acquisition; :meth:`receive` for each accepted acquisition, as it
-    arrives; and :meth:`recon` for each branch :meth:`receive` routes. Only
-    :meth:`recon` is abstract. The default :meth:`receive` runs the ``chain``,
-    places the readout in :attr:`buffers` and routes by ``branches``, so a
-    plugin usually declares those two and writes only :meth:`recon`. When a
-    stream ends on acquisitions that closed no branch, :meth:`recon` runs once
-    more with ``"imaging"``.
+    The runtime drives one MRD stream through three hooks: :meth:`startup`
+    once, before any acquisition; :meth:`recon` for each reconstruction unit as
+    it closes; and :meth:`finish` once, after the last unit. Only :meth:`recon`
+    is abstract; the framework method :meth:`receive` is not overridden.
+
+    A *unit* is the set of readouts reconstructed together: those of one
+    branch and encoding space that share every image counter (slice, contrast,
+    phase, repetition, set, average) not listed in ``axes``. The counters in
+    ``axes`` are axes of the unit's k-space instead; ``segment`` and the user
+    counters separate no units unless ``segment`` is listed. Each accepted
+    acquisition runs through the ``gadgets``, then joins the unit of the branch
+    :meth:`branch_for` names, which places it by its flags (see
+    :class:`ReconData`). A unit closes when the flag ``triggers`` names for its
+    branch has arrived for every combination of the counters in ``axes``. It
+    leaves the plugin before :meth:`recon` runs, so its buffers are freed once
+    :meth:`recon` returns; the memory a stream holds is bounded by the units
+    open at once. Units still open at ``LAST_IN_MEASUREMENT`` or at the end of
+    the stream are reconstructed then, in the order they opened and under their
+    own branches.
 
     Each stream runs on its own :meth:`spawn` of the module-level ``PLUGIN``, so
     state set in the hooks belongs to one stream. ``context.exam`` is shared
@@ -543,32 +557,40 @@ class ReconPlugin(ABC):
 
     Parameters
     ----------
-    chain
-        :class:`Gadget` steps applied to every readout on arrival, in order.
-    branches
-        ``{AcquisitionFlag: name}``, tried in order: the first flag the
-        acquisition carries names the branch. List larger units first, since the
-        last acquisition of a slice also closes its segment. Flags combined with
-        ``|`` route either one to the branch. The default routes
-        ``LAST_IN_MEASUREMENT`` to ``"imaging"``.
+    gadgets
+        :class:`Gadget` steps applied to every accepted readout on arrival, in
+        order, before it is placed.
+    triggers
+        ``{branch: flag}``: the :class:`~pulserver.mrd.AcquisitionFlag` that
+        closes a unit of the branch, combined with ``|`` for either of several.
+        The first branch declared receives the readouts :meth:`branch_for`
+        does not route elsewhere. The default is ``{"imaging":
+        LAST_IN_MEASUREMENT}``.
+    axes
+        Counters of a unit placed along axes of its k-space and waited for by
+        the closing flag, instead of separating units: any of ``repetition``,
+        ``phase``, ``slice``, ``contrast``, ``set``, ``average`` and
+        ``segment``. Their extents are the header's encoding limits.
     require_flags
         Flags an acquisition must all carry to be accepted. A combined
         :class:`AcquisitionFlag` counts as its members.
     reject_flags
-        Flags any one of which excludes an acquisition. The runtime never passes
-        excluded acquisitions to :meth:`receive`.
+        Flags any one of which excludes an acquisition.
     buffered
-        Place acquisitions into :attr:`buffers`. Disable for streams whose header
-        does not describe their encoding spaces; the plugin then collects
-        acquisitions itself.
+        Place readouts in :attr:`ReconData.data` and :attr:`ReconData.ref`.
+        Disable for streams whose header does not describe their encoding
+        spaces; the plugin then reads :attr:`ReconData.acquisitions`, and a
+        unit closes at the first flag, whatever its ``axes``.
+    chain
+        Deprecated alias of ``gadgets``; warns.
+    branches
+        Deprecated alias of ``triggers``, mapping ``{flag: branch}``; warns.
 
     Attributes
     ----------
-    buffers : ReconData
-        Every encoding space of the scan, laid out by :meth:`startup`.
-    acquisition : object
-        The last acquisition the chain passed -- the one that closed the branch
-        :meth:`recon` is running -- or ``None``.
+    gadgets : tuple of Gadget
+    triggers : dict
+    axes : tuple of str
 
     Examples
     --------
@@ -582,36 +604,63 @@ class ReconPlugin(ABC):
     >>> class RootSumOfSquares(recon.ReconPlugin):
     ...     def __init__(self):
     ...         super().__init__(
-    ...             chain=[DropNoise()],
-    ...             branches={mrd.AcquisitionFlag.LAST_IN_SLICE: "imaging"},
+    ...             gadgets=[DropNoise()],
+    ...             triggers={"imaging": mrd.AcquisitionFlag.LAST_IN_SLICE},
+    ...             axes=("average",),
     ...         )
-    ...     def recon(self, branch, context):
-    ...         kspace = self.buffers[0].kspace
+    ...     def recon(self, context, branch, data):
+    ...         kspace = data.data.kspace
     ...         return recon.ReconResult(np.sqrt(np.sum(np.abs(kspace) ** 2, axis=0)))
-    >>> RootSumOfSquares().branches[mrd.AcquisitionFlag.LAST_IN_SLICE]
-    'imaging'
+    >>> RootSumOfSquares().triggers["imaging"]
+    <AcquisitionFlag.LAST_IN_SLICE: 128>
     """
 
     def __init__(
         self,
         *,
-        chain: Sequence[Any] = (),
-        branches: Mapping[Any, str] | None = None,
-        require_flags: tuple[int | str, ...] = (),
-        reject_flags: tuple[int | str, ...] = (),
+        gadgets: Sequence[Gadget] = (),
+        triggers: Mapping[str, Any] | None = None,
+        axes: Sequence[str] = (),
+        require_flags: tuple[int | str, ...] | AcquisitionFlag = (),
+        reject_flags: tuple[int | str, ...] | AcquisitionFlag = (),
         buffered: bool = True,
+        chain: Sequence[Gadget] | None = None,
+        branches: Mapping[Any, str] | None = None,
     ) -> None:
-        self.chain = tuple(chain)
-        self.branches = dict(
-            {AcquisitionFlag.LAST_IN_MEASUREMENT: "imaging"}
-            if branches is None
-            else branches
+        if chain is not None:
+            warnings.warn(
+                "ReconPlugin(chain=...) is deprecated; pass gadgets=",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            if gadgets:
+                raise TypeError("pass gadgets, not both gadgets and chain")
+            gadgets = chain
+        if branches is not None:
+            warnings.warn(
+                "ReconPlugin(branches={flag: name}) is deprecated; "
+                "pass triggers={name: flag}",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            if triggers is not None:
+                raise TypeError("pass triggers, not both triggers and branches")
+            triggers = _triggers_of(branches)
+        unknown = [name for name in axes if name not in _AXES]
+        if unknown:
+            raise ValueError(
+                f"axes {unknown} are not counters a unit can be laid out along; "
+                f"they are {list(_AXES)}"
+            )
+        self.gadgets = tuple(gadgets)
+        self.triggers = dict(
+            triggers or {"imaging": AcquisitionFlag.LAST_IN_MEASUREMENT}
         )
+        self.axes = tuple(axes)
         self.require_flags = _flag_members(require_flags)
         self.reject_flags = _flag_members(reject_flags)
         self.buffered = bool(buffered)
-        self.buffers = ReconData()
-        self.acquisition: Any = None
+        self._reset()
 
     def spawn(self) -> ReconPlugin:
         """Return the instance one stream runs on.
@@ -621,100 +670,123 @@ class ReconPlugin(ABC):
         shared. Override to isolate anything else a shallow copy would share.
         """
         plugin = copy.copy(self)
-        plugin.chain = tuple(copy.copy(gadget) for gadget in self.chain)
+        plugin.gadgets = tuple(copy.copy(gadget) for gadget in self.gadgets)
         return plugin
 
     def startup(self, context: ReconContext) -> None:
-        """Start every gadget, then lay out :attr:`buffers` from the header.
+        """Start every gadget and lay out the units' encoding spaces from the header.
 
-        No buffer is allocated until an acquisition names its space. Overrides call
+        Nothing is allocated until a readout is placed. Overrides call
         ``super().startup(context)``.
         """
-        for gadget in self.chain:
+        self._reset()
+        for gadget in self.gadgets:
             gadget.startup(context)
         if self.buffered:
-            self.buffers = ReconData.from_header(context.header)
-
-    def process(self, acquisition: Any, data: Any = None) -> Any:
-        """Run the chain over one readout and return what it left.
-
-        Parameters
-        ----------
-        acquisition
-            The acquisition, for its flags and counters.
-        data
-            The readout to start from; ``None`` takes ``acquisition.data``.
-
-        Returns
-        -------
-        ndarray or None
-            The corrected readout, or ``None`` when a step consumed it.
-        """
-        if data is None:
-            data = np.asarray(acquisition.data)
-        for gadget in self.chain:
-            data = gadget(acquisition, data)
-            if data is None:
-                return None
-        return data
+            self._spaces = {
+                space.index: space
+                for space in EncodingSpace.all_from_header(context.header, self.axes)
+            }
 
     def gadget(self, kind: type) -> Any:
         """Return this stream's first gadget of type ``kind``.
 
-        Hooks reach gadgets through this rather than through ``PLUGIN``, whose chain
+        Hooks reach gadgets through this rather than through ``PLUGIN``, whose gadgets
         :meth:`spawn` copied.
 
         Raises
         ------
         LookupError
-            If the chain holds no gadget of that type.
+            If the plugin holds no gadget of that type.
         """
-        for gadget in self.chain:
+        for gadget in self.gadgets:
             if isinstance(gadget, kind):
                 return gadget
-        raise LookupError(f"this plugin's chain has no {kind.__name__}")
+        raise LookupError(f"this plugin has no {kind.__name__}")
 
     def branch_for(self, acquisition: Any) -> str | None:
-        """Return the branch the acquisition closes, or ``None``; see ``branches``."""
-        if acquisition is None:
+        """Return the branch an acquisition belongs to, or ``None`` to drop it.
+
+        Noise measurements belong to none. Navigator readouts belong to
+        ``"navigator"`` when ``triggers`` declares it, else to none. Anything
+        else belongs to the first branch ``triggers`` declares.
+        """
+        if has_acquisition_flag(acquisition, "ACQ_IS_NOISE_MEASUREMENT"):
             return None
-        for flag, branch in self.branches.items():
-            if _closes(acquisition, flag):
-                return branch
-        return None
+        if has_acquisition_flag(acquisition, "ACQ_IS_NAVIGATION_DATA"):
+            return "navigator" if "navigator" in self.triggers else None
+        return next(iter(self.triggers))
 
-    def receive(self, acquisition: Any, context: ReconContext) -> Any:
-        """Run the chain on one acquisition, place it, and run the branch it closes.
+    @final
+    def receive(
+        self, acquisition: Any, context: ReconContext
+    ) -> list[tuple[ReconData | None, Any]]:
+        """Take in one acquisition and reconstruct the units it completes.
 
-        Placement follows ``encoding_space_ref`` and the acquisition's counters.
-        Override for placement the default cannot express, calling :meth:`process`
-        so the chain still runs.
+        In order: the acquisition must pass ``require_flags`` and
+        ``reject_flags``; the ``gadgets`` run, any of which may consume it;
+        :meth:`branch_for` names its branch; it is added to its unit; the
+        units that close are removed from the plugin and reconstructed by
+        :meth:`recon`, in the order they opened. An acquisition carrying
+        ``LAST_IN_MEASUREMENT`` closes every open unit instead, as :meth:`flush`
+        does, whether or not it has samples: the stream's end marker has none.
 
         Returns
         -------
-        object or None
-            What :meth:`recon` returned, or ``None`` when the chain consumed the
-            acquisition or it closed no branch.
+        list
+            ``(data, output)`` for each unit :meth:`recon` returned something
+            for, ``data`` being what it was given.
         """
-        data = self.process(acquisition)
-        if data is None:
-            return None
-        self.acquisition = acquisition
-        if self.buffered:
-            self.buffers.add(acquisition, data)
-        branch = self.branch_for(acquisition)
-        return None if branch is None else self.recon(branch, context)
+        emitted: list[tuple[ReconData | None, Any]] = []
+        if self._accepts(acquisition):
+            readout = self._process(acquisition)
+            branch = None if readout is None else self.branch_for(acquisition)
+            if branch is not None:
+                self._unit(branch, acquisition).add_acquisition(acquisition, readout)
+            if has_acquisition_flag(acquisition, "ACQ_LAST_IN_MEASUREMENT"):
+                emitted = self.flush(context)
+            elif branch is not None:
+                closed = self._closure.closed(self._units, acquisition, branch)
+                emitted = self._reconstruct(closed, context)
+        return emitted
+
+    def receive_waveform(self, waveform: Any) -> None:
+        """Hold a waveform for the next units that close; see :attr:`ReconData.waveforms`."""
+        self._waveforms.append(waveform)
+
+    def flush(self, context: ReconContext) -> list[tuple[ReconData | None, Any]]:
+        """Reconstruct every unit still open under its own branch, then call :meth:`finish`.
+
+        :meth:`receive` calls it at ``LAST_IN_MEASUREMENT`` and the runtime at
+        the end of the stream; :meth:`finish` runs the first time only.
+
+        Returns
+        -------
+        list
+            As :meth:`receive`; the output of :meth:`finish`, if any, comes last
+            and with ``None`` for ``data``.
+        """
+        emitted = self._reconstruct(list(self._units), context)
+        if not self._finished:
+            self._finished = True
+            output = self.finish(context)
+            if output is not None:
+                emitted.append((None, output))
+        return emitted
 
     @abstractmethod
-    def recon(self, branch: str, context: ReconContext) -> Any:
-        """Reconstruct one branch from the filled buffers.
+    def recon(self, context: ReconContext, branch: str, data: ReconData) -> Any:
+        """Reconstruct one unit.
 
         Parameters
         ----------
-        branch
-            The branch name :meth:`receive` routed.
         context
             The scan context.
+        branch
+            The unit's branch, ``data.branch``.
+        data
+            The unit's readouts. Nothing else keeps them, so a plugin that
+            wants them later keeps the parts it needs.
 
         Returns
         -------
@@ -723,6 +795,16 @@ class ReconPlugin(ABC):
             :class:`ReconResult`), a sequence of these, or ``None``.
         """
         ...
+
+    def finish(self, context: ReconContext) -> Any:
+        """Run once, after the last unit has been reconstructed.
+
+        A :class:`ReconResult` takes its geometry from an acquisition of its
+        unit, and this has none, so it returns ``ismrmrd`` outputs or ``None``.
+        The default returns ``None``.
+        """
+        del context
+        return None
 
     def run(
         self,
@@ -775,39 +857,79 @@ class ReconPlugin(ABC):
     def __call__(self, bucket: AcquisitionBucket, context: ReconContext) -> Any:
         """Reconstruct an assembled bucket on a new :meth:`spawn`.
 
-        Runs :meth:`startup`, then :meth:`receive` for every acquisition in arrival
-        order, and returns the last output that was not ``None``. When there was
-        none and the last acquisition closes no branch, returns :meth:`recon` with
-        ``"imaging"``. ``require_flags`` and ``reject_flags`` are not applied.
+        Runs :meth:`startup`, delivers the bucket's waveforms, then runs
+        :meth:`receive` for every acquisition in arrival order and :meth:`flush`,
+        and returns the last output that was not ``None``.
         """
         plugin = self.spawn()
         plugin.startup(context)
+        for waveform in bucket.waveforms:
+            plugin.receive_waveform(waveform)
         output = None
         for acquisition in bucket.acquisitions:
-            received = plugin.receive(acquisition, context)
-            if received is not None:
-                output = received
-        if output is None and plugin.branch_for(_last(bucket.acquisitions)) is None:
-            output = plugin.recon("imaging", context)
+            for _, result in plugin.receive(acquisition, context):
+                output = result
+        for _, result in plugin.flush(context):
+            output = result
         return output
+
+    def _reset(self) -> None:
+        """Begin a stream with no unit open."""
+        self._spaces: dict[int, EncodingSpace] = {}
+        self._closure: _Closure = _FlagClosure(self.triggers, self.axes)
+        self._units: dict[UnitKey, ReconUnit] = {}
+        self._waveforms: list[Any] = []
+        self._finished = False
+
+    def _accepts(self, acquisition: Any) -> bool:
+        return all(
+            has_acquisition_flag(acquisition, flag) for flag in self.require_flags
+        ) and not any(
+            has_acquisition_flag(acquisition, flag) for flag in self.reject_flags
+        )
+
+    def _process(self, acquisition: Any) -> Any:
+        """Run the gadgets over one readout; ``None`` when one consumed it or it has no samples."""
+        data = np.asarray(acquisition.data)
+        if data.size == 0:
+            return None
+        for gadget in self.gadgets:
+            data = gadget(acquisition, data)
+            if data is None:
+                return None
+        return data
+
+    def _unit(self, branch: str, acquisition: Any) -> ReconUnit:
+        key = unit_key(branch, acquisition, self.axes)
+        if key not in self._units:
+            self._units[key] = ReconUnit(key, self._spaces, buffered=self.buffered)
+        return self._units[key]
+
+    def _reconstruct(
+        self, keys: list[UnitKey], context: ReconContext
+    ) -> list[tuple[ReconData | None, Any]]:
+        if not keys:
+            return []
+        if len(keys) > 1:
+            closing = set(keys)
+            keys = [key for key in self._units if key in closing]
+        waveforms = tuple(self._waveforms)
+        self._waveforms.clear()
+        emitted: list[tuple[ReconData | None, Any]] = []
+        for key in keys:
+            data = self._units.pop(key).data
+            data.waveforms = waveforms
+            output = self.recon(context, data.branch, data)
+            if output is not None:
+                emitted.append((data, output))
+        return emitted
+
+
+#: Counters a unit can be laid out along, as ``axes`` names them.
+_AXES = (*LOOP_COUNTERS, "segment")
 
 
 # %% private module subroutines
-
-
-def _closes(acquisition: Any, flag: Any) -> bool:
-    """Whether this acquisition carries the boundary named.
-
-    A combined :class:`AcquisitionFlag` names several at once, and carrying any
-    of them closes the branch it was mapped to.
-    """
-    if isinstance(flag, AcquisitionFlag):
-        return any(
-            has_acquisition_flag(acquisition, member.flag)
-            for member in AcquisitionFlag
-            if member in flag
-        )
-    return has_acquisition_flag(acquisition, flag)
 
 
 def _flag_members(flags: Any) -> tuple[Any, ...]:
@@ -821,9 +943,17 @@ def _flag_members(flags: Any) -> tuple[Any, ...]:
     return tuple(flags)
 
 
-def _last(acquisitions: tuple[Any, ...]) -> Any | None:
-    """Return the acquisition that ended a bucket, or ``None`` for an empty one."""
-    return acquisitions[-1] if acquisitions else None
+def _triggers_of(branches: Mapping[Any, str]) -> dict[str, Any]:
+    """Return ``{branch: flag}`` for the deprecated ``{flag: branch}``."""
+    triggers: dict[str, Any] = {}
+    for flag, name in branches.items():
+        if name in triggers:
+            raise ValueError(
+                f"branches maps two flags to {name!r}; declare "
+                f"triggers={{{name!r}: first | second}} instead"
+            )
+        triggers[name] = flag
+    return triggers
 
 
 def _replace(path: Path, payload: bytes) -> None:

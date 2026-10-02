@@ -70,8 +70,8 @@ from pulserver import recon
 
 
 class Pics(recon.ReconPlugin):
-    def recon(self, branch, context):
-        kspace = torch.from_numpy(self.buffers[0].kspace)  # (coils, y, x)
+    def recon(self, context, branch, data):
+        kspace = torch.from_numpy(data.data.kspace)  # (coils, y, x)
         maps = bt.ecalib(kspace, maps=1)
         image = apps.pics(kspace, maps, regularizers=priors.Wavelet((-1, -2), 0.005))
         return recon.ReconResult(image.abs().numpy())

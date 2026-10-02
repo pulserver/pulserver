@@ -1,4 +1,4 @@
-"""Prospective motion correction from three-plane spiral navigators with bartorch, around an imaging reconstruction."""
+"""Prospective motion correction from three-plane spiral navigators with bartorch, alongside the pics reconstruction."""
 
 from __future__ import annotations
 
@@ -8,25 +8,23 @@ from typing import Any
 
 import numpy as np
 
-from ...mrd._metadata import has_acquisition_flag
 from ...proxy._motion import Pose, pose_waveform
-from ..plugin import ReconPlugin
-from .pics import PicsRecon
-
-#: Flags either of which marks a navigator readout: pypulseqpp's ``NAV`` label,
-#: or ``RTFEEDBACK``.
-NAVIGATOR = ("ACQ_IS_NAVIGATION_DATA", "ACQ_IS_RTFEEDBACK_DATA")
+from .._buffers import ReconData
+from .._units import carries
+from ..plugin import ReconContext
+from .pics import NAVIGATOR, PicsRecon
 
 #: Planes of one navigator, as pypulseqpp's ``SpiralNavigator`` plays them.
 PLANES = 3
 
 
-class PmcRecon(ReconPlugin):
-    """Rigid pose from each navigator, stated to the scan; every other readout to ``imaging``.
+class PmcRecon(PicsRecon):
+    """Rigid pose from each navigator, stated to the scan; every other readout reconstructed as :class:`~pulserver.recon.handlers.pics.PicsRecon`.
 
-    Navigator readouts (``NAV`` or ``RTFEEDBACK``) are collected a navigator at a time, one
-    readout per plane. Each plane is reconstructed by a density-compensated
-    adjoint NUFFT, coils combined by root sum of squares
+    Navigator readouts (``NAV`` or ``RTFEEDBACK``) belong to the ``navigator``
+    branch, whose units are one readout each, and are collected a navigator at
+    a time, one readout per plane. Each plane is reconstructed by a
+    density-compensated adjoint NUFFT, coils combined by root sum of squares
     (:func:`bartorch.tools.reconstruct_navigator`), on one thread. The
     Pipe-Menon density (:func:`bartorch.estimate_density`) is computed once,
     from the first navigator's trajectory, which the proxy stamps from the
@@ -41,45 +39,38 @@ class PmcRecon(ReconPlugin):
 
     Parameters
     ----------
-    imaging
-        The reconstruction of the readouts that are not navigators.
     matrix
         In-plane matrix each plane is reconstructed on.
+    wavelet, iterations
+        As :class:`~pulserver.recon.handlers.pics.PicsRecon`.
     """
 
-    def __init__(self, imaging: ReconPlugin | None = None, matrix: int = 32) -> None:
-        imaging = PicsRecon() if imaging is None else imaging
-        super().__init__(
-            branches=imaging.branches,
-            require_flags=imaging.require_flags,
-            reject_flags=imaging.reject_flags,
-            buffered=False,
-        )
-        self.imaging = imaging
+    def __init__(
+        self, matrix: int = 32, wavelet: float = 0.005, iterations: int = 30
+    ) -> None:
+        super().__init__(wavelet, iterations)
+        self.triggers["navigator"] = NAVIGATOR
         self.matrix = matrix
 
-    def spawn(self) -> PmcRecon:
-        plugin = super().spawn()
-        plugin.imaging = self.imaging.spawn()
-        return plugin
-
-    def startup(self, context):
-        self.imaging.startup(context)
-        self.planes = []
+    def startup(self, context: ReconContext) -> None:
+        super().startup(context)
+        self.planes: list[Any] = []
         self.geometry = None
         self.tracker = None
 
-    def receive(self, acquisition, context):
-        if not any(has_acquisition_flag(acquisition, flag) for flag in NAVIGATOR):
-            return self.imaging.receive(acquisition, context)
-        self.planes.append(acquisition)
+    def branch_for(self, acquisition: Any) -> str | None:
+        if carries(acquisition, NAVIGATOR):
+            return "navigator"
+        return super().branch_for(acquisition)
+
+    def recon(self, context: ReconContext, branch: str, data: ReconData) -> Any:
+        if branch != "navigator":
+            return super().recon(context, branch, data)
+        self.planes.extend(data.acquisitions)
         if len(self.planes) < PLANES:
             return None
         planes, self.planes = self.planes, []
         return pose_waveform(self.pose(planes))
-
-    def recon(self, branch, context):
-        return self.imaging.recon(branch, context)
 
     def pose(self, planes: list[Any]) -> Pose:
         """Return the filtered pose of one navigator's readouts, one per plane."""

@@ -11,15 +11,16 @@ A plugin file defines a {class}`ReconPlugin` subclass and a module-level
 `PLUGIN` instance of it. The same hooks run over a live MRD stream in a worker
 of the reconstruction proxy, over an ISMRMRD HDF5 file
 ({meth}`ReconPlugin.run`) and over an assembled
-{class}`~pulserver.mrd.AcquisitionBucket` (calling the instance). Writing one is
-described in {doc}`../user-guide/reconstruction-plugins`.
+{class}`~pulserver.mrd.AcquisitionBucket` (calling the instance). The plugin
+reconstructs one unit of readouts at a time, as {class}`ReconData`. Writing one
+is described in {doc}`../user-guide/reconstruction-plugins`.
 
 ## Plugin
 
 | Object | Description |
 | --- | --- |
 | {obj}`~pulserver.recon.ReconPlugin` | Base class for reconstruction plugins. |
-| {obj}`~pulserver.recon.Gadget` | One per-acquisition step of a plugin's chain. |
+| {obj}`~pulserver.recon.Gadget` | One per-acquisition step, run before a readout is placed. |
 | {obj}`~pulserver.recon.load_plugin` | Import a plugin file and return its `PLUGIN` instance. |
 
 ## Scan context
@@ -37,6 +38,6 @@ described in {doc}`../user-guide/reconstruction-plugins`.
 
 | Object | Description |
 | --- | --- |
-| {obj}`~pulserver.recon.ReconData` | Every encoding space of a scan, by space index. |
+| {obj}`~pulserver.recon.ReconData` | The readouts of one reconstruction unit: imaging and calibration k-space, counters and waveforms. |
 | {obj}`~pulserver.recon.ReconBuffer` | K-space of one encoding space, filled one acquisition at a time. |
 | {obj}`~pulserver.recon.ReconResult` | Image array the runtime packages as an MRD image or DICOM dataset. |

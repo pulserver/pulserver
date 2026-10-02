@@ -4,15 +4,14 @@ from __future__ import annotations
 
 __all__ = ["PLUGIN", "NufftRecon"]
 
-from typing import Any
-
 import numpy as np
 
 from ...mrd._acquisitions import AcquisitionFlag
 from ...mrd._images import center_crop
-from ...mrd._metadata import acquisition_label, max_stored_value
+from ...mrd._metadata import max_stored_value
+from .._buffers import ReconData
 from ..plugin import ReconContext, ReconPlugin, ReconResult
-from .cartesian import last_average, loop_position
+from .cartesian import averaged
 
 
 class NufftRecon(ReconPlugin):
@@ -26,9 +25,9 @@ class NufftRecon(ReconPlugin):
     normal operator (``bart pics -e``). The trajectory is the one the proxy's enrichment writes, which
     :meth:`~pulserver.recon.ReconBuffer.grid_trajectory` scales to the image
     grid. A stack of spokes or spirals is Fourier transformed along its
-    partitions first and fitted partition by partition. Images close on the
-    last average, sum their averages and are scaled as
-    :class:`~pulserver.recon.handlers.cartesian.CartesianRecon` makes them.
+    partitions first and fitted partition by partition. Images close and are
+    scaled as :class:`~pulserver.recon.handlers.cartesian.CartesianRecon`
+    makes them, their averages summed.
     bartorch is imported when the first image is made, which the ``coils``
     extra installs.
 
@@ -42,37 +41,31 @@ class NufftRecon(ReconPlugin):
 
     def __init__(self, wavelet: float = 0.005, iterations: int = 30) -> None:
         super().__init__(
-            branches={AcquisitionFlag.LAST_IN_SLICE: "imaging"},
+            triggers={"imaging": AcquisitionFlag.LAST_IN_SLICE},
+            axes=("average",),
             reject_flags=AcquisitionFlag.IS_NOISE_MEASUREMENT
             | AcquisitionFlag.IS_PHASECORR_DATA,
         )
         self.wavelet = wavelet
         self.iterations = iterations
 
-    def startup(self, context: ReconContext) -> None:
-        super().startup(context)
-        self.closing: Any = None
-
-    def receive(self, acquisition: Any, context: ReconContext) -> Any:
-        self.closing = acquisition
-        return super().receive(acquisition, context)
-
-    def recon(self, branch: str, context: ReconContext) -> ReconResult | None:
+    def recon(
+        self, context: ReconContext, branch: str, data: ReconData
+    ) -> ReconResult | None:
         del branch
-        if self.closing is None:
-            return None
-        index = int(acquisition_label(self.closing, "encoding_space_ref", 0) or 0)
-        buffer = self.buffers[index]
-        if not last_average(buffer, self.closing):
+        buffer = data.data
+        if buffer is None:
             return None
         grid = buffer.grid_trajectory()
         if grid is None:
             raise ValueError(
                 "a non-Cartesian reconstruction needs the readouts' trajectory"
             )
-        kspace = loop_position(buffer, self.closing)
-        trajectory = grid[_loop_index(buffer, self.closing)]
-        image = self._fitted(kspace, trajectory, buffer.image_shape, context.device)
+        # The trajectory of the first average stands for all of them.
+        trajectory = grid[0] if "average" in buffer.axes else grid
+        image = self._fitted(
+            averaged(buffer), trajectory, buffer.image_shape, context.device
+        )
         peak = float(image.max(initial=0.0))
         if peak > 0.0:
             image *= max_stored_value(context.header) / peak
@@ -150,16 +143,3 @@ def sensitivities(samples, points, radius: float = 12.0):
     )
     maps = maps.reshape(samples.shape[0], *maps.shape[-2:])
     return maps / maps.abs().square().sum(dim=0, keepdim=True).sqrt().clamp_min(1e-12)
-
-
-def _loop_index(buffer: Any, acquisition: Any) -> tuple[Any, ...]:
-    """Index the placement axes of a grid trajectory at the loop position of ``acquisition``; the first average."""
-    index: list[Any] = []
-    for name in buffer.axes[1:-1]:
-        if name in ("partition", "phase_encode"):
-            index.append(slice(None))
-        elif name == "average":
-            index.append(0)
-        else:
-            index.append(int(acquisition_label(acquisition, name, 0) or 0))
-    return tuple(index)

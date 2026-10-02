@@ -36,14 +36,17 @@ def _average_closes(kspace):
             "average": np.repeat(np.arange(averages), LINES),
         },
     )
+    for index, acquisition in enumerate(bucket.acquisitions):
+        if index % LINES == LINES - 1:
+            acquisition.flags |= mrd.AcquisitionFlag.LAST_IN_SLICE.value
     context = recon.ReconContext.offline(_header(averages))
     plugin = PLUGIN.spawn()
     plugin.startup(context)
     closes = []
     for index, acquisition in enumerate(bucket.acquisitions):
-        plugin.receive(acquisition, context)
+        emitted = plugin.receive(acquisition, context)
         if index % LINES == LINES - 1:
-            closes.append(plugin.recon("imaging", context))
+            closes.append(emitted[0][1] if emitted else None)
     return closes
 
 
