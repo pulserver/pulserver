@@ -1,12 +1,33 @@
 # Reconstruction plugins
 
-A reconstruction plugin is a file in one of the reconstruction proxy's
-`--plugins` directories; a name is the plugin of the first directory holding
-`<name>.py`, and a symbolic link is a plugin named after the link. It defines a {class}`~pulserver.recon.ReconPlugin` subclass and a
-module-level `PLUGIN` instance of it. The proxy runs the plugin in a worker
-process, one per series, over an MRD stream whose header and acquisitions carry
-what the sequence states about its readouts (see
-{doc}`../explanations/reconstruction`).
+A reconstruction plugin is a file, `<name>.py` in a `--plugins` directory of the
+reconstruction proxy, holding a {class}`~pulserver.recon.ReconPlugin` subclass
+and a module-level `PLUGIN` instance. This one is `bart pics` on ESPIRiT maps:
+
+```python
+# recon/gre.py
+import torch
+import bartorch.tools as bt
+from bartorch import apps, priors
+from pulserver import recon
+
+class Pics(recon.ReconPlugin):
+    def recon(self, branch, context):
+        kspace = torch.from_numpy(self.buffers[0].kspace)  # (coils, y, x)
+        maps = bt.ecalib(kspace, maps=1)
+        image = apps.pics(kspace, maps, regularizers=priors.Wavelet((-1, -2), 0.005))
+        return recon.ReconResult(image.abs().numpy())
+
+PLUGIN = Pics()
+```
+
+`self.buffers[0].kspace` is the first encoding space, `(coils, ..., readout)`,
+with the axes `buffers[0].axes` names. Readouts are placed by their encoding
+counters, which a sequence sets with `self.labels(LIN=line)` in its kernel or
+`pp.make_label` as in PyPulseq; a readout placed over another is warned about.
+The proxy runs the plugin in a worker process, one per series, over an MRD
+stream enriched from the sequence's design
+({doc}`../explanations/reconstruction`).
 
 ## Hooks
 
@@ -50,20 +71,14 @@ geometry and timing come from a reference acquisition, so a plugin builds no
 image header; `dicom=True` sends it as DICOM instead.
 
 Each series runs on its own copy of `PLUGIN`
-({meth}`~pulserver.recon.ReconPlugin.spawn`), so state set in the hooks belongs
-to one series. `context.exam`, an {class}`~pulserver.recon.ExamCache`, is shared
-by the series of one exam: a coil calibration computed in one series can be
-stored there and read by the next. Under the proxy each series runs in a process
-of its own, so a stored value reaches the next series pickled, through the
-exam's directory: it comes back as a copy, without its `cleanup`, and a value
-that cannot be pickled stays with its series.
+({meth}`~pulserver.recon.ReconPlugin.spawn`). `context.exam`, an
+{class}`~pulserver.recon.ExamCache`, is shared by the series of one exam, such
+as for a coil calibration; under the proxy a stored value reaches the next
+series pickled, as a copy without its `cleanup`.
 
-`context.device` is the GPU the proxy gave the series, such as `"cuda:0"`, and
-`None` on a host without one and offline; a reconstruction puts its tensors
-there. A reconstruction may start processes of its own. A child started with
-the `spawn` method imports what it runs by module name, which a plugin file
-loaded from a path does not have, so the functions it runs come from importable
-modules.
+`context.device` is the GPU the proxy gave the series, such as `"cuda:0"`, or
+`None`. A child process started with the `spawn` method runs functions from
+importable modules, not from the plugin file.
 
 ## Non-Cartesian data
 
@@ -91,12 +106,12 @@ transformed with an FFT before the in-plane NUFFT.
 
 ## Running a plugin offline
 
-The same hooks run outside the proxy.
 {meth}`~pulserver.recon.ReconPlugin.run` reconstructs an ISMRMRD HDF5 file in
-the calling process:
+the calling process. A file recorded as the scanner sends it, such as
+`pulserver scan --mrd raw.h5` writes, is enriched from its design store first:
 
 ```python
-images = PLUGIN.run("scan.h5")
+images = PLUGIN.run("raw.h5", store="designs")
 ```
 
 Calling the plugin on an {class}`~pulserver.mrd.AcquisitionBucket` runs
@@ -120,7 +135,7 @@ describe the encoded space and the receiver channels:
 
 ```
 
-Three shipped plugins are complete reconstructions, each image scaled to the
+Four shipped plugins are complete reconstructions, each image scaled to the
 header's largest stored value. They are searched after every reconstruction
 plugin directory, so a sequence names one with `recon = "nufft"` and needs no
 file of its own:
@@ -129,9 +144,10 @@ file of its own:
 | --- | --- |
 | `simplefft` | A two-dimensional Cartesian FFT of the lines in arrival order, one image per slice |
 | `cartesian` | A Cartesian FFT of the readouts placed by their encoding counters, partitions included; one image per slice, contrast, cardiac phase, set and repetition, averages summed |
-| `nufft` | Each coil's least-squares fit of bartorch's NUFFT to its samples, with a Tikhonov term; the same images as `cartesian`, for a radial or spiral trajectory or a stack of them. Needs the `coils` extra |
+| `nufft` | The same images as `cartesian`, for a radial or spiral trajectory or a stack of them, each solved as `bart pics -t -R W` over `bart nlinv -t` sensitivities of the samples near the k-space centre. Needs the `coils` extra |
+| `pics` | `cartesian`'s images, its readouts cropped to the matrix as they arrive; each image solved as `bart pics -R W` over `bart nlinv` sensitivities of its low-resolution centre, then completed by `bart homodyne` along a partial-Fourier axis. Needs the `coils` extra |
 
-Each combines its coils as a root sum of squares; a volume is sent as one
+`simplefft` and `cartesian` combine their coils as a root sum of squares. A volume is sent as one
 image per partition. A plugin file that reexports one under another name,
 `from pulserver.recon.handlers.cartesian import PLUGIN`, is the same
 reconstruction.

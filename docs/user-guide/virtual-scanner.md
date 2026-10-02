@@ -209,15 +209,17 @@ line, is written to standard output, and the scan clock to standard error.
 - `--speed` plays the scan that many times as fast as a scanner, once the
   simulation is far enough ahead, writing the time left before it is to
   standard error; without it, the scan runs as fast as the simulation.
-- `--device cuda` reads the ADC windows outside runs of repetitions on the
-  CUDA device. A window under a changing gradient, such as a spiral's, whose
-  isochromats lie on a lattice along the axes its k moves along, as a
-  phantom's do, is summed onto the lattice by a Triton kernel and transformed
-  by cuFINUFFT; every other one, under a held gradient or with its
-  isochromats off any lattice, as a moving subject's are, is summed sample by
-  sample by a second Triton kernel. The `gpu` extra installs both
-  (`pip install 'pulserver[gpu]'`). The rest of the scan is simulated on the
-  CPU.
+- `--device cuda` reads the ADC windows and carries the runs of repetitions
+  on the CUDA device. A window outside a run under a changing gradient, such
+  as a spiral's, whose isochromats lie on a lattice along the axes its k
+  moves along, as a phantom's do, is summed onto the lattice by a Triton
+  kernel and transformed by cuFINUFFT; every other one, under a held gradient
+  or with its isochromats off any lattice, as a moving subject's are, is
+  summed sample by sample by a second Triton kernel. A run of repetitions,
+  Cartesian, radial or of ZTE spokes, is carried and spread onto its windows'
+  grids by more Triton kernels, a tile of repetitions at a time. The `gpu` extra
+  installs all of them (`pip install 'pulserver[gpu]'`). The rest of the scan
+  is simulated on the CPU.
 
 ## Prescribe an orientation
 
@@ -299,24 +301,27 @@ docker run -d --restart unless-stopped --name pulserver \
   -p 127.0.0.1:8765:8765 ghcr.io/pulserver/pulserver
 ```
 
-Its sequences are pypulseqpp's, reconstructed by the built-in plugins of
-{doc}`reconstruction-plugins`, and each protocol starts at values the image's
-limits play:
+Options after the image's name are added to its console's: an option of one
+value takes the value given last, and `--plugins`, `--recon-plugins` and
+`--origin` add to the image's. A console whose scans spread each voxel over
+four isochromats, in tissue that diffuses, of a subject that nods through ±2°
+with a period of 8 s:
 
-| Plugin | Sequence | Reconstruction |
-| --- | --- | --- |
-| `gre2d` | 2D gradient echo | `simplefft` |
-| `gre_multiecho2d` | 2D multi-echo gradient echo, one image per echo | `cartesian` |
-| `se2d` | 2D spin echo | `cartesian` |
-| `bssfp2d` | 2D balanced SSFP | `cartesian` |
-| `gre_radial2d` | 2D radial gradient echo | `nufft` |
-| `gre_spiral2d` | 2D spiral gradient echo | `nufft` |
+```bash
+docker run -d --restart unless-stopped --name pulserver \
+  -p 127.0.0.1:8765:8765 ghcr.io/pulserver/pulserver \
+  --spins 4 --diffusion --nod 2 8
+```
+
+Its sequences are the ones listed under {ref}`shipped-sequences`,
+reconstructed by the shipped plugins of {doc}`reconstruction-plugins`, and each
+protocol starts at values the image's limits play.
 
 Directories mounted at `/console/user/plugins` and `/console/user/recon` add
-sequences and reconstructions to the image's. They are searched first, so a
-file there takes the place of the image's file of that name. A link must
-resolve inside the container, as a relative link within the mounted directory
-does. A file added or changed is used from the next call on:
+sequences and reconstructions to those pulserver ships. They are searched
+first, so a file there takes the place of the shipped file of that name. A
+link must resolve inside the container, as a relative link within the mounted
+directory does. A file added or changed is used from the next call on:
 
 ```bash
 docker run -d --restart unless-stopped --name pulserver \

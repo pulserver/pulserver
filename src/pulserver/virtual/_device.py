@@ -1,4 +1,4 @@
-"""ADC windows read on a torch device in the isochromat engine's place: on the lattice by Triton sums and cuFINUFFT transforms, and sample by sample by a Triton kernel."""
+"""ADC windows read and runs of repetitions carried on a torch device in the isochromat engine's place: windows on the lattice by Triton sums and cuFINUFFT transforms, others sample by sample by a Triton kernel, and runs by the kernels of :mod:`._carry`."""
 
 from __future__ import annotations
 
@@ -9,14 +9,16 @@ from collections import OrderedDict
 
 import numpy as np
 
+from . import _carry
+
 try:
     import torch
     import triton
     import triton.language as tl
-except ImportError:  # without the gpu extra, which WindowDevice names
+except ImportError:  # without the gpu extra, which Device names
     torch = triton = tl = None
 
-__all__ = ["WindowDevice"]
+__all__ = ["Device"]
 
 #: Most bytes a window's lattice sums take at once on the CPU; on a CUDA
 #: device, a quarter of the memory free when the first window is read. A
@@ -40,6 +42,10 @@ SMALLEST = 1 << 22
 
 #: Engines whose isochromats a device holds, the most recently read last.
 ENGINES = 2
+
+#: Least slots times coils of a run a CUDA device carries; the engine
+#: carries smaller ones faster than the device starts.
+SMALLEST_RUN = 1 << 18
 
 
 if triton is not None:
@@ -493,8 +499,8 @@ class _Layout:
         return _padded(staged[:, self.order], self.padded).contiguous()
 
 
-class WindowDevice:
-    """Reads the windows the isochromat engine hands it, on a torch device.
+class Device:
+    """Reads the windows and carries the runs the isochromat engine hands it, on a torch device.
 
     A window under a changing gradient whose isochromats lie on a lattice is
     read there: each isochromat's value at each Chebyshev point is summed
@@ -510,6 +516,15 @@ class WindowDevice:
     (``TRITON_INTERPRET=1`` before triton is first imported). The engine
     computes everything else about a window, and the state it leaves.
 
+    A run of repetitions is carried here from its first play on: each tile
+    of repetitions carries every slot's magnetisation by its map,
+    phase-encodes each window's coefficient, and spreads it onto the
+    window's grid, a grid point at a time over the slots that spread onto
+    it, as products of matrices of coils and repetitions; a turned window's
+    slots are sorted at each repetition by the grid point they reach, and
+    spread a block of grid points at a time as products of matrices of
+    weights and coils. The engine reads the grids as it reads its own.
+
     Parameters
     ----------
     device : str or torch.device, default="cuda"
@@ -522,6 +537,11 @@ class WindowDevice:
         Least isochromats times samples times coils of a window read sample
         by sample; smaller windows are left to the engine. :data:`SMALLEST`
         on a CUDA device and 0 on the CPU without it.
+    smallest_run : int, default=None
+        Least slots times coils of a run carried here; smaller runs, and runs
+        whose slots take more than half the memory free on a CUDA device, are
+        left to the engine. :data:`SMALLEST_RUN` on a CUDA device and 0 on
+        the CPU without it.
     profile : bool, default=False
         Time each stage of every window, waiting for the device between
         them, into :attr:`stages`, in s.
@@ -540,6 +560,7 @@ class WindowDevice:
         *,
         memory: int | None = None,
         smallest: int | None = None,
+        smallest_run: int | None = None,
         profile=False,
     ):
         if triton is None:
@@ -573,6 +594,10 @@ class WindowDevice:
         if smallest is None:
             smallest = SMALLEST if self.device.type == "cuda" else 0
         self.smallest = smallest
+        if smallest_run is None:
+            smallest_run = SMALLEST_RUN if self.device.type == "cuda" else 0
+        self.smallest_run = smallest_run
+        self._runs: dict[int, _carry.Run] = {}
         self._engines: OrderedDict[int, _Engine] = OrderedDict()
         self._processors = None
         self._plans: OrderedDict = OrderedDict()
@@ -759,8 +784,51 @@ class WindowDevice:
             )
         return max(1, min(coils, self.memory // max(per_coil, 1)))
 
+    def begin_run(self, run) -> bool:
+        """Take the slots of ``run``, as the engine hands them at its first play; whether they were taken.
+
+        A run without windows, unless its first block's pulse is read off
+        tables, one smaller than :attr:`smallest_run`, and one that does not
+        fit in half the memory free on a CUDA device are left to the engine.
+        """
+        if not len(run["cells"]) and run.get("pulse") is None:
+            return False
+        if int(run["slots"]) * max(int(run["coils"]), 1) < self.smallest_run:
+            return False
+        if self.device.type == "cuda":
+            free = torch.cuda.mem_get_info(self.device)[0]
+            if _carry.bytes_for(run) > free // 2:
+                return False
+        began = self._clock()
+        self._runs[run["run"]] = _carry.Run(run, self.device)
+        self._lap("upload", began)
+        return True
+
+    def carry(self, tile) -> int:
+        """Carry the run's slots through ``tile`` and write its grids into the ``grid`` it was handed; return the transients dropped."""
+        dropped = self._runs[tile["run"]].carry(tile, self._clock, self._lap)
+        if self.stages is not None:
+            self.stages["tiles"] = self.stages.get("tiles", 0) + 1
+        return dropped
+
+    def write_state(self, state) -> None:
+        """Write the run's magnetisation into the engine's ``state["m"]``, ``(3, slots)``."""
+        began = self._clock()
+        self._runs[state["run"]].write(state)
+        self._lap("state", began)
+
+    def load_state(self, state) -> None:
+        """Take the magnetisation in the engine's ``state["m"]``, ``(3, slots)``, as the run's, where the run resumes after blocks played between its repetitions."""
+        began = self._clock()
+        self._runs[state["run"]].load(state)
+        self._lap("state", began)
+
+    def end_run(self, run: int) -> None:
+        """Free what the device holds of ``run``."""
+        self._runs.pop(run, None)
+
     def finish(self) -> None:
-        """Write the window :meth:`__call__` started reading into the ``out`` it was handed."""
+        """Write the window :meth:`lattice` or :meth:`samples` started reading into the ``out`` it was handed."""
         began = self._clock()
         out, (fetched, done) = self._pending
         self._pending = None

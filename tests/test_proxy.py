@@ -31,6 +31,7 @@ from pulserver.proxy import (
     _designs,
     _held,
 )
+from pulserver.proxy._seqdesc import is_message
 from pulserver.recon import load_plugin
 from pulserver.recon._runtime import concurrency
 from pulserver.recon._runtime.connection import Connection
@@ -873,8 +874,9 @@ def test_a_forwarded_series_names_its_reconstruction_in_a_config_file_message(
     received = stream(proxy.port, series["bound"], config='{"parameters": {}}')
     recording.join()
 
-    name, header, *acquisitions = recording.received
+    name, header, description, *acquisitions = recording.received
     assert name == (configured or "gre2d")
+    assert is_message(description)
     assert header.encoding[0].encodedSpace.matrixSize.x == MATRIX["nx"]
     assert len(acquisitions) == len(series["bound"].table)
     assert "forwarded" in received
@@ -900,6 +902,32 @@ def test_a_message_the_proxy_cannot_read_ends_the_output_with_its_type(
         isinstance(item, str) and "message of type 1030" in item for item in received
     )
     assert closed(received)
+
+
+def test_the_reconstruction_reads_the_sequence_description_before_any_acquisition(
+    start_proxy, bucket
+):
+    _, series = bucket
+    recording = _RecordingServer(_texts)
+    proxy = start_proxy(forward=("127.0.0.1", recording.port))
+    stream(proxy.port, series["bound"])
+    recording.join()
+
+    kinds = [
+        "description" if is_message(item) else type(item).__name__
+        for item in recording.received
+    ]
+    assert kinds.count("description") == 1
+    assert kinds.index("description") < kinds.index("Acquisition")
+
+
+def test_the_sequence_description_is_not_sent_back_to_the_client(start_proxy, bucket):
+    """A reconstruction echoes what it does not read, and the scanner did not ask for it."""
+    _, series = bucket
+    proxy = start_proxy(slots=1)
+    received = stream(proxy.port, series["bound"])
+    assert images(received)
+    assert not any(is_message(item) for item in received)
 
 
 def test_forwarded_images_come_back_as_dicom_when_asked(

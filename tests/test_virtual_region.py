@@ -115,6 +115,37 @@ def test_an_excitation_under_a_changing_gradient_excites_every_isochromat(tmp_pa
     assert virtual.excited(seq) is None
 
 
+def test_excitations_under_more_gradients_than_a_scan_keeps_slabs_for_excite_every_isochromat(
+    tmp_path,
+):
+    """A hard pulse per spoke, under the spoke's gradient, as a ZTE scan plays: one gradient more than 16."""
+    blocks = []
+    for spoke in range(17):
+        angle = math.pi * spoke / 17
+        pulse = pp.make_block_pulse(
+            math.pi / 18, duration=2e-5, delay=2e-4, system=SYSTEM, use="excitation"
+        )
+        held = [
+            pp.make_trapezoid(
+                axis,
+                amplitude=1e5 * share,
+                rise_time=1e-4,
+                flat_time=4e-4,
+                system=SYSTEM,
+            )
+            for axis, share in (("x", math.cos(angle)), ("y", math.sin(angle)))
+            if abs(share) > 1e-9
+        ]
+        blocks.append((pulse, *held))
+    seq = _written(tmp_path / "spokes.seq", *blocks)
+
+    assert virtual.excited(seq) is None
+    assert (
+        len(virtual.excited(_written(tmp_path / "few.seq", *blocks[:16])).gradients)
+        == 16
+    )
+
+
 def test_pulses_other_than_excitations_leave_the_slabs_to_the_excitations(tmp_path):
     rf, gz = _slice()
     inversion = pp.make_block_pulse(

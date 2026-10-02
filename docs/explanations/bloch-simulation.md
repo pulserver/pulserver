@@ -242,6 +242,14 @@ precession, none of which can be taken out along $|d|$, so it is interpolated
 there with a quintic through six points, which keeps the agreement with the
 stepped map at about $10^{-7}$ of $M_0$.
 
+Groups are made for one gradient direction, and the engine keeps those of four
+directions. Once it holds four, a pulse under a direction none of them is made
+for, as each spoke of a ZTE scan plays under its own readout gradient, is
+played from the grid isochromat by isochromat: each map is interpolated at the
+isochromat's own $\nu$ and $|d_j|$ and applied at once, with no grouping along
+the new direction and no maps kept for a later pulse. A pulse the grid cannot
+serve with fewer new points than there are isochromats is grouped instead.
+
 ## Pulseq events as fields
 
 {meth}`~pulserver.virtual.Isochromats.play` plays one block's events as
@@ -345,6 +353,19 @@ $\Delta t$ the dwell time: each repetition reads the window along its own
 direction. The non-uniform FFT a window is read with then spreads each
 isochromat onto grid points found anew for every repetition.
 
+A first block that plays its pulse under a gradient held through the block,
+larger by $\Delta\mathbf{g}_n$ than the first repetition's, as each spoke of a
+ZTE scan plays its pulse under its own readout gradient, gives isochromat $j$
+the field $\nu_j + \Delta\mathbf{g}_n\cdot\mathbf{r}_j$ through the block, and
+a map that differs from one repetition to the next by more than a turn about
+$z$. Each repetition then applies the block's map read off the pulse's grid at
+that field and $|d_j|$, as a pulse past the groupings kept is, with the free
+precession at that field before and after the pulse. The four plays give the
+maps of the blocks after it, and the areas the difference leaves are those
+over these blocks. The grid spans the fields of every repetition; a pulse it
+cannot serve with fewer points than the isochromats times the repetitions is
+refused.
+
 ### Fixed points and transients
 
 Where the phase offsets step by one increment, $\theta_{n+1} - \theta_n =
@@ -390,6 +411,50 @@ of the terms a sample sums, reads the transients' windows by the narrowest
 kernel that holds it, carries the magnetisation in single precision from
 $10^{-4}$ on, and drops transients below it. The fixed points' samples are
 summed by the widest kernel at any tolerance.
+
+### Blocks played between repetitions
+
+Blocks played between two repetitions of a run leave a magnetisation the run
+did not carry, as each shell's closing spoke and the ramp onto the next
+shell's first spoke do between the spokes of a ZTE scan's shells. The run
+resumes from it, turned into the frame of its next repetition's pulses,
+$\mathbf{m} = R_z(-\theta_n)\,\mathbf{M}$. Its maps depend on the blocks of a
+repetition alone, so they hold, and the scan pays for them once rather than
+for every shell. A run split into fixed points and transients does not
+resume: an isochromat whose transient was dropped no longer carries one.
+
+### Runs carried on a device
+
+Isochromats given a CUDA device carry a run there from its first play. The
+engine hands the device, for each isochromat it carries, the magnetisation,
+the maps, each window's coefficients, the limit below which its transient is
+dropped, the coordinates its phase encodings depend on, and the grid points
+and weights by which each window's non-uniform FFT spreads it, in the
+precision the engine carries them in; where the first block's pulse is read
+off its grid, it hands the grid, each isochromat's field and position, and the
+weights of the grid's rows around its drive. For each tile of 16 repetitions,
+a Triton kernel carries every isochromat through the tile, reading such a
+pulse's map off the grid at each repetition, and writes its transverse
+magnetisation at each window's first sample, times the phase encoding, at
+every repetition. A second kernel spreads these onto each
+window's grid. For each grid point, T2 class and block of coils, it sums the
+isochromats of that class whose kernel reaches the point, grouped by the first
+grid point they spread onto, as products of a matrix of their weights times
+their sensitivities, a row per coil, by one of their transverse
+magnetisations, a column per repetition. A turned window spreads each
+isochromat onto grid points found anew for every repetition, from its
+position and the repetition's readout as the engine finds them, in double
+precision. At each repetition the isochromats are sorted by T2 class and the
+first grid point they reach, and each block of 32 grid points sums those that
+reach it as products of a matrix of their weights times their transverse
+magnetisations, a row per grid point, by one of their sensitivities, a column
+per coil. The engine reads the grids as it reads its own, and the device
+writes the magnetisation back to the engine at the end of each play and takes
+the engine's where the run resumes.
+Transients are dropped as the engine drops them, and once more than a quarter
+have been dropped the device keeps only the rest. A run of fewer than
+$2^{18}$ isochromats times coils, by default, and one whose arrays would take
+more than half the memory free on the device, are carried by the engine.
 
 ## Voxels, motion and diffusion
 

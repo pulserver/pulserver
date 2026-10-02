@@ -1,4 +1,4 @@
-"""pypulseqpp's 2D multi-echo gradient echo bound to the scanner UI, one image per echo by the Cartesian FFT."""
+"""pypulseqpp's 2D multi-echo gradient echo bound to the scanner UI, one image per echo by pics."""
 
 from pypulseqpp.sequences.sequence.gre_multiecho2D_sequence import GreMultiecho2DApp
 
@@ -8,7 +8,7 @@ from pulserver.protocol import TEPreset, TRPreset, UIParam
 
 class GreMultiecho2D(ScannerSequence):
     app = GreMultiecho2DApp
-    recon = "cartesian"
+    recon = "pics"
     ui = {
         UIParam.FLIP: FloatParam(
             "flip_angle_deg", unit="deg", range_min=1.0, range_max=90.0
@@ -35,4 +35,5 @@ class GreMultiecho2D(ScannerSequence):
         UIParam.SLICE_THICKNESS: FloatParam(
             "slice_thickness", unit="mm", scale=1e-3, range_min=1.0, range_max=20.0
         ),
+        UIParam.RY: IntParam("ry", range_min=1, range_max=4),
     }

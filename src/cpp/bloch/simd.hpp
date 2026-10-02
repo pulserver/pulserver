@@ -47,6 +47,14 @@
 #define BLOCH_INLINE inline
 #endif
 
+/* Fetch the cache line holding @p address ahead of a read or, with @p write
+ * 1, a write. */
+#if defined(__GNUC__)
+#define BLOCH_PREFETCH(address, write) __builtin_prefetch((address), (write))
+#else
+#define BLOCH_PREFETCH(address, write) ((void)(address))
+#endif
+
 namespace bloch
 {
 
