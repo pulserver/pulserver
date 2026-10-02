@@ -81,6 +81,7 @@ every `--plugins` directory, so a file of the same name there replaces it:
 | `gre2d`, `se2d`, `bssfp2d`, `gre_multiecho2d`, `gre3d`, `se3d` | `pics` |
 | `gre_radial2d`, `gre_spiral2d`, `se_radial2d`, `se_spiral2d` | `nufft` |
 | `gre_stack_of_stars3d`, `gre_stack_of_spirals3d`, `se_stack_of_stars3d`, `se_stack_of_spirals3d` | `nufft` |
+| `epi2d` | `epi` |
 
 A 3D sequence takes its number of partitions from the number of slices. The
 Cartesian ones take `Ry`, and the 3D ones `Rz`, as their undersampling.

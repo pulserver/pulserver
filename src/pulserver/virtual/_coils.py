@@ -226,13 +226,13 @@ def _sampled(model: str, channels: int) -> np.ndarray:
     field of view, as BART's ``phantom`` places it.
     """
     try:
-        from bartorch.tools import simulate
+        from bartorch.tools import phantom
     except ImportError as error:
         raise ImportError(
             "BART's coil models are sampled by bartorch: pip install 'pulserver[coils]'"
         ) from error
     three = model == "HEAD_3D_64CH"
-    maps = simulate.phantom((_SAMPLES,) * (3 if three else 2), S=channels, coil=model)
+    maps = phantom((_SAMPLES,) * (3 if three else 2), S=channels, coil=model)
     return np.asarray(maps.cpu().numpy(), dtype=np.complex64).reshape(
         channels, -1, _SAMPLES, _SAMPLES
     )

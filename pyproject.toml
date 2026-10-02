@@ -26,7 +26,7 @@ dependencies = ["pypulseqpp>=0.0.18", "numpy>=2.2.6", "ismrmrd>=1.15.0", "pydico
 
 [project.optional-dependencies]
 brainweb = ["brainweb-dl>=0.4.6"]
-coils = ["bartorch>=0.0.3.post0"]
+coils = ["bartorch>=0.0.5"]
 console = ["websockets>=13"]
 # Windows read on the isochromats' lattice on a CUDA device: the sums by a
 # Triton kernel, the transforms by cuFINUFFT.
