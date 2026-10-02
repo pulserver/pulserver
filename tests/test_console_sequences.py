@@ -31,6 +31,7 @@ SMALLER = {
     "gre_spiral2d": {**NONCARTESIAN, "num_shots": 32},
     "se_radial2d": NONCARTESIAN,
     "se_spiral2d": NONCARTESIAN,
+    "epi2d": {"bandwidth": 50e3},
     "gre3d": {"nslices": 8},
     "se3d": {"nslices": 8},
     "gre_stack_of_stars3d": {**NONCARTESIAN, "nslices": 8},
@@ -42,6 +43,8 @@ SMALLER = {
 # vials: below it on a contrast of its own, a regularised NUFFT's residual
 # streaks, or both.
 AGREEMENT = 0.7
+# EPI displaces a vial off water resonance along the phase encode.
+AGREEMENTS = {"epi2d": 0.6}
 
 
 def _prescription(**values):
@@ -122,7 +125,9 @@ def test_a_console_sequence_images_the_vials_where_the_cartesian_gradient_echo_d
         # The vials lie in the partition at the slab's centre.
         images = [images[len(images) // 2]]
     for image in images:
-        assert _correlation(reference, image.astype(float)) > AGREEMENT
+        assert _correlation(reference, image.astype(float)) > AGREEMENTS.get(
+            name, AGREEMENT
+        )
 
 
 def test_the_cartesian_reconstruction_of_a_gradient_echo_is_the_simple_fft(tmp_path):
