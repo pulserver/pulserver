@@ -205,6 +205,19 @@ def _nyquist_spokes(n: int) -> int:
     return math.ceil(math.pi / 2 * n)
 
 
+def propeller_2d(a: dict[str, Any]) -> tuple[dict[str, Any], int]:
+    """One line of one blade of a 2D PROPELLER scan, and its dummies and lines.
+
+    A blade is ``blade_width`` lines and the Nyquist set is
+    ``ceil(pi * n / (2 * blade_width))`` blades, so a blade of one line has
+    the set of ``_nyquist_spokes(n)``, of which one in that many is played.
+    """
+    blades = math.ceil(math.pi * a["n"] / (2 * a["blade_width"]))
+    lines = len(range(0, blades, a["ry"])) * a["blade_width"]
+    one = {"n_dummy": 0, "blade_width": 1, "ry": _nyquist_spokes(a["n"])}
+    return one, a["n_dummy"] + lines
+
+
 def radial_2d(a: dict[str, Any]) -> tuple[dict[str, Any], int]:
     """One spoke of a 2D radial scan, and its dummies and spokes."""
     nyquist = _nyquist_spokes(a["n"])

@@ -30,8 +30,11 @@ NONCARTESIAN = {"ny": None, "phase_fov": None}
 SMALLER = {
     "bssfp2d": {"bandwidth": 25e3},
     "bssfp3d": {"nslices": 8},
+    "gre_propeller2d": NONCARTESIAN,
     "gre_radial2d": NONCARTESIAN,
     "gre_spiral2d": {**NONCARTESIAN, "num_shots": 32},
+    "se_epi_propeller2d": {**NONCARTESIAN, "bandwidth": 50e3},
+    "se_propeller2d": NONCARTESIAN,
     "se_radial2d": NONCARTESIAN,
     "se_spiral2d": NONCARTESIAN,
     "epi2d": {"bandwidth": 50e3},

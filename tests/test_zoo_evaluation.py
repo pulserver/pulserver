@@ -53,6 +53,7 @@ CHANGED = {
         "ny": 32,
         "nslices": 16,
     },
+    "gre_propeller2d": {"flip": 20.0, "nx": 64},
     "gre_radial2d": {"flip": 20.0, "nx": 64},
     "gre_spiral2d": {"flip": 20.0, "nx": 64, "num_shots": 8},
     "gre_stack_of_blades3d": {"flip": 20.0, "nx": 64, "nslices": 8},
@@ -68,6 +69,8 @@ CHANGED = {
     "mprage_stack_of_stars3d": {"flip": 20.0, "nx": 64, "nslices": 8},
     "se2d": {"nx": 64, "ny": 48},
     "se3d": {"nx": 64, "ny": 32, "nslices": 16},
+    "se_epi_propeller2d": {"nx": 64, "etl": 8},
+    "se_propeller2d": {"nx": 64},
     "se_radial2d": {"nx": 64},
     "se_spiral2d": {"nx": 64, "num_shots": 8},
     "se_stack_of_blades3d": {"nx": 64, "nslices": 8},
@@ -133,6 +136,11 @@ SCANS = [pytest.param(name, {}, id=name) for name in SHIPPED] + [
             "undersampled",
             {"nslices": 12, "Ry": 2, "Rz": 2, "num_echoes": 3, "nx": 64, "ny": 48},
         ),
+        (
+            "gre_propeller2d",
+            "packets",
+            {"nslices": 10, "TR": 40000, "nx": 64, "Ry": 2},
+        ),
         ("gre_radial2d", "packets", {"nslices": 10, "TR": 40000, "nx": 64}),
         (
             "gre_stack_of_blades3d",
@@ -165,6 +173,12 @@ SCANS = [pytest.param(name, {}, id=name) for name in SHIPPED] + [
             {"nslices": 8, "nx": 64, "TR": TRPreset.MINIMUM},
         ),
         ("se2d", "packets", {"nslices": 7, "TR": 60000, "Ry": 3}),
+        (
+            "se_epi_propeller2d",
+            "passes",
+            {"nslices": 7, "TR": 300000, "nx": 64, "etl": 8},
+        ),
+        ("se_propeller2d", "packets", {"nslices": 7, "TR": 60000, "Ry": 3}),
         ("se_spiral2d", "packets", {"nslices": 25, "TR": 300000, "num_shots": 8}),
         ("se_stack_of_blades3d", "blades", {"nslices": 5, "TR": 30000, "nx": 100}),
         (
@@ -201,6 +215,9 @@ REJECTED = [
         {"TR": 8000, "num_echoes": 8, "nslices": 16, "nx": 64, "ny": 32},
         id="gre_multiecho3d-short",
     ),
+    pytest.param(
+        "gre_propeller2d", {"nslices": 4, "TR": 3000}, id="gre_propeller2d-short"
+    ),
     pytest.param("gre_radial2d", {"nslices": 4, "TR": 3000}, id="gre_radial2d-short"),
     pytest.param(
         "gre_stack_of_blades3d", {"TR": 3000}, id="gre_stack_of_blades3d-short"
@@ -221,6 +238,12 @@ REJECTED = [
         id="mprage_stack_of_stars3d-short",
     ),
     pytest.param("se2d", {"nslices": 4, "TR": 12000}, id="se2d-short"),
+    pytest.param(
+        "se_epi_propeller2d", {"nslices": 4, "TR": 20000}, id="se_epi_propeller2d-short"
+    ),
+    pytest.param(
+        "se_propeller2d", {"nslices": 4, "TR": 12000}, id="se_propeller2d-short"
+    ),
     pytest.param(
         "se_stack_of_blades3d", {"TR": 10000}, id="se_stack_of_blades3d-short"
     ),
