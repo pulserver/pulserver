@@ -122,23 +122,31 @@ every `--plugins` directory, so a file of the same name there replaces it:
 
 | Plugin | Paired reconstruction |
 | --- | --- |
-| `gre2d`, `se2d`, `bssfp2d`, `gre_multiecho2d`, `gre3d`, `se3d` | `pics` |
-| `gre_radial2d`, `gre_spiral2d`, `se_radial2d`, `se_spiral2d` | `nufft` |
-| `gre_stack_of_stars3d`, `gre_stack_of_spirals3d`, `se_stack_of_stars3d`, `se_stack_of_spirals3d` | `nufft` |
-| `epi2d` | `epi` |
+| `gre2d`, `se2d`, `bssfp2d`, `gre_multiecho2d`, `gre3d`, `se3d`, `bssfp3d`, `gre_multiecho3d` | `pics` |
+| `fse3d`, `mprage3d` | `pics_train` |
+| `gre_radial2d`, `gre_spiral2d`, `se_radial2d`, `se_spiral2d`, `gre_propeller2d`, `se_propeller2d`, `se_epi_propeller2d`, `zte3d` | `nufft` |
+| `gre_stack_of_stars3d`, `gre_stack_of_spirals3d`, `gre_stack_of_blades3d`, `se_stack_of_stars3d`, `se_stack_of_spirals3d`, `se_stack_of_blades3d` | `nufft` |
+| `mprage_stack_of_stars3d`, `mprage_stack_of_spirals3d` | `nufft_train` |
+| `epi2d`, `epi3d` | `epi` |
 
 The pair is what a console reconstructs a shipped sequence with when the scan
 names no reconstruction ({doc}`virtual-scanner`); a scan can name another, and
 the reconstruction client of a scanner names one in its config
 ({doc}`reconstruction-client`).
 
-A 3D sequence takes its number of partitions from the number of slices. The
-Cartesian ones take `Ry`, and the 3D ones `Rz`, as their undersampling.
+A 3D sequence takes its number of partitions from the number of slices. `Ry`
+undersamples the phase encode of the Cartesian sequences, the blades of
+`gre_propeller2d` and `se_propeller2d` and the shells of `zte3d`, and `Rz` the
+partition encode of the 3D Cartesian ones. The `ETL` of `se_epi_propeller2d` is
+its blade width, and the MPRAGE sequences take their inversion time as
+`prep_time`.
 
 Each shipped plugin binds the function of its pypulseqpp sequence and evaluates
-a protocol by calling it for one repetition of the scan, one line, partition,
-spoke or interleaf of one slice without dummy repetitions
-({ref}`evaluating-a-protocol`). The scan time is the duration of the repetition
+a protocol from one repetition of the scan, one line, partition, spoke,
+interleaf, blade line, echo train or inversion shot of one slice without dummy
+repetitions ({ref}`evaluating-a-protocol`). Most call the function with the
+arguments that reduce it to that repetition; `epi3d` and `zte3d` build the
+repetition from the modules their function builds it from. The scan time is the duration of the repetition
 times the number of repetitions the prescription plays, with the slices that
 share a TR counted in the packets the sequence plays them in. The values are
 those the main sequence states for the prescription: where the plugin has the
@@ -149,11 +157,12 @@ sequence lists every echo time, and the `TE` entry holds the first. A
 prescription the design refuses is invalid with the message of its error. The
 RF layout is the first TR of the repetition, its shot repeated once per slice of
 the largest packet, with the TR as its period; for the balanced steady state it
-is the TR after the half-angle pulse ({ref}`stating-the-rf-layout`). The flip
-angle is the control of every excitation of the gradient-echo, balanced
-steady-state and EPI plugins, which have a `flip` entry. The spin-echo plugins
-have none, and the amplitude of their excitation and refocusing pulses is that
-of the design.
+is the TR after the half-angle pulse ({ref}`stating-the-rf-layout`). The TR of
+a fast spin echo holds an echo train, that of an MPRAGE an inversion shot, and
+that of `epi3d` a volume. The flip angle is the control of every excitation of
+the plugins with a `flip` entry, which an MPRAGE's inversion is not. The
+spin-echo plugins, `fse3d` among them, have none, and the amplitude of their
+excitation and refocusing pulses is that of the design.
 
 ## Resolving a protocol
 

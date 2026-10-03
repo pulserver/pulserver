@@ -543,18 +543,19 @@ it closes; and <a class="reference internal" href="pulserver.recon.ReconPlugin.f
 is abstract; the framework method <a class="reference internal" href="pulserver.recon.ReconPlugin.receive.html#pulserver.recon.ReconPlugin.receive" title="pulserver.recon.ReconPlugin.receive"><code class="xref py py-meth docutils literal notranslate"><span class="pre">receive()</span></code></a> is not overridden.</p>
 <p>A <em>unit</em> is the set of readouts reconstructed together: those of one
 branch and encoding space that share every image counter (slice, contrast,
-phase, repetition, set, average) not listed in <code class="docutils literal notranslate"><span class="pre">axes</span></code>. The counters in
-<code class="docutils literal notranslate"><span class="pre">axes</span></code> are axes of the unit’s k-space instead; <code class="docutils literal notranslate"><span class="pre">segment</span></code> and the user
-counters separate no units unless <code class="docutils literal notranslate"><span class="pre">segment</span></code> is listed. Each accepted
+phase, repetition, set, average) not listed in <code class="docutils literal notranslate"><span class="pre">axes</span></code> or <code class="docutils literal notranslate"><span class="pre">merge</span></code>. The
+counters in <code class="docutils literal notranslate"><span class="pre">axes</span></code> are axes of the unit’s k-space instead, and those in
+<code class="docutils literal notranslate"><span class="pre">merge</span></code> are laid out along none; <code class="docutils literal notranslate"><span class="pre">segment</span></code> and the user counters
+separate no units unless <code class="docutils literal notranslate"><span class="pre">segment</span></code> is listed. Each accepted
 acquisition runs through the <code class="docutils literal notranslate"><span class="pre">gadgets</span></code>, then joins the unit of the branch
 <a class="reference internal" href="pulserver.recon.ReconPlugin.branch_for.html#pulserver.recon.ReconPlugin.branch_for" title="pulserver.recon.ReconPlugin.branch_for"><code class="xref py py-meth docutils literal notranslate"><span class="pre">branch_for()</span></code></a> names, which places it by its flags (see
 <a class="reference internal" href="pulserver.recon.ReconData.html#pulserver.recon.ReconData" title="pulserver.recon.ReconData"><code class="xref py py-class docutils literal notranslate"><span class="pre">ReconData</span></code></a>). A unit closes when the flag <code class="docutils literal notranslate"><span class="pre">triggers</span></code> names for its
-branch has arrived for every combination of the counters in <code class="docutils literal notranslate"><span class="pre">axes</span></code>. It
-leaves the plugin before <a class="reference internal" href="pulserver.recon.ReconPlugin.recon.html#pulserver.recon.ReconPlugin.recon" title="pulserver.recon.ReconPlugin.recon"><code class="xref py py-meth docutils literal notranslate"><span class="pre">recon()</span></code></a> runs, so its buffers are freed once
-<a class="reference internal" href="pulserver.recon.ReconPlugin.recon.html#pulserver.recon.ReconPlugin.recon" title="pulserver.recon.ReconPlugin.recon"><code class="xref py py-meth docutils literal notranslate"><span class="pre">recon()</span></code></a> returns; the memory a stream holds is bounded by the units
-open at once. Units still open at <code class="docutils literal notranslate"><span class="pre">LAST_IN_MEASUREMENT</span></code> or at the end of
-the stream are reconstructed then, in the order they opened and under their
-own branches.</p>
+branch has arrived for every combination of the counters in <code class="docutils literal notranslate"><span class="pre">axes</span></code> and
+<code class="docutils literal notranslate"><span class="pre">merge</span></code>. It leaves the plugin before <a class="reference internal" href="pulserver.recon.ReconPlugin.recon.html#pulserver.recon.ReconPlugin.recon" title="pulserver.recon.ReconPlugin.recon"><code class="xref py py-meth docutils literal notranslate"><span class="pre">recon()</span></code></a> runs, so its buffers
+are freed once <a class="reference internal" href="pulserver.recon.ReconPlugin.recon.html#pulserver.recon.ReconPlugin.recon" title="pulserver.recon.ReconPlugin.recon"><code class="xref py py-meth docutils literal notranslate"><span class="pre">recon()</span></code></a> returns; the memory a stream holds is bounded
+by the units open at once. Units still open at <code class="docutils literal notranslate"><span class="pre">LAST_IN_MEASUREMENT</span></code> or
+at the end of the stream are reconstructed then, in the order they opened
+and under their own branches.</p>
 <p>Each stream runs on its own <a class="reference internal" href="pulserver.recon.ReconPlugin.spawn.html#pulserver.recon.ReconPlugin.spawn" title="pulserver.recon.ReconPlugin.spawn"><code class="xref py py-meth docutils literal notranslate"><span class="pre">spawn()</span></code></a> of the module-level <code class="docutils literal notranslate"><span class="pre">PLUGIN</span></code>, so
 state set in the hooks belongs to one stream. <code class="docutils literal notranslate"><span class="pre">context.exam</span></code> is shared
 across the series of an exam; a plugin adds to it and never clears it.</p>
@@ -573,6 +574,14 @@ does not route elsewhere. The default is <code class="docutils literal notransla
 the closing flag, instead of separating units: any of <code class="docutils literal notranslate"><span class="pre">repetition</span></code>,
 <code class="docutils literal notranslate"><span class="pre">phase</span></code>, <code class="docutils literal notranslate"><span class="pre">slice</span></code>, <code class="docutils literal notranslate"><span class="pre">contrast</span></code>, <code class="docutils literal notranslate"><span class="pre">set</span></code>, <code class="docutils literal notranslate"><span class="pre">average</span></code> and
 <code class="docutils literal notranslate"><span class="pre">segment</span></code>. Their extents are the header’s encoding limits.</p></li>
+<li><p><strong>merge</strong> – Counters of a unit waited for by the closing flag and laid out along no
+axis, instead of separating units: any of <code class="docutils literal notranslate"><span class="pre">repetition</span></code>, <code class="docutils literal notranslate"><span class="pre">phase</span></code>,
+<code class="docutils literal notranslate"><span class="pre">slice</span></code>, <code class="docutils literal notranslate"><span class="pre">contrast</span></code>, <code class="docutils literal notranslate"><span class="pre">set</span></code> and <code class="docutils literal notranslate"><span class="pre">average</span></code>. A readout is placed
+by its other counters whatever its value of a merged one, so readouts
+that share them replace one another, with a warning; the echoes of one
+train, which fill phase encodes of their own, do not. A buffer holds
+one k-space however many values a merged counter takes. Their extents
+are the header’s encoding limits.</p></li>
 <li><p><strong>require_flags</strong> – Flags an acquisition must all carry to be accepted. A combined
 <code class="xref py py-class docutils literal notranslate"><span class="pre">AcquisitionFlag</span></code> counts as its members.</p></li>
 <li><p><strong>reject_flags</strong> – Flags any one of which excludes an acquisition.</p></li>
@@ -589,6 +598,8 @@ unit closes at the first flag, whatever its <code class="docutils literal notran
 <li><p><strong>gadgets</strong> (<em>tuple of Gadget</em>)</p></li>
 <li><p><strong>triggers</strong> (<em>dict</em>)</p></li>
 <li><p><strong>axes</strong> (<em>tuple of str</em>)</p></li>
+<li><p><strong>merge</strong> (<em>tuple of str</em>) – Read when a stream starts, so a subclass may assign it after
+<code class="docutils literal notranslate"><span class="pre">super().__init__</span></code>.</p></li>
 </ul>
 </dd>
 </dl>

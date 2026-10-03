@@ -602,10 +602,13 @@ then, under its own branch, in the order the units opened.</p>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">axes</span></code></p></td>
 <td><p>the counters that are axes of a unit instead of separating units</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">require_flags</span></code>, <code class="docutils literal notranslate"><span class="pre">reject_flags</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">merge</span></code></p></td>
+<td><p>the counters that neither separate units nor are axes: a unit waits for its closing flag at each of their values, and their readouts fill one k-space, as the place in a train (<code class="docutils literal notranslate"><span class="pre">contrast</span></code>, <code class="docutils literal notranslate"><span class="pre">ECO</span></code>) of an echo train or an inversion shot does</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">require_flags</span></code>, <code class="docutils literal notranslate"><span class="pre">reject_flags</span></code></p></td>
 <td><p>the flags an acquisition must all carry, and those any one of which excludes it</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">buffered</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">buffered</span></code></p></td>
 <td><p>whether readouts are placed in <code class="docutils literal notranslate"><span class="pre">data.data</span></code> and <code class="docutils literal notranslate"><span class="pre">data.ref</span></code>; with <code class="docutils literal notranslate"><span class="pre">False</span></code> a plugin reads <code class="docutils literal notranslate"><span class="pre">data.acquisitions</span></code> and a unit closes at its first flag, whatever its <code class="docutils literal notranslate"><span class="pre">axes</span></code></p></td>
 </tr>
 </tbody>
@@ -876,7 +879,7 @@ describe the encoded space and the receiver channels:</p>
 
 </pre></div>
 </div>
-<p>Six shipped plugins are complete reconstructions, returning the values of their
+<p>Eight shipped plugins are complete reconstructions, returning the values of their
 transform or solve unscaled. They are searched after every reconstruction
 plugin directory, so a client can name one, such as <code class="docutils literal notranslate"><span class="pre">nufft</span></code>, without a file of
 its own:</p>
@@ -894,10 +897,16 @@ its own:</p>
 <td><p>A Cartesian FFT of the readouts placed by their encoding counters, partitions included; one image per slice, contrast, cardiac phase, set and repetition, averages summed</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">nufft</span></code></p></td>
-<td><p>The same images as <code class="docutils literal notranslate"><span class="pre">cartesian</span></code>, for a radial or spiral trajectory or a stack of them, from readouts whitened with the stream’s noise measurement (<code class="docutils literal notranslate"><span class="pre">Prewhiten</span></code>); each solved as <code class="docutils literal notranslate"><span class="pre">bart</span> <span class="pre">pics</span> <span class="pre">-t</span> <span class="pre">-R</span> <span class="pre">W</span></code> over <code class="docutils literal notranslate"><span class="pre">bart</span> <span class="pre">nlinv</span> <span class="pre">-t</span></code> sensitivities of the unit’s samples near the k-space centre. Needs the <code class="docutils literal notranslate"><span class="pre">coils</span></code> extra</p></td>
+<td><p>The same images as <code class="docutils literal notranslate"><span class="pre">cartesian</span></code>, for a radial, spiral, PROPELLER or zero-echo-time trajectory or a stack of them, from readouts whitened with the stream’s noise measurement (<code class="docutils literal notranslate"><span class="pre">Prewhiten</span></code>); each solved as <code class="docutils literal notranslate"><span class="pre">bart</span> <span class="pre">pics</span> <span class="pre">-t</span> <span class="pre">-R</span> <span class="pre">W</span></code> over <code class="docutils literal notranslate"><span class="pre">bart</span> <span class="pre">nlinv</span> <span class="pre">-t</span></code> sensitivities of the unit’s samples near the k-space centre. The readouts of every segment of a unit, the blades of a PROPELLER scan or the shells of a zero-echo-time one, enter one solve; a trajectory that encodes the partition direction without a partition axis is solved as one volume. Needs the <code class="docutils literal notranslate"><span class="pre">coils</span></code> extra</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">pics</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">nufft_train</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">nufft</span></code>’s images from readouts that number their place in a train of excitations (<code class="docutils literal notranslate"><span class="pre">contrast</span></code>, <code class="docutils literal notranslate"><span class="pre">ECO</span></code>), merged so that the readouts of every place fill one image. Needs the <code class="docutils literal notranslate"><span class="pre">coils</span></code> extra</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">pics</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">cartesian</span></code>’s images from readouts whitened with the stream’s noise measurement, completed to full echoes and cropped to the reconstruction field of view as they arrive (<code class="docutils literal notranslate"><span class="pre">Prewhiten</span></code>, <code class="docutils literal notranslate"><span class="pre">AsymmetricEcho</span></code>, <code class="docutils literal notranslate"><span class="pre">RemoveReadoutOversampling</span></code>); each image solved as <code class="docutils literal notranslate"><span class="pre">bart</span> <span class="pre">pics</span> <span class="pre">-R</span> <span class="pre">W</span></code> over the coil sensitivities of <a class="reference internal" href="../generated/pulserver.recon.coil_maps.html#pulserver.recon.coil_maps" title="pulserver.recon.coil_maps"><code class="xref py py-func docutils literal notranslate"><span class="pre">coil_maps()</span></code></a> (<code class="docutils literal notranslate"><span class="pre">bart</span> <span class="pre">nlinv</span></code> of the unit’s calibration readouts, else the maps stored for its slice or the exam’s, else a fit to the unit’s own low-resolution centre), then completed by <code class="docutils literal notranslate"><span class="pre">bart</span> <span class="pre">homodyne</span></code> along a partial-Fourier axis. A unit of calibration readouts only makes no image and stores its maps. Needs the <code class="docutils literal notranslate"><span class="pre">coils</span></code> extra</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">pics_train</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">pics</span></code>’s images from readouts that number their place in an echo train or an inversion shot (<code class="docutils literal notranslate"><span class="pre">contrast</span></code>, <code class="docutils literal notranslate"><span class="pre">ECO</span></code>), merged so that the readouts of every place fill one image. Needs the <code class="docutils literal notranslate"><span class="pre">coils</span></code> extra</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">epi</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">pics</span></code>’s images from EPI readouts, each whitened, resampled off its ramps onto the matrix and corrected for its odd/even phase against the shot’s navigator as it arrives (<code class="docutils literal notranslate"><span class="pre">bart</span></code> ramp operator, <code class="docutils literal notranslate"><span class="pre">estimate_epi_phase</span></code>). The phase-encode-reversed reference set is an image of its own, and with PyHySCO installed (GPL-3.0, not a dependency) each later image of its slice is corrected for susceptibility distortion against it. Needs the <code class="docutils literal notranslate"><span class="pre">coils</span></code> extra</p></td>
@@ -909,10 +918,11 @@ its own:</p>
 </table>
 </div>
 <p><code class="docutils literal notranslate"><span class="pre">simplefft</span></code> and <code class="docutils literal notranslate"><span class="pre">cartesian</span></code> are NumPy reference reconstructions: they combine
-their coils as a root sum of squares and reject noise readouts. <code class="docutils literal notranslate"><span class="pre">nufft</span></code>, <code class="docutils literal notranslate"><span class="pre">pics</span></code>,
-<code class="docutils literal notranslate"><span class="pre">epi</span></code> and <code class="docutils literal notranslate"><span class="pre">pmc</span></code> whiten their readouts with <a class="reference internal" href="../generated/pulserver.recon.Prewhiten.html#pulserver.recon.Prewhiten" title="pulserver.recon.Prewhiten"><code class="xref py py-class docutils literal notranslate"><span class="pre">Prewhiten</span></code></a>,
-which consumes the noise readouts of the stream and logs a warning once where
-the stream has none and the exam stores no noise covariance. A volume is sent
+their coils as a root sum of squares and reject noise readouts. <code class="docutils literal notranslate"><span class="pre">nufft</span></code>,
+<code class="docutils literal notranslate"><span class="pre">nufft_train</span></code>, <code class="docutils literal notranslate"><span class="pre">pics</span></code>, <code class="docutils literal notranslate"><span class="pre">pics_train</span></code>, <code class="docutils literal notranslate"><span class="pre">epi</span></code> and <code class="docutils literal notranslate"><span class="pre">pmc</span></code> whiten their readouts with
+<a class="reference internal" href="../generated/pulserver.recon.Prewhiten.html#pulserver.recon.Prewhiten" title="pulserver.recon.Prewhiten"><code class="xref py py-class docutils literal notranslate"><span class="pre">Prewhiten</span></code></a>, which consumes the noise readouts of the
+stream and logs a warning once where the stream has none and the exam stores no
+noise covariance. A volume is sent
 as one image per partition. A plugin file that reexports one under another
 name, <code class="docutils literal notranslate"><span class="pre">from</span> <span class="pre">pulserver.recon.handlers.cartesian</span> <span class="pre">import</span> <span class="pre">PLUGIN</span></code>, is the same
 reconstruction.</p>

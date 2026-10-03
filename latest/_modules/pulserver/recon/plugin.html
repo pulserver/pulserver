@@ -501,6 +501,7 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">copy</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">hashlib</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">math</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">numbers</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">pickle</span>
@@ -1094,18 +1095,19 @@
 
 <span class="sd">    A *unit* is the set of readouts reconstructed together: those of one</span>
 <span class="sd">    branch and encoding space that share every image counter (slice, contrast,</span>
-<span class="sd">    phase, repetition, set, average) not listed in ``axes``. The counters in</span>
-<span class="sd">    ``axes`` are axes of the unit's k-space instead; ``segment`` and the user</span>
-<span class="sd">    counters separate no units unless ``segment`` is listed. Each accepted</span>
+<span class="sd">    phase, repetition, set, average) not listed in ``axes`` or ``merge``. The</span>
+<span class="sd">    counters in ``axes`` are axes of the unit's k-space instead, and those in</span>
+<span class="sd">    ``merge`` are laid out along none; ``segment`` and the user counters</span>
+<span class="sd">    separate no units unless ``segment`` is listed. Each accepted</span>
 <span class="sd">    acquisition runs through the ``gadgets``, then joins the unit of the branch</span>
 <span class="sd">    :meth:`branch_for` names, which places it by its flags (see</span>
 <span class="sd">    :class:`ReconData`). A unit closes when the flag ``triggers`` names for its</span>
-<span class="sd">    branch has arrived for every combination of the counters in ``axes``. It</span>
-<span class="sd">    leaves the plugin before :meth:`recon` runs, so its buffers are freed once</span>
-<span class="sd">    :meth:`recon` returns; the memory a stream holds is bounded by the units</span>
-<span class="sd">    open at once. Units still open at ``LAST_IN_MEASUREMENT`` or at the end of</span>
-<span class="sd">    the stream are reconstructed then, in the order they opened and under their</span>
-<span class="sd">    own branches.</span>
+<span class="sd">    branch has arrived for every combination of the counters in ``axes`` and</span>
+<span class="sd">    ``merge``. It leaves the plugin before :meth:`recon` runs, so its buffers</span>
+<span class="sd">    are freed once :meth:`recon` returns; the memory a stream holds is bounded</span>
+<span class="sd">    by the units open at once. Units still open at ``LAST_IN_MEASUREMENT`` or</span>
+<span class="sd">    at the end of the stream are reconstructed then, in the order they opened</span>
+<span class="sd">    and under their own branches.</span>
 
 <span class="sd">    Each stream runs on its own :meth:`spawn` of the module-level ``PLUGIN``, so</span>
 <span class="sd">    state set in the hooks belongs to one stream. ``context.exam`` is shared</span>
@@ -1128,6 +1130,15 @@
 <span class="sd">        the closing flag, instead of separating units: any of ``repetition``,</span>
 <span class="sd">        ``phase``, ``slice``, ``contrast``, ``set``, ``average`` and</span>
 <span class="sd">        ``segment``. Their extents are the header's encoding limits.</span>
+<span class="sd">    merge</span>
+<span class="sd">        Counters of a unit waited for by the closing flag and laid out along no</span>
+<span class="sd">        axis, instead of separating units: any of ``repetition``, ``phase``,</span>
+<span class="sd">        ``slice``, ``contrast``, ``set`` and ``average``. A readout is placed</span>
+<span class="sd">        by its other counters whatever its value of a merged one, so readouts</span>
+<span class="sd">        that share them replace one another, with a warning; the echoes of one</span>
+<span class="sd">        train, which fill phase encodes of their own, do not. A buffer holds</span>
+<span class="sd">        one k-space however many values a merged counter takes. Their extents</span>
+<span class="sd">        are the header's encoding limits.</span>
 <span class="sd">    require_flags</span>
 <span class="sd">        Flags an acquisition must all carry to be accepted. A combined</span>
 <span class="sd">        :class:`AcquisitionFlag` counts as its members.</span>
@@ -1148,6 +1159,9 @@
 <span class="sd">    gadgets : tuple of Gadget</span>
 <span class="sd">    triggers : dict</span>
 <span class="sd">    axes : tuple of str</span>
+<span class="sd">    merge : tuple of str</span>
+<span class="sd">        Read when a stream starts, so a subclass may assign it after</span>
+<span class="sd">        ``super().__init__``.</span>
 
 <span class="sd">    Examples</span>
 <span class="sd">    --------</span>
@@ -1178,6 +1192,7 @@
         <span class="n">gadgets</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">Gadget</span><span class="p">]</span> <span class="o">=</span> <span class="p">(),</span>
         <span class="n">triggers</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">axes</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">(),</span>
+        <span class="n">merge</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">(),</span>
         <span class="n">require_flags</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span> <span class="o">|</span> <span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">|</span> <span class="n">AcquisitionFlag</span> <span class="o">=</span> <span class="p">(),</span>
         <span class="n">reject_flags</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span> <span class="o">|</span> <span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">|</span> <span class="n">AcquisitionFlag</span> <span class="o">=</span> <span class="p">(),</span>
         <span class="n">buffered</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
@@ -1209,11 +1224,21 @@
                 <span class="sa">f</span><span class="s2">"axes </span><span class="si">{</span><span class="n">unknown</span><span class="si">}</span><span class="s2"> are not counters a unit can be laid out along; "</span>
                 <span class="sa">f</span><span class="s2">"they are </span><span class="si">{</span><span class="nb">list</span><span class="p">(</span><span class="n">_AXES</span><span class="p">)</span><span class="si">}</span><span class="s2">"</span>
             <span class="p">)</span>
+        <span class="n">unknown</span> <span class="o">=</span> <span class="p">[</span><span class="n">name</span> <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">merge</span> <span class="k">if</span> <span class="n">name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">LOOP_COUNTERS</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">unknown</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"merge </span><span class="si">{</span><span class="n">unknown</span><span class="si">}</span><span class="s2"> are not counters that separate units; "</span>
+                <span class="sa">f</span><span class="s2">"they are </span><span class="si">{</span><span class="nb">list</span><span class="p">(</span><span class="n">LOOP_COUNTERS</span><span class="p">)</span><span class="si">}</span><span class="s2">"</span>
+            <span class="p">)</span>
+        <span class="n">both</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="n">axes</span><span class="p">)</span> <span class="o">&amp;</span> <span class="nb">set</span><span class="p">(</span><span class="n">merge</span><span class="p">))</span>
+        <span class="k">if</span> <span class="n">both</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">both</span><span class="si">}</span><span class="s2"> cannot be both an axis and merged"</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">gadgets</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">gadgets</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">triggers</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span>
             <span class="n">triggers</span> <span class="ow">or</span> <span class="p">{</span><span class="s2">"imaging"</span><span class="p">:</span> <span class="n">AcquisitionFlag</span><span class="o">.</span><span class="n">LAST_IN_MEASUREMENT</span><span class="p">}</span>
         <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">axes</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">axes</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">merge</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">merge</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">require_flags</span> <span class="o">=</span> <span class="n">_flag_members</span><span class="p">(</span><span class="n">require_flags</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">reject_flags</span> <span class="o">=</span> <span class="n">_flag_members</span><span class="p">(</span><span class="n">reject_flags</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">buffered</span> <span class="o">=</span> <span class="nb">bool</span><span class="p">(</span><span class="n">buffered</span><span class="p">)</span>
@@ -1248,6 +1273,10 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">_spaces</span> <span class="o">=</span> <span class="p">{</span>
                 <span class="n">space</span><span class="o">.</span><span class="n">index</span><span class="p">:</span> <span class="n">space</span>
                 <span class="k">for</span> <span class="n">space</span> <span class="ow">in</span> <span class="n">EncodingSpace</span><span class="o">.</span><span class="n">all_from_header</span><span class="p">(</span><span class="n">context</span><span class="o">.</span><span class="n">header</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">axes</span><span class="p">)</span>
+            <span class="p">}</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_merged</span> <span class="o">=</span> <span class="p">{</span>
+                <span class="n">space</span><span class="o">.</span><span class="n">index</span><span class="p">:</span> <span class="n">math</span><span class="o">.</span><span class="n">prod</span><span class="p">(</span><span class="n">space</span><span class="o">.</span><span class="n">loop_sizes</span><span class="p">)</span>
+                <span class="k">for</span> <span class="n">space</span> <span class="ow">in</span> <span class="n">EncodingSpace</span><span class="o">.</span><span class="n">all_from_header</span><span class="p">(</span><span class="n">context</span><span class="o">.</span><span class="n">header</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">merge</span><span class="p">)</span>
             <span class="p">}</span></div>
 
 
@@ -1466,7 +1495,8 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">_reset</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">"""Begin a stream with no unit open."""</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_spaces</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">EncodingSpace</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_closure</span><span class="p">:</span> <span class="n">_Closure</span> <span class="o">=</span> <span class="n">_FlagClosure</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">triggers</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">axes</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_merged</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_closure</span><span class="p">:</span> <span class="n">_Closure</span> <span class="o">=</span> <span class="n">_FlagClosure</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">triggers</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">axes</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">merge</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_units</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="n">UnitKey</span><span class="p">,</span> <span class="n">ReconUnit</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_waveforms</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_finished</span> <span class="o">=</span> <span class="kc">False</span>
@@ -1497,9 +1527,11 @@
         <span class="k">return</span> <span class="n">data</span><span class="p">,</span> <span class="n">placed</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_unit</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">branch</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">acquisition</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ReconUnit</span><span class="p">:</span>
-        <span class="n">key</span> <span class="o">=</span> <span class="n">unit_key</span><span class="p">(</span><span class="n">branch</span><span class="p">,</span> <span class="n">acquisition</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">axes</span><span class="p">)</span>
+        <span class="n">key</span> <span class="o">=</span> <span class="n">unit_key</span><span class="p">(</span><span class="n">branch</span><span class="p">,</span> <span class="n">acquisition</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">axes</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">merge</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">key</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_units</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_units</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">ReconUnit</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_spaces</span><span class="p">,</span> <span class="n">buffered</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">buffered</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_units</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">ReconUnit</span><span class="p">(</span>
+                <span class="n">key</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_spaces</span><span class="p">,</span> <span class="n">buffered</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">buffered</span><span class="p">,</span> <span class="n">merged</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_merged</span>
+            <span class="p">)</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_units</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_reconstruct</span><span class="p">(</span>

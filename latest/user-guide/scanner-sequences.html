@@ -686,16 +686,22 @@ every <code class="docutils literal notranslate"><span class="pre">--plugins</sp
 </tr>
 </thead>
 <tbody>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">gre2d</span></code>, <code class="docutils literal notranslate"><span class="pre">se2d</span></code>, <code class="docutils literal notranslate"><span class="pre">bssfp2d</span></code>, <code class="docutils literal notranslate"><span class="pre">gre_multiecho2d</span></code>, <code class="docutils literal notranslate"><span class="pre">gre3d</span></code>, <code class="docutils literal notranslate"><span class="pre">se3d</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">gre2d</span></code>, <code class="docutils literal notranslate"><span class="pre">se2d</span></code>, <code class="docutils literal notranslate"><span class="pre">bssfp2d</span></code>, <code class="docutils literal notranslate"><span class="pre">gre_multiecho2d</span></code>, <code class="docutils literal notranslate"><span class="pre">gre3d</span></code>, <code class="docutils literal notranslate"><span class="pre">se3d</span></code>, <code class="docutils literal notranslate"><span class="pre">bssfp3d</span></code>, <code class="docutils literal notranslate"><span class="pre">gre_multiecho3d</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">pics</span></code></p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">gre_radial2d</span></code>, <code class="docutils literal notranslate"><span class="pre">gre_spiral2d</span></code>, <code class="docutils literal notranslate"><span class="pre">se_radial2d</span></code>, <code class="docutils literal notranslate"><span class="pre">se_spiral2d</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">fse3d</span></code>, <code class="docutils literal notranslate"><span class="pre">mprage3d</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">pics_train</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">gre_radial2d</span></code>, <code class="docutils literal notranslate"><span class="pre">gre_spiral2d</span></code>, <code class="docutils literal notranslate"><span class="pre">se_radial2d</span></code>, <code class="docutils literal notranslate"><span class="pre">se_spiral2d</span></code>, <code class="docutils literal notranslate"><span class="pre">gre_propeller2d</span></code>, <code class="docutils literal notranslate"><span class="pre">se_propeller2d</span></code>, <code class="docutils literal notranslate"><span class="pre">se_epi_propeller2d</span></code>, <code class="docutils literal notranslate"><span class="pre">zte3d</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">nufft</span></code></p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">gre_stack_of_stars3d</span></code>, <code class="docutils literal notranslate"><span class="pre">gre_stack_of_spirals3d</span></code>, <code class="docutils literal notranslate"><span class="pre">se_stack_of_stars3d</span></code>, <code class="docutils literal notranslate"><span class="pre">se_stack_of_spirals3d</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">gre_stack_of_stars3d</span></code>, <code class="docutils literal notranslate"><span class="pre">gre_stack_of_spirals3d</span></code>, <code class="docutils literal notranslate"><span class="pre">gre_stack_of_blades3d</span></code>, <code class="docutils literal notranslate"><span class="pre">se_stack_of_stars3d</span></code>, <code class="docutils literal notranslate"><span class="pre">se_stack_of_spirals3d</span></code>, <code class="docutils literal notranslate"><span class="pre">se_stack_of_blades3d</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">nufft</span></code></p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">epi2d</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">mprage_stack_of_stars3d</span></code>, <code class="docutils literal notranslate"><span class="pre">mprage_stack_of_spirals3d</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">nufft_train</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">epi2d</span></code>, <code class="docutils literal notranslate"><span class="pre">epi3d</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">epi</span></code></p></td>
 </tr>
 </tbody>
@@ -705,12 +711,18 @@ every <code class="docutils literal notranslate"><span class="pre">--plugins</sp
 names no reconstruction (<a class="reference internal" href="virtual-scanner.html"><span class="doc">Scanning a phantom without a scanner</span></a>); a scan can name another, and
 the reconstruction client of a scanner names one in its config
 (<a class="reference internal" href="reconstruction-client.html"><span class="doc">Reconstruction clients</span></a>).</p>
-<p>A 3D sequence takes its number of partitions from the number of slices. The
-Cartesian ones take <code class="docutils literal notranslate"><span class="pre">Ry</span></code>, and the 3D ones <code class="docutils literal notranslate"><span class="pre">Rz</span></code>, as their undersampling.</p>
+<p>A 3D sequence takes its number of partitions from the number of slices. <code class="docutils literal notranslate"><span class="pre">Ry</span></code>
+undersamples the phase encode of the Cartesian sequences, the blades of
+<code class="docutils literal notranslate"><span class="pre">gre_propeller2d</span></code> and <code class="docutils literal notranslate"><span class="pre">se_propeller2d</span></code> and the shells of <code class="docutils literal notranslate"><span class="pre">zte3d</span></code>, and <code class="docutils literal notranslate"><span class="pre">Rz</span></code> the
+partition encode of the 3D Cartesian ones. The <code class="docutils literal notranslate"><span class="pre">ETL</span></code> of <code class="docutils literal notranslate"><span class="pre">se_epi_propeller2d</span></code> is
+its blade width, and the MPRAGE sequences take their inversion time as
+<code class="docutils literal notranslate"><span class="pre">prep_time</span></code>.</p>
 <p>Each shipped plugin binds the function of its pypulseqpp sequence and evaluates
-a protocol by calling it for one repetition of the scan, one line, partition,
-spoke or interleaf of one slice without dummy repetitions
-(<a class="reference internal" href="#evaluating-a-protocol"><span class="std std-ref">Evaluating a protocol</span></a>). The scan time is the duration of the repetition
+a protocol from one repetition of the scan, one line, partition, spoke,
+interleaf, blade line, echo train or inversion shot of one slice without dummy
+repetitions (<a class="reference internal" href="#evaluating-a-protocol"><span class="std std-ref">Evaluating a protocol</span></a>). Most call the function with the
+arguments that reduce it to that repetition; <code class="docutils literal notranslate"><span class="pre">epi3d</span></code> and <code class="docutils literal notranslate"><span class="pre">zte3d</span></code> build the
+repetition from the modules their function builds it from. The scan time is the duration of the repetition
 times the number of repetitions the prescription plays, with the slices that
 share a TR counted in the packets the sequence plays them in. The values are
 those the main sequence states for the prescription: where the plugin has the
@@ -721,11 +733,12 @@ sequence lists every echo time, and the <code class="docutils literal notranslat
 prescription the design refuses is invalid with the message of its error. The
 RF layout is the first TR of the repetition, its shot repeated once per slice of
 the largest packet, with the TR as its period; for the balanced steady state it
-is the TR after the half-angle pulse (<a class="reference internal" href="#stating-the-rf-layout"><span class="std std-ref">Stating the RF layout</span></a>). The flip
-angle is the control of every excitation of the gradient-echo, balanced
-steady-state and EPI plugins, which have a <code class="docutils literal notranslate"><span class="pre">flip</span></code> entry. The spin-echo plugins
-have none, and the amplitude of their excitation and refocusing pulses is that
-of the design.</p>
+is the TR after the half-angle pulse (<a class="reference internal" href="#stating-the-rf-layout"><span class="std std-ref">Stating the RF layout</span></a>). The TR of
+a fast spin echo holds an echo train, that of an MPRAGE an inversion shot, and
+that of <code class="docutils literal notranslate"><span class="pre">epi3d</span></code> a volume. The flip angle is the control of every excitation of
+the plugins with a <code class="docutils literal notranslate"><span class="pre">flip</span></code> entry, which an MPRAGE’s inversion is not. The
+spin-echo plugins, <code class="docutils literal notranslate"><span class="pre">fse3d</span></code> among them, have none, and the amplitude of their
+excitation and refocusing pulses is that of the design.</p>
 </section>
 <section id="resolving-a-protocol">
 <h2>Resolving a protocol<a class="headerlink" href="#resolving-a-protocol" title="Link to this heading">#</a></h2>
