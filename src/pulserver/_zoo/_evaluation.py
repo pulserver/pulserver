@@ -80,10 +80,14 @@ def rf_layout(
     centres = (
         starts[pulses] + tables.rf[rf[pulses] - 1, 5] + tables.rf[rf[pulses] - 1, 4]
     )
-    one_tr = pp.Sequence(main.system)
-    for index in pulses[(centres >= start) & (centres < start + tr)]:
-        one_tr.add_block(main.get_block(int(index) + 1))
-    instances = one_tr.rf_instances()
+    in_tr = pulses[(centres >= start) & (centres < start + tr)]
+    if in_tr.size == pulses.size:
+        instances = main.rf_instances()
+    else:
+        one_tr = pp.Sequence(main.system)
+        for index in in_tr:
+            one_tr.add_block(main.get_block(int(index) + 1))
+        instances = one_tr.rf_instances()
     instances = pp.RfInstances(
         instances.definitions,
         np.tile(instances.definition, copies),

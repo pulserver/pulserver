@@ -29,15 +29,19 @@ SMALL = {"nx": 32, "ny": 32, "fov": 220.0, "phase_fov": 220.0}
 NONCARTESIAN = {"ny": None, "phase_fov": None}
 SMALLER = {
     "bssfp2d": {"bandwidth": 25e3},
+    "bssfp3d": {"nslices": 8},
     "gre_radial2d": NONCARTESIAN,
     "gre_spiral2d": {**NONCARTESIAN, "num_shots": 32},
     "se_radial2d": NONCARTESIAN,
     "se_spiral2d": NONCARTESIAN,
     "epi2d": {"bandwidth": 50e3},
+    "fse3d": {"nslices": 8},
     "gre3d": {"nslices": 8},
+    "gre_multiecho3d": {"nslices": 8, "num_echoes": 2},
     "se3d": {"nslices": 8},
     "gre_stack_of_stars3d": {**NONCARTESIAN, "nslices": 8},
     "gre_stack_of_spirals3d": {**NONCARTESIAN, "nslices": 8},
+    "mprage3d": {"nslices": 8},
     "se_stack_of_stars3d": {**NONCARTESIAN, "nslices": 8},
     "se_stack_of_spirals3d": {**NONCARTESIAN, "nslices": 8},
 }
@@ -126,8 +130,10 @@ def test_a_console_sequence_images_the_vials_where_the_cartesian_gradient_echo_d
 
     assert images
     if name.endswith("3d"):
-        # The vials lie in the partition at the slab's centre.
-        images = [images[len(images) // 2]]
+        # The vials lie in the partition at the slab's centre, of each echo.
+        partitions = {**SMALL, **SMALLER.get(name, {})}["nslices"]
+        assert len(images) % partitions == 0
+        images = images[partitions // 2 :: partitions]
     for image in images:
         assert _correlation(reference, image.astype(float)) > AGREEMENTS.get(
             name, AGREEMENT

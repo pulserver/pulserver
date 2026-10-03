@@ -1,5 +1,8 @@
 """The pics reconstruction of Cartesian streams: the lines it solves from, the maps it takes and the noise it whitens with."""
 
+from types import SimpleNamespace
+
+import ismrmrd
 import numpy as np
 import pytest
 from conftest import (
@@ -12,6 +15,7 @@ from conftest import (
 )
 
 from pulserver.recon.handlers.pics import PicsRecon
+from pulserver.recon.handlers.pics_train import PicsTrainRecon
 
 pytest.importorskip("bartorch")
 
@@ -30,7 +34,7 @@ NOISE = "ACQ_IS_NOISE_MEASUREMENT"
 UNDERSAMPLING = 7e-2
 
 
-class Images(PicsRecon):
+class Recording:
     """Keeps what each unit returns, in the list a stream's copy shares."""
 
     def __init__(self):
@@ -43,9 +47,17 @@ class Images(PicsRecon):
         return result
 
 
-def reconstruct(acquisitions, header=None, *, device=None):
+class Images(Recording, PicsRecon):
+    pass
+
+
+class TrainImages(Recording, PicsTrainRecon):
+    pass
+
+
+def reconstruct(acquisitions, header=None, *, device=None, plugin=None):
     """The context and the image of each unit of ``acquisitions`` that makes one, in the order the units close."""
-    plugin = Images()
+    plugin = Images() if plugin is None else plugin
     context = play(
         plugin,
         calibration_header(COILS, MATRIX) if header is None else header,
@@ -198,3 +210,63 @@ def test_a_partial_fourier_image_is_closer_to_the_full_one_than_the_solve_of_its
 
     full = root_sum_of_squares(kspace)
     assert scaled_difference(completed, full) < scaled_difference(solved, full)
+
+
+def contrasts_in_header(count):
+    """The header of ``reconstruct``'s default with ``count`` values of the ``contrast`` counter."""
+    header = calibration_header(COILS, MATRIX)
+    header.encoding[0].encodingLimits.contrast = SimpleNamespace(
+        minimum=0, maximum=count - 1, center=0
+    )
+    return header
+
+
+def at_places_of_a_train(acquisitions, places):
+    """``acquisitions`` with each line's place in a train of ``places`` as its ``contrast``.
+
+    The last readout of each place closes the slice, as the proxy flags a
+    counter that selects images.
+    """
+    last = {}
+    for index, acquisition in enumerate(acquisitions):
+        acquisition.idx.contrast = acquisition.idx.kspace_encode_step_1 % places
+        last[acquisition.idx.contrast] = index
+    for index in last.values():
+        acquisitions[index].setFlag(ismrmrd.ACQ_LAST_IN_SLICE)
+    return acquisitions
+
+
+def test_the_places_of_a_train_reconstruct_to_the_image_of_the_readouts_without_them(
+    device,
+):
+    places = 4
+    kspace = vials()
+    lines = acquired(range(0, MATRIX, 2))
+    _, (reference,) = reconstruct(stream(kspace, lines), device=device)
+
+    _, (image,) = reconstruct(
+        at_places_of_a_train(stream(kspace, lines), places),
+        contrasts_in_header(places),
+        device=device,
+        plugin=TrainImages(),
+    )
+
+    assert relative_difference(image, reference) < 1e-4
+
+
+def test_contrasts_that_are_images_reconstruct_to_one_image_each(device):
+    echoes = [vials(), coil_phantom(COILS, MATRIX)[2]]
+    acquisitions = []
+    for echo, kspace in enumerate(echoes):
+        for acquisition in stream(kspace, range(MATRIX)):
+            acquisition.idx.contrast = echo
+            acquisitions.append(acquisition)
+
+    _, images = reconstruct(
+        acquisitions, contrasts_in_header(len(echoes)), device=device
+    )
+
+    assert len(images) == len(echoes)
+    for image, kspace in zip(images, echoes, strict=True):
+        _, (expected,) = reconstruct(stream(kspace, range(MATRIX)), device=device)
+        assert relative_difference(image, expected) < 1e-4

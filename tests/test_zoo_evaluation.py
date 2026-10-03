@@ -39,14 +39,24 @@ POWER_RTOL = 1e-3
 # echoes, whichever the sequence has; by wire name.
 CHANGED = {
     "bssfp2d": {"flip": 30.0, "ny": 48},
+    "bssfp3d": {"flip": 30.0, "ny": 32, "nslices": 8},
     "epi2d": {"flip": 60.0, "nx": 64, "ny": 32},
+    "fse3d": {"nx": 64, "ny": 32, "nslices": 16, "etl": 16},
     "gre2d": {"flip": 20.0, "nx": 64, "ny": 48},
     "gre3d": {"flip": 20.0, "nx": 64, "ny": 32, "nslices": 16},
     "gre_multiecho2d": {"flip": 20.0, "num_echoes": 2, "nx": 64, "ny": 48},
+    "gre_multiecho3d": {
+        "flip": 20.0,
+        "num_echoes": 2,
+        "nx": 64,
+        "ny": 32,
+        "nslices": 16,
+    },
     "gre_radial2d": {"flip": 20.0, "nx": 64},
     "gre_spiral2d": {"flip": 20.0, "nx": 64, "num_shots": 8},
     "gre_stack_of_spirals3d": {"flip": 20.0, "nx": 64, "nslices": 8},
     "gre_stack_of_stars3d": {"flip": 20.0, "nx": 64, "nslices": 8},
+    "mprage3d": {"flip": 12.0, "nx": 64, "ny": 32, "nslices": 16},
     "se2d": {"nx": 64, "ny": 48},
     "se3d": {"nx": 64, "ny": 32, "nslices": 16},
     "se_radial2d": {"nx": 64},
@@ -64,17 +74,51 @@ SCANS = [pytest.param(name, {}, id=name) for name in SHIPPED] + [
     pytest.param(name, changes, id=f"{name}-{label}")
     for name, label, changes in (
         ("bssfp2d", "slices", {"nslices": 3, "TR": 6000, "ny": 64}),
+        ("bssfp3d", "longer-tr", {"TR": 9000, "nslices": 8, "ny": 32}),
+        ("bssfp3d", "undersampled", {"nslices": 12, "ny": 48, "Ry": 2, "Rz": 2}),
         ("epi2d", "undersampled", {"Ry": 2}),
         ("epi2d", "packets", {"nslices": 7, "TR": 900000, "Ry": 2, "num_shots": 2}),
         ("epi2d", "frames", {"nslices": 12, "TR": 5000000, "num_frames": 3}),
         ("epi2d", "shortest", {"nslices": 6, "TR": TRPreset.MINIMUM}),
+        (
+            "fse3d",
+            "shortest",
+            {
+                "nslices": 16,
+                "TE": TEPreset.MINIMUM,
+                "TR": TRPreset.MINIMUM,
+                "etl": 10,
+                "nx": 64,
+                "ny": 32,
+            },
+        ),
+        (
+            "fse3d",
+            "undersampled",
+            {"nslices": 24, "Ry": 2, "Rz": 2, "etl": 12, "nx": 64, "ny": 48},
+        ),
         ("gre3d", "partitions", {"nslices": 16, "TR": 20000, "nx": 64, "ny": 32}),
         (
             "gre_multiecho2d",
             "shortest",
             {"nslices": 9, "TR": TRPreset.MINIMUM, "num_echoes": 6, "ny": 48},
         ),
+        (
+            "gre_multiecho3d",
+            "undersampled",
+            {"nslices": 12, "Ry": 2, "Rz": 2, "num_echoes": 3, "nx": 64, "ny": 48},
+        ),
         ("gre_radial2d", "packets", {"nslices": 10, "TR": 40000, "nx": 64}),
+        (
+            "mprage3d",
+            "shortest",
+            {"nslices": 16, "TE": TEPreset.MINIMUM, "TR": TRPreset.MINIMUM, "ny": 32},
+        ),
+        (
+            "mprage3d",
+            "undersampled",
+            {"nslices": 12, "Ry": 2, "Rz": 2, "prep_time": 600000, "nx": 64, "ny": 48},
+        ),
         ("se2d", "packets", {"nslices": 7, "TR": 60000, "Ry": 3}),
         ("se_spiral2d", "packets", {"nslices": 25, "TR": 300000, "num_shots": 8}),
         (
@@ -85,14 +129,30 @@ SCANS = [pytest.param(name, {}, id=name) for name in SHIPPED] + [
     )
 ]
 
-# Requested TRs shorter than one slice takes, and an EPI time series whose
-# volume one TR cannot hold.
+# Requested TRs shorter than one slice, partition, echo train or shot takes,
+# and an EPI time series whose volume one TR cannot hold.
 REJECTED = [
+    pytest.param("bssfp3d", {"TR": 4000, "nslices": 8, "ny": 32}, id="bssfp3d-short"),
     pytest.param("epi2d", {"nslices": 5, "TR": 300000}, id="epi2d-short"),
     pytest.param(
         "epi2d", {"nslices": 12, "TR": 2000000, "num_frames": 5}, id="epi2d-frames"
     ),
+    pytest.param(
+        "fse3d",
+        {"TR": 30000, "etl": 16, "nslices": 16, "nx": 64, "ny": 32},
+        id="fse3d-short",
+    ),
+    pytest.param(
+        "gre_multiecho3d",
+        {"TR": 8000, "num_echoes": 8, "nslices": 16, "nx": 64, "ny": 32},
+        id="gre_multiecho3d-short",
+    ),
     pytest.param("gre_radial2d", {"nslices": 4, "TR": 3000}, id="gre_radial2d-short"),
+    pytest.param(
+        "mprage3d",
+        {"TR": 500000, "nslices": 16, "nx": 64, "ny": 32},
+        id="mprage3d-short",
+    ),
     pytest.param("se2d", {"nslices": 4, "TR": 12000}, id="se2d-short"),
 ]
 
@@ -109,7 +169,10 @@ LARGE = {
 
 # The RF uses of one TR at the default protocol, in play order, where a TR is
 # not one excitation followed, in a spin echo, by one refocusing pulse; by name.
-TRAINS: dict[str, list[str]] = {}
+TRAINS: dict[str, list[str]] = {
+    "fse3d": ["excitation"] + ["refocusing"] * 45,
+    "mprage3d": ["inversion"] + ["excitation"] * 256,
+}
 
 
 @pytest.fixture(scope="module")
