@@ -28,18 +28,26 @@ class Solves(NufftRecon):
 
     def _solved(self, samples, points, device):
         self.solved.append((samples, points))
-        return np.zeros((MATRIX, MATRIX), dtype=np.float32)
+        axes = 3 if points[..., 2].any() else 2
+        return np.zeros((MATRIX,) * axes, dtype=np.float32)
 
 
-def header(*, segments=1, averages=1, depth=1, partitions=1, lines=LINES):
-    """One non-Cartesian encoding space of ``MATRIX`` voxels in plane and ``depth`` along z, counting what it is given."""
+def header(
+    *, segments=1, averages=1, depth=1, partitions=1, lines=LINES, fov_z_mm=None
+):
+    """One non-Cartesian encoding space of ``MATRIX`` voxels in plane and ``depth`` along z, counting what it is given.
+
+    The field of view along z is 5 mm a voxel unless ``fov_z_mm`` gives it.
+    """
 
     def limit(extent):
         return SimpleNamespace(minimum=0, maximum=extent - 1, center=0)
 
     space = SimpleNamespace(
         matrixSize=SimpleNamespace(x=MATRIX, y=MATRIX, z=depth),
-        fieldOfView_mm=SimpleNamespace(x=FOV_MM, y=FOV_MM, z=5.0 * depth),
+        fieldOfView_mm=SimpleNamespace(
+            x=FOV_MM, y=FOV_MM, z=5.0 * depth if fov_z_mm is None else fov_z_mm
+        ),
     )
     limits = SimpleNamespace(
         kspace_encoding_step_1=limit(lines),
@@ -85,9 +93,9 @@ def noise(*shape, seed=0):
 
 
 def readout(data, points, *, segment, line, **counters):
-    """A readout of ``data`` ``(coils, samples)`` along ``points`` ``(samples, 2)`` in grid units."""
+    """A readout of ``data`` ``(coils, samples)`` along ``points`` ``(samples, dimensions)`` in grid units."""
     acquisition = ismrmrd.Acquisition()
-    acquisition.resize(data.shape[-1], COILS, 2)
+    acquisition.resize(data.shape[-1], COILS, points.shape[-1])
     acquisition.data[:] = data
     acquisition.traj[:] = points / (1e-3 * FOV_MM)
     acquisition.idx.segment = segment
@@ -335,3 +343,125 @@ def test_the_image_of_blades_is_the_object_they_sample():
     image = np.asarray(result.data, dtype=float)
     correlation = np.corrcoef(image.ravel(), blob.ravel())[0, 1]
     assert correlation > 0.9
+
+
+def spokes(shots, views, *, samples=SAMPLES):
+    """The trajectory ``(shots, views, samples, 3)`` of spokes through the centre, in grid units.
+
+    The views of a shot are every ``shots``-th point of one Fibonacci set over
+    the sphere, so that each shot samples it evenly and the shots together
+    cover it.
+    """
+    total = shots * views
+    height = 1.0 - 2.0 * (np.arange(total) + 0.5) / total
+    turn = np.pi * (3.0 - np.sqrt(5.0)) * np.arange(total)
+    ring = np.sqrt(1.0 - height**2)
+    directions = np.stack([ring * np.cos(turn), ring * np.sin(turn), height], axis=-1)
+    along = (np.arange(samples) - samples // 2) * (MATRIX / samples)
+    points = along[None, :, None] * directions[:, None, :]
+    return points.reshape(views, shots, samples, 3).swapaxes(0, 1)
+
+
+def volume_header(*, shots, views):
+    """One non-Cartesian encoding space of ``MATRIX`` voxels along each axis, its views counted as lines and its shots as segments."""
+    return header(segments=shots, depth=MATRIX, lines=views, fov_z_mm=FOV_MM)
+
+
+def test_a_trajectory_that_encodes_kz_is_one_volume_solved_from_all_its_shots():
+    shots, views = 3, 5
+    points = spokes(shots, views)
+    data = noise(shots, views, COILS, SAMPLES)
+    plugin = Solves()
+
+    closed = play(plugin, volume_header(shots=shots, views=views), stream(data, points))
+
+    ((samples, trajectory),) = plugin.solved
+    np.testing.assert_array_equal(
+        samples, data.reshape(-1, COILS, SAMPLES).transpose(1, 0, 2)
+    )
+    np.testing.assert_allclose(trajectory, points.reshape(-1, SAMPLES, 3), atol=1e-5)
+    ((_, image),) = closed
+    assert image.data.shape == (MATRIX, MATRIX, MATRIX)
+
+
+def test_a_shot_of_a_volume_that_no_readout_was_placed_at_is_not_a_sample():
+    shots, views = 3, 5
+    points = spokes(shots, views)
+    data = noise(shots, views, COILS, SAMPLES)
+    plugin = Solves()
+
+    play(
+        plugin,
+        volume_header(shots=shots, views=views),
+        stream(data, points, segments=[0, 2]),
+    )
+
+    ((samples, trajectory),) = plugin.solved
+    np.testing.assert_array_equal(
+        samples, data[[0, 2]].reshape(-1, COILS, SAMPLES).transpose(1, 0, 2)
+    )
+    assert trajectory.shape == (2 * views, SAMPLES, 3)
+
+
+def sphere(points):
+    """The samples ``(shots, views, coils, samples)`` along ``points`` of two coils seeing three blobs in a volume.
+
+    The blobs differ in their position along every axis, and the coils'
+    sensitivities are smooth, one rising along each of two axes.
+    """
+    axis = np.arange(MATRIX) - MATRIX // 2
+    z, y, x = np.meshgrid(axis, axis, axis, indexing="ij")
+    blob = np.zeros((MATRIX,) * 3)
+    for (at_z, at_y, at_x), weight in (
+        ((-3, 0, 2), 1.0),
+        ((0, 3, 0), 2.0),
+        ((3, -2, -3), 1.5),
+    ):
+        blob += weight * np.exp(
+            -((z - at_z) ** 2 + (y - at_y) ** 2 + (x - at_x) ** 2) / 4.0
+        )
+    maps = np.stack([1.0 + 0.04 * x, 1.0 + 0.04 * y])
+    phase = np.exp(
+        -2j
+        * np.pi
+        * (
+            points[..., 0, None] * x.ravel()
+            + points[..., 1, None] * y.ravel()
+            + points[..., 2, None] * z.ravel()
+        )
+        / MATRIX
+    )
+    samples = np.einsum("slkv,cv->slck", phase, (maps * blob).reshape(COILS, -1))
+    return blob, samples.astype(np.complex64)
+
+
+def test_the_volume_of_spokes_is_the_object_they_sample():
+    pytest.importorskip("bartorch")
+    shots, views = 4, 40
+    points = spokes(shots, views)
+    blob, data = sphere(points)
+
+    ((_, result),) = play(
+        NufftRecon(),
+        volume_header(shots=shots, views=views),
+        stream(data, points),
+    )
+
+    image = np.asarray(result.data, dtype=float)
+    assert image.shape == blob.shape
+    assert np.corrcoef(image.ravel(), blob.ravel())[0, 1] > 0.9
+
+
+def test_the_maps_of_one_coil_over_a_volume_are_unity_on_the_grid_its_trajectory_spans():
+    torch = pytest.importorskip("torch")
+    pytest.importorskip("bartorch")
+    from pulserver.recon.handlers.nufft import _volume_maps
+
+    points = torch.from_numpy(spokes(2, 6).reshape(-1, SAMPLES, 3))
+    samples = torch.from_numpy(noise(1, 12, SAMPLES))
+
+    maps = _volume_maps(samples, points)
+
+    assert maps.shape[0] == 1
+    assert maps.ndim == 4
+    assert torch.equal(maps, torch.ones_like(maps))

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 __all__ = ["PLUGIN", "NufftRecon"]
 
+from typing import Any
+
 import numpy as np
 
 from ...mrd._acquisitions import AcquisitionFlag
@@ -26,7 +28,8 @@ class NufftRecon(ReconPlugin):
     holds: :func:`~pulserver.recon.coil_maps` estimates from Cartesian
     calibration k-space only. The image minimises
     ``|P F S x - y|^2 + lambda |W x|_1`` over them (``bart pics -t -R W``),
-    ``F`` bartorch's NUFFT, so no density compensation is assumed of the
+    ``F`` bartorch's NUFFT and ``W`` the wavelet transform over the spatial
+    axes the trajectory encodes, so no density compensation is assumed of the
     trajectory; the step is the reciprocal of the largest eigenvalue of the
     normal operator (``bart pics -e``). The trajectory is the one the proxy's
     enrichment writes, which
@@ -35,7 +38,9 @@ class NufftRecon(ReconPlugin):
     blade) and line they carry, and one solve takes them all; a shot at which
     no readout was placed is not a sample. A stack of blades, spokes or spirals
     is Fourier transformed along its partitions first and fitted partition by
-    partition. A unit closes as that of
+    partition. A trajectory that encodes kz, with no partitions, is one
+    three-dimensional solve, its maps fitted as ``bart nlinv -m 1 -t`` fits
+    them over three spatial axes. A unit closes as that of
     :class:`~pulserver.recon.handlers.cartesian.CartesianRecon` does, and also
     once the last readout of each of its segments has arrived; an image is its
     averages summed, and its values are those of the solve, unscaled. bartorch
@@ -96,10 +101,12 @@ class NufftRecon(ReconPlugin):
 
         ``trajectory`` is ``([partitions,] shots, samples, 3)`` and ``played``
         ``([partitions,] shots)``; only the shots flagged in ``played`` are
-        samples. The image is cropped to the plane of ``shape``, one per
-        partition.
+        samples. The image is cropped to the last two axes of ``shape``, one
+        per partition, or to its last three where the trajectory encodes kz and
+        there are no partitions: one volume.
         """
-        plane = shape[-2:]
+        volume = played.ndim == 1 and bool(trajectory[..., 2].any())
+        extent = shape[-3:] if volume else shape[-2:]
         if played.ndim == 2:
             kspace = np.fft.fftshift(
                 np.fft.ifft(np.fft.ifftshift(kspace, axes=1), axis=1), axes=1
@@ -113,35 +120,66 @@ class NufftRecon(ReconPlugin):
         images = []
         for samples, points, shots in stack:
             if not shots.any():
-                images.append(np.zeros(plane, dtype=np.float32))
+                images.append(np.zeros(extent, dtype=np.float32))
                 continue
             if not shots.all():
                 samples, points = samples[:, shots], points[shots]
             image = self._solved(samples, points, device)
-            images.append(np.array(center_crop(image, plane)))
+            images.append(np.array(center_crop(image, extent)))
         return np.stack(images) if len(images) > 1 else images[0]
 
     def _solved(
         self, samples: np.ndarray, points: np.ndarray, device: str | None
     ) -> np.ndarray:
-        """Return the magnitude image of ``(coils, shots, samples)`` k-space and its ``(shots, samples, 3)`` trajectory, on the grid the trajectory spans."""
+        """Return the magnitude image of ``(coils, shots, samples)`` k-space and its ``(shots, samples, 3)`` trajectory, on the grid the trajectory spans.
+
+        The image is a plane, or a volume where the trajectory encodes kz.
+        """
         import torch
         from bartorch import apps, priors
 
+        axes = 3 if points[..., 2].any() else 2
         samples = torch.from_numpy(
             np.ascontiguousarray(samples, dtype=np.complex64)
         ).to(device)
         points = torch.from_numpy(np.ascontiguousarray(points)).to(device)
-        maps = apps.nlinv_maps(samples, traj=points)
+        maps = (
+            _volume_maps(samples, points)
+            if axes == 3
+            else apps.nlinv_maps(samples, traj=points)
+        )
         image = apps.pics(
             samples,
             maps,
             traj=points,
-            regularizers=priors.Wavelet((-1, -2), self.wavelet),
+            regularizers=priors.Wavelet(tuple(range(-1, -axes - 1, -1)), self.wavelet),
             maxiter=self.iterations,
             eigen_step=True,
         )
-        return image.abs().cpu().numpy().reshape(maps.shape[-2:])
+        return image.abs().cpu().numpy().reshape(maps.shape[-axes:])
+
+
+def _volume_maps(samples: Any, points: Any, radius: float = 12.0) -> Any:
+    """Return the coil maps ``(coils, z, y, x)`` of ``(coils, shots, samples)`` k-space along a three-dimensional trajectory.
+
+    As :func:`bartorch.apps.nlinv_maps` fits them for a plane: ``bart nlinv
+    -m 1`` over the samples within ``radius`` grid units of the k-space
+    centre, normalised to unit root sum of squares over the coils, and unit
+    for one coil.
+    """
+    import torch
+    from bartorch import tools
+
+    coils = samples.shape[0]
+    if coils == 1:
+        x, y, z = (int(n) for n in tools.estdims(points.real.cpu()).split())
+        return torch.ones((1, z, y, x), dtype=samples.dtype, device=samples.device)
+    centre = points.real.square().sum(dim=-1).sqrt() <= radius
+    _, maps = tools.nlinv(
+        (samples * centre)[..., None], traj=points, maps=1, return_sensitivities=True
+    )
+    maps = maps.reshape(coils, *maps.shape[-3:])
+    return maps / maps.abs().square().sum(dim=0, keepdim=True).sqrt().clamp_min(1e-12)
 
 
 def _by_shots(
