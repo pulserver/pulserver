@@ -18,7 +18,7 @@ RfControl = Literal[FloatKey.FLIP] | UserKey
 
 @dataclass(frozen=True)
 class RfLayout:
-    """The RF definitions a plugin plays and the instances of one repetition.
+    """The RF definitions a plugin plays and the instances of one TR.
 
     An instance plays the RF amplitude ``amplitude * peak_hz * waveform`` of its
     definition, as :meth:`pypulseqpp.Sequence.rf_instances` states. A control
@@ -30,12 +30,13 @@ class RfLayout:
     Attributes
     ----------
     instances
-        The definitions, numbered by first play, and the instances in play order.
+        The definitions, numbered by first play, and the instances of one TR in
+        play order.
     control
         One entry per instance: the control its amplitude is proportional to,
         or ``None``.
     period
-        The time in seconds over which the instances repeat.
+        The TR in seconds.
 
     Raises
     ------
@@ -82,19 +83,17 @@ class RfLayout:
         *,
         period: float | None = None,
     ) -> RfLayout:
-        """Return the layout of the RF instances of a sequence.
+        """Return the layout of the RF instances of one TR.
 
         Parameters
         ----------
         repetition
-            The sequence whose RF instances are the layout: the whole scan, or
-            one representative repetition such as a TR, a shot or a train.
+            One TR: the sequence whose RF instances are the layout.
         control
             The control of every instance, or ``None`` for none; or one control
             per instance, in play order. A single key is one control.
         period
-            Seconds over which the instances repeat. The duration of
-            ``repetition`` where omitted.
+            The TR in seconds. The duration of ``repetition`` where omitted.
         """
         instances = repetition.rf_instances()
         if (

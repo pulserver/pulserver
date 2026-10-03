@@ -94,6 +94,6 @@ listing and the value block ignore these.
 | {obj}`~pulserver.protocol.RfDefinitionRecord` | One RF definition of an `[RfDefinitions]` block. |
 | {obj}`~pulserver.protocol.format_rf_definitions` | Format the RF definitions of an evaluation, as the `list` design call replies them. |
 | {obj}`~pulserver.protocol.parse_rf_definitions` | Read the `[RfDefinitions]` block of a `list` reply. |
-| {obj}`~pulserver.protocol.RfLayoutRecord` | The contents of an `[RfLayout]` block, one entry per instance in play order. |
+| {obj}`~pulserver.protocol.RfLayoutRecord` | The contents of an `[RfLayout]` block, one entry per instance of one TR in play order. |
 | {obj}`~pulserver.protocol.format_rf_layout` | Format the RF layout of a validation, as the `validate` design call replies it. |
 | {obj}`~pulserver.protocol.parse_rf_layout` | Read the `[RfLayout]` block of a `validate` reply. |

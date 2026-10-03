@@ -1,11 +1,20 @@
 """pypulseqpp's 2D gradient-echo EPI bound to the scanner UI."""
 
 import functools
+from typing import Any
 
+import pypulseqpp as pp
+from pypulseqpp import sequences
 from pypulseqpp.sequences.sequence.epi2D_sequence import epi2d
 
-from pulserver._zoo._evaluation import evaluation
-from pulserver.design import FloatParam, IntParam, SequencePlugin, TimeParam
+from pulserver._zoo._evaluation import achieved, arguments, packets, rf_layout
+from pulserver.design import (
+    Evaluation,
+    FloatParam,
+    IntParam,
+    SequencePlugin,
+    TimeParam,
+)
 from pulserver.protocol import TEPreset, TRPreset, UIParam
 
 
@@ -51,4 +60,52 @@ class Epi2D(SequencePlugin):
     }
 
     def evaluate(self, system, protocol):
-        return evaluation(self, system, protocol)
+        # A cycle plays one shot of every slice of a packet, and a TR the
+        # shots of a volume. The design of one slice at the shortest TR plays
+        # one cycle of that slice per shot, after its calibration.
+        a = arguments(self, protocol)
+        one = {"n_slices": 1, "tr": None, "n_frames": 1, "n_dummy": 0}
+        *calibration, _, volume = self.app(system, **(protocol.arguments | one))
+        n_shots, n_frames = a["n_shots"], a["n_frames"]
+        shot = volume.definitions["TR"][0] / n_shots
+        sizes, cycles = _cycles(a, shot, system.block_duration_raster)
+        # The reference volume and the time series each play their dummy
+        # cycles first, packet by packet.
+        dummies = a["n_dummy"] * (n_shots if n_frames > 1 else 1)
+        played = 2 * dummies + (1 + n_frames) * n_shots
+        tr = n_shots * max(cycles)
+        return Evaluation(
+            protocol.replace(achieved(self, volume) | {UIParam.TR: tr}),
+            played * sum(cycles) + a["n_slices"] * sequences.duration(calibration),
+            rf_layout=rf_layout(volume, scaled=True, copies=max(sizes), period=tr),
+        )
+
+
+def _cycles(
+    a: dict[str, Any], shot: float, raster: float
+) -> tuple[list[int], list[float]]:
+    """Return the slices of each packet, and the duration of one cycle of each.
+
+    A cycle plays one shot of every slice of a packet, each ``shot`` long, and
+    a TR ``n_shots`` cycles.
+
+    Raises
+    ------
+    ValueError
+        If the TR cannot hold the shots of one slice, or the slices of a
+        volume when there is more than one frame.
+    """
+    n_slices, n_shots, tr = a["n_slices"], a["n_shots"], a["tr"]
+    cycle = None if tr is None else tr / n_shots
+    sizes, cycles = packets(n_slices, cycle, shot, raster)
+    if a["n_frames"] > 1 and len(sizes) > 1:
+        raise ValueError(
+            f"the requested TR of {tr * 1e3:.3f} ms cannot hold the {n_slices} "
+            f"excitations of a volume, {shot * 1e3:.3f} ms each per shot"
+        )
+    if cycle is not None and pp.round_to_raster(cycle - shot, raster) < 0:
+        raise ValueError(
+            f"the requested TR of {tr * 1e3:.3f} ms is shorter than the "
+            f"{n_shots * shot * 1e3:.3f} ms the shots of one slice take"
+        )
+    return sizes, cycles

@@ -1,9 +1,15 @@
 """pypulseqpp's 2D balanced SSFP bound to the scanner UI."""
 
-from pypulseqpp.sequences.sequence.bssfp2D_sequence import bssfp2d
+from pypulseqpp.sequences.sequence.bssfp2D_sequence import MAX_SLICE_DURATION, bssfp2d
 
-from pulserver._zoo._evaluation import evaluation
-from pulserver.design import FloatParam, IntParam, SequencePlugin, TimeParam
+from pulserver._zoo._evaluation import achieved, arguments, cartesian_2d, rf_layout
+from pulserver.design import (
+    Evaluation,
+    FloatParam,
+    IntParam,
+    SequencePlugin,
+    TimeParam,
+)
 from pulserver.protocol import TRPreset, UIParam
 
 
@@ -40,4 +46,22 @@ class Bssfp2D(SequencePlugin):
     }
 
     def evaluate(self, system, protocol):
-        return evaluation(self, system, protocol)
+        # Each slice plays its own train: the half-angle pulse, then one TR per
+        # repetition. The design of one line plays one repetition of one slice.
+        a = arguments(self, protocol)
+        one, repetitions = cartesian_2d(a)
+        line = self.app(system, **(protocol.arguments | one | {"n_slices": 1}))
+        tr = line.definitions["TR"][0]
+        once = line.duration()[0]
+        train = once + (repetitions - 1) * tr
+        if train > MAX_SLICE_DURATION:
+            raise ValueError(
+                f"a slice's train lasts {train:.1f} s, longer than the "
+                f"{MAX_SLICE_DURATION:.0f} s one repetition of the scan may; "
+                "raise ry, or lower n_y"
+            )
+        return Evaluation(
+            protocol.replace(achieved(self, line)),
+            a["n_slices"] * train,
+            rf_layout=rf_layout(line, scaled=True, start=once - tr),
+        )

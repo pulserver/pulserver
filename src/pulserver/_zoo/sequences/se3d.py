@@ -2,7 +2,7 @@
 
 from pypulseqpp.sequences.sequence.se3D_sequence import se3d
 
-from pulserver._zoo._evaluation import evaluation
+from pulserver._zoo._evaluation import cartesian_3d, evaluation
 from pulserver.design import FloatParam, IntParam, SequencePlugin, TimeParam
 from pulserver.protocol import TEPreset, TRPreset, UIParam
 
@@ -40,4 +40,4 @@ class Se3D(SequencePlugin):
     }
 
     def evaluate(self, system, protocol):
-        return evaluation(self, system, protocol)
+        return evaluation(self, system, protocol, cartesian_3d)
