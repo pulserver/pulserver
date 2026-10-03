@@ -9,7 +9,8 @@ import numpy as np
 from ...mrd._header import EncodingSpace
 from ...mrd._metadata import acquisition_label, has_acquisition_flag
 from .._buffers import ReconData, discards, echo_centre
-from ..plugin import Gadget
+from ..gadgets import Prewhiten
+from ..plugin import Gadget, ReconContext
 from .pics import PicsRecon
 
 
@@ -122,28 +123,33 @@ class EpiPhaseCorrection(Gadget):
 class EpiRecon(PicsRecon):
     """Images of :class:`~pulserver.recon.handlers.pics.PicsRecon` from EPI readouts.
 
-    Each readout is ramp-resampled (:class:`RampSampling`) and has its
-    odd/even phase removed (:class:`EpiPhaseCorrection`) on arrival, so the
-    k-space is Cartesian, forward-ordered and at the reconstruction matrix
-    when its slice closes. The phase-encode-reversed reference volume
-    (``SET`` 1) is reconstructed as an image of its own, and when PyHySCO is
-    installed (bartorch's ``pyhysco`` extra, GPL-3.0) each later image of the
-    same slice is corrected for susceptibility distortion against it
+    Each readout is whitened (:class:`~pulserver.recon.Prewhiten`),
+    ramp-resampled (:class:`RampSampling`) and has its odd/even phase removed
+    (:class:`EpiPhaseCorrection`) on arrival, so the k-space is Cartesian,
+    forward-ordered and at the reconstruction matrix when its slice closes.
+    The phase-encode-reversed reference volume (``SET`` 1) is reconstructed as
+    an image of its own, and when PyHySCO is installed (bartorch's ``pyhysco``
+    extra, GPL-3.0) each later image of the same slice is corrected for
+    susceptibility distortion against it
     (:func:`bartorch.tools.correct_susceptibility`).
     """
 
     def __init__(self, wavelet: float = 0.005, iterations: int = 30) -> None:
         super().__init__(wavelet, iterations)
-        self.gadgets = (RampSampling(), EpiPhaseCorrection())
+        self.gadgets = (Prewhiten(), RampSampling(), EpiPhaseCorrection())
 
     def startup(self, context):
         super().startup(context)
         self.references = {}
 
-    def image(self, kspace, shape, device, data: ReconData | None = None):
-        image = super().image(kspace, shape, device)
-        if data is None:
-            return image
+    def image(
+        self,
+        kspace: np.ndarray,
+        shape: tuple[int, ...],
+        context: ReconContext,
+        data: ReconData,
+    ) -> np.ndarray:
+        image = super().image(kspace, shape, context, data)
         if int(data.counters.get("set", 0)) == 1:
             self.references[int(data.counters.get("slice", 0))] = image
             return image
