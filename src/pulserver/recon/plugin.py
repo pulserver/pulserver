@@ -46,6 +46,7 @@ import contextlib
 import copy
 import hashlib
 import logging
+import math
 import numbers
 import os
 import pickle
@@ -604,18 +605,19 @@ class ReconPlugin(ABC):
 
     A *unit* is the set of readouts reconstructed together: those of one
     branch and encoding space that share every image counter (slice, contrast,
-    phase, repetition, set, average) not listed in ``axes``. The counters in
-    ``axes`` are axes of the unit's k-space instead; ``segment`` and the user
-    counters separate no units unless ``segment`` is listed. Each accepted
+    phase, repetition, set, average) not listed in ``axes`` or ``merge``. The
+    counters in ``axes`` are axes of the unit's k-space instead, and those in
+    ``merge`` are laid out along none; ``segment`` and the user counters
+    separate no units unless ``segment`` is listed. Each accepted
     acquisition runs through the ``gadgets``, then joins the unit of the branch
     :meth:`branch_for` names, which places it by its flags (see
     :class:`ReconData`). A unit closes when the flag ``triggers`` names for its
-    branch has arrived for every combination of the counters in ``axes``. It
-    leaves the plugin before :meth:`recon` runs, so its buffers are freed once
-    :meth:`recon` returns; the memory a stream holds is bounded by the units
-    open at once. Units still open at ``LAST_IN_MEASUREMENT`` or at the end of
-    the stream are reconstructed then, in the order they opened and under their
-    own branches.
+    branch has arrived for every combination of the counters in ``axes`` and
+    ``merge``. It leaves the plugin before :meth:`recon` runs, so its buffers
+    are freed once :meth:`recon` returns; the memory a stream holds is bounded
+    by the units open at once. Units still open at ``LAST_IN_MEASUREMENT`` or
+    at the end of the stream are reconstructed then, in the order they opened
+    and under their own branches.
 
     Each stream runs on its own :meth:`spawn` of the module-level ``PLUGIN``, so
     state set in the hooks belongs to one stream. ``context.exam`` is shared
@@ -638,6 +640,15 @@ class ReconPlugin(ABC):
         the closing flag, instead of separating units: any of ``repetition``,
         ``phase``, ``slice``, ``contrast``, ``set``, ``average`` and
         ``segment``. Their extents are the header's encoding limits.
+    merge
+        Counters of a unit waited for by the closing flag and laid out along no
+        axis, instead of separating units: any of ``repetition``, ``phase``,
+        ``slice``, ``contrast``, ``set`` and ``average``. A readout is placed
+        by its other counters whatever its value of a merged one, so readouts
+        that share them replace one another, with a warning; the echoes of one
+        train, which fill phase encodes of their own, do not. A buffer holds
+        one k-space however many values a merged counter takes. Their extents
+        are the header's encoding limits.
     require_flags
         Flags an acquisition must all carry to be accepted. A combined
         :class:`AcquisitionFlag` counts as its members.
@@ -658,6 +669,9 @@ class ReconPlugin(ABC):
     gadgets : tuple of Gadget
     triggers : dict
     axes : tuple of str
+    merge : tuple of str
+        Read when a stream starts, so a subclass may assign it after
+        ``super().__init__``.
 
     Examples
     --------
@@ -688,6 +702,7 @@ class ReconPlugin(ABC):
         gadgets: Sequence[Gadget] = (),
         triggers: Mapping[str, Any] | None = None,
         axes: Sequence[str] = (),
+        merge: Sequence[str] = (),
         require_flags: tuple[int | str, ...] | AcquisitionFlag = (),
         reject_flags: tuple[int | str, ...] | AcquisitionFlag = (),
         buffered: bool = True,
@@ -719,11 +734,21 @@ class ReconPlugin(ABC):
                 f"axes {unknown} are not counters a unit can be laid out along; "
                 f"they are {list(_AXES)}"
             )
+        unknown = [name for name in merge if name not in LOOP_COUNTERS]
+        if unknown:
+            raise ValueError(
+                f"merge {unknown} are not counters that separate units; "
+                f"they are {list(LOOP_COUNTERS)}"
+            )
+        both = sorted(set(axes) & set(merge))
+        if both:
+            raise ValueError(f"{both} cannot be both an axis and merged")
         self.gadgets = tuple(gadgets)
         self.triggers = dict(
             triggers or {"imaging": AcquisitionFlag.LAST_IN_MEASUREMENT}
         )
         self.axes = tuple(axes)
+        self.merge = tuple(merge)
         self.require_flags = _flag_members(require_flags)
         self.reject_flags = _flag_members(reject_flags)
         self.buffered = bool(buffered)
@@ -753,6 +778,10 @@ class ReconPlugin(ABC):
             self._spaces = {
                 space.index: space
                 for space in EncodingSpace.all_from_header(context.header, self.axes)
+            }
+            self._merged = {
+                space.index: math.prod(space.loop_sizes)
+                for space in EncodingSpace.all_from_header(context.header, self.merge)
             }
 
     def gadget(self, kind: type) -> Any:
@@ -946,7 +975,8 @@ class ReconPlugin(ABC):
     def _reset(self) -> None:
         """Begin a stream with no unit open."""
         self._spaces: dict[int, EncodingSpace] = {}
-        self._closure: _Closure = _FlagClosure(self.triggers, self.axes)
+        self._merged: dict[int, int] = {}
+        self._closure: _Closure = _FlagClosure(self.triggers, self.axes, self.merge)
         self._units: dict[UnitKey, ReconUnit] = {}
         self._waveforms: list[Any] = []
         self._finished = False
@@ -977,9 +1007,11 @@ class ReconPlugin(ABC):
         return data, placed
 
     def _unit(self, branch: str, acquisition: Any) -> ReconUnit:
-        key = unit_key(branch, acquisition, self.axes)
+        key = unit_key(branch, acquisition, self.axes, self.merge)
         if key not in self._units:
-            self._units[key] = ReconUnit(key, self._spaces, buffered=self.buffered)
+            self._units[key] = ReconUnit(
+                key, self._spaces, buffered=self.buffered, merged=self._merged
+            )
         return self._units[key]
 
     def _reconstruct(

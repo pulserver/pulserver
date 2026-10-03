@@ -80,10 +80,14 @@ def rf_layout(
     centres = (
         starts[pulses] + tables.rf[rf[pulses] - 1, 5] + tables.rf[rf[pulses] - 1, 4]
     )
-    one_tr = pp.Sequence(main.system)
-    for index in pulses[(centres >= start) & (centres < start + tr)]:
-        one_tr.add_block(main.get_block(int(index) + 1))
-    instances = one_tr.rf_instances()
+    in_tr = pulses[(centres >= start) & (centres < start + tr)]
+    if in_tr.size == pulses.size:
+        instances = main.rf_instances()
+    else:
+        one_tr = pp.Sequence(main.system)
+        for index in in_tr:
+            one_tr.add_block(main.get_block(int(index) + 1))
+        instances = one_tr.rf_instances()
     instances = pp.RfInstances(
         instances.definitions,
         np.tile(instances.definition, copies),
@@ -201,6 +205,19 @@ def _nyquist_spokes(n: int) -> int:
     return math.ceil(math.pi / 2 * n)
 
 
+def propeller_2d(a: dict[str, Any]) -> tuple[dict[str, Any], int]:
+    """One line of one blade of a 2D PROPELLER scan, and its dummies and lines.
+
+    A blade is ``blade_width`` lines and the Nyquist set is
+    ``ceil(pi * n / (2 * blade_width))`` blades, so a blade of one line has
+    the set of ``_nyquist_spokes(n)``, of which one in that many is played.
+    """
+    blades = math.ceil(math.pi * a["n"] / (2 * a["blade_width"]))
+    lines = len(range(0, blades, a["ry"])) * a["blade_width"]
+    one = {"n_dummy": 0, "blade_width": 1, "ry": _nyquist_spokes(a["n"])}
+    return one, a["n_dummy"] + lines
+
+
 def radial_2d(a: dict[str, Any]) -> tuple[dict[str, Any], int]:
     """One spoke of a 2D radial scan, and its dummies and spokes."""
     nyquist = _nyquist_spokes(a["n"])
@@ -221,6 +238,27 @@ def stack_of_stars(a: dict[str, Any]) -> tuple[dict[str, Any], int]:
     partitions = _views(a["n_z"], a["rz"], a["n_acs_z"], a["partial_fourier_z"])
     one = {"n_dummy": 0, "ry": nyquist, "rz": a["n_z"], "n_acs_z": 0}
     return one, a["n_dummy"] + spokes * partitions
+
+
+def stack_of_blades(a: dict[str, Any]) -> tuple[dict[str, Any], int]:
+    """One line of one blade at one partition of a stack of blades, and its dummies and views.
+
+    The scan plays every ``ry``-th blade of the Nyquist set of ``ceil(pi n /
+    (2 blade_width))``, each of its ``blade_width`` lines at every acquired
+    partition. A blade of one line, with ``ry`` the size of its Nyquist set,
+    leaves the first blade and its one line.
+    """
+    width = a["blade_width"]
+    blades = len(range(0, math.ceil(math.pi * a["n"] / (2 * width)), a["ry"]))
+    partitions = _views(a["n_z"], a["rz"], a["n_acs_z"], a["partial_fourier_z"])
+    one = {
+        "n_dummy": 0,
+        "ry": _nyquist_spokes(a["n"]),
+        "rz": a["n_z"],
+        "n_acs_z": 0,
+        "blade_width": 1,
+    }
+    return one, a["n_dummy"] + blades * width * partitions
 
 
 def stack_of_spirals(a: dict[str, Any]) -> tuple[dict[str, Any], int]:

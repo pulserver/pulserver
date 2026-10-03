@@ -24,22 +24,37 @@ SHIPPED = sorted(path.stem for path in SEQUENCES.glob("*.py"))
 # A matrix small enough to scan here, at the reference's field of view. The
 # balanced SSFP is read at a bandwidth whose readout outlasts the half of its
 # excitation that follows the pulse centre. The gradient-echo spiral is read in
-# enough interleaves that its image is not limited by undersampling.
+# enough interleaves that its image is not limited by undersampling. The zero
+# echo time sequence is read at a bandwidth at which the dead-time gap after
+# each pulse leaves no sample at the centre of k-space unacquired.
 SMALL = {"nx": 32, "ny": 32, "fov": 220.0, "phase_fov": 220.0}
 NONCARTESIAN = {"ny": None, "phase_fov": None}
 SMALLER = {
     "bssfp2d": {"bandwidth": 25e3},
+    "bssfp3d": {"nslices": 8},
+    "gre_propeller2d": NONCARTESIAN,
     "gre_radial2d": NONCARTESIAN,
     "gre_spiral2d": {**NONCARTESIAN, "num_shots": 32},
+    "se_epi_propeller2d": {**NONCARTESIAN, "bandwidth": 50e3},
+    "se_propeller2d": NONCARTESIAN,
     "se_radial2d": NONCARTESIAN,
     "se_spiral2d": NONCARTESIAN,
     "epi2d": {"bandwidth": 50e3},
+    "epi3d": {"nslices": 8},
+    "fse3d": {"nslices": 8},
     "gre3d": {"nslices": 8},
+    "gre_multiecho3d": {"nslices": 8, "num_echoes": 2},
     "se3d": {"nslices": 8},
+    "gre_stack_of_blades3d": {**NONCARTESIAN, "nslices": 8},
     "gre_stack_of_stars3d": {**NONCARTESIAN, "nslices": 8},
     "gre_stack_of_spirals3d": {**NONCARTESIAN, "nslices": 8},
+    "mprage3d": {"nslices": 8},
+    "se_stack_of_blades3d": {**NONCARTESIAN, "nslices": 8},
     "se_stack_of_stars3d": {**NONCARTESIAN, "nslices": 8},
     "se_stack_of_spirals3d": {**NONCARTESIAN, "nslices": 8},
+    "mprage_stack_of_stars3d": {**NONCARTESIAN, "nslices": 8},
+    "mprage_stack_of_spirals3d": {**NONCARTESIAN, "nslices": 8},
+    "zte3d": {**NONCARTESIAN, "bandwidth": 25e3},
 }
 # Normalised correlation with the Cartesian gradient echo's image of the same
 # vials: below it on a contrast of its own, a regularised NUFFT's residual
@@ -122,12 +137,16 @@ def test_a_console_sequence_images_the_vials_where_the_cartesian_gradient_echo_d
         pytest.importorskip("bartorch")
     console = _console(tmp_path)
 
-    images = _images(console, name, {**SMALL, **SMALLER.get(name, {})})
+    prescribed = {**SMALL, **SMALLER.get(name, {})}
+    images = _images(console, name, prescribed)
 
     assert images
     if name.endswith("3d"):
-        # The vials lie in the partition at the slab's centre.
-        images = [images[len(images) // 2]]
+        # The vials lie in the partition at the slab's centre, of each echo or
+        # volume; a sequence without a slices entry images one volume.
+        partitions = prescribed.get("nslices", len(images))
+        assert len(images) % partitions == 0
+        images = images[partitions // 2 :: partitions]
     for image in images:
         assert _correlation(reference, image.astype(float)) > AGREEMENTS.get(
             name, AGREEMENT

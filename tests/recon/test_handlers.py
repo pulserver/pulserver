@@ -10,6 +10,7 @@ from pulserver import mrd, recon
 from pulserver.recon.handlers.cartesian import PLUGIN, CartesianRecon
 from pulserver.recon.handlers.epi import EpiRecon
 from pulserver.recon.handlers.nufft import NufftRecon
+from pulserver.recon.handlers.nufft_train import NufftTrainRecon
 from pulserver.recon.handlers.pics import PicsRecon
 from pulserver.recon.handlers.pmc import PmcRecon
 from pulserver.recon.handlers.simplefft import SimpleFftRecon
@@ -131,13 +132,23 @@ def test_the_simple_fft_crops_to_the_matrix_of_the_space_its_lines_are_in_and_sc
 
 @pytest.mark.parametrize(
     "handler",
-    [CartesianRecon, SimpleFftRecon, PicsRecon, EpiRecon, NufftRecon, PmcRecon],
+    [
+        CartesianRecon,
+        SimpleFftRecon,
+        PicsRecon,
+        EpiRecon,
+        NufftRecon,
+        NufftTrainRecon,
+        PmcRecon,
+    ],
 )
 def test_a_shipped_reconstruction_leaves_receive_to_the_framework(handler):
     assert handler.receive is recon.ReconPlugin.receive
 
 
-@pytest.mark.parametrize("handler", [PicsRecon, EpiRecon, NufftRecon, PmcRecon])
+@pytest.mark.parametrize(
+    "handler", [PicsRecon, EpiRecon, NufftRecon, NufftTrainRecon, PmcRecon]
+)
 def test_a_reconstruction_through_bartorch_whitens_first_and_takes_noise_readouts(
     handler,
 ):
@@ -156,3 +167,74 @@ def test_a_reference_reconstruction_whitens_nothing_and_rejects_noise_readouts(
 
     assert not any(isinstance(gadget, recon.Prewhiten) for gadget in plugin.gadgets)
     assert mrd.AcquisitionFlag.IS_NOISE_MEASUREMENT in plugin.reject_flags
+
+
+SHOTS = 6
+
+
+def _train_header(places):
+    matrix = SimpleNamespace(
+        matrixSize=SimpleNamespace(x=SAMPLES, y=SHOTS, z=1), fieldOfView_mm=None
+    )
+    limits = SimpleNamespace(
+        kspace_encoding_step_1=SimpleNamespace(maximum=SHOTS - 1),
+        contrast=SimpleNamespace(maximum=places - 1),
+    )
+    return SimpleNamespace(
+        encoding=[
+            SimpleNamespace(
+                encodedSpace=matrix,
+                reconSpace=matrix,
+                encodingLimits=limits,
+                trajectory="radial",
+            )
+        ],
+        acquisitionSystemInformation=SimpleNamespace(receiverChannels=COILS),
+    )
+
+
+def _train(places):
+    """The ``SHOTS`` readouts of an image, shot ``n`` at place ``n % places`` of a train, each place closing with its last shot."""
+    closing = set({shot % places: shot for shot in range(SHOTS)}.values())
+    readouts = []
+    for shot in range(SHOTS):
+        acquisition = ismrmrd.Acquisition()
+        acquisition.resize(SAMPLES, COILS)
+        acquisition.data[:] = 1.0
+        acquisition.idx.kspace_encode_step_1 = shot
+        acquisition.idx.contrast = shot % places
+        if shot in closing:
+            acquisition.setFlag(ismrmrd.ACQ_LAST_IN_SLICE)
+        readouts.append(acquisition)
+    return readouts
+
+
+def _solved(handler, places):
+    """The k-space of each unit ``handler`` is asked to solve from a train of ``places`` places."""
+
+    class Probe(handler):
+        def __init__(self):
+            super().__init__()
+            self.solved = []
+
+        def recon(self, context, branch, data):
+            self.solved.append(data.data)
+
+    plugin = Probe()
+    context = recon.ReconContext.offline(_train_header(places))
+    plugin.startup(context)
+    for acquisition in _train(places):
+        plugin.receive(acquisition, context)
+    plugin.flush(context)
+    return plugin.solved
+
+
+@pytest.mark.parametrize("places", [2, 3])
+def test_a_train_reconstruction_solves_the_readouts_of_every_place_as_one_unit(places):
+    each = _solved(NufftRecon, places)
+    (together,) = _solved(NufftTrainRecon, places)
+
+    assert len(each) == places
+    assert not any(unit.mask.all() for unit in each)
+    assert together.axes == ("coil", "phase_encode", "readout")
+    assert together.mask.all()

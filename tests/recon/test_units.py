@@ -68,6 +68,25 @@ def frame(last=CLOSES_SLICE, **idx):
     ]
 
 
+def train(places=2, **idx):
+    """The ``LINES`` readouts of one image, line ``n`` at place ``n % places`` of a train.
+
+    The last readout of each place carries ``LAST_IN_SLICE``, as the proxy flags
+    a counter that selects images.
+    """
+    place = [line % places for line in range(LINES)]
+    last = {at: line for line, at in enumerate(place)}
+    return [
+        acquire(
+            *(CLOSES_SLICE if last[place[line]] == line else ()),
+            kspace_encode_step_1=line,
+            contrast=place[line],
+            **idx,
+        )
+        for line in range(LINES)
+    ]
+
+
 def sequential(*frames):
     """The readouts of ``frames`` taken one frame after another."""
     return list(chain.from_iterable(frames))
@@ -210,6 +229,28 @@ def test_an_image_counter_separates_units_unless_it_is_an_axis_of_the_unit(count
     assert unit_key("imaging", first, (counter,)) == unit_key(
         "imaging", second, (counter,)
     )
+
+
+@pytest.mark.parametrize(
+    "counter", ["repetition", "phase", "slice", "contrast", "set", "average"]
+)
+def test_a_merged_counter_separates_no_units(counter):
+    first, second = acquire(**{counter: 0}), acquire(**{counter: 1})
+
+    assert unit_key("imaging", first, (), (counter,)) == unit_key(
+        "imaging", second, (), (counter,)
+    )
+
+
+def test_a_counter_cannot_be_both_an_axis_and_merged():
+    with pytest.raises(ValueError, match="contrast"):
+        Recorder(axes=("contrast",), merge=("contrast",))
+
+
+@pytest.mark.parametrize("name", ["segment", "echo"])
+def test_merge_names_only_counters_that_separate_units(name):
+    with pytest.raises(ValueError, match=name):
+        Recorder(merge=(name,))
 
 
 def test_the_branch_and_the_encoding_space_separate_units():
@@ -367,6 +408,66 @@ def test_echoes_close_their_unit_once_whatever_order_they_arrive_in(order):
     assert index == len(readouts) - 1
     assert data.data.kspace.shape == (COILS, 2, LINES, N_X)
     assert data.data.mask.all()
+
+
+def test_the_readouts_of_every_value_of_a_merged_counter_fill_one_k_space_placed_by_their_other_counters():
+    plugin = Recorder(triggers={"imaging": SLICE}, merge=("contrast",))
+    readouts = train(places=2)
+
+    ((index, data),) = play(plugin, header(space(contrast=2)), readouts)
+
+    assert index == len(readouts) - 1
+    assert data.data.axes == ("coil", "phase_encode", "readout")
+    assert data.data.mask.all()
+    assert "contrast" not in data.counters
+    assert lines(data.acquisitions) == [0, 1, 2, 3]
+
+
+def test_a_unit_waits_for_its_flag_at_every_value_of_a_merged_counter():
+    plugin = Recorder(triggers={"imaging": SLICE}, merge=("contrast",))
+    context = ReconContext.offline(header(space(contrast=2)))
+    plugin.startup(context)
+
+    closed = [len(plugin.receive(readout, context)) for readout in train(places=2)]
+
+    # Line 2 is the last readout of place 0 and line 3 the last of place 1.
+    assert closed == [0, 0, 0, 1]
+
+
+def test_a_merged_counter_does_not_multiply_the_k_space_a_unit_holds():
+    places = 4
+    merged = Recorder(triggers={"imaging": SLICE}, merge=("contrast",))
+    laid_out = Recorder(triggers={"imaging": SLICE}, axes=("contrast",))
+    for plugin in (merged, laid_out):
+        context = ReconContext.offline(header(space(contrast=places)))
+        plugin.startup(context)
+        plugin.receive(acquire(kspace_encode_step_1=0, contrast=0), context)
+
+    assert held(laid_out) == places * held(merged)
+
+
+def test_merge_assigned_after_construction_applies_to_the_stream():
+    class Late(Recorder):
+        def __init__(self, **options):
+            super().__init__(**options)
+            self.merge = ("contrast",)
+
+    closed = play(
+        Late(triggers={"imaging": SLICE}), header(space(contrast=2)), train(places=2)
+    )
+
+    assert len(closed) == 1
+
+
+def test_readouts_that_share_a_position_across_a_merged_counter_replace_one_another_with_a_warning():
+    plugin = Recorder(triggers={"imaging": SLICE}, merge=("contrast",))
+    readouts = [
+        acquire(*CLOSES_SLICE, kspace_encode_step_1=0, contrast=place)
+        for place in range(2)
+    ]
+
+    with pytest.warns(UserWarning, match="replaced one already placed"):
+        play(plugin, header(space(contrast=2)), readouts)
 
 
 def test_a_unit_waits_for_its_flag_at_every_position_along_its_axes():

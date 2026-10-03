@@ -39,8 +39,8 @@ returns sequences. Resolving a request proceeds in three steps.
 An evaluation answers every edit of an entry, so its duration adds to the
 latency of the UI, and a design of the whole scan grows with the matrix and the
 slices. A scan repeats one TR, so the shipped plugins design one repetition of
-it, one line, partition, spoke or interleaf of one slice without dummy
-repetitions, and extrapolate: the scan time is the duration of a repetition
+it, one line, partition, spoke, interleaf, echo train or inversion shot of one
+slice without dummy repetitions, and extrapolate: the scan time is the duration of a repetition
 times the number of repetitions the prescription plays, and slices that share a
 TR are dealt into the packets the sequence plays them in, from which the TR and
 the scan time follow.
