@@ -26,10 +26,9 @@ class Solves(NufftRecon):
         super().__init__()
         self.solved = []
 
-    def _solved(self, samples, points, device):
+    def _solved(self, samples, points, device, volume=None):
         self.solved.append((samples, points))
-        axes = 3 if points[..., 2].any() else 2
-        return np.zeros((MATRIX,) * axes, dtype=np.float32)
+        return np.zeros(volume or (MATRIX, MATRIX), dtype=np.float32)
 
 
 def header(
@@ -345,19 +344,19 @@ def test_the_image_of_blades_is_the_object_they_sample():
     assert correlation > 0.9
 
 
-def spokes(shots, views, *, samples=SAMPLES):
+def spokes(shots, views, *, samples=SAMPLES, reach=1.0):
     """The trajectory ``(shots, views, samples, 3)`` of spokes through the centre, in grid units.
 
     The views of a shot are every ``shots``-th point of one Fibonacci set over
     the sphere, so that each shot samples it evenly and the shots together
-    cover it.
+    cover it. A spoke runs ``reach`` of the way to the edge of the matrix.
     """
     total = shots * views
     height = 1.0 - 2.0 * (np.arange(total) + 0.5) / total
     turn = np.pi * (3.0 - np.sqrt(5.0)) * np.arange(total)
     ring = np.sqrt(1.0 - height**2)
     directions = np.stack([ring * np.cos(turn), ring * np.sin(turn), height], axis=-1)
-    along = (np.arange(samples) - samples // 2) * (MATRIX / samples)
+    along = (np.arange(samples) - samples // 2) * (reach * MATRIX / samples)
     points = along[None, :, None] * directions[:, None, :]
     return points.reshape(views, shots, samples, 3).swapaxes(0, 1)
 
@@ -452,7 +451,24 @@ def test_the_volume_of_spokes_is_the_object_they_sample():
     assert np.corrcoef(image.ravel(), blob.ravel())[0, 1] > 0.9
 
 
-def test_the_maps_of_one_coil_over_a_volume_are_unity_on_the_grid_its_trajectory_spans():
+def test_the_volume_of_spokes_that_stop_short_of_the_matrix_edge_is_on_the_matrix():
+    pytest.importorskip("bartorch")
+    shots, views = 4, 40
+    points = spokes(shots, views, reach=0.85)
+    blob, data = sphere(points)
+
+    ((_, result),) = play(
+        NufftRecon(),
+        volume_header(shots=shots, views=views),
+        stream(data, points),
+    )
+
+    image = np.asarray(result.data, dtype=float)
+    assert image.shape == blob.shape
+    assert np.corrcoef(image.ravel(), blob.ravel())[0, 1] > 0.9
+
+
+def test_the_maps_of_one_coil_over_a_volume_are_unity_on_its_matrix():
     torch = pytest.importorskip("torch")
     pytest.importorskip("bartorch")
     from pulserver.recon.handlers.nufft import _volume_maps
@@ -460,8 +476,7 @@ def test_the_maps_of_one_coil_over_a_volume_are_unity_on_the_grid_its_trajectory
     points = torch.from_numpy(spokes(2, 6).reshape(-1, SAMPLES, 3))
     samples = torch.from_numpy(noise(1, 12, SAMPLES))
 
-    maps = _volume_maps(samples, points)
+    maps = _volume_maps(samples, points, (MATRIX,) * 3)
 
-    assert maps.shape[0] == 1
-    assert maps.ndim == 4
+    assert maps.shape == (1, MATRIX, MATRIX, MATRIX)
     assert torch.equal(maps, torch.ones_like(maps))

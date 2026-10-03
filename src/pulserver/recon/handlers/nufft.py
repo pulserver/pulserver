@@ -101,12 +101,23 @@ class NufftRecon(ReconPlugin):
 
         ``trajectory`` is ``([partitions,] shots, samples, 3)`` and ``played``
         ``([partitions,] shots)``; only the shots flagged in ``played`` are
-        samples. The image is cropped to the last two axes of ``shape``, one
-        per partition, or to its last three where the trajectory encodes kz and
-        there are no partitions: one volume.
+        samples. The image is the last two axes of ``shape``, one per
+        partition, or its last three where the trajectory encodes kz and there
+        are no partitions: one volume.
+
+        Raises
+        ------
+        ValueError
+            If the trajectory encodes kz and ``shape`` has two axes.
         """
-        volume = played.ndim == 1 and bool(trajectory[..., 2].any())
-        extent = shape[-3:] if volume else shape[-2:]
+        volume = None
+        if played.ndim == 1 and trajectory[..., 2].any():
+            if len(shape) < 3:
+                raise ValueError(
+                    "a trajectory that encodes kz needs a three-dimensional image matrix"
+                )
+            volume = tuple(int(n) for n in shape[-3:])
+        extent = shape[-2:] if volume is None else volume
         if played.ndim == 2:
             kspace = np.fft.fftshift(
                 np.fft.ifft(np.fft.ifftshift(kspace, axes=1), axis=1), axes=1
@@ -124,29 +135,34 @@ class NufftRecon(ReconPlugin):
                 continue
             if not shots.all():
                 samples, points = samples[:, shots], points[shots]
-            image = self._solved(samples, points, device)
+            image = self._solved(samples, points, device, volume)
             images.append(np.array(center_crop(image, extent)))
         return np.stack(images) if len(images) > 1 else images[0]
 
     def _solved(
-        self, samples: np.ndarray, points: np.ndarray, device: str | None
+        self,
+        samples: np.ndarray,
+        points: np.ndarray,
+        device: str | None,
+        volume: tuple[int, ...] | None = None,
     ) -> np.ndarray:
-        """Return the magnitude image of ``(coils, shots, samples)`` k-space and its ``(shots, samples, 3)`` trajectory, on the grid the trajectory spans.
+        """Return the magnitude image of ``(coils, shots, samples)`` k-space and its ``(shots, samples, 3)`` trajectory.
 
-        The image is a plane, or a volume where the trajectory encodes kz.
+        The image is a plane on the grid the trajectory spans, or the
+        ``(z, y, x)`` matrix ``volume`` when it is given.
         """
         import torch
         from bartorch import apps, priors
 
-        axes = 3 if points[..., 2].any() else 2
         samples = torch.from_numpy(
             np.ascontiguousarray(samples, dtype=np.complex64)
         ).to(device)
         points = torch.from_numpy(np.ascontiguousarray(points)).to(device)
+        axes = 2 if volume is None else 3
         maps = (
-            _volume_maps(samples, points)
-            if axes == 3
-            else apps.nlinv_maps(samples, traj=points)
+            apps.nlinv_maps(samples, traj=points)
+            if volume is None
+            else _volume_maps(samples, points, volume)
         )
         image = apps.pics(
             samples,
@@ -159,8 +175,10 @@ class NufftRecon(ReconPlugin):
         return image.abs().cpu().numpy().reshape(maps.shape[-axes:])
 
 
-def _volume_maps(samples: Any, points: Any, radius: float = 12.0) -> Any:
-    """Return the coil maps ``(coils, z, y, x)`` of ``(coils, shots, samples)`` k-space along a three-dimensional trajectory.
+def _volume_maps(
+    samples: Any, points: Any, shape: tuple[int, ...], radius: float = 12.0
+) -> Any:
+    """Return the coil maps ``(coils, z, y, x)`` on the grid ``shape`` of ``(coils, shots, samples)`` k-space along a three-dimensional trajectory.
 
     As :func:`bartorch.apps.nlinv_maps` fits them for a plane: ``bart nlinv
     -m 1`` over the samples within ``radius`` grid units of the k-space
@@ -172,13 +190,16 @@ def _volume_maps(samples: Any, points: Any, radius: float = 12.0) -> Any:
 
     coils = samples.shape[0]
     if coils == 1:
-        x, y, z = (int(n) for n in tools.estdims(points.real.cpu()).split())
-        return torch.ones((1, z, y, x), dtype=samples.dtype, device=samples.device)
-    centre = points.real.square().sum(dim=-1).sqrt() <= radius
+        return torch.ones((1, *shape), dtype=samples.dtype, device=samples.device)
+    centre = points.square().sum(dim=-1).sqrt() <= radius
     _, maps = tools.nlinv(
-        (samples * centre)[..., None], traj=points, maps=1, return_sensitivities=True
+        (samples * centre)[..., None],
+        traj=points,
+        maps=1,
+        return_sensitivities=True,
+        x=tuple(reversed(shape)),
     )
-    maps = maps.reshape(coils, *maps.shape[-3:])
+    maps = maps.reshape(coils, *shape)
     return maps / maps.abs().square().sum(dim=0, keepdim=True).sqrt().clamp_min(1e-12)
 
 
