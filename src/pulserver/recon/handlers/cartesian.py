@@ -42,7 +42,7 @@ class CartesianRecon(ReconPlugin):
         buffer = data.data
         if buffer is None:
             return None
-        image = self.image(averaged(buffer), buffer.image_shape, context.device, data)
+        image = self.image(averaged(buffer), buffer.image_shape, context, data)
         return ReconResult(
             image, attributes={"ImageProcessingHistory": ["PULSERVER", "PYTHON", "FFT"]}
         )
@@ -51,14 +51,16 @@ class CartesianRecon(ReconPlugin):
         self,
         kspace: np.ndarray,
         shape: tuple[int, ...],
-        device: str | None,
-        data: ReconData | None = None,
+        context: ReconContext,
+        data: ReconData,
     ) -> np.ndarray:
         """Return the magnitude image of ``(coils, [partitions,] phase encodes, readout)`` k-space, cropped to ``shape``.
 
-        ``data`` is the unit being reconstructed, for subclasses that need its counters.
+        ``context`` and ``data`` are those :meth:`recon` was given, for
+        subclasses that need the device, the unit's counters or its
+        calibration k-space.
         """
-        del device, data
+        del context, data
         return transformed(kspace, shape)
 
 

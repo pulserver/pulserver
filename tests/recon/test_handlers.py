@@ -1,12 +1,17 @@
-"""The built-in Cartesian reconstruction, driven readout by readout as the proxy drives it."""
+"""The shipped reconstructions: their gadgets and rejected flags, and the Cartesian one driven readout by readout as the proxy drives it."""
 
 from types import SimpleNamespace
 
 import ismrmrd
 import numpy as np
+import pytest
 
 from pulserver import mrd, recon
-from pulserver.recon.handlers.cartesian import PLUGIN
+from pulserver.recon.handlers.cartesian import PLUGIN, CartesianRecon
+from pulserver.recon.handlers.epi import EpiRecon
+from pulserver.recon.handlers.nufft import NufftRecon
+from pulserver.recon.handlers.pics import PicsRecon
+from pulserver.recon.handlers.pmc import PmcRecon
 from pulserver.recon.handlers.simplefft import SimpleFftRecon
 
 LINES, COILS, SAMPLES = 4, 2, 8
@@ -122,3 +127,32 @@ def test_the_simple_fft_crops_to_the_matrix_of_the_space_its_lines_are_in_and_sc
     np.testing.assert_allclose(
         image.data, _transformed(kspace)[1:7, 2:6], rtol=1e-4, atol=1e-9
     )
+
+
+@pytest.mark.parametrize(
+    "handler",
+    [CartesianRecon, SimpleFftRecon, PicsRecon, EpiRecon, NufftRecon, PmcRecon],
+)
+def test_a_shipped_reconstruction_leaves_receive_to_the_framework(handler):
+    assert handler.receive is recon.ReconPlugin.receive
+
+
+@pytest.mark.parametrize("handler", [PicsRecon, EpiRecon, NufftRecon, PmcRecon])
+def test_a_reconstruction_through_bartorch_whitens_first_and_takes_noise_readouts(
+    handler,
+):
+    plugin = handler()
+
+    assert isinstance(plugin.gadgets[0], recon.Prewhiten)
+    assert mrd.AcquisitionFlag.IS_NOISE_MEASUREMENT not in plugin.reject_flags
+    assert mrd.AcquisitionFlag.IS_PHASECORR_DATA in plugin.reject_flags
+
+
+@pytest.mark.parametrize("handler", [CartesianRecon, SimpleFftRecon])
+def test_a_reference_reconstruction_whitens_nothing_and_rejects_noise_readouts(
+    handler,
+):
+    plugin = handler()
+
+    assert not any(isinstance(gadget, recon.Prewhiten) for gadget in plugin.gadgets)
+    assert mrd.AcquisitionFlag.IS_NOISE_MEASUREMENT in plugin.reject_flags

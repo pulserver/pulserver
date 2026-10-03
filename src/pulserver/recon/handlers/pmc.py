@@ -24,9 +24,10 @@ class PmcRecon(PicsRecon):
 
     Navigator readouts (``NAV`` or ``RTFEEDBACK``) belong to the ``navigator``
     branch, whose units are one readout each, and are collected a navigator at
-    a time, one readout per plane. Each plane is reconstructed by a
-    density-compensated adjoint NUFFT, coils combined by root sum of squares
-    (:func:`bartorch.tools.reconstruct_navigator`), on one thread. The
+    a time, one readout per plane. A plane is the readout as received, so the
+    whitening of the stream is not applied to it. Each plane is reconstructed
+    by a density-compensated adjoint NUFFT, coils combined by root sum of
+    squares (:func:`bartorch.tools.reconstruct_navigator`), on one thread. The
     Pipe-Menon density (:func:`bartorch.estimate_density`) is computed once,
     from the first navigator's trajectory, which the proxy stamps from the
     sequence. The planes are registered against the first navigator's and the
