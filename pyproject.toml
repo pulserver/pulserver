@@ -23,7 +23,7 @@ classifiers = [
 ]
 
 dependencies = [
-  "pypulseqpp>=0.0.22",
+  "pypulseqpp>=0.0.23",
   "numpy>=2.2.6",
   "ismrmrd>=1.15.0",
   "pydicom>=3.0.2",
