@@ -24,7 +24,9 @@ SHIPPED = sorted(path.stem for path in SEQUENCES.glob("*.py"))
 # A matrix small enough to scan here, at the reference's field of view. The
 # balanced SSFP is read at a bandwidth whose readout outlasts the half of its
 # excitation that follows the pulse centre. The gradient-echo spiral is read in
-# enough interleaves that its image is not limited by undersampling.
+# enough interleaves that its image is not limited by undersampling. The zero
+# echo time sequence is read at a bandwidth at which the dead-time gap after
+# each pulse leaves no sample at the centre of k-space unacquired.
 SMALL = {"nx": 32, "ny": 32, "fov": 220.0, "phase_fov": 220.0}
 NONCARTESIAN = {"ny": None, "phase_fov": None}
 SMALLER = {
@@ -52,6 +54,7 @@ SMALLER = {
     "se_stack_of_spirals3d": {**NONCARTESIAN, "nslices": 8},
     "mprage_stack_of_stars3d": {**NONCARTESIAN, "nslices": 8},
     "mprage_stack_of_spirals3d": {**NONCARTESIAN, "nslices": 8},
+    "zte3d": {**NONCARTESIAN, "bandwidth": 25e3},
 }
 # Normalised correlation with the Cartesian gradient echo's image of the same
 # vials: below it on a contrast of its own, a regularised NUFFT's residual

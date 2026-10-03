@@ -31,4 +31,5 @@ ZOO_PAIRS: dict[str, str] = {
     "se_stack_of_blades3d": "nufft",
     "se_stack_of_spirals3d": "nufft",
     "se_stack_of_stars3d": "nufft",
+    "zte3d": "nufft",
 }

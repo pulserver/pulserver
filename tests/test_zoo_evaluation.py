@@ -76,6 +76,7 @@ CHANGED = {
     "se_stack_of_blades3d": {"nx": 64, "nslices": 8},
     "se_stack_of_spirals3d": {"nx": 64, "nslices": 8},
     "se_stack_of_stars3d": {"nx": 64, "nslices": 8},
+    "zte3d": {"flip": 20.0, "nx": 64},
 }
 REQUESTS = [pytest.param(name, {}, id=f"{name}-default") for name in SHIPPED] + [
     pytest.param(name, CHANGED[name], id=f"{name}-changed") for name in SHIPPED
@@ -191,6 +192,8 @@ SCANS = [pytest.param(name, {}, id=name) for name in SHIPPED] + [
             "shortest",
             {"nslices": 8, "TR": TRPreset.MINIMUM, "nx": 64},
         ),
+        ("zte3d", "undersampled", {"Ry": 4, "nx": 64}),
+        ("zte3d", "longer", {"TR": 900, "Ry": 3, "nx": 48}),
     )
 ]
 
@@ -247,6 +250,7 @@ REJECTED = [
     pytest.param(
         "se_stack_of_blades3d", {"TR": 10000}, id="se_stack_of_blades3d-short"
     ),
+    pytest.param("zte3d", {"nx": 64, "TR": 300}, id="zte3d-short"),
 ]
 
 # Many slices, lines, partitions, interleaves and echoes, at the shortest TR;
@@ -269,6 +273,12 @@ TRAINS: dict[str, list[str]] = {
     "mprage_stack_of_spirals3d": ["inversion"] + ["excitation"] * 16,
     "mprage_stack_of_stars3d": ["inversion"] + ["excitation"] * 403,
 }
+
+# The blocks in the last TR of a design whose last view outlasts the TR it
+# states, by name. A zero echo time view is a block that holds its pulse and a
+# block that reads; the last view of a shell reads until the gradient has
+# slewed to zero, so the final TR seconds of the design hold no pulse.
+LAST_TR_BLOCKS = {"zte3d": 2}
 
 
 @pytest.fixture(scope="module")
@@ -337,11 +347,19 @@ def _wire_power(listed, layout):
     return _mean_power(layout.period, layout.amplitude, peak[which], energy[which])
 
 
-def _last_tr_power(main):
-    """The RF energy of the blocks of ``main`` that end within a ``TR`` of its end, over that ``TR``, in Hz²."""
+def _last_tr_power(main, blocks=None):
+    """The RF energy of the last TR of ``main``, over its ``TR``, in Hz².
+
+    The last TR is the last ``blocks`` blocks, or those that end within a
+    ``TR`` of the end.
+    """
     tr = main.definitions["TR"][0]
     ends = np.cumsum(main.libraries().block_durations)
-    first = int(np.flatnonzero(ends > ends[-1] - tr)[0]) + 1
+    first = (
+        ends.size - blocks + 1
+        if blocks
+        else int(np.flatnonzero(ends > ends[-1] - tr)[0]) + 1
+    )
     return main.calc_rf_power(block_range=(first, ends.size))[3] / tr
 
 
@@ -532,10 +550,10 @@ def test_a_zoo_evaluation_designs_two_trs_at_most_however_large_the_prescription
     protocol = _protocol(plugin, changes)
     monkeypatch.setattr(plugin, "app", recording)
     monkeypatch.setattr(pp.Sequence, "__init__", recording_init)
-    evaluation = plugin.evaluate(SYSTEM, protocol)
+    plugin.evaluate(SYSTEM, protocol)
 
-    # An evaluation designs through the app once, or builds the modules of one
-    # TR itself, and the sequences it builds hold at most two TRs of the layout.
+    # An evaluation designs through the app once, two TRs at most, or builds
+    # the modules of a repetition itself, two excitations at most.
     assert len(designed) <= 1
     if designed:
         main = _chain(designed[0])[-1]
@@ -544,9 +562,7 @@ def test_a_zoo_evaluation_designs_two_trs_at_most_however_large_the_prescription
         assert main.duration()[0] <= 2 * tr + rounding
     else:
         assert built
-        for sequence in built:
-            rounding = SYSTEM.block_duration_raster * _excitations(sequence)
-            assert sequence.duration()[0] <= 2 * evaluation.rf_layout.period + rounding
+        assert max(map(_excitations, built)) <= 2
 
 
 @pytest.mark.parametrize("name", SHIPPED)
@@ -576,7 +592,8 @@ def test_each_zoo_layout_plays_the_rf_power_of_the_last_tr_of_the_design(zoo, na
     layout = plugin.evaluate(SYSTEM, protocol).rf_layout
 
     assert _layout_power(layout) == pytest.approx(
-        _last_tr_power(_main(plugin, protocol)), rel=POWER_RTOL
+        _last_tr_power(_main(plugin, protocol), LAST_TR_BLOCKS.get(name)),
+        rel=POWER_RTOL,
     )
 
 
@@ -643,5 +660,5 @@ def test_the_listed_definitions_and_the_validated_layout_play_the_rf_power_of_th
     plugin = zoo[name]
     main = _main(plugin, _protocol(plugin, changes))
     assert _wire_power(listed, layout) == pytest.approx(
-        _last_tr_power(main), rel=POWER_RTOL
+        _last_tr_power(main, LAST_TR_BLOCKS.get(name)), rel=POWER_RTOL
     )
