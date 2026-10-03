@@ -23,7 +23,7 @@ from pulserver.protocol import (
 SYSTEM = pp.Opts(**LIMITS)
 SHIPPED = sorted(path.stem for path in _plugins.SEQUENCES.glob("*.py"))
 # The spin-echo sequences fix their flip angles; the others take one.
-SPIN_ECHO = [name for name in SHIPPED if name.startswith("se")]
+SPIN_ECHO = [name for name in SHIPPED if name.startswith(("se", "fse"))]
 FLIPPED = [name for name in SHIPPED if name not in SPIN_ECHO]
 
 # The layout integrates the squared magnitude of each unit-peak waveform with
@@ -106,6 +106,10 @@ LARGE = {
     "num_echoes": 8,
     "TR": TRPreset.MINIMUM,
 }
+
+# The RF uses of one TR at the default protocol, in play order, where a TR is
+# not one excitation followed, in a spin echo, by one refocusing pulse; by name.
+TRAINS: dict[str, list[str]] = {}
 
 
 @pytest.fixture(scope="module")
@@ -251,7 +255,8 @@ def test_an_evaluation_states_as_its_layout_a_regular_tr_of_the_design(
     main = _main(plugin, protocol)
     # The first TR holds the largest packet of slices; a balanced steady state
     # opens with its half-angle pulse, so its last TR is the regular one.
-    start = main.duration()[0] - main.definitions["TR"][0] if name == "bssfp2d" else 0
+    balanced = name.startswith("bssfp")
+    start = main.duration()[0] - main.definitions["TR"][0] if balanced else 0
     expected = rf_layout(main, UIParam.FLIP in plugin.protocol, start=start)
     assert layout.period == pytest.approx(expected.period, rel=1e-12)
     assert layout.instances.definition.tolist() == (
@@ -349,9 +354,8 @@ def test_each_zoo_layout_is_one_tr_of_an_excitation_and_a_spin_echo_refocusing_p
     assert layout.period == pytest.approx(
         _main(plugin, protocol).definitions["TR"][0], rel=1e-12
     )
-    assert uses == (
-        ["excitation", "refocusing"] if name in SPIN_ECHO else ["excitation"]
-    )
+    single = ["excitation", "refocusing"] if name in SPIN_ECHO else ["excitation"]
+    assert uses == TRAINS.get(name, single)
 
 
 @pytest.mark.parametrize("name", FLIPPED)
