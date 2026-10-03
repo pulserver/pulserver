@@ -137,12 +137,14 @@ def test_a_console_sequence_images_the_vials_where_the_cartesian_gradient_echo_d
         pytest.importorskip("bartorch")
     console = _console(tmp_path)
 
-    images = _images(console, name, {**SMALL, **SMALLER.get(name, {})})
+    prescribed = {**SMALL, **SMALLER.get(name, {})}
+    images = _images(console, name, prescribed)
 
     assert images
     if name.endswith("3d"):
-        # The vials lie in the partition at the slab's centre, of each echo or volume.
-        partitions = {**SMALL, **SMALLER.get(name, {})}["nslices"]
+        # The vials lie in the partition at the slab's centre, of each echo or
+        # volume; a sequence without a slices entry images one volume.
+        partitions = prescribed.get("nslices", len(images))
         assert len(images) % partitions == 0
         images = images[partitions // 2 :: partitions]
     for image in images:
