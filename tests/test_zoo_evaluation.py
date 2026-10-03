@@ -82,8 +82,10 @@ REQUESTS = [pytest.param(name, {}, id=f"{name}-default") for name in SHIPPED] + 
     pytest.param(name, CHANGED[name], id=f"{name}-changed") for name in SHIPPED
 ]
 
-# The defaults, and prescriptions whose slices fall into packets of unequal
-# size at a requested TR or into one packet at the shortest; by wire name.
+# The defaults, and prescriptions that change what the repetitions of a scan
+# are counted from: slices in packets of unequal size at a requested TR or in
+# one packet at the shortest, undersampling, partitions, shots, frames, blades,
+# echo trains and inversion shots; by wire name.
 SCANS = [pytest.param(name, {}, id=name) for name in SHIPPED] + [
     pytest.param(name, changes, id=f"{name}-{label}")
     for name, label, changes in (
