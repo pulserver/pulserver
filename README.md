@@ -15,7 +15,7 @@
 pulserver orchestrates MR acquisitions with Pulseq sequences on clinical
 scanners: sequence design, scanner preparation and reconstruction. It
 resolves the protocol an operator edits in the scanner UI against a
-[pypulseqpp](https://github.com/pulserver/pypulseqpp) sequence application,
+[pypulseqpp](https://github.com/pulserver/pypulseqpp) sequence function,
 converts the design into the segmented representation a scanner interpreter
 plays, and routes the raw data of each series, enriched from the sequence that
 acquired it, to a reconstruction, normally
@@ -46,20 +46,27 @@ the checks pypulseqpp provides does not establish scanner or patient safety.
 pip install pulserver bartorch
 ```
 
-A sequence plugin binds a pypulseqpp `SequenceApp`, or a function returning
-sequences, to the scanner protocol, and a reconstruction plugin reconstructs
-the series it acquires. The client of a scan chooses the reconstruction,
-independently of the sequence:
+A sequence plugin binds a pypulseqpp sequence function, a function that returns
+the designed sequences, to the scanner protocol, and a reconstruction plugin
+reconstructs the series it acquires. The client of a scan chooses the
+reconstruction, independently of the sequence. The plugin below evaluates a
+protocol by designing the sequence, which states the scan time and refuses a
+prescription the design cannot realize:
 
 ```python
 # sequences/gre.py
-from pypulseqpp.sequences.sequence.gre2D_sequence import Gre2DApp
-from pulserver.design import SequencePlugin, TimeParam, UIParam
+from pypulseqpp import sequences
+from pypulseqpp.sequences.sequence.gre2D_sequence import gre2d
+from pulserver.design import Evaluation, SequencePlugin, TimeParam, UIParam
 
 
 class Gre(SequencePlugin):
-    app = Gre2DApp
+    app = gre2d
     protocol = {UIParam.TE: TimeParam("te", range_min=3000, range_max=20000)}  # µs
+
+    def evaluate(self, system, protocol):
+        scan = self.app(system, **protocol.arguments)
+        return Evaluation(protocol, sequences.duration(scan))
 ```
 
 ```python

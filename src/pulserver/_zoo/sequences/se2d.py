@@ -1,13 +1,14 @@
 """pypulseqpp's 2D spin echo bound to the scanner UI."""
 
-from pypulseqpp.sequences.sequence.se2D_sequence import Se2DApp
+from pypulseqpp.sequences.sequence.se2D_sequence import se2d
 
+from pulserver._zoo._evaluation import evaluation
 from pulserver.design import FloatParam, IntParam, SequencePlugin, TimeParam
 from pulserver.protocol import TEPreset, TRPreset, UIParam
 
 
 class Se2D(SequencePlugin):
-    app = Se2DApp
+    app = se2d
     protocol = {
         UIParam.TE: TimeParam(
             "te",
@@ -39,3 +40,6 @@ class Se2D(SequencePlugin):
         ),
         UIParam.RY: IntParam("ry", range_min=1, range_max=4),
     }
+
+    def evaluate(self, system, protocol):
+        return evaluation(self, system, protocol)

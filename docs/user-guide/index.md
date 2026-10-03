@@ -10,7 +10,7 @@ exchange are described in {doc}`../explanations/index`.
 | --- | --- |
 | This page | Installation, supported platforms, issues and security. |
 | {doc}`running` | The design calls, the warm server and the reconstruction proxy, and their options. |
-| {doc}`scanner-sequences` | Binding a pypulseqpp sequence application to the scanner protocol. |
+| {doc}`scanner-sequences` | Binding a pypulseqpp sequence function to the scanner protocol. |
 | {doc}`reconstruction-plugins` | Writing a reconstruction and running it outside the proxy. |
 | {doc}`reconstruction-client` | The MRD stream a scanner's reconstruction client sends the proxy. |
 | {doc}`virtual-scanner` | Scanning an analytic phantom through a stored design, the proxy and a reconstruction plugin, without a scanner. |

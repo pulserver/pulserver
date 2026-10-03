@@ -107,6 +107,7 @@ TYPED_INVALID_VALUES = block(
 )
 GRE2D_LISTING = block(
     [
+        "flip: float|typein|12.0|1.0|90.0|1.0|deg",
         "TE: int|dropdown|8000|1000|80000|10|us|-2|5000|8000",
         "TR: int|dropdown|250000|1000|5000000|1|us|-1",
         "bandwidth: float|typein|250000.0|1000.0|1000000.0|1.0|Hz",
@@ -230,8 +231,8 @@ def test_a_choice_is_a_member_of_its_enum_until_the_wire(typed):
     request = {UIParam.IMAGING_MODE: "3d"}
     reply = typed.validate(SYSTEM, request)
     assert reply.valid, reply.info
-    app = typed.generate(SYSTEM, _protocol(typed, request))
-    assert type(app.mode) is ImagingMode
+    arguments = _protocol(typed, request).arguments
+    assert type(arguments["mode"]) is ImagingMode
     assert reply.values[UIParam.IMAGING_MODE] is ImagingMode.THREE_D
 
     text = format_validation(reply, listing)
@@ -291,9 +292,9 @@ def test_a_string_list_param_is_a_choice_param_over_an_enum_of_its_options(typed
     assert format_listing({UIParam.IMAGING_MODE: mode}).splitlines()[1] == (
         "imaging_mode: stringlist|1|2d|3d"
     )
-    app = listed.generate(SYSTEM, _protocol(listed, {UIParam.IMAGING_MODE: "2d"}))
-    assert app.mode == "2d"
-    assert isinstance(app.mode, str)
+    arguments = _protocol(listed, {UIParam.IMAGING_MODE: "2d"}).arguments
+    assert arguments["mode"] == "2d"
+    assert isinstance(arguments["mode"], str)
 
 
 def test_a_protocol_holds_the_values_in_the_units_of_the_application_arguments(typed):

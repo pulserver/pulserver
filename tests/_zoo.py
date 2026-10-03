@@ -1,5 +1,8 @@
 """Small prescriptions of the sequences pypulseqpp ships, one per module of ``pypulseqpp.sequences``."""
 
+import pypulseqpp as pp
+from pypulseqpp import sequences
+
 #: A prescription small enough to design and scan in a moment.
 SMALL = {
     "gre2D_sequence": {"n_x": 32, "n_y": 16, "n_slices": 1, "n_acs_y": 0},
@@ -83,3 +86,12 @@ SMALL = {
         "tr": 200e-3,
     },
 }
+
+
+def designed(name):
+    """Return the main sequence of the shipped sequence ``name`` at its :data:`SMALL` prescription.
+
+    A sequence with prescans returns a chain, the main sequence last.
+    """
+    result = getattr(sequences, name)(**SMALL[name])
+    return result if isinstance(result, pp.Sequence) else result[-1]

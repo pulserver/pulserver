@@ -160,15 +160,16 @@ for n_y, n_slices, blocks, result in rows:
 # Subsequences
 # ------------
 #
-# pypulseqpp's echo planar application writes a reference prescan, one volume
-# with the phase-encoding direction reversed, before the imaging sequence. The
-# two are separate files linked by the ``NextSequence`` definition, and the
-# conversion reads the chain as the subsequences of one scan.
+# pypulseqpp's echo planar sequence returns a reference prescan, one volume
+# with the phase-encoding direction reversed, and the imaging sequence, as a
+# chain. :func:`pypulseqpp.sequences.write` writes them as separate files
+# linked by the ``NextSequence`` definition, and the conversion reads the chain
+# as the subsequences of one scan.
 
-from pypulseqpp.sequences.sequence.epi2D_sequence import Epi2DApp
+from pypulseqpp import sequences
+from pypulseqpp.sequences.sequence.epi2D_sequence import epi2d
 
-epi = Epi2DApp(system, n_x=64, n_y=64)
-files = epi.write(work / "epi.seq", offline=False)
+files = sequences.write(work / "epi.seq", epi2d(system, n_x=64, n_y=64), offline=False)
 print([Path(f).name for f in ir.chain(files[0])])
 
 report = ir.summary(files[0], system)

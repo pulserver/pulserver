@@ -57,7 +57,8 @@ import ismrmrd
 import ismrmrd.xsd as xsd
 import numpy as np
 import pypulseqpp as pp
-from pypulseqpp.sequences.sequence.gre2D_sequence import Gre2DApp
+from pypulseqpp import sequences
+from pypulseqpp.sequences.sequence.gre2D_sequence import gre2d
 
 from pulserver.ir import prescribe
 from pulserver.proxy import SequenceTable, enrich_acquisition, enrich_header
@@ -65,8 +66,8 @@ from pulserver.proxy import SequenceTable, enrich_acquisition, enrich_header
 system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
 work = Path(tempfile.mkdtemp())
 
-app = Gre2DApp(system, n_x=64, n_y=64, te=None, tr=None, n_dummy=0)
-files = app.write(work / "sequence.seq", offline=False)
+seq = gre2d(system, n_x=64, n_y=64, te=None, tr=None, n_dummy=0)
+files = sequences.write(work / "sequence.seq", seq, offline=False)
 table = SequenceTable.read(files[0])
 
 k = np.hstack([table.readout_k(row) for row in range(len(table))])

@@ -1,13 +1,14 @@
 """pypulseqpp's 2D spiral gradient echo bound to the scanner UI."""
 
-from pypulseqpp.sequences.sequence.gre_spiral2D_sequence import GreSpiral2DApp
+from pypulseqpp.sequences.sequence.gre_spiral2D_sequence import gre_spiral2d
 
+from pulserver._zoo._evaluation import evaluation
 from pulserver.design import FloatParam, IntParam, SequencePlugin, TimeParam
 from pulserver.protocol import TEPreset, TRPreset, UIParam
 
 
 class GreSpiral2D(SequencePlugin):
-    app = GreSpiral2DApp
+    app = gre_spiral2d
     protocol = {
         UIParam.FLIP: FloatParam(
             "flip_angle_deg", unit="deg", range_min=1.0, range_max=90.0
@@ -31,3 +32,6 @@ class GreSpiral2D(SequencePlugin):
             "slice_thickness", unit="mm", scale=1e-3, range_min=1.0, range_max=20.0
         ),
     }
+
+    def evaluate(self, system, protocol):
+        return evaluation(self, system, protocol)

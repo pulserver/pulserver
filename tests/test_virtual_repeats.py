@@ -6,7 +6,7 @@ from pathlib import Path
 import numpy as np
 import pypulseqpp as pp
 import pytest
-from _zoo import SMALL
+from _zoo import designed
 from pypulseqpp import sequences
 
 from pulserver import ir, virtual
@@ -36,7 +36,7 @@ REPEATING = [
 
 def _designed(name, tmp_path_factory):
     path = tmp_path_factory.mktemp(name) / "scan.seq"
-    getattr(sequences, name)(**SMALL[name]).write(str(path))
+    sequences.write(path, designed(name))
     ir.convert(path, pp.Opts())
     return path
 

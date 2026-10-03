@@ -19,7 +19,7 @@ own and the results are chained into one collection.
 
 ## Prescription
 
-A sequence application writes its files in the logical frame, about the
+A pypulseqpp sequence is written in the logical frame, about the
 isocentre. The prescribed field-of-view offset $\mathbf{d}$ reaches the host in
 the `fov_offset_x`, `fov_offset_y` and `fov_offset_z` entries of the protocol,
 in mm along the logical readout, phase-encoding and slice axes, and

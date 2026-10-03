@@ -3,9 +3,14 @@ from pathlib import Path
 import numpy as np
 import pypulseqpp as pp
 import pytest
-from pypulseqpp import sequences
 
-from pulserver.design import FloatParam, SequencePlugin, TimeParam, load_plugin
+from pulserver.design import (
+    Evaluation,
+    FloatParam,
+    SequencePlugin,
+    TimeParam,
+    load_plugin,
+)
 from pulserver.protocol import (
     PRESCRIPTION,
     FloatKey,
@@ -19,6 +24,7 @@ from pulserver.protocol import (
 )
 
 PLUGINS = Path(__file__).parent / "plugins"
+SHORTEST_TE = 2.5e-3
 SYSTEM = pp.Opts(max_grad=40.0, grad_unit="mT/m", max_slew=150.0, slew_unit="T/m/s")
 
 PRESCRIPTIONS = [
@@ -32,60 +38,24 @@ PRESCRIPTIONS = [
 ]
 
 
-class StatedApp(sequences.SequenceApp):
-    """Records its echo time under another name and states its scan time."""
-
-    MAX_GRAD = 40.0
-    MAX_SLEW = 150.0
-
-    def init_sequence(self, te: float | None = None, tr: float = 10e-3) -> None:
-        self.echo = 2.5e-3 if te is None else te
-        self.duration = 4 * tr
-        self.resolve(te=self.echo)
-
-    def loop(self) -> None:
-        raise AssertionError("the scan was played")
-
-    def kernel(self) -> None:
-        pass
-
-
-class PrescannedApp(sequences.SequenceApp):
-    """States no scan time: a 1 ms prescan, then three 10 ms repetitions."""
-
-    MAX_GRAD = 40.0
-    MAX_SLEW = 150.0
-
-    def init_sequence(self, tr: float = 10e-3) -> None:
-        self.tr = tr
-
-    def prescans(self):
-        return {"calibration": self.calibration}
-
-    def calibration(self) -> None:
-        if self.tr > 1.0:
-            raise ValueError("the calibration cannot play a TR over 1 s")
-        self.seq.add_block(pp.make_delay(1e-3))
-
-    def loop(self) -> None:
-        for _ in range(3):
-            self.kernel()
-
-    def kernel(self) -> None:
-        self.seq.add_block(pp.make_delay(self.tr))
+def stated(system, te: float | None = None, tr: float = 10e-3):
+    """Design a delay of ``te``, the shortest where it is ``None``, and record it as the ``TE`` definition."""
+    echo = SHORTEST_TE if te is None else te
+    seq = pp.Sequence(system)
+    seq.set_definition("TE", [echo])
+    seq.add_block(pp.make_delay(echo))
+    seq.add_block(pp.make_delay(tr))
+    return seq
 
 
 class Stated(SequencePlugin):
-    app = StatedApp
-    protocol = {
-        UIParam.TE: TimeParam("te", range_max=80000, presets={TEPreset.MINIMUM: None}),
-        UIParam.TR: TimeParam("tr", range_max=5_000_000),
-    }
+    """Evaluates by designing the sequence, and states its ``TE`` definition as the echo time."""
 
+    app = stated
 
-class Prescanned(SequencePlugin):
-    app = PrescannedApp
-    protocol = {UIParam.TR: TimeParam("tr", range_max=5_000_000)}
+    def evaluate(self, system, protocol):
+        seq = self.app(system, **protocol.arguments)
+        return Evaluation(protocol.replace({UIParam.TE: seq.definitions["TE"][0]}))
 
 
 @pytest.fixture(scope="module")
@@ -117,31 +87,6 @@ def test_a_minimum_request_resolves_to_the_designed_value(tiny, gre2d):
     assert 0 < reply.values["TE"] < 8000
 
 
-def test_an_entry_resolves_to_the_value_the_application_records():
-    values = Stated().validate(SYSTEM, {"TE": TEPreset.MINIMUM}).values
-    assert (values["TE"], values["TR"]) == (2500, 10000)
-
-
-def test_a_stated_scan_time_is_reported_without_playing_the_scan():
-    reply = Stated().validate(SYSTEM, {"TR": 20000})
-    assert reply.valid, reply.info
-    assert reply.duration == pytest.approx(80e-3)
-
-
-def test_an_unstated_scan_time_is_that_of_the_chain_with_its_prescans():
-    reply = Prescanned().validate(SYSTEM, {"TR": 10000})
-    assert reply.valid, reply.info
-    assert reply.duration == pytest.approx(1e-3 + 3 * 10e-3)
-
-
-def test_a_design_refused_while_it_is_timed_is_invalid():
-    reply = Prescanned().validate(SYSTEM, {"TR": 2_000_000})
-    assert (reply.valid, reply.info) == (
-        False,
-        "the calibration cannot play a TR over 1 s",
-    )
-
-
 def test_an_infeasible_protocol_is_invalid_with_the_design_error_as_info(tiny, gre2d):
     reply = tiny.validate(SYSTEM, {"TE": 1000})
     assert not reply.valid
@@ -150,8 +95,7 @@ def test_an_infeasible_protocol_is_invalid_with_the_design_error_as_info(tiny, g
     assert "TR" in gre2d.validate(SYSTEM, {"TR": 1000}).info
 
 
-class Defaulted(SequencePlugin):
-    app = StatedApp
+class Defaulted(Stated):
     protocol = {
         UIParam.TE: TimeParam(
             "te", range_max=80000, presets={TEPreset.MINIMUM: None}, default=4000
@@ -160,7 +104,7 @@ class Defaulted(SequencePlugin):
     }
 
 
-def test_an_entry_s_default_is_the_protocol_s_initial_value_in_place_of_the_application_s():
+def test_an_entry_s_default_is_the_protocol_s_initial_value_in_place_of_the_app_s():
     listing = Defaulted().listing()
     values = Defaulted().validate(SYSTEM, {}).values
 
@@ -171,8 +115,7 @@ def test_an_entry_s_default_is_the_protocol_s_initial_value_in_place_of_the_appl
 def test_a_time_entry_defaults_to_a_preset_it_offers_and_no_other():
     def bound(**entry):
         entries = {UIParam.TE: TimeParam("te", default=TEPreset.MINIMUM, **entry)}
-        attributes = {"app": StatedApp, "protocol": entries}
-        return type("Bound", (SequencePlugin,), attributes)()
+        return type("Bound", (Stated,), {"protocol": entries})()
 
     offered = bound(presets={TEPreset.MINIMUM: None})
 
@@ -286,9 +229,9 @@ def test_a_sequence_plugin_may_not_bind_a_prescription_entry(tiny):
         )
 
 
-def test_a_sequence_without_protocol_plays_its_application_s_defaults():
+def test_a_sequence_without_protocol_plays_its_app_s_defaults():
     class Bare(SequencePlugin):
-        app = StatedApp
+        app = stated
 
     assert set(Bare().listing()) == set(PRESCRIPTION)
     assert Bare().validate(SYSTEM, {}).valid
@@ -298,5 +241,5 @@ def test_an_entry_the_interpreter_does_not_know_is_refused_with_the_names_it_res
     with pytest.raises(ValueError, match=r"did you mean \['TE'"):
 
         class Lowercase(SequencePlugin):
-            app = StatedApp
+            app = stated
             protocol = {"te": TimeParam("te")}

@@ -14,7 +14,7 @@ from types import SimpleNamespace
 import numpy as np
 import pypulseqpp as pp
 import pytest
-from _zoo import SMALL
+from _zoo import SMALL, designed
 from pypulseqpp import sequences
 
 from pulserver import ir, virtual
@@ -167,7 +167,7 @@ def _design(name, directory):
     """Write the design ``name`` names into ``directory`` and return its first file."""
     if name in SMALL:
         path = directory / "scan.seq"
-        getattr(sequences, name)(**SMALL[name]).write(str(path))
+        sequences.write(path, designed(name))
         return path
     shutil.copytree(FIXTURES, directory, dirs_exist_ok=True)
     return directory / f"{name}.seq"

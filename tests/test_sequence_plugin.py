@@ -7,7 +7,6 @@ from pathlib import Path
 
 import pypulseqpp as pp
 import pytest
-from pypulseqpp import sequences
 
 from pulserver import _plugins
 from pulserver.design import (
@@ -29,42 +28,10 @@ ENTRIES = {
 }
 
 
-class ScannedApp(sequences.SequenceApp):
-    """A 1 ms prescan, then three repetitions; every construction is counted."""
-
-    MAX_GRAD = 40.0
-    MAX_SLEW = 150.0
-    constructions = 0
-
-    def init_sequence(self, tr: float = 10e-3) -> None:
-        type(self).constructions += 1
-        self.tr = tr
-
-    def prescans(self):
-        return {"calibration": self.calibration}
-
-    def calibration(self) -> None:
-        self.seq.add_block(pp.make_delay(1e-3))
-
-    def loop(self) -> None:
-        for _ in range(3):
-            self.kernel()
-
-    def kernel(self) -> None:
-        self.seq.add_block(pp.make_delay(self.tr))
-
-
 @pytest.fixture
 def calls():
     """The arguments of every call of the app made by :func:`_delays`."""
     return []
-
-
-@pytest.fixture
-def counted():
-    """:class:`ScannedApp`, its construction count reset."""
-    ScannedApp.constructions = 0
-    return ScannedApp
 
 
 def _delays(calls):
@@ -108,6 +75,18 @@ def test_a_partial_app_lists_the_defaults_of_the_partial(calls):
     listing = _plugin(functools.partial(_delays(calls), te=4e-3, nx=5)).listing()
 
     assert (listing[UIParam.TE].value, listing[UIParam.NX].value) == (4000, 5)
+
+
+def test_a_partial_app_is_called_with_the_limits_and_no_instance_bound(calls, tmp_path):
+    plugin = _plugin(functools.partial(_delays(calls), nx=2))
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        validation, paths = plugin.design(SYSTEM, {}, tmp_path)
+
+    assert validation.valid
+    assert calls == [{"te": 2.5e-3, "nx": 2}]
+    assert _durations(paths) == [pytest.approx(2 * 2.5e-3)]
 
 
 def test_a_function_app_without_a_protocol_is_designed_at_its_defaults(calls, tmp_path):
@@ -254,24 +233,6 @@ def test_design_names_the_files_of_a_longer_chain_by_position(tmp_path):
     assert _durations(paths) == [pytest.approx(n * 1e-3) for n in (1, 2, 3, 4)]
 
 
-def test_design_writes_a_sequence_application_as_the_application_writes_it(
-    counted, tmp_path
-):
-    plugin = type(
-        "Scanned",
-        (SequencePlugin,),
-        {"app": ScannedApp, "protocol": {UIParam.TR: TimeParam("tr")}},
-    )()
-
-    validation, paths = plugin.design(SYSTEM, {UIParam.TR: 20000}, tmp_path)
-
-    assert validation.valid, validation.info
-    assert [Path(p).name for p in paths] == ["sequence.seq", "sequence_main.seq"]
-    assert _durations(paths) == [pytest.approx(1e-3), pytest.approx(3 * 20e-3)]
-    assert pp.io.read(paths[0]).get_definition("NextSequence") == "sequence_main.seq"
-    assert b"[BLOCKS]" not in Path(paths[0]).read_bytes()
-
-
 def test_design_of_an_invalid_request_neither_generates_nor_writes(calls, tmp_path):
     def evaluate(self, system, protocol):
         raise ValueError("no such design")
@@ -309,27 +270,23 @@ def test_a_function_app_returning_neither_a_sequence_nor_a_list_is_a_type_error(
     assert list(tmp_path.iterdir()) == []
 
 
-def test_a_validation_and_the_design_after_it_construct_the_application_once(
-    counted, tmp_path
-):
-    plugin = type("Scanned", (SequencePlugin,), {"app": ScannedApp})()
+def test_a_validation_and_the_design_after_it_call_the_app_once(calls, tmp_path):
+    plugin = _plugin(_delays(calls))
 
     reply = plugin.validate(SYSTEM, {})
     plugin.design(SYSTEM, reply.values, tmp_path)
 
-    assert counted.constructions == 1
+    assert calls == [{"te": 2.5e-3, "nx": 3}]
 
 
-def test_a_design_does_not_reuse_the_application_of_an_earlier_design(
-    counted, tmp_path
-):
-    plugin = type("Scanned", (SequencePlugin,), {"app": ScannedApp})()
+def test_a_design_does_not_reuse_the_sequence_of_an_earlier_design(calls, tmp_path):
+    plugin = _plugin(_delays(calls))
 
     for name in ("first", "second"):
         (tmp_path / name).mkdir()
         plugin.design(SYSTEM, {}, tmp_path / name)
 
-    assert counted.constructions == 2
+    assert len(calls) == 2
 
 
 def test_a_subclass_of_scanner_sequence_warns_at_its_class_statement(calls):
@@ -363,6 +320,19 @@ def test_a_class_declaring_protocol_and_ui_is_refused(calls):
             app = _delays(calls)
             protocol = ENTRIES
             ui = ENTRIES
+
+
+def test_a_class_as_the_app_is_refused_at_its_class_statement():
+    class Application:
+        def __init__(self, system, **arguments):
+            self.system, self.arguments = system, arguments
+
+    with pytest.raises(
+        TypeError, match="app is a function returning a sequence or a list of them"
+    ):
+
+        class Bound(SequencePlugin):
+            app = Application
 
 
 def test_a_plugin_file_may_subclass_the_deprecated_name(tmp_path):

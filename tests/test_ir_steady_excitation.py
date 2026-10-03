@@ -6,7 +6,7 @@ from pathlib import Path
 import numpy as np
 import pypulseqpp as pp
 import pytest
-from _zoo import SMALL
+from _zoo import SMALL, designed
 from pypulseqpp import sequences
 
 from pulserver import ir
@@ -65,7 +65,7 @@ def test_every_shipped_sequence_flags_only_the_excitations_pypulseqpp_finds_stea
     name, tmp_path
 ):
     path = tmp_path / "scan.seq"
-    getattr(sequences, name)(**SMALL[name]).write(str(path))
+    sequences.write(path, designed(name))
     _assert_flags_follow_pypulseqpp(path, name)
 
 

@@ -7,14 +7,13 @@ A sequence app bound to the entries of the scanner protocol.
 ```
 
 A plugin file in the design calls' plugin directory defines one
-{class}`SequencePlugin` subclass. Its `app` is a pypulseqpp sequence application
-or a function returning sequences, and its `protocol` maps each key of the
-interpreter's parameter table, a {data}`~pulserver.protocol.ProtocolKey`, to an
-entry naming the argument of the app it sets. Its methods evaluate a request
-into the protocol the design plays and write the design. Conversion between the
-UI's units and the app's SI arguments, and the rounding of resolved values to
-the precision of a float32 control variable, are described in
-{doc}`../explanations/protocol`.
+{class}`SequencePlugin` subclass. Its `app` is a function returning sequences,
+and its `protocol` maps each key of the interpreter's parameter table, a
+{data}`~pulserver.protocol.ProtocolKey`, to an entry naming the argument of the
+app it sets. Its methods evaluate a request into the protocol the design plays
+and write the design. Conversion between the UI's units and the app's SI
+arguments, and the rounding of resolved values to the precision of a float32
+control variable, are described in {doc}`../explanations/protocol`.
 
 ## Sequence
 

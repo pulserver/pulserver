@@ -1,13 +1,14 @@
 """pypulseqpp's 2D balanced SSFP bound to the scanner UI."""
 
-from pypulseqpp.sequences.sequence.bssfp2D_sequence import Bssfp2DApp
+from pypulseqpp.sequences.sequence.bssfp2D_sequence import bssfp2d
 
+from pulserver._zoo._evaluation import evaluation
 from pulserver.design import FloatParam, IntParam, SequencePlugin, TimeParam
 from pulserver.protocol import TRPreset, UIParam
 
 
 class Bssfp2D(SequencePlugin):
-    app = Bssfp2DApp
+    app = bssfp2d
     protocol = {
         UIParam.FLIP: FloatParam(
             "flip_angle_deg", unit="deg", range_min=1.0, range_max=90.0
@@ -37,3 +38,6 @@ class Bssfp2D(SequencePlugin):
         ),
         UIParam.RY: IntParam("ry", range_min=1, range_max=4),
     }
+
+    def evaluate(self, system, protocol):
+        return evaluation(self, system, protocol)

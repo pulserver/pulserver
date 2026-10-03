@@ -2,22 +2,17 @@
 
 import functools
 
-from pypulseqpp.sequences.sequence.epi2D_sequence import Epi2DApp
+from pypulseqpp.sequences.sequence.epi2D_sequence import epi2d
 
+from pulserver._zoo._evaluation import evaluation
 from pulserver.design import FloatParam, IntParam, SequencePlugin, TimeParam
 from pulserver.protocol import TEPreset, TRPreset, UIParam
 
 
-class _Epi2DApp(Epi2DApp):
+class Epi2D(SequencePlugin):
     # Twofold readout oversampling keeps the ramp-sampled flat top within the
     # spacing of the readout field of view, so it can be resampled onto a grid.
-    init_sequence = functools.partialmethod(
-        Epi2DApp.init_sequence, readout_oversampling=2.0
-    )
-
-
-class Epi2D(SequencePlugin):
-    app = _Epi2DApp
+    app = functools.partial(epi2d, readout_oversampling=2.0)
     protocol = {
         UIParam.FLIP: FloatParam(
             "flip_angle_deg", unit="deg", range_min=1.0, range_max=90.0
@@ -54,3 +49,6 @@ class Epi2D(SequencePlugin):
         UIParam.NUM_SHOTS: IntParam("n_shots", range_min=1, range_max=16),
         UIParam.RY: IntParam("ry", range_min=1, range_max=4),
     }
+
+    def evaluate(self, system, protocol):
+        return evaluation(self, system, protocol)
