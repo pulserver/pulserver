@@ -2,6 +2,7 @@
 
 import logging
 import math
+import shutil
 
 import numpy as np
 import pypulseqpp as pp
@@ -15,7 +16,7 @@ from pulserver.design import (
     SequencePlugin,
     load_plugin,
 )
-from pulserver.host import DesignStore, call
+from pulserver.host import DesignStore, _service, call
 from pulserver.protocol import (
     ConfigKey,
     UIParam,
@@ -238,15 +239,14 @@ def test_one_definition_carries_none_and_two_controls():
     assert read.control == (None, UIParam.FLIP, UserKey.USER0)
 
 
-def test_a_gre_layout_holds_one_excitation_whatever_the_matrix():
-    layouts = {lines: RfLayout.of(_gre(lines), UIParam.FLIP) for lines in (1, 8, 16)}
+def test_a_gre_layout_is_one_excitation_and_lists_one_definition_whatever_the_matrix():
+    listed = {format_rf_definitions(_gre(lines).rf_instances()) for lines in (1, 8, 16)}
 
-    for lines, layout in layouts.items():
-        assert len(layout.instances.definitions) == 1
-        assert _runs(layout) == [f"run 0 1 flip {lines}"]
-        assert layout.period == pytest.approx(lines * 10e-3)
-    listed = {format_rf_definitions(layout.instances) for layout in layouts.values()}
+    layout = RfLayout.of(_gre(1), UIParam.FLIP)
+
     assert len(listed) == 1
+    assert _runs(layout) == ["run 0 1 flip 1"]
+    assert layout.period == pytest.approx(10e-3)
 
 
 def test_a_layout_needs_one_control_per_instance():
@@ -648,6 +648,27 @@ def test_a_validation_whose_default_protocol_is_invalid_states_the_layout_as_eva
     warned = [r.getMessage() for r in caplog.records if r.name == "pulserver.host"]
     assert len(warned) == 1
     assert "default protocol is invalid" in warned[0]
+
+
+def test_validations_asked_for_their_layout_evaluate_the_default_protocol_once(
+    tmp_path, monkeypatch
+):
+    plugins = tmp_path / "plugins"
+    plugins.mkdir()
+    shutil.copy(PLUGINS / "rf_train.py", plugins / "copied.py")
+    requests = []
+    validated = _service._validated
+
+    def counting(path, limits, request):
+        requests.append(dict(request))
+        return validated(path, limits, request)
+
+    monkeypatch.setattr(_service, "_validated", counting)
+    for flip in (60.0, 120.0):
+        _validate({"flip": flip}, plugin="copied", plugins=plugins)
+
+    assert len(requests) == 3
+    assert requests.count({}) == 1
 
 
 @pytest.mark.parametrize(

@@ -136,18 +136,24 @@ A 3D sequence takes its number of partitions from the number of slices. The
 Cartesian ones take `Ry`, and the 3D ones `Rz`, as their undersampling.
 
 Each shipped plugin binds the function of its pypulseqpp sequence and evaluates
-a protocol by designing the chain the function returns
-({ref}`evaluating-a-protocol`). The scan time is the summed duration of the
-chain. Where the plugin has the entry, the echo time and the repetition time are
-the `TE` and `TR` definitions of the main sequence, the receiver bandwidth is the
-inverse of the dwell time of its first ADC event, and the slice thickness is its
-`SliceThickness` definition; a multi-echo sequence lists every echo time, and the
-`TE` entry holds the first. A prescription the design refuses is invalid with the
-message of its error. The RF layout is that of the main sequence, whose period is
-its duration ({ref}`stating-the-rf-layout`). The flip angle is the control of
-every excitation of the gradient-echo, balanced steady-state and EPI plugins,
-which have a `flip` entry. The spin-echo plugins have none, and the amplitude of
-every one of their pulses is that of the design.
+a protocol by calling it for one repetition of the scan, one line, partition,
+spoke or interleaf of one slice without dummy repetitions
+({ref}`evaluating-a-protocol`). The scan time is the duration of the repetition
+times the number of repetitions the prescription plays, with the slices that
+share a TR counted in the packets the sequence plays them in. The values are
+those the main sequence states for the prescription: where the plugin has the
+entry, the echo time and the repetition time in its `TE` and `TR` definitions,
+the receiver bandwidth as the inverse of the dwell time of its first ADC event,
+and the slice thickness in its `SliceThickness` definition; a multi-echo
+sequence lists every echo time, and the `TE` entry holds the first. A
+prescription the design refuses is invalid with the message of its error. The
+RF layout is the first TR of the repetition, its shot repeated once per slice of
+the largest packet, with the TR as its period; for the balanced steady state it
+is the TR after the half-angle pulse ({ref}`stating-the-rf-layout`). The flip
+angle is the control of every excitation of the gradient-echo, balanced
+steady-state and EPI plugins, which have a `flip` entry. The spin-echo plugins
+have none, and the amplitude of their excitation and refocusing pulses is that
+of the design.
 
 ## Resolving a protocol
 
@@ -301,36 +307,38 @@ writes nothing for an invalid request.
 ## Stating the RF layout
 
 An evaluation may state the RF its protocol plays, from which a scanner
-estimates the RF of a prescription before the design is generated.
+estimates the RF of a prescription before the design is generated. The layout is
+one TR: the RF instances one TR plays, and the TR as its `period`.
 {meth}`RfLayout.of <pulserver.design.RfLayout.of>` takes the RF instances of a
-sequence, as {meth}`pypulseqpp.Sequence.rf_instances` returns them, and the
-control each instance's amplitude follows: the flip angle, `UIParam.FLIP`, or a
-float user entry, `UIParam.user_value(n)`, either declared in `protocol`. One
-control applies to every instance; a list gives one per instance in play order,
-`None` for an instance no entry scales. The scanner multiplies the amplitude of
-an instance by the ratio of the value of its control in the protocol it plays to
-the value in the evaluated protocol. The `period` is the time in seconds over
-which the instances repeat, and the duration of the sequence where omitted:
+sequence that is one TR, as {meth}`pypulseqpp.Sequence.rf_instances` returns
+them, and the control each instance's amplitude follows: the flip angle,
+`UIParam.FLIP`, or a float user entry, `UIParam.user_value(n)`, either declared
+in `protocol`. One control applies to every instance; a list gives one per
+instance in play order, `None` for an instance no entry scales. The scanner
+multiplies the amplitude of an instance by the ratio of the value of its control
+in the protocol it plays to the value in the evaluated protocol. The `period` is
+the TR in seconds, and the duration of the sequence where omitted:
 
 ```pycon
 >>> from pulserver.design import RfLayout
 >>> from pulserver.protocol import format_rf_layout
 >>> class Costed(PulseAcquire):
 ...     def evaluate(self, system, protocol):
-...         seq = pulse_acquire(system, **protocol.arguments)
-...         layout = RfLayout.of(seq, UIParam.FLIP)
-...         return Evaluation(protocol, seq.duration()[0], rf_layout=layout)
+...         one_tr = pulse_acquire(system, **(protocol.arguments | {"averages": 1}))
+...         layout = RfLayout.of(one_tr, UIParam.FLIP)
+...         scan_time = protocol[UIParam.NEX] * protocol[UIParam.TR]
+...         return Evaluation(protocol, scan_time, rf_layout=layout)
 >>> reply = Costed().validate(system, {"nex": 4})
 >>> print(format_rf_layout(reply.rf_layout), end="")
 [RfLayout]
-period 0.4
-run 0 1 flip 4
+period 0.1
+run 0 1 flip 1
 [RfLayout End]
 
 ```
 
-An evaluation may build one representative repetition, a TR, a shot or a
-train, and state its `period`: `RfLayout.of(seq, UIParam.FLIP, period=tr)`.
+A sequence shorter than the TR, such as one TR without its closing delay, is
+stated with the TR: `RfLayout.of(seq, UIParam.FLIP, period=tr)`.
 
 The layout is optional. An evaluation that states none is valid and states no
 estimate, and one whose control is not an entry of `protocol`, or has no

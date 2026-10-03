@@ -2,7 +2,7 @@
 
 from pypulseqpp.sequences.sequence.gre_radial2D_sequence import gre_radial2d
 
-from pulserver._zoo._evaluation import evaluation
+from pulserver._zoo._evaluation import evaluation, radial_2d
 from pulserver.design import FloatParam, IntParam, SequencePlugin, TimeParam
 from pulserver.protocol import TEPreset, TRPreset, UIParam
 
@@ -33,4 +33,4 @@ class GreRadial2D(SequencePlugin):
     }
 
     def evaluate(self, system, protocol):
-        return evaluation(self, system, protocol)
+        return evaluation(self, system, protocol, radial_2d)

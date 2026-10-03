@@ -4,7 +4,7 @@ from pypulseqpp.sequences.sequence.se_stack_of_stars3D_sequence import (
     se_stack_of_stars3d,
 )
 
-from pulserver._zoo._evaluation import evaluation
+from pulserver._zoo._evaluation import evaluation, stack_of_stars
 from pulserver.design import FloatParam, IntParam, SequencePlugin, TimeParam
 from pulserver.protocol import TEPreset, TRPreset, UIParam
 
@@ -36,4 +36,4 @@ class SeStackOfStars3D(SequencePlugin):
     }
 
     def evaluate(self, system, protocol):
-        return evaluation(self, system, protocol)
+        return evaluation(self, system, protocol, stack_of_stars)

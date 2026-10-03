@@ -4,7 +4,7 @@ from pypulseqpp.sequences.sequence.gre_stack_of_spirals3D_sequence import (
     gre_stack_of_spirals3d,
 )
 
-from pulserver._zoo._evaluation import evaluation
+from pulserver._zoo._evaluation import evaluation, stack_of_spirals
 from pulserver.design import FloatParam, IntParam, SequencePlugin, TimeParam
 from pulserver.protocol import TEPreset, TRPreset, UIParam
 
@@ -33,4 +33,4 @@ class GreStackOfSpirals3D(SequencePlugin):
     }
 
     def evaluate(self, system, protocol):
-        return evaluation(self, system, protocol)
+        return evaluation(self, system, protocol, stack_of_spirals)

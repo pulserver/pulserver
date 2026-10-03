@@ -327,12 +327,12 @@ class RfDefinitionRecord:
 
 @dataclass(frozen=True)
 class RfLayoutRecord:
-    """The contents of an ``[RfLayout]`` block, one entry per instance in play order.
+    """The contents of an ``[RfLayout]`` block, one entry per instance of one TR in play order.
 
     Attributes
     ----------
     period
-        The time in seconds over which the instances repeat.
+        The TR in seconds.
     definition
         The number of the definition each instance plays.
     amplitude

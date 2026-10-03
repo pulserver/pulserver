@@ -409,14 +409,22 @@ def _default_rf_layout(
     """Return the RF layout of the plugin's evaluation at its default protocol, the RF the listing states.
 
     ``None`` where the evaluation states none. Where it is invalid, a warning
-    that begins with ``unavailable`` is logged and the result is ``None``.
+    that begins with ``unavailable`` is logged and the result is ``None``. The
+    evaluation is made once per plugin file, as last modified, and limits.
     """
-    evaluated = _validated(path, limits, {})
+    evaluated = _default_validation(
+        path, Path(path).stat().st_mtime_ns, tuple(sorted(limits.items()))
+    )
     if not evaluated.valid:
         _log.warning(
             "%s: its default protocol is invalid: %s", unavailable, evaluated.info
         )
     return evaluated.rf_layout
+
+
+@lru_cache(maxsize=32)
+def _default_validation(path: str, mtime_ns: int, limits: tuple) -> Validation:  # noqa: ARG001 -- part of the key
+    return _validated(path, dict(limits), {})
 
 
 def _chain(first: str) -> list[str]:

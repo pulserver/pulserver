@@ -2,7 +2,7 @@
 
 from pypulseqpp.sequences.sequence.gre2D_sequence import gre2d
 
-from pulserver._zoo._evaluation import evaluation
+from pulserver._zoo._evaluation import cartesian_2d, evaluation
 from pulserver.design import FloatParam, IntParam, SequencePlugin, TimeParam
 from pulserver.protocol import TEPreset, TRPreset, UIParam
 
@@ -42,4 +42,4 @@ class Gre2D(SequencePlugin):
     }
 
     def evaluate(self, system, protocol):
-        return evaluation(self, system, protocol)
+        return evaluation(self, system, protocol, cartesian_2d)

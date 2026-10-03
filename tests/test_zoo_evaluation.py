@@ -9,6 +9,7 @@ import pytest
 from _host import LIMITS, value_block
 
 from pulserver import _plugins
+from pulserver._zoo._evaluation import achieved, rf_layout
 from pulserver.design import Protocol, load_plugin
 from pulserver.host import call
 from pulserver.protocol import (
@@ -57,6 +58,55 @@ REQUESTS = [pytest.param(name, {}, id=f"{name}-default") for name in SHIPPED] + 
     pytest.param(name, CHANGED[name], id=f"{name}-changed") for name in SHIPPED
 ]
 
+# The defaults, and prescriptions whose slices fall into packets of unequal
+# size at a requested TR or into one packet at the shortest; by wire name.
+SCANS = [pytest.param(name, {}, id=name) for name in SHIPPED] + [
+    pytest.param(name, changes, id=f"{name}-{label}")
+    for name, label, changes in (
+        ("bssfp2d", "slices", {"nslices": 3, "TR": 6000, "ny": 64}),
+        ("epi2d", "undersampled", {"Ry": 2}),
+        ("epi2d", "packets", {"nslices": 7, "TR": 900000, "Ry": 2, "num_shots": 2}),
+        ("epi2d", "frames", {"nslices": 12, "TR": 5000000, "num_frames": 3}),
+        ("epi2d", "shortest", {"nslices": 6, "TR": TRPreset.MINIMUM}),
+        ("gre3d", "partitions", {"nslices": 16, "TR": 20000, "nx": 64, "ny": 32}),
+        (
+            "gre_multiecho2d",
+            "shortest",
+            {"nslices": 9, "TR": TRPreset.MINIMUM, "num_echoes": 6, "ny": 48},
+        ),
+        ("gre_radial2d", "packets", {"nslices": 10, "TR": 40000, "nx": 64}),
+        ("se2d", "packets", {"nslices": 7, "TR": 60000, "Ry": 3}),
+        ("se_spiral2d", "packets", {"nslices": 25, "TR": 300000, "num_shots": 8}),
+        (
+            "se_stack_of_stars3d",
+            "shortest",
+            {"nslices": 8, "TR": TRPreset.MINIMUM, "nx": 64},
+        ),
+    )
+]
+
+# Requested TRs shorter than one slice takes, and an EPI time series whose
+# volume one TR cannot hold.
+REJECTED = [
+    pytest.param("epi2d", {"nslices": 5, "TR": 300000}, id="epi2d-short"),
+    pytest.param(
+        "epi2d", {"nslices": 12, "TR": 2000000, "num_frames": 5}, id="epi2d-frames"
+    ),
+    pytest.param("gre_radial2d", {"nslices": 4, "TR": 3000}, id="gre_radial2d-short"),
+    pytest.param("se2d", {"nslices": 4, "TR": 12000}, id="se2d-short"),
+]
+
+# Many slices, lines, partitions, interleaves and echoes, at the shortest TR;
+# by wire name.
+LARGE = {
+    "nx": 128,
+    "ny": 128,
+    "nslices": 32,
+    "num_shots": 16,
+    "num_echoes": 8,
+    "TR": TRPreset.MINIMUM,
+}
+
 
 @pytest.fixture(scope="module")
 def zoo():
@@ -73,10 +123,21 @@ def _protocol(plugin, changes=None):
     return Protocol.from_wire(plugin.protocol, wire, SYSTEM)
 
 
+def _chain(designed):
+    """The sequences an app returned, the main sequence last."""
+    return [designed] if isinstance(designed, pp.Sequence) else list(designed)
+
+
 def _main(plugin, protocol):
     """The main sequence of the chain ``plugin`` designs for ``protocol``."""
-    designed = plugin.generate(SYSTEM, protocol)
-    return designed if isinstance(designed, pp.Sequence) else list(designed)[-1]
+    return _chain(plugin.generate(SYSTEM, protocol))[-1]
+
+
+def _excitations(sequence):
+    """The number of excitation pulses ``sequence`` plays."""
+    instances = sequence.rf_instances()
+    uses = [definition.use for definition in instances.definitions]
+    return sum(uses[number] == "excitation" for number in instances.definition)
 
 
 def _unit_energy(time, waveform):
@@ -111,6 +172,14 @@ def _wire_power(listed, layout):
     energy = np.array([_unit_energy(r.time, r.waveform) for r in listed])
     which = list(layout.definition)
     return _mean_power(layout.period, layout.amplitude, peak[which], energy[which])
+
+
+def _last_tr_power(main):
+    """The RF energy of the blocks of ``main`` that end within a ``TR`` of its end, over that ``TR``, in Hz²."""
+    tr = main.definitions["TR"][0]
+    ends = np.cumsum(main.libraries().block_durations)
+    first = int(np.flatnonzero(ends > ends[-1] - tr)[0]) + 1
+    return main.calc_rf_power(block_range=(first, ends.size))[3] / tr
 
 
 def _played_peak(layout):
@@ -151,25 +220,88 @@ def test_a_zoo_sequence_has_a_flip_entry_exactly_where_its_function_takes_a_flip
         assert plugin.protocol[UIParam.FLIP].argument == "flip_angle_deg"
 
 
-@pytest.mark.parametrize(
-    ("name", "changes", "files"),
-    [
-        *[pytest.param(name, {}, 1, id=name) for name in SHIPPED],
-        pytest.param("epi2d", {"Ry": 2}, 3, id="epi2d-undersampled"),
-    ],
-)
-def test_an_evaluation_states_the_duration_of_every_file_the_design_writes(
-    zoo, tmp_path, name, changes, files
+@pytest.mark.parametrize(("name", "changes"), SCANS)
+def test_an_evaluation_states_the_values_and_the_scan_time_of_the_design(
+    zoo, name, changes
 ):
     plugin = zoo[name]
+    protocol = _protocol(plugin, changes)
 
-    stated = plugin.evaluate(SYSTEM, _protocol(plugin, changes)).duration
-    validation, paths = plugin.design(SYSTEM, changes, tmp_path)
+    evaluation = plugin.evaluate(SYSTEM, protocol)
+    chain = _chain(plugin.app(SYSTEM, **protocol.arguments))
 
-    assert validation.valid, validation.info
-    assert len(paths) >= files
-    written = sum(pp.io.read(path).duration()[0] for path in paths)
-    assert stated == pytest.approx(written, rel=1e-2)
+    expected = protocol.replace(achieved(plugin, chain[-1]))
+    assert evaluation.protocol.to_wire() == expected.to_wire()
+    # The delay closing a TR is rounded up to the block raster, so each TR the
+    # design plays lasts the TR it states or one raster more.
+    played = sum(sequence.duration()[0] for sequence in chain)
+    rounding = SYSTEM.block_duration_raster * sum(map(_excitations, chain))
+    assert abs(evaluation.duration - played) <= rounding + 1e-9
+
+
+@pytest.mark.parametrize(("name", "changes"), SCANS)
+def test_an_evaluation_states_as_its_layout_a_regular_tr_of_the_design(
+    zoo, name, changes
+):
+    plugin = zoo[name]
+    protocol = _protocol(plugin, changes)
+
+    layout = plugin.evaluate(SYSTEM, protocol).rf_layout
+
+    main = _main(plugin, protocol)
+    # The first TR holds the largest packet of slices; a balanced steady state
+    # opens with its half-angle pulse, so its last TR is the regular one.
+    start = main.duration()[0] - main.definitions["TR"][0] if name == "bssfp2d" else 0
+    expected = rf_layout(main, UIParam.FLIP in plugin.protocol, start=start)
+    assert layout.period == pytest.approx(expected.period, rel=1e-12)
+    assert layout.instances.definition.tolist() == (
+        expected.instances.definition.tolist()
+    )
+    assert layout.control == expected.control
+    assert layout.instances.amplitude == pytest.approx(
+        expected.instances.amplitude, rel=1e-9
+    )
+    definitions = layout.instances.definitions
+    assert [d.use for d in definitions] == [
+        d.use for d in expected.instances.definitions
+    ]
+    assert [d.peak_hz for d in definitions] == pytest.approx(
+        [d.peak_hz for d in expected.instances.definitions], rel=1e-9
+    )
+
+
+@pytest.mark.parametrize(("name", "changes"), REJECTED)
+def test_an_evaluation_rejects_a_tr_the_design_rejects(zoo, name, changes):
+    plugin = zoo[name]
+    protocol = _protocol(plugin, changes)
+
+    with pytest.raises(ValueError, match="TR"):
+        plugin.app(SYSTEM, **protocol.arguments)
+    with pytest.raises(ValueError, match="TR"):
+        plugin.evaluate(SYSTEM, protocol)
+
+
+@pytest.mark.parametrize("name", SHIPPED)
+def test_a_zoo_evaluation_designs_two_trs_at_most_however_large_the_prescription(
+    zoo, name, monkeypatch
+):
+    plugin = zoo[name]
+    app = plugin.app
+    designed = []
+
+    @functools.wraps(app)
+    def recording(system, **arguments):
+        designed.append(app(system, **arguments))
+        return designed[-1]
+
+    monkeypatch.setattr(plugin, "app", recording)
+    changes = {key: value for key, value in LARGE.items() if key in plugin.protocol}
+    plugin.evaluate(SYSTEM, _protocol(plugin, changes))
+
+    [chain] = designed
+    main = _chain(chain)[-1]
+    rounding = SYSTEM.block_duration_raster * _excitations(main)
+    assert main.duration()[0] <= 2 * main.definitions["TR"][0] + rounding
 
 
 @pytest.mark.parametrize("name", SHIPPED)
@@ -192,20 +324,19 @@ def test_resolving_a_resolved_zoo_protocol_changes_nothing(zoo, name):
 
 
 @pytest.mark.parametrize("name", SHIPPED)
-def test_each_zoo_layout_matches_the_scan_mean_rf_power(zoo, name):
+def test_each_zoo_layout_plays_the_rf_power_of_the_last_tr_of_the_design(zoo, name):
     plugin = zoo[name]
     protocol = _protocol(plugin)
 
     layout = plugin.evaluate(SYSTEM, protocol).rf_layout
 
-    main = _main(plugin, protocol)
     assert _layout_power(layout) == pytest.approx(
-        main.calc_rf_power()[0], rel=POWER_RTOL
+        _last_tr_power(_main(plugin, protocol)), rel=POWER_RTOL
     )
 
 
 @pytest.mark.parametrize("name", SHIPPED)
-def test_each_zoo_layout_holds_every_rf_event_of_the_main_sequence_over_its_duration(
+def test_each_zoo_layout_is_one_tr_of_an_excitation_and_a_spin_echo_refocusing_pulse(
     zoo, name
 ):
     plugin = zoo[name]
@@ -213,10 +344,13 @@ def test_each_zoo_layout_holds_every_rf_event_of_the_main_sequence_over_its_dura
 
     layout = plugin.evaluate(SYSTEM, protocol).rf_layout
 
-    main = _main(plugin, protocol)
-    assert layout.period == pytest.approx(main.duration()[0])
-    assert len(layout.instances.definition) == np.count_nonzero(
-        main.libraries().blocks[:, 0]
+    instances = layout.instances
+    uses = [instances.definitions[number].use for number in instances.definition]
+    assert layout.period == pytest.approx(
+        _main(plugin, protocol).definitions["TR"][0], rel=1e-12
+    )
+    assert uses == (
+        ["excitation", "refocusing"] if name in SPIN_ECHO else ["excitation"]
     )
 
 
@@ -265,5 +399,5 @@ def test_the_listed_definitions_and_the_validated_layout_play_the_rf_power_of_th
     plugin = zoo[name]
     main = _main(plugin, _protocol(plugin, changes))
     assert _wire_power(listed, layout) == pytest.approx(
-        main.calc_rf_power()[0], rel=POWER_RTOL
+        _last_tr_power(main), rel=POWER_RTOL
     )

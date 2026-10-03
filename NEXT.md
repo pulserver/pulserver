@@ -70,7 +70,7 @@ repository and vendor tooling that is not available in this environment.
   replies the RF definitions of a plugin's evaluation with the listing and the
   RF layout of a protocol with its validation, when asked, and a plugin states a
   layout by returning it from `evaluate`; every shipped scanner sequence states
-  the layout of its main sequence. Reading these blocks and costing the
+  one TR of its scan. Reading these blocks and costing the
   RF of a prescription from them are work in the interpreter repository, and
   neither has run on a scanner.
 - **Gradient heating on a dense repetition.** The model is evaluated over a

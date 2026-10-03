@@ -62,11 +62,11 @@ class Evaluation:
         A note shown with the valid protocol. Whitespace, newlines included, is
         folded to single spaces on the wire.
     rf_layout
-        The RF the protocol plays, from which a scanner estimates the RF of a
-        protocol before it is designed. ``()`` or ``[]``, the default, states no
-        estimate and is not invalid. Every control of the layout must be an
-        entry of :attr:`SequencePlugin.protocol` whose value in ``protocol`` is
-        positive, or the protocol is invalid.
+        The RF one TR of the protocol plays, from which a scanner estimates the
+        RF of a protocol before it is designed. ``()`` or ``[]``, the default,
+        states no estimate and is not invalid. Every control of the layout must
+        be an entry of :attr:`SequencePlugin.protocol` whose value in
+        ``protocol`` is positive, or the protocol is invalid.
     """
 
     protocol: Protocol
