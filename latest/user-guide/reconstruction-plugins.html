@@ -564,7 +564,7 @@ and <code class="docutils literal notranslate"><span class="pre">data.data</span
 <code class="docutils literal notranslate"><span class="pre">data.data.axes</span></code> names. Readouts are placed by their echo along the readout and
 by their encoding counters along the encoded axes
 (<a class="reference internal" href="../explanations/reconstruction.html#reconstruction-placement"><span class="std std-ref">Placement</span></a>); a sequence sets the counters with
-<code class="docutils literal notranslate"><span class="pre">self.labels(LIN=line)</span></code> in its kernel or <code class="docutils literal notranslate"><span class="pre">pp.make_label</span></code> as in PyPulseq, and a
+<a class="reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.sequences.Labels.html#pypulseqpp.sequences.Labels" title="(in pypulseqpp latest)"><code class="xref py py-class docutils literal notranslate"><span class="pre">pypulseqpp.sequences.Labels</span></code></a> or <code class="docutils literal notranslate"><span class="pre">pp.make_label</span></code> as in PyPulseq, and a
 readout placed over another is warned about.
 The proxy runs the plugin in a worker process, one per series, over an MRD
 stream enriched from the sequence’s design

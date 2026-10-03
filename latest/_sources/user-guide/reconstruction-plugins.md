@@ -26,7 +26,7 @@ and `data.data` its k-space, `(coils, ..., readout)`, with the axes
 `data.data.axes` names. Readouts are placed by their echo along the readout and
 by their encoding counters along the encoded axes
 ({ref}`reconstruction-placement`); a sequence sets the counters with
-`self.labels(LIN=line)` in its kernel or `pp.make_label` as in PyPulseq, and a
+{class}`pypulseqpp.sequences.Labels` or `pp.make_label` as in PyPulseq, and a
 readout placed over another is warned about.
 The proxy runs the plugin in a worker process, one per series, over an MRD
 stream enriched from the sequence's design

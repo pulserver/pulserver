@@ -550,9 +550,8 @@ an edit is therefore the value the design achieves, not the value requested.</p>
 <section id="resolution">
 <h2>Resolution<a class="headerlink" href="#resolution" title="Link to this heading">#</a></h2>
 <p>A scanner sequence (<a class="reference internal" href="../generated/pulserver.design.SequencePlugin.html#pulserver.design.SequencePlugin" title="pulserver.design.SequencePlugin"><code class="xref py py-class docutils literal notranslate"><span class="pre">SequencePlugin</span></code></a>) maps each
-interpreter parameter name to an argument of its app: the <code class="docutils literal notranslate"><span class="pre">init_sequence</span></code> of a
-pypulseqpp sequence application, or a function returning sequences. Resolving a
-request proceeds in three steps.</p>
+interpreter parameter name to a keyword argument of its app, a function that
+returns sequences. Resolving a request proceeds in three steps.</p>
 <ol class="arabic simple">
 <li><p>Every entry the request omits takes its initial value, the app’s default
 unless the entry declares another, so a request is always a complete
@@ -560,19 +559,21 @@ prescription.</p></li>
 <li><p>The wire values are converted to the app’s arguments, held as a
 <a class="reference internal" href="../generated/pulserver.design.Protocol.html#pulserver.design.Protocol" title="pulserver.design.Protocol"><code class="xref py py-class docutils literal notranslate"><span class="pre">Protocol</span></code></a>, and the plugin evaluates the protocol
 under the scanner limits, capped by the design limits the scanner derates
-for the prescription (<a class="reference internal" href="../user-guide/running.html"><span class="doc">Running the services</span></a>). The evaluation of a
-sequence application constructs it, which designs the events and their
-timing against those limits without playing the scan, and raises an error
-for a prescription it cannot realize. The evaluation of a function app
-accepts the protocol unchanged and builds nothing; a plugin overrides
+for the prescription (<a class="reference internal" href="../user-guide/running.html"><span class="doc">Running the services</span></a>). An evaluation that
+calls the app designs the events and their timing against those limits
+without playing the scan, and the app raises an error for a prescription it
+cannot realize. The shipped plugins evaluate this way. The default
+evaluation of a function app accepts the protocol unchanged and builds
+nothing, and a plugin overrides
 <a class="reference internal" href="../generated/pulserver.design.SequencePlugin.evaluate.html#pulserver.design.SequencePlugin.evaluate" title="pulserver.design.SequencePlugin.evaluate"><code class="xref py py-meth docutils literal notranslate"><span class="pre">evaluate()</span></code></a> to check or complete it.</p></li>
 <li><p>The evaluation returns the protocol the design achieves, converted back to
 wire values, with the scan time, a note and, optionally, the RF layout
-(<a class="reference internal" href="#rf-layout"><span class="std std-ref">RF layout</span></a>). For a sequence application, the
-value each argument took in the design, as the application records it
-(<a class="reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.sequences.SequenceApp.resolved.html#pypulseqpp.sequences.SequenceApp.resolved" title="(in pypulseqpp latest)"><code class="xref py py-attr docutils literal notranslate"><span class="pre">resolved</span></code></a>), replaces the
-requested one; an argument the application does not record keeps its
-requested value.</p></li>
+(<a class="reference internal" href="#rf-layout"><span class="std std-ref">RF layout</span></a>). An evaluation that calls the app reads the values from
+the sequences it designed: the shipped plugins read the echo time and the
+repetition time from the <code class="docutils literal notranslate"><span class="pre">TE</span></code> and <code class="docutils literal notranslate"><span class="pre">TR</span></code> definitions of the main sequence, the
+receiver bandwidth from the dwell time of its ADC event and the slice
+thickness from its <code class="docutils literal notranslate"><span class="pre">SliceThickness</span></code> definition, and an argument they do not
+read keeps its requested value.</p></li>
 </ol>
 <p>The prescription is not a design argument. Every listing ends with its
 entries, not editable in the UI, which the interpreter fills from the
@@ -591,9 +592,9 @@ makes the request invalid, and the message names only its type. A request that
 names an entry the protocol does not declare is invalid, and the message names
 the entry.</p>
 <p>A valid reply carries the resolved values, a note, and the scan time in
-seconds: for a sequence application,
-<a class="reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.sequences.SequenceApp.scan_time.html#pypulseqpp.sequences.SequenceApp.scan_time" title="(in pypulseqpp latest)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">scan_time()</span></code></a>. An evaluation that states
-no scan time, <code class="docutils literal notranslate"><span class="pre">0.0</span></code>, is valid, and the reply reports the scan time as unknown.</p>
+seconds the evaluation states: the summed duration of the sequences the shipped
+plugins design. An evaluation that states no scan time, <code class="docutils literal notranslate"><span class="pre">0.0</span></code>, is valid, and the
+reply reports the scan time as unknown.</p>
 </section>
 <section id="rf-layout">
 <span id="id1"></span><h2>RF layout<a class="headerlink" href="#rf-layout" title="Link to this heading">#</a></h2>
@@ -662,8 +663,8 @@ strings, is deprecated: declare the enum and use <code class="docutils literal n
 <p>A preset is a negative value of a time entry that the UI shows as a word, such
 as <em>Minimum</em> for the echo time (<a class="reference internal" href="../generated/pulserver.protocol.TEPreset.html#pulserver.protocol.TEPreset" title="pulserver.protocol.TEPreset"><code class="xref py py-class docutils literal notranslate"><span class="pre">TEPreset</span></code></a>,
 <a class="reference internal" href="../generated/pulserver.protocol.TRPreset.html#pulserver.protocol.TRPreset" title="pulserver.protocol.TRPreset"><code class="xref py py-class docutils literal notranslate"><span class="pre">TRPreset</span></code></a>). A scanner sequence maps each preset it
-offers to the argument value it requests: <code class="docutils literal notranslate"><span class="pre">None</span></code>, which asks the application
-for its shortest achievable time; a time in seconds; or a function of the
+offers to the argument value it requests: <code class="docutils literal notranslate"><span class="pre">None</span></code>, which asks the app for its
+shortest achievable time; a time in seconds; or a function of the
 scanner limits. A preset is resolved like any other request: where the
 evaluation records the time the design achieved, the reply carries it in place
 of the preset. A time showing a preset holds what the preset requests in a
@@ -673,11 +674,11 @@ protocol, and <a class="reference internal" href="../generated/pulserver.design.
 <h2>Units and precision<a class="headerlink" href="#units-and-precision" title="Link to this heading">#</a></h2>
 <p>The interpreter stores protocol values in scanner parameters. Time parameters
 hold integer microseconds, so time entries are exchanged in integer
-microseconds and converted to seconds for the application, rounding to the
-nearest microsecond. Other float entries are held in float32 parameters, whose
+microseconds and converted to seconds for the app, rounding to the nearest
+microsecond. Other float entries are held in float32 parameters, whose
 round trip preserves six significant decimal digits, so they
 are exchanged at that precision. A float entry carries a scale between its UI
-unit and the application’s SI argument, such as <code class="docutils literal notranslate"><span class="pre">1e-3</span></code> for a field of view
+unit and the app’s SI argument, such as <code class="docutils literal notranslate"><span class="pre">1e-3</span></code> for a field of view
 shown in mm and designed in m.</p>
 <p>Resolved values are reported at the precision in which they are stored.
 Consequently, sending a resolved protocol back unchanged resolves to the same

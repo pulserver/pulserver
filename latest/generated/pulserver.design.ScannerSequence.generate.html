@@ -536,10 +536,8 @@
 <dt class="sig sig-object py" id="pulserver.design.ScannerSequence.generate">
 <span class="sig-prename descclassname"><span class="pre">ScannerSequence.</span></span><span class="sig-name descname"><span class="pre">generate</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#pulserver.design.ScannerSequence.generate" title="Link to this definition">#</a></dt>
 <dd><p>Return what <a class="reference internal" href="pulserver.design.ScannerSequence.design.html#pulserver.design.ScannerSequence.design" title="pulserver.design.ScannerSequence.design"><code class="xref py py-meth docutils literal notranslate"><span class="pre">design()</span></code></a> writes for a protocol.</p>
-<p>The hook a subclass overrides to build the sequence. The default for a
-function app returns <code class="docutils literal notranslate"><span class="pre">app(system,</span> <span class="pre">**protocol.arguments)</span></code>. The default
-for a sequence application returns the application constructed from the
-arguments; <a class="reference internal" href="pulserver.design.ScannerSequence.design.html#pulserver.design.ScannerSequence.design" title="pulserver.design.ScannerSequence.design"><code class="xref py py-meth docutils literal notranslate"><span class="pre">design()</span></code></a> designs it, with its prescans.</p>
+<p>The hook a subclass overrides to build the sequence. The default
+returns <code class="docutils literal notranslate"><span class="pre">app(system,</span> <span class="pre">**protocol.arguments)</span></code>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
@@ -549,10 +547,10 @@ arguments; <a class="reference internal" href="pulserver.design.ScannerSequence.
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p>A sequence, or a chain of them, prescans first and the main
-sequence last, or an application that designs its own chain.</p>
+sequence last.</p>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p><a class="reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.Sequence.html#pypulseqpp.Sequence" title="(in pypulseqpp latest)">pypulseqpp.Sequence</a> or <a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#list" title="(in Python v3.14)">list</a> of <a class="reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.Sequence.html#pypulseqpp.Sequence" title="(in pypulseqpp latest)">pypulseqpp.Sequence</a> or SequenceApp</p>
+<dd class="field-odd"><p><a class="reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.Sequence.html#pypulseqpp.Sequence" title="(in pypulseqpp latest)">pypulseqpp.Sequence</a> or <a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#list" title="(in Python v3.14)">list</a> of <a class="reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.Sequence.html#pypulseqpp.Sequence" title="(in pypulseqpp latest)">pypulseqpp.Sequence</a></p>
 </dd>
 </dl>
 </dd></dl>

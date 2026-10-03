@@ -540,13 +540,8 @@
 console shows with it. Returning <code class="docutils literal notranslate"><span class="pre">None</span></code> is returning
 <code class="docutils literal notranslate"><span class="pre">Evaluation(protocol)</span></code>. An exception makes the protocol invalid, as
 <a class="reference internal" href="pulserver.design.SequencePlugin.validate.html#pulserver.design.SequencePlugin.validate" title="pulserver.design.SequencePlugin.validate"><code class="xref py py-meth docutils literal notranslate"><span class="pre">validate()</span></code></a> describes.</p>
-<p>The default for a function app accepts the protocol unchanged with no
-scan time estimate, and does not call the app. The default for a
-sequence application constructs it, which checks the prescription, and
-returns its <code class="docutils literal notranslate"><span class="pre">scan_time()</span></code> and the protocol with each entry holding
-the value the design took, as the application records it with
-<code class="docutils literal notranslate"><span class="pre">SequenceApp.resolve</span></code>; an argument it does not record keeps its
-requested value.</p>
+<p>The default accepts the protocol unchanged with no scan time estimate,
+and does not call the app.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">

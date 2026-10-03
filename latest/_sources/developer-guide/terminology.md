@@ -41,7 +41,7 @@ Use the established term. Do not explain around it.
 | filling in the raw data | MRD enrichment |
 | what the reconstruction runs on | the reconstruction worker |
 | the reconstruction's code | the reconstruction plugin |
-| the sequence's code | the scanner-sequence plugin, the sequence application |
+| the sequence's code | the scanner-sequence plugin, the sequence function |
 
 ### Distinctions that must not be blurred
 
@@ -51,15 +51,16 @@ interpreter plays. A *listing* carries entries with their UI schema; a *value
 block* carries values only. A *preset* is a negative time value standing for a
 design choice, not a time.
 
-**Design.** A *sequence application* is the pypulseqpp `SequenceApp` subclass
-that designs the sequence. A *scanner sequence* is the pulserver
-`SequencePlugin` that binds an *app*, a sequence application or a function
-returning sequences, to protocol entries. A *plugin* is the file either kind is
-loaded from; say which kind. The *evaluation* of a prescription is what the
-scanner sequence's `evaluate` returns: the resolved protocol, the scan time, a
-note and, optionally, the *RF layout*. An RF layout is the RF *definitions* of a
-sequence, its RF *instances* in play order, and for each instance the *control*
-its amplitude follows, the flip angle or a float user entry. The `list` and
+**Design.** A *sequence function* is a function of the scanner limits and the
+protocol arguments that returns the designed sequences, a chain with the
+prescans first and the main sequence last. A *scanner sequence* is the
+pulserver `SequencePlugin` that binds an *app*, a sequence function, to protocol
+entries. A *plugin* is the file a scanner sequence or a reconstruction is loaded
+from; say which kind. The *evaluation* of a prescription is what the scanner
+sequence's `evaluate` returns: the resolved protocol, the scan time, a note and,
+optionally, the *RF layout*. An RF layout is the RF *definitions* of a sequence,
+its RF *instances* in play order, and for each instance the *control* its
+amplitude follows, the flip angle or a float user entry. The `list` and
 `validate` replies carry it when asked, as an estimate; the design the
 interpreter plays is the stored one.
 
@@ -152,7 +153,7 @@ Every documented quantity carries its unit.
 | Quantity | Unit |
 |---|---|
 | Time entry of a protocol, on the wire and in a scanner parameter | integer µs |
-| Time argument of a sequence application | s |
+| Time argument of an app | s |
 | Float protocol entry | the entry's `unit`; the argument is the value times `scale` |
 | Scan time in a `VALIDATE` reply | s; `?` where the evaluation states none |
 | Times, frequencies and flip angles of an RF block | s, Hz and degrees; the amplitude of an instance in an `[RfLayout]` block is unitless, the peak RF amplitude over the `peak_hz` the listing states for its definition |

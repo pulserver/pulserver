@@ -548,13 +548,13 @@ what the resolved protocol depends on: the receiver bandwidth a readout can
 realize on the sampling rasters, and the shortest echo time the readout
 admits.</p>
 <p>A request is resolved by evaluating the protocol under the scanner limits,
-which constructs the application and so designs the sequence, and reading back
-the values the design achieved, as described in <a class="reference internal" href="../../../explanations/protocol.html"><span class="doc">Protocol resolution</span></a>.
-The sequence is pypulseqpp’s shipped <code class="docutils literal notranslate"><span class="pre">Gre2DApp</span></code>, bound to five protocol
-entries.</p>
+which designs the sequence, and reading back the values the design achieved, as
+described in <a class="reference internal" href="../../../explanations/protocol.html"><span class="doc">Protocol resolution</span></a>. The sequence is pypulseqpp’s
+shipped <code class="docutils literal notranslate"><span class="pre">gre2d</span></code>, bound to five protocol entries.</p>
 <p>Outline:</p>
 <ol class="arabic simple">
-<li><p><strong>Scanner sequence.</strong> The binding of the application to the protocol.</p></li>
+<li><p><strong>Scanner sequence.</strong> The binding of the function to the protocol, and its
+evaluation.</p></li>
 <li><p><strong>Receiver bandwidth.</strong> Requested and achieved bandwidth for two readout
 lengths.</p></li>
 <li><p><strong>Shortest echo time.</strong> The <em>Minimum</em> preset against matrix size and
@@ -564,21 +564,30 @@ prescription the design refuses, and to a resolved protocol sent back.</p></li>
 </ol>
 <section id="scanner-sequence">
 <h2>Scanner sequence<a class="headerlink" href="#scanner-sequence" title="Link to this heading">#</a></h2>
-<p>The binding maps interpreter parameter names to <code class="docutils literal notranslate"><span class="pre">init_sequence</span></code> arguments.
-Times are exchanged in integer microseconds, the field of view in mm, and the
-<em>Minimum</em> preset of TE and TR requests the shortest time the design admits.
-The application records the echo time, repetition time and receiver
-bandwidth its design achieves, and the reply carries those values.</p>
+<p>The binding maps interpreter parameter names to keyword arguments of the
+function. Times are exchanged in integer microseconds, the field of view in
+mm, and the <em>Minimum</em> preset of TE and TR requests the shortest time the
+design admits. The evaluation designs the sequence and reads back the echo
+time and the repetition time, which the sequence records as its <code class="docutils literal notranslate"><span class="pre">TE</span></code> and
+<code class="docutils literal notranslate"><span class="pre">TR</span></code> definitions, and the receiver bandwidth, the inverse of the dwell time
+of its ADC event. The reply carries those values and the scan time.</p>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span><span class="w">
 </span><span class="kn">import</span><span class="w"> </span><span class="nn">pypulseqpp</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pp</span><span class="w">
-</span><span class="kn">from</span><span class="w"> </span><span class="nn">pypulseqpp</span><span class="nn">.</span><span class="nn">sequences</span><span class="nn">.</span><span class="nn">sequence</span><span class="nn">.</span><span class="nn">gre2D_sequence</span><span class="w"> </span><span class="kn">import</span> <a class="sphx-glr-backref-module-pypulseqpp-sequences sphx-glr-backref-type-py-class reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.sequences.SequenceApp.html#pypulseqpp.sequences.SequenceApp" title="pypulseqpp.sequences.SequenceApp"><span class="n">Gre2DApp</span></a><span class="w">
+</span><span class="kn">from</span><span class="w"> </span><span class="nn">pypulseqpp</span><span class="w"> </span><span class="kn">import</span> <span class="n">sequences</span><span class="w">
+</span><span class="kn">from</span><span class="w"> </span><span class="nn">pypulseqpp</span><span class="nn">.</span><span class="nn">sequences</span><span class="nn">.</span><span class="nn">sequence</span><span class="nn">.</span><span class="nn">gre2D_sequence</span><span class="w"> </span><span class="kn">import</span> <span class="n">gre2d</span><span class="w">
 </span><span class="w">
-</span><span class="kn">from</span><span class="w"> </span><span class="nn">pulserver</span><span class="nn">.</span><span class="nn">design</span><span class="w"> </span><span class="kn">import</span> <a class="sphx-glr-backref-module-pulserver-design sphx-glr-backref-type-py-class reference internal" href="../../pulserver.design.FloatParam.html#pulserver.design.FloatParam" title="pulserver.design.FloatParam"><span class="n">FloatParam</span></a><span class="p">,</span> <a class="sphx-glr-backref-module-pulserver-design sphx-glr-backref-type-py-class reference internal" href="../../pulserver.design.IntParam.html#pulserver.design.IntParam" title="pulserver.design.IntParam"><span class="n">IntParam</span></a><span class="p">,</span> <a class="sphx-glr-backref-module-pulserver-design sphx-glr-backref-type-py-class reference internal" href="../../pulserver.design.SequencePlugin.html#pulserver.design.SequencePlugin" title="pulserver.design.SequencePlugin"><span class="n">SequencePlugin</span></a><span class="p">,</span> <a class="sphx-glr-backref-module-pulserver-design sphx-glr-backref-type-py-class reference internal" href="../../pulserver.design.TimeParam.html#pulserver.design.TimeParam" title="pulserver.design.TimeParam"><span class="n">TimeParam</span></a><span class="w">
+</span><span class="kn">from</span><span class="w"> </span><span class="nn">pulserver</span><span class="nn">.</span><span class="nn">design</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span><span class="w">
+</span>    <a class="sphx-glr-backref-module-pulserver-design sphx-glr-backref-type-py-class reference internal" href="../../pulserver.design.Evaluation.html#pulserver.design.Evaluation" title="pulserver.design.Evaluation"><span class="n">Evaluation</span></a><span class="p">,</span><span class="w">
+</span>    <a class="sphx-glr-backref-module-pulserver-design sphx-glr-backref-type-py-class reference internal" href="../../pulserver.design.FloatParam.html#pulserver.design.FloatParam" title="pulserver.design.FloatParam"><span class="n">FloatParam</span></a><span class="p">,</span><span class="w">
+</span>    <a class="sphx-glr-backref-module-pulserver-design sphx-glr-backref-type-py-class reference internal" href="../../pulserver.design.IntParam.html#pulserver.design.IntParam" title="pulserver.design.IntParam"><span class="n">IntParam</span></a><span class="p">,</span><span class="w">
+</span>    <a class="sphx-glr-backref-module-pulserver-design sphx-glr-backref-type-py-class reference internal" href="../../pulserver.design.SequencePlugin.html#pulserver.design.SequencePlugin" title="pulserver.design.SequencePlugin"><span class="n">SequencePlugin</span></a><span class="p">,</span><span class="w">
+</span>    <a class="sphx-glr-backref-module-pulserver-design sphx-glr-backref-type-py-class reference internal" href="../../pulserver.design.TimeParam.html#pulserver.design.TimeParam" title="pulserver.design.TimeParam"><span class="n">TimeParam</span></a><span class="p">,</span><span class="w">
+</span><span class="p">)</span><span class="w">
 </span><span class="kn">from</span><span class="w"> </span><span class="nn">pulserver</span><span class="nn">.</span><span class="nn">protocol</span><span class="w"> </span><span class="kn">import</span> <span class="n">TEPreset</span><span class="p">,</span> <span class="n">TRPreset</span><span class="p">,</span> <span class="n">UIParam</span><span class="p">,</span> <a class="sphx-glr-backref-module-pulserver-protocol sphx-glr-backref-type-py-function reference internal" href="../../pulserver.protocol.format_listing.html#pulserver.protocol.format_listing" title="pulserver.protocol.format_listing"><span class="n">format_listing</span></a><span class="w">
 </span><span class="w">
 </span><span class="w">
 </span><span class="k">class</span><span class="w"> </span><a class="sphx-glr-backref-module-pulserver-design sphx-glr-backref-type-py-class reference internal" href="../../pulserver.design.SequencePlugin.html#pulserver.design.SequencePlugin" title="pulserver.design.SequencePlugin"><span class="nc">Gre2D</span></a><span class="p">(</span><a class="sphx-glr-backref-module-pulserver-design sphx-glr-backref-type-py-class reference internal" href="../../pulserver.design.SequencePlugin.html#pulserver.design.SequencePlugin" title="pulserver.design.SequencePlugin"><span class="n">SequencePlugin</span></a><span class="p">)</span><span class="p">:</span><span class="w">
-</span>    <span class="n">app</span> <span class="o">=</span> <a class="sphx-glr-backref-module-pypulseqpp-sequences sphx-glr-backref-type-py-class reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.sequences.SequenceApp.html#pypulseqpp.sequences.SequenceApp" title="pypulseqpp.sequences.SequenceApp"><span class="n">Gre2DApp</span></a><span class="w">
+</span>    <span class="n">app</span> <span class="o">=</span> <span class="n">gre2d</span><span class="w">
 </span>    <span class="n">protocol</span> <span class="o">=</span> <span class="p">{</span><span class="w">
 </span>        <a class="sphx-glr-backref-module-pulserver-protocol sphx-glr-backref-type-py-class sphx-glr-backref-instance reference internal" href="../../pulserver.protocol.FloatKey.html#pulserver.protocol.FloatKey" title="pulserver.protocol.FloatKey"><span class="n">UIParam</span><span class="o">.</span><span class="n">TE</span></a><span class="p">:</span> <a class="sphx-glr-backref-module-pulserver-design sphx-glr-backref-type-py-class reference internal" href="../../pulserver.design.TimeParam.html#pulserver.design.TimeParam" title="pulserver.design.TimeParam"><span class="n">TimeParam</span></a><span class="p">(</span><span class="w">
 </span>            <span class="s2">&quot;</span><span class="s2">te</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">range_min</span><span class="o">=</span><span class="mi">1000</span><span class="p">,</span> <span class="n">range_max</span><span class="o">=</span><span class="mi">80000</span><span class="p">,</span> <span class="n">presets</span><span class="o">=</span><span class="p">{</span><a class="sphx-glr-backref-module-pulserver-protocol sphx-glr-backref-type-py-class sphx-glr-backref-instance reference internal" href="../../pulserver.protocol.TEPreset.html#pulserver.protocol.TEPreset" title="pulserver.protocol.TEPreset"><span class="n">TEPreset</span><span class="o">.</span><span class="n">MINIMUM</span></a><span class="p">:</span> <span class="kc">None</span><span class="p">}</span><span class="w">
@@ -594,6 +603,16 @@ bandwidth its design achieves, and the reply carries those values.</p>
 </span>        <span class="p">)</span><span class="p">,</span><span class="w">
 </span>        <a class="sphx-glr-backref-module-pulserver-protocol sphx-glr-backref-type-py-class sphx-glr-backref-instance reference internal" href="../../pulserver.protocol.IntKey.html#pulserver.protocol.IntKey" title="pulserver.protocol.IntKey"><span class="n">UIParam</span><span class="o">.</span><span class="n">NX</span></a><span class="p">:</span> <a class="sphx-glr-backref-module-pulserver-design sphx-glr-backref-type-py-class reference internal" href="../../pulserver.design.IntParam.html#pulserver.design.IntParam" title="pulserver.design.IntParam"><span class="n">IntParam</span></a><span class="p">(</span><span class="s2">&quot;</span><span class="s2">n_x</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">range_min</span><span class="o">=</span><span class="mi">32</span><span class="p">,</span> <span class="n">range_max</span><span class="o">=</span><span class="mi">512</span><span class="p">,</span> <span class="n">range_incr</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span><span class="p">,</span><span class="w">
 </span>    <span class="p">}</span><span class="w">
+</span><span class="w">
+</span>    <span class="k">def</span><span class="w"> </span><span class="nf">evaluate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <a class="sphx-glr-backref-module-pypulseqpp sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.Opts.html#pypulseqpp.Opts" title="pypulseqpp.Opts"><span class="n">system</span></a><span class="p">,</span> <span class="n">protocol</span><span class="p">)</span><span class="p">:</span><span class="w">
+</span>        <span class="n">seq</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">app</span><span class="p">(</span><a class="sphx-glr-backref-module-pypulseqpp sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.Opts.html#pypulseqpp.Opts" title="pypulseqpp.Opts"><span class="n">system</span></a><span class="p">,</span> <span class="o">*</span><span class="o">*</span><span class="n">protocol</span><span class="o">.</span><span class="n">arguments</span><span class="p">)</span><span class="w">
+</span>        <span class="n">dwell</span> <span class="o">=</span> <span class="n">seq</span><span class="o">.</span><span class="n">libraries</span><span class="p">(</span><span class="p">)</span><span class="o">.</span><span class="n">adc</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">]</span><span class="w">
+</span>        <a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict" title="dict"><span class="n">achieved</span></a> <span class="o">=</span> <span class="p">{</span><span class="w">
+</span>            <a class="sphx-glr-backref-module-pulserver-protocol sphx-glr-backref-type-py-class sphx-glr-backref-instance reference internal" href="../../pulserver.protocol.FloatKey.html#pulserver.protocol.FloatKey" title="pulserver.protocol.FloatKey"><span class="n">UIParam</span><span class="o">.</span><span class="n">TE</span></a><span class="p">:</span> <span class="n">seq</span><span class="o">.</span><span class="n">definitions</span><span class="p">[</span><span class="s2">&quot;</span><span class="s2">TE</span><span class="s2">&quot;</span><span class="p">]</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="p">,</span><span class="w">
+</span>            <a class="sphx-glr-backref-module-pulserver-protocol sphx-glr-backref-type-py-class sphx-glr-backref-instance reference internal" href="../../pulserver.protocol.FloatKey.html#pulserver.protocol.FloatKey" title="pulserver.protocol.FloatKey"><span class="n">UIParam</span><span class="o">.</span><span class="n">TR</span></a><span class="p">:</span> <span class="n">seq</span><span class="o">.</span><span class="n">definitions</span><span class="p">[</span><span class="s2">&quot;</span><span class="s2">TR</span><span class="s2">&quot;</span><span class="p">]</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="p">,</span><span class="w">
+</span>            <a class="sphx-glr-backref-module-pulserver-protocol sphx-glr-backref-type-py-class sphx-glr-backref-instance reference internal" href="../../pulserver.protocol.FloatKey.html#pulserver.protocol.FloatKey" title="pulserver.protocol.FloatKey"><span class="n">UIParam</span><span class="o">.</span><span class="n">BANDWIDTH</span></a><span class="p">:</span> <span class="mf">1.0</span> <span class="o">/</span> <span class="n">dwell</span><span class="p">,</span><span class="w">
+</span>        <span class="p">}</span><span class="w">
+</span>        <span class="k">return</span> <a class="sphx-glr-backref-module-pulserver-design sphx-glr-backref-type-py-class reference internal" href="../../pulserver.design.Evaluation.html#pulserver.design.Evaluation" title="pulserver.design.Evaluation"><span class="n">Evaluation</span></a><span class="p">(</span><span class="n">protocol</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict" title="dict"><span class="n">achieved</span></a><span class="p">)</span><span class="p">,</span> <a class="sphx-glr-backref-module-pypulseqpp-sequences sphx-glr-backref-type-py-function reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.sequences.duration.html#pypulseqpp.sequences.duration" title="pypulseqpp.sequences.duration"><span class="n">sequences</span><span class="o">.</span><span class="n">duration</span></a><span class="p">(</span><span class="n">seq</span><span class="p">)</span><span class="p">)</span><span class="w">
 </span><span class="w">
 </span><span class="w">
 </span><span class="n">gre</span> <span class="o">=</span> <a class="sphx-glr-backref-module-pulserver-design sphx-glr-backref-type-py-class reference internal" href="../../pulserver.design.SequencePlugin.html#pulserver.design.SequencePlugin" title="pulserver.design.SequencePlugin"><span class="n">Gre2D</span></a><span class="p">(</span><span class="p">)</span><span class="w">
@@ -701,20 +720,15 @@ interpreter shows to the operator.</p>
 </span></pre></div></div>
 <div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>infeasible protocol in Gre2D.evaluate: the requested TE of 1.500 ms is shorter than the 3.550 ms this readout can achieve
 Traceback (most recent call last):
-  File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/pulserver/design/_plugin.py", line 419, in _validated
+  File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/pulserver/design/_plugin.py", line 380, in _validated
     evaluation = self.evaluate(system, protocol)
                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/pulserver/design/_plugin.py", line 268, in evaluate
-    app = self._application(system, protocol)
-          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/pulserver/design/_plugin.py", line 404, in _application
-    app = self.app(system, **arguments)
-          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/pypulseqpp/sequences/_app.py", line 166, in __init__
-    self.init_sequence(**protocol)
-  File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/pypulseqpp/sequences/sequence/gre2D_sequence.py", line 138, in init_sequence
-    self.ro = sequences.LineReadout2D(
-              ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/work/pulserver/pulserver/gallery/01-protocol/01_protocol_resolution.py", line 84, in evaluate
+    seq = self.app(system, **protocol.arguments)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/pypulseqpp/sequences/sequence/gre2D_sequence.py", line 144, in gre2d
+    ro = sequences.LineReadout2D(
+         ^^^^^^^^^^^^^^^^^^^^^^^^
   File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/pypulseqpp/sequences/_module.py", line 264, in __init__
     self.init_module(*args, **kwargs)
   File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/pypulseqpp/sequences/readout/line.py", line 434, in init_module
@@ -748,7 +762,7 @@ nx: 192
 True scan time 36.0 s
 </pre></div>
 </div>
-<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 4.871 seconds)</p>
+<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 4.610 seconds)</p>
 <div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-generated-gallery-01-protocol-01-protocol-resolution-py">
 <div class="sphx-glr-download sphx-glr-download-jupyter docutils container">
 <p><a class="reference download internal" download="" href="../../../_downloads/7417ea07f7e079f1bb4b10cb04fae4e2/01_protocol_resolution.ipynb"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Jupyter</span> <span class="pre">notebook:</span> <span class="pre">01_protocol_resolution.ipynb</span></code></a></p>

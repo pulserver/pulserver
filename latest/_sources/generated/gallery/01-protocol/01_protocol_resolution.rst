@@ -29,14 +29,14 @@ realize on the sampling rasters, and the shortest echo time the readout
 admits.
 
 A request is resolved by evaluating the protocol under the scanner limits,
-which constructs the application and so designs the sequence, and reading back
-the values the design achieved, as described in :doc:`/explanations/protocol`.
-The sequence is pypulseqpp's shipped ``Gre2DApp``, bound to five protocol
-entries.
+which designs the sequence, and reading back the values the design achieved, as
+described in :doc:`/explanations/protocol`. The sequence is pypulseqpp's
+shipped ``gre2d``, bound to five protocol entries.
 
 Outline:
 
-#. **Scanner sequence.** The binding of the application to the protocol.
+#. **Scanner sequence.** The binding of the function to the protocol, and its
+   evaluation.
 #. **Receiver bandwidth.** Requested and achieved bandwidth for two readout
    lengths.
 #. **Shortest echo time.** The *Minimum* preset against matrix size and
@@ -53,32 +53,41 @@ Outline:
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 39-47
+.. GENERATED FROM PYTHON SOURCE LINES 39-49
 
 Scanner sequence
 ----------------
 
-The binding maps interpreter parameter names to ``init_sequence`` arguments.
-Times are exchanged in integer microseconds, the field of view in mm, and the
-*Minimum* preset of TE and TR requests the shortest time the design admits.
-The application records the echo time, repetition time and receiver
-bandwidth its design achieves, and the reply carries those values.
+The binding maps interpreter parameter names to keyword arguments of the
+function. Times are exchanged in integer microseconds, the field of view in
+mm, and the *Minimum* preset of TE and TR requests the shortest time the
+design admits. The evaluation designs the sequence and reads back the echo
+time and the repetition time, which the sequence records as its ``TE`` and
+``TR`` definitions, and the receiver bandwidth, the inverse of the dwell time
+of its ADC event. The reply carries those values and the scan time.
 
-.. GENERATED FROM PYTHON SOURCE LINES 47-78
+.. GENERATED FROM PYTHON SOURCE LINES 49-97
 
 .. code-block:: Python
 
 
     import numpy as np
     import pypulseqpp as pp
-    from pypulseqpp.sequences.sequence.gre2D_sequence import Gre2DApp
+    from pypulseqpp import sequences
+    from pypulseqpp.sequences.sequence.gre2D_sequence import gre2d
 
-    from pulserver.design import FloatParam, IntParam, SequencePlugin, TimeParam
+    from pulserver.design import (
+        Evaluation,
+        FloatParam,
+        IntParam,
+        SequencePlugin,
+        TimeParam,
+    )
     from pulserver.protocol import TEPreset, TRPreset, UIParam, format_listing
 
 
     class Gre2D(SequencePlugin):
-        app = Gre2DApp
+        app = gre2d
         protocol = {
             UIParam.TE: TimeParam(
                 "te", range_min=1000, range_max=80000, presets={TEPreset.MINIMUM: None}
@@ -94,6 +103,16 @@ bandwidth its design achieves, and the reply carries those values.
             ),
             UIParam.NX: IntParam("n_x", range_min=32, range_max=512, range_incr=2),
         }
+
+        def evaluate(self, system, protocol):
+            seq = self.app(system, **protocol.arguments)
+            dwell = seq.libraries().adc[0, 1]
+            achieved = {
+                UIParam.TE: seq.definitions["TE"][0],
+                UIParam.TR: seq.definitions["TR"][0],
+                UIParam.BANDWIDTH: 1.0 / dwell,
+            }
+            return Evaluation(protocol.replace(achieved), sequences.duration(seq))
 
 
     gre = Gre2D()
@@ -130,13 +149,13 @@ bandwidth its design achieves, and the reply carries those values.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 79-82
+.. GENERATED FROM PYTHON SOURCE LINES 98-101
 
 The scanner limits are those an interpreter host process sends with each
 call. The rasters are stated explicitly because the achieved bandwidth
 depends on them.
 
-.. GENERATED FROM PYTHON SOURCE LINES 82-92
+.. GENERATED FROM PYTHON SOURCE LINES 101-111
 
 .. code-block:: Python
 
@@ -157,7 +176,7 @@ depends on them.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 93-109
+.. GENERATED FROM PYTHON SOURCE LINES 112-128
 
 Receiver bandwidth
 ------------------
@@ -176,7 +195,7 @@ time that is a multiple of 2.5 µs, so only 400, 200, 133, 100, 80 kHz and so
 on are achievable. For 200 samples, every multiple of the 100 ns ADC raster
 is achievable.
 
-.. GENERATED FROM PYTHON SOURCE LINES 109-135
+.. GENERATED FROM PYTHON SOURCE LINES 128-154
 
 .. code-block:: Python
 
@@ -203,12 +222,12 @@ is achievable.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 136-138
+.. GENERATED FROM PYTHON SOURCE LINES 155-157
 
 The reply always carries the achieved value, so the scanner UI shows the
 bandwidth that will be played rather than the one typed in.
 
-.. GENERATED FROM PYTHON SOURCE LINES 138-145
+.. GENERATED FROM PYTHON SOURCE LINES 157-164
 
 .. code-block:: Python
 
@@ -233,7 +252,7 @@ bandwidth that will be played rather than the one typed in.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 146-155
+.. GENERATED FROM PYTHON SOURCE LINES 165-174
 
 Shortest echo time
 ------------------
@@ -245,7 +264,7 @@ readout acquires half of its samples. The shortest echo time therefore grows
 with the number of samples and with the dwell time, that is, with matrix size
 and inversely with bandwidth.
 
-.. GENERATED FROM PYTHON SOURCE LINES 155-186
+.. GENERATED FROM PYTHON SOURCE LINES 174-205
 
 .. code-block:: Python
 
@@ -275,7 +294,7 @@ and inversely with bandwidth.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 187-193
+.. GENERATED FROM PYTHON SOURCE LINES 206-212
 
 Infeasible requests and repeated resolution
 -------------------------------------------
@@ -284,7 +303,7 @@ A prescription the design cannot realize is invalid. The reply carries the
 request unchanged and the message of the error the design raised, which the
 interpreter shows to the operator.
 
-.. GENERATED FROM PYTHON SOURCE LINES 193-198
+.. GENERATED FROM PYTHON SOURCE LINES 212-217
 
 .. code-block:: Python
 
@@ -303,20 +322,15 @@ interpreter shows to the operator.
 
     infeasible protocol in Gre2D.evaluate: the requested TE of 1.500 ms is shorter than the 3.550 ms this readout can achieve
     Traceback (most recent call last):
-      File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/pulserver/design/_plugin.py", line 419, in _validated
+      File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/pulserver/design/_plugin.py", line 380, in _validated
         evaluation = self.evaluate(system, protocol)
                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-      File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/pulserver/design/_plugin.py", line 268, in evaluate
-        app = self._application(system, protocol)
-              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-      File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/pulserver/design/_plugin.py", line 404, in _application
-        app = self.app(system, **arguments)
-              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-      File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/pypulseqpp/sequences/_app.py", line 166, in __init__
-        self.init_sequence(**protocol)
-      File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/pypulseqpp/sequences/sequence/gre2D_sequence.py", line 138, in init_sequence
-        self.ro = sequences.LineReadout2D(
-                  ^^^^^^^^^^^^^^^^^^^^^^^^
+      File "/home/runner/work/pulserver/pulserver/gallery/01-protocol/01_protocol_resolution.py", line 84, in evaluate
+        seq = self.app(system, **protocol.arguments)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/pypulseqpp/sequences/sequence/gre2D_sequence.py", line 144, in gre2d
+        ro = sequences.LineReadout2D(
+             ^^^^^^^^^^^^^^^^^^^^^^^^
       File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/pypulseqpp/sequences/_module.py", line 264, in __init__
         self.init_module(*args, **kwargs)
       File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/pypulseqpp/sequences/readout/line.py", line 434, in init_module
@@ -334,14 +348,14 @@ interpreter shows to the operator.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 199-203
+.. GENERATED FROM PYTHON SOURCE LINES 218-222
 
 A valid reply carries the resolved protocol at the precision a scanner
 parameter stores. Sending it back resolves to the same protocol,
 which is what lets a design be identified by its resolved protocol
 (:doc:`/explanations/designs`).
 
-.. GENERATED FROM PYTHON SOURCE LINES 203-209
+.. GENERATED FROM PYTHON SOURCE LINES 222-228
 
 .. code-block:: Python
 
@@ -372,7 +386,7 @@ which is what lets a design be identified by its resolved protocol
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 4.871 seconds)
+   **Total running time of the script:** (0 minutes 4.610 seconds)
 
 
 .. _sphx_glr_download_generated_gallery_01-protocol_01_protocol_resolution.py:

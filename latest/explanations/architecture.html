@@ -557,7 +557,7 @@ sequence. The reconstruction is whatever a reconstruction plugin imports,
 normally <a class="reference external" href="https://github.com/mcencini/bartorch">bartorch</a>. Pulserver
 implements neither sequence design nor reconstruction algorithms.</p>
 </dd>
-<dt>Orchestration</dt><dd><p>Pulserver: the resolution of a protocol against a sequence application, the
+<dt>Orchestration</dt><dd><p>Pulserver: the resolution of a protocol against a sequence function, the
 storage of the resulting designs, the conversion of a design into the scanner
 IR, and the routing and enrichment of raw data.</p>
 </dd>
@@ -585,9 +585,10 @@ One acquisition proceeds as follows.</p>
 <ol class="arabic simple">
 <li><p>On each protocol edit, the interpreter host process requests validation,
 naming the scanner-sequence plugin, the scanner limits and the requested
-protocol. The call constructs the application with pypulseqpp and replies
-with the protocol the design achieves and the scan time, or with the error
-the design raised (<a class="reference internal" href="protocol.html"><span class="doc">Protocol resolution</span></a>).</p></li>
+protocol. The call evaluates the protocol with the plugin, which for a
+shipped sequence designs it with pypulseqpp, and replies with the protocol
+the design achieves and the scan time, or with the error the design raised
+(<a class="reference internal" href="protocol.html"><span class="doc">Protocol resolution</span></a>).</p></li>
 <li><p>When the scan is prepared, the process requests the design. The call designs
 the sequence, checks it, and stores the Pulseq files and the IR cache as a
 design of the design store, pushes the design to the proxy when the proxy

@@ -553,7 +553,7 @@
 <p>pulserver orchestrates MR acquisitions with Pulseq sequences on clinical
 scanners: sequence design, scanner preparation and reconstruction. It
 resolves the protocol an operator edits in the scanner UI against a
-<a class="reference external" href="https://github.com/pulserver/pypulseqpp">pypulseqpp</a> sequence application,
+<a class="reference external" href="https://github.com/pulserver/pypulseqpp">pypulseqpp</a> sequence function,
 converts the design into the segmented representation a scanner interpreter
 plays, and routes the raw data of each series, enriched from the sequence that
 acquired it, to a reconstruction, normally
@@ -583,18 +583,25 @@ stream, an ISMRMRD file or an assembled acquisition bucket.</p></li>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span>pulserver<span class="w"> </span>bartorch
 </pre></div>
 </div>
-<p>A sequence plugin binds a pypulseqpp <code class="docutils literal notranslate"><span class="pre">SequenceApp</span></code>, or a function returning
-sequences, to the scanner protocol, and a reconstruction plugin reconstructs
-the series it acquires. The client of a scan chooses the reconstruction,
-independently of the sequence:</p>
+<p>A sequence plugin binds a pypulseqpp sequence function, a function that returns
+the designed sequences, to the scanner protocol, and a reconstruction plugin
+reconstructs the series it acquires. The client of a scan chooses the
+reconstruction, independently of the sequence. The plugin below evaluates a
+protocol by designing the sequence, which states the scan time and refuses a
+prescription the design cannot realize:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># sequences/gre.py</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">pypulseqpp.sequences.sequence.gre2D_sequence</span><span class="w"> </span><span class="kn">import</span> <span class="n">Gre2DApp</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">pulserver.design</span><span class="w"> </span><span class="kn">import</span> <span class="n">SequencePlugin</span><span class="p">,</span> <span class="n">TimeParam</span><span class="p">,</span> <span class="n">UIParam</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pypulseqpp</span><span class="w"> </span><span class="kn">import</span> <span class="n">sequences</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pypulseqpp.sequences.sequence.gre2D_sequence</span><span class="w"> </span><span class="kn">import</span> <span class="n">gre2d</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pulserver.design</span><span class="w"> </span><span class="kn">import</span> <span class="n">Evaluation</span><span class="p">,</span> <span class="n">SequencePlugin</span><span class="p">,</span> <span class="n">TimeParam</span><span class="p">,</span> <span class="n">UIParam</span>
 
 
 <span class="k">class</span><span class="w"> </span><span class="nc">Gre</span><span class="p">(</span><span class="n">SequencePlugin</span><span class="p">):</span>
-    <span class="n">app</span> <span class="o">=</span> <span class="n">Gre2DApp</span>
+    <span class="n">app</span> <span class="o">=</span> <span class="n">gre2d</span>
     <span class="n">protocol</span> <span class="o">=</span> <span class="p">{</span><span class="n">UIParam</span><span class="o">.</span><span class="n">TE</span><span class="p">:</span> <span class="n">TimeParam</span><span class="p">(</span><span class="s2">"te"</span><span class="p">,</span> <span class="n">range_min</span><span class="o">=</span><span class="mi">3000</span><span class="p">,</span> <span class="n">range_max</span><span class="o">=</span><span class="mi">20000</span><span class="p">)}</span>  <span class="c1"># µs</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">evaluate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">system</span><span class="p">,</span> <span class="n">protocol</span><span class="p">):</span>
+        <span class="n">scan</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">app</span><span class="p">(</span><span class="n">system</span><span class="p">,</span> <span class="o">**</span><span class="n">protocol</span><span class="o">.</span><span class="n">arguments</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">Evaluation</span><span class="p">(</span><span class="n">protocol</span><span class="p">,</span> <span class="n">sequences</span><span class="o">.</span><span class="n">duration</span><span class="p">(</span><span class="n">scan</span><span class="p">))</span>
 </pre></div>
 </div>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># recon/gre.py</span>

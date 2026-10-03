@@ -543,10 +543,9 @@ as it stands: a request that evaluates to other values is designed
 from the values it was given, so a design that is a function of the
 evaluated protocol is made from <code class="docutils literal notranslate"><span class="pre">validate(...).values</span></code>.</p>
 <p>The first file is <code class="docutils literal notranslate"><span class="pre">sequence.seq</span></code>. Each later file of a chain is
-<code class="docutils literal notranslate"><span class="pre">sequence_&lt;name&gt;.seq</span></code>, <code class="docutils literal notranslate"><span class="pre">main</span></code> for the last, and each file names the
-next as its <code class="docutils literal notranslate"><span class="pre">NextSequence</span></code> definition, so the chain is one scan.
-<code class="docutils literal notranslate"><span class="pre">name</span></code> is the name of the prescan for a sequence application, and
-<code class="docutils literal notranslate"><span class="pre">prescan&lt;n&gt;</span></code> for a list of sequences, <code class="docutils literal notranslate"><span class="pre">n</span></code> counting from 2.</p>
+<code class="docutils literal notranslate"><span class="pre">sequence_prescan&lt;n&gt;.seq</span></code>, <code class="docutils literal notranslate"><span class="pre">n</span></code> counting from 2, or
+<code class="docutils literal notranslate"><span class="pre">sequence_main.seq</span></code> for the last, and each file names the next as its
+<code class="docutils literal notranslate"><span class="pre">NextSequence</span></code> definition, so the chain is one scan.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Returns<span class="colon">:</span></dt>
 <dd class="field-odd"><p><ul class="simple">
@@ -557,7 +556,7 @@ request, for which nothing is written.</p></li>
 </p>
 </dd>
 <dt class="field-even">Raises<span class="colon">:</span></dt>
-<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#TypeError" title="(in Python v3.14)"><strong>TypeError</strong></a> – If a function app returns neither a sequence nor a list of them.</p>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#TypeError" title="(in Python v3.14)"><strong>TypeError</strong></a> – If <code class="docutils literal notranslate"><span class="pre">app</span></code> returns neither a sequence nor a list of them.</p>
 </dd>
 </dl>
 </dd></dl>

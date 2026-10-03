@@ -617,7 +617,7 @@ wording.</p>
 <td><p>the reconstruction plugin</p></td>
 </tr>
 <tr class="row-even"><td><p>the sequence’s code</p></td>
-<td><p>the scanner-sequence plugin, the sequence application</p></td>
+<td><p>the scanner-sequence plugin, the sequence function</p></td>
 </tr>
 </tbody>
 </table>
@@ -629,15 +629,16 @@ enters. The <em>resolved protocol</em> is what the design achieves and what the
 interpreter plays. A <em>listing</em> carries entries with their UI schema; a <em>value
 block</em> carries values only. A <em>preset</em> is a negative time value standing for a
 design choice, not a time.</p>
-<p><strong>Design.</strong> A <em>sequence application</em> is the pypulseqpp <code class="docutils literal notranslate"><span class="pre">SequenceApp</span></code> subclass
-that designs the sequence. A <em>scanner sequence</em> is the pulserver
-<code class="docutils literal notranslate"><span class="pre">SequencePlugin</span></code> that binds an <em>app</em>, a sequence application or a function
-returning sequences, to protocol entries. A <em>plugin</em> is the file either kind is
-loaded from; say which kind. The <em>evaluation</em> of a prescription is what the
-scanner sequence’s <code class="docutils literal notranslate"><span class="pre">evaluate</span></code> returns: the resolved protocol, the scan time, a
-note and, optionally, the <em>RF layout</em>. An RF layout is the RF <em>definitions</em> of a
-sequence, its RF <em>instances</em> in play order, and for each instance the <em>control</em>
-its amplitude follows, the flip angle or a float user entry. The <code class="docutils literal notranslate"><span class="pre">list</span></code> and
+<p><strong>Design.</strong> A <em>sequence function</em> is a function of the scanner limits and the
+protocol arguments that returns the designed sequences, a chain with the
+prescans first and the main sequence last. A <em>scanner sequence</em> is the
+pulserver <code class="docutils literal notranslate"><span class="pre">SequencePlugin</span></code> that binds an <em>app</em>, a sequence function, to protocol
+entries. A <em>plugin</em> is the file a scanner sequence or a reconstruction is loaded
+from; say which kind. The <em>evaluation</em> of a prescription is what the scanner
+sequence’s <code class="docutils literal notranslate"><span class="pre">evaluate</span></code> returns: the resolved protocol, the scan time, a note and,
+optionally, the <em>RF layout</em>. An RF layout is the RF <em>definitions</em> of a sequence,
+its RF <em>instances</em> in play order, and for each instance the <em>control</em> its
+amplitude follows, the flip angle or a float user entry. The <code class="docutils literal notranslate"><span class="pre">list</span></code> and
 <code class="docutils literal notranslate"><span class="pre">validate</span></code> replies carry it when asked, as an estimate; the design the
 interpreter plays is the stored one.</p>
 <p><strong>Storage.</strong> A <em>design</em> is one generated or imported chain with its IR cache,
@@ -728,7 +729,7 @@ verb that classifies the operation: “Return…”, “Read…”, “Format…
 <tr class="row-even"><td><p>Time entry of a protocol, on the wire and in a scanner parameter</p></td>
 <td><p>integer µs</p></td>
 </tr>
-<tr class="row-odd"><td><p>Time argument of a sequence application</p></td>
+<tr class="row-odd"><td><p>Time argument of an app</p></td>
 <td><p>s</p></td>
 </tr>
 <tr class="row-even"><td><p>Float protocol entry</p></td>

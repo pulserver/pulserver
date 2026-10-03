@@ -185,25 +185,26 @@ phase-encoding amplitude.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 160-167
+.. GENERATED FROM PYTHON SOURCE LINES 160-168
 
 Subsequences
 ------------
 
-pypulseqpp's echo planar application writes a reference prescan, one volume
-with the phase-encoding direction reversed, before the imaging sequence. The
-two are separate files linked by the ``NextSequence`` definition, and the
-conversion reads the chain as the subsequences of one scan.
+pypulseqpp's echo planar sequence returns a reference prescan, one volume
+with the phase-encoding direction reversed, and the imaging sequence, as a
+chain. :func:`pypulseqpp.sequences.write` writes them as separate files
+linked by the ``NextSequence`` definition, and the conversion reads the chain
+as the subsequences of one scan.
 
-.. GENERATED FROM PYTHON SOURCE LINES 167-182
+.. GENERATED FROM PYTHON SOURCE LINES 168-183
 
 .. code-block:: Python
 
 
-    from pypulseqpp.sequences.sequence.epi2D_sequence import Epi2DApp
+    from pypulseqpp import sequences
+    from pypulseqpp.sequences.sequence.epi2D_sequence import epi2d
 
-    epi = Epi2DApp(system, n_x=64, n_y=64)
-    files = epi.write(work / "epi.seq", offline=False)
+    files = sequences.write(work / "epi.seq", epi2d(system, n_x=64, n_y=64), offline=False)
     print([Path(f).name for f in ir.chain(files[0])])
 
     report = ir.summary(files[0], system)
@@ -222,7 +223,7 @@ conversion reads the chain as the subsequences of one scan.
 
  .. code-block:: none
 
-    ['epi.seq', 'epi_main.seq']
+    ['epi.seq', 'epi_epi_2d.seq']
     subsequence 0: 72 blocks per repetition, 3 repetitions
     subsequence 1: 72 blocks per repetition, 3 repetitions
     segment definitions over the chain: 2
@@ -230,7 +231,7 @@ conversion reads the chain as the subsequences of one scan.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 183-187
+.. GENERATED FROM PYTHON SOURCE LINES 184-188
 
 Segment definitions are deduplicated across subsequences as well as within
 one. The reference prescan reverses the sign of the phase-encoding
@@ -240,7 +241,7 @@ definition, and both subsequences are played from the same two definitions.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.621 seconds)
+   **Total running time of the script:** (0 minutes 0.613 seconds)
 
 
 .. _sphx_glr_download_generated_gallery_02-scanner-ir_01_segmentation.py:

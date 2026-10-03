@@ -23,7 +23,7 @@ Engines
   implements neither sequence design nor reconstruction algorithms.
 
 Orchestration
-: Pulserver: the resolution of a protocol against a sequence application, the
+: Pulserver: the resolution of a protocol against a sequence function, the
   storage of the resulting designs, the conversion of a design into the scanner
   IR, and the routing and enrichment of raw data.
 
@@ -48,9 +48,10 @@ One acquisition proceeds as follows.
 
 1. On each protocol edit, the interpreter host process requests validation,
    naming the scanner-sequence plugin, the scanner limits and the requested
-   protocol. The call constructs the application with pypulseqpp and replies
-   with the protocol the design achieves and the scan time, or with the error
-   the design raised ({doc}`protocol`).
+   protocol. The call evaluates the protocol with the plugin, which for a
+   shipped sequence designs it with pypulseqpp, and replies with the protocol
+   the design achieves and the scan time, or with the error the design raised
+   ({doc}`protocol`).
 2. When the scan is prepared, the process requests the design. The call designs
    the sequence, checks it, and stores the Pulseq files and the IR cache as a
    design of the design store, pushes the design to the proxy when the proxy

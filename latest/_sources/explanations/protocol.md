@@ -11,9 +11,8 @@ an edit is therefore the value the design achieves, not the value requested.
 ## Resolution
 
 A scanner sequence ({class}`~pulserver.design.SequencePlugin`) maps each
-interpreter parameter name to an argument of its app: the `init_sequence` of a
-pypulseqpp sequence application, or a function returning sequences. Resolving a
-request proceeds in three steps.
+interpreter parameter name to a keyword argument of its app, a function that
+returns sequences. Resolving a request proceeds in three steps.
 
 1. Every entry the request omits takes its initial value, the app's default
    unless the entry declares another, so a request is always a complete
@@ -21,19 +20,21 @@ request proceeds in three steps.
 2. The wire values are converted to the app's arguments, held as a
    {class}`~pulserver.design.Protocol`, and the plugin evaluates the protocol
    under the scanner limits, capped by the design limits the scanner derates
-   for the prescription ({doc}`../user-guide/running`). The evaluation of a
-   sequence application constructs it, which designs the events and their
-   timing against those limits without playing the scan, and raises an error
-   for a prescription it cannot realize. The evaluation of a function app
-   accepts the protocol unchanged and builds nothing; a plugin overrides
+   for the prescription ({doc}`../user-guide/running`). An evaluation that
+   calls the app designs the events and their timing against those limits
+   without playing the scan, and the app raises an error for a prescription it
+   cannot realize. The shipped plugins evaluate this way. The default
+   evaluation of a function app accepts the protocol unchanged and builds
+   nothing, and a plugin overrides
    {meth}`~pulserver.design.SequencePlugin.evaluate` to check or complete it.
 3. The evaluation returns the protocol the design achieves, converted back to
    wire values, with the scan time, a note and, optionally, the RF layout
-   ({ref}`rf-layout`). For a sequence application, the
-   value each argument took in the design, as the application records it
-   ({attr}`~pypulseqpp.sequences.SequenceApp.resolved`), replaces the
-   requested one; an argument the application does not record keeps its
-   requested value.
+   ({ref}`rf-layout`). An evaluation that calls the app reads the values from
+   the sequences it designed: the shipped plugins read the echo time and the
+   repetition time from the `TE` and `TR` definitions of the main sequence, the
+   receiver bandwidth from the dwell time of its ADC event and the slice
+   thickness from its `SliceThickness` definition, and an argument they do not
+   read keeps its requested value.
 
 The prescription is not a design argument. Every listing ends with its
 entries, not editable in the UI, which the interpreter fills from the
@@ -54,9 +55,9 @@ names an entry the protocol does not declare is invalid, and the message names
 the entry.
 
 A valid reply carries the resolved values, a note, and the scan time in
-seconds: for a sequence application,
-{meth}`~pypulseqpp.sequences.SequenceApp.scan_time`. An evaluation that states
-no scan time, `0.0`, is valid, and the reply reports the scan time as unknown.
+seconds the evaluation states: the summed duration of the sequences the shipped
+plugins design. An evaluation that states no scan time, `0.0`, is valid, and the
+reply reports the scan time as unknown.
 
 (rf-layout)=
 ## RF layout
@@ -132,8 +133,8 @@ strings, is deprecated: declare the enum and use `ChoiceParam`.
 A preset is a negative value of a time entry that the UI shows as a word, such
 as *Minimum* for the echo time ({class}`~pulserver.protocol.TEPreset`,
 {class}`~pulserver.protocol.TRPreset`). A scanner sequence maps each preset it
-offers to the argument value it requests: `None`, which asks the application
-for its shortest achievable time; a time in seconds; or a function of the
+offers to the argument value it requests: `None`, which asks the app for its
+shortest achievable time; a time in seconds; or a function of the
 scanner limits. A preset is resolved like any other request: where the
 evaluation records the time the design achieved, the reply carries it in place
 of the preset. A time showing a preset holds what the preset requests in a
@@ -143,11 +144,11 @@ protocol, and {meth}`~pulserver.design.Protocol.preset` returns the preset.
 
 The interpreter stores protocol values in scanner parameters. Time parameters
 hold integer microseconds, so time entries are exchanged in integer
-microseconds and converted to seconds for the application, rounding to the
-nearest microsecond. Other float entries are held in float32 parameters, whose
+microseconds and converted to seconds for the app, rounding to the nearest
+microsecond. Other float entries are held in float32 parameters, whose
 round trip preserves six significant decimal digits, so they
 are exchanged at that precision. A float entry carries a scale between its UI
-unit and the application's SI argument, such as `1e-3` for a field of view
+unit and the app's SI argument, such as `1e-3` for a field of view
 shown in mm and designed in m.
 
 Resolved values are reported at the precision in which they are stored.

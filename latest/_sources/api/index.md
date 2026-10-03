@@ -6,7 +6,7 @@ Conceptual background is in {doc}`../explanations/index` and procedures in the
 | Page | Module | What it documents |
 | --- | --- | --- |
 | {doc}`protocol` | `pulserver.protocol` | The entries of a scanner protocol, their presets, and the text blocks that carry them between the design calls and the interpreter. |
-| {doc}`design` | `pulserver.design` | {class}`~pulserver.design.SequencePlugin`, which binds a pypulseqpp sequence application, or a function returning sequences, to the scanner protocol, and the UI entries it is declared with. |
+| {doc}`design` | `pulserver.design` | {class}`~pulserver.design.SequencePlugin`, which binds a function returning sequences to the scanner protocol, and the UI entries it is declared with. |
 | {doc}`host` | `pulserver.host` | The design calls of the interpreter host processes and the store of the designs they generate. |
 | {doc}`ir` | `pulserver.ir` | The segmentation of a sequence chain into the IR cache the interpreter loads. |
 | {doc}`proxy` | `pulserver.proxy` | The reconstruction proxy, the designs it resolves a series to, and the enrichment it applies. |

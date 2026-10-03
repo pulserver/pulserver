@@ -69,7 +69,7 @@ with its encoding counters, flags and dwell time.
 of each sample of a readout, in 1/m, integrated when it is asked for. The
 simulation below joins them over the scan.
 
-.. GENERATED FROM PYTHON SOURCE LINES 52-79
+.. GENERATED FROM PYTHON SOURCE LINES 52-80
 
 .. code-block:: Python
 
@@ -81,7 +81,8 @@ simulation below joins them over the scan.
     import ismrmrd.xsd as xsd
     import numpy as np
     import pypulseqpp as pp
-    from pypulseqpp.sequences.sequence.gre2D_sequence import Gre2DApp
+    from pypulseqpp import sequences
+    from pypulseqpp.sequences.sequence.gre2D_sequence import gre2d
 
     from pulserver.ir import prescribe
     from pulserver.proxy import SequenceTable, enrich_acquisition, enrich_header
@@ -89,8 +90,8 @@ simulation below joins them over the scan.
     system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
     work = Path(tempfile.mkdtemp())
 
-    app = Gre2DApp(system, n_x=64, n_y=64, te=None, tr=None, n_dummy=0)
-    files = app.write(work / "sequence.seq", offline=False)
+    seq = gre2d(system, n_x=64, n_y=64, te=None, tr=None, n_dummy=0)
+    files = sequences.write(work / "sequence.seq", seq, offline=False)
     table = SequenceTable.read(files[0])
 
     k = np.hstack([table.readout_k(row) for row in range(len(table))])
@@ -115,7 +116,7 @@ simulation below joins them over the scan.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 80-90
+.. GENERATED FROM PYTHON SOURCE LINES 81-91
 
 Prescription
 ------------
@@ -128,7 +129,7 @@ moves each file of a design to the prescribed offset with
 played sequence carries the frequency offset :math:`G_x d_x` of the readout
 gradient, and a phase offset.
 
-.. GENERATED FROM PYTHON SOURCE LINES 90-110
+.. GENERATED FROM PYTHON SOURCE LINES 91-111
 
 .. code-block:: Python
 
@@ -166,7 +167,7 @@ gradient, and a phase offset.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 111-117
+.. GENERATED FROM PYTHON SOURCE LINES 112-118
 
 The receive phase of a sample is the phase of the receiver's reference at
 that sample relative to the excitation the readout follows: the ADC phase
@@ -175,7 +176,7 @@ window, and any phase modulation, minus the RF phase at the centre of the
 pulse. The prescription makes it :math:`2\pi\,\mathbf{d}\cdot\mathbf{k}(t)`,
 the phase an object at :math:`\mathbf{d}` accumulates.
 
-.. GENERATED FROM PYTHON SOURCE LINES 117-167
+.. GENERATED FROM PYTHON SOURCE LINES 118-168
 
 .. code-block:: Python
 
@@ -224,7 +225,7 @@ the phase an object at :math:`\mathbf{d}` accumulates.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 168-185
+.. GENERATED FROM PYTHON SOURCE LINES 169-186
 
 Simulated series
 ----------------
@@ -244,7 +245,7 @@ reference, :math:`e^{+i\phi(t)}` with :math:`\phi` the receive phase, which
 for the design played as written is zero: the ADC phase follows the RF
 spoiling phase of the excitation.
 
-.. GENERATED FROM PYTHON SOURCE LINES 185-211
+.. GENERATED FROM PYTHON SOURCE LINES 186-212
 
 .. code-block:: Python
 
@@ -281,12 +282,12 @@ spoiling phase of the excitation.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 212-214
+.. GENERATED FROM PYTHON SOURCE LINES 213-215
 
 The stream carries what a vendor reconstruction client supplies: one
 receiver channel, the readout samples, and a header with no encoding space.
 
-.. GENERATED FROM PYTHON SOURCE LINES 214-239
+.. GENERATED FROM PYTHON SOURCE LINES 215-240
 
 .. code-block:: Python
 
@@ -330,7 +331,7 @@ receiver channel, the readout samples, and a header with no encoding space.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 240-249
+.. GENERATED FROM PYTHON SOURCE LINES 241-250
 
 Enrichment
 ----------
@@ -342,7 +343,7 @@ echo, readout oversampling included, with its field of view in proportion.
 :func:`~pulserver.proxy.enrich_acquisition` applies one table row to each
 acquisition, in stream order, and leaves the samples as received.
 
-.. GENERATED FROM PYTHON SOURCE LINES 249-272
+.. GENERATED FROM PYTHON SOURCE LINES 250-273
 
 .. code-block:: Python
 
@@ -386,7 +387,7 @@ acquisition, in stream order, and leaves the samples as received.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 273-285
+.. GENERATED FROM PYTHON SOURCE LINES 274-286
 
 Reconstruction
 --------------
@@ -401,7 +402,7 @@ oversampled readout to the reconstruction matrix of the header.
 The phantom is acquired twice: with the design played as written, and played
 at the prescribed offset.
 
-.. GENERATED FROM PYTHON SOURCE LINES 285-322
+.. GENERATED FROM PYTHON SOURCE LINES 286-323
 
 .. code-block:: Python
 
@@ -442,7 +443,7 @@ at the prescribed offset.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 323-330
+.. GENERATED FROM PYTHON SOURCE LINES 324-331
 
 Played as written, the sequence acquires the phantom at its displacement from
 the isocentre: shifted along the readout axis, and folded along the
@@ -455,7 +456,7 @@ to the gradients or the trajectory.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 1.031 seconds)
+   **Total running time of the script:** (0 minutes 1.189 seconds)
 
 
 .. _sphx_glr_download_generated_gallery_03-reconstruction_01_enrichment.py:

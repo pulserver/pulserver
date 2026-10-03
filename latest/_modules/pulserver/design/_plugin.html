@@ -458,6 +458,7 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">difflib</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">functools</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">importlib.util</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">inspect</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
@@ -471,7 +472,6 @@
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">pypulseqpp</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pp</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">pypulseqpp</span><span class="w"> </span><span class="kn">import</span> <span class="n">sequences</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">..protocol</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">FOV_OFFSET</span><span class="p">,</span>
@@ -553,19 +553,14 @@
 <span class="sd">    Attributes</span>
 <span class="sd">    ----------</span>
 <span class="sd">    app : callable</span>
-<span class="sd">        Designs the sequence. Either a function ``app(system, **arguments)``,</span>
-<span class="sd">        or a :class:`~pypulseqpp.sequences.SequenceApp` subclass.</span>
-
-<span class="sd">        A function takes the scanner limits, a :class:`pypulseqpp.Opts`, and</span>
-<span class="sd">        the keyword arguments the entries of :attr:`protocol` bind, and</span>
-<span class="sd">        returns a :class:`pypulseqpp.Sequence` or a list of them, which is a</span>
-<span class="sd">        chain: the prescans first and the main sequence last. The defaults</span>
-<span class="sd">        the listing shows are those of its signature, so a</span>
-<span class="sd">        :func:`functools.partial` is an app. It is called by :meth:`generate`</span>
-<span class="sd">        only.</span>
-
-<span class="sd">        A sequence application is constructed under the scanner limits, which</span>
-<span class="sd">        checks the prescription, and designed by :meth:`design`.</span>
+<span class="sd">        A function ``app(system, **arguments)`` that designs the sequence. It</span>
+<span class="sd">        takes the scanner limits, a :class:`pypulseqpp.Opts`, and the keyword</span>
+<span class="sd">        arguments the entries of :attr:`protocol` bind, and returns a</span>
+<span class="sd">        :class:`pypulseqpp.Sequence` or a list of them, which is a chain: the</span>
+<span class="sd">        prescans first and the main sequence last. The defaults the listing</span>
+<span class="sd">        shows are those of its signature, so a :func:`functools.partial` is an</span>
+<span class="sd">        app. :meth:`generate` calls it, and so does an :meth:`evaluate` that</span>
+<span class="sd">        designs the sequence; the default :meth:`evaluate` does not.</span>
 <span class="sd">    protocol : mapping</span>
 <span class="sd">        The entries the operator edits, by key: the interpreter's parameter</span>
 <span class="sd">        names, which are the members of</span>
@@ -580,6 +575,8 @@
 <span class="sd">        not know, which its parser would drop, or with one of the prescription</span>
 <span class="sd">        entries, which pulserver applies itself; or with both ``protocol`` and</span>
 <span class="sd">        ``ui``.</span>
+<span class="sd">    TypeError</span>
+<span class="sd">        When a subclass is defined with a class as ``app``.</span>
 
 <span class="sd">    Warns</span>
 <span class="sd">    -----</span>
@@ -596,7 +593,6 @@
     <span class="n">protocol</span><span class="p">:</span> <span class="n">ClassVar</span><span class="p">[</span><span class="n">Mapping</span><span class="p">[</span><span class="n">ProtocolKey</span><span class="p">,</span> <span class="n">Entry</span><span class="p">]]</span> <span class="o">=</span> <span class="p">{}</span>
 
     <span class="n">_deprecated_alias</span><span class="p">:</span> <span class="n">ClassVar</span><span class="p">[</span><span class="nb">bool</span><span class="p">]</span> <span class="o">=</span> <span class="kc">False</span>
-    <span class="n">_built</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">pp</span><span class="o">.</span><span class="n">Opts</span><span class="p">,</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span> <span class="n">sequences</span><span class="o">.</span><span class="n">SequenceApp</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">__init_subclass__</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">__init_subclass__</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
@@ -622,8 +618,14 @@
                 <span class="ne">DeprecationWarning</span><span class="p">,</span>
                 <span class="n">stacklevel</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
             <span class="p">)</span>
-        <span class="k">if</span> <span class="n">inspect</span><span class="o">.</span><span class="n">isfunction</span><span class="p">(</span><span class="n">declared</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"app"</span><span class="p">)):</span>
-            <span class="bp">cls</span><span class="o">.</span><span class="n">app</span> <span class="o">=</span> <span class="nb">staticmethod</span><span class="p">(</span><span class="n">declared</span><span class="p">[</span><span class="s2">"app"</span><span class="p">])</span>
+        <span class="n">app</span> <span class="o">=</span> <span class="n">declared</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"app"</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">inspect</span><span class="o">.</span><span class="n">isclass</span><span class="p">(</span><span class="n">app</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="bp">cls</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> binds the class </span><span class="si">{</span><span class="n">app</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> as app; app is a "</span>
+                <span class="s2">"function returning a sequence or a list of them"</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="n">inspect</span><span class="o">.</span><span class="n">isfunction</span><span class="p">(</span><span class="n">app</span><span class="p">)</span> <span class="ow">or</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">app</span><span class="p">,</span> <span class="n">functools</span><span class="o">.</span><span class="n">partial</span><span class="p">):</span>
+            <span class="bp">cls</span><span class="o">.</span><span class="n">app</span> <span class="o">=</span> <span class="nb">staticmethod</span><span class="p">(</span><span class="n">app</span><span class="p">)</span>
         <span class="k">if</span> <span class="s2">"ui"</span> <span class="ow">in</span> <span class="n">declared</span><span class="p">:</span>
             <span class="k">if</span> <span class="s2">"protocol"</span> <span class="ow">in</span> <span class="n">declared</span><span class="p">:</span>
                 <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
@@ -700,7 +702,7 @@
 
 <div class="viewcode-block" id="SequencePlugin.evaluate">
 <a class="viewcode-back" href="../../../generated/pulserver.design.SequencePlugin.evaluate.html#pulserver.design.SequencePlugin.evaluate">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">evaluate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">system</span><span class="p">:</span> <span class="n">pp</span><span class="o">.</span><span class="n">Opts</span><span class="p">,</span> <span class="n">protocol</span><span class="p">:</span> <span class="n">Protocol</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Evaluation</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">evaluate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">system</span><span class="p">:</span> <span class="n">pp</span><span class="o">.</span><span class="n">Opts</span><span class="p">,</span> <span class="n">protocol</span><span class="p">:</span> <span class="n">Protocol</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Evaluation</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>  <span class="c1"># noqa: ARG002 -- the signature of the hook a subclass overrides</span>
 <span class="w">        </span><span class="sd">"""Evaluate a requested protocol, or refuse it by raising.</span>
 
 <span class="sd">        The hook a subclass overrides to check a protocol and to state what the</span>
@@ -708,13 +710,8 @@
 <span class="sd">        ``Evaluation(protocol)``. An exception makes the protocol invalid, as</span>
 <span class="sd">        :meth:`validate` describes.</span>
 
-<span class="sd">        The default for a function app accepts the protocol unchanged with no</span>
-<span class="sd">        scan time estimate, and does not call the app. The default for a</span>
-<span class="sd">        sequence application constructs it, which checks the prescription, and</span>
-<span class="sd">        returns its ``scan_time()`` and the protocol with each entry holding</span>
-<span class="sd">        the value the design took, as the application records it with</span>
-<span class="sd">        ``SequenceApp.resolve``; an argument it does not record keeps its</span>
-<span class="sd">        requested value.</span>
+<span class="sd">        The default accepts the protocol unchanged with no scan time estimate,</span>
+<span class="sd">        and does not call the app.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
@@ -728,30 +725,18 @@
 <span class="sd">        Evaluation or None</span>
 <span class="sd">            The protocol to show back, the scan time and a note.</span>
 <span class="sd">        """</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_application</span><span class="p">():</span>
-            <span class="k">return</span> <span class="n">Evaluation</span><span class="p">(</span><span class="n">protocol</span><span class="p">)</span>
-        <span class="n">app</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_application</span><span class="p">(</span><span class="n">system</span><span class="p">,</span> <span class="n">protocol</span><span class="p">)</span>
-        <span class="n">duration</span> <span class="o">=</span> <span class="n">app</span><span class="o">.</span><span class="n">scan_time</span><span class="p">()</span>
-        <span class="n">readback</span> <span class="o">=</span> <span class="n">app</span><span class="o">.</span><span class="n">resolved</span>
-        <span class="n">recorded</span> <span class="o">=</span> <span class="p">{}</span>
-        <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">entry</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">protocol</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
-            <span class="n">value</span> <span class="o">=</span> <span class="n">readback</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="n">entry</span><span class="p">,</span> <span class="s2">"argument"</span><span class="p">,</span> <span class="kc">None</span><span class="p">))</span>
-            <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="n">recorded</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
-        <span class="k">return</span> <span class="n">Evaluation</span><span class="p">(</span><span class="n">protocol</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="n">recorded</span><span class="p">),</span> <span class="n">duration</span><span class="p">)</span></div>
+        <span class="k">return</span> <span class="n">Evaluation</span><span class="p">(</span><span class="n">protocol</span><span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="SequencePlugin.generate">
 <a class="viewcode-back" href="../../../generated/pulserver.design.SequencePlugin.generate.html#pulserver.design.SequencePlugin.generate">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">generate</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span> <span class="n">system</span><span class="p">:</span> <span class="n">pp</span><span class="o">.</span><span class="n">Opts</span><span class="p">,</span> <span class="n">protocol</span><span class="p">:</span> <span class="n">Protocol</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">pp</span><span class="o">.</span><span class="n">Sequence</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="n">pp</span><span class="o">.</span><span class="n">Sequence</span><span class="p">]</span> <span class="o">|</span> <span class="n">sequences</span><span class="o">.</span><span class="n">SequenceApp</span><span class="p">:</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">pp</span><span class="o">.</span><span class="n">Sequence</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="n">pp</span><span class="o">.</span><span class="n">Sequence</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">"""Return what :meth:`design` writes for a protocol.</span>
 
-<span class="sd">        The hook a subclass overrides to build the sequence. The default for a</span>
-<span class="sd">        function app returns ``app(system, **protocol.arguments)``. The default</span>
-<span class="sd">        for a sequence application returns the application constructed from the</span>
-<span class="sd">        arguments; :meth:`design` designs it, with its prescans.</span>
+<span class="sd">        The hook a subclass overrides to build the sequence. The default</span>
+<span class="sd">        returns ``app(system, **protocol.arguments)``.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
@@ -762,12 +747,10 @@
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
-<span class="sd">        pypulseqpp.Sequence or list of pypulseqpp.Sequence or SequenceApp</span>
+<span class="sd">        pypulseqpp.Sequence or list of pypulseqpp.Sequence</span>
 <span class="sd">            A sequence, or a chain of them, prescans first and the main</span>
-<span class="sd">            sequence last, or an application that designs its own chain.</span>
+<span class="sd">            sequence last.</span>
 <span class="sd">        """</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_application</span><span class="p">():</span>
-            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_application</span><span class="p">(</span><span class="n">system</span><span class="p">,</span> <span class="n">protocol</span><span class="p">)</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">app</span><span class="p">(</span><span class="n">system</span><span class="p">,</span> <span class="o">**</span><span class="n">protocol</span><span class="o">.</span><span class="n">arguments</span><span class="p">)</span></div>
 
 
@@ -824,10 +807,9 @@
 <span class="sd">        evaluated protocol is made from ``validate(...).values``.</span>
 
 <span class="sd">        The first file is ``sequence.seq``. Each later file of a chain is</span>
-<span class="sd">        ``sequence_&lt;name&gt;.seq``, ``main`` for the last, and each file names the</span>
-<span class="sd">        next as its ``NextSequence`` definition, so the chain is one scan.</span>
-<span class="sd">        ``name`` is the name of the prescan for a sequence application, and</span>
-<span class="sd">        ``prescan&lt;n&gt;`` for a list of sequences, ``n`` counting from 2.</span>
+<span class="sd">        ``sequence_prescan&lt;n&gt;.seq``, ``n`` counting from 2, or</span>
+<span class="sd">        ``sequence_main.seq`` for the last, and each file names the next as its</span>
+<span class="sd">        ``NextSequence`` definition, so the chain is one scan.</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
@@ -840,26 +822,17 @@
 <span class="sd">        Raises</span>
 <span class="sd">        ------</span>
 <span class="sd">        TypeError</span>
-<span class="sd">            If a function app returns neither a sequence nor a list of them.</span>
+<span class="sd">            If ``app`` returns neither a sequence nor a list of them.</span>
 <span class="sd">        """</span>
-        <span class="k">try</span><span class="p">:</span>
-            <span class="n">validation</span><span class="p">,</span> <span class="n">protocol</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_validated</span><span class="p">(</span><span class="n">system</span><span class="p">,</span> <span class="n">request</span><span class="p">)</span>
-            <span class="k">if</span> <span class="n">protocol</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="k">return</span> <span class="n">validation</span><span class="p">,</span> <span class="p">[]</span>
-            <span class="n">built</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">generate</span><span class="p">(</span><span class="n">system</span><span class="p">,</span> <span class="n">protocol</span><span class="p">)</span>
-            <span class="k">return</span> <span class="n">validation</span><span class="p">,</span> <span class="n">_write</span><span class="p">(</span><span class="n">built</span><span class="p">,</span> <span class="n">Path</span><span class="p">(</span><span class="n">directory</span><span class="p">)</span> <span class="o">/</span> <span class="n">_FIRST_FILE</span><span class="p">)</span>
-        <span class="k">finally</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_built</span> <span class="o">=</span> <span class="kc">None</span></div>
+        <span class="n">validation</span><span class="p">,</span> <span class="n">protocol</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_validated</span><span class="p">(</span><span class="n">system</span><span class="p">,</span> <span class="n">request</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">protocol</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">validation</span><span class="p">,</span> <span class="p">[]</span>
+        <span class="n">built</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">generate</span><span class="p">(</span><span class="n">system</span><span class="p">,</span> <span class="n">protocol</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">validation</span><span class="p">,</span> <span class="n">_write</span><span class="p">(</span><span class="n">built</span><span class="p">,</span> <span class="n">Path</span><span class="p">(</span><span class="n">directory</span><span class="p">)</span> <span class="o">/</span> <span class="n">_FIRST_FILE</span><span class="p">)</span></div>
 
-
-    <span class="nd">@classmethod</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">_is_application</span><span class="p">(</span><span class="bp">cls</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">inspect</span><span class="o">.</span><span class="n">isclass</span><span class="p">(</span><span class="bp">cls</span><span class="o">.</span><span class="n">app</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">issubclass</span><span class="p">(</span><span class="bp">cls</span><span class="o">.</span><span class="n">app</span><span class="p">,</span> <span class="n">sequences</span><span class="o">.</span><span class="n">SequenceApp</span><span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_defaults</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">"""Return the default of each argument of the app, ``inspect.Parameter.empty`` for none."""</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_application</span><span class="p">():</span>
-            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">app</span><span class="o">.</span><span class="n">protocol</span><span class="p">()</span>
         <span class="c1"># The first parameter is the scanner limits.</span>
         <span class="n">arguments</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">inspect</span><span class="o">.</span><span class="n">signature</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">app</span><span class="p">)</span><span class="o">.</span><span class="n">parameters</span><span class="o">.</span><span class="n">values</span><span class="p">())[</span><span class="mi">1</span><span class="p">:]</span>
         <span class="k">return</span> <span class="p">{</span>
@@ -867,18 +840,6 @@
             <span class="k">for</span> <span class="n">argument</span> <span class="ow">in</span> <span class="n">arguments</span>
             <span class="k">if</span> <span class="n">argument</span><span class="o">.</span><span class="n">kind</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="n">argument</span><span class="o">.</span><span class="n">VAR_POSITIONAL</span><span class="p">,</span> <span class="n">argument</span><span class="o">.</span><span class="n">VAR_KEYWORD</span><span class="p">)</span>
         <span class="p">}</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="nf">_application</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span> <span class="n">system</span><span class="p">:</span> <span class="n">pp</span><span class="o">.</span><span class="n">Opts</span><span class="p">,</span> <span class="n">protocol</span><span class="p">:</span> <span class="n">Protocol</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">sequences</span><span class="o">.</span><span class="n">SequenceApp</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""Return the application of a protocol, constructed once for one system and arguments."""</span>
-        <span class="n">arguments</span> <span class="o">=</span> <span class="n">protocol</span><span class="o">.</span><span class="n">arguments</span>
-        <span class="n">held</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_built</span>
-        <span class="k">if</span> <span class="n">held</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">held</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="ow">is</span> <span class="n">system</span> <span class="ow">and</span> <span class="n">held</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">==</span> <span class="n">arguments</span><span class="p">:</span>
-            <span class="k">return</span> <span class="n">held</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span>
-        <span class="n">app</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">app</span><span class="p">(</span><span class="n">system</span><span class="p">,</span> <span class="o">**</span><span class="n">arguments</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_built</span> <span class="o">=</span> <span class="p">(</span><span class="n">system</span><span class="p">,</span> <span class="n">arguments</span><span class="p">,</span> <span class="n">app</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">app</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_validated</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span> <span class="n">system</span><span class="p">:</span> <span class="n">pp</span><span class="o">.</span><span class="n">Opts</span><span class="p">,</span> <span class="n">request</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="n">ProtocolKey</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span>
@@ -963,12 +924,8 @@
     <span class="k">return</span> <span class="n">layout</span> <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">layout</span><span class="o">.</span><span class="n">instances</span><span class="o">.</span><span class="n">definition</span><span class="p">)</span> <span class="k">else</span> <span class="kc">None</span>
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_write</span><span class="p">(</span>
-    <span class="n">built</span><span class="p">:</span> <span class="n">pp</span><span class="o">.</span><span class="n">Sequence</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="n">pp</span><span class="o">.</span><span class="n">Sequence</span><span class="p">]</span> <span class="o">|</span> <span class="n">sequences</span><span class="o">.</span><span class="n">SequenceApp</span><span class="p">,</span> <span class="n">first</span><span class="p">:</span> <span class="n">Path</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
-<span class="w">    </span><span class="sd">"""Write a sequence application, a sequence or a chain of them as signed binary Pulseq; return the paths in play order."""</span>
-    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">built</span><span class="p">,</span> <span class="n">sequences</span><span class="o">.</span><span class="n">SequenceApp</span><span class="p">):</span>
-        <span class="k">return</span> <span class="n">built</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">first</span><span class="p">,</span> <span class="n">offline</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_write</span><span class="p">(</span><span class="n">built</span><span class="p">:</span> <span class="n">pp</span><span class="o">.</span><span class="n">Sequence</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="n">pp</span><span class="o">.</span><span class="n">Sequence</span><span class="p">],</span> <span class="n">first</span><span class="p">:</span> <span class="n">Path</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Write a sequence or a chain of them as signed binary Pulseq; return the paths in play order."""</span>
     <span class="n">chain</span> <span class="o">=</span> <span class="p">[</span><span class="n">built</span><span class="p">]</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">built</span><span class="p">,</span> <span class="n">pp</span><span class="o">.</span><span class="n">Sequence</span><span class="p">)</span> <span class="k">else</span> <span class="n">built</span>
     <span class="k">if</span> <span class="p">(</span>
         <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">chain</span><span class="p">,</span> <span class="nb">list</span> <span class="o">|</span> <span class="nb">tuple</span><span class="p">)</span>

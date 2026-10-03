@@ -538,14 +538,13 @@
 <h1>Scanner sequences<a class="headerlink" href="#scanner-sequences" title="Link to this heading">#</a></h1>
 <p>A sequence app bound to the entries of the scanner protocol.</p>
 <p>A plugin file in the design calls’ plugin directory defines one
-<a class="reference internal" href="../generated/pulserver.design.SequencePlugin.html#pulserver.design.SequencePlugin" title="pulserver.design.SequencePlugin"><code class="xref py py-class docutils literal notranslate"><span class="pre">SequencePlugin</span></code></a> subclass. Its <code class="docutils literal notranslate"><span class="pre">app</span></code> is a pypulseqpp sequence application
-or a function returning sequences, and its <code class="docutils literal notranslate"><span class="pre">protocol</span></code> maps each key of the
-interpreter’s parameter table, a <a class="reference internal" href="../generated/pulserver.protocol.ProtocolKey.html#pulserver.protocol.ProtocolKey" title="pulserver.protocol.ProtocolKey"><code class="xref py py-data docutils literal notranslate"><span class="pre">ProtocolKey</span></code></a>, to an
-entry naming the argument of the app it sets. Its methods evaluate a request
-into the protocol the design plays and write the design. Conversion between the
-UI’s units and the app’s SI arguments, and the rounding of resolved values to
-the precision of a float32 control variable, are described in
-<a class="reference internal" href="../explanations/protocol.html"><span class="doc">Protocol resolution</span></a>.</p>
+<a class="reference internal" href="../generated/pulserver.design.SequencePlugin.html#pulserver.design.SequencePlugin" title="pulserver.design.SequencePlugin"><code class="xref py py-class docutils literal notranslate"><span class="pre">SequencePlugin</span></code></a> subclass. Its <code class="docutils literal notranslate"><span class="pre">app</span></code> is a function returning sequences,
+and its <code class="docutils literal notranslate"><span class="pre">protocol</span></code> maps each key of the interpreter’s parameter table, a
+<a class="reference internal" href="../generated/pulserver.protocol.ProtocolKey.html#pulserver.protocol.ProtocolKey" title="pulserver.protocol.ProtocolKey"><code class="xref py py-data docutils literal notranslate"><span class="pre">ProtocolKey</span></code></a>, to an entry naming the argument of the
+app it sets. Its methods evaluate a request into the protocol the design plays
+and write the design. Conversion between the UI’s units and the app’s SI
+arguments, and the rounding of resolved values to the precision of a float32
+control variable, are described in <a class="reference internal" href="../explanations/protocol.html"><span class="doc">Protocol resolution</span></a>.</p>
 <section id="sequence">
 <h2>Sequence<a class="headerlink" href="#sequence" title="Link to this heading">#</a></h2>
 <div class="pst-scrollable-table-container"><table class="table">

@@ -10,14 +10,14 @@ realize on the sampling rasters, and the shortest echo time the readout
 admits.
 
 A request is resolved by evaluating the protocol under the scanner limits,
-which constructs the application and so designs the sequence, and reading back
-the values the design achieved, as described in :doc:`/explanations/protocol`.
-The sequence is pypulseqpp's shipped ``Gre2DApp``, bound to five protocol
-entries.
+which designs the sequence, and reading back the values the design achieved, as
+described in :doc:`/explanations/protocol`. The sequence is pypulseqpp's
+shipped ``gre2d``, bound to five protocol entries.
 
 Outline:
 
-#. **Scanner sequence.** The binding of the application to the protocol.
+#. **Scanner sequence.** The binding of the function to the protocol, and its
+   evaluation.
 #. **Receiver bandwidth.** Requested and achieved bandwidth for two readout
    lengths.
 #. **Shortest echo time.** The *Minimum* preset against matrix size and
@@ -39,22 +39,31 @@ PAGE_WIDTH = 8.6  # inches, the width of the documentation column
 # Scanner sequence
 # ----------------
 #
-# The binding maps interpreter parameter names to ``init_sequence`` arguments.
-# Times are exchanged in integer microseconds, the field of view in mm, and the
-# *Minimum* preset of TE and TR requests the shortest time the design admits.
-# The application records the echo time, repetition time and receiver
-# bandwidth its design achieves, and the reply carries those values.
+# The binding maps interpreter parameter names to keyword arguments of the
+# function. Times are exchanged in integer microseconds, the field of view in
+# mm, and the *Minimum* preset of TE and TR requests the shortest time the
+# design admits. The evaluation designs the sequence and reads back the echo
+# time and the repetition time, which the sequence records as its ``TE`` and
+# ``TR`` definitions, and the receiver bandwidth, the inverse of the dwell time
+# of its ADC event. The reply carries those values and the scan time.
 
 import numpy as np
 import pypulseqpp as pp
-from pypulseqpp.sequences.sequence.gre2D_sequence import Gre2DApp
+from pypulseqpp import sequences
+from pypulseqpp.sequences.sequence.gre2D_sequence import gre2d
 
-from pulserver.design import FloatParam, IntParam, SequencePlugin, TimeParam
+from pulserver.design import (
+    Evaluation,
+    FloatParam,
+    IntParam,
+    SequencePlugin,
+    TimeParam,
+)
 from pulserver.protocol import TEPreset, TRPreset, UIParam, format_listing
 
 
 class Gre2D(SequencePlugin):
-    app = Gre2DApp
+    app = gre2d
     protocol = {
         UIParam.TE: TimeParam(
             "te", range_min=1000, range_max=80000, presets={TEPreset.MINIMUM: None}
@@ -70,6 +79,16 @@ class Gre2D(SequencePlugin):
         ),
         UIParam.NX: IntParam("n_x", range_min=32, range_max=512, range_incr=2),
     }
+
+    def evaluate(self, system, protocol):
+        seq = self.app(system, **protocol.arguments)
+        dwell = seq.libraries().adc[0, 1]
+        achieved = {
+            UIParam.TE: seq.definitions["TE"][0],
+            UIParam.TR: seq.definitions["TR"][0],
+            UIParam.BANDWIDTH: 1.0 / dwell,
+        }
+        return Evaluation(protocol.replace(achieved), sequences.duration(seq))
 
 
 gre = Gre2D()
