@@ -581,6 +581,10 @@ class ReconUnit:
         Place readouts. ``False`` only records them in :attr:`ReconData.acquisitions`.
     dtype
         Complex dtype of the k-space arrays.
+    merged
+        Positions of the plugin's ``merge`` counters by encoding space index:
+        the combinations of their values that the closing flag has to arrive
+        at, in addition to those along the axes. 1 where a space is absent.
 
     Attributes
     ----------
@@ -596,20 +600,24 @@ class ReconUnit:
         *,
         buffered: bool = True,
         dtype: Any = np.complex64,
+        merged: Mapping[int, int] | None = None,
     ) -> None:
         branch, self.space_index, counters = key
         self.key = key
         self.spaces = spaces
         self.buffered = buffered
         self.dtype = dtype
+        self.merged = dict(merged or {})
         self.data = ReconData(branch, counters=dict(counters))
         self._reference: list[tuple[Any, np.ndarray, tuple[int, ...]]] = []
 
     @property
     def combinations(self) -> int:
-        """Number of positions along the unit's axes, 1 where its space is not described."""
+        """Number of positions along the unit's axes and merged counters, 1 where its space is not described."""
         space = self.spaces.get(self.space_index)
-        return 1 if space is None else math.prod(space.loop_sizes)
+        if space is None:
+            return 1
+        return math.prod(space.loop_sizes) * self.merged.get(self.space_index, 1)
 
     def add_acquisition(
         self, acquisition: Any, readout: Any, placed: Any = None
