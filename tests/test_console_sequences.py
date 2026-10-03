@@ -39,9 +39,11 @@ SMALLER = {
     "gre3d": {"nslices": 8},
     "gre_multiecho3d": {"nslices": 8, "num_echoes": 2},
     "se3d": {"nslices": 8},
+    "gre_stack_of_blades3d": {**NONCARTESIAN, "nslices": 8},
     "gre_stack_of_stars3d": {**NONCARTESIAN, "nslices": 8},
     "gre_stack_of_spirals3d": {**NONCARTESIAN, "nslices": 8},
     "mprage3d": {"nslices": 8},
+    "se_stack_of_blades3d": {**NONCARTESIAN, "nslices": 8},
     "se_stack_of_stars3d": {**NONCARTESIAN, "nslices": 8},
     "se_stack_of_spirals3d": {**NONCARTESIAN, "nslices": 8},
 }
