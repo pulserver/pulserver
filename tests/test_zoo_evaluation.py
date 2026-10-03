@@ -41,6 +41,7 @@ CHANGED = {
     "bssfp2d": {"flip": 30.0, "ny": 48},
     "bssfp3d": {"flip": 30.0, "ny": 32, "nslices": 8},
     "epi2d": {"flip": 60.0, "nx": 64, "ny": 32},
+    "epi3d": {"flip": 60.0, "nx": 64, "ny": 32, "nslices": 8},
     "fse3d": {"nx": 64, "ny": 32, "nslices": 16, "etl": 16},
     "gre2d": {"flip": 20.0, "nx": 64, "ny": 48},
     "gre3d": {"flip": 20.0, "nx": 64, "ny": 32, "nslices": 16},
@@ -58,6 +59,13 @@ CHANGED = {
     "gre_stack_of_spirals3d": {"flip": 20.0, "nx": 64, "nslices": 8},
     "gre_stack_of_stars3d": {"flip": 20.0, "nx": 64, "nslices": 8},
     "mprage3d": {"flip": 12.0, "nx": 64, "ny": 32, "nslices": 16},
+    "mprage_stack_of_spirals3d": {
+        "flip": 20.0,
+        "nx": 64,
+        "nslices": 8,
+        "num_shots": 8,
+    },
+    "mprage_stack_of_stars3d": {"flip": 20.0, "nx": 64, "nslices": 8},
     "se2d": {"nx": 64, "ny": 48},
     "se3d": {"nx": 64, "ny": 32, "nslices": 16},
     "se_radial2d": {"nx": 64},
@@ -82,6 +90,21 @@ SCANS = [pytest.param(name, {}, id=name) for name in SHIPPED] + [
         ("epi2d", "packets", {"nslices": 7, "TR": 900000, "Ry": 2, "num_shots": 2}),
         ("epi2d", "frames", {"nslices": 12, "TR": 5000000, "num_frames": 3}),
         ("epi2d", "shortest", {"nslices": 6, "TR": TRPreset.MINIMUM}),
+        (
+            "epi3d",
+            "undersampled",
+            {"Ry": 2, "Rz": 2, "nx": 64, "ny": 64, "nslices": 16},
+        ),
+        (
+            "epi3d",
+            "shots",
+            {"Ry": 3, "Rz": 2, "num_shots": 2, "nx": 64, "ny": 96, "nslices": 12},
+        ),
+        (
+            "epi3d",
+            "frames",
+            {"num_frames": 3, "TR": 3000000, "nx": 64, "ny": 32, "nslices": 8},
+        ),
         (
             "fse3d",
             "shortest",
@@ -126,6 +149,21 @@ SCANS = [pytest.param(name, {}, id=name) for name in SHIPPED] + [
             "undersampled",
             {"nslices": 12, "Ry": 2, "Rz": 2, "prep_time": 600000, "nx": 64, "ny": 48},
         ),
+        (
+            "mprage_stack_of_spirals3d",
+            "recovery",
+            {"nslices": 9, "num_shots": 8, "TR": 2500000, "prep_time": 700000},
+        ),
+        (
+            "mprage_stack_of_stars3d",
+            "recovery",
+            {"nslices": 9, "nx": 64, "TR": 3000000, "prep_time": 500000},
+        ),
+        (
+            "mprage_stack_of_stars3d",
+            "shortest",
+            {"nslices": 8, "nx": 64, "TR": TRPreset.MINIMUM},
+        ),
         ("se2d", "packets", {"nslices": 7, "TR": 60000, "Ry": 3}),
         ("se_spiral2d", "packets", {"nslices": 25, "TR": 300000, "num_shots": 8}),
         ("se_stack_of_blades3d", "blades", {"nslices": 5, "TR": 30000, "nx": 100}),
@@ -151,6 +189,9 @@ REJECTED = [
         "epi2d", {"nslices": 12, "TR": 2000000, "num_frames": 5}, id="epi2d-frames"
     ),
     pytest.param(
+        "epi3d", {"nx": 64, "ny": 32, "nslices": 8, "TR": 100000}, id="epi3d-short"
+    ),
+    pytest.param(
         "fse3d",
         {"TR": 30000, "etl": 16, "nslices": 16, "nx": 64, "ny": 32},
         id="fse3d-short",
@@ -168,6 +209,16 @@ REJECTED = [
         "mprage3d",
         {"TR": 500000, "nslices": 16, "nx": 64, "ny": 32},
         id="mprage3d-short",
+    ),
+    pytest.param(
+        "mprage_stack_of_spirals3d",
+        {"num_shots": 8, "TR": 500000},
+        id="mprage_stack_of_spirals3d-short",
+    ),
+    pytest.param(
+        "mprage_stack_of_stars3d",
+        {"nx": 64, "TR": 1000000},
+        id="mprage_stack_of_stars3d-short",
     ),
     pytest.param("se2d", {"nslices": 4, "TR": 12000}, id="se2d-short"),
     pytest.param(
@@ -189,8 +240,11 @@ LARGE = {
 # The RF uses of one TR at the default protocol, in play order, where a TR is
 # not one excitation followed, in a spin echo, by one refocusing pulse; by name.
 TRAINS: dict[str, list[str]] = {
+    "epi3d": ["excitation"] * 32,
     "fse3d": ["excitation"] + ["refocusing"] * 45,
     "mprage3d": ["inversion"] + ["excitation"] * 256,
+    "mprage_stack_of_spirals3d": ["inversion"] + ["excitation"] * 16,
+    "mprage_stack_of_stars3d": ["inversion"] + ["excitation"] * 403,
 }
 
 
@@ -357,6 +411,42 @@ def test_an_evaluation_states_as_its_layout_a_regular_tr_of_the_design(
     )
 
 
+@pytest.mark.parametrize(
+    ("name", "changes"),
+    [
+        ("mprage_stack_of_spirals3d", {"nslices": 16, "num_shots": 8}),
+        ("mprage_stack_of_stars3d", {"nslices": 16, "nx": 64}),
+    ],
+)
+def test_an_inversion_train_evaluation_counts_the_shots_and_excitations_of_an_undersampled_scan(
+    zoo, monkeypatch, name, changes
+):
+    plugin = zoo[name]
+    monkeypatch.setattr(
+        plugin,
+        "app",
+        functools.partial(
+            plugin.app, ry=2, rz=2, n_acs_z=4, partial_fourier_z=0.875, n_dummy=2
+        ),
+    )
+    protocol = _protocol(plugin, changes)
+
+    evaluation = plugin.evaluate(SYSTEM, protocol)
+
+    main = _main(plugin, protocol)
+    expected = rf_layout(main, scaled=True)
+    rounding = SYSTEM.block_duration_raster * _excitations(main)
+    assert abs(evaluation.duration - main.duration()[0]) <= rounding + 1e-9
+    assert evaluation.protocol.to_wire() == (
+        protocol.replace(achieved(plugin, main)).to_wire()
+    )
+    assert evaluation.rf_layout.period == pytest.approx(expected.period, rel=1e-12)
+    assert evaluation.rf_layout.instances.definition.tolist() == (
+        expected.instances.definition.tolist()
+    )
+    assert len(expected.instances.definition) > 2
+
+
 @pytest.mark.parametrize(("name", "changes"), REJECTED)
 def test_an_evaluation_rejects_a_tr_the_design_rejects(zoo, name, changes):
     plugin = zoo[name]
@@ -402,21 +492,38 @@ def test_a_zoo_evaluation_designs_two_trs_at_most_however_large_the_prescription
 ):
     plugin = zoo[name]
     app = plugin.app
-    designed = []
+    designed, built = [], []
 
     @functools.wraps(app)
     def recording(system, **arguments):
         designed.append(app(system, **arguments))
         return designed[-1]
 
-    monkeypatch.setattr(plugin, "app", recording)
-    changes = {key: value for key, value in LARGE.items() if key in plugin.protocol}
-    plugin.evaluate(SYSTEM, _protocol(plugin, changes))
+    initialise = pp.Sequence.__init__
 
-    [chain] = designed
-    main = _chain(chain)[-1]
-    rounding = SYSTEM.block_duration_raster * _excitations(main)
-    assert main.duration()[0] <= 2 * main.definitions["TR"][0] + rounding
+    def recording_init(self, *args, **kwargs):
+        initialise(self, *args, **kwargs)
+        built.append(self)
+
+    changes = {key: value for key, value in LARGE.items() if key in plugin.protocol}
+    protocol = _protocol(plugin, changes)
+    monkeypatch.setattr(plugin, "app", recording)
+    monkeypatch.setattr(pp.Sequence, "__init__", recording_init)
+    evaluation = plugin.evaluate(SYSTEM, protocol)
+
+    # An evaluation designs through the app once, or builds the modules of one
+    # TR itself, and the sequences it builds hold at most two TRs of the layout.
+    assert len(designed) <= 1
+    if designed:
+        main = _chain(designed[0])[-1]
+        tr = main.definitions["TR"][0]
+        rounding = SYSTEM.block_duration_raster * _excitations(main)
+        assert main.duration()[0] <= 2 * tr + rounding
+    else:
+        assert built
+        for sequence in built:
+            rounding = SYSTEM.block_duration_raster * _excitations(sequence)
+            assert sequence.duration()[0] <= 2 * evaluation.rf_layout.period + rounding
 
 
 @pytest.mark.parametrize("name", SHIPPED)

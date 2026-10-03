@@ -35,6 +35,7 @@ SMALLER = {
     "se_radial2d": NONCARTESIAN,
     "se_spiral2d": NONCARTESIAN,
     "epi2d": {"bandwidth": 50e3},
+    "epi3d": {"nslices": 8},
     "fse3d": {"nslices": 8},
     "gre3d": {"nslices": 8},
     "gre_multiecho3d": {"nslices": 8, "num_echoes": 2},
@@ -46,6 +47,8 @@ SMALLER = {
     "se_stack_of_blades3d": {**NONCARTESIAN, "nslices": 8},
     "se_stack_of_stars3d": {**NONCARTESIAN, "nslices": 8},
     "se_stack_of_spirals3d": {**NONCARTESIAN, "nslices": 8},
+    "mprage_stack_of_stars3d": {**NONCARTESIAN, "nslices": 8},
+    "mprage_stack_of_spirals3d": {**NONCARTESIAN, "nslices": 8},
 }
 # Normalised correlation with the Cartesian gradient echo's image of the same
 # vials: below it on a contrast of its own, a regularised NUFFT's residual
@@ -132,7 +135,7 @@ def test_a_console_sequence_images_the_vials_where_the_cartesian_gradient_echo_d
 
     assert images
     if name.endswith("3d"):
-        # The vials lie in the partition at the slab's centre, of each echo.
+        # The vials lie in the partition at the slab's centre, of each echo or volume.
         partitions = {**SMALL, **SMALLER.get(name, {})}["nslices"]
         assert len(images) % partitions == 0
         images = images[partitions // 2 :: partitions]
