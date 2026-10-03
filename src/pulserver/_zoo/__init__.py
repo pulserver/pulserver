@@ -14,6 +14,7 @@ ZOO_PAIRS: dict[str, str] = {
     "gre_multiecho3d": "pics",
     "gre_radial2d": "nufft",
     "gre_spiral2d": "nufft",
+    "gre_stack_of_blades3d": "nufft",
     "gre_stack_of_spirals3d": "nufft",
     "gre_stack_of_stars3d": "nufft",
     "mprage3d": "pics_train",
@@ -21,6 +22,7 @@ ZOO_PAIRS: dict[str, str] = {
     "se3d": "pics",
     "se_radial2d": "nufft",
     "se_spiral2d": "nufft",
+    "se_stack_of_blades3d": "nufft",
     "se_stack_of_spirals3d": "nufft",
     "se_stack_of_stars3d": "nufft",
 }
