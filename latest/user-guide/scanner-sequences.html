@@ -708,18 +708,24 @@ the reconstruction client of a scanner names one in its config
 <p>A 3D sequence takes its number of partitions from the number of slices. The
 Cartesian ones take <code class="docutils literal notranslate"><span class="pre">Ry</span></code>, and the 3D ones <code class="docutils literal notranslate"><span class="pre">Rz</span></code>, as their undersampling.</p>
 <p>Each shipped plugin binds the function of its pypulseqpp sequence and evaluates
-a protocol by designing the chain the function returns
-(<a class="reference internal" href="#evaluating-a-protocol"><span class="std std-ref">Evaluating a protocol</span></a>). The scan time is the summed duration of the
-chain. Where the plugin has the entry, the echo time and the repetition time are
-the <code class="docutils literal notranslate"><span class="pre">TE</span></code> and <code class="docutils literal notranslate"><span class="pre">TR</span></code> definitions of the main sequence, the receiver bandwidth is the
-inverse of the dwell time of its first ADC event, and the slice thickness is its
-<code class="docutils literal notranslate"><span class="pre">SliceThickness</span></code> definition; a multi-echo sequence lists every echo time, and the
-<code class="docutils literal notranslate"><span class="pre">TE</span></code> entry holds the first. A prescription the design refuses is invalid with the
-message of its error. The RF layout is that of the main sequence, whose period is
-its duration (<a class="reference internal" href="#stating-the-rf-layout"><span class="std std-ref">Stating the RF layout</span></a>). The flip angle is the control of
-every excitation of the gradient-echo, balanced steady-state and EPI plugins,
-which have a <code class="docutils literal notranslate"><span class="pre">flip</span></code> entry. The spin-echo plugins have none, and the amplitude of
-every one of their pulses is that of the design.</p>
+a protocol by calling it for one repetition of the scan, one line, partition,
+spoke or interleaf of one slice without dummy repetitions
+(<a class="reference internal" href="#evaluating-a-protocol"><span class="std std-ref">Evaluating a protocol</span></a>). The scan time is the duration of the repetition
+times the number of repetitions the prescription plays, with the slices that
+share a TR counted in the packets the sequence plays them in. The values are
+those the main sequence states for the prescription: where the plugin has the
+entry, the echo time and the repetition time in its <code class="docutils literal notranslate"><span class="pre">TE</span></code> and <code class="docutils literal notranslate"><span class="pre">TR</span></code> definitions,
+the receiver bandwidth as the inverse of the dwell time of its first ADC event,
+and the slice thickness in its <code class="docutils literal notranslate"><span class="pre">SliceThickness</span></code> definition; a multi-echo
+sequence lists every echo time, and the <code class="docutils literal notranslate"><span class="pre">TE</span></code> entry holds the first. A
+prescription the design refuses is invalid with the message of its error. The
+RF layout is the first TR of the repetition, its shot repeated once per slice of
+the largest packet, with the TR as its period; for the balanced steady state it
+is the TR after the half-angle pulse (<a class="reference internal" href="#stating-the-rf-layout"><span class="std std-ref">Stating the RF layout</span></a>). The flip
+angle is the control of every excitation of the gradient-echo, balanced
+steady-state and EPI plugins, which have a <code class="docutils literal notranslate"><span class="pre">flip</span></code> entry. The spin-echo plugins
+have none, and the amplitude of their excitation and refocusing pulses is that
+of the design.</p>
 </section>
 <section id="resolving-a-protocol">
 <h2>Resolving a protocol<a class="headerlink" href="#resolving-a-protocol" title="Link to this heading">#</a></h2>
@@ -856,34 +862,36 @@ writes nothing for an invalid request.</p>
 <section id="stating-the-rf-layout">
 <span id="id4"></span><h2>Stating the RF layout<a class="headerlink" href="#stating-the-rf-layout" title="Link to this heading">#</a></h2>
 <p>An evaluation may state the RF its protocol plays, from which a scanner
-estimates the RF of a prescription before the design is generated.
+estimates the RF of a prescription before the design is generated. The layout is
+one TR: the RF instances one TR plays, and the TR as its <code class="docutils literal notranslate"><span class="pre">period</span></code>.
 <a class="reference internal" href="../generated/pulserver.design.RfLayout.of.html#pulserver.design.RfLayout.of" title="pulserver.design.RfLayout.of"><code class="xref py py-meth docutils literal notranslate"><span class="pre">RfLayout.of</span></code></a> takes the RF instances of a
-sequence, as <a class="reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.Sequence.rf_instances.html#pypulseqpp.Sequence.rf_instances" title="(in pypulseqpp latest)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">pypulseqpp.Sequence.rf_instances()</span></code></a> returns them, and the
-control each instance’s amplitude follows: the flip angle, <code class="docutils literal notranslate"><span class="pre">UIParam.FLIP</span></code>, or a
-float user entry, <code class="docutils literal notranslate"><span class="pre">UIParam.user_value(n)</span></code>, either declared in <code class="docutils literal notranslate"><span class="pre">protocol</span></code>. One
-control applies to every instance; a list gives one per instance in play order,
-<code class="docutils literal notranslate"><span class="pre">None</span></code> for an instance no entry scales. The scanner multiplies the amplitude of
-an instance by the ratio of the value of its control in the protocol it plays to
-the value in the evaluated protocol. The <code class="docutils literal notranslate"><span class="pre">period</span></code> is the time in seconds over
-which the instances repeat, and the duration of the sequence where omitted:</p>
+sequence that is one TR, as <a class="reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.Sequence.rf_instances.html#pypulseqpp.Sequence.rf_instances" title="(in pypulseqpp latest)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">pypulseqpp.Sequence.rf_instances()</span></code></a> returns
+them, and the control each instance’s amplitude follows: the flip angle,
+<code class="docutils literal notranslate"><span class="pre">UIParam.FLIP</span></code>, or a float user entry, <code class="docutils literal notranslate"><span class="pre">UIParam.user_value(n)</span></code>, either declared
+in <code class="docutils literal notranslate"><span class="pre">protocol</span></code>. One control applies to every instance; a list gives one per
+instance in play order, <code class="docutils literal notranslate"><span class="pre">None</span></code> for an instance no entry scales. The scanner
+multiplies the amplitude of an instance by the ratio of the value of its control
+in the protocol it plays to the value in the evaluated protocol. The <code class="docutils literal notranslate"><span class="pre">period</span></code> is
+the TR in seconds, and the duration of the sequence where omitted:</p>
 <div class="highlight-pycon notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">pulserver.design</span><span class="w"> </span><span class="kn">import</span> <span class="n">RfLayout</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">pulserver.protocol</span><span class="w"> </span><span class="kn">import</span> <span class="n">format_rf_layout</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">Costed</span><span class="p">(</span><span class="n">PulseAcquire</span><span class="p">):</span>
 <span class="gp">... </span>    <span class="k">def</span><span class="w"> </span><span class="nf">evaluate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">system</span><span class="p">,</span> <span class="n">protocol</span><span class="p">):</span>
-<span class="gp">... </span>        <span class="n">seq</span> <span class="o">=</span> <span class="n">pulse_acquire</span><span class="p">(</span><span class="n">system</span><span class="p">,</span> <span class="o">**</span><span class="n">protocol</span><span class="o">.</span><span class="n">arguments</span><span class="p">)</span>
-<span class="gp">... </span>        <span class="n">layout</span> <span class="o">=</span> <span class="n">RfLayout</span><span class="o">.</span><span class="n">of</span><span class="p">(</span><span class="n">seq</span><span class="p">,</span> <span class="n">UIParam</span><span class="o">.</span><span class="n">FLIP</span><span class="p">)</span>
-<span class="gp">... </span>        <span class="k">return</span> <span class="n">Evaluation</span><span class="p">(</span><span class="n">protocol</span><span class="p">,</span> <span class="n">seq</span><span class="o">.</span><span class="n">duration</span><span class="p">()[</span><span class="mi">0</span><span class="p">],</span> <span class="n">rf_layout</span><span class="o">=</span><span class="n">layout</span><span class="p">)</span>
+<span class="gp">... </span>        <span class="n">one_tr</span> <span class="o">=</span> <span class="n">pulse_acquire</span><span class="p">(</span><span class="n">system</span><span class="p">,</span> <span class="o">**</span><span class="p">(</span><span class="n">protocol</span><span class="o">.</span><span class="n">arguments</span> <span class="o">|</span> <span class="p">{</span><span class="s2">"averages"</span><span class="p">:</span> <span class="mi">1</span><span class="p">}))</span>
+<span class="gp">... </span>        <span class="n">layout</span> <span class="o">=</span> <span class="n">RfLayout</span><span class="o">.</span><span class="n">of</span><span class="p">(</span><span class="n">one_tr</span><span class="p">,</span> <span class="n">UIParam</span><span class="o">.</span><span class="n">FLIP</span><span class="p">)</span>
+<span class="gp">... </span>        <span class="n">scan_time</span> <span class="o">=</span> <span class="n">protocol</span><span class="p">[</span><span class="n">UIParam</span><span class="o">.</span><span class="n">NEX</span><span class="p">]</span> <span class="o">*</span> <span class="n">protocol</span><span class="p">[</span><span class="n">UIParam</span><span class="o">.</span><span class="n">TR</span><span class="p">]</span>
+<span class="gp">... </span>        <span class="k">return</span> <span class="n">Evaluation</span><span class="p">(</span><span class="n">protocol</span><span class="p">,</span> <span class="n">scan_time</span><span class="p">,</span> <span class="n">rf_layout</span><span class="o">=</span><span class="n">layout</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">reply</span> <span class="o">=</span> <span class="n">Costed</span><span class="p">()</span><span class="o">.</span><span class="n">validate</span><span class="p">(</span><span class="n">system</span><span class="p">,</span> <span class="p">{</span><span class="s2">"nex"</span><span class="p">:</span> <span class="mi">4</span><span class="p">})</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">format_rf_layout</span><span class="p">(</span><span class="n">reply</span><span class="o">.</span><span class="n">rf_layout</span><span class="p">),</span> <span class="n">end</span><span class="o">=</span><span class="s2">""</span><span class="p">)</span>
 <span class="go">[RfLayout]</span>
-<span class="go">period 0.4</span>
-<span class="go">run 0 1 flip 4</span>
+<span class="go">period 0.1</span>
+<span class="go">run 0 1 flip 1</span>
 <span class="go">[RfLayout End]</span>
 
 </pre></div>
 </div>
-<p>An evaluation may build one representative repetition, a TR, a shot or a
-train, and state its <code class="docutils literal notranslate"><span class="pre">period</span></code>: <code class="docutils literal notranslate"><span class="pre">RfLayout.of(seq,</span> <span class="pre">UIParam.FLIP,</span> <span class="pre">period=tr)</span></code>.</p>
+<p>A sequence shorter than the TR, such as one TR without its closing delay, is
+stated with the TR: <code class="docutils literal notranslate"><span class="pre">RfLayout.of(seq,</span> <span class="pre">UIParam.FLIP,</span> <span class="pre">period=tr)</span></code>.</p>
 <p>The layout is optional. An evaluation that states none is valid and states no
 estimate, and one whose control is not an entry of <code class="docutils literal notranslate"><span class="pre">protocol</span></code>, or has no
 positive value in the evaluated protocol, is invalid. What the scanner checks

@@ -569,12 +569,20 @@ nothing, and a plugin overrides
 <li><p>The evaluation returns the protocol the design achieves, converted back to
 wire values, with the scan time, a note and, optionally, the RF layout
 (<a class="reference internal" href="#rf-layout"><span class="std std-ref">RF layout</span></a>). An evaluation that calls the app reads the values from
-the sequences it designed: the shipped plugins read the echo time and the
-repetition time from the <code class="docutils literal notranslate"><span class="pre">TE</span></code> and <code class="docutils literal notranslate"><span class="pre">TR</span></code> definitions of the main sequence, the
-receiver bandwidth from the dwell time of its ADC event and the slice
-thickness from its <code class="docutils literal notranslate"><span class="pre">SliceThickness</span></code> definition, and an argument they do not
-read keeps its requested value.</p></li>
+the sequences it designed: the shipped plugins return the values the main
+sequence states for the prescription, the echo time and the repetition time
+in its <code class="docutils literal notranslate"><span class="pre">TE</span></code> and <code class="docutils literal notranslate"><span class="pre">TR</span></code> definitions, the receiver bandwidth as the inverse of the
+dwell time of its ADC event and the slice thickness in its <code class="docutils literal notranslate"><span class="pre">SliceThickness</span></code>
+definition, and an argument they do not read keeps its requested value.</p></li>
 </ol>
+<p>An evaluation answers every edit of an entry, so its duration adds to the
+latency of the UI, and a design of the whole scan grows with the matrix and the
+slices. A scan repeats one TR, so the shipped plugins design one repetition of
+it, one line, partition, spoke or interleaf of one slice without dummy
+repetitions, and extrapolate: the scan time is the duration of a repetition
+times the number of repetitions the prescription plays, and slices that share a
+TR are dealt into the packets the sequence plays them in, from which the TR and
+the scan time follow.</p>
 <p>The prescription is not a design argument. Every listing ends with its
 entries, not editable in the UI, which the interpreter fills from the
 scanner’s prescription: the field-of-view offset in <code class="docutils literal notranslate"><span class="pre">fov_offset_x</span></code>,
@@ -592,17 +600,16 @@ makes the request invalid, and the message names only its type. A request that
 names an entry the protocol does not declare is invalid, and the message names
 the entry.</p>
 <p>A valid reply carries the resolved values, a note, and the scan time in
-seconds the evaluation states: the summed duration of the sequences the shipped
-plugins design. An evaluation that states no scan time, <code class="docutils literal notranslate"><span class="pre">0.0</span></code>, is valid, and the
-reply reports the scan time as unknown.</p>
+seconds the evaluation states. An evaluation that states no scan time, <code class="docutils literal notranslate"><span class="pre">0.0</span></code>, is
+valid, and the reply reports the scan time as unknown.</p>
 </section>
 <section id="rf-layout">
 <span id="id1"></span><h2>RF layout<a class="headerlink" href="#rf-layout" title="Link to this heading">#</a></h2>
 <p>The RF a protocol plays depends on the protocol. An evaluation may state it as
 an <a class="reference internal" href="../generated/pulserver.design.RfLayout.html#pulserver.design.RfLayout" title="pulserver.design.RfLayout"><code class="xref py py-class docutils literal notranslate"><span class="pre">RfLayout</span></code></a>, from which a scanner estimates the RF of
-a prescription without designing it: the RF definitions of a sequence, its RF
-instances in play order, and for each instance the protocol entry its amplitude
-follows.</p>
+a prescription without designing it: the RF definitions of a sequence, the RF
+instances of one TR in play order, and for each instance the protocol entry its
+amplitude follows.</p>
 <p>A definition is one RF pulse: a complex waveform at unit peak magnitude, its
 timing and its use. Instances of a definition differ in amplitude and in
 frequency and phase offset. In the sequence an evaluation builds, the amplitude
@@ -622,15 +629,16 @@ evaluation of the validation. A protocol that changes a flip angle changes the
 peak of the definition in its own evaluation, and the amplitude stated includes
 that change, so that the product of the amplitude and the listed <code class="docutils literal notranslate"><span class="pre">peak_hz</span></code> is the
 peak RF amplitude the instance plays.</p>
-<p>The layout need not hold the scan. The instances repeat over a period, and an
-evaluation that builds one representative repetition, a TR, a shot or a train,
-states the instances of that repetition and its <code class="docutils literal notranslate"><span class="pre">period</span></code>, so that the size of
-the layout does not depend on the matrix. A definition is named by its number in
-the sequence the evaluation builds, in the order of first play. The listing
-carries the definitions of the evaluation at the default protocol, and a layout
-names the pulses of the listing only where the protocol does not change which
-pulses are played first: the length of a train, a flip angle schedule and the
-matrix do not, and a protocol that adds a preparation pulse does.</p>
+<p>A layout is one TR: the instances one TR plays, and the TR as its <code class="docutils literal notranslate"><span class="pre">period</span></code>,
+over which a scanner averages their RF. Its size does not depend on the matrix.
+The shipped plugins state the first TR of the repetition they design, its shot
+repeated once per slice of the largest packet, and a balanced steady state the
+TR after its half-angle pulse. A definition is named by its number in the
+sequence the evaluation builds, in the order of first play. The listing carries
+the definitions of the evaluation at the default protocol, and a layout names
+the pulses of the listing only where the protocol does not change which pulses
+are played first: the length of a train, a flip angle schedule and the matrix do
+not, and a protocol that adds a preparation pulse does.</p>
 <p>The layout is an estimate for the prescription. An evaluation that states none
 states no estimate and is valid, and what the scanner checks before the scan is
 the stored design (<a class="reference internal" href="designs.html"><span class="doc">Designs and the design store</span></a>).</p>
@@ -739,7 +747,7 @@ run &lt;index&gt; &lt;amplitude&gt; &lt;control|-&gt; &lt;count&gt;
 [RfLayout End]
 </pre></div>
 </div>
-<p><code class="docutils literal notranslate"><span class="pre">period</span></code> is the time in seconds over which the instances repeat. The <code class="docutils literal notranslate"><span class="pre">amplitude</span></code>
+<p><code class="docutils literal notranslate"><span class="pre">period</span></code> is the TR in seconds, over which the instances repeat. The <code class="docutils literal notranslate"><span class="pre">amplitude</span></code>
 of a run is unitless: the peak RF amplitude of its instances over the <code class="docutils literal notranslate"><span class="pre">peak_hz</span></code>
 the listing states for the definition, so that <code class="docutils literal notranslate"><span class="pre">amplitude</span> <span class="pre">×</span> <span class="pre">peak_hz</span> <span class="pre">×</span> <span class="pre">waveform</span></code>
 is what an instance plays. The host reads those peaks by evaluating the plugin

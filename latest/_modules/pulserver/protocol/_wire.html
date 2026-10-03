@@ -814,12 +814,12 @@
 <a class="viewcode-back" href="../../../generated/pulserver.protocol.RfLayoutRecord.html#pulserver.protocol.RfLayoutRecord">[docs]</a>
 <span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 <span class="k">class</span><span class="w"> </span><span class="nc">RfLayoutRecord</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""The contents of an ``[RfLayout]`` block, one entry per instance in play order.</span>
+<span class="w">    </span><span class="sd">"""The contents of an ``[RfLayout]`` block, one entry per instance of one TR in play order.</span>
 
 <span class="sd">    Attributes</span>
 <span class="sd">    ----------</span>
 <span class="sd">    period</span>
-<span class="sd">        The time in seconds over which the instances repeat.</span>
+<span class="sd">        The TR in seconds.</span>
 <span class="sd">    definition</span>
 <span class="sd">        The number of the definition each instance plays.</span>
 <span class="sd">    amplitude</span>

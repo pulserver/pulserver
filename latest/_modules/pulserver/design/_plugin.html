@@ -519,11 +519,11 @@
 <span class="sd">        A note shown with the valid protocol. Whitespace, newlines included, is</span>
 <span class="sd">        folded to single spaces on the wire.</span>
 <span class="sd">    rf_layout</span>
-<span class="sd">        The RF the protocol plays, from which a scanner estimates the RF of a</span>
-<span class="sd">        protocol before it is designed. ``()`` or ``[]``, the default, states no</span>
-<span class="sd">        estimate and is not invalid. Every control of the layout must be an</span>
-<span class="sd">        entry of :attr:`SequencePlugin.protocol` whose value in ``protocol`` is</span>
-<span class="sd">        positive, or the protocol is invalid.</span>
+<span class="sd">        The RF one TR of the protocol plays, from which a scanner estimates the</span>
+<span class="sd">        RF of a protocol before it is designed. ``()`` or ``[]``, the default,</span>
+<span class="sd">        states no estimate and is not invalid. Every control of the layout must</span>
+<span class="sd">        be an entry of :attr:`SequencePlugin.protocol` whose value in</span>
+<span class="sd">        ``protocol`` is positive, or the protocol is invalid.</span>
 <span class="sd">    """</span>
 
     <span class="n">protocol</span><span class="p">:</span> <span class="n">Protocol</span>

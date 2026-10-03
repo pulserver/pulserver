@@ -536,7 +536,7 @@
 <dt class="sig sig-object py" id="pulserver.design.RfLayout">
 <span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">pulserver.design.</span></span><span class="sig-name descname"><span class="pre">RfLayout</span></span><a class="reference internal" href="../_modules/pulserver/design/_rf.html#RfLayout"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.design.RfLayout" title="Link to this definition">#</a></dt>
 <dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/builtins/functions.html#object" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
-<p>The RF definitions a plugin plays and the instances of one repetition.</p>
+<p>The RF definitions a plugin plays and the instances of one TR.</p>
 <p>An instance plays the RF amplitude <code class="docutils literal notranslate"><span class="pre">amplitude</span> <span class="pre">*</span> <span class="pre">peak_hz</span> <span class="pre">*</span> <span class="pre">waveform</span></code> of its
 definition, as <a class="reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.Sequence.rf_instances.html#pypulseqpp.Sequence.rf_instances" title="(in pypulseqpp latest)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">pypulseqpp.Sequence.rf_instances()</span></code></a> states. A control
 scales its instance with the protocol: a scanner that plays another value of
@@ -546,10 +546,11 @@ amplitude it was evaluated at.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Attributes<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>instances</strong> (<em>pp.RfInstances</em>) – The definitions, numbered by first play, and the instances in play order.</p></li>
+<li><p><strong>instances</strong> (<em>pp.RfInstances</em>) – The definitions, numbered by first play, and the instances of one TR in
+play order.</p></li>
 <li><p><strong>control</strong> (<em>tuple[RfControl | None, …]</em>) – One entry per instance: the control its amplitude is proportional to,
 or <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
-<li><p><strong>period</strong> (<em>float</em>) – The time in seconds over which the instances repeat.</p></li>
+<li><p><strong>period</strong> (<em>float</em>) – The TR in seconds.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Raises<span class="colon">:</span></dt>
@@ -568,7 +569,7 @@ or <code class="docutils literal notranslate"><span class="pre">None</span></cod
 <div class="pst-scrollable-table-container"><table class="autosummary longtable table">
 <tbody>
 <tr class="row-odd"><td><p><a class="reference internal" href="pulserver.design.RfLayout.of.html#pulserver.design.RfLayout.of" title="pulserver.design.RfLayout.of"><code class="xref py py-obj docutils literal notranslate"><span class="pre">of</span></code></a></p></td>
-<td><p>Return the layout of the RF instances of a sequence.</p></td>
+<td><p>Return the layout of the RF instances of one TR.</p></td>
 </tr>
 </tbody>
 </table>

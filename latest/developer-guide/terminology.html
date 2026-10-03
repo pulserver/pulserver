@@ -637,10 +637,10 @@ entries. A <em>plugin</em> is the file a scanner sequence or a reconstruction is
 from; say which kind. The <em>evaluation</em> of a prescription is what the scanner
 sequence’s <code class="docutils literal notranslate"><span class="pre">evaluate</span></code> returns: the resolved protocol, the scan time, a note and,
 optionally, the <em>RF layout</em>. An RF layout is the RF <em>definitions</em> of a sequence,
-its RF <em>instances</em> in play order, and for each instance the <em>control</em> its
-amplitude follows, the flip angle or a float user entry. The <code class="docutils literal notranslate"><span class="pre">list</span></code> and
-<code class="docutils literal notranslate"><span class="pre">validate</span></code> replies carry it when asked, as an estimate; the design the
-interpreter plays is the stored one.</p>
+the RF <em>instances</em> of one TR in play order with the TR as its <em>period</em>, and for
+each instance the <em>control</em> its amplitude follows, the flip angle or a float
+user entry. The <code class="docutils literal notranslate"><span class="pre">list</span></code> and <code class="docutils literal notranslate"><span class="pre">validate</span></code> replies carry it when asked, as an
+estimate; the design the interpreter plays is the stored one.</p>
 <p><strong>Storage.</strong> A <em>design</em> is one generated or imported chain with its IR cache,
 immutable once written. Its <em>identity</em> is the hash of what it depends on; its
 <em>identifier</em> is the first 18 hexadecimal digits of the identity. The <em>design

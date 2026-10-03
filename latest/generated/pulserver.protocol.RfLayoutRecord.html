@@ -536,11 +536,11 @@
 <dt class="sig sig-object py" id="pulserver.protocol.RfLayoutRecord">
 <span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">pulserver.protocol.</span></span><span class="sig-name descname"><span class="pre">RfLayoutRecord</span></span><a class="reference internal" href="../_modules/pulserver/protocol/_wire.html#RfLayoutRecord"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.protocol.RfLayoutRecord" title="Link to this definition">#</a></dt>
 <dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/builtins/functions.html#object" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
-<p>The contents of an <code class="docutils literal notranslate"><span class="pre">[RfLayout]</span></code> block, one entry per instance in play order.</p>
+<p>The contents of an <code class="docutils literal notranslate"><span class="pre">[RfLayout]</span></code> block, one entry per instance of one TR in play order.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Attributes<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>period</strong> (<em>float</em>) – The time in seconds over which the instances repeat.</p></li>
+<li><p><strong>period</strong> (<em>float</em>) – The TR in seconds.</p></li>
 <li><p><strong>definition</strong> (<em>tuple[int, …]</em>) – The number of the definition each instance plays.</p></li>
 <li><p><strong>amplitude</strong> (<em>tuple[float, …]</em>) – The peak RF amplitude of each instance over the <code class="docutils literal notranslate"><span class="pre">peak_hz</span></code> the listing
 states for its definition.</p></li>

@@ -30,11 +30,20 @@ returns sequences. Resolving a request proceeds in three steps.
 3. The evaluation returns the protocol the design achieves, converted back to
    wire values, with the scan time, a note and, optionally, the RF layout
    ({ref}`rf-layout`). An evaluation that calls the app reads the values from
-   the sequences it designed: the shipped plugins read the echo time and the
-   repetition time from the `TE` and `TR` definitions of the main sequence, the
-   receiver bandwidth from the dwell time of its ADC event and the slice
-   thickness from its `SliceThickness` definition, and an argument they do not
-   read keeps its requested value.
+   the sequences it designed: the shipped plugins return the values the main
+   sequence states for the prescription, the echo time and the repetition time
+   in its `TE` and `TR` definitions, the receiver bandwidth as the inverse of the
+   dwell time of its ADC event and the slice thickness in its `SliceThickness`
+   definition, and an argument they do not read keeps its requested value.
+
+An evaluation answers every edit of an entry, so its duration adds to the
+latency of the UI, and a design of the whole scan grows with the matrix and the
+slices. A scan repeats one TR, so the shipped plugins design one repetition of
+it, one line, partition, spoke or interleaf of one slice without dummy
+repetitions, and extrapolate: the scan time is the duration of a repetition
+times the number of repetitions the prescription plays, and slices that share a
+TR are dealt into the packets the sequence plays them in, from which the TR and
+the scan time follow.
 
 The prescription is not a design argument. Every listing ends with its
 entries, not editable in the UI, which the interpreter fills from the
@@ -55,18 +64,17 @@ names an entry the protocol does not declare is invalid, and the message names
 the entry.
 
 A valid reply carries the resolved values, a note, and the scan time in
-seconds the evaluation states: the summed duration of the sequences the shipped
-plugins design. An evaluation that states no scan time, `0.0`, is valid, and the
-reply reports the scan time as unknown.
+seconds the evaluation states. An evaluation that states no scan time, `0.0`, is
+valid, and the reply reports the scan time as unknown.
 
 (rf-layout)=
 ## RF layout
 
 The RF a protocol plays depends on the protocol. An evaluation may state it as
 an {class}`~pulserver.design.RfLayout`, from which a scanner estimates the RF of
-a prescription without designing it: the RF definitions of a sequence, its RF
-instances in play order, and for each instance the protocol entry its amplitude
-follows.
+a prescription without designing it: the RF definitions of a sequence, the RF
+instances of one TR in play order, and for each instance the protocol entry its
+amplitude follows.
 
 A definition is one RF pulse: a complex waveform at unit peak magnitude, its
 timing and its use. Instances of a definition differ in amplitude and in
@@ -90,15 +98,16 @@ peak of the definition in its own evaluation, and the amplitude stated includes
 that change, so that the product of the amplitude and the listed `peak_hz` is the
 peak RF amplitude the instance plays.
 
-The layout need not hold the scan. The instances repeat over a period, and an
-evaluation that builds one representative repetition, a TR, a shot or a train,
-states the instances of that repetition and its `period`, so that the size of
-the layout does not depend on the matrix. A definition is named by its number in
-the sequence the evaluation builds, in the order of first play. The listing
-carries the definitions of the evaluation at the default protocol, and a layout
-names the pulses of the listing only where the protocol does not change which
-pulses are played first: the length of a train, a flip angle schedule and the
-matrix do not, and a protocol that adds a preparation pulse does.
+A layout is one TR: the instances one TR plays, and the TR as its `period`,
+over which a scanner averages their RF. Its size does not depend on the matrix.
+The shipped plugins state the first TR of the repetition they design, its shot
+repeated once per slice of the largest packet, and a balanced steady state the
+TR after its half-angle pulse. A definition is named by its number in the
+sequence the evaluation builds, in the order of first play. The listing carries
+the definitions of the evaluation at the default protocol, and a layout names
+the pulses of the listing only where the protocol does not change which pulses
+are played first: the length of a train, a flip angle schedule and the matrix do
+not, and a protocol that adds a preparation pulse does.
 
 The layout is an estimate for the prescription. An evaluation that states none
 states no estimate and is valid, and what the scanner checks before the scan is
@@ -220,7 +229,7 @@ run <index> <amplitude> <control|-> <count>
 [RfLayout End]
 ```
 
-`period` is the time in seconds over which the instances repeat. The `amplitude`
+`period` is the TR in seconds, over which the instances repeat. The `amplitude`
 of a run is unitless: the peak RF amplitude of its instances over the `peak_hz`
 the listing states for the definition, so that `amplitude × peak_hz × waveform`
 is what an instance plays. The host reads those peaks by evaluating the plugin

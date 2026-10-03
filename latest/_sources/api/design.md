@@ -27,13 +27,13 @@ control variable, are described in {doc}`../explanations/protocol`.
 
 ## RF layout
 
-The RF an evaluation states: the RF definitions of a sequence, its instances in
-play order and the protocol entry each instance's amplitude follows
+The RF an evaluation states: the RF definitions of a sequence, the instances of
+one TR in play order and the protocol entry each instance's amplitude follows
 ({doc}`../explanations/protocol`).
 
 | Object | Description |
 | --- | --- |
-| {obj}`~pulserver.design.RfLayout` | The RF definitions a plugin plays and the instances of one repetition, each with the control its amplitude follows. |
+| {obj}`~pulserver.design.RfLayout` | The RF definitions a plugin plays and the instances of one TR, each with the control its amplitude follows. |
 | {obj}`~pulserver.design.RfControl` | A control an RF amplitude follows: the flip angle or a float user entry. |
 
 ## UI entries

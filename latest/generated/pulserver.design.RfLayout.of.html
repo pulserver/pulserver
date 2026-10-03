@@ -535,16 +535,14 @@
 <dl class="py method">
 <dt class="sig sig-object py" id="pulserver.design.RfLayout.of">
 <span class="property"><span class="k"><span class="pre">classmethod</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">RfLayout.</span></span><span class="sig-name descname"><span class="pre">of</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pulserver/design/_rf.html#RfLayout.of"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.design.RfLayout.of" title="Link to this definition">#</a></dt>
-<dd><p>Return the layout of the RF instances of a sequence.</p>
+<dd><p>Return the layout of the RF instances of one TR.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>repetition</strong> – The sequence whose RF instances are the layout: the whole scan, or
-one representative repetition such as a TR, a shot or a train.</p></li>
+<li><p><strong>repetition</strong> – One TR: the sequence whose RF instances are the layout.</p></li>
 <li><p><strong>control</strong> – The control of every instance, or <code class="docutils literal notranslate"><span class="pre">None</span></code> for none; or one control
 per instance, in play order. A single key is one control.</p></li>
-<li><p><strong>period</strong> – Seconds over which the instances repeat. The duration of
-<code class="docutils literal notranslate"><span class="pre">repetition</span></code> where omitted.</p></li>
+<li><p><strong>period</strong> – The TR in seconds. The duration of <code class="docutils literal notranslate"><span class="pre">repetition</span></code> where omitted.</p></li>
 </ul>
 </dd>
 </dl>

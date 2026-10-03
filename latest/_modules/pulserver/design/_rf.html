@@ -475,7 +475,7 @@
 <a class="viewcode-back" href="../../../generated/pulserver.design.RfLayout.html#pulserver.design.RfLayout">[docs]</a>
 <span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 <span class="k">class</span><span class="w"> </span><span class="nc">RfLayout</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""The RF definitions a plugin plays and the instances of one repetition.</span>
+<span class="w">    </span><span class="sd">"""The RF definitions a plugin plays and the instances of one TR.</span>
 
 <span class="sd">    An instance plays the RF amplitude ``amplitude * peak_hz * waveform`` of its</span>
 <span class="sd">    definition, as :meth:`pypulseqpp.Sequence.rf_instances` states. A control</span>
@@ -487,12 +487,13 @@
 <span class="sd">    Attributes</span>
 <span class="sd">    ----------</span>
 <span class="sd">    instances</span>
-<span class="sd">        The definitions, numbered by first play, and the instances in play order.</span>
+<span class="sd">        The definitions, numbered by first play, and the instances of one TR in</span>
+<span class="sd">        play order.</span>
 <span class="sd">    control</span>
 <span class="sd">        One entry per instance: the control its amplitude is proportional to,</span>
 <span class="sd">        or ``None``.</span>
 <span class="sd">    period</span>
-<span class="sd">        The time in seconds over which the instances repeat.</span>
+<span class="sd">        The TR in seconds.</span>
 
 <span class="sd">    Raises</span>
 <span class="sd">    ------</span>
@@ -541,19 +542,17 @@
         <span class="o">*</span><span class="p">,</span>
         <span class="n">period</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">RfLayout</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""Return the layout of the RF instances of a sequence.</span>
+<span class="w">        </span><span class="sd">"""Return the layout of the RF instances of one TR.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
 <span class="sd">        repetition</span>
-<span class="sd">            The sequence whose RF instances are the layout: the whole scan, or</span>
-<span class="sd">            one representative repetition such as a TR, a shot or a train.</span>
+<span class="sd">            One TR: the sequence whose RF instances are the layout.</span>
 <span class="sd">        control</span>
 <span class="sd">            The control of every instance, or ``None`` for none; or one control</span>
 <span class="sd">            per instance, in play order. A single key is one control.</span>
 <span class="sd">        period</span>
-<span class="sd">            Seconds over which the instances repeat. The duration of</span>
-<span class="sd">            ``repetition`` where omitted.</span>
+<span class="sd">            The TR in seconds. The duration of ``repetition`` where omitted.</span>
 <span class="sd">        """</span>
         <span class="n">instances</span> <span class="o">=</span> <span class="n">repetition</span><span class="o">.</span><span class="n">rf_instances</span><span class="p">()</span>
         <span class="k">if</span> <span class="p">(</span>
