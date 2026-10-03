@@ -53,17 +53,16 @@ design choice, not a time.
 
 **Design.** A *sequence function* is a function of the scanner limits and the
 protocol arguments that returns the designed sequences, a chain with the
-prescans first and the main sequence last. A *sequence application* is a
-pypulseqpp `SequenceApp` subclass, which a plugin also accepts. A *scanner
-sequence* is the pulserver `SequencePlugin` that binds an *app*, a sequence
-function or a sequence application, to protocol entries. A *plugin* is the file
-either kind is loaded from; say which kind. The *evaluation* of a prescription is
-what the scanner sequence's `evaluate` returns: the resolved protocol, the scan
-time, a note and, optionally, the *RF layout*. An RF layout is the RF
-*definitions* of a sequence, its RF *instances* in play order, and for each
-instance the *control* its amplitude follows, the flip angle or a float user
-entry. The `list` and `validate` replies carry it when asked, as an estimate; the
-design the interpreter plays is the stored one.
+prescans first and the main sequence last. A *scanner sequence* is the
+pulserver `SequencePlugin` that binds an *app*, a sequence function, to protocol
+entries. A *plugin* is the file a scanner sequence or a reconstruction is loaded
+from; say which kind. The *evaluation* of a prescription is what the scanner
+sequence's `evaluate` returns: the resolved protocol, the scan time, a note and,
+optionally, the *RF layout*. An RF layout is the RF *definitions* of a sequence,
+its RF *instances* in play order, and for each instance the *control* its
+amplitude follows, the flip angle or a float user entry. The `list` and
+`validate` replies carry it when asked, as an estimate; the design the
+interpreter plays is the stored one.
 
 **Storage.** A *design* is one generated or imported chain with its IR cache,
 immutable once written. Its *identity* is the hash of what it depends on; its

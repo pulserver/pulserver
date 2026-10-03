@@ -19,8 +19,6 @@ The interpreter names it `--plugin gre`. Without `protocol`, the protocol is the
 app's defaults. A PyPulseq script becomes a function app by taking the scanner
 limits and its parameters as arguments and returning its sequence
 ([from a PyPulseq script](https://pulserver.github.io/pypulseqpp/latest/user-guide/from-pypulseq.html)).
-A pypulseqpp {class}`~pypulseqpp.sequences.SequenceApp` subclass is accepted as
-the app as well ({ref}`sequence-applications`).
 
 ## Binding the protocol
 
@@ -28,9 +26,8 @@ the app as well ({ref}`sequence-applications`).
 {data}`~pulserver.protocol.ProtocolKey`, to entries;
 {class}`~pulserver.protocol.UIParam` collects those of the UI controls. A plain
 string naming a parameter is stored as its member, and a name outside the table
-is refused when the class is defined. An entry names the argument of the app it
-sets: a keyword argument of a function, or an `init_sequence` argument of a
-sequence application. The class does not name a reconstruction: the console's scan
+is refused when the class is defined. An entry names the keyword argument of the
+app it sets. The class does not name a reconstruction: the console's scan
 or the reconstruction client does ({doc}`reconstruction-plugins`). A `recon`
 attribute has no effect, and defining one raises a `DeprecationWarning`.
 `ui` and `ScannerSequence` are deprecated names of `protocol` and
@@ -116,26 +113,6 @@ calls it when the design is generated ({ref}`evaluating-a-protocol`).
 {'flip': 90.0, 'TR': 100000, 'nex': 8}
 
 ```
-
-(sequence-applications)=
-## Sequence applications
-
-A pypulseqpp {class}`~pypulseqpp.sequences.SequenceApp` subclass is accepted as
-`app` as well. An entry names an `init_sequence` argument of it, and the
-application is constructed under the scanner limits, which checks the
-prescription, and designed with its prescans by
-{meth}`~pulserver.design.SequencePlugin.design`. `MAX_GRAD` (mT/m) and
-`MAX_SLEW` (T/m/s) are required on every application: they cap the scanner's
-limits, which the design call passes in.
-
-The default evaluation of a sequence application constructs it and states its
-{meth}`~pypulseqpp.sequences.SequenceApp.scan_time`: the `duration`
-`init_sequence` states, otherwise the summed duration of the designed prescans
-and main sequence. An entry holds the value the application recorded with
-{meth}`~pypulseqpp.sequences.SequenceApp.resolve`, and keeps the requested value
-where the application recorded none. The default
-{meth}`~pulserver.design.SequencePlugin.generate` returns the application, and
-the design writes the files of its prescans and main sequence.
 
 (shipped-sequences)=
 ## Shipped sequences
@@ -314,12 +291,11 @@ error with its traceback. A request that names an entry the protocol does not
 declare, or an option a choice does not offer, is invalid in the same way.
 
 {meth}`~pulserver.design.SequencePlugin.generate` is the hook that builds the
-sequence of a requested protocol. The default for a function app calls the app
-with the arguments of the protocol, and the default for a sequence application
-constructs it ({ref}`sequence-applications`). A plugin overrides `generate` to
-return a sequence, or a list of them, built another way. `validate` and `design`
-are not overridden: they are the boundary between a request and the code of a
-plugin, and `design` writes nothing for an invalid request.
+sequence of a requested protocol. The default calls the app with the arguments
+of the protocol. A plugin overrides `generate` to return a sequence, or a list
+of them, built another way. `validate` and `design` are not overridden: they
+are the boundary between a request and the code of a plugin, and `design`
+writes nothing for an invalid request.
 
 (stating-the-rf-layout)=
 ## Stating the RF layout

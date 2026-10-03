@@ -17,7 +17,6 @@ from typing import Any, ClassVar
 
 import numpy as np
 import pypulseqpp as pp
-from pypulseqpp import sequences
 
 from ..protocol import (
     FOV_OFFSET,
@@ -94,20 +93,14 @@ class SequencePlugin:
     Attributes
     ----------
     app : callable
-        Designs the sequence. Either a function ``app(system, **arguments)``,
-        or a :class:`~pypulseqpp.sequences.SequenceApp` subclass.
-
-        A function takes the scanner limits, a :class:`pypulseqpp.Opts`, and
-        the keyword arguments the entries of :attr:`protocol` bind, and
-        returns a :class:`pypulseqpp.Sequence` or a list of them, which is a
-        chain: the prescans first and the main sequence last. The defaults
-        the listing shows are those of its signature, so a
-        :func:`functools.partial` is an app. :meth:`generate` calls it, and so
-        does an :meth:`evaluate` that designs the sequence; the default
-        :meth:`evaluate` does not.
-
-        A sequence application is constructed under the scanner limits, which
-        checks the prescription, and designed by :meth:`design`.
+        A function ``app(system, **arguments)`` that designs the sequence. It
+        takes the scanner limits, a :class:`pypulseqpp.Opts`, and the keyword
+        arguments the entries of :attr:`protocol` bind, and returns a
+        :class:`pypulseqpp.Sequence` or a list of them, which is a chain: the
+        prescans first and the main sequence last. The defaults the listing
+        shows are those of its signature, so a :func:`functools.partial` is an
+        app. :meth:`generate` calls it, and so does an :meth:`evaluate` that
+        designs the sequence; the default :meth:`evaluate` does not.
     protocol : mapping
         The entries the operator edits, by key: the interpreter's parameter
         names, which are the members of
@@ -122,6 +115,8 @@ class SequencePlugin:
         not know, which its parser would drop, or with one of the prescription
         entries, which pulserver applies itself; or with both ``protocol`` and
         ``ui``.
+    TypeError
+        When a subclass is defined with a class as ``app``.
 
     Warns
     -----
@@ -138,7 +133,6 @@ class SequencePlugin:
     protocol: ClassVar[Mapping[ProtocolKey, Entry]] = {}
 
     _deprecated_alias: ClassVar[bool] = False
-    _built: tuple[pp.Opts, dict[str, Any], sequences.SequenceApp] | None = None
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
@@ -165,6 +159,11 @@ class SequencePlugin:
                 stacklevel=2,
             )
         app = declared.get("app")
+        if inspect.isclass(app):
+            raise TypeError(
+                f"{cls.__name__} binds the class {app.__name__} as app; app is a "
+                "function returning a sequence or a list of them"
+            )
         if inspect.isfunction(app) or isinstance(app, functools.partial):
             cls.app = staticmethod(app)
         if "ui" in declared:
@@ -238,7 +237,7 @@ class SequencePlugin:
             )
         return listing
 
-    def evaluate(self, system: pp.Opts, protocol: Protocol) -> Evaluation | None:
+    def evaluate(self, system: pp.Opts, protocol: Protocol) -> Evaluation | None:  # noqa: ARG002 -- the signature of the hook a subclass overrides
         """Evaluate a requested protocol, or refuse it by raising.
 
         The hook a subclass overrides to check a protocol and to state what the
@@ -246,13 +245,8 @@ class SequencePlugin:
         ``Evaluation(protocol)``. An exception makes the protocol invalid, as
         :meth:`validate` describes.
 
-        The default for a function app accepts the protocol unchanged with no
-        scan time estimate, and does not call the app. The default for a
-        sequence application constructs it, which checks the prescription, and
-        returns its ``scan_time()`` and the protocol with each entry holding
-        the value the design took, as the application records it with
-        ``SequenceApp.resolve``; an argument it does not record keeps its
-        requested value.
+        The default accepts the protocol unchanged with no scan time estimate,
+        and does not call the app.
 
         Parameters
         ----------
@@ -266,27 +260,15 @@ class SequencePlugin:
         Evaluation or None
             The protocol to show back, the scan time and a note.
         """
-        if not self._is_application():
-            return Evaluation(protocol)
-        app = self._application(system, protocol)
-        duration = app.scan_time()
-        readback = app.resolved
-        recorded = {}
-        for key, entry in self.protocol.items():
-            value = readback.get(getattr(entry, "argument", None))
-            if value is not None:
-                recorded[key] = value
-        return Evaluation(protocol.replace(recorded), duration)
+        return Evaluation(protocol)
 
     def generate(
         self, system: pp.Opts, protocol: Protocol
-    ) -> pp.Sequence | list[pp.Sequence] | sequences.SequenceApp:
+    ) -> pp.Sequence | list[pp.Sequence]:
         """Return what :meth:`design` writes for a protocol.
 
-        The hook a subclass overrides to build the sequence. The default for a
-        function app returns ``app(system, **protocol.arguments)``. The default
-        for a sequence application returns the application constructed from the
-        arguments; :meth:`design` designs it, with its prescans.
+        The hook a subclass overrides to build the sequence. The default
+        returns ``app(system, **protocol.arguments)``.
 
         Parameters
         ----------
@@ -297,12 +279,10 @@ class SequencePlugin:
 
         Returns
         -------
-        pypulseqpp.Sequence or list of pypulseqpp.Sequence or SequenceApp
+        pypulseqpp.Sequence or list of pypulseqpp.Sequence
             A sequence, or a chain of them, prescans first and the main
-            sequence last, or an application that designs its own chain.
+            sequence last.
         """
-        if self._is_application():
-            return self._application(system, protocol)
         return self.app(system, **protocol.arguments)
 
     def validate(
@@ -353,10 +333,9 @@ class SequencePlugin:
         evaluated protocol is made from ``validate(...).values``.
 
         The first file is ``sequence.seq``. Each later file of a chain is
-        ``sequence_<name>.seq``, ``main`` for the last, and each file names the
-        next as its ``NextSequence`` definition, so the chain is one scan.
-        ``name`` is the name of the prescan for a sequence application, and
-        ``prescan<n>`` for a list of sequences, ``n`` counting from 2.
+        ``sequence_prescan<n>.seq``, ``n`` counting from 2, or
+        ``sequence_main.seq`` for the last, and each file names the next as its
+        ``NextSequence`` definition, so the chain is one scan.
 
         Returns
         -------
@@ -369,25 +348,16 @@ class SequencePlugin:
         Raises
         ------
         TypeError
-            If a function app returns neither a sequence nor a list of them.
+            If ``app`` returns neither a sequence nor a list of them.
         """
-        try:
-            validation, protocol = self._validated(system, request)
-            if protocol is None:
-                return validation, []
-            built = self.generate(system, protocol)
-            return validation, _write(built, Path(directory) / _FIRST_FILE)
-        finally:
-            self._built = None
-
-    @classmethod
-    def _is_application(cls) -> bool:
-        return inspect.isclass(cls.app) and issubclass(cls.app, sequences.SequenceApp)
+        validation, protocol = self._validated(system, request)
+        if protocol is None:
+            return validation, []
+        built = self.generate(system, protocol)
+        return validation, _write(built, Path(directory) / _FIRST_FILE)
 
     def _defaults(self) -> dict[str, Any]:
         """Return the default of each argument of the app, ``inspect.Parameter.empty`` for none."""
-        if self._is_application():
-            return self.app.protocol()
         # The first parameter is the scanner limits.
         arguments = list(inspect.signature(self.app).parameters.values())[1:]
         return {
@@ -395,18 +365,6 @@ class SequencePlugin:
             for argument in arguments
             if argument.kind not in (argument.VAR_POSITIONAL, argument.VAR_KEYWORD)
         }
-
-    def _application(
-        self, system: pp.Opts, protocol: Protocol
-    ) -> sequences.SequenceApp:
-        """Return the application of a protocol, constructed once for one system and arguments."""
-        arguments = protocol.arguments
-        held = self._built
-        if held is not None and held[0] is system and held[1] == arguments:
-            return held[2]
-        app = self.app(system, **arguments)
-        self._built = (system, arguments, app)
-        return app
 
     def _validated(
         self, system: pp.Opts, request: Mapping[ProtocolKey, Any]
@@ -487,12 +445,8 @@ def _stated_layout(
     return layout if len(layout.instances.definition) else None
 
 
-def _write(
-    built: pp.Sequence | list[pp.Sequence] | sequences.SequenceApp, first: Path
-) -> list[str]:
-    """Write a sequence application, a sequence or a chain of them as signed binary Pulseq; return the paths in play order."""
-    if isinstance(built, sequences.SequenceApp):
-        return built.write(first, offline=False)
+def _write(built: pp.Sequence | list[pp.Sequence], first: Path) -> list[str]:
+    """Write a sequence or a chain of them as signed binary Pulseq; return the paths in play order."""
     chain = [built] if isinstance(built, pp.Sequence) else built
     if (
         not isinstance(chain, list | tuple)

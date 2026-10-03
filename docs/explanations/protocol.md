@@ -11,9 +11,8 @@ an edit is therefore the value the design achieves, not the value requested.
 ## Resolution
 
 A scanner sequence ({class}`~pulserver.design.SequencePlugin`) maps each
-interpreter parameter name to an argument of its app: a keyword argument of a
-function that returns sequences, or an `init_sequence` argument of a pypulseqpp
-sequence application. Resolving a request proceeds in three steps.
+interpreter parameter name to a keyword argument of its app, a function that
+returns sequences. Resolving a request proceeds in three steps.
 
 1. Every entry the request omits takes its initial value, the app's default
    unless the entry declares another, so a request is always a complete
@@ -27,19 +26,15 @@ sequence application. Resolving a request proceeds in three steps.
    cannot realize. The shipped plugins evaluate this way. The default
    evaluation of a function app accepts the protocol unchanged and builds
    nothing, and a plugin overrides
-   {meth}`~pulserver.design.SequencePlugin.evaluate` to check or complete it;
-   the default evaluation of a sequence application constructs it.
+   {meth}`~pulserver.design.SequencePlugin.evaluate` to check or complete it.
 3. The evaluation returns the protocol the design achieves, converted back to
    wire values, with the scan time, a note and, optionally, the RF layout
-   ({ref}`rf-layout`). An evaluation of a function reads the values from the
-   sequences it designed: the shipped plugins read the echo time and the
+   ({ref}`rf-layout`). An evaluation that calls the app reads the values from
+   the sequences it designed: the shipped plugins read the echo time and the
    repetition time from the `TE` and `TR` definitions of the main sequence, the
    receiver bandwidth from the dwell time of its ADC event and the slice
    thickness from its `SliceThickness` definition, and an argument they do not
-   read keeps its requested value. For a sequence application, the value each
-   argument took in the design, as the application records it
-   ({attr}`~pypulseqpp.sequences.SequenceApp.resolved`), replaces the
-   requested one under the default evaluation.
+   read keeps its requested value.
 
 The prescription is not a design argument. Every listing ends with its
 entries, not editable in the UI, which the interpreter fills from the
@@ -61,9 +56,8 @@ the entry.
 
 A valid reply carries the resolved values, a note, and the scan time in
 seconds the evaluation states: the summed duration of the sequences the shipped
-plugins design, or, for a sequence application under the default evaluation,
-{meth}`~pypulseqpp.sequences.SequenceApp.scan_time`. An evaluation that states
-no scan time, `0.0`, is valid, and the reply reports the scan time as unknown.
+plugins design. An evaluation that states no scan time, `0.0`, is valid, and the
+reply reports the scan time as unknown.
 
 (rf-layout)=
 ## RF layout

@@ -31,41 +31,39 @@ from pulserver.protocol import (
 FIXTURES = Path(__file__).parent / "fixtures" / "sequences"
 GRE = {"nx": 32, "ny": 32, "TE": 5000}
 
-COUNTED = '''"""A delay per repetition; every construction appends to a file."""
+COUNTED = '''"""A function app that appends the TE it is called with to a file; its evaluation states the shortest TE without calling it."""
 
 import os
 
 import pypulseqpp as pp
-from pypulseqpp import sequences
 
-from pulserver.design import SequencePlugin, TimeParam
+from pulserver.design import Evaluation, SequencePlugin, TimeParam
 from pulserver.protocol import TEPreset, UIParam
 
+SHORTEST_TE = 2.5e-3
 
-class CountedApp(sequences.SequenceApp):
-    MAX_GRAD = 40.0
-    MAX_SLEW = 150.0
 
-    def init_sequence(self, te: float | None = 8e-3) -> None:
-        with open(os.environ["PULSERVER_CONSTRUCTIONS"], "a") as log:
-            log.write("constructed\\n")
-        self.te = 2.5e-3 if te is None else te
-        self.resolve(te=self.te)
-
-    def loop(self) -> None:
-        self.kernel()
-
-    def kernel(self) -> None:
-        self.seq.add_block(pp.make_delay(self.te))
+def counted(system, te: float | None = 8e-3):
+    with open(os.environ["PULSERVER_CALLS"], "a") as log:
+        log.write(f"{te!r}\\n")
+    te = SHORTEST_TE if te is None else te
+    seq = pp.Sequence(system)
+    seq.add_block(pp.make_delay(te))
+    return seq
 
 
 class Counted(SequencePlugin):
-    app = CountedApp
+    app = counted
     protocol = {
         UIParam.TE: TimeParam(
             "te", range_min=1000, range_max=80000, presets={TEPreset.MINIMUM: None}
         )
     }
+
+    def evaluate(self, system, protocol):
+        te = protocol[UIParam.TE]
+        shortest = SHORTEST_TE if te is None else te
+        return Evaluation(protocol.replace({UIParam.TE: shortest}))
 '''
 
 EVALUATING = '''"""A function app; its evaluation rejects 80 lines, fails on 13 and states a scan time for 20."""
@@ -226,23 +224,23 @@ def test_one_resolved_protocol_is_one_design(store):
     assert "TE: 2500" in (directory / "resolved.protocol").read_text()
 
 
-def test_a_request_resolving_to_itself_constructs_its_application_once(
+def test_a_request_is_generated_once_whether_or_not_it_resolves_to_itself(
     tmp_path, store, monkeypatch
 ):
     plugins = tmp_path / "plugins"
     plugins.mkdir()
     (plugins / "counted.py").write_text(COUNTED)
-    log = tmp_path / "constructions"
-    monkeypatch.setenv("PULSERVER_CONSTRUCTIONS", str(log))
+    log = tmp_path / "calls"
+    monkeypatch.setenv("PULSERVER_CALLS", str(log))
 
-    def constructions(values):
+    def calls(values):
         log.write_text("")
         generated(generate(store, "counted", values, plugins=plugins))
-        return len(log.read_text().splitlines())
+        return log.read_text().split()
 
-    assert constructions({"TE": 5000}) == 1
+    assert calls({"TE": 5000}) == ["0.005"]
     # A preset resolves to a time, and the design is made from the time.
-    assert constructions({"TE": TEPreset.MINIMUM}) == 2
+    assert calls({"TE": TEPreset.MINIMUM}) == ["0.0025"]
 
 
 def test_a_manifest_records_what_the_design_depends_on(store):
