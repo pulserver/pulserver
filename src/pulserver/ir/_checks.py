@@ -5,6 +5,7 @@ from __future__ import annotations
 import contextlib
 import copy
 import io
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -96,6 +97,7 @@ def check(
     *,
     rotation: np.ndarray | None = None,
     limits: CheckLimits | None = None,
+    designed: list[tuple[Path, pp.Sequence]] | None = None,
 ) -> list[str]:
     """Return the problems of a chain under a scanner's limits, in the physical frame.
 
@@ -120,6 +122,9 @@ def check(
         reflection included; the identity by default.
     limits
         The nerve and resonance limits; none by default.
+    designed
+        The chain as :func:`pulserver.mrd.designed_chain` returns it, checked
+        in place of reading the files, and rotated in place.
 
     Returns
     -------
@@ -134,10 +139,7 @@ def check(
         orthonormal.
     """
     limits = CheckLimits() if limits is None else limits
-    try:
-        chain_read = read_chain(seq_path, verify=False)
-    except RuntimeError as failure:
-        raise ValueError(f"cannot read {seq_path}: {failure}") from failure
+    chain_read = designed if designed is not None else _read(seq_path)
     turn = None if rotation is None else _prescription(rotation)
     problems = []
     for path, sequence in chain_read:
@@ -146,6 +148,13 @@ def check(
             found = [f"{path.name}: {problem}" for problem in found]
         problems += found
     return problems
+
+
+def _read(seq_path: Path | str) -> list[tuple[Path, pp.Sequence]]:
+    try:
+        return read_chain(seq_path, verify=False)
+    except RuntimeError as failure:
+        raise ValueError(f"cannot read {seq_path}: {failure}") from failure
 
 
 def _prescription(rotation: np.ndarray) -> np.ndarray | None:
@@ -172,23 +181,40 @@ def _problems(
     is_ok, report = pp.check_timing(sequence)
     if not is_ok:
         problems.append(_timing(sequence, report))
-    for check, name, unit, scale in (
-        (safety.check_max_grad, "gradient amplitude", "mT/m", 1e3),
-        (safety.check_max_slew, "slew rate", "T/m/s", 1.0),
-    ):
-        is_ok, found = check(sequence, opts)
-        if not is_ok:
-            peak = found.per_axis
-            problems.append(
-                f"{name} of {peak.value / opts.gamma * scale:.1f} {unit} on "
-                f"{peak.axis} in block {peak.block} exceeds "
-                f"{found.limit / opts.gamma * scale:.1f} {unit}"
-            )
+    checks = [
+        (_limit, safety.check_max_grad, "gradient amplitude", "mT/m", 1e3),
+        (_limit, safety.check_max_slew, "slew rate", "T/m/s", 1.0),
+    ]
     if limits.pns is not None:
-        problems += _pns(sequence, opts, limits)
+        checks.append((_pns, limits))
     if limits.bands:
-        problems += _resonance(sequence, opts, limits)
+        checks.append((_resonance, limits))
+    # The native checks read the sequence and release the GIL; check_timing
+    # records TotalDuration, so it runs before them.
+    with ThreadPoolExecutor(len(checks)) as pool:
+        found = [pool.submit(run, sequence, opts, *args) for run, *args in checks]
+    for result in found:
+        problems += result.result()
     return problems
+
+
+def _limit(
+    sequence: pp.Sequence,
+    system: pp.Opts,
+    check: Any,
+    name: str,
+    unit: str,
+    scale: float,
+) -> list[str]:
+    is_ok, found = check(sequence, system)
+    if is_ok:
+        return []
+    peak = found.per_axis
+    return [
+        f"{name} of {peak.value / system.gamma * scale:.1f} {unit} on "
+        f"{peak.axis} in block {peak.block} exceeds "
+        f"{found.limit / system.gamma * scale:.1f} {unit}"
+    ]
 
 
 def _pns(sequence: pp.Sequence, system: pp.Opts, limits: CheckLimits) -> list[str]:
@@ -219,7 +245,10 @@ def _resonance(
 
 
 def sar_ratios(
-    seq_path: Path | str, system: pp.Opts, limits: CheckLimits
+    seq_path: Path | str,
+    system: pp.Opts,
+    limits: CheckLimits,
+    designed: list[tuple[Path, pp.Sequence]] | None = None,
 ) -> list[SarRatio]:
     """Return the SAR ratios of each file of a chain against the reference pulse.
 
@@ -237,6 +266,9 @@ def sar_ratios(
         The rasters and RF dead times the reference pulse is made with.
     limits
         The VOPs, channel drive and default shim.
+    designed
+        The chain as :func:`pulserver.mrd.designed_chain` returns it, weighed
+        in place of reading the files.
 
     Returns
     -------
@@ -262,10 +294,7 @@ def sar_ratios(
         )
     )
     _, pulse = safety.check_sar(reference, vops, **drive)
-    try:
-        chain_read = read_chain(seq_path, verify=False)
-    except RuntimeError as failure:
-        raise ValueError(f"cannot read {seq_path}: {failure}") from failure
+    chain_read = designed if designed is not None else _read(seq_path)
     ratios = []
     for _, sequence in chain_read:
         _, found = safety.check_sar(sequence, vops, reference=pulse, **drive)

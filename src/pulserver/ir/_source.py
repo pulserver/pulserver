@@ -18,6 +18,8 @@ import numpy as np
 import pypulseqpp as pp
 from numpy.typing import NDArray
 
+from .._accelerators import require
+
 #: Use tag of an RF event, as a Pulseq file writes it. A pulse the file does
 #: not label is 0, which is what a reader that switches on the tag treats as
 #: "unknown"; "undefined" is what pypulseqpp calls the same thing.
@@ -276,7 +278,10 @@ def conversion_payload(sequence: Any, system: pp.Opts) -> dict[str, Any]:
     The libraries, the specification tables and the chain rows that link a
     block to them, in the layout a parsed file holds: times in µs, fields of
     view in cm, rasters in µs. The chain rows are the sequence's own, and
-    each block names the head of its chain.
+    each block names the head of its chain. The block table, the ADC rows and
+    the event definitions are pypulseqpp's own, with a map from each library
+    id to the played rows; the converter renumbers, converts and densifies
+    them per block natively.
 
     RF and ADC frequency and phase offsets are absolute: the ppm offsets are
     resolved at the gamma and B0 of ``system`` by
@@ -296,24 +301,19 @@ def conversion_payload(sequence: Any, system: pp.Opts) -> dict[str, Any]:
         start at the first block.
     """
     tables = _tables(sequence)
-    libraries = _sequence_libraries(sequence, tables)
-    _resolve_ppm(libraries, tables, system)
+    events = tables.blocks
+    played_rf, rf_map = _played(events, (0,))
+    played_grad, grad_map = _played(events, (1, 2, 3))
+    _, adc_map = _played(events, (4,))
+    shapes = _ShapeTable(tables.shapes)
+    rf, rf_use, rf_spectra, rf_b1sq = _rf_library(sequence, tables, played_rf)
+    rf_offsets, adc_offsets = tables.absolute_offsets(system)
+    rf[:, 8:10] = rf_offsets
+    rf[:, 6:8] = 0.0
+    grad = _grad_library(tables, shapes)
+    shapes.empty(_receiver_only(tables))
+    interned = sequence.event_definitions()
     specifications = _specification_libraries(tables)
-    blocks = libraries.blocks
-    (
-        rf,
-        grad,
-        grad_statistics,
-        adc,
-        rf_use,
-        rf_spectra,
-        rf_flip_deg,
-        rf_channels,
-        rf_b1sq,
-        rf_definitions,
-        grad_definitions,
-        adc_definitions,
-    ) = _compact(blocks, libraries)
     declared = sequence.definitions
 
     return {
@@ -348,25 +348,32 @@ def conversion_payload(sequence: Any, system: pp.Opts) -> dict[str, Any]:
             "next_sequence": str(declared.get("NextSequence", "")),
         },
         "definitions": {name: _texts(value) for name, value in declared.items()},
-        "blocks": blocks,
-        "rf": rf,
-        "rf_use": rf_use,
-        "rf_spectra": rf_spectra,
-        "rf_flip_deg": rf_flip_deg,
-        "rf_channels": rf_channels,
-        "rf_b1sq_integral": rf_b1sq,
-        "grad": grad,
-        "grad_statistics": grad_statistics,
-        "adc": adc,
-        "rf_definitions": rf_definitions,
-        "grad_definitions": grad_definitions,
-        "adc_definitions": adc_definitions,
-        "block_definitions": _densified(
-            libraries.block_definitions, np.arange(len(libraries.block_definitions))
-        ),
+        "block_events": events,
+        "block_durations": tables.block_durations,
+        "block_duration_raster": sequence.block_duration_raster,
+        "rf_map": rf_map,
+        "grad_map": grad_map,
+        "adc_map": adc_map,
+        "rf": rf[played_rf],
+        "rf_use": rf_use[played_rf],
+        "rf_spectra": rf_spectra[played_rf],
+        "rf_flip_deg": np.asarray(sequence.rf_flip_angles(), dtype=np.float64)[
+            played_rf
+        ],
+        "rf_channels": np.asarray(sequence.rf_channels(), dtype=np.int32)[played_rf],
+        "rf_b1sq_integral": rf_b1sq[played_rf],
+        "grad": grad[played_grad],
+        "grad_statistics": _grad_statistics(sequence)[played_grad],
+        "adc": tables.adc,
+        "adc_offsets": adc_offsets,
+        "shape_sizes": [shape.num_samples for shape in tables.shapes],
+        "rf_definitions": interned.rf,
+        "grad_definitions": interned.gradient,
+        "adc_definitions": interned.adc,
+        "block_definitions": sequence.block_definitions(),
         "shapes": [
             (shape.num_uncompressed_samples, shape.samples)
-            for shape in libraries.shapes
+            for shape in shapes.entries()
         ],
         "extensions": np.asarray(tables.extensions, dtype=np.float64).reshape(-1, 3),
         "extension_map": _extension_map(tables),
@@ -376,7 +383,7 @@ def conversion_payload(sequence: Any, system: pp.Opts) -> dict[str, Any]:
         "labelinc": specifications.labelinc,
         "soft_delays": specifications.soft_delays,
         "rf_shims": list(specifications.rf_shims),
-        **_block_states(sequence, blocks),
+        **_block_states(sequence),
     }
 
 
@@ -403,14 +410,12 @@ def _sequence_libraries(sequence: Any, tables: Any) -> SequenceLibraries:
     blocks[:, 1:] = tables.blocks
 
     shapes = _ShapeTable(tables.shapes)
-    rf, rf_use, rf_spectra, rf_b1sq = _rf_library(sequence, tables, blocks)
+    played, _ = _played(tables.blocks, (0,))
+    rf, rf_use, rf_spectra, rf_b1sq = _rf_library(sequence, tables, played)
     grad = _grad_library(tables, shapes)
-    measured = sequence.gradient_statistics()
-    grad_statistics = np.stack(
-        (measured.peak_slew, measured.energy, measured.slew_energy), axis=1
-    ).reshape(-1, 3)
+    grad_statistics = _grad_statistics(sequence)
     adc = _adc_library(tables)
-    shapes.empty(_receiver_only(adc, tables))
+    shapes.empty(_receiver_only(tables))
     adc[:, 7] = 0
     interned = sequence.event_definitions()
     return SequenceLibraries(
@@ -457,13 +462,20 @@ class _ShapeTable:
         return tuple(self._entries)
 
 
-def _receiver_only(adc: NDArray[np.float64], tables: Any) -> set[int]:
+def _grad_statistics(sequence: Any) -> NDArray[np.float64]:
+    measured = sequence.gradient_statistics()
+    return np.stack(
+        (measured.peak_slew, measured.energy, measured.slew_energy), axis=1
+    ).reshape(-1, 3)
+
+
+def _receiver_only(tables: Any) -> set[int]:
     """Return the shapes only ADC phase modulation names.
 
     The modulation is applied to the received samples by the reconstruction
     proxy from the sequence file, so the cache carries neither it nor them.
     """
-    modulation = adc[:, 7].astype(np.int64)
+    modulation = np.asarray(tables.adc)[:, 7].astype(np.int64)
     named = _present(modulation[modulation > 0])
     rf = np.asarray(tables.rf, dtype=np.int64).reshape(-1, 10)[:, 1:4].ravel()
     arbitrary = (
@@ -476,7 +488,7 @@ def _receiver_only(adc: NDArray[np.float64], tables: Any) -> set[int]:
 
 
 def _rf_library(
-    sequence: Any, tables: Any, blocks: NDArray[np.float64]
+    sequence: Any, tables: Any, played: NDArray[np.int64]
 ) -> tuple[
     NDArray[np.float64], NDArray[np.int32], NDArray[np.float64], NDArray[np.float64]
 ]:
@@ -492,13 +504,13 @@ def _rf_library(
     # of shapes, on a row that plays something: a pulse of zero amplitude has
     # no spectrum, and its row keeps none.
     measured: dict[tuple[float, float, float], tuple[NDArray[np.float64], float]] = {}
-    played = blocks[:, 1].astype(np.int64)
-    identifiers = np.unique(played[played > 0])
+    column = tables.blocks[:, 0]
+    identifiers = played + 1
     for identifier in identifiers:
         row = rows[identifier - 1]
         key = (row[1], row[2], row[3])
         if row[0] != 0.0 and key not in measured:
-            block = int(np.argmax(played == identifier)) + 1
+            block = int(np.argmax(column == identifier)) + 1
             event = sequence.get_block(block).rf
             energy, peak, _ = pp.calc_rf_power(event, dt=raster)
             measured[key] = (
@@ -530,8 +542,9 @@ def _spectrum_row(event: Any, raster: float) -> NDArray[np.float64]:
     row[1] = max(result.num_bands, 1)
     row[2] = result.band_bandwidths.max() if result.num_bands else result.bandwidth
     # Measured on 10 Hz bins; below a millihertz an offset is the float32 of a
-    # binary file's shape samples, not a property of the pulse.
-    row[3 : 3 + count] = np.round(result.band_offsets[:count], 3)
+    # binary file's shape samples, not a property of the pulse; adding zero
+    # folds the -0.0 a small negative offset rounds to.
+    row[3 : 3 + count] = np.round(result.band_offsets[:count], 3) + 0.0
     return row
 
 
@@ -602,8 +615,8 @@ def _specification_libraries(tables: Any) -> SpecificationLibraries:
     kinds = _declared_types(tables)
     referenced: dict[str, set[int]] = {kind: set() for kind in _EXTENSION_KINDS}
     numbers = {number: kind for kind, number in kinds.items() if number >= 0}
-    heads = _present(np.asarray(tables.blocks[:, 5], dtype=np.int64))
-    for head in (np.flatnonzero(heads[1:]) + 1).tolist():
+    heads = require("played")(tables.blocks, [5])
+    for head in np.flatnonzero(heads).tolist():
         for kind, row in _links(tables.extensions, head):
             if kind in numbers:
                 referenced[numbers[kind]].add(row)
@@ -644,49 +657,34 @@ def _label_rows(values: Any, labels: Any) -> NDArray[np.float64]:
     return rows
 
 
-def _block_states(
-    sequence: Any, blocks: NDArray[np.float64]
-) -> dict[str, NDArray[Any]]:
-    """Per block, the rows it plays, the flags in force and the gradient under its RF; per readout, the labels.
+def _block_states(sequence: Any) -> dict[str, Any]:
+    """Return the per-block state pypulseqpp evaluates, which the converter lays out per block and per readout.
 
-    ``block_rotations`` and ``block_shims`` count the ROTATIONS and RF_SHIMS
-    rows from 0, -1 for none. ``block_flags`` holds :data:`_BLOCK_FLAGS` and
-    ``adc_labels``, one row per acquiring block in block order,
-    :data:`_READOUT_LABELS`: the values in force once the block's own labels
-    apply, PMC starting at 1 and every other label at 0, with OFF as 0 or 1.
-    ``trid_set`` is 1 at a block that sets TRID, which is where a repetition of
-    that group starts even when it sets the value already in force.
-    ``rf_steady`` is 1 at a block whose RF pulse plays under a gradient that
-    holds one value along every channel axis, and ``rf_gradient`` is the
-    gradient along x, y and z at the pulse's centre, in Hz/m.
+    ``flag_labels`` and ``readout_labels`` hold, in the order of
+    :data:`_BLOCK_FLAGS` and :data:`_READOUT_LABELS`, the values in force once
+    each block's own labels apply, PMC starting at 1 and every other label at
+    0; the converter keeps the readout labels at acquiring blocks, with OFF as
+    0 or 1. ``trid_blocks`` are the blocks that set TRID, which is where a
+    repetition of that group starts even when it sets the value already in
+    force. ``rf_pulsed``, ``rf_steady`` and ``rf_gradient`` are
+    ``pypulseqpp.Sequence.rf_gradients``: per RF block, whether the gradient
+    holds one value along each channel axis and its value at the pulse's
+    centre, in Hz/m. ``block_rotations`` and ``block_shims`` count from 1, 0
+    for none.
     """
-    count = blocks.shape[0]
     start = dict.fromkeys((*_BLOCK_FLAGS, *_READOUT_LABELS), 0)
     start["PMC"] = 1
     found = sequence.evaluate_labels(init=start, evolution="blocks")
-    state = {
-        name: np.broadcast_to(np.asarray(found[name], dtype=np.int32), (count,))
-        for name in start
-    }
-    labels = np.stack([state[name] for name in _READOUT_LABELS], axis=1)
-    labels = labels[blocks[:, 5] > 0]
-    labels[:, -1] = labels[:, -1] != 0
-    trid_set = np.zeros(count, dtype=np.int32)
-    trid_set[np.asarray(sequence.label_blocks("TRID"), dtype=np.int64) - 1] = 1
     under = sequence.rf_gradients()
-    pulsed = under.block.astype(np.int64) - 1
-    rf_steady = np.zeros(count, dtype=np.int32)
-    rf_steady[pulsed] = under.steady.all(axis=1)
-    rf_gradient = np.zeros((count, 3), dtype=np.float64)
-    rf_gradient[pulsed] = under.gradient
     return {
-        "block_rotations": np.asarray(sequence.block_rotations(), dtype=np.int32) - 1,
-        "block_shims": np.asarray(sequence.block_shims(), dtype=np.int32) - 1,
-        "block_flags": np.stack([state[name] for name in _BLOCK_FLAGS], axis=1),
-        "trid_set": trid_set,
-        "rf_steady": rf_steady,
-        "rf_gradient": rf_gradient,
-        "adc_labels": labels,
+        "flag_labels": [found[name] for name in _BLOCK_FLAGS],
+        "readout_labels": [found[name] for name in _READOUT_LABELS],
+        "trid_blocks": np.asarray(sequence.label_blocks("TRID")).tolist(),
+        "rf_pulsed": under.block,
+        "rf_steady": under.steady,
+        "rf_gradient": under.gradient,
+        "block_rotations": sequence.block_rotations(),
+        "block_shims": sequence.block_shims(),
     }
 
 
@@ -708,11 +706,11 @@ def played_rf(sequence: Any) -> tuple[tuple[int, float], ...]:
         The definition, and the angle the row turns the magnetisation through
         in degrees.
     """
-    libraries = _sequence_libraries(sequence, _tables(sequence))
-    rows, _ = _played(libraries.blocks, (1,))
-    definitions = _densified(libraries.rf_definitions, rows)
+    rows, _ = _played(_tables(sequence).blocks, (0,))
+    definitions = _densified(sequence.event_definitions().rf, rows)
+    flips = np.asarray(sequence.rf_flip_angles(), dtype=np.float64)
     return tuple(
-        (int(definition), float(libraries.rf_flip_deg[row]))
+        (int(definition), float(flips[row]))
         for definition, row in zip(definitions, rows, strict=True)
     )
 
@@ -725,58 +723,6 @@ def _repetition_size(sequence: Any) -> int:
             "repetition that starts at the first block"
         )
     return int(size)
-
-
-def _resolve_ppm(libraries: SequenceLibraries, tables: Any, system: pp.Opts) -> None:
-    """Fold the ppm offsets of the RF and ADC rows into their absolute offsets, in place."""
-    rf_offsets, adc_offsets = tables.absolute_offsets(system)
-    libraries.rf[:, 8:10] = rf_offsets
-    libraries.rf[:, 6:8] = 0.0
-    libraries.adc[:, 5:7] = adc_offsets
-    libraries.adc[:, 3:5] = 0.0
-
-
-def _compact(
-    blocks: NDArray[np.float64], libraries: SequenceLibraries
-) -> tuple[Any, ...]:
-    """Drop the library rows no block plays, renumbering the block table in place.
-
-    A row no block plays would deduplicate into a definition of its own that
-    nothing plays. Numbering the played rows again keeps the libraries to what
-    the scan actually asks for.
-    """
-    played_rf, rf_map = _played(blocks, (1,))
-    played_grad, grad_map = _played(blocks, (2, 3, 4))
-    played_adc, adc_map = _played(blocks, (5,))
-    rf = libraries.rf[played_rf]
-    grad = libraries.grad[played_grad]
-    grad_statistics = libraries.grad_statistics[played_grad]
-    adc = libraries.adc[played_adc]
-    uses = np.asarray(libraries.rf_use, dtype=np.int32)[played_rf]
-    spectra = libraries.rf_spectra[played_rf]
-    flips = libraries.rf_flip_deg[played_rf]
-    channels = libraries.rf_channels[played_rf]
-    integrals = libraries.rf_b1sq_integral[played_rf]
-    rf_defs = _densified(libraries.rf_definitions, played_rf)
-    grad_defs = _densified(libraries.grad_definitions, played_grad)
-    adc_defs = _densified(libraries.adc_definitions, played_adc)
-    for columns, mapping in (((1,), rf_map), ((2, 3, 4), grad_map), ((5,), adc_map)):
-        for column in columns:
-            blocks[:, column] = mapping[blocks[:, column].astype(np.int64)]
-    return (
-        rf,
-        grad,
-        grad_statistics,
-        adc,
-        uses,
-        spectra,
-        flips,
-        channels,
-        integrals,
-        rf_defs,
-        grad_defs,
-        adc_defs,
-    )
 
 
 def _densified(
@@ -802,21 +748,18 @@ def _densified(
 
 
 def _played(
-    blocks: NDArray[np.float64], columns: tuple[int, ...]
-) -> tuple[NDArray[np.int64], NDArray[np.float64]]:
+    events: NDArray[np.int32], columns: tuple[int, ...]
+) -> tuple[NDArray[np.int64], NDArray[np.int32]]:
     """Return the 0-based rows some block names, and the new id of each old id.
 
-    The new ids number the named rows from 1 in order; id 0 stays 0.
+    ``events`` is pypulseqpp's block table. The new ids number the named rows
+    from 1 in order; id 0 stays 0.
     """
-    present = _present(blocks[:, list(columns)].astype(np.int64).ravel())
-    present[0] = False
-    named = np.flatnonzero(present)
-    mapping = np.zeros(present.size, dtype=np.float64)
-    mapping[named] = np.arange(1, named.size + 1)
-    return named - 1, mapping
+    mapping = require("played")(events, list(columns))
+    return np.flatnonzero(mapping) - 1, mapping
 
 
-def _present(ids: NDArray[np.int64]) -> NDArray[np.bool_]:
+def _present(ids: NDArray[np.integer]) -> NDArray[np.bool_]:
     """Return a mask over ``0..max(ids)`` that is True at every id in ``ids``, which are non-negative."""
     present = np.zeros(int(ids.max(initial=0)) + 1, dtype=bool)
     present[ids] = True

@@ -219,6 +219,7 @@ def convert(
     wave_budget: WaveBudget | None = None,
     profile: VendorProfile | None = None,
     grouping: Grouping | None = None,
+    designed: list[tuple[Path, pp.Sequence]] | None = None,
 ) -> Path:
     """Segment a sequence file and write its IR cache beside it.
 
@@ -266,6 +267,10 @@ def convert(
         The waveform memory of the playout the cache is for, which the cache
         lays the waves out in (:func:`plan_waves`); None holds every wave at
         once on the gradient raster of the chain's first file.
+    designed
+        The chain as :func:`pulserver.mrd.designed_chain` returns it,
+        segmented in place of reading and verifying the files, and moved to
+        ``fov_offset`` in place.
 
     Returns
     -------
@@ -281,10 +286,43 @@ def convert(
     OSError
         If no cache was written.
     """
+    cache_path(Path(seq_path), cache_ext).unlink(missing_ok=True)
+    payload = _payload(Path(seq_path), system, verify_signature, fov_offset, designed)
+    return _write_cache(
+        seq_path,
+        system,
+        payload,
+        vendor=vendor,
+        label_column_map=label_column_map,
+        cache_ext=cache_ext,
+        sar_ratios=sar_ratios,
+        wave_budget=wave_budget,
+        profile=profile,
+        grouping=grouping,
+    )
+
+
+def _write_cache(
+    seq_path: Path | str,
+    system: pp.Opts,
+    payload: list[dict[str, Any]],
+    *,
+    vendor: int = 0,
+    label_column_map: Sequence[int] = (0, 1, 2),
+    cache_ext: str = ".pseg",
+    sar_ratios: Sequence[SarRatio] | None = None,
+    wave_budget: WaveBudget | None = None,
+    profile: VendorProfile | None = None,
+    grouping: Grouping | None = None,
+) -> Path:
+    """Segment the libraries :func:`_payload` returned and write the cache, as :func:`convert`.
+
+    The libraries are copies, so the sequences they were taken from may
+    change while this runs; the segmentation releases the GIL.
+    """
     seq_path = Path(seq_path)
     target = cache_path(seq_path, cache_ext)
     target.unlink(missing_ok=True)
-    payload = _payload(seq_path, system, verify_signature, fov_offset)
     if sar_ratios is not None:
         if len(sar_ratios) != len(payload):
             raise ValueError(
@@ -507,16 +545,20 @@ def _payload(
     system: pp.Opts,
     verify_signature: bool,
     fov_offset: Sequence[float] | None = None,
+    designed: list[tuple[Path, pp.Sequence]] | None = None,
 ) -> list[dict[str, Any]]:
     """Read the chain and return each file's libraries, in play order, prescribed to ``fov_offset``.
 
     A file the reader refuses raises ``ValueError``, whatever the reader
     itself raised.
     """
-    try:
-        chain_read = read_chain(seq_path, verify=verify_signature)
-    except RuntimeError as failure:
-        raise ValueError(f"cannot read {seq_path}: {failure}") from failure
+    if designed is not None:
+        chain_read = designed
+    else:
+        try:
+            chain_read = read_chain(seq_path, verify=verify_signature)
+        except RuntimeError as failure:
+            raise ValueError(f"cannot read {seq_path}: {failure}") from failure
     payload = []
     for _, sequence in chain_read:
         if fov_offset is not None:

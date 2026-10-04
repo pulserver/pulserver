@@ -13,8 +13,9 @@ import hashlib
 import inspect
 import logging
 import shutil
-from collections.abc import Mapping
-from functools import lru_cache
+from collections.abc import Callable, Mapping
+from concurrent.futures import ThreadPoolExecutor
+from functools import lru_cache, partial
 from pathlib import Path
 from typing import Any
 
@@ -23,6 +24,8 @@ import pypulseqpp as pp
 from .. import __version__, _plugins, ir
 from .._plugins import PluginPath
 from ..design import RfLayout, SequencePlugin, load_plugin
+from ..ir._convert import _payload, _write_cache
+from ..mrd._sequence import designed_chain
 from ..protocol import (
     Parameter,
     ProtocolKey,
@@ -191,15 +194,28 @@ def generate(
         return f"GENERATED {_pushed(store, found, push)}\n"
     staged = store.stage()
     try:
-        accepted, paths = scanner.design(design, validation.values, staged)
+        accepted, paths, written = scanner._design(design, validation.values, staged)
         if not accepted.valid:
             raise CallError(accepted.info)
+        # The sequences as written stand for the files. The conversion moves
+        # them to the offset in place, which changes only RF and ADC offsets
+        # and phases; the check then rotates them in place and reads only
+        # gradients and timing.
+        chain = designed_chain(written)
+        offset = prescribed_offset(validation.values)
         rotation = prescribed_rotation(validation.values)
-        problems = ir.check(paths[0], system, rotation=rotation, limits=checked)
+        # The cache is segmented from copies of the moved sequences while the
+        # check rotates them.
+        with ThreadPoolExecutor(1) as pool:
+            cache = pool.submit(
+                _converting(paths[0], system, checked, offset, options, chain)
+            )
+            problems = ir.check(
+                paths[0], system, rotation=rotation, limits=checked, designed=chain
+            )
+            cache.result()
         if problems:
             raise CallError("; ".join(problems))
-        offset = prescribed_offset(validation.values)
-        _converted(paths[0], system, checked, offset, options)
         (staged / "resolved.protocol").write_text(
             format_values(validation.values, listing)
         )
@@ -443,17 +459,28 @@ def _convert(
     fov_offset: tuple[float, float, float] = (0.0, 0.0, 0.0),
 ) -> str:
     system, options, checked = split_limits(limits)
-    return _converted(seq_path, system, checked, fov_offset, options).name
+    return _converting(seq_path, system, checked, fov_offset, options)().name
 
 
-def _converted(
+def _converting(
     seq_path: str,
     system: pp.Opts,
     checked: ir.CheckLimits,
     fov_offset: tuple[float, float, float],
     options: dict[str, Any],
-) -> Path:
-    ratios = None if checked.vops is None else ir.sar_ratios(seq_path, system, checked)
-    return ir.convert(
-        seq_path, system, fov_offset=fov_offset, sar_ratios=ratios, **options
+    designed: list[tuple[Path, pp.Sequence]] | None = None,
+) -> Callable[[], Path]:
+    """Move the chain to ``fov_offset`` and return the call that writes its cache.
+
+    The chain is ``designed`` when given, else read from ``seq_path`` and
+    verified.
+    """
+    ratios = (
+        None
+        if checked.vops is None
+        else ir.sar_ratios(seq_path, system, checked, designed)
+    )
+    payload = _payload(Path(seq_path), system, True, fov_offset, designed)
+    return partial(
+        _write_cache, seq_path, system, payload, sar_ratios=ratios, **options
     )

@@ -61,16 +61,24 @@ static void seq_file_set_defaults(pulseq_file *seq)
     INIT_LIBRARY(seq, definitions_library, num_definitions, is_definitions_library_parsed);
     memset(&seq->reserved_definitions_library, 0, sizeof(seq->reserved_definitions_library));
 
-    INIT_LIBRARY(seq, block_library, num_blocks, is_block_library_parsed);
-    seq->block_ids = NULL;
+    seq->num_blocks = 0;
+    seq->is_block_library_parsed = 0;
+    seq->block_events = NULL;
+    seq->block_durations = NULL;
+    seq->block_duration_raster = 0.0;
+    seq->rf_map = NULL;
+    seq->grad_map = NULL;
+    seq->adc_map = NULL;
+    seq->rf_map_size = 0;
+    seq->grad_map_size = 0;
+    seq->adc_map_size = 0;
     seq->block_rotations = NULL;
     seq->block_shims = NULL;
-    seq->block_flags = NULL;
+    memset(seq->block_flags, 0, sizeof(seq->block_flags));
     seq->block_trid_set = NULL;
     seq->block_rf_steady = NULL;
     seq->block_rf_gradient = NULL;
-    seq->num_adc_labels = 0;
-    seq->adc_labels = NULL;
+    memset(seq->adc_labels, 0, sizeof(seq->adc_labels));
     INIT_LIBRARY(seq, rf_library, rf_library_size, is_rf_library_parsed);
     seq->rf_use_tags = NULL;
     seq->rf_spectra = NULL;
@@ -83,7 +91,11 @@ static void seq_file_set_defaults(pulseq_file *seq)
     seq->block_definitions = NULL;
     INIT_LIBRARY(seq, grad_library, grad_library_size, is_grad_library_parsed);
     seq->grad_statistics = NULL;
-    INIT_LIBRARY(seq, adc_library, adc_library_size, is_adc_library_parsed);
+    seq->adc_library_size = 0;
+    seq->is_adc_library_parsed = 0;
+    seq->adc_rows = NULL;
+    seq->adc_offsets = NULL;
+    seq->adc_rows_of = NULL;
     INIT_LIBRARY(seq, extensions_library, extensions_library_size, is_extensions_library_parsed);
     INIT_LIBRARY(seq, trigger_library, trigger_library_size, is_extensions_library_parsed);
     INIT_LIBRARY(
@@ -147,16 +159,9 @@ void pulseq__file_reset(pulseq_file *seq)
     }
     if (seq->is_block_library_parsed)
     {
-        PULSEQ_FREE(seq->block_library);
-        PULSEQ_FREE(seq->block_ids);
-        seq->block_ids = NULL;
-        PULSEQ_FREE(seq->block_rotations);
-        PULSEQ_FREE(seq->block_shims);
-        PULSEQ_FREE(seq->block_flags);
         PULSEQ_FREE(seq->block_trid_set);
         PULSEQ_FREE(seq->block_rf_steady);
         PULSEQ_FREE(seq->block_rf_gradient);
-        PULSEQ_FREE(seq->adc_labels);
     }
     if (seq->is_rf_library_parsed)
     {
@@ -195,8 +200,9 @@ void pulseq__file_reset(pulseq_file *seq)
         PULSEQ_FREE(seq->grad_library);
         PULSEQ_FREE(seq->grad_statistics);
     }
-    if (seq->is_adc_library_parsed)
-        PULSEQ_FREE(seq->adc_library);
+    if (seq->adc_rows_of)
+        PULSEQ_FREE(seq->adc_rows_of);
+    seq->adc_rows_of = NULL;
     if (seq->is_extensions_library_parsed)
     {
         PULSEQ_FREE(seq->extensions_library);
@@ -240,6 +246,12 @@ void pulseq_file_free(pulseq_file *seq)
     memset(&seq->design_raster, 0, sizeof(seq->design_raster));
 }
 
+/* The played row, from 0, of a library id; -1 for none. */
+static int played_row(const int *map, int size, int id)
+{
+    return id > 0 && id < size ? map[id] - 1 : -1;
+}
+
 int pulseq_get_raw_block_content_ids(
     const pulseq_file *seq,
     pulseq_raw_block *block,
@@ -247,7 +259,7 @@ int pulseq_get_raw_block_content_ids(
     int parse_extensions)
 {
     int next_ext_id, ext_count;
-    PULSEQ_REAL *ev;
+    const int *ev;
     PULSEQ_REAL *ext_data;
 
     if (!seq || !block || block_index < 0 || block_index >= seq->num_blocks)
@@ -261,16 +273,17 @@ int pulseq_get_raw_block_content_ids(
     block->adc = -1;
     block->ext_count = 0;
 
-    if (!seq->block_library)
+    if (!seq->block_events || !seq->block_durations || seq->block_duration_raster <= 0.0)
         return 0;
 
-    ev = seq->block_library[block_index];
-    block->block_duration = (int)ev[0];
-    block->rf = (int)ev[1] - 1;
-    block->gx = (int)ev[2] - 1;
-    block->gy = (int)ev[3] - 1;
-    block->gz = (int)ev[4] - 1;
-    block->adc = (int)ev[5] - 1;
+    ev = seq->block_events[block_index];
+    block->block_duration =
+        (int)rint(seq->block_durations[block_index] / seq->block_duration_raster);
+    block->rf = played_row(seq->rf_map, seq->rf_map_size, ev[0]);
+    block->gx = played_row(seq->grad_map, seq->grad_map_size, ev[1]);
+    block->gy = played_row(seq->grad_map, seq->grad_map_size, ev[2]);
+    block->gz = played_row(seq->grad_map, seq->grad_map_size, ev[3]);
+    block->adc = played_row(seq->adc_map, seq->adc_map_size, ev[4]);
 
     if (!parse_extensions)
     {
@@ -281,7 +294,7 @@ int pulseq_get_raw_block_content_ids(
         seq->extensions_library_size <= 0)
         return 1;
 
-    next_ext_id = (int)ev[6];
+    next_ext_id = ev[5];
     ext_count = 0;
     while (next_ext_id > 0 && next_ext_id <= seq->extensions_library_size &&
            ext_count < PULSEQ_MAX_EXTENSIONS_PER_BLOCK)

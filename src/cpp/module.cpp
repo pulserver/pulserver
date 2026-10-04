@@ -612,6 +612,14 @@ Collection load(const std::string &cache_path, int source_size)
     return coll;
 }
 
+/* What @p call returns, called without the GIL. */
+template <typename Call>
+auto unlocked(Call call)
+{
+    py::gil_scoped_release released;
+    return call();
+}
+
 /* Convert a chain of sequences, each given as the libraries it was read into. */
 Collection convert(const py::list &chain, const pulseg_opts &opts)
 {
@@ -620,6 +628,7 @@ Collection convert(const py::list &chain, const pulseg_opts &opts)
         throw std::invalid_argument("a chain holds at least one subsequence");
 
     std::vector<pulseq_file> files((size_t)count);
+    std::vector<py::object> held;
     for (int i = 0; i < count; ++i)
         pulseq_file_init(&files[(size_t)i], nullptr);
     auto release = [&files]()
@@ -630,7 +639,7 @@ Collection convert(const py::list &chain, const pulseg_opts &opts)
     try
     {
         for (int i = 0; i < count; ++i)
-            pulserver::build_pulseq_file(files[(size_t)i], chain[(size_t)i].cast<py::dict>());
+            pulserver::build_pulseq_file(files[(size_t)i], chain[(size_t)i].cast<py::dict>(), held);
     }
     catch (...)
     {
@@ -645,8 +654,8 @@ Collection convert(const py::list &chain, const pulseg_opts &opts)
         throw std::bad_alloc();
     }
     pulseg_diagnostic diag = PULSEG_DIAGNOSTIC_INIT;
-    const int converted =
-        pulseg_convert_collection(coll.get(), &diag, files.data(), count, &opts, 1);
+    const int converted = unlocked(
+        [&] { return pulseg_convert_collection(coll.get(), &diag, files.data(), count, &opts, 1); });
     release();
     if (converted != count)
         raise_failure(diag.code, diag);
@@ -687,14 +696,50 @@ PYBIND11_MODULE(_ext, module)
             const Collection coll = convert(chain, opts);
             const pulseg_wave_budget budget = budget_for(coll.get(), wave_budget);
             pulseg_diagnostic diag = PULSEG_DIAGNOSTIC_INIT;
-            const int rc = pulseg_store_wave_plan(coll.get(), &budget, &diag);
+            const int rc =
+                unlocked([&] { return pulseg_store_wave_plan(coll.get(), &budget, &diag); });
             if (PULSEG_FAILED(rc))
                 native::raise_diagnosed(rc, diag);
-            require(pulseg_store_repetitions(coll.get()), "heaviest repetitions");
-            if (PULSEG_FAILED(pulseg_save_cache(coll.get(), seq_path.c_str(), &opts)))
+            require(
+                unlocked([&] { return pulseg_store_repetitions(coll.get()); }),
+                "heaviest repetitions");
+            if (PULSEG_FAILED(
+                    unlocked([&] { return pulseg_save_cache(coll.get(), seq_path.c_str(), &opts); })))
                 throw std::invalid_argument("cannot write the cache beside " + seq_path);
         },
         "Segment a chain read into libraries and write its IR cache beside a sequence file.");
+
+    module.def(
+        "played",
+        [](const py::array_t<int32_t> &events, const std::vector<int> &columns)
+        {
+            const auto table = events.unchecked<2>();
+            int32_t largest = 0;
+            for (py::ssize_t b = 0; b < table.shape(0); ++b)
+                for (const int column : columns)
+                    largest = std::max(largest, table(b, column));
+            // Allocated here rather than by NumPy, whose huge-page advice
+            // makes the first touch of a large array compact memory.
+            auto *ids = new int32_t[static_cast<size_t>(largest) + 1]();
+            py::capsule owner(ids, [](void *held) { delete[] static_cast<int32_t *>(held); });
+            for (py::ssize_t b = 0; b < table.shape(0); ++b)
+                for (const int column : columns)
+                {
+                    const int32_t id = table(b, column);
+                    if (id < 0)
+                        throw std::invalid_argument("a block names a negative event id");
+                    ids[id] = 1;
+                }
+            ids[0] = 0;
+            int32_t next = 0;
+            for (int32_t id = 1; id <= largest; ++id)
+                ids[id] = ids[id] ? ++next : 0;
+            return py::array_t<int32_t>(static_cast<py::ssize_t>(largest) + 1, ids, owner);
+        },
+        py::arg("events"),
+        py::arg("columns"),
+        "The new id of each event id some block names in the given columns of a "
+        "block table, numbered from 1 in id order; 0 for an id none names.");
 
     module.def(
         "summary_from_libraries",

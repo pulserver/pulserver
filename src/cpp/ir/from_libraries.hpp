@@ -8,6 +8,8 @@
 
 #include <pybind11/pybind11.h>
 
+#include <vector>
+
 #include "pulseq.h"
 
 namespace pulserver
@@ -19,8 +21,11 @@ namespace pulserver
  * @p libraries holds the arrays pulserver.ir reads a pypulseqpp Sequence
  * into, in the layout the parser produces. The file is left as a completed
  * parse: every library is marked read, so pulseq_file_free() releases it.
+ * The per-block arrays are read in place, not copied: @p held keeps each
+ * one alive, and must outlive every use of @p seq.
  */
-void build_pulseq_file(pulseq_file &seq, const pybind11::dict &libraries);
+void build_pulseq_file(
+    pulseq_file &seq, const pybind11::dict &libraries, std::vector<pybind11::object> &held);
 
 } // namespace pulserver
 
