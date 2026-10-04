@@ -552,10 +552,11 @@ def _boundary_flags(
         keys = np.stack(
             [space, *(counters[other] for other in enclosing), counters[name]], axis=1
         )
-        _, first_at = np.unique(keys, axis=0, return_index=True)
-        _, last_from_end = np.unique(keys[::-1], axis=0, return_index=True)
-        flags[first_at] |= np.uint64(first.value)
-        flags[count - 1 - last_from_end] |= np.uint64(last.value)
+        order = np.lexsort(keys.T[::-1])
+        ordered = keys[order]
+        change = np.any(ordered[1:] != ordered[:-1], axis=1)
+        flags[order[np.concatenate(([True], change))]] |= np.uint64(first.value)
+        flags[order[np.concatenate((change, [True]))]] |= np.uint64(last.value)
     return flags
 
 

@@ -362,7 +362,7 @@ def conversion_payload(sequence: Any, system: pp.Opts) -> dict[str, Any]:
         "grad_definitions": grad_definitions,
         "adc_definitions": adc_definitions,
         "block_definitions": _densified(
-            libraries.block_definitions, list(range(len(libraries.block_definitions)))
+            libraries.block_definitions, np.arange(len(libraries.block_definitions))
         ),
         "shapes": [
             (shape.num_uncompressed_samples, shape.samples)
@@ -597,7 +597,8 @@ def _specification_libraries(tables: Any) -> SpecificationLibraries:
     kinds = _declared_types(tables)
     referenced: dict[str, set[int]] = {kind: set() for kind in _EXTENSION_KINDS}
     numbers = {number: kind for kind, number in kinds.items() if number >= 0}
-    for head in {int(value) for value in tables.blocks[:, 5]} - {0}:
+    heads = np.unique(tables.blocks[:, 5].astype(np.int64))
+    for head in heads[heads > 0].tolist():
         for kind, row in _links(tables.extensions, head):
             if kind in numbers:
                 referenced[numbers[kind]].add(row)
@@ -703,8 +704,7 @@ def played_rf(sequence: Any) -> tuple[tuple[int, float], ...]:
         in degrees.
     """
     libraries = _sequence_libraries(sequence, _tables(sequence))
-    _, mapping = _played(libraries.rf, libraries.blocks, (1,))
-    rows = [old - 1 for old in sorted(mapping, key=mapping.get)]
+    rows, _ = _played(libraries.blocks, (1,))
     definitions = _densified(libraries.rf_definitions, rows)
     return tuple(
         (int(definition), float(libraries.rf_flip_deg[row]))
@@ -740,29 +740,24 @@ def _compact(
     nothing plays. Numbering the played rows again keeps the libraries to what
     the scan actually asks for.
     """
-    rf, rf_map = _played(libraries.rf, blocks, (1,))
-    grad, grad_map = _played(libraries.grad, blocks, (2, 3, 4))
-    grad_statistics, _ = _played(libraries.grad_statistics, blocks, (2, 3, 4))
-    adc, adc_map = _played(libraries.adc, blocks, (5,))
-    played_rf = [old - 1 for old in sorted(rf_map, key=rf_map.get)]
-    uses = np.array([libraries.rf_use[row] for row in played_rf], dtype=np.int32)
+    played_rf, rf_map = _played(blocks, (1,))
+    played_grad, grad_map = _played(blocks, (2, 3, 4))
+    played_adc, adc_map = _played(blocks, (5,))
+    rf = libraries.rf[played_rf]
+    grad = libraries.grad[played_grad]
+    grad_statistics = libraries.grad_statistics[played_grad]
+    adc = libraries.adc[played_adc]
+    uses = np.asarray(libraries.rf_use, dtype=np.int32)[played_rf]
     spectra = libraries.rf_spectra[played_rf]
     flips = libraries.rf_flip_deg[played_rf]
     channels = libraries.rf_channels[played_rf]
     integrals = libraries.rf_b1sq_integral[played_rf]
     rf_defs = _densified(libraries.rf_definitions, played_rf)
-    grad_defs = _densified(
-        libraries.grad_definitions,
-        [old - 1 for old in sorted(grad_map, key=grad_map.get)],
-    )
-    adc_defs = _densified(
-        libraries.adc_definitions, [old - 1 for old in sorted(adc_map, key=adc_map.get)]
-    )
+    grad_defs = _densified(libraries.grad_definitions, played_grad)
+    adc_defs = _densified(libraries.adc_definitions, played_adc)
     for columns, mapping in (((1,), rf_map), ((2, 3, 4), grad_map), ((5,), adc_map)):
         for column in columns:
-            blocks[:, column] = [
-                mapping.get(int(value), 0) for value in blocks[:, column]
-            ]
+            blocks[:, column] = mapping[blocks[:, column].astype(np.int64)]
     return (
         rf,
         grad,
@@ -779,31 +774,34 @@ def _compact(
     )
 
 
-def _densified(definitions: NDArray[np.int32], played: list[int]) -> NDArray[np.int32]:
+def _densified(
+    definitions: NDArray[np.int32], played: NDArray[np.int64]
+) -> NDArray[np.int32]:
     """Return the definitions of the played rows, numbered densely from 0.
 
     Dropping the rows no block plays leaves gaps in the numbering, and the
     conversion indexes its definition tables by these, so they are handed out
     again in order of first appearance.
     """
-    seen: dict[int, int] = {}
-    return np.array(
-        [seen.setdefault(int(definitions[row]), len(seen)) for row in played],
-        dtype=np.int32,
-    )
+    values = np.asarray(definitions)[played]
+    _, first, inverse = np.unique(values, return_index=True, return_inverse=True)
+    rank = np.empty(first.size, dtype=np.int32)
+    rank[np.argsort(first)] = np.arange(first.size, dtype=np.int32)
+    return rank[inverse.reshape(-1)]
 
 
 def _played(
-    library: NDArray[np.float64], blocks: NDArray[np.float64], columns: tuple[int, ...]
-) -> tuple[NDArray[np.float64], dict[int, int]]:
-    """Return the rows some block names, and what each of their ids becomes."""
-    named = sorted(
-        {int(value) for column in columns for value in blocks[:, column]} - {0}
-    )
-    mapping = {old: new for new, old in enumerate(named, start=1)}
-    if not named:
-        return library[:0], mapping
-    return library[[old - 1 for old in named]], mapping
+    blocks: NDArray[np.float64], columns: tuple[int, ...]
+) -> tuple[NDArray[np.int64], NDArray[np.float64]]:
+    """Return the 0-based rows some block names, and the new id of each old id.
+
+    The new ids number the named rows from 1 in order; id 0 stays 0.
+    """
+    ids = np.unique(blocks[:, list(columns)].astype(np.int64))
+    named = ids[ids > 0]
+    mapping = np.zeros(int(ids.max(initial=0)) + 1, dtype=np.float64)
+    mapping[named] = np.arange(1, named.size + 1)
+    return named - 1, mapping
 
 
 def _extension_map(tables: Any) -> list[int]:
