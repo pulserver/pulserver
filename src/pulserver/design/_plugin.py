@@ -350,11 +350,23 @@ class SequencePlugin:
         TypeError
             If ``app`` returns neither a sequence nor a list of them.
         """
+        validation, paths, _ = self._design(system, request, directory)
+        return validation, paths
+
+    def _design(
+        self,
+        system: pp.Opts,
+        request: Mapping[ProtocolKey, Any],
+        directory: Path | str,
+    ) -> tuple[Validation, list[str], list[tuple[Path, pp.Sequence]]]:
+        """Return what :meth:`design` returns, and each written path with its sequence as written."""
         validation, protocol = self._validated(system, request)
         if protocol is None:
-            return validation, []
+            return validation, [], []
         built = self.generate(system, protocol)
-        return validation, _write(built, Path(directory) / _FIRST_FILE)
+        paths = _write(built, Path(directory) / _FIRST_FILE)
+        chain = [built] if isinstance(built, pp.Sequence) else built
+        return validation, paths, list(zip(map(Path, paths), chain, strict=True))
 
     def _defaults(self) -> dict[str, Any]:
         """Return the default of each argument of the app, ``inspect.Parameter.empty`` for none."""

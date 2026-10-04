@@ -58,6 +58,20 @@ def read_chain(path: Path | str, *, verify: bool = False) -> list[tuple[Path, An
     return pp.io.read_chain(path, detect_rf_use=True, verify=verify)
 
 
+def designed_chain(written: list[tuple[Path, Any]]) -> list[tuple[Path, Any]]:
+    """Return a chain as written, each pulse labelled as :func:`read_chain` labels the file.
+
+    The sequences are the ones the files were written from, deduplicated as
+    written, so the chain stands for reading the files back. A file is read
+    with no system, at 1.5 T and the proton gyromagnetic ratio, and its
+    unlabelled pulses are labelled there; the sequences are labelled in place
+    at the same field.
+    """
+    for _, sequence in written:
+        sequence.detect_rf_use(B0=1.5, gamma=42.576e6)
+    return written
+
+
 @dataclass(frozen=True)
 class SequenceDefinitions:
     """Definitions describing what a sequence acquires, in Pulseq units.

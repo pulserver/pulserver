@@ -219,6 +219,7 @@ def convert(
     wave_budget: WaveBudget | None = None,
     profile: VendorProfile | None = None,
     grouping: Grouping | None = None,
+    designed: list[tuple[Path, pp.Sequence]] | None = None,
 ) -> Path:
     """Segment a sequence file and write its IR cache beside it.
 
@@ -266,6 +267,10 @@ def convert(
         The waveform memory of the playout the cache is for, which the cache
         lays the waves out in (:func:`plan_waves`); None holds every wave at
         once on the gradient raster of the chain's first file.
+    designed
+        The chain as :func:`pulserver.mrd.designed_chain` returns it,
+        segmented in place of reading and verifying the files, and moved to
+        ``fov_offset`` in place.
 
     Returns
     -------
@@ -284,7 +289,7 @@ def convert(
     seq_path = Path(seq_path)
     target = cache_path(seq_path, cache_ext)
     target.unlink(missing_ok=True)
-    payload = _payload(seq_path, system, verify_signature, fov_offset)
+    payload = _payload(seq_path, system, verify_signature, fov_offset, designed)
     if sar_ratios is not None:
         if len(sar_ratios) != len(payload):
             raise ValueError(
@@ -507,16 +512,20 @@ def _payload(
     system: pp.Opts,
     verify_signature: bool,
     fov_offset: Sequence[float] | None = None,
+    designed: list[tuple[Path, pp.Sequence]] | None = None,
 ) -> list[dict[str, Any]]:
     """Read the chain and return each file's libraries, in play order, prescribed to ``fov_offset``.
 
     A file the reader refuses raises ``ValueError``, whatever the reader
     itself raised.
     """
-    try:
-        chain_read = read_chain(seq_path, verify=verify_signature)
-    except RuntimeError as failure:
-        raise ValueError(f"cannot read {seq_path}: {failure}") from failure
+    if designed is not None:
+        chain_read = designed
+    else:
+        try:
+            chain_read = read_chain(seq_path, verify=verify_signature)
+        except RuntimeError as failure:
+            raise ValueError(f"cannot read {seq_path}: {failure}") from failure
     payload = []
     for _, sequence in chain_read:
         if fov_offset is not None:

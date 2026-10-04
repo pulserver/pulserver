@@ -96,6 +96,7 @@ def check(
     *,
     rotation: np.ndarray | None = None,
     limits: CheckLimits | None = None,
+    designed: list[tuple[Path, pp.Sequence]] | None = None,
 ) -> list[str]:
     """Return the problems of a chain under a scanner's limits, in the physical frame.
 
@@ -120,6 +121,9 @@ def check(
         reflection included; the identity by default.
     limits
         The nerve and resonance limits; none by default.
+    designed
+        The chain as :func:`pulserver.mrd.designed_chain` returns it, checked
+        in place of reading the files, and rotated in place.
 
     Returns
     -------
@@ -134,10 +138,7 @@ def check(
         orthonormal.
     """
     limits = CheckLimits() if limits is None else limits
-    try:
-        chain_read = read_chain(seq_path, verify=False)
-    except RuntimeError as failure:
-        raise ValueError(f"cannot read {seq_path}: {failure}") from failure
+    chain_read = designed if designed is not None else _read(seq_path)
     turn = None if rotation is None else _prescription(rotation)
     problems = []
     for path, sequence in chain_read:
@@ -146,6 +147,13 @@ def check(
             found = [f"{path.name}: {problem}" for problem in found]
         problems += found
     return problems
+
+
+def _read(seq_path: Path | str) -> list[tuple[Path, pp.Sequence]]:
+    try:
+        return read_chain(seq_path, verify=False)
+    except RuntimeError as failure:
+        raise ValueError(f"cannot read {seq_path}: {failure}") from failure
 
 
 def _prescription(rotation: np.ndarray) -> np.ndarray | None:
@@ -219,7 +227,10 @@ def _resonance(
 
 
 def sar_ratios(
-    seq_path: Path | str, system: pp.Opts, limits: CheckLimits
+    seq_path: Path | str,
+    system: pp.Opts,
+    limits: CheckLimits,
+    designed: list[tuple[Path, pp.Sequence]] | None = None,
 ) -> list[SarRatio]:
     """Return the SAR ratios of each file of a chain against the reference pulse.
 
@@ -237,6 +248,9 @@ def sar_ratios(
         The rasters and RF dead times the reference pulse is made with.
     limits
         The VOPs, channel drive and default shim.
+    designed
+        The chain as :func:`pulserver.mrd.designed_chain` returns it, weighed
+        in place of reading the files.
 
     Returns
     -------
@@ -262,10 +276,7 @@ def sar_ratios(
         )
     )
     _, pulse = safety.check_sar(reference, vops, **drive)
-    try:
-        chain_read = read_chain(seq_path, verify=False)
-    except RuntimeError as failure:
-        raise ValueError(f"cannot read {seq_path}: {failure}") from failure
+    chain_read = designed if designed is not None else _read(seq_path)
     ratios = []
     for _, sequence in chain_read:
         _, found = safety.check_sar(sequence, vops, reference=pulse, **drive)

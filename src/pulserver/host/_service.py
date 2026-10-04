@@ -23,6 +23,7 @@ import pypulseqpp as pp
 from .. import __version__, _plugins, ir
 from .._plugins import PluginPath
 from ..design import RfLayout, SequencePlugin, load_plugin
+from ..mrd._sequence import designed_chain
 from ..protocol import (
     Parameter,
     ProtocolKey,
@@ -191,15 +192,22 @@ def generate(
         return f"GENERATED {_pushed(store, found, push)}\n"
     staged = store.stage()
     try:
-        accepted, paths = scanner.design(design, validation.values, staged)
+        accepted, paths, written = scanner._design(design, validation.values, staged)
         if not accepted.valid:
             raise CallError(accepted.info)
+        # The sequences as written stand for the files. The conversion moves
+        # them to the offset in place, which changes only RF and ADC offsets
+        # and phases; the check then rotates them in place and reads only
+        # gradients and timing.
+        chain = designed_chain(written)
+        offset = prescribed_offset(validation.values)
+        _converted(paths[0], system, checked, offset, options, chain)
         rotation = prescribed_rotation(validation.values)
-        problems = ir.check(paths[0], system, rotation=rotation, limits=checked)
+        problems = ir.check(
+            paths[0], system, rotation=rotation, limits=checked, designed=chain
+        )
         if problems:
             raise CallError("; ".join(problems))
-        offset = prescribed_offset(validation.values)
-        _converted(paths[0], system, checked, offset, options)
         (staged / "resolved.protocol").write_text(
             format_values(validation.values, listing)
         )
@@ -452,8 +460,18 @@ def _converted(
     checked: ir.CheckLimits,
     fov_offset: tuple[float, float, float],
     options: dict[str, Any],
+    designed: list[tuple[Path, pp.Sequence]] | None = None,
 ) -> Path:
-    ratios = None if checked.vops is None else ir.sar_ratios(seq_path, system, checked)
+    ratios = (
+        None
+        if checked.vops is None
+        else ir.sar_ratios(seq_path, system, checked, designed)
+    )
     return ir.convert(
-        seq_path, system, fov_offset=fov_offset, sar_ratios=ratios, **options
+        seq_path,
+        system,
+        fov_offset=fov_offset,
+        sar_ratios=ratios,
+        designed=designed,
+        **options,
     )
