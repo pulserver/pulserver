@@ -286,10 +286,43 @@ def convert(
     OSError
         If no cache was written.
     """
+    cache_path(Path(seq_path), cache_ext).unlink(missing_ok=True)
+    payload = _payload(Path(seq_path), system, verify_signature, fov_offset, designed)
+    return _write_cache(
+        seq_path,
+        system,
+        payload,
+        vendor=vendor,
+        label_column_map=label_column_map,
+        cache_ext=cache_ext,
+        sar_ratios=sar_ratios,
+        wave_budget=wave_budget,
+        profile=profile,
+        grouping=grouping,
+    )
+
+
+def _write_cache(
+    seq_path: Path | str,
+    system: pp.Opts,
+    payload: list[dict[str, Any]],
+    *,
+    vendor: int = 0,
+    label_column_map: Sequence[int] = (0, 1, 2),
+    cache_ext: str = ".pseg",
+    sar_ratios: Sequence[SarRatio] | None = None,
+    wave_budget: WaveBudget | None = None,
+    profile: VendorProfile | None = None,
+    grouping: Grouping | None = None,
+) -> Path:
+    """Segment the libraries :func:`_payload` returned and write the cache, as :func:`convert`.
+
+    The libraries are copies, so the sequences they were taken from may
+    change while this runs; the segmentation releases the GIL.
+    """
     seq_path = Path(seq_path)
     target = cache_path(seq_path, cache_ext)
     target.unlink(missing_ok=True)
-    payload = _payload(seq_path, system, verify_signature, fov_offset, designed)
     if sar_ratios is not None:
         if len(sar_ratios) != len(payload):
             raise ValueError(

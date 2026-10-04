@@ -612,6 +612,14 @@ Collection load(const std::string &cache_path, int source_size)
     return coll;
 }
 
+/* What @p call returns, called without the GIL. */
+template <typename Call>
+auto unlocked(Call call)
+{
+    py::gil_scoped_release released;
+    return call();
+}
+
 /* Convert a chain of sequences, each given as the libraries it was read into. */
 Collection convert(const py::list &chain, const pulseg_opts &opts)
 {
@@ -645,8 +653,8 @@ Collection convert(const py::list &chain, const pulseg_opts &opts)
         throw std::bad_alloc();
     }
     pulseg_diagnostic diag = PULSEG_DIAGNOSTIC_INIT;
-    const int converted =
-        pulseg_convert_collection(coll.get(), &diag, files.data(), count, &opts, 1);
+    const int converted = unlocked(
+        [&] { return pulseg_convert_collection(coll.get(), &diag, files.data(), count, &opts, 1); });
     release();
     if (converted != count)
         raise_failure(diag.code, diag);
@@ -687,11 +695,15 @@ PYBIND11_MODULE(_ext, module)
             const Collection coll = convert(chain, opts);
             const pulseg_wave_budget budget = budget_for(coll.get(), wave_budget);
             pulseg_diagnostic diag = PULSEG_DIAGNOSTIC_INIT;
-            const int rc = pulseg_store_wave_plan(coll.get(), &budget, &diag);
+            const int rc =
+                unlocked([&] { return pulseg_store_wave_plan(coll.get(), &budget, &diag); });
             if (PULSEG_FAILED(rc))
                 native::raise_diagnosed(rc, diag);
-            require(pulseg_store_repetitions(coll.get()), "heaviest repetitions");
-            if (PULSEG_FAILED(pulseg_save_cache(coll.get(), seq_path.c_str(), &opts)))
+            require(
+                unlocked([&] { return pulseg_store_repetitions(coll.get()); }),
+                "heaviest repetitions");
+            if (PULSEG_FAILED(
+                    unlocked([&] { return pulseg_save_cache(coll.get(), seq_path.c_str(), &opts); })))
                 throw std::invalid_argument("cannot write the cache beside " + seq_path);
         },
         "Segment a chain read into libraries and write its IR cache beside a sequence file.");
