@@ -481,10 +481,11 @@ def test_the_header_states_the_shift_in_millimetres_along_read_phase_and_slice()
     assert header_fov_offset_m(header()) is None
 
 
-def test_a_stated_shift_replaces_the_one_the_design_was_converted_at():
+def test_a_stated_position_away_from_the_converted_shift_adds_its_whole_phase():
     path = FIXTURES / "mprage_stack_of_spirals_3d.seq"
-    shift = (0.02, -0.012, 0.005)
-    converted = SequenceTable.read(path, fov_offset_m=shift)
+    shift = np.array([0.02, -0.012, 0.005])
+    moved = np.array([0.003, 0.001, -0.002])
+    converted = SequenceTable.read(path, fov_offset_m=tuple(shift))
     unshifted = SequenceTable.read(path)
     moving = [
         i
@@ -493,8 +494,18 @@ def test_a_stated_shift_replaces_the_one_the_design_was_converted_at():
     ]
     assert moving
     for index in moving[:20]:
-        assert unshifted.readout_phase_modulation(index) is None
-        np.testing.assert_array_equal(
-            unshifted.readout_phase_modulation(index, shift),
+        k = converted.readout_k(index)
+        np.testing.assert_allclose(
+            converted.readout_phase_modulation(index, tuple(shift)),
             converted.readout_phase_modulation(index),
+        )
+        np.testing.assert_allclose(
+            converted.readout_phase_modulation(index, tuple(shift + moved)),
+            converted.readout_phase_modulation(index) + 2 * np.pi * (moved @ k),
+            atol=1e-9,
+        )
+        np.testing.assert_allclose(
+            unshifted.readout_phase_modulation(index, tuple(shift)),
+            2 * np.pi * (shift @ k),
+            atol=1e-9,
         )

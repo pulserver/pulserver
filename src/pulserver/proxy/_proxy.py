@@ -888,7 +888,8 @@ def _enriched(
 ) -> Iterator[Any]:
     """Yield the client's stream up to its close, acquisitions enriched in play order.
 
-    ``fov_offset_m``, the shift the header states, replaces the design's.
+    ``fov_offset_m`` is the position the header states; its difference from
+    the design's shift is applied to the samples in full.
     Acquisitions are matched to readouts by position, so the stream carries
     one per readout of the chain, and once the client numbers them, every
     ``scan_counter`` must follow the previous one by one: a gap or a repeat is

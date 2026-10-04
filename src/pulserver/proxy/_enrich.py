@@ -173,22 +173,31 @@ class SequenceTable:
     ) -> np.ndarray | None:
         """Return the phase one readout's samples are corrected by, in rad, or None.
 
-        The phase modulation its ADC stores, plus what the shift adds about
-        the middle of the sampling window beyond the frequency and phase
-        offsets the scanner plays there. ``fov_offset_m``, in m along the
-        logical axes, replaces :attr:`fov_offset_m`. None when both are zero.
+        The phase modulation its ADC stores, plus what the shift
+        :attr:`fov_offset_m` the cache was converted at adds beyond the
+        frequency and phase offsets the scanner plays at the middle of the
+        sampling window. ``fov_offset_m``, in m along the logical axes, is the
+        position the object is at when it differs from that shift, as a
+        motion update states it: the difference is applied in full, as
+        ``2 pi (fov_offset_m - self.fov_offset_m) . k``. None when nothing is
+        applied.
         """
-        shift = self.fov_offset_m if fov_offset_m is None else fov_offset_m
+        converted = np.asarray(self.fov_offset_m, dtype=np.float64)
+        moved = (
+            np.zeros(3)
+            if fov_offset_m is None
+            else (np.asarray(fov_offset_m, dtype=np.float64) - converted)
+        )
         file = int(np.searchsorted(self._first_rows, index, side="right")) - 1
         stored = self._files[file].readout_phase_modulation(
             index - int(self._first_rows[file])
         )
-        if not any(shift):
+        if not converted.any() and not moved.any():
             return stored
-        curvature = _shift_curvature(self.readout_k(index), shift)
-        if curvature is None or stored is None:
-            return stored if curvature is None else curvature
-        return stored + curvature
+        phase = _shift_phase(self.readout_k(index), converted, moved)
+        if phase is None or stored is None:
+            return stored if phase is None else phase
+        return stored + phase
 
     @classmethod
     def read(
@@ -268,27 +277,30 @@ class SequenceTable:
         )
 
 
-def _shift_curvature(k: np.ndarray, shift_m: Any) -> np.ndarray | None:
-    """Return the phase a shift adds to a readout beyond a line through its window centre.
+def _shift_phase(
+    k: np.ndarray, converted_m: np.ndarray, moved_m: np.ndarray
+) -> np.ndarray | None:
+    """Return the receive phase a shift leaves to the proxy, in rad, or None when it is zero.
 
-    ``2 pi d . (k(t) - k(t_c) - k'(t_c) (t - t_c))`` in rad, ``t_c`` the
-    middle of the sampling window, where the frequency and phase offsets of
-    a shifted readout are taken. None for a readout whose k moves at one
-    rate, which the offsets alone move.
+    ``2 pi c . (k(t) - k(t_c) - k'(t_c) (t - t_c)) + 2 pi m . k(t)``: the
+    curvature of the converted shift ``c`` about the line through the window
+    centre ``t_c``, where the scanner's frequency and phase offsets take the
+    rest, and the whole phase of a further displacement ``m`` no offset
+    carries.
     """
     count = k.shape[1]
-    if count < 3:
-        return None
-    centre = 0.5 * (count - 1)
-    below = int(np.floor(centre))
-    if count % 2:
-        at = k[:, below]
-        rate = 0.5 * (k[:, below + 1] - k[:, below - 1])
-    else:
-        at = 0.5 * (k[:, below] + k[:, below + 1])
-        rate = k[:, below + 1] - k[:, below]
-    line = at[:, None] + rate[:, None] * (np.arange(count) - centre)
-    phase = 2.0 * np.pi * (np.asarray(shift_m, dtype=np.float64) @ (k - line))
+    phase = 2.0 * np.pi * (moved_m @ k)
+    if count >= 3 and converted_m.any():
+        centre = 0.5 * (count - 1)
+        below = int(np.floor(centre))
+        if count % 2:
+            at = k[:, below]
+            rate = 0.5 * (k[:, below + 1] - k[:, below - 1])
+        else:
+            at = 0.5 * (k[:, below] + k[:, below + 1])
+            rate = k[:, below + 1] - k[:, below]
+        line = at[:, None] + rate[:, None] * (np.arange(count) - centre)
+        phase = phase + 2.0 * np.pi * (converted_m @ (k - line))
     return phase if np.abs(phase).max() > 1e-9 else None
 
 
@@ -388,8 +400,8 @@ def enrich_acquisition(
     whose k moves gets it as ``traj``, trailing constant axes dropped.
 
     The samples are left as received, except where
-    :meth:`SequenceTable.readout_phase_modulation` gives a phase, at
-    ``fov_offset_m`` when given. That is the
+    :meth:`SequenceTable.readout_phase_modulation` gives a phase, with the
+    object at ``fov_offset_m`` when given. That is the
     part of a shifted field of view a receiver cannot apply itself: under a
     gradient that holds one value, a shift is a phase and a frequency offset,
     but under one that does not, the phase curves over the readout and is

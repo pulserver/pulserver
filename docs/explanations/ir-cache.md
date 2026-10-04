@@ -43,11 +43,12 @@ The cache carries each readout's frequency and phase offsets, taken at the
 middle of its sampling window, and no phase modulation: the scanner
 demodulates by the offsets alone. The reconstruction proxy applies the rest,
 $2\pi\,\mathbf{d}\cdot(\mathbf{k}(t) - \mathbf{k}(t_c) - \dot{\mathbf{k}}(t_c)(t - t_c))$
-about the window centre $t_c$, from the readout's k-space and the offset the
-MRD header states (`fov_offset_mm`) or, without one, the offset the design
-was converted at; a later offset, such as one a motion correction updates,
-needs no new cache. The reconstruction then receives an object at
-$\mathbf{d}$ at the centre of its field of view. A chain whose stored
+about the window centre $t_c$, from the readout's k-space and the offset
+$\mathbf{d}$ the design was converted at. Where the MRD header states the
+object at another position (`fov_offset_mm`), such as one a motion correction
+updates, the proxy also applies $2\pi\,\Delta\mathbf{d}\cdot\mathbf{k}(t)$
+for the difference, which needs no new cache. The reconstruction then receives an object at
+the stated position at the centre of its field of view. A chain whose stored
 modulation does not hold one phase per ADC sample is refused. The rotation of the prescription is not applied
 to the cache: the scanner plays it through its rotation matrix, composed after
 each block's own rotation. Two offsets make two caches of one design, and two
