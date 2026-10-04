@@ -183,7 +183,9 @@ class SequenceLibraries:
     adc : NDArray[np.float64]
         ``(A, 8)``: sample count; dwell in ns; delay in µs; the frequency and
         phase ppm offsets; the frequency offset in Hz; the phase offset in
-        rad; the phase modulation shape id.
+        rad; 0 for the phase modulation shape id. The cache carries no phase
+        modulation: the reconstruction proxy applies it from the sequence
+        file, and the shapes only it names are empty.
     rf_definitions, grad_definitions, adc_definitions : NDArray[np.int32]
         ``(R,)``, ``(G,)``, ``(A,)``: the definition each row was
         deduplicated onto, counted from 1, as
@@ -297,7 +299,7 @@ def conversion_payload(sequence: Any, system: pp.Opts) -> dict[str, Any]:
     libraries = _sequence_libraries(sequence, tables)
     _resolve_ppm(libraries, tables, system)
     specifications = _specification_libraries(tables)
-    blocks = libraries.blocks.copy()
+    blocks = libraries.blocks
     (
         rf,
         grad,
@@ -360,7 +362,7 @@ def conversion_payload(sequence: Any, system: pp.Opts) -> dict[str, Any]:
         "grad_definitions": grad_definitions,
         "adc_definitions": adc_definitions,
         "block_definitions": _densified(
-            libraries.block_definitions, list(range(len(libraries.block_definitions)))
+            libraries.block_definitions, np.arange(len(libraries.block_definitions))
         ),
         "shapes": [
             (shape.num_uncompressed_samples, shape.samples)
@@ -408,6 +410,8 @@ def _sequence_libraries(sequence: Any, tables: Any) -> SequenceLibraries:
         (measured.peak_slew, measured.energy, measured.slew_energy), axis=1
     ).reshape(-1, 3)
     adc = _adc_library(tables)
+    shapes.empty(_receiver_only(adc, tables))
+    adc[:, 7] = 0
     interned = sequence.event_definitions()
     return SequenceLibraries(
         blocks,
@@ -445,8 +449,30 @@ class _ShapeTable:
             self._grids[count] = len(self._entries)
         return self._grids[count]
 
+    def empty(self, identifiers: set[int]) -> None:
+        for identifier in identifiers:
+            self._entries[identifier - 1] = Shape(0, np.zeros(0))
+
     def entries(self) -> tuple[Shape, ...]:
         return tuple(self._entries)
+
+
+def _receiver_only(adc: NDArray[np.float64], tables: Any) -> set[int]:
+    """Return the shapes only ADC phase modulation names.
+
+    The modulation is applied to the received samples by the reconstruction
+    proxy from the sequence file, so the cache carries neither it nor them.
+    """
+    modulation = adc[:, 7].astype(np.int64)
+    named = _present(modulation[modulation > 0])
+    rf = np.asarray(tables.rf, dtype=np.int64).reshape(-1, 10)[:, 1:4].ravel()
+    arbitrary = (
+        np.asarray(tables.arbitrary_gradients, dtype=np.int64).reshape(-1, 6)[:, 3:5]
+    ).ravel()
+    for other in (rf, arbitrary):
+        other = other[(other > 0) & (other < named.size)]
+        named[other] = False
+    return set(np.flatnonzero(named).tolist())
 
 
 def _rf_library(
@@ -539,14 +565,16 @@ def _adc_library(tables: Any) -> NDArray[np.float64]:
     rows = np.array(tables.adc, dtype=np.float64).reshape(-1, 8)
     rows[:, 1] = np.rint(rows[:, 1] * 1e9)
     rows[:, 2] = _micro(rows[:, 2])
-    for identifier, row in enumerate(rows, start=1):
-        modulation = int(row[7])
-        size = tables.shapes[modulation - 1].num_samples if modulation else 0
-        if size and size != row[0]:
-            raise ValueError(
-                f"ADC {identifier} acquires {row[0]:g} samples but its "
-                f"phase modulation has {size}"
-            )
+    modulation = rows[:, 7].astype(np.int64)
+    sizes = np.array([shape.num_samples for shape in tables.shapes] or [0])
+    size = np.where(modulation > 0, sizes[np.maximum(modulation - 1, 0)], 0)
+    wrong = np.flatnonzero((size > 0) & (size != rows[:, 0]))
+    if wrong.size:
+        identifier = int(wrong[0])
+        raise ValueError(
+            f"ADC {identifier + 1} acquires {rows[identifier, 0]:g} samples but "
+            f"its phase modulation has {size[identifier]}"
+        )
     return rows
 
 
@@ -574,7 +602,8 @@ def _specification_libraries(tables: Any) -> SpecificationLibraries:
     kinds = _declared_types(tables)
     referenced: dict[str, set[int]] = {kind: set() for kind in _EXTENSION_KINDS}
     numbers = {number: kind for kind, number in kinds.items() if number >= 0}
-    for head in {int(value) for value in tables.blocks[:, 5]} - {0}:
+    heads = _present(np.asarray(tables.blocks[:, 5], dtype=np.int64))
+    for head in (np.flatnonzero(heads[1:]) + 1).tolist():
         for kind, row in _links(tables.extensions, head):
             if kind in numbers:
                 referenced[numbers[kind]].add(row)
@@ -680,8 +709,7 @@ def played_rf(sequence: Any) -> tuple[tuple[int, float], ...]:
         in degrees.
     """
     libraries = _sequence_libraries(sequence, _tables(sequence))
-    _, mapping = _played(libraries.rf, libraries.blocks, (1,))
-    rows = [old - 1 for old in sorted(mapping, key=mapping.get)]
+    rows, _ = _played(libraries.blocks, (1,))
     definitions = _densified(libraries.rf_definitions, rows)
     return tuple(
         (int(definition), float(libraries.rf_flip_deg[row]))
@@ -717,29 +745,24 @@ def _compact(
     nothing plays. Numbering the played rows again keeps the libraries to what
     the scan actually asks for.
     """
-    rf, rf_map = _played(libraries.rf, blocks, (1,))
-    grad, grad_map = _played(libraries.grad, blocks, (2, 3, 4))
-    grad_statistics, _ = _played(libraries.grad_statistics, blocks, (2, 3, 4))
-    adc, adc_map = _played(libraries.adc, blocks, (5,))
-    played_rf = [old - 1 for old in sorted(rf_map, key=rf_map.get)]
-    uses = np.array([libraries.rf_use[row] for row in played_rf], dtype=np.int32)
+    played_rf, rf_map = _played(blocks, (1,))
+    played_grad, grad_map = _played(blocks, (2, 3, 4))
+    played_adc, adc_map = _played(blocks, (5,))
+    rf = libraries.rf[played_rf]
+    grad = libraries.grad[played_grad]
+    grad_statistics = libraries.grad_statistics[played_grad]
+    adc = libraries.adc[played_adc]
+    uses = np.asarray(libraries.rf_use, dtype=np.int32)[played_rf]
     spectra = libraries.rf_spectra[played_rf]
     flips = libraries.rf_flip_deg[played_rf]
     channels = libraries.rf_channels[played_rf]
     integrals = libraries.rf_b1sq_integral[played_rf]
     rf_defs = _densified(libraries.rf_definitions, played_rf)
-    grad_defs = _densified(
-        libraries.grad_definitions,
-        [old - 1 for old in sorted(grad_map, key=grad_map.get)],
-    )
-    adc_defs = _densified(
-        libraries.adc_definitions, [old - 1 for old in sorted(adc_map, key=adc_map.get)]
-    )
+    grad_defs = _densified(libraries.grad_definitions, played_grad)
+    adc_defs = _densified(libraries.adc_definitions, played_adc)
     for columns, mapping in (((1,), rf_map), ((2, 3, 4), grad_map), ((5,), adc_map)):
         for column in columns:
-            blocks[:, column] = [
-                mapping.get(int(value), 0) for value in blocks[:, column]
-            ]
+            blocks[:, column] = mapping[blocks[:, column].astype(np.int64)]
     return (
         rf,
         grad,
@@ -756,31 +779,48 @@ def _compact(
     )
 
 
-def _densified(definitions: NDArray[np.int32], played: list[int]) -> NDArray[np.int32]:
+def _densified(
+    definitions: NDArray[np.int32], played: NDArray[np.int64]
+) -> NDArray[np.int32]:
     """Return the definitions of the played rows, numbered densely from 0.
 
     Dropping the rows no block plays leaves gaps in the numbering, and the
     conversion indexes its definition tables by these, so they are handed out
     again in order of first appearance.
     """
-    seen: dict[int, int] = {}
-    return np.array(
-        [seen.setdefault(int(definitions[row]), len(seen)) for row in played],
-        dtype=np.int32,
+    values = np.asarray(definitions, dtype=np.int64)[played]
+    if not values.size:
+        return values.astype(np.int32)
+    first = np.full(int(values.max()) + 1, values.size, dtype=np.int64)
+    np.minimum.at(first, values, np.arange(values.size))
+    present = np.flatnonzero(first < values.size)
+    rank = np.empty(first.size, dtype=np.int32)
+    rank[present[np.argsort(first[present], kind="stable")]] = np.arange(
+        present.size, dtype=np.int32
     )
+    return rank[values]
 
 
 def _played(
-    library: NDArray[np.float64], blocks: NDArray[np.float64], columns: tuple[int, ...]
-) -> tuple[NDArray[np.float64], dict[int, int]]:
-    """Return the rows some block names, and what each of their ids becomes."""
-    named = sorted(
-        {int(value) for column in columns for value in blocks[:, column]} - {0}
-    )
-    mapping = {old: new for new, old in enumerate(named, start=1)}
-    if not named:
-        return library[:0], mapping
-    return library[[old - 1 for old in named]], mapping
+    blocks: NDArray[np.float64], columns: tuple[int, ...]
+) -> tuple[NDArray[np.int64], NDArray[np.float64]]:
+    """Return the 0-based rows some block names, and the new id of each old id.
+
+    The new ids number the named rows from 1 in order; id 0 stays 0.
+    """
+    present = _present(blocks[:, list(columns)].astype(np.int64).ravel())
+    present[0] = False
+    named = np.flatnonzero(present)
+    mapping = np.zeros(present.size, dtype=np.float64)
+    mapping[named] = np.arange(1, named.size + 1)
+    return named - 1, mapping
+
+
+def _present(ids: NDArray[np.int64]) -> NDArray[np.bool_]:
+    """Return a mask over ``0..max(ids)`` that is True at every id in ``ids``, which are non-negative."""
+    present = np.zeros(int(ids.max(initial=0)) + 1, dtype=bool)
+    present[ids] = True
+    return present
 
 
 def _extension_map(tables: Any) -> list[int]:

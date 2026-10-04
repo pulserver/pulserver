@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 __all__ = ["DESIGN_PARAMETER", "Design", "DesignCache"]
 
 import re
@@ -120,7 +122,9 @@ class DesignCache:
                     return self._designs[directory]
             design = Design(
                 directory=directory,
-                table=SequenceTable.read(directory / _ENTRY),
+                table=SequenceTable.read(
+                    directory / _ENTRY, fov_offset_m=_fov_offset_m(directory)
+                ),
                 prospective_motion=_asks_for_motion_correction(directory / _ENTRY),
             )
             with self._lock:
@@ -133,6 +137,14 @@ class DesignCache:
     def resolve(self, header: Any) -> Design:
         """Return the design a header names; see :meth:`locate` and :meth:`read`."""
         return self.read(self.locate(header))
+
+
+def _fov_offset_m(directory: Path) -> tuple[float, float, float]:
+    """Return the field-of-view shift a design was converted at, in m."""
+    manifest = json.loads((directory / MANIFEST).read_text())
+    return tuple(
+        1e-3 * float(v) for v in manifest.get("fov_offset_mm", (0.0, 0.0, 0.0))
+    )
 
 
 def _asks_for_motion_correction(entry: Path) -> bool:

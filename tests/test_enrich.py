@@ -13,6 +13,7 @@ from pulserver.proxy._enrich import (
     SequenceTable,
     enrich_acquisition,
     enrich_header,
+    header_fov_offset_m,
 )
 
 FIXTURES = Path(__file__).parent / "fixtures" / "sequences"
@@ -467,3 +468,44 @@ def test_a_steady_readout_needs_no_curve(tmp_path):
         translation=(0.04, 0.0, 0.0), through_rotation=True
     ).apply_to_sequence(seq, in_place=True)
     assert written(seq, tmp_path).readout_phase_modulation(0) is None
+
+
+def test_the_header_states_the_shift_in_millimetres_along_read_phase_and_slice():
+    stated = header()
+    stated.userParameters = ismrmrd.xsd.userParametersType(
+        userParameterString=[
+            ismrmrd.xsd.userParameterStringType(name="fov_offset_mm", value="20 -12 5")
+        ]
+    )
+    assert header_fov_offset_m(stated) == pytest.approx((0.02, -0.012, 0.005))
+    assert header_fov_offset_m(header()) is None
+
+
+def test_a_stated_position_away_from_the_converted_shift_adds_its_whole_phase():
+    path = FIXTURES / "mprage_stack_of_spirals_3d.seq"
+    shift = np.array([0.02, -0.012, 0.005])
+    moved = np.array([0.003, 0.001, -0.002])
+    converted = SequenceTable.read(path, fov_offset_m=tuple(shift))
+    unshifted = SequenceTable.read(path)
+    moving = [
+        i
+        for i in range(len(converted))
+        if converted.readout_phase_modulation(i) is not None
+    ]
+    assert moving
+    for index in moving[:20]:
+        k = converted.readout_k(index)
+        np.testing.assert_allclose(
+            converted.readout_phase_modulation(index, tuple(shift)),
+            converted.readout_phase_modulation(index),
+        )
+        np.testing.assert_allclose(
+            converted.readout_phase_modulation(index, tuple(shift + moved)),
+            converted.readout_phase_modulation(index) + 2 * np.pi * (moved @ k),
+            atol=1e-9,
+        )
+        np.testing.assert_allclose(
+            unshifted.readout_phase_modulation(index, tuple(shift)),
+            2 * np.pi * (shift @ k),
+            atol=1e-9,
+        )

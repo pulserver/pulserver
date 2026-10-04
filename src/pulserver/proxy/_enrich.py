@@ -24,6 +24,7 @@ import numpy as np
 
 from .._labels import MRD_COUNTERS, MRD_FLAGS
 from ..mrd._acquisitions import AcquisitionFlag
+from ..mrd._metadata import user_parameter
 from ..mrd._sequence import ReadoutTable, SequenceDefinitions, read_chain
 
 _F = AcquisitionFlag
@@ -137,6 +138,10 @@ class SequenceTable:
         ``TR`` and ``TI`` minima and every distinct ``TE`` in ascending order,
         in ms, and every distinct ``FlipAngle`` in ascending order, in
         degrees. Keys no file defines or measures are absent.
+    fov_offset_m : tuple of float
+        The field-of-view shift the scanner plays the chain at, in m, along
+        the axes the design's blocks are rotated onto, as
+        :func:`pulserver.ir.prescribe` takes it.
     """
 
     counters: dict[str, np.ndarray]
@@ -150,6 +155,7 @@ class SequenceTable:
     sequence_parameters: dict[str, list[float]]
     _files: tuple[ReadoutTable, ...] = dataclasses.field(repr=False)
     _first_rows: np.ndarray = dataclasses.field(repr=False)
+    fov_offset_m: tuple[float, float, float] = (0.0, 0.0, 0.0)
 
     def __len__(self) -> int:
         return int(self.num_samples.size)
@@ -162,15 +168,43 @@ class SequenceTable:
         file = int(np.searchsorted(self._first_rows, index, side="right")) - 1
         return self._files[file].readout_k(index - int(self._first_rows[file]))
 
-    def readout_phase_modulation(self, index: int) -> np.ndarray | None:
-        """Return the phase modulation of one readout's ADC, in rad, or None."""
+    def readout_phase_modulation(
+        self, index: int, fov_offset_m: Any = None
+    ) -> np.ndarray | None:
+        """Return the phase one readout's samples are corrected by, in rad, or None.
+
+        The phase modulation its ADC stores, plus what the shift
+        :attr:`fov_offset_m` the cache was converted at adds beyond the
+        frequency and phase offsets the scanner plays at the middle of the
+        sampling window. ``fov_offset_m``, in m along the logical axes, is the
+        position the object is at when it differs from that shift, as a
+        motion update states it: the difference is applied in full, as
+        ``2 pi (fov_offset_m - self.fov_offset_m) . k``. None when nothing is
+        applied.
+        """
+        converted = np.asarray(self.fov_offset_m, dtype=np.float64)
+        moved = (
+            np.zeros(3)
+            if fov_offset_m is None
+            else (np.asarray(fov_offset_m, dtype=np.float64) - converted)
+        )
         file = int(np.searchsorted(self._first_rows, index, side="right")) - 1
-        return self._files[file].readout_phase_modulation(
+        stored = self._files[file].readout_phase_modulation(
             index - int(self._first_rows[file])
         )
+        if not converted.any() and not moved.any():
+            return stored
+        phase = _shift_phase(self.readout_k(index), converted, moved)
+        if phase is None or stored is None:
+            return stored if phase is None else phase
+        return stored + phase
 
     @classmethod
-    def read(cls, path: Path | str) -> SequenceTable:
+    def read(
+        cls,
+        path: Path | str,
+        fov_offset_m: tuple[float, float, float] = (0.0, 0.0, 0.0),
+    ) -> SequenceTable:
         """Tabulate the ``NextSequence`` chain starting at a sequence file.
 
         Raises
@@ -239,7 +273,35 @@ class SequenceTable:
             sequence_parameters=parameters,
             _files=tuple(files),
             _first_rows=np.cumsum([0] + [len(file) for file in files[:-1]]),
+            fov_offset_m=tuple(float(value) for value in fov_offset_m),
         )
+
+
+def _shift_phase(
+    k: np.ndarray, converted_m: np.ndarray, moved_m: np.ndarray
+) -> np.ndarray | None:
+    """Return the receive phase a shift leaves to the proxy, in rad, or None when it is zero.
+
+    ``2 pi c . (k(t) - k(t_c) - k'(t_c) (t - t_c)) + 2 pi m . k(t)``: the
+    curvature of the converted shift ``c`` about the line through the window
+    centre ``t_c``, where the scanner's frequency and phase offsets take the
+    rest, and the whole phase of a further displacement ``m`` no offset
+    carries.
+    """
+    count = k.shape[1]
+    phase = 2.0 * np.pi * (moved_m @ k)
+    if count >= 3 and converted_m.any():
+        centre = 0.5 * (count - 1)
+        below = int(np.floor(centre))
+        if count % 2:
+            at = k[:, below]
+            rate = 0.5 * (k[:, below + 1] - k[:, below - 1])
+        else:
+            at = 0.5 * (k[:, below] + k[:, below + 1])
+            rate = k[:, below + 1] - k[:, below]
+        line = at[:, None] + rate[:, None] * (np.arange(count) - centre)
+        phase = phase + 2.0 * np.pi * (converted_m @ (k - line))
+    return phase if np.abs(phase).max() > 1e-9 else None
 
 
 def enrich_header(header: Any, table: SequenceTable) -> None:
@@ -313,7 +375,23 @@ def enrich_header(header: Any, table: SequenceTable) -> None:
     header.encoding = encodings
 
 
-def enrich_acquisition(acquisition: Any, table: SequenceTable, index: int) -> None:
+def header_fov_offset_m(header: Any) -> tuple[float, float, float] | None:
+    """Return the field-of-view shift an MRD header carries, in m, or None.
+
+    Read from the ``fov_offset_mm`` user parameter string, three millimetres
+    along the logical readout, phase and slice axes, as the scanner client
+    writes the prescription centre.
+    """
+    stated = user_parameter(header, "fov_offset_mm")
+    if stated in (None, ""):
+        return None
+    x, y, z = (1e-3 * float(value) for value in str(stated).split())
+    return x, y, z
+
+
+def enrich_acquisition(
+    acquisition: Any, table: SequenceTable, index: int, fov_offset_m: Any = None
+) -> None:
     """Stamp row ``index`` of the table on one acquisition, in place.
 
     Sets the encoding counters, flags, ``sample_time_us`` and
@@ -321,11 +399,13 @@ def enrich_acquisition(acquisition: Any, table: SequenceTable, index: int) -> No
     across the readout, in which case the received value stays. A readout
     whose k moves gets it as ``traj``, trailing constant axes dropped.
 
-    The samples are left as received, except where the readout's ADC carries a
-    phase modulation. That is the part of a shifted field of view a receiver
-    cannot apply itself: under a gradient that holds one value, a shift is a
-    phase and a frequency offset, but under one that does not, the phase
-    curves over the readout and is applied here.
+    The samples are left as received, except where
+    :meth:`SequenceTable.readout_phase_modulation` gives a phase, with the
+    object at ``fov_offset_m`` when given. That is the
+    part of a shifted field of view a receiver cannot apply itself: under a
+    gradient that holds one value, a shift is a phase and a frequency offset,
+    but under one that does not, the phase curves over the readout and is
+    applied here.
 
     Raises
     ------
@@ -352,7 +432,7 @@ def enrich_acquisition(acquisition: Any, table: SequenceTable, index: int) -> No
     acquisition.sample_time_us = float(table.sample_time_us[index])
     acquisition.encoding_space_ref = int(table.encoding_space[index])
 
-    modulation = table.readout_phase_modulation(index)
+    modulation = table.readout_phase_modulation(index, fov_offset_m)
     if modulation is not None:
         if modulation.size != count:
             raise ValueError(
@@ -472,11 +552,30 @@ def _boundary_flags(
         keys = np.stack(
             [space, *(counters[other] for other in enclosing), counters[name]], axis=1
         )
-        _, first_at = np.unique(keys, axis=0, return_index=True)
-        _, last_from_end = np.unique(keys[::-1], axis=0, return_index=True)
-        flags[first_at] |= np.uint64(first.value)
-        flags[count - 1 - last_from_end] |= np.uint64(last.value)
+        order, change = _groups(keys)
+        flags[order[np.concatenate(([True], change))]] |= np.uint64(first.value)
+        flags[order[np.concatenate((change, [True]))]] |= np.uint64(last.value)
     return flags
+
+
+def _groups(keys: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Return a stable order grouping equal rows of ``keys``, and where each row of it differs from the next.
+
+    Rows of non-negative counters are packed into one integer per row where
+    they fit, which sorts faster than ordering by each column in turn.
+    """
+    keys = keys.astype(np.int64)
+    sizes = keys.max(axis=0, initial=0) + 1
+    if keys.size and keys.min() >= 0 and float(np.prod(sizes.astype(float))) < 2.0**62:
+        packed = np.zeros(keys.shape[0], dtype=np.int64)
+        for column, size in zip(keys.T, sizes, strict=True):
+            packed = packed * size + column
+        order = np.argsort(packed, kind="stable")
+        ordered = packed[order]
+        return order, ordered[1:] != ordered[:-1]
+    order = np.lexsort(keys.T[::-1])
+    ordered = keys[order]
+    return order, np.any(ordered[1:] != ordered[:-1], axis=1)
 
 
 def _limit(values: np.ndarray, centre: int | None = None) -> Any:

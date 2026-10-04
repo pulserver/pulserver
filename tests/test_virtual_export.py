@@ -198,9 +198,8 @@ def test_a_gradient_that_starts_and_ends_away_from_zero_inside_its_block_steps_t
     _assert_same_trajectory(back.calculate_kspace()[0], played)
 
 
-def test_the_receiver_phase_is_the_adc_offsets_advancing_from_its_start_and_its_modulation(
-    tmp_path,
-):
+def test_the_receiver_phase_is_the_adc_offsets_advancing_from_its_start(tmp_path):
+    """The modulation is left to the reconstruction proxy, as on the scanner."""
     samples, dwell = 32, 1e-5
     modulation = np.linspace(0.0, 2.0, samples)
     adc = pp.make_adc(
@@ -221,9 +220,7 @@ def test_the_receiver_phase_is_the_adc_offsets_advancing_from_its_start_and_its_
     back, (phase,) = _exported(path, tmp_path / "exported.seq")
 
     since = dwell * (np.arange(samples) + 0.5)
-    np.testing.assert_allclose(
-        phase, 0.4 + 2 * math.pi * 250.0 * since + modulation, atol=1e-5
-    )
+    np.testing.assert_allclose(phase, 0.4 + 2 * math.pi * 250.0 * since, atol=1e-5)
     window = back.get_block(2).adc
     assert window.freq_offset == window.phase_offset == 0.0
     assert window.num_samples == samples

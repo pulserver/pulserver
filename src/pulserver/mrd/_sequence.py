@@ -23,8 +23,8 @@ _RUN_SAMPLES = 1 << 17
 #: Runs whose k-space a table keeps.
 _KEPT_RUNS = 2
 
-#: ADC column of ``Sequence.block_events``, and the number of columns.
-_ADC, _COLUMNS = 5, 7
+#: ADC column of ``Sequence.libraries().blocks``.
+_ADC = 4
 
 
 def read_chain(path: Path | str, *, verify: bool = False) -> list[tuple[Path, Any]]:
@@ -62,10 +62,11 @@ def read_chain(path: Path | str, *, verify: bool = False) -> list[tuple[Path, An
 class SequenceDefinitions:
     """Definitions describing what a sequence acquires, in Pulseq units.
 
-    ``TR``, ``TE`` and ``FlipAngle`` a sequence does not define are measured
-    by ``Sequence.test_report_dict``: TE from the excitation before the
-    closest approach to the k-space centre, TR between the excitations around
-    it, and every distinct flip angle the sequence plays.
+    ``TR`` and ``TE`` a sequence does not define are measured by
+    ``Sequence.test_report_dict``: TE from the excitation before the closest
+    approach to the k-space centre, TR between the excitations around it. An
+    undefined ``FlipAngle`` is every distinct value of
+    ``Sequence.rf_flip_angles``, as the report lists them.
 
     Attributes
     ----------
@@ -99,17 +100,18 @@ class SequenceDefinitions:
     def from_sequence(cls, seq: Any) -> SequenceDefinitions:
         """Read the definitions of a ``pypulseqpp.Sequence``, measuring those it lacks.
 
-        Measuring runs ``check_timing``, which may record ``TotalDuration`` and
+        Measuring TR or TE runs ``check_timing``, which may record ``TotalDuration`` and
         needs the sequence on a system, as ``pypulseqpp.io.read`` builds one.
         """
         tr = tuple(_numbers(seq.get_definition("TR")))
         te = tuple(_numbers(seq.get_definition("TE")))
         flip_angle = tuple(_numbers(seq.get_definition("FlipAngle")))
-        if not (tr and te and flip_angle):
-            measured_tr, measured_te, measured_flip = _measured(seq)
+        if not (tr and te):
+            measured_tr, measured_te = _measured(seq)
             tr = tr or measured_tr
             te = te or measured_te
-            flip_angle = flip_angle or measured_flip
+        if not flip_angle:
+            flip_angle = tuple(float(a) for a in np.unique(seq.rf_flip_angles()))
         return cls(
             matrix=_triple(seq.get_definition("Matrix"), int),
             fov=_triple(seq.get_definition("FOV"), float),
@@ -177,7 +179,7 @@ class ReadoutTable:
     center_sample: np.ndarray
     trajectory_dimensions: np.ndarray
     _runs: _Runs = field(repr=False)
-    #: One entry per distinct ADC: its phase modulation in rad, or None.
+    #: One entry per distinct phase modulation shape: the modulation in rad, or None.
     _phase_modulation: tuple[np.ndarray | None, ...] = field(default=(), repr=False)
     #: Which entry of _phase_modulation each readout plays.
     _modulated_by: np.ndarray = field(
@@ -190,14 +192,19 @@ class ReadoutTable:
     @classmethod
     def from_sequence(cls, seq: Any) -> ReadoutTable:
         """Tabulate the readouts of a ``pypulseqpp.Sequence``."""
-        events = np.array(list(seq.block_events.values()), dtype=np.int64)
-        events = events.reshape(-1, _COLUMNS)
+        tables = seq.libraries()
         echoes = seq.adc_echoes()
         block = echoes.block.astype(np.int64)
         count = block.size
         num_samples = echoes.num_samples.astype(np.int32)
-        adcs, which = _events_by_id(seq, events[block - 1, _ADC], block, "adc")
-        dwell = np.array([float(adc.dwell) for adc in adcs])[which]
+        adc_rows = np.asarray(tables.adc, dtype=np.float64).reshape(-1, 8)
+        played = adc_rows[
+            np.asarray(tables.blocks)[block - 1, _ADC].astype(np.int64) - 1
+        ]
+        dwell = played[:, 1]
+        # A shifted field of view gives every readout an ADC row of its own;
+        # the modulation is decoded once per shape the rows name.
+        adcs, which = _events_by_id(seq, played[:, 7].astype(np.int64), block, "adc")
         labels = _labels_at(seq, block)
 
         reverse = labels.get("REV", np.zeros(count, dtype=np.int64)) != 0
@@ -322,7 +329,7 @@ def _labels_at(seq: Any, block: np.ndarray) -> dict[str, np.ndarray]:
 
 
 def _measured(seq: Any) -> tuple[tuple[float, ...], ...]:
-    """TR, TE and flip angles as pypulseqpp's report measures them; empty where it cannot.
+    """TR and TE as pypulseqpp's report measures them; empty where it cannot.
 
     A sequence without RF has no TR: the report's fallback to the total
     duration is not one.
@@ -333,7 +340,6 @@ def _measured(seq: Any) -> tuple[tuple[float, ...], ...]:
     return (
         (tr,) if plays_rf and math.isfinite(tr) else (),
         (te,) if math.isfinite(te) else (),
-        tuple(float(angle) for angle in report["flip_angles_deg"]),
     )
 
 

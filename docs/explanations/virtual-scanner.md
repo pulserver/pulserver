@@ -417,8 +417,8 @@ virtual scanner's simulation of the cache on the same spins.
   axes, for every readout.
 - An object posed where an axial, an oblique or a reflected prescription
   places the field of view is acquired by every shipped sequence as it is at
-  the isocentre, EPI and spiral readouts, which the translation gives a phase
-  modulation, and readouts turned by a rotation extension included; an object
+  the isocentre, EPI and spiral readouts, whose curvature the proxy's phase
+  completes, and readouts turned by a rotation extension included; an object
   away from the offset, or turned otherwise than prescribed, is not.
 - A series streamed through the proxy under an axial, an oblique and a
   reflected prescription is reconstructed into the image of the phantom at the
