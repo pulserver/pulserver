@@ -299,7 +299,7 @@ def conversion_payload(sequence: Any, system: pp.Opts) -> dict[str, Any]:
     libraries = _sequence_libraries(sequence, tables)
     _resolve_ppm(libraries, tables, system)
     specifications = _specification_libraries(tables)
-    blocks = libraries.blocks.copy()
+    blocks = libraries.blocks
     (
         rf,
         grad,
@@ -463,13 +463,16 @@ def _receiver_only(adc: NDArray[np.float64], tables: Any) -> set[int]:
     The modulation is applied to the received samples by the reconstruction
     proxy from the sequence file, so the cache carries neither it nor them.
     """
-    played = set(np.asarray(tables.rf, dtype=np.int64).reshape(-1, 10)[:, 1:4].ravel())
-    played |= set(
-        np.asarray(tables.arbitrary_gradients, dtype=np.int64)
-        .reshape(-1, 6)[:, 3:5]
-        .ravel()
-    )
-    return {int(i) for i in adc[:, 7] if i > 0} - played
+    modulation = adc[:, 7].astype(np.int64)
+    named = _present(modulation[modulation > 0])
+    rf = np.asarray(tables.rf, dtype=np.int64).reshape(-1, 10)[:, 1:4].ravel()
+    arbitrary = (
+        np.asarray(tables.arbitrary_gradients, dtype=np.int64).reshape(-1, 6)[:, 3:5]
+    ).ravel()
+    for other in (rf, arbitrary):
+        other = other[(other > 0) & (other < named.size)]
+        named[other] = False
+    return set(np.flatnonzero(named).tolist())
 
 
 def _rf_library(
@@ -562,14 +565,16 @@ def _adc_library(tables: Any) -> NDArray[np.float64]:
     rows = np.array(tables.adc, dtype=np.float64).reshape(-1, 8)
     rows[:, 1] = np.rint(rows[:, 1] * 1e9)
     rows[:, 2] = _micro(rows[:, 2])
-    for identifier, row in enumerate(rows, start=1):
-        modulation = int(row[7])
-        size = tables.shapes[modulation - 1].num_samples if modulation else 0
-        if size and size != row[0]:
-            raise ValueError(
-                f"ADC {identifier} acquires {row[0]:g} samples but its "
-                f"phase modulation has {size}"
-            )
+    modulation = rows[:, 7].astype(np.int64)
+    sizes = np.array([shape.num_samples for shape in tables.shapes] or [0])
+    size = np.where(modulation > 0, sizes[np.maximum(modulation - 1, 0)], 0)
+    wrong = np.flatnonzero((size > 0) & (size != rows[:, 0]))
+    if wrong.size:
+        identifier = int(wrong[0])
+        raise ValueError(
+            f"ADC {identifier + 1} acquires {rows[identifier, 0]:g} samples but "
+            f"its phase modulation has {size[identifier]}"
+        )
     return rows
 
 
@@ -597,8 +602,8 @@ def _specification_libraries(tables: Any) -> SpecificationLibraries:
     kinds = _declared_types(tables)
     referenced: dict[str, set[int]] = {kind: set() for kind in _EXTENSION_KINDS}
     numbers = {number: kind for kind, number in kinds.items() if number >= 0}
-    heads = np.unique(tables.blocks[:, 5].astype(np.int64))
-    for head in heads[heads > 0].tolist():
+    heads = _present(np.asarray(tables.blocks[:, 5], dtype=np.int64))
+    for head in (np.flatnonzero(heads[1:]) + 1).tolist():
         for kind, row in _links(tables.extensions, head):
             if kind in numbers:
                 referenced[numbers[kind]].add(row)
@@ -783,11 +788,17 @@ def _densified(
     conversion indexes its definition tables by these, so they are handed out
     again in order of first appearance.
     """
-    values = np.asarray(definitions)[played]
-    _, first, inverse = np.unique(values, return_index=True, return_inverse=True)
+    values = np.asarray(definitions, dtype=np.int64)[played]
+    if not values.size:
+        return values.astype(np.int32)
+    first = np.full(int(values.max()) + 1, values.size, dtype=np.int64)
+    np.minimum.at(first, values, np.arange(values.size))
+    present = np.flatnonzero(first < values.size)
     rank = np.empty(first.size, dtype=np.int32)
-    rank[np.argsort(first)] = np.arange(first.size, dtype=np.int32)
-    return rank[inverse.reshape(-1)]
+    rank[present[np.argsort(first[present], kind="stable")]] = np.arange(
+        present.size, dtype=np.int32
+    )
+    return rank[values]
 
 
 def _played(
@@ -797,11 +808,19 @@ def _played(
 
     The new ids number the named rows from 1 in order; id 0 stays 0.
     """
-    ids = np.unique(blocks[:, list(columns)].astype(np.int64))
-    named = ids[ids > 0]
-    mapping = np.zeros(int(ids.max(initial=0)) + 1, dtype=np.float64)
+    present = _present(blocks[:, list(columns)].astype(np.int64).ravel())
+    present[0] = False
+    named = np.flatnonzero(present)
+    mapping = np.zeros(present.size, dtype=np.float64)
     mapping[named] = np.arange(1, named.size + 1)
     return named - 1, mapping
+
+
+def _present(ids: NDArray[np.int64]) -> NDArray[np.bool_]:
+    """Return a mask over ``0..max(ids)`` that is True at every id in ``ids``, which are non-negative."""
+    present = np.zeros(int(ids.max(initial=0)) + 1, dtype=bool)
+    present[ids] = True
+    return present
 
 
 def _extension_map(tables: Any) -> list[int]:
