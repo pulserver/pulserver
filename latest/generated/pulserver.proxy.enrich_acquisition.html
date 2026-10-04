@@ -539,7 +539,8 @@
 <p>Sets the encoding counters, flags, <code class="docutils literal notranslate"><span class="pre">sample_time_us</span></code> and
 <code class="docutils literal notranslate"><span class="pre">encoding_space_ref</span></code>, and <code class="docutils literal notranslate"><span class="pre">center_sample</span></code> unless k does not move
 across the readout, in which case the received value stays. A readout
-whose k moves gets it as <code class="docutils literal notranslate"><span class="pre">traj</span></code>, trailing constant axes dropped.</p>
+whose k moves gets it as <code class="docutils literal notranslate"><span class="pre">traj</span></code>, trailing constant axes dropped, unless
+it is a Cartesian readout sampled on its flat top alone.</p>
 <p>The samples are left as received, except where
 <a class="reference internal" href="pulserver.proxy.SequenceTable.readout_phase_modulation.html#pulserver.proxy.SequenceTable.readout_phase_modulation" title="pulserver.proxy.SequenceTable.readout_phase_modulation"><code class="xref py py-meth docutils literal notranslate"><span class="pre">SequenceTable.readout_phase_modulation()</span></code></a> gives a phase, with the
 object at <code class="docutils literal notranslate"><span class="pre">fov_offset_m</span></code> when given. That is the

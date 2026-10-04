@@ -537,10 +537,12 @@
 <span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">pulserver.mrd.</span></span><span class="sig-name descname"><span class="pre">ReadoutTable</span></span><a class="reference internal" href="../_modules/pulserver/mrd/_sequence.html#ReadoutTable"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.mrd.ReadoutTable" title="Link to this definition">#</a></dt>
 <dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/builtins/functions.html#object" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
 <p>Every ADC readout of one sequence, in play order.</p>
-<p>k-space is integrated a run of consecutive readouts at a time, by
-<code class="docutils literal notranslate"><span class="pre">Sequence.adc_kspace(readouts=...)</span></code>, from the last pulse before the run
-that resets it. Tabulating integrates the whole sequence once, to find
-each readout’s echo; <a class="reference internal" href="pulserver.mrd.ReadoutTable.readout_k.html#pulserver.mrd.ReadoutTable.readout_k" title="pulserver.mrd.ReadoutTable.readout_k"><code class="xref py py-meth docutils literal notranslate"><span class="pre">readout_k()</span></code></a> integrates a readout’s run when it
+<p>Tabulating follows k-space through the whole sequence once, to find each
+readout’s echo. Where <code class="docutils literal notranslate"><span class="pre">Sequence.adc_echoes</span></code> returns each readout’s k as
+its block’s origin plus the sweep of a block of its kind,
+<a class="reference internal" href="pulserver.mrd.ReadoutTable.readout_k.html#pulserver.mrd.ReadoutTable.readout_k" title="pulserver.mrd.ReadoutTable.readout_k"><code class="xref py py-meth docutils literal notranslate"><span class="pre">readout_k()</span></code></a> adds the two. Otherwise k-space is integrated a run of
+consecutive readouts at a time, by <code class="docutils literal notranslate"><span class="pre">Sequence.adc_kspace(readouts=...)</span></code>,
+from the last pulse before the run that resets it, when the readout’s run
 is not among the last few kept. The table holds the sequence for this,
 which must not change once tabulated.</p>
 <dl class="field-list simple">
@@ -582,10 +584,13 @@ axes it does not move along are dropped; 0 when no axis moves.</p></li>
 <tr class="row-odd"><td><p><a class="reference internal" href="pulserver.mrd.ReadoutTable.from_sequence.html#pulserver.mrd.ReadoutTable.from_sequence" title="pulserver.mrd.ReadoutTable.from_sequence"><code class="xref py py-obj docutils literal notranslate"><span class="pre">from_sequence</span></code></a></p></td>
 <td><p>Tabulate the readouts of a <code class="docutils literal notranslate"><span class="pre">pypulseqpp.Sequence</span></code>.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pulserver.mrd.ReadoutTable.readout_k.html#pulserver.mrd.ReadoutTable.readout_k" title="pulserver.mrd.ReadoutTable.readout_k"><code class="xref py py-obj docutils literal notranslate"><span class="pre">readout_k</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pulserver.mrd.ReadoutTable.readout_block.html#pulserver.mrd.ReadoutTable.readout_block" title="pulserver.mrd.ReadoutTable.readout_block"><code class="xref py py-obj docutils literal notranslate"><span class="pre">readout_block</span></code></a></p></td>
+<td><p>Return the decoded block holding one readout, as <code class="docutils literal notranslate"><span class="pre">Sequence.get_block</span></code> does.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.mrd.ReadoutTable.readout_k.html#pulserver.mrd.ReadoutTable.readout_k" title="pulserver.mrd.ReadoutTable.readout_k"><code class="xref py py-obj docutils literal notranslate"><span class="pre">readout_k</span></code></a></p></td>
 <td><p>Return the k-space position of each sample of one readout, in 1/m.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.mrd.ReadoutTable.readout_phase_modulation.html#pulserver.mrd.ReadoutTable.readout_phase_modulation" title="pulserver.mrd.ReadoutTable.readout_phase_modulation"><code class="xref py py-obj docutils literal notranslate"><span class="pre">readout_phase_modulation</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pulserver.mrd.ReadoutTable.readout_phase_modulation.html#pulserver.mrd.ReadoutTable.readout_phase_modulation" title="pulserver.mrd.ReadoutTable.readout_phase_modulation"><code class="xref py py-obj docutils literal notranslate"><span class="pre">readout_phase_modulation</span></code></a></p></td>
 <td><p>Return the phase modulation of one readout's ADC, in rad, or None.</p></td>
 </tr>
 </tbody>
