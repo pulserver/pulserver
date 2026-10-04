@@ -1,3 +1,4 @@
+import dataclasses
 from pathlib import Path
 
 import numpy as np
@@ -14,6 +15,11 @@ SEQUENCES = sorted(path.name for path in FIXTURES.glob("*.seq"))
 def fixture(name):
     seq = pp.io.read(FIXTURES / name)
     return seq, ReadoutTable.from_sequence(seq)
+
+
+def integrated(table):
+    """The table with k integrated a run at a time where the walk gave it."""
+    return dataclasses.replace(table, _origin=None)
 
 
 def synthetic(*readouts):
@@ -43,17 +49,18 @@ def test_k_integrated_a_run_at_a_time_is_k_integrated_from_the_first_block(
     monkeypatch, name, run_samples
 ):
     monkeypatch.setattr(_sequence, "_RUN_SAMPLES", run_samples)
-    seq, table = fixture(name)
+    seq, walked = fixture(name)
     whole = seq.calculate_kspace()[0]
     # The float32 resolution of the largest k, which an MRD trajectory carries.
     tolerance = 1e-6 * np.abs(whole).max()
-    start = 0
-    for index in range(len(table)):
-        stop = start + int(table.num_samples[index])
-        np.testing.assert_allclose(
-            table.readout_k(index), whole[:, start:stop], rtol=0, atol=tolerance
-        )
-        start = stop
+    for table in (walked, integrated(walked)):
+        start = 0
+        for index in range(len(table)):
+            stop = start + int(table.num_samples[index])
+            np.testing.assert_allclose(
+                table.readout_k(index), whole[:, start:stop], rtol=0, atol=tolerance
+            )
+            start = stop
 
 
 def test_a_spin_echo_train_keeps_the_k_its_refocusing_pulses_reverse(monkeypatch):
@@ -106,6 +113,7 @@ def test_a_readout_in_an_excitations_block_keeps_the_k_before_it(monkeypatch):
 def test_a_table_keeps_the_k_of_two_runs_at_most(monkeypatch):
     monkeypatch.setattr(_sequence, "_RUN_SAMPLES", 1)
     _, table = fixture("gre_2d_3sl.seq")
+    table = integrated(table)
     for index in range(len(table)):
         table.readout_k(index)
     assert len(table._runs.first) == len(table)
