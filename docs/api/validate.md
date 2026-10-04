@@ -26,6 +26,7 @@ exists to find.
 | {obj}`~pulserver.validate.validate` | Check a sequence against a recording of it, or against its own cache. |
 | {obj}`~pulserver.validate.Comparison` | What a comparison established, and what it compared against. |
 | {obj}`~pulserver.validate.ChannelAgreement` | How far apart one channel's two renderings are. |
+| {obj}`~pulserver.validate.gradient_tolerance_mt_per_m` | Gradient tolerance, in mT/m, from the slew rate over three gradient raster steps. |
 | {obj}`~pulserver.validate.read_waveform_xml` | Read the waveform XML a scanner's plotter writes. |
 | {obj}`~pulserver.validate.PlayedWaveforms` | What a scanner played, as its plotter recorded it. |
 | {obj}`~pulserver.validate.VENDORS` | The machines a recording can be read from. |

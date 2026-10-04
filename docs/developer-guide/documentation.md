@@ -23,13 +23,16 @@ Four broad forms are useful:
 
 These forms may link extensively to one another, but they should not be collapsed into a single style of documentation.
 
-The three principal modes have distinct levels of detail:
+The principal modes have distinct levels of detail:
 
-* **Explanation** is concise scientific prose organised around equations, figures, tables, schematics, or explicit criteria. Each object is introduced and interpreted briefly.
-* **Examples** are executable MRI workflows that connect sequence physics, acquisition strategy, and application to observable output.
-* **API reference** is terse and exhaustive. Accurate NumPy-style docstrings carry interface semantics, units, types, and defaults.
+| Mode | Form | Register |
+| --- | --- | --- |
+| **Course (tutorial)** | Sequential lessons at the start of the gallery that teach the framework's workflow, each with explicit learning objectives. | Teaching prose; a lesson may refer to the previous and the next one. |
+| **Tour** | A standalone executable workflow after the course: an application, an advanced branch or a specialised workflow, with an observable result. | Concise methodological prose; no tutorial narration; not an API tour. |
+| **Explanation** | A concept-centred page organised around equations, figures, tables, schematics, or explicit criteria. | Brief; each object is introduced and interpreted briefly. |
+| **API reference** | NumPy-style docstrings and reference pages. | Terse and exhaustive: exact semantics, types, units, defaults, and the meaning of every return value, with small object-centred examples. |
 
-Cross-link these modes rather than repeating the same account in all three.
+Cross-link these modes rather than repeating the same account in each.
 
 ### API reference
 
@@ -138,7 +141,7 @@ An example should address one question. Where it compares configurations, hold e
 
 Prefer a small number of strong examples to broad coverage. A gallery is not an inventory of the public interface, and no example is warranted merely because a feature would otherwise go unrepresented.
 
-An example is **not a conversational tutorial**. Code, figures, and scientific results should dominate the page. Prose supplies the context necessary to understand the problem, consequential methodological choices, conventions, and interpretation.
+A Tour is **not a conversational tutorial**. Code, figures, and scientific results should dominate the page. Prose supplies the context necessary to understand the problem, consequential methodological choices, conventions, and interpretation. The course described under {ref}`course-and-tours` is the one intentional exception, and its register is defined there.
 
 A substantial example will often include:
 
@@ -253,9 +256,30 @@ The intended result is **a reproducible scientific example with concise methodol
 
 When a sentence merely describes what the next line of code does, it can usually be removed.
 
+(course-and-tours)=
+#### Course and Tours
+
+The gallery opens with a course and continues with Tours.
+
+The Course is the shortest coherent path that gives a new user the framework's core mental model and enough practical competence to work independently. Tours are useful applications, advanced branches or specialised workflows that are not necessary for that core competence.
+
+Whether a lesson depends on another is not the test of membership; the criterion is. A terminal lesson belongs in the course if it is fundamental, and the number of lessons follows from the criterion rather than from a target. The course reaches an end-to-end result early, and later lessons follow the data flow once each.
+
+A lesson is written as teaching material. It normally contains:
+
+1. a concise introductory paragraph stating the concept the lesson introduces;
+2. a short **Learning objectives** section listing what the reader can do after the lesson;
+3. the progressive executable lesson;
+4. the figures, equations and results used to explain the workflow;
+5. where useful, one sentence relating the lesson to the previous or next one.
+
+The section headings are the outline of the lesson; a separate outline that restates them is not added. Pedagogical transitions are allowed. Generated scaffolding is not: "The scope of this notebook is...", "The observable is...", an "Outline:" block that repeats the headings, and figurative phrasing. The prose rules of this guide apply otherwise unchanged.
+
+A Tour opens with its objective and a prerequisites line naming the lessons it assumes, and has no previous or next links. It follows every rule this section states for a gallery example.
+
 #### API examples and gallery examples
 
-Two kinds of example are legitimate, and they are not interchangeable.
+Three kinds of example are legitimate, and they are not interchangeable: the course lesson, the Tour, and the API example.
 
 An **API example** shows how an object is constructed and used. It belongs in the `Examples` section of a docstring or on the reference page for that object, it is a few lines long, and it needs no experiment, sweep or scientific result. Reference material that illustrates one object belongs here; where an executed configuration and the figures it produces are large enough to be a page of their own, the reference page links the gallery example that carries them rather than repeating it.
 
@@ -279,7 +303,15 @@ If the automatic choice produces a poor figure, that is a defect in the helper o
 
 A legend is placed outside the axes it describes — above them, below them or beside them — in every figure, on an explanation page, in a gallery example and in a docstring plot alike. A legend inside a panel covers data, and which data it covers depends on the values the build happened to produce.
 
-Where one legend describes series drawn in several panels, it belongs to the figure rather than to one of them, above the row it applies to. Reserve room for it with the `rect` argument of `tight_layout`, or with the `top` and `bottom` of an explicit gridspec, so nothing is clipped.
+Where one legend describes series drawn in several panels, it belongs to the figure rather than to one of them, above the row it applies to: `fig.legend(loc="outside upper center")` under the constrained layout the figure style sets, which reserves room for it so nothing is clipped.
+
+#### Figure style
+
+Every figure takes its typography, resolution and layout from one style module, `docs/figure_style.py`, applied before each gallery script is executed. A script sets no font size, DPI or colour of its own; where it needs a colour, it imports it from the style module. The canvas is transparent and the ink reads against the light and the dark theme alike.
+
+A figure is sized to the documentation column, `PAGE_WIDTH` of the style module; a figure narrower than the column is a fraction of it.
+
+A static figure, a schematic or a logo, is a pair of SVG files, one for each theme, drawn by `scripts/make_artwork.py` and shown with the `only-light` and `only-dark` classes. An SVG whose colours follow the reader's operating-system setting through a media query disagrees with the theme the reader selected on the page and is not used.
 
 #### Geometry and traversal are different figures
 
@@ -299,7 +331,7 @@ A separate example is justified when it studies something across objects, or goe
 
 #### Gallery organization and navigation
 
-When examples fall into categories, each category gets a landing page the documentation owns, carrying one or two factual sentences and a table of what is below it. A table is preferred to a wall of thumbnails once a category holds more than a handful of examples, because a reader looking for one sequence or one module reads names rather than pictures.
+The examples landing page carries a **Course** table and a **Tours** table. When examples fall into categories, each category gets a landing page the documentation owns, carrying one or two factual sentences and a table of what is below it. A table is preferred to a wall of thumbnails once a category holds more than a handful of examples, because a reader looking for one sequence or one module reads names rather than pictures.
 
 Global navigation carries the gallery and its categories, to the depth at which a category is still something a reader would look for on its own. Below that depth, an example is reached from the table on its category's page and from cross-references, not from the navigation tree.
 
@@ -313,7 +345,11 @@ Explanatory documentation answers questions about concepts, theory, terminology,
 
 Pyxu's conceptual introductions to inverse problems and proximal optimization, and MRI-NUFFT's discussion of non-uniform sampling and its operators, are useful models for the desired depth and register.
 
-This is the appropriate place for material that would be too pedagogical for API reference or too general for an example.
+This is the appropriate place for material that would be too pedagogical for API reference or too general for an example. Implementation design — file layouts, memory budgets, tolerances, the inventory of what the test suite establishes — is not explanation; it belongs to the developer guide's internals pages.
+
+An explanation page has one obvious purpose and, where appropriate, a strong conceptual anchor: a figure, a table, an equation, or a similarly compact device that carries the concept. A figure is never required for its own sake.
+
+An explanation page with more than one `##` section opens with a **TL;DR** block directly under its title: a short list of the page's conclusions, each stated as the page states it, with no claim the page does not support. It lets a reader decide whether the page answers their question. A page of a single section may omit it. Landing pages, API reference pages and gallery examples have none.
 
 #### Organization of an explanatory page
 
@@ -680,6 +716,8 @@ Explain rationale where it helps maintainers understand why an architecture, rep
 
 Distinguish current design rationale from historical narration.
 
+The developer guide's internals pages hold the implementation design a maintainer or an interpreter author needs: how the IR cache is laid out, how a playout loads it, how the reconstruction proxy places and schedules data, how the virtual scanner's engine plays repeated blocks. An explanation page states the concept and links to the internals page for the implementation.
+
 Abandoned alternatives, transient development reasoning, and change history generally belong in issue trackers, design records, release notes, or repository history unless they are necessary to understand a current constraint.
 
 ## Editing existing documentation
@@ -728,6 +766,13 @@ A successful documentation build establishes that the documentation can be rende
 * Is background theory limited to what is needed to specify the interface?
 * Have implementation details displaced the scientific abstraction?
 
+### Course lessons
+
+* Does the lesson belong to the shortest coherent path to the core mental model, or is it a Tour?
+* Does the lesson state its concept and its learning objectives?
+* Is any transition to the previous or next lesson one sentence rather than a recap?
+* Is the scaffolding free of templated phrases and outline blocks that restate the headings?
+
 ### Examples and gallery
 
 * Is this a meaningful and reproducible scientific workflow?
@@ -752,6 +797,8 @@ A successful documentation build establishes that the documentation can be rende
 * Does the depth remain relevant to the software?
 * Does the page reach a formal model or criterion, and then the software abstraction?
 * Are mechanisms and trade-offs stated explicitly rather than compressed into a rhetorical sentence?
+* Does the page open with a TL;DR that states only what the page establishes?
+* Has implementation design been left to the internals pages?
 
 ### Tutorials and how-to guides
 

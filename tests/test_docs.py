@@ -1,4 +1,4 @@
-"""Run the examples of the user guide, and hold every public name to an API page."""
+"""Run the examples of the user guide, hold every public name to an API page, and keep the sidebar in the family's order."""
 
 import doctest
 import importlib
@@ -9,7 +9,40 @@ import pytest
 
 DOCS = Path(__file__).resolve().parents[1] / "docs"
 GUIDE_PAGES = sorted((DOCS / "user-guide").glob("*.md"))
-SUBPACKAGES = ("design", "host", "ir", "mrd", "protocol", "proxy", "recon")
+SUBPACKAGES = (
+    "design",
+    "host",
+    "ir",
+    "mrd",
+    "protocol",
+    "proxy",
+    "recon",
+    "validate",
+    "virtual",
+)
+#: The six top-level sections, in the order pypulseqpp and bartorch show them.
+SECTIONS = (
+    "user-guide/index",
+    "developer-guide/index",
+    "explanations/index",
+    "examples/index",
+    "api/index",
+    "misc/index",
+)
+
+
+def _toctree(page):
+    """The entries of the first toctree of a page, in order."""
+    block = re.search(r"```\{toctree\}\n(.*?)```", page.read_text(), flags=re.S)
+    return [
+        line.strip()
+        for line in block.group(1).splitlines()
+        if line.strip() and not line.startswith(":")
+    ]
+
+
+def test_the_sidebar_lists_the_six_sections_in_order():
+    assert tuple(_toctree(DOCS / "index.md")) == SECTIONS
 
 
 @pytest.mark.parametrize("page", GUIDE_PAGES, ids=lambda page: page.name)
