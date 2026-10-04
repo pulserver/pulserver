@@ -446,7 +446,10 @@ def _stated_layout(
 
 
 def _write(built: pp.Sequence | list[pp.Sequence], first: Path) -> list[str]:
-    """Write a sequence or a chain of them as signed binary Pulseq; return the paths in play order."""
+    """Write a sequence or a chain of them as signed binary Pulseq; return the paths in play order.
+
+    Each sequence is deduplicated in place before it is written.
+    """
     chain = [built] if isinstance(built, pp.Sequence) else built
     if (
         not isinstance(chain, list | tuple)
@@ -464,7 +467,8 @@ def _write(built: pp.Sequence | list[pp.Sequence], first: Path) -> list[str]:
     for seq, path, following in zip(chain, paths, [*paths[1:], None], strict=True):
         if following is not None:
             seq.set_definition(key="NextSequence", value=following.name)
-        pp.io.write(seq, str(path), binary=True)
+        seq.remove_duplicates(in_place=True)
+        pp.io.write(seq, str(path), binary=True, remove_duplicates=False)
     return [str(path) for path in paths]
 
 
