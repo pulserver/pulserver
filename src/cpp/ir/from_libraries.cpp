@@ -9,6 +9,7 @@
 #include <pybind11/stl.h>
 
 #include <cmath>
+#include <cstdlib>
 #include <cstring>
 #include <stdexcept>
 #include <string>
@@ -392,12 +393,22 @@ std::vector<Column> label_columns(const py::object &value, int count)
     return columns;
 }
 
+/* Zeroed by calloc, which leaves the pages of a large array untouched until
+ * written: most of a per-block array set only at RF pulses never is. The
+ * host build frees with PULSEQ_FREE, which is free. */
 template <typename T> T *zeroed(size_t count)
+{
+    void *memory = std::calloc(count, sizeof(T));
+    if (!memory)
+        throw std::bad_alloc();
+    return static_cast<T *>(memory);
+}
+
+template <typename T> T *allocated(size_t count)
 {
     void *memory = PULSEQ_ALLOC(sizeof(T) * count);
     if (!memory)
         throw std::bad_alloc();
-    std::memset(memory, 0, sizeof(T) * count);
     return static_cast<T *>(memory);
 }
 
@@ -448,7 +459,7 @@ void build_labels(pulseq_file &seq, const py::dict &libraries)
     if (flags.size() != PULSEQ_BLOCK_FLAG_WIDTH || readout.size() != PULSEQ_ADC_LABEL_WIDTH)
         throw std::invalid_argument("a label state of the wrong width");
     seq.block_flags = reinterpret_cast<int (*)[PULSEQ_BLOCK_FLAG_WIDTH]>(
-        zeroed<int>((size_t)count * PULSEQ_BLOCK_FLAG_WIDTH));
+        allocated<int>((size_t)count * PULSEQ_BLOCK_FLAG_WIDTH));
     seq.num_adc_labels = 0;
     for (int i = 0; i < count; ++i)
     {
@@ -459,7 +470,7 @@ void build_labels(pulseq_file &seq, const py::dict &libraries)
     if (seq.num_adc_labels == 0)
         return;
     seq.adc_labels = reinterpret_cast<int (*)[PULSEQ_ADC_LABEL_WIDTH]>(
-        zeroed<int>((size_t)seq.num_adc_labels * PULSEQ_ADC_LABEL_WIDTH));
+        allocated<int>((size_t)seq.num_adc_labels * PULSEQ_ADC_LABEL_WIDTH));
     int row = 0;
     for (int i = 0; i < count; ++i)
     {
