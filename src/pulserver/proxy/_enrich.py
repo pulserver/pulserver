@@ -24,6 +24,7 @@ import numpy as np
 
 from .._labels import MRD_COUNTERS, MRD_FLAGS
 from ..mrd._acquisitions import AcquisitionFlag
+from ..mrd._metadata import user_parameter
 from ..mrd._sequence import ReadoutTable, SequenceDefinitions, read_chain
 
 _F = AcquisitionFlag
@@ -167,20 +168,24 @@ class SequenceTable:
         file = int(np.searchsorted(self._first_rows, index, side="right")) - 1
         return self._files[file].readout_k(index - int(self._first_rows[file]))
 
-    def readout_phase_modulation(self, index: int) -> np.ndarray | None:
+    def readout_phase_modulation(
+        self, index: int, fov_offset_m: Any = None
+    ) -> np.ndarray | None:
         """Return the phase one readout's samples are corrected by, in rad, or None.
 
-        The phase modulation its ADC stores, plus what :attr:`fov_offset_m`
-        adds about the middle of the sampling window beyond the frequency
-        and phase offsets the scanner plays there. None when both are zero.
+        The phase modulation its ADC stores, plus what the shift adds about
+        the middle of the sampling window beyond the frequency and phase
+        offsets the scanner plays there. ``fov_offset_m``, in m along the
+        logical axes, replaces :attr:`fov_offset_m`. None when both are zero.
         """
+        shift = self.fov_offset_m if fov_offset_m is None else fov_offset_m
         file = int(np.searchsorted(self._first_rows, index, side="right")) - 1
         stored = self._files[file].readout_phase_modulation(
             index - int(self._first_rows[file])
         )
-        if not any(self.fov_offset_m):
+        if not any(shift):
             return stored
-        curvature = _shift_curvature(self.readout_k(index), self.fov_offset_m)
+        curvature = _shift_curvature(self.readout_k(index), shift)
         if curvature is None or stored is None:
             return stored if curvature is None else curvature
         return stored + curvature
@@ -358,7 +363,23 @@ def enrich_header(header: Any, table: SequenceTable) -> None:
     header.encoding = encodings
 
 
-def enrich_acquisition(acquisition: Any, table: SequenceTable, index: int) -> None:
+def header_fov_offset_m(header: Any) -> tuple[float, float, float] | None:
+    """Return the field-of-view shift an MRD header carries, in m, or None.
+
+    Read from the ``fov_offset_mm`` user parameter string, three millimetres
+    along the logical readout, phase and slice axes, as the scanner client
+    writes the prescription centre.
+    """
+    stated = user_parameter(header, "fov_offset_mm")
+    if stated in (None, ""):
+        return None
+    x, y, z = (1e-3 * float(value) for value in str(stated).split())
+    return x, y, z
+
+
+def enrich_acquisition(
+    acquisition: Any, table: SequenceTable, index: int, fov_offset_m: Any = None
+) -> None:
     """Stamp row ``index`` of the table on one acquisition, in place.
 
     Sets the encoding counters, flags, ``sample_time_us`` and
@@ -367,7 +388,8 @@ def enrich_acquisition(acquisition: Any, table: SequenceTable, index: int) -> No
     whose k moves gets it as ``traj``, trailing constant axes dropped.
 
     The samples are left as received, except where
-    :meth:`SequenceTable.readout_phase_modulation` gives a phase. That is the
+    :meth:`SequenceTable.readout_phase_modulation` gives a phase, at
+    ``fov_offset_m`` when given. That is the
     part of a shifted field of view a receiver cannot apply itself: under a
     gradient that holds one value, a shift is a phase and a frequency offset,
     but under one that does not, the phase curves over the readout and is
@@ -398,7 +420,7 @@ def enrich_acquisition(acquisition: Any, table: SequenceTable, index: int) -> No
     acquisition.sample_time_us = float(table.sample_time_us[index])
     acquisition.encoding_space_ref = int(table.encoding_space[index])
 
-    modulation = table.readout_phase_modulation(index)
+    modulation = table.readout_phase_modulation(index, fov_offset_m)
     if modulation is not None:
         if modulation.size != count:
             raise ValueError(

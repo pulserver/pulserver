@@ -32,7 +32,7 @@ from ..recon._runtime.mrd2dicom import MrdDicomBuilder
 from ..recon._runtime.readers import deserialize_config, read_text
 from . import _held
 from ._designs import Design, DesignCache
-from ._enrich import enrich_acquisition, enrich_header
+from ._enrich import enrich_acquisition, enrich_header, header_fov_offset_m
 from ._motion import FILENAME, MotionWriter, Pose, pose_of, pose_waveform
 from ._queue import QueueFile
 from ._seqdesc import is_message
@@ -322,7 +322,10 @@ class ReconProxy(_Listener):
                 config,
                 header,
                 plugin,
-                itertools.chain((design.description,), _enriched(client, design)),
+                itertools.chain(
+                    (design.description,),
+                    _enriched(client, design, header_fov_offset_m(header)),
+                ),
                 motion=design.directory / FILENAME
                 if design.prospective_motion
                 else None,
@@ -880,9 +883,12 @@ def _is_close_marker(item: Any) -> bool:
     )
 
 
-def _enriched(client: Connection, design: Design) -> Iterator[Any]:
+def _enriched(
+    client: Connection, design: Design, fov_offset_m: Any = None
+) -> Iterator[Any]:
     """Yield the client's stream up to its close, acquisitions enriched in play order.
 
+    ``fov_offset_m``, the shift the header states, replaces the design's.
     Acquisitions are matched to readouts by position, so the stream carries
     one per readout of the chain, and once the client numbers them, every
     ``scan_counter`` must follow the previous one by one: a gap or a repeat is
@@ -927,7 +933,7 @@ def _enriched(client: Connection, design: Design) -> Iterator[Any]:
                     f"{design.directory} plays"
                 )
             previous = counter
-            enrich_acquisition(item, design.table, index)
+            enrich_acquisition(item, design.table, index, fov_offset_m)
             index += 1
         yield item
     if index < readouts:

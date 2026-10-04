@@ -44,6 +44,7 @@ connection, so the client can finish sending and read the reason.
 | `experimentalConditions.H1resonanceFrequency_Hz` | Required by the MRD schema | DICOM `ImagingFrequency` |
 | `acquisitionSystemInformation.receiverChannels` | Optional | The coil count of a reconstruction buffer laid out before its first acquisition |
 | `ExamID`, a `userParameterString`, or else `studyInformation.studyInstanceUID`, or else `studyInformation.studyID` | Optional | The exam; the series of one exam share its exam cache, and a series without one is an exam of its own |
+| `fov_offset_mm`, a `userParameterString` | Optional | The field-of-view offset the scanner plays, three millimetres along the logical readout, phase and slice axes separated by spaces; without it, the offset the design was converted at |
 | `subjectInformation`, `studyInformation`, `measurementInformation`, `acquisitionSystemInformation` | Optional | Copied into the DICOM datasets; `relativeTablePosition` is not |
 | `measurementInformation.measurementID` | A non-negative integer when `systemVendor` names GE | The DICOM series number on a GE system |
 | `encoding` | Optional | Replaced by one encoding space per subsequence, and one more for the navigator readouts of a subsequence that has them. The reconstruction space is the sequence's matrix size and field of view; the encoded space of a Cartesian space has the readout widened to the full echo, oversampling included, and its field of view in proportion. The encoding limits are the extremes of the counters the readouts reach, centred on the k-space centre line and partition the sequence defines. A matrix size or field of view the sequence does not define is kept from the client's encoding at the same index |
@@ -61,7 +62,7 @@ noise scans and navigators included, and no other.
 | Field | Client | Proxy |
 | --- | --- | --- |
 | `number_of_samples` | The sample count of the readout's ADC event | Checked |
-| `active_channels`, data | The samples, demodulated to the prescribed field-of-view centre by each ADC's frequency and phase offsets and its phase modulation | Passed on unchanged |
+| `active_channels`, data | The samples, demodulated by each ADC's frequency and phase offsets | Multiplied by the phase a field-of-view offset adds to a readout under a moving gradient, and by any phase modulation the sequence file stores |
 | `scan_counter` | 0 on every acquisition, or increasing by one from any start | Checked |
 | `flags` | None, or `LAST_IN_MEASUREMENT` on the last acquisition | Replaced |
 | `idx`, `sample_time_us`, `encoding_space_ref` | Any value | Replaced |
