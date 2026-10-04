@@ -392,12 +392,19 @@ std::vector<Column> label_columns(const py::object &value, int count)
     return columns;
 }
 
-/* Per block, the rotation and shim rows from 0, the flags in force, where a
- * TRID is set and the gradient under its RF pulse; per readout, the labels. */
-void build_block_states(pulseq_file &seq, const py::dict &libraries)
+template <typename T> T *zeroed(size_t count)
+{
+    void *memory = PULSEQ_ALLOC(sizeof(T) * count);
+    if (!memory)
+        throw std::bad_alloc();
+    std::memset(memory, 0, sizeof(T) * count);
+    return static_cast<T *>(memory);
+}
+
+/* The rotation and shim rows from 0, and the blocks setting a TRID. */
+void build_block_groups(pulseq_file &seq, const py::dict &libraries)
 {
     const int count = seq.num_blocks;
-    const auto events = libraries["block_events"].cast<Integers>().unchecked<2>();
     seq.block_rotations = integers(libraries["block_rotations"], count);
     seq.block_shims = integers(libraries["block_shims"], count);
     for (int i = 0; i < count; ++i)
@@ -405,22 +412,18 @@ void build_block_states(pulseq_file &seq, const py::dict &libraries)
         seq.block_rotations[i] -= 1;
         seq.block_shims[i] -= 1;
     }
-
-    const auto allocate = [](size_t bytes) {
-        void *memory = PULSEQ_ALLOC(bytes);
-        if (!memory)
-            throw std::bad_alloc();
-        std::memset(memory, 0, bytes);
-        return memory;
-    };
-    seq.block_trid_set = static_cast<int *>(allocate(sizeof(int) * (size_t)count));
+    seq.block_trid_set = zeroed<int>((size_t)count);
     for (const int block : libraries["trid_blocks"].cast<std::vector<int>>())
         if (block >= 1 && block <= count)
             seq.block_trid_set[block - 1] = 1;
+}
 
-    seq.block_rf_steady = static_cast<int *>(allocate(sizeof(int) * (size_t)count));
-    seq.block_rf_gradient =
-        static_cast<PULSEQ_REAL (*)[3]>(allocate(sizeof(PULSEQ_REAL) * (size_t)count * 3));
+/* The gradient under each RF pulse, and whether it is steady there. */
+void build_rf_gradients(pulseq_file &seq, const py::dict &libraries)
+{
+    const int count = seq.num_blocks;
+    seq.block_rf_steady = zeroed<int>((size_t)count);
+    seq.block_rf_gradient = reinterpret_cast<PULSEQ_REAL (*)[3]>(zeroed<PULSEQ_REAL>((size_t)count * 3));
     const auto pulsed = libraries["rf_pulsed"].cast<Integers>().unchecked<1>();
     const auto steady = libraries["rf_steady"].cast<py::array_t<bool, py::array::forcecast>>().unchecked<2>();
     const auto gradient = libraries["rf_gradient"].cast<Reals>().unchecked<2>();
@@ -433,13 +436,19 @@ void build_block_states(pulseq_file &seq, const py::dict &libraries)
         for (int axis = 0; axis < 3; ++axis)
             seq.block_rf_gradient[block][axis] = static_cast<PULSEQ_REAL>(gradient(p, axis));
     }
+}
 
+/* The flags in force per block, and the labels per readout. */
+void build_labels(pulseq_file &seq, const py::dict &libraries)
+{
+    const int count = seq.num_blocks;
+    const auto events = libraries["block_events"].cast<Integers>().unchecked<2>();
     const auto flags = label_columns(libraries["flag_labels"], count);
     const auto readout = label_columns(libraries["readout_labels"], count);
     if (flags.size() != PULSEQ_BLOCK_FLAG_WIDTH || readout.size() != PULSEQ_ADC_LABEL_WIDTH)
         throw std::invalid_argument("a label state of the wrong width");
-    seq.block_flags = static_cast<int (*)[PULSEQ_BLOCK_FLAG_WIDTH]>(
-        allocate(sizeof(int) * (size_t)count * PULSEQ_BLOCK_FLAG_WIDTH));
+    seq.block_flags = reinterpret_cast<int (*)[PULSEQ_BLOCK_FLAG_WIDTH]>(
+        zeroed<int>((size_t)count * PULSEQ_BLOCK_FLAG_WIDTH));
     seq.num_adc_labels = 0;
     for (int i = 0; i < count; ++i)
     {
@@ -449,8 +458,8 @@ void build_block_states(pulseq_file &seq, const py::dict &libraries)
     }
     if (seq.num_adc_labels == 0)
         return;
-    seq.adc_labels = static_cast<int (*)[PULSEQ_ADC_LABEL_WIDTH]>(
-        allocate(sizeof(int) * (size_t)seq.num_adc_labels * PULSEQ_ADC_LABEL_WIDTH));
+    seq.adc_labels = reinterpret_cast<int (*)[PULSEQ_ADC_LABEL_WIDTH]>(
+        zeroed<int>((size_t)seq.num_adc_labels * PULSEQ_ADC_LABEL_WIDTH));
     int row = 0;
     for (int i = 0; i < count; ++i)
     {
@@ -514,7 +523,9 @@ void build_pulseq_file(pulseq_file &seq, const py::dict &libraries)
     for (int i = 0; i < seq.num_blocks; ++i)
         seq.block_ids[i] = i + 1;
     seq.is_block_library_parsed = 1;
-    build_block_states(seq, libraries);
+    build_block_groups(seq, libraries);
+    build_rf_gradients(seq, libraries);
+    build_labels(seq, libraries);
 
     seq.rf_library = rows<10>(libraries["rf"], seq.rf_library_size);
     seq.rf_use_tags = integers(libraries["rf_use"], seq.rf_library_size);

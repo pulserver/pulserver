@@ -56,24 +56,35 @@ static int array_equal(const int *a, const int *b, int len)
 /*  Hash-based integer-row deduplication                              */
 /* ================================================================== */
 
+/* A slot holds the row's hash and its label + 1, 0 when empty; the row a
+ * label stands for is unique_defs[label]. The table is sized by the labels
+ * found rather than by the rows, since a scan of millions of blocks plays a
+ * few hundred definitions. */
 typedef struct
 {
-    size_t hash;
-    int row_index;
+    unsigned int hash;
     int label;
-    char used;
-} hash_entry;
+} hash_slot;
 
-static size_t hash_row(const int *row, int num_cols)
+static unsigned int hash_row(const int *row, int num_cols)
 {
-    size_t h = 2166136261UL;
+    unsigned int h = 2166136261U;
     int i;
     for (i = 0; i < num_cols; ++i)
     {
-        h ^= (size_t)row[i];
-        h *= 16777619UL;
+        h ^= (unsigned int)row[i];
+        h *= 16777619U;
     }
-    return h;
+    return h ^ (h >> 15);
+}
+
+static void place(hash_slot *table, size_t mask, unsigned int h, int label)
+{
+    size_t idx = h & mask;
+    while (table[idx].label)
+        idx = (idx + 1) & mask;
+    table[idx].hash = h;
+    table[idx].label = label + 1;
 }
 
 int pulseg__deduplicate_int_rows(
@@ -83,49 +94,62 @@ int pulseg__deduplicate_int_rows(
     int num_rows,
     int num_cols)
 {
-    size_t table_size;
-    hash_entry *table = NULL;
+    size_t table_size = 1024, mask, idx, k;
+    hash_slot *table = NULL;
     int num_unique = 0;
     int r;
-    size_t h, idx;
+    unsigned int h;
 
     if (num_rows <= 0)
         return 0;
 
-    table_size = pulseg__next_pow2((size_t)(num_rows * 2));
-    table = (hash_entry *)PULSEG_ALLOC(table_size * sizeof(hash_entry));
+    table = (hash_slot *)PULSEG_ALLOC(table_size * sizeof(hash_slot));
     if (!table)
         return 0;
-    memset(table, 0, table_size * sizeof(hash_entry));
+    memset(table, 0, table_size * sizeof(hash_slot));
+    mask = table_size - 1;
 
     for (r = 0; r < num_rows; ++r)
     {
-        h = hash_row(&int_rows[r * num_cols], num_cols);
-        idx = h & (table_size - 1);
+        const int *row = &int_rows[(size_t)r * num_cols];
+        h = hash_row(row, num_cols);
+        idx = h & mask;
 
-        while (table[idx].used)
+        while (table[idx].label)
         {
+            const int label = table[idx].label - 1;
             if (table[idx].hash == h &&
-                array_equal(
-                    &int_rows[r * num_cols],
-                    &int_rows[table[idx].row_index * num_cols],
-                    num_cols))
-            {
-                event_table[r] = table[idx].label;
+                array_equal(row, &int_rows[(size_t)unique_defs[label] * num_cols], num_cols))
                 break;
-            }
-            idx = (idx + 1) & (table_size - 1);
+            idx = (idx + 1) & mask;
+        }
+        if (table[idx].label)
+        {
+            event_table[r] = table[idx].label - 1;
+            continue;
         }
 
-        if (!table[idx].used)
+        unique_defs[num_unique] = r;
+        event_table[r] = num_unique;
+        table[idx].hash = h;
+        table[idx].label = ++num_unique;
+
+        if ((size_t)num_unique * 2 > table_size)
         {
-            table[idx].hash = h;
-            table[idx].row_index = r;
-            table[idx].label = num_unique;
-            table[idx].used = 1;
-            unique_defs[num_unique] = r;
-            event_table[r] = num_unique;
-            num_unique++;
+            hash_slot *grown = (hash_slot *)PULSEG_ALLOC(2 * table_size * sizeof(hash_slot));
+            if (!grown)
+            {
+                PULSEG_FREE(table);
+                return 0;
+            }
+            memset(grown, 0, 2 * table_size * sizeof(hash_slot));
+            for (k = 0; k < table_size; ++k)
+                if (table[k].label)
+                    place(grown, 2 * table_size - 1, table[k].hash, table[k].label - 1);
+            PULSEG_FREE(table);
+            table = grown;
+            table_size *= 2;
+            mask = table_size - 1;
         }
     }
 
