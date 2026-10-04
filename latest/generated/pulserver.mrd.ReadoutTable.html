@@ -551,7 +551,7 @@ which must not change once tabulated.</p>
 <li><p><strong>block</strong> (<em>ndarray</em>) – <code class="docutils literal notranslate"><span class="pre">int64</span></code>, 1-based index of the block holding each readout.</p></li>
 <li><p><strong>num_samples</strong> (<em>ndarray</em>) – <code class="docutils literal notranslate"><span class="pre">int32</span></code> samples per readout.</p></li>
 <li><p><strong>dwell</strong> (<em>ndarray</em>) – <code class="docutils literal notranslate"><span class="pre">float64</span></code> dwell time, in seconds.</p></li>
-<li><p><strong>labels</strong> (<em>dict of str to ndarray</em>) – Every label the sequence writes, with the <code class="docutils literal notranslate"><span class="pre">int64</span></code> value in force at
+<li><p><strong>labels</strong> (<em>dict of str to ndarray</em>) – Every label the sequence writes, with the <code class="docutils literal notranslate"><span class="pre">int32</span></code> value in force at
 each readout. Labels the sequence never writes are absent.</p></li>
 <li><p><strong>center_sample</strong> (<em>ndarray</em>) – <code class="docutils literal notranslate"><span class="pre">int32</span></code> echo index: of the samples <code class="docutils literal notranslate"><span class="pre">pypulseqpp.Sequence.adc_echoes</span></code>
 finds nearest the centre of k-space over the axes the readout moves
