@@ -5,6 +5,7 @@ from __future__ import annotations
 import contextlib
 import copy
 import io
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -180,23 +181,40 @@ def _problems(
     is_ok, report = pp.check_timing(sequence)
     if not is_ok:
         problems.append(_timing(sequence, report))
-    for check, name, unit, scale in (
-        (safety.check_max_grad, "gradient amplitude", "mT/m", 1e3),
-        (safety.check_max_slew, "slew rate", "T/m/s", 1.0),
-    ):
-        is_ok, found = check(sequence, opts)
-        if not is_ok:
-            peak = found.per_axis
-            problems.append(
-                f"{name} of {peak.value / opts.gamma * scale:.1f} {unit} on "
-                f"{peak.axis} in block {peak.block} exceeds "
-                f"{found.limit / opts.gamma * scale:.1f} {unit}"
-            )
+    checks = [
+        (_limit, safety.check_max_grad, "gradient amplitude", "mT/m", 1e3),
+        (_limit, safety.check_max_slew, "slew rate", "T/m/s", 1.0),
+    ]
     if limits.pns is not None:
-        problems += _pns(sequence, opts, limits)
+        checks.append((_pns, limits))
     if limits.bands:
-        problems += _resonance(sequence, opts, limits)
+        checks.append((_resonance, limits))
+    # The native checks read the sequence and release the GIL; check_timing
+    # records TotalDuration, so it runs before them.
+    with ThreadPoolExecutor(len(checks)) as pool:
+        found = [pool.submit(run, sequence, opts, *args) for run, *args in checks]
+    for result in found:
+        problems += result.result()
     return problems
+
+
+def _limit(
+    sequence: pp.Sequence,
+    system: pp.Opts,
+    check: Any,
+    name: str,
+    unit: str,
+    scale: float,
+) -> list[str]:
+    is_ok, found = check(sequence, system)
+    if is_ok:
+        return []
+    peak = found.per_axis
+    return [
+        f"{name} of {peak.value / system.gamma * scale:.1f} {unit} on "
+        f"{peak.axis} in block {peak.block} exceeds "
+        f"{found.limit / system.gamma * scale:.1f} {unit}"
+    ]
 
 
 def _pns(sequence: pp.Sequence, system: pp.Opts, limits: CheckLimits) -> list[str]:

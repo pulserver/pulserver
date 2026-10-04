@@ -18,6 +18,8 @@ import numpy as np
 import pypulseqpp as pp
 from numpy.typing import NDArray
 
+from .._accelerators import require
+
 #: Use tag of an RF event, as a Pulseq file writes it. A pulse the file does
 #: not label is 0, which is what a reader that switches on the tag treats as
 #: "unknown"; "undefined" is what pypulseqpp calls the same thing.
@@ -612,8 +614,8 @@ def _specification_libraries(tables: Any) -> SpecificationLibraries:
     kinds = _declared_types(tables)
     referenced: dict[str, set[int]] = {kind: set() for kind in _EXTENSION_KINDS}
     numbers = {number: kind for kind, number in kinds.items() if number >= 0}
-    heads = _present(np.asarray(tables.blocks[:, 5], dtype=np.int64))
-    for head in (np.flatnonzero(heads[1:]) + 1).tolist():
+    heads = require("played")(tables.blocks, [5])
+    for head in np.flatnonzero(heads).tolist():
         for kind, row in _links(tables.extensions, head):
             if kind in numbers:
                 referenced[numbers[kind]].add(row)
@@ -752,12 +754,8 @@ def _played(
     ``events`` is pypulseqpp's block table. The new ids number the named rows
     from 1 in order; id 0 stays 0.
     """
-    present = _present(np.asarray(events)[:, list(columns)].ravel())
-    present[0] = False
-    named = np.flatnonzero(present)
-    mapping = np.zeros(present.size, dtype=np.int32)
-    mapping[named] = np.arange(1, named.size + 1, dtype=np.int32)
-    return named - 1, mapping
+    mapping = require("played")(events, list(columns))
+    return np.flatnonzero(mapping) - 1, mapping
 
 
 def _present(ids: NDArray[np.integer]) -> NDArray[np.bool_]:

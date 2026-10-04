@@ -710,6 +710,38 @@ PYBIND11_MODULE(_ext, module)
         "Segment a chain read into libraries and write its IR cache beside a sequence file.");
 
     module.def(
+        "played",
+        [](const py::array_t<int32_t> &events, const std::vector<int> &columns)
+        {
+            const auto table = events.unchecked<2>();
+            int32_t largest = 0;
+            for (py::ssize_t b = 0; b < table.shape(0); ++b)
+                for (const int column : columns)
+                    largest = std::max(largest, table(b, column));
+            // Allocated here rather than by NumPy, whose huge-page advice
+            // makes the first touch of a large array compact memory.
+            auto *ids = new int32_t[static_cast<size_t>(largest) + 1]();
+            py::capsule owner(ids, [](void *held) { delete[] static_cast<int32_t *>(held); });
+            for (py::ssize_t b = 0; b < table.shape(0); ++b)
+                for (const int column : columns)
+                {
+                    const int32_t id = table(b, column);
+                    if (id < 0)
+                        throw std::invalid_argument("a block names a negative event id");
+                    ids[id] = 1;
+                }
+            ids[0] = 0;
+            int32_t next = 0;
+            for (int32_t id = 1; id <= largest; ++id)
+                ids[id] = ids[id] ? ++next : 0;
+            return py::array_t<int32_t>(static_cast<py::ssize_t>(largest) + 1, ids, owner);
+        },
+        py::arg("events"),
+        py::arg("columns"),
+        "The new id of each event id some block names in the given columns of a "
+        "block table, numbered from 1 in id order; 0 for an id none names.");
+
+    module.def(
         "summary_from_libraries",
         [](const py::list &chain,
            float rf_raster_us,
