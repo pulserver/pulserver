@@ -137,6 +137,10 @@ class SequenceTable:
         ``TR`` and ``TI`` minima and every distinct ``TE`` in ascending order,
         in ms, and every distinct ``FlipAngle`` in ascending order, in
         degrees. Keys no file defines or measures are absent.
+    fov_offset_m : tuple of float
+        The field-of-view shift the scanner plays the chain at, in m, along
+        the axes the design's blocks are rotated onto, as
+        :func:`pulserver.ir.prescribe` takes it.
     """
 
     counters: dict[str, np.ndarray]
@@ -150,6 +154,7 @@ class SequenceTable:
     sequence_parameters: dict[str, list[float]]
     _files: tuple[ReadoutTable, ...] = dataclasses.field(repr=False)
     _first_rows: np.ndarray = dataclasses.field(repr=False)
+    fov_offset_m: tuple[float, float, float] = (0.0, 0.0, 0.0)
 
     def __len__(self) -> int:
         return int(self.num_samples.size)
@@ -163,14 +168,29 @@ class SequenceTable:
         return self._files[file].readout_k(index - int(self._first_rows[file]))
 
     def readout_phase_modulation(self, index: int) -> np.ndarray | None:
-        """Return the phase modulation of one readout's ADC, in rad, or None."""
+        """Return the phase one readout's samples are corrected by, in rad, or None.
+
+        The phase modulation its ADC stores, plus what :attr:`fov_offset_m`
+        adds about the middle of the sampling window beyond the frequency
+        and phase offsets the scanner plays there. None when both are zero.
+        """
         file = int(np.searchsorted(self._first_rows, index, side="right")) - 1
-        return self._files[file].readout_phase_modulation(
+        stored = self._files[file].readout_phase_modulation(
             index - int(self._first_rows[file])
         )
+        if not any(self.fov_offset_m):
+            return stored
+        curvature = _shift_curvature(self.readout_k(index), self.fov_offset_m)
+        if curvature is None or stored is None:
+            return stored if curvature is None else curvature
+        return stored + curvature
 
     @classmethod
-    def read(cls, path: Path | str) -> SequenceTable:
+    def read(
+        cls,
+        path: Path | str,
+        fov_offset_m: tuple[float, float, float] = (0.0, 0.0, 0.0),
+    ) -> SequenceTable:
         """Tabulate the ``NextSequence`` chain starting at a sequence file.
 
         Raises
@@ -239,7 +259,32 @@ class SequenceTable:
             sequence_parameters=parameters,
             _files=tuple(files),
             _first_rows=np.cumsum([0] + [len(file) for file in files[:-1]]),
+            fov_offset_m=tuple(float(value) for value in fov_offset_m),
         )
+
+
+def _shift_curvature(k: np.ndarray, shift_m: Any) -> np.ndarray | None:
+    """Return the phase a shift adds to a readout beyond a line through its window centre.
+
+    ``2 pi d . (k(t) - k(t_c) - k'(t_c) (t - t_c))`` in rad, ``t_c`` the
+    middle of the sampling window, where the frequency and phase offsets of
+    a shifted readout are taken. None for a readout whose k moves at one
+    rate, which the offsets alone move.
+    """
+    count = k.shape[1]
+    if count < 3:
+        return None
+    centre = 0.5 * (count - 1)
+    below = int(np.floor(centre))
+    if count % 2:
+        at = k[:, below]
+        rate = 0.5 * (k[:, below + 1] - k[:, below - 1])
+    else:
+        at = 0.5 * (k[:, below] + k[:, below + 1])
+        rate = k[:, below + 1] - k[:, below]
+    line = at[:, None] + rate[:, None] * (np.arange(count) - centre)
+    phase = 2.0 * np.pi * (np.asarray(shift_m, dtype=np.float64) @ (k - line))
+    return phase if np.abs(phase).max() > 1e-9 else None
 
 
 def enrich_header(header: Any, table: SequenceTable) -> None:
@@ -321,11 +366,12 @@ def enrich_acquisition(acquisition: Any, table: SequenceTable, index: int) -> No
     across the readout, in which case the received value stays. A readout
     whose k moves gets it as ``traj``, trailing constant axes dropped.
 
-    The samples are left as received, except where the readout's ADC carries a
-    phase modulation. That is the part of a shifted field of view a receiver
-    cannot apply itself: under a gradient that holds one value, a shift is a
-    phase and a frequency offset, but under one that does not, the phase
-    curves over the readout and is applied here.
+    The samples are left as received, except where
+    :meth:`SequenceTable.readout_phase_modulation` gives a phase. That is the
+    part of a shifted field of view a receiver cannot apply itself: under a
+    gradient that holds one value, a shift is a phase and a frequency offset,
+    but under one that does not, the phase curves over the readout and is
+    applied here.
 
     Raises
     ------

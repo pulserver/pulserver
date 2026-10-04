@@ -488,35 +488,51 @@ def test_an_object_turned_otherwise_than_prescribed_is_not_acquired_as_at_the_is
 def test_a_readout_under_a_varying_gradient_is_acquired_centred_off_the_isocentre(
     name, tmp_path
 ):
+    """Centred once the proxy applies the curvature the shift adds."""
     seq = _copy(name, tmp_path)
     ir.convert(seq, SYSTEM, fov_offset=OFFSET)
     acquired = virtual.acquire(seq, phantom(OFFSET, coils=1))
+    table = SequenceTable.read(seq, fov_offset_m=OFFSET)
+    corrected = []
+    for index, samples in enumerate(acquired):
+        modulation = table.readout_phase_modulation(index)
+        corrected.append(
+            samples if modulation is None else samples * np.exp(1j * modulation)
+        )
     ideal = _ideal(seq, phantom(coils=1))
-    excited = [i for i, samples in enumerate(acquired) if np.abs(samples).any()]
-    residual, _ = _residual([acquired[i] for i in excited], [ideal[i] for i in excited])
+    excited = [i for i, samples in enumerate(corrected) if np.abs(samples).any()]
+    residual, _ = _residual(
+        [corrected[i] for i in excited], [ideal[i] for i in excited]
+    )
     assert residual < 1e-4
 
 
-def test_the_cache_carries_the_phase_modulation_of_every_prescribed_readout(tmp_path):
+def test_the_proxy_curvature_is_the_modulation_the_shift_stores(tmp_path):
     seq = _copy("epi_2d_main.seq", tmp_path)
-    ir.convert(seq, SYSTEM, fov_offset=OFFSET)
-    played = ir.play(seq, waveforms=True)
-    readouts = np.flatnonzero(played["adc"])
+    table = SequenceTable.read(seq, fov_offset_m=OFFSET)
     designed = []
     for _, sequence in read_chain(seq):
         ir.prescribe(sequence, OFFSET)
         designed += [
-            np.asarray(block.adc.phase_modulation, dtype=float)
+            np.asarray(block.adc.phase_modulation, dtype=float).ravel()
             for block in (sequence.get_block(i) for i in range(1, len(sequence) + 1))
             if block.adc is not None
         ]
-    assert len(designed) == readouts.size
+    assert len(designed) == len(table)
     assert any(modulation.size for modulation in designed)
-    for block, modulation in zip(readouts, designed, strict=True):
-        start, stop = played["adc_modulation_span"][block]
-        np.testing.assert_allclose(
-            played["adc_phase_modulation_rad"][start:stop], modulation, atol=1e-6
-        )
+    for index, stored in enumerate(designed):
+        computed = table.readout_phase_modulation(index)
+        if not stored.size:
+            assert computed is None
+            continue
+        turned = np.angle(np.exp(1j * (computed - stored)))
+        np.testing.assert_allclose(turned, 0.0, atol=1e-3)
+
+
+def test_the_cache_carries_no_phase_modulation(tmp_path):
+    seq = _copy("epi_2d_main.seq", tmp_path)
+    ir.convert(seq, SYSTEM, fov_offset=OFFSET)
+    assert ir.play(seq, waveforms=True)["adc_phase_modulation_rad"].size == 0
 
 
 def test_a_phase_modulation_without_one_phase_per_sample_is_refused(tmp_path):

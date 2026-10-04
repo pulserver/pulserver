@@ -183,7 +183,9 @@ class SequenceLibraries:
     adc : NDArray[np.float64]
         ``(A, 8)``: sample count; dwell in ns; delay in µs; the frequency and
         phase ppm offsets; the frequency offset in Hz; the phase offset in
-        rad; the phase modulation shape id.
+        rad; 0 for the phase modulation shape id. The cache carries no phase
+        modulation: the reconstruction proxy applies it from the sequence
+        file, and the shapes only it names are empty.
     rf_definitions, grad_definitions, adc_definitions : NDArray[np.int32]
         ``(R,)``, ``(G,)``, ``(A,)``: the definition each row was
         deduplicated onto, counted from 1, as
@@ -408,6 +410,8 @@ def _sequence_libraries(sequence: Any, tables: Any) -> SequenceLibraries:
         (measured.peak_slew, measured.energy, measured.slew_energy), axis=1
     ).reshape(-1, 3)
     adc = _adc_library(tables)
+    shapes.empty(_receiver_only(adc, tables))
+    adc[:, 7] = 0
     interned = sequence.event_definitions()
     return SequenceLibraries(
         blocks,
@@ -445,8 +449,27 @@ class _ShapeTable:
             self._grids[count] = len(self._entries)
         return self._grids[count]
 
+    def empty(self, identifiers: set[int]) -> None:
+        for identifier in identifiers:
+            self._entries[identifier - 1] = Shape(0, np.zeros(0))
+
     def entries(self) -> tuple[Shape, ...]:
         return tuple(self._entries)
+
+
+def _receiver_only(adc: NDArray[np.float64], tables: Any) -> set[int]:
+    """Return the shapes only ADC phase modulation names.
+
+    The modulation is applied to the received samples by the reconstruction
+    proxy from the sequence file, so the cache carries neither it nor them.
+    """
+    played = set(np.asarray(tables.rf, dtype=np.int64).reshape(-1, 10)[:, 1:4].ravel())
+    played |= set(
+        np.asarray(tables.arbitrary_gradients, dtype=np.int64)
+        .reshape(-1, 6)[:, 3:5]
+        .ravel()
+    )
+    return {int(i) for i in adc[:, 7] if i > 0} - played
 
 
 def _rf_library(

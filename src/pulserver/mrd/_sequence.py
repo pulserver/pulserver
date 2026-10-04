@@ -177,7 +177,7 @@ class ReadoutTable:
     center_sample: np.ndarray
     trajectory_dimensions: np.ndarray
     _runs: _Runs = field(repr=False)
-    #: One entry per distinct ADC: its phase modulation in rad, or None.
+    #: One entry per distinct phase modulation shape: the modulation in rad, or None.
     _phase_modulation: tuple[np.ndarray | None, ...] = field(default=(), repr=False)
     #: Which entry of _phase_modulation each readout plays.
     _modulated_by: np.ndarray = field(
@@ -196,8 +196,12 @@ class ReadoutTable:
         block = echoes.block.astype(np.int64)
         count = block.size
         num_samples = echoes.num_samples.astype(np.int32)
-        adcs, which = _events_by_id(seq, events[block - 1, _ADC], block, "adc")
-        dwell = np.array([float(adc.dwell) for adc in adcs])[which]
+        adc_rows = np.asarray(seq.libraries().adc, dtype=np.float64).reshape(-1, 8)
+        played = adc_rows[events[block - 1, _ADC] - 1]
+        dwell = played[:, 1]
+        # A shifted field of view gives every readout an ADC row of its own;
+        # the modulation is decoded once per shape the rows name.
+        adcs, which = _events_by_id(seq, played[:, 7].astype(np.int64), block, "adc")
         labels = _labels_at(seq, block)
 
         reverse = labels.get("REV", np.zeros(count, dtype=np.int64)) != 0

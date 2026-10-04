@@ -482,7 +482,8 @@ def play(
           readout, one phase per sample in radians, concatenated in play
           order; the receiver phase of a sample is the ADC phase offset, plus
           its frequency offset times the time since the ADC's start, plus
-          this;
+          this. Empty for a cache converted here, which leaves the
+          modulation to the reconstruction proxy;
         - ``adc_modulation_span``: ``(blocks, 2)``, the start and stop of each
           block's modulation in that array; empty without one.
 

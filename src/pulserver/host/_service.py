@@ -208,6 +208,7 @@ def generate(
             "plugin": plugin,
             "source": source,
             "scan_time": validation.duration,
+            "fov_offset_mm": [1e3 * value for value in offset],
         }
         design = store.commit(identity, staged, manifest)
     except BaseException:
