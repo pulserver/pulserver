@@ -162,7 +162,7 @@ class ReadoutTable:
     dwell : ndarray
         ``float64`` dwell time, in seconds.
     labels : dict of str to ndarray
-        Every label the sequence writes, with the ``int64`` value in force at
+        Every label the sequence writes, with the ``int32`` value in force at
         each readout. Labels the sequence never writes are absent.
     center_sample : ndarray
         ``int32`` echo index: of the samples ``pypulseqpp.Sequence.adc_echoes``
@@ -218,13 +218,11 @@ class ReadoutTable:
         count = block.size
         num_samples = echoes.num_samples.astype(np.int32)
         adc_rows = np.asarray(tables.adc, dtype=np.float64).reshape(-1, 8)
-        played = adc_rows[
-            np.asarray(tables.blocks)[block - 1, _ADC].astype(np.int64) - 1
-        ]
-        dwell = played[:, 1]
+        adc_row = np.asarray(tables.blocks)[block - 1, _ADC].astype(np.int64) - 1
+        dwell = adc_rows[adc_row, 1]
         # A shifted field of view gives every readout an ADC row of its own;
         # the modulation is decoded once per shape the rows name.
-        adcs, which = _events_by_id(seq, played[:, 7].astype(np.int64), block, "adc")
+        adcs, which = _events_by_shape(seq, adc_rows[:, 7], adc_row, block, "adc")
         labels = _labels_at(seq, block)
 
         reverse = labels.get("REV", np.zeros(count, dtype=np.int64)) != 0
@@ -233,8 +231,10 @@ class ReadoutTable:
             moves, np.where(reverse, echoes.echo[:, 0], echoes.echo[:, 1]), -1
         ).astype(np.int32)
         # The last axis moved along, counted from 1.
-        last_moving = 3 - np.argmax(echoes.moving[:, ::-1], axis=1)
-        dimensions = np.where(moves, last_moving, 0).astype(np.int8)
+        moving = echoes.moving
+        dimensions = np.where(
+            moving[:, 2], 3, np.where(moving[:, 1], 2, moves.astype(np.int8))
+        ).astype(np.int8)
         return cls(
             block=block,
             num_samples=num_samples,
@@ -289,9 +289,9 @@ class _Runs:
         #: Samples before each readout, and after the last.
         self.before = np.concatenate(([0], np.cumsum(num_samples, dtype=np.int64)))
         #: First readout of each run.
-        self.first = np.flatnonzero(
-            np.diff(self.before[:-1] // _RUN_SAMPLES, prepend=-1)
-        )
+        last = int(self.before[-2]) if num_samples.size else -1
+        starts = np.arange(0, last + 1, _RUN_SAMPLES)
+        self.first = np.unique(np.searchsorted(self.before[:-1], starts))
         self._stop = np.append(self.first[1:], num_samples.size)
         self._kept: OrderedDict[int, np.ndarray] = OrderedDict()
         self._lock = threading.Lock()
@@ -324,13 +324,25 @@ def _phase_modulation_of(adc: Any) -> np.ndarray | None:
     return values if values.size else None
 
 
-def _events_by_id(
-    seq: Any, ids: np.ndarray, blocks: np.ndarray, kind: str
+def _events_by_shape(
+    seq: Any, shape: np.ndarray, row: np.ndarray, blocks: np.ndarray, kind: str
 ) -> tuple[list[Any], np.ndarray]:
-    """Decode one event per distinct ID, and return where each ID falls among them."""
-    _, first, which = np.unique(ids, return_index=True, return_inverse=True)
-    decoded = [getattr(seq.get_block(int(blocks[at])), kind) for at in first]
-    return decoded, which.reshape(-1)
+    """Decode one event per distinct shape of the library rows played, and return which each readout plays.
+
+    ``shape`` is per library row, ``row`` the 0-based library row of each
+    readout and ``blocks`` its block.
+    """
+    count = row.size
+    first = np.full(shape.size, count, dtype=np.int64)
+    np.minimum.at(first, row, np.arange(count))
+    used = np.flatnonzero(first < count)
+    distinct, inverse = np.unique(shape[used], return_inverse=True)
+    start = np.full(distinct.size, count, dtype=np.int64)
+    np.minimum.at(start, inverse, first[used])
+    decoded = [getattr(seq.get_block(int(blocks[at])), kind) for at in start]
+    of_row = np.zeros(shape.size, dtype=np.int64)
+    of_row[used] = inverse
+    return decoded, of_row[row]
 
 
 def _labels_at(seq: Any, block: np.ndarray) -> dict[str, np.ndarray]:
@@ -345,12 +357,11 @@ def _labels_at(seq: Any, block: np.ndarray) -> dict[str, np.ndarray]:
     if block.size > 1:
         found = seq.evaluate_labels(evolution="adc")
         return {
-            name: np.asarray(value, dtype=np.int64).copy()
-            for name, value in found.items()
+            name: np.asarray(value, dtype=np.int32) for name, value in found.items()
         }
     at = int(block[0]) - 1
     return {
-        name: np.atleast_1d(np.asarray(value, dtype=np.int64))[
+        name: np.atleast_1d(np.asarray(value, dtype=np.int32))[
             [at if np.size(value) > 1 else 0]
         ]
         for name, value in seq.evaluate_labels(evolution="blocks").items()

@@ -15,6 +15,9 @@ _USAGE = (
 def main(argv: list[str] | None = None) -> int:
     """Run ``pulserver <command> ...``; return its exit status."""
     argv = sys.argv[1:] if argv is None else argv
+    from ._memory import without_huge_page_advice
+
+    without_huge_page_advice()
     if argv and argv[0] == "design":
         from .host._command import main as design
 

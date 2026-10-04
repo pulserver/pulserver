@@ -22,6 +22,7 @@
 #include <stdexcept>
 #include <string>
 #include <tuple>
+#include <unordered_map>
 #include <vector>
 
 #include "bloch/bindings.hpp"
@@ -740,6 +741,107 @@ PYBIND11_MODULE(_ext, module)
         py::arg("columns"),
         "The new id of each event id some block names in the given columns of a "
         "block table, numbered from 1 in id order; 0 for an id none names.");
+
+    module.def(
+        "first_and_last",
+        [](const std::vector<py::array_t<int32_t, py::array::c_style | py::array::forcecast>>
+               &columns)
+        {
+            const size_t count = columns.empty() ? 0 : static_cast<size_t>(columns[0].size());
+            std::vector<const int32_t *> data;
+            for (const auto &column : columns)
+            {
+                if (static_cast<size_t>(column.size()) != count)
+                    throw std::invalid_argument("columns differ in length");
+                data.push_back(column.data());
+            }
+            auto *marks = new uint8_t[count]();
+            py::capsule owner(marks, [](void *held) { delete[] static_cast<uint8_t *>(held); });
+            unlocked(
+                [&]
+                {
+                    // Mixed-radix packing of each row over the columns' ranges.
+                    std::vector<int64_t> low(data.size(), 0);
+                    std::vector<uint64_t> size(data.size(), 1);
+                    long double cells = 1.0L;
+                    for (size_t c = 0; c < data.size(); ++c)
+                    {
+                        int32_t lo = 0, hi = 0;
+                        if (count)
+                        {
+                            const auto [a, b] = std::minmax_element(data[c], data[c] + count);
+                            lo = *a;
+                            hi = *b;
+                        }
+                        low[c] = lo;
+                        size[c] = static_cast<uint64_t>(static_cast<int64_t>(hi) - lo) + 1;
+                        cells *= static_cast<long double>(size[c]);
+                    }
+                    const auto pack = [&](size_t row)
+                    {
+                        uint64_t key = 0;
+                        for (size_t c = 0; c < data.size(); ++c)
+                            key = key * size[c] + static_cast<uint64_t>(data[c][row] - low[c]);
+                        return key;
+                    };
+                    if (cells <= static_cast<long double>(4 * count + (1u << 20)))
+                    {
+                        std::vector<std::array<int64_t, 2>> span(
+                            static_cast<size_t>(cells), std::array<int64_t, 2>{-1, -1});
+                        for (size_t row = 0; row < count; ++row)
+                        {
+                            auto &[opened, closed] = span[pack(row)];
+                            if (opened < 0)
+                                opened = static_cast<int64_t>(row);
+                            closed = static_cast<int64_t>(row);
+                        }
+                        for (const auto &[opened, closed] : span)
+                            if (opened >= 0)
+                            {
+                                marks[opened] |= 1;
+                                marks[closed] |= 2;
+                            }
+                    }
+                    else if (cells < 1.8e19L)
+                    {
+                        std::unordered_map<uint64_t, std::array<int64_t, 2>> span;
+                        for (size_t row = 0; row < count; ++row)
+                        {
+                            auto [at, fresh] = span.try_emplace(
+                                pack(row), std::array<int64_t, 2>{static_cast<int64_t>(row), 0});
+                            at->second[1] = static_cast<int64_t>(row);
+                        }
+                        for (const auto &[key, rows] : span)
+                        {
+                            marks[rows[0]] |= 1;
+                            marks[rows[1]] |= 2;
+                        }
+                    }
+                    else
+                    {
+                        std::map<std::vector<int32_t>, std::array<int64_t, 2>> span;
+                        std::vector<int32_t> key(data.size());
+                        for (size_t row = 0; row < count; ++row)
+                        {
+                            for (size_t c = 0; c < data.size(); ++c)
+                                key[c] = data[c][row];
+                            auto [at, fresh] = span.try_emplace(
+                                key, std::array<int64_t, 2>{static_cast<int64_t>(row), 0});
+                            at->second[1] = static_cast<int64_t>(row);
+                        }
+                        for (const auto &[ignored, rows] : span)
+                        {
+                            marks[rows[0]] |= 1;
+                            marks[rows[1]] |= 2;
+                        }
+                    }
+                    return 0;
+                });
+            return py::array_t<uint8_t>(static_cast<py::ssize_t>(count), marks, owner);
+        },
+        py::arg("columns"),
+        "Per row of equal-length int32 columns: bit 0 set where that row's values first "
+        "occur, bit 1 where they last occur.");
 
     module.def(
         "summary_from_libraries",

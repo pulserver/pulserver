@@ -7,11 +7,13 @@ import logging
 import signal
 from pathlib import Path
 
+from .._memory import without_huge_page_advice
 from ._intake import DesignIntake
 from ._proxy import ReconProxy
 
 
 def main(argv: list[str] | None = None) -> None:
+    without_huge_page_advice()
     parser = argparse.ArgumentParser(prog="python -m pulserver.proxy")
     parser.add_argument(
         "--store",

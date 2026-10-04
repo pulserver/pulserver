@@ -22,6 +22,7 @@ from typing import Any
 import ismrmrd.xsd as xsd
 import numpy as np
 
+from .._accelerators import require
 from .._labels import MRD_COUNTERS, MRD_FLAGS
 from ..mrd._acquisitions import AcquisitionFlag
 from ..mrd._metadata import user_parameter
@@ -242,7 +243,7 @@ class SequenceTable:
             flip.extend(definitions.flip_angle)
 
         def joined(name: str, dtype: Any) -> np.ndarray:
-            return np.concatenate([part[name] for part in parts]).astype(dtype)
+            return np.concatenate([part[name] for part in parts], dtype=dtype)
 
         flags = joined("flags", np.uint64)
         if flags.size:
@@ -265,8 +266,8 @@ class SequenceTable:
 
         return cls(
             counters={
-                name: np.concatenate([part["counters"][name] for part in parts]).astype(
-                    np.int32
+                name: np.concatenate(
+                    [part["counters"][name] for part in parts], dtype=np.int32
                 )
                 for name in MRD_COUNTERS
             },
@@ -471,7 +472,7 @@ def _map_readouts(
     count = len(readouts)
     labels = readouts.labels
     counters = {
-        name: labels.get(name, np.zeros(count, dtype=np.int64)) for name in MRD_COUNTERS
+        name: labels.get(name, np.zeros(count, dtype=np.int32)) for name in MRD_COUNTERS
     }
 
     flags = np.zeros(count, dtype=np.uint64)
@@ -480,7 +481,7 @@ def _map_readouts(
             flags[labels[name] != 0] |= np.uint64(bit)
     navigator = (flags & np.uint64(_F.IS_NAVIGATION_DATA.value)) != 0
     reverse = (flags & np.uint64(_F.IS_REVERSE.value)) != 0
-    local_space = navigator.astype(np.int64)
+    local_space = navigator.astype(np.int32)
     flags |= _boundary_flags(counters, local_space, set(labels))
 
     spaces = []
@@ -584,33 +585,12 @@ def _boundary_flags(
             for other, _, _, selects_image in _BOUNDARY_COUNTERS
             if selects_image and other != name and other in written
         ]
-        keys = np.stack(
-            [space, *(counters[other] for other in enclosing), counters[name]], axis=1
+        marks = require("first_and_last")(
+            [space, *(counters[other] for other in enclosing), counters[name]]
         )
-        order, change = _groups(keys)
-        flags[order[np.concatenate(([True], change))]] |= np.uint64(first.value)
-        flags[order[np.concatenate((change, [True]))]] |= np.uint64(last.value)
+        flags[(marks & 1) != 0] |= np.uint64(first.value)
+        flags[(marks & 2) != 0] |= np.uint64(last.value)
     return flags
-
-
-def _groups(keys: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    """Return a stable order grouping equal rows of ``keys``, and where each row of it differs from the next.
-
-    Rows of non-negative counters are packed into one integer per row where
-    they fit, which sorts faster than ordering by each column in turn.
-    """
-    keys = keys.astype(np.int64)
-    sizes = keys.max(axis=0, initial=0) + 1
-    if keys.size and keys.min() >= 0 and float(np.prod(sizes.astype(float))) < 2.0**62:
-        packed = np.zeros(keys.shape[0], dtype=np.int64)
-        for column, size in zip(keys.T, sizes, strict=True):
-            packed = packed * size + column
-        order = np.argsort(packed, kind="stable")
-        ordered = packed[order]
-        return order, ordered[1:] != ordered[:-1]
-    order = np.lexsort(keys.T[::-1])
-    ordered = keys[order]
-    return order, np.any(ordered[1:] != ordered[:-1], axis=1)
 
 
 def _limit(values: np.ndarray, centre: int | None = None) -> Any:
