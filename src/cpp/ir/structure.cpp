@@ -1669,11 +1669,10 @@ static void record_adc_label(
 int pulseg__build_label_table(pulseg_sequence_descriptor *desc, const pulseq_file *seq)
 {
     int num_columns, total_adcs;
-    int n, b, entry_idx;
+    int n, b, l, entry_idx;
     int *table;
     int *off_table = NULL;
-    int *row_of_block = NULL;
-    const int *state;
+    int state[PULSEQ_ADC_LABEL_WIDTH];
 
     if (!desc || !seq)
         return PULSEG_ERR_NULL_POINTER;
@@ -1726,31 +1725,15 @@ int pulseg__build_label_table(pulseg_sequence_descriptor *desc, const pulseq_fil
     }
     memset(off_table, 0, (size_t)total_adcs * sizeof(int));
 
-    /* The labels in force at each acquiring block come from pypulseqpp, one
-     * row of seq->adc_labels per acquiring block in block order; block_table
-     * index == raw block index, so a block's row is the count of acquiring
-     * blocks before it. */
-    row_of_block = (int *)PULSEG_ALLOC((size_t)desc->num_blocks * sizeof(int));
-    if (!row_of_block)
-    {
-        PULSEG_FREE(table);
-        PULSEG_FREE(off_table);
-        return PULSEG_ERR_ALLOC_FAILED;
-    }
-    entry_idx = 0;
-    for (b = 0; b < desc->num_blocks; ++b)
-    {
-        row_of_block[b] = entry_idx;
-        if (desc->block_table[b].adc_id >= 0)
-            ++entry_idx;
-    }
-    if (entry_idx != seq->num_adc_labels || !seq->adc_labels)
-    {
-        PULSEG_FREE(row_of_block);
-        PULSEG_FREE(table);
-        PULSEG_FREE(off_table);
-        return PULSEG_ERR_INVALID_ARGUMENT;
-    }
+    /* The labels in force at each block come from pypulseqpp, one column
+     * per label indexed by raw block, which is the block_table index. */
+    for (l = 0; l < PULSEQ_ADC_LABEL_WIDTH; ++l)
+        if (!seq->adc_labels[l].data)
+        {
+            PULSEG_FREE(table);
+            PULSEG_FREE(off_table);
+            return PULSEG_ERR_INVALID_ARGUMENT;
+        }
 
     memset(&desc->label_limits, 0, sizeof(desc->label_limits));
     entry_idx = 0;
@@ -1762,7 +1745,9 @@ int pulseg__build_label_table(pulseg_sequence_descriptor *desc, const pulseq_fil
         b = pulseg__exec_block_idx(desc, n);
         if (b < 0 || b >= desc->num_blocks || desc->block_table[b].adc_id < 0)
             continue;
-        state = seq->adc_labels[row_of_block[b]];
+        for (l = 0; l < PULSEQ_ADC_LABEL_WIDTH; ++l)
+            state[l] = PULSEQ_COLUMN(seq->adc_labels[l], b);
+        state[PULSEQ_ADC_LABEL_WIDTH - 1] = state[PULSEQ_ADC_LABEL_WIDTH - 1] != 0;
         record_adc_label(
             &table[entry_idx * num_columns],
             num_columns,
@@ -1773,7 +1758,6 @@ int pulseg__build_label_table(pulseg_sequence_descriptor *desc, const pulseq_fil
         off_table[entry_idx] = state[10];
         ++entry_idx;
     }
-    PULSEG_FREE(row_of_block);
 
     desc->label_num_columns = num_columns;
     desc->label_num_entries = entry_idx;

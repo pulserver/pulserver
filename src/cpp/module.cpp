@@ -628,6 +628,7 @@ Collection convert(const py::list &chain, const pulseg_opts &opts)
         throw std::invalid_argument("a chain holds at least one subsequence");
 
     std::vector<pulseq_file> files((size_t)count);
+    std::vector<py::object> held;
     for (int i = 0; i < count; ++i)
         pulseq_file_init(&files[(size_t)i], nullptr);
     auto release = [&files]()
@@ -638,7 +639,7 @@ Collection convert(const py::list &chain, const pulseg_opts &opts)
     try
     {
         for (int i = 0; i < count; ++i)
-            pulserver::build_pulseq_file(files[(size_t)i], chain[(size_t)i].cast<py::dict>());
+            pulserver::build_pulseq_file(files[(size_t)i], chain[(size_t)i].cast<py::dict>(), held);
     }
     catch (...)
     {

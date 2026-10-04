@@ -32,8 +32,8 @@ extern "C"
 /* ================================================================== */
 /*  File-scope constants                                              */
 /* ================================================================== */
-/* The per-block row the conversion keeps: the duration in block rasters, and
- * the definition of each event the block plays, -1 for one it does not. */
+/* A block definition's row: the duration in block rasters, and the definition
+ * of each event the block plays, -1 for one it does not. */
 #define BLOCK_DEF_COLS 6
 /* What makes a block definition here: the one pypulseqpp published, and the
  * ADC definition it digitises with. */
@@ -339,6 +339,11 @@ static int deduplicate_grad_library(
 /*  ADC                                                               */
 /* ================================================================== */
 
+static int adc_row(const pulseq_file *seq, int played)
+{
+    return seq->adc_rows_of ? seq->adc_rows_of[played] : played;
+}
+
 static int deduplicate_adc_library(
     const pulseq_file *seq,
     pulseg_adc_definition *adc_defs,
@@ -373,19 +378,19 @@ static int deduplicate_adc_library(
 
     for (i = 0; i < num_unique; ++i)
     {
-        const float *adc = seq->adc_library[unique_defs[i]];
+        const double *adc = seq->adc_rows[adc_row(seq, unique_defs[i])];
         adc_defs[i].id = unique_defs[i];
         adc_defs[i].num_samples = (int)adc[0];
-        adc_defs[i].dwell_time = (int)adc[1];
-        adc_defs[i].delay = (int)adc[2];
+        adc_defs[i].dwell_time = (int)rint(adc[1] * 1e9);
+        adc_defs[i].delay = (int)rint(adc[2] * 1e6);
     }
     for (i = 0; i < num_rows; ++i)
     {
-        const float *adc = seq->adc_library[i];
+        const int row = adc_row(seq, i);
         adc_table[i].id = event_table[i];
-        adc_table[i].freq_offset = adc[5];  /* ppm resolved on the host (Hz)  */
-        adc_table[i].phase_offset = adc[6]; /* ppm resolved on the host (rad) */
-        adc_table[i].phase_shape_id = (int)adc[7];
+        adc_table[i].freq_offset = (float)seq->adc_offsets[row][0];  /* Hz  */
+        adc_table[i].phase_offset = (float)seq->adc_offsets[row][1]; /* rad */
+        adc_table[i].phase_shape_id = (int)seq->adc_rows[row][7];
     }
 
     PULSEG_FREE(unique_defs);
@@ -1310,6 +1315,27 @@ static int check_raster_times(const pulseq_file *seq, const pulseg_opts *opts)
 /*  get_unique_blocks                                                 */
 /* ================================================================== */
 
+/* A block's definition row: duration in block rasters (0 for a pure delay,
+ * whose length is a per-instance value an interpreter sets at run time, so
+ * every pure delay is one definition), then the unique RF, GX, GY, GZ and ADC
+ * definitions, -1 for none. */
+static void block_definition_row(
+    const pulseq_raw_block *raw,
+    const pulseg_rf_table_element *rf_tab,
+    const pulseg_grad_table_element *grad_tab,
+    const pulseg_adc_table_element *adc_tab,
+    int row[BLOCK_DEF_COLS])
+{
+    row[0] = (raw->rf < 0 && raw->gx < 0 && raw->gy < 0 && raw->gz < 0 && raw->adc < 0)
+        ? 0
+        : (raw->block_duration >= 0 ? raw->block_duration : 0);
+    row[1] = (raw->rf >= 0 && rf_tab) ? rf_tab[raw->rf].id : -1;
+    row[2] = (raw->gx >= 0 && grad_tab) ? grad_tab[raw->gx].id : -1;
+    row[3] = (raw->gy >= 0 && grad_tab) ? grad_tab[raw->gy].id : -1;
+    row[4] = (raw->gz >= 0 && grad_tab) ? grad_tab[raw->gz].id : -1;
+    row[5] = (raw->adc >= 0 && adc_tab) ? adc_tab[raw->adc].id : -1;
+}
+
 int pulseg__get_unique_blocks(
     pulseg_sequence_descriptor *desc,
     const pulseq_file *seq,
@@ -1336,7 +1362,6 @@ int pulseg__get_unique_blocks(
     pulseg_base_block *tmp_blk_defs = NULL;
     pulseg_block_table_element *tmp_blk_tab = NULL;
 
-    int(*int_rows)[BLOCK_DEF_COLS] = NULL;
     int(*key_rows)[BLOCK_KEY_COLS] = NULL;
     int *geometry_defs = NULL;
     int *geometry_of = NULL;
@@ -1350,8 +1375,8 @@ int pulseg__get_unique_blocks(
         return PULSEG_ERR_INVALID_ARGUMENT;
 
     num_blocks = seq->num_blocks;
-    if (num_blocks <= 0 || !seq->block_library || !seq->block_rotations || !seq->block_shims ||
-        !seq->block_flags || !seq->block_trid_set)
+    if (num_blocks <= 0 || !seq->block_events || !seq->block_rotations || !seq->block_shims ||
+        !seq->block_flags[PULSEQ_BLOCK_FLAG_WIDTH - 1].data || !seq->block_trid_set)
         return PULSEG_ERR_INVALID_ARGUMENT;
 
     desc->num_unique_rfs = 0;
@@ -1516,11 +1541,10 @@ int pulseg__get_unique_blocks(
     }
 
     /* ---- step 2: block definition matrix ---- */
-    int_rows = (int(*)[BLOCK_DEF_COLS])PULSEG_ALLOC(num_blocks * sizeof(*int_rows));
     key_rows = (int(*)[BLOCK_KEY_COLS])PULSEG_ALLOC(num_blocks * sizeof(*key_rows));
     unique_defs = (int *)PULSEG_ALLOC(num_blocks * sizeof(int));
     event_table = (int *)PULSEG_ALLOC(num_blocks * sizeof(int));
-    if (!int_rows || !key_rows || !unique_defs || !event_table)
+    if (!key_rows || !unique_defs || !event_table)
         goto fail;
 
     for (n = 0; n < num_blocks; ++n)
@@ -1530,18 +1554,8 @@ int pulseg__get_unique_blocks(
             result = PULSEG_ERR_INVALID_ARGUMENT;
             goto fail;
         }
-        /* A pure delay's length is a per-instance value -- an interpreter
-         * sets how long it waits there at run time -- so it is left out of
-         * the key and every pure delay is one definition. */
-        int_rows[n][0] =
-            (raw.rf < 0 && raw.gx < 0 && raw.gy < 0 && raw.gz < 0 && raw.adc < 0)
-            ? 0
-            : (raw.block_duration >= 0 ? raw.block_duration : 0);
-        int_rows[n][1] = (raw.rf >= 0 && tmp_rf_tab) ? tmp_rf_tab[raw.rf].id : -1;
-        int_rows[n][2] = (raw.gx >= 0 && tmp_grad_tab) ? tmp_grad_tab[raw.gx].id : -1;
-        int_rows[n][3] = (raw.gy >= 0 && tmp_grad_tab) ? tmp_grad_tab[raw.gy].id : -1;
-        int_rows[n][4] = (raw.gz >= 0 && tmp_grad_tab) ? tmp_grad_tab[raw.gz].id : -1;
-        int_rows[n][5] = (raw.adc >= 0 && tmp_adc_tab) ? tmp_adc_tab[raw.adc].id : -1;
+        key_rows[n][0] = seq->block_definitions[n];
+        key_rows[n][1] = (raw.adc >= 0 && tmp_adc_tab) ? tmp_adc_tab[raw.adc].id : -1;
 
         tmp_blk_tab[n].rf_id = raw.rf;
         tmp_blk_tab[n].gx_id = raw.gx;
@@ -1554,20 +1568,20 @@ int pulseg__get_unique_blocks(
             ? (int)(raw.block_duration * desc->block_raster_us)
             : -1;
 
-        tmp_blk_tab[n].rotation_id = seq->block_rotations[n];
-        tmp_blk_tab[n].rf_shim_id = seq->block_shims[n];
+        tmp_blk_tab[n].rotation_id = seq->block_rotations[n] - 1;
+        tmp_blk_tab[n].rf_shim_id = seq->block_shims[n] - 1;
         tmp_blk_tab[n].digitalout_id = pulseq_block_trigger(seq, &raw);
-        tmp_blk_tab[n].norot_flag = seq->block_flags[n][0];
-        tmp_blk_tab[n].nopos_flag = seq->block_flags[n][1];
-        tmp_blk_tab[n].pmc_flag = seq->block_flags[n][2];
-        tmp_blk_tab[n].nav_flag = seq->block_flags[n][3];
+        tmp_blk_tab[n].norot_flag = PULSEQ_COLUMN(seq->block_flags[0], n);
+        tmp_blk_tab[n].nopos_flag = PULSEQ_COLUMN(seq->block_flags[1], n);
+        tmp_blk_tab[n].pmc_flag = PULSEQ_COLUMN(seq->block_flags[2], n);
+        tmp_blk_tab[n].nav_flag = PULSEQ_COLUMN(seq->block_flags[3], n);
         /* TRID is sticky: the group in force, 0 before any. trid_set marks
          * the block that sets it, which is where a repetition starts: an
          * author re-SETs the same id at every one, so the sticky value alone
          * does not say where one ends and the next begins. Both live on the
          * per-occurrence block-table entry, never on the deduplicated block
          * definition, so they have no dedup footprint. */
-        tmp_blk_tab[n].trid = seq->block_flags[n][4];
+        tmp_blk_tab[n].trid = PULSEQ_COLUMN(seq->block_flags[4], n);
         tmp_blk_tab[n].trid_set = seq->block_trid_set[n];
     }
 
@@ -1581,11 +1595,6 @@ int pulseg__get_unique_blocks(
          * repetition is read off.  A pulse generator prepares the readout too,
          * so here a definition is that one AND the ADC definition, and the
          * published one is the geometry the two share. */
-        for (n = 0; n < num_blocks; ++n)
-        {
-            key_rows[n][0] = seq->block_definitions[n];
-            key_rows[n][1] = int_rows[n][5];
-        }
         num_raw_defs = pulseg__deduplicate_int_rows(
             unique_defs, event_table, (const int *)key_rows, num_blocks, BLOCK_KEY_COLS);
         if (num_raw_defs <= 0)
@@ -1646,21 +1655,27 @@ int pulseg__get_unique_blocks(
             const int rep = unique_defs[k];
             if (def_map[k] != k)
                 continue;
+            int row[BLOCK_DEF_COLS];
+            if (!pulseq_get_raw_block_content_ids(seq, &raw, rep, 0))
+            {
+                result = PULSEG_ERR_INVALID_ARGUMENT;
+                goto fail;
+            }
+            block_definition_row(&raw, tmp_rf_tab, tmp_grad_tab, tmp_adc_tab, row);
             tmp_blk_defs[dense].id = rep;
             /* A pure delay's definition carries no duration of its own, an
              * interpreter setting what it waits at run time; it takes the
              * length of the instance that introduced it, and the block table
              * carries what each instance waits. */
             tmp_blk_defs[dense].duration_us =
-                (int_rows[rep][1] < 0 && int_rows[rep][2] < 0 && int_rows[rep][3] < 0 &&
-                 int_rows[rep][4] < 0 && int_rows[rep][5] < 0)
+                (row[1] < 0 && row[2] < 0 && row[3] < 0 && row[4] < 0 && row[5] < 0)
                 ? tmp_blk_tab[rep].duration_us
-                : (int)(int_rows[rep][0] * desc->block_raster_us);
-            tmp_blk_defs[dense].rf_id = int_rows[rep][1];
-            tmp_blk_defs[dense].gx_id = int_rows[rep][2];
-            tmp_blk_defs[dense].gy_id = int_rows[rep][3];
-            tmp_blk_defs[dense].gz_id = int_rows[rep][4];
-            tmp_blk_defs[dense].adc_id = int_rows[rep][5];
+                : (int)(row[0] * desc->block_raster_us);
+            tmp_blk_defs[dense].rf_id = row[1];
+            tmp_blk_defs[dense].gx_id = row[2];
+            tmp_blk_defs[dense].gy_id = row[3];
+            tmp_blk_defs[dense].gz_id = row[4];
+            tmp_blk_defs[dense].adc_id = row[5];
             geometry_of[k] = dense; /* reused as raw definition -> dense index */
             ++dense;
         }
@@ -1678,8 +1693,6 @@ int pulseg__get_unique_blocks(
     def_map = NULL;
     PULSEG_FREE(key_rows);
     key_rows = NULL;
-    PULSEG_FREE(int_rows);
-    int_rows = NULL;
     PULSEG_FREE(unique_defs);
     unique_defs = NULL;
     PULSEG_FREE(event_table);
@@ -1820,8 +1833,6 @@ fail:
         PULSEG_FREE(tmp_blk_defs);
     if (tmp_blk_tab)
         PULSEG_FREE(tmp_blk_tab);
-    if (int_rows)
-        PULSEG_FREE(int_rows);
     if (key_rows)
         PULSEG_FREE(key_rows);
     if (geometry_defs)

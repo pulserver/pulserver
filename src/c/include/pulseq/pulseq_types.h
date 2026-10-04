@@ -39,6 +39,15 @@
  * LIN, ACQ, OFF -- the label state a label_column_map indexes. */
 #define PULSEQ_ADC_LABEL_WIDTH 11
 
+/* A per-block integer column read in place: block n holds
+ * data[n * stride], so a stride of 0 gives every block one value. */
+typedef struct pulseq_int_column
+{
+    const int *data;
+    int stride;
+} pulseq_int_column;
+#define PULSEQ_COLUMN(column, n) ((column).data[(size_t)(n) * (size_t)(column).stride])
+
 /* ================================================================== */
 /*  RF use codes (the trailing e/r/i/s use tag on an RF library row)   */
 /* ================================================================== */
@@ -325,16 +334,28 @@ typedef struct pulseq_file
     pulseq_reserved_definitions reserved_definitions_library;
     int is_block_library_parsed;
     int num_blocks;
-    PULSEQ_REAL (*block_library)[7];
-    int *block_ids;
-    /* Per block, as pypulseqpp gives them: the ROTATIONS and RF_SHIMS rows it
-     * plays, counted from 0 and -1 for none (Sequence.block_rotations and
+    /* Per block, borrowed from the caller and never freed here: pypulseqpp's
+     * RF, GX, GY, GZ, ADC and EXT ids (Sequence.block_events, 0 for none),
+     * renumbered through rf_map, grad_map and adc_map to the played library
+     * rows, counted from 1; and the duration in s, in units of
+     * block_duration_raster. */
+    const int (*block_events)[6];
+    const double *block_durations;
+    double block_duration_raster;
+    const int *rf_map;
+    const int *grad_map;
+    const int *adc_map;
+    int rf_map_size;
+    int grad_map_size;
+    int adc_map_size;
+    /* Per block, borrowed: the ROTATIONS and RF_SHIMS rows it plays, counted
+     * from 1 and 0 for none (Sequence.block_rotations and
      * Sequence.block_shims); the NOROT, NOPOS, PMC, NAV and TRID values in
      * force once its labels apply (Sequence.evaluate_labels, PMC starting at
-     * 1); and 1 where it sets TRID (Sequence.label_blocks). */
-    int *block_rotations;
-    int *block_shims;
-    int (*block_flags)[PULSEQ_BLOCK_FLAG_WIDTH];
+     * 1). Owned: 1 where it sets TRID (Sequence.label_blocks). */
+    const int *block_rotations;
+    const int *block_shims;
+    pulseq_int_column block_flags[PULSEQ_BLOCK_FLAG_WIDTH];
     int *block_trid_set;
     /* Per block, the gradient its RF pulse plays under, as pypulseqpp's
      * Sequence.rf_gradients gives it: 1 where every channel axis holds one
@@ -342,11 +363,10 @@ typedef struct pulseq_file
      * along x, y and z at the pulse's centre, in Hz/m. */
     int *block_rf_steady;
     PULSEQ_REAL (*block_rf_gradient)[3];
-    /* Per acquiring block, in block order: the SLC, PHS, REP, AVG, SEG, SET,
-     * ECO, PAR, LIN, ACQ and OFF (0 or 1) values in force, as
-     * Sequence.evaluate_labels gives them. */
-    int num_adc_labels;
-    int (*adc_labels)[PULSEQ_ADC_LABEL_WIDTH];
+    /* Per block, borrowed: the SLC, PHS, REP, AVG, SEG, SET, ECO, PAR, LIN,
+     * ACQ and OFF values in force, as Sequence.evaluate_labels gives them;
+     * read at acquiring blocks only. */
+    pulseq_int_column adc_labels[PULSEQ_ADC_LABEL_WIDTH];
     int is_rf_library_parsed;
     int rf_library_size;
     PULSEQ_REAL (*rf_library)[10];
@@ -383,7 +403,13 @@ typedef struct pulseq_file
     PULSEQ_REAL (*grad_statistics)[3];
     int is_adc_library_parsed;
     int adc_library_size;
-    PULSEQ_REAL (*adc_library)[8];
+    /* Per played ADC, borrowed: pypulseqpp's ADC row (samples, dwell in s,
+     * delay in s, ..., phase modulation shape) and its absolute frequency
+     * (Hz) and phase (rad) offsets, at row adc_rows_of[i], or at row i where
+     * adc_rows_of, which is owned, is NULL. */
+    const double (*adc_rows)[8];
+    const double (*adc_offsets)[2];
+    int *adc_rows_of;
     int is_extensions_library_parsed;
     int extensions_library_size;
     PULSEQ_REAL (*extensions_library)[3];
