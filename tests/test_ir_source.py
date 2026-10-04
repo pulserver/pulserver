@@ -215,3 +215,19 @@ def test_the_definitions_are_the_ones_pypulseqpp_interned(name):
         np.testing.assert_array_equal(taken, published)
         assert np.flatnonzero(mapping).tolist() == played
         assert mapping[played].tolist() == list(range(1, len(played) + 1))
+
+
+def test_a_band_offset_below_a_millihertz_is_written_as_positive_zero(monkeypatch):
+    from types import SimpleNamespace
+
+    from pulserver.ir import _source
+
+    measured = SimpleNamespace(
+        bandwidth=1000.0,
+        num_bands=1,
+        band_bandwidths=np.array([1000.0]),
+        band_offsets=np.array([-4e-4]),
+    )
+    monkeypatch.setattr(_source.pp, "calc_rf_bandwidth", lambda *_, **__: measured)
+    row = _source._spectrum_row(SimpleNamespace(), 1e-6)
+    assert row[3] == 0.0 and not np.signbit(row[3])

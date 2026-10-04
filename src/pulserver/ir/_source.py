@@ -542,8 +542,9 @@ def _spectrum_row(event: Any, raster: float) -> NDArray[np.float64]:
     row[1] = max(result.num_bands, 1)
     row[2] = result.band_bandwidths.max() if result.num_bands else result.bandwidth
     # Measured on 10 Hz bins; below a millihertz an offset is the float32 of a
-    # binary file's shape samples, not a property of the pulse.
-    row[3 : 3 + count] = np.round(result.band_offsets[:count], 3)
+    # binary file's shape samples, not a property of the pulse; adding zero
+    # folds the -0.0 a small negative offset rounds to.
+    row[3 : 3 + count] = np.round(result.band_offsets[:count], 3) + 0.0
     return row
 
 
