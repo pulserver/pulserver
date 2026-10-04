@@ -568,6 +568,9 @@ that begins a unit by setting them permits.</p></li>
 <li><p><strong>wave_budget</strong> – The waveform memory of the playout the cache is for, which the cache
 lays the waves out in (<a class="reference internal" href="pulserver.ir.plan_waves.html#pulserver.ir.plan_waves" title="pulserver.ir.plan_waves"><code class="xref py py-func docutils literal notranslate"><span class="pre">plan_waves()</span></code></a>); None holds every wave at
 once on the gradient raster of the chain’s first file.</p></li>
+<li><p><strong>designed</strong> – The chain as <code class="xref py py-func docutils literal notranslate"><span class="pre">pulserver.mrd.designed_chain()</span></code> returns it,
+segmented in place of reading and verifying the files, and moved to
+<code class="docutils literal notranslate"><span class="pre">fov_offset</span></code> in place.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>

@@ -703,6 +703,7 @@
     <span class="n">wave_budget</span><span class="p">:</span> <span class="n">WaveBudget</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">profile</span><span class="p">:</span> <span class="n">VendorProfile</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">grouping</span><span class="p">:</span> <span class="n">Grouping</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">designed</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="n">Path</span><span class="p">,</span> <span class="n">pp</span><span class="o">.</span><span class="n">Sequence</span><span class="p">]]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Path</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Segment a sequence file and write its IR cache beside it.</span>
 
@@ -750,6 +751,10 @@
 <span class="sd">        The waveform memory of the playout the cache is for, which the cache</span>
 <span class="sd">        lays the waves out in (:func:`plan_waves`); None holds every wave at</span>
 <span class="sd">        once on the gradient raster of the chain's first file.</span>
+<span class="sd">    designed</span>
+<span class="sd">        The chain as :func:`pulserver.mrd.designed_chain` returns it,</span>
+<span class="sd">        segmented in place of reading and verifying the files, and moved to</span>
+<span class="sd">        ``fov_offset`` in place.</span>
 
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
@@ -765,10 +770,44 @@
 <span class="sd">    OSError</span>
 <span class="sd">        If no cache was written.</span>
 <span class="sd">    """</span>
+    <span class="n">cache_path</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="n">seq_path</span><span class="p">),</span> <span class="n">cache_ext</span><span class="p">)</span><span class="o">.</span><span class="n">unlink</span><span class="p">(</span><span class="n">missing_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">payload</span> <span class="o">=</span> <span class="n">_payload</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="n">seq_path</span><span class="p">),</span> <span class="n">system</span><span class="p">,</span> <span class="n">verify_signature</span><span class="p">,</span> <span class="n">fov_offset</span><span class="p">,</span> <span class="n">designed</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">_write_cache</span><span class="p">(</span>
+        <span class="n">seq_path</span><span class="p">,</span>
+        <span class="n">system</span><span class="p">,</span>
+        <span class="n">payload</span><span class="p">,</span>
+        <span class="n">vendor</span><span class="o">=</span><span class="n">vendor</span><span class="p">,</span>
+        <span class="n">label_column_map</span><span class="o">=</span><span class="n">label_column_map</span><span class="p">,</span>
+        <span class="n">cache_ext</span><span class="o">=</span><span class="n">cache_ext</span><span class="p">,</span>
+        <span class="n">sar_ratios</span><span class="o">=</span><span class="n">sar_ratios</span><span class="p">,</span>
+        <span class="n">wave_budget</span><span class="o">=</span><span class="n">wave_budget</span><span class="p">,</span>
+        <span class="n">profile</span><span class="o">=</span><span class="n">profile</span><span class="p">,</span>
+        <span class="n">grouping</span><span class="o">=</span><span class="n">grouping</span><span class="p">,</span>
+    <span class="p">)</span></div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_write_cache</span><span class="p">(</span>
+    <span class="n">seq_path</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">system</span><span class="p">:</span> <span class="n">pp</span><span class="o">.</span><span class="n">Opts</span><span class="p">,</span>
+    <span class="n">payload</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]],</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">vendor</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span>
+    <span class="n">label_column_map</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">),</span>
+    <span class="n">cache_ext</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">".pseg"</span><span class="p">,</span>
+    <span class="n">sar_ratios</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">SarRatio</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">wave_budget</span><span class="p">:</span> <span class="n">WaveBudget</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">profile</span><span class="p">:</span> <span class="n">VendorProfile</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">grouping</span><span class="p">:</span> <span class="n">Grouping</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Path</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Segment the libraries :func:`_payload` returned and write the cache, as :func:`convert`.</span>
+
+<span class="sd">    The libraries are copies, so the sequences they were taken from may</span>
+<span class="sd">    change while this runs; the segmentation releases the GIL.</span>
+<span class="sd">    """</span>
     <span class="n">seq_path</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">seq_path</span><span class="p">)</span>
     <span class="n">target</span> <span class="o">=</span> <span class="n">cache_path</span><span class="p">(</span><span class="n">seq_path</span><span class="p">,</span> <span class="n">cache_ext</span><span class="p">)</span>
     <span class="n">target</span><span class="o">.</span><span class="n">unlink</span><span class="p">(</span><span class="n">missing_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-    <span class="n">payload</span> <span class="o">=</span> <span class="n">_payload</span><span class="p">(</span><span class="n">seq_path</span><span class="p">,</span> <span class="n">system</span><span class="p">,</span> <span class="n">verify_signature</span><span class="p">,</span> <span class="n">fov_offset</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">sar_ratios</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">sar_ratios</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="n">payload</span><span class="p">):</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
@@ -791,8 +830,7 @@
     <span class="p">)</span>
     <span class="k">if</span> <span class="ow">not</span> <span class="n">target</span><span class="o">.</span><span class="n">is_file</span><span class="p">():</span>
         <span class="k">raise</span> <span class="ne">OSError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"no cache was written for </span><span class="si">{</span><span class="n">seq_path</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
-    <span class="k">return</span> <span class="n">target</span></div>
-
+    <span class="k">return</span> <span class="n">target</span>
 
 
 <div class="viewcode-block" id="summary">
@@ -1001,16 +1039,20 @@
     <span class="n">system</span><span class="p">:</span> <span class="n">pp</span><span class="o">.</span><span class="n">Opts</span><span class="p">,</span>
     <span class="n">verify_signature</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
     <span class="n">fov_offset</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">designed</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="n">Path</span><span class="p">,</span> <span class="n">pp</span><span class="o">.</span><span class="n">Sequence</span><span class="p">]]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]:</span>
 <span class="w">    </span><span class="sd">"""Read the chain and return each file's libraries, in play order, prescribed to ``fov_offset``.</span>
 
 <span class="sd">    A file the reader refuses raises ``ValueError``, whatever the reader</span>
 <span class="sd">    itself raised.</span>
 <span class="sd">    """</span>
-    <span class="k">try</span><span class="p">:</span>
-        <span class="n">chain_read</span> <span class="o">=</span> <span class="n">read_chain</span><span class="p">(</span><span class="n">seq_path</span><span class="p">,</span> <span class="n">verify</span><span class="o">=</span><span class="n">verify_signature</span><span class="p">)</span>
-    <span class="k">except</span> <span class="ne">RuntimeError</span> <span class="k">as</span> <span class="n">failure</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"cannot read </span><span class="si">{</span><span class="n">seq_path</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">failure</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">failure</span>
+    <span class="k">if</span> <span class="n">designed</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">chain_read</span> <span class="o">=</span> <span class="n">designed</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">chain_read</span> <span class="o">=</span> <span class="n">read_chain</span><span class="p">(</span><span class="n">seq_path</span><span class="p">,</span> <span class="n">verify</span><span class="o">=</span><span class="n">verify_signature</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">RuntimeError</span> <span class="k">as</span> <span class="n">failure</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"cannot read </span><span class="si">{</span><span class="n">seq_path</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">failure</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">failure</span>
     <span class="n">payload</span> <span class="o">=</span> <span class="p">[]</span>
     <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">sequence</span> <span class="ow">in</span> <span class="n">chain_read</span><span class="p">:</span>
         <span class="k">if</span> <span class="n">fov_offset</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>

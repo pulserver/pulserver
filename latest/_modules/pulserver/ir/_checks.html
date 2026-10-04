@@ -460,6 +460,7 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">contextlib</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">copy</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">io</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">concurrent.futures</span><span class="w"> </span><span class="kn">import</span> <span class="n">ThreadPoolExecutor</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span>
@@ -559,6 +560,7 @@
     <span class="o">*</span><span class="p">,</span>
     <span class="n">rotation</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">limits</span><span class="p">:</span> <span class="n">CheckLimits</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">designed</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="n">Path</span><span class="p">,</span> <span class="n">pp</span><span class="o">.</span><span class="n">Sequence</span><span class="p">]]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
 <span class="w">    </span><span class="sd">"""Return the problems of a chain under a scanner's limits, in the physical frame.</span>
 
@@ -583,6 +585,9 @@
 <span class="sd">        reflection included; the identity by default.</span>
 <span class="sd">    limits</span>
 <span class="sd">        The nerve and resonance limits; none by default.</span>
+<span class="sd">    designed</span>
+<span class="sd">        The chain as :func:`pulserver.mrd.designed_chain` returns it, checked</span>
+<span class="sd">        in place of reading the files, and rotated in place.</span>
 
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
@@ -597,10 +602,7 @@
 <span class="sd">        orthonormal.</span>
 <span class="sd">    """</span>
     <span class="n">limits</span> <span class="o">=</span> <span class="n">CheckLimits</span><span class="p">()</span> <span class="k">if</span> <span class="n">limits</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">limits</span>
-    <span class="k">try</span><span class="p">:</span>
-        <span class="n">chain_read</span> <span class="o">=</span> <span class="n">read_chain</span><span class="p">(</span><span class="n">seq_path</span><span class="p">,</span> <span class="n">verify</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-    <span class="k">except</span> <span class="ne">RuntimeError</span> <span class="k">as</span> <span class="n">failure</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"cannot read </span><span class="si">{</span><span class="n">seq_path</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">failure</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">failure</span>
+    <span class="n">chain_read</span> <span class="o">=</span> <span class="n">designed</span> <span class="k">if</span> <span class="n">designed</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">_read</span><span class="p">(</span><span class="n">seq_path</span><span class="p">)</span>
     <span class="n">turn</span> <span class="o">=</span> <span class="kc">None</span> <span class="k">if</span> <span class="n">rotation</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">_prescription</span><span class="p">(</span><span class="n">rotation</span><span class="p">)</span>
     <span class="n">problems</span> <span class="o">=</span> <span class="p">[]</span>
     <span class="k">for</span> <span class="n">path</span><span class="p">,</span> <span class="n">sequence</span> <span class="ow">in</span> <span class="n">chain_read</span><span class="p">:</span>
@@ -610,6 +612,13 @@
         <span class="n">problems</span> <span class="o">+=</span> <span class="n">found</span>
     <span class="k">return</span> <span class="n">problems</span></div>
 
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_read</span><span class="p">(</span><span class="n">seq_path</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="n">Path</span><span class="p">,</span> <span class="n">pp</span><span class="o">.</span><span class="n">Sequence</span><span class="p">]]:</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">read_chain</span><span class="p">(</span><span class="n">seq_path</span><span class="p">,</span> <span class="n">verify</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">RuntimeError</span> <span class="k">as</span> <span class="n">failure</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"cannot read </span><span class="si">{</span><span class="n">seq_path</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">failure</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">failure</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_prescription</span><span class="p">(</span><span class="n">rotation</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
@@ -636,23 +645,40 @@
     <span class="n">is_ok</span><span class="p">,</span> <span class="n">report</span> <span class="o">=</span> <span class="n">pp</span><span class="o">.</span><span class="n">check_timing</span><span class="p">(</span><span class="n">sequence</span><span class="p">)</span>
     <span class="k">if</span> <span class="ow">not</span> <span class="n">is_ok</span><span class="p">:</span>
         <span class="n">problems</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">_timing</span><span class="p">(</span><span class="n">sequence</span><span class="p">,</span> <span class="n">report</span><span class="p">))</span>
-    <span class="k">for</span> <span class="n">check</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">unit</span><span class="p">,</span> <span class="n">scale</span> <span class="ow">in</span> <span class="p">(</span>
-        <span class="p">(</span><span class="n">safety</span><span class="o">.</span><span class="n">check_max_grad</span><span class="p">,</span> <span class="s2">"gradient amplitude"</span><span class="p">,</span> <span class="s2">"mT/m"</span><span class="p">,</span> <span class="mf">1e3</span><span class="p">),</span>
-        <span class="p">(</span><span class="n">safety</span><span class="o">.</span><span class="n">check_max_slew</span><span class="p">,</span> <span class="s2">"slew rate"</span><span class="p">,</span> <span class="s2">"T/m/s"</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">),</span>
-    <span class="p">):</span>
-        <span class="n">is_ok</span><span class="p">,</span> <span class="n">found</span> <span class="o">=</span> <span class="n">check</span><span class="p">(</span><span class="n">sequence</span><span class="p">,</span> <span class="n">opts</span><span class="p">)</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="n">is_ok</span><span class="p">:</span>
-            <span class="n">peak</span> <span class="o">=</span> <span class="n">found</span><span class="o">.</span><span class="n">per_axis</span>
-            <span class="n">problems</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2"> of </span><span class="si">{</span><span class="n">peak</span><span class="o">.</span><span class="n">value</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="n">opts</span><span class="o">.</span><span class="n">gamma</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">scale</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">unit</span><span class="si">}</span><span class="s2"> on "</span>
-                <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">peak</span><span class="o">.</span><span class="n">axis</span><span class="si">}</span><span class="s2"> in block </span><span class="si">{</span><span class="n">peak</span><span class="o">.</span><span class="n">block</span><span class="si">}</span><span class="s2"> exceeds "</span>
-                <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">found</span><span class="o">.</span><span class="n">limit</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="n">opts</span><span class="o">.</span><span class="n">gamma</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">scale</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">unit</span><span class="si">}</span><span class="s2">"</span>
-            <span class="p">)</span>
+    <span class="n">checks</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="p">(</span><span class="n">_limit</span><span class="p">,</span> <span class="n">safety</span><span class="o">.</span><span class="n">check_max_grad</span><span class="p">,</span> <span class="s2">"gradient amplitude"</span><span class="p">,</span> <span class="s2">"mT/m"</span><span class="p">,</span> <span class="mf">1e3</span><span class="p">),</span>
+        <span class="p">(</span><span class="n">_limit</span><span class="p">,</span> <span class="n">safety</span><span class="o">.</span><span class="n">check_max_slew</span><span class="p">,</span> <span class="s2">"slew rate"</span><span class="p">,</span> <span class="s2">"T/m/s"</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">),</span>
+    <span class="p">]</span>
     <span class="k">if</span> <span class="n">limits</span><span class="o">.</span><span class="n">pns</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="n">problems</span> <span class="o">+=</span> <span class="n">_pns</span><span class="p">(</span><span class="n">sequence</span><span class="p">,</span> <span class="n">opts</span><span class="p">,</span> <span class="n">limits</span><span class="p">)</span>
+        <span class="n">checks</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">_pns</span><span class="p">,</span> <span class="n">limits</span><span class="p">))</span>
     <span class="k">if</span> <span class="n">limits</span><span class="o">.</span><span class="n">bands</span><span class="p">:</span>
-        <span class="n">problems</span> <span class="o">+=</span> <span class="n">_resonance</span><span class="p">(</span><span class="n">sequence</span><span class="p">,</span> <span class="n">opts</span><span class="p">,</span> <span class="n">limits</span><span class="p">)</span>
+        <span class="n">checks</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">_resonance</span><span class="p">,</span> <span class="n">limits</span><span class="p">))</span>
+    <span class="c1"># The native checks read the sequence and release the GIL; check_timing</span>
+    <span class="c1"># records TotalDuration, so it runs before them.</span>
+    <span class="k">with</span> <span class="n">ThreadPoolExecutor</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">checks</span><span class="p">))</span> <span class="k">as</span> <span class="n">pool</span><span class="p">:</span>
+        <span class="n">found</span> <span class="o">=</span> <span class="p">[</span><span class="n">pool</span><span class="o">.</span><span class="n">submit</span><span class="p">(</span><span class="n">run</span><span class="p">,</span> <span class="n">sequence</span><span class="p">,</span> <span class="n">opts</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">)</span> <span class="k">for</span> <span class="n">run</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span> <span class="ow">in</span> <span class="n">checks</span><span class="p">]</span>
+    <span class="k">for</span> <span class="n">result</span> <span class="ow">in</span> <span class="n">found</span><span class="p">:</span>
+        <span class="n">problems</span> <span class="o">+=</span> <span class="n">result</span><span class="o">.</span><span class="n">result</span><span class="p">()</span>
     <span class="k">return</span> <span class="n">problems</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_limit</span><span class="p">(</span>
+    <span class="n">sequence</span><span class="p">:</span> <span class="n">pp</span><span class="o">.</span><span class="n">Sequence</span><span class="p">,</span>
+    <span class="n">system</span><span class="p">:</span> <span class="n">pp</span><span class="o">.</span><span class="n">Opts</span><span class="p">,</span>
+    <span class="n">check</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">unit</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">scale</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+    <span class="n">is_ok</span><span class="p">,</span> <span class="n">found</span> <span class="o">=</span> <span class="n">check</span><span class="p">(</span><span class="n">sequence</span><span class="p">,</span> <span class="n">system</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">is_ok</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">[]</span>
+    <span class="n">peak</span> <span class="o">=</span> <span class="n">found</span><span class="o">.</span><span class="n">per_axis</span>
+    <span class="k">return</span> <span class="p">[</span>
+        <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2"> of </span><span class="si">{</span><span class="n">peak</span><span class="o">.</span><span class="n">value</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="n">system</span><span class="o">.</span><span class="n">gamma</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">scale</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">unit</span><span class="si">}</span><span class="s2"> on "</span>
+        <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">peak</span><span class="o">.</span><span class="n">axis</span><span class="si">}</span><span class="s2"> in block </span><span class="si">{</span><span class="n">peak</span><span class="o">.</span><span class="n">block</span><span class="si">}</span><span class="s2"> exceeds "</span>
+        <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">found</span><span class="o">.</span><span class="n">limit</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="n">system</span><span class="o">.</span><span class="n">gamma</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">scale</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">unit</span><span class="si">}</span><span class="s2">"</span>
+    <span class="p">]</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_pns</span><span class="p">(</span><span class="n">sequence</span><span class="p">:</span> <span class="n">pp</span><span class="o">.</span><span class="n">Sequence</span><span class="p">,</span> <span class="n">system</span><span class="p">:</span> <span class="n">pp</span><span class="o">.</span><span class="n">Opts</span><span class="p">,</span> <span class="n">limits</span><span class="p">:</span> <span class="n">CheckLimits</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
@@ -685,7 +711,10 @@
 <div class="viewcode-block" id="sar_ratios">
 <a class="viewcode-back" href="../../../generated/pulserver.ir.sar_ratios.html#pulserver.ir.sar_ratios">[docs]</a>
 <span class="k">def</span><span class="w"> </span><span class="nf">sar_ratios</span><span class="p">(</span>
-    <span class="n">seq_path</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span><span class="p">,</span> <span class="n">system</span><span class="p">:</span> <span class="n">pp</span><span class="o">.</span><span class="n">Opts</span><span class="p">,</span> <span class="n">limits</span><span class="p">:</span> <span class="n">CheckLimits</span>
+    <span class="n">seq_path</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">system</span><span class="p">:</span> <span class="n">pp</span><span class="o">.</span><span class="n">Opts</span><span class="p">,</span>
+    <span class="n">limits</span><span class="p">:</span> <span class="n">CheckLimits</span><span class="p">,</span>
+    <span class="n">designed</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="n">Path</span><span class="p">,</span> <span class="n">pp</span><span class="o">.</span><span class="n">Sequence</span><span class="p">]]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">SarRatio</span><span class="p">]:</span>
 <span class="w">    </span><span class="sd">"""Return the SAR ratios of each file of a chain against the reference pulse.</span>
 
@@ -703,6 +732,9 @@
 <span class="sd">        The rasters and RF dead times the reference pulse is made with.</span>
 <span class="sd">    limits</span>
 <span class="sd">        The VOPs, channel drive and default shim.</span>
+<span class="sd">    designed</span>
+<span class="sd">        The chain as :func:`pulserver.mrd.designed_chain` returns it, weighed</span>
+<span class="sd">        in place of reading the files.</span>
 
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
@@ -728,10 +760,7 @@
         <span class="p">)</span>
     <span class="p">)</span>
     <span class="n">_</span><span class="p">,</span> <span class="n">pulse</span> <span class="o">=</span> <span class="n">safety</span><span class="o">.</span><span class="n">check_sar</span><span class="p">(</span><span class="n">reference</span><span class="p">,</span> <span class="n">vops</span><span class="p">,</span> <span class="o">**</span><span class="n">drive</span><span class="p">)</span>
-    <span class="k">try</span><span class="p">:</span>
-        <span class="n">chain_read</span> <span class="o">=</span> <span class="n">read_chain</span><span class="p">(</span><span class="n">seq_path</span><span class="p">,</span> <span class="n">verify</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-    <span class="k">except</span> <span class="ne">RuntimeError</span> <span class="k">as</span> <span class="n">failure</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"cannot read </span><span class="si">{</span><span class="n">seq_path</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">failure</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">failure</span>
+    <span class="n">chain_read</span> <span class="o">=</span> <span class="n">designed</span> <span class="k">if</span> <span class="n">designed</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">_read</span><span class="p">(</span><span class="n">seq_path</span><span class="p">)</span>
     <span class="n">ratios</span> <span class="o">=</span> <span class="p">[]</span>
     <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">sequence</span> <span class="ow">in</span> <span class="n">chain_read</span><span class="p">:</span>
         <span class="n">_</span><span class="p">,</span> <span class="n">found</span> <span class="o">=</span> <span class="n">safety</span><span class="o">.</span><span class="n">check_sar</span><span class="p">(</span><span class="n">sequence</span><span class="p">,</span> <span class="n">vops</span><span class="p">,</span> <span class="n">reference</span><span class="o">=</span><span class="n">pulse</span><span class="p">,</span> <span class="o">**</span><span class="n">drive</span><span class="p">)</span>

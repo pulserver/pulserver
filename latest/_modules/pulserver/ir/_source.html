@@ -473,6 +473,8 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">pypulseqpp</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pp</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">numpy.typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">NDArray</span>
 
+<span class="kn">from</span><span class="w"> </span><span class="nn">.._accelerators</span><span class="w"> </span><span class="kn">import</span> <span class="n">require</span>
+
 <span class="c1">#: Use tag of an RF event, as a Pulseq file writes it. A pulse the file does</span>
 <span class="c1">#: not label is 0, which is what a reader that switches on the tag treats as</span>
 <span class="c1">#: "unknown"; "undefined" is what pypulseqpp calls the same thing.</span>
@@ -731,7 +733,10 @@
 <span class="sd">    The libraries, the specification tables and the chain rows that link a</span>
 <span class="sd">    block to them, in the layout a parsed file holds: times in µs, fields of</span>
 <span class="sd">    view in cm, rasters in µs. The chain rows are the sequence's own, and</span>
-<span class="sd">    each block names the head of its chain.</span>
+<span class="sd">    each block names the head of its chain. The block table, the ADC rows and</span>
+<span class="sd">    the event definitions are pypulseqpp's own, with a map from each library</span>
+<span class="sd">    id to the played rows; the converter renumbers, converts and densifies</span>
+<span class="sd">    them per block natively.</span>
 
 <span class="sd">    RF and ADC frequency and phase offsets are absolute: the ppm offsets are</span>
 <span class="sd">    resolved at the gamma and B0 of ``system`` by</span>
@@ -751,24 +756,19 @@
 <span class="sd">        start at the first block.</span>
 <span class="sd">    """</span>
     <span class="n">tables</span> <span class="o">=</span> <span class="n">_tables</span><span class="p">(</span><span class="n">sequence</span><span class="p">)</span>
-    <span class="n">libraries</span> <span class="o">=</span> <span class="n">_sequence_libraries</span><span class="p">(</span><span class="n">sequence</span><span class="p">,</span> <span class="n">tables</span><span class="p">)</span>
-    <span class="n">_resolve_ppm</span><span class="p">(</span><span class="n">libraries</span><span class="p">,</span> <span class="n">tables</span><span class="p">,</span> <span class="n">system</span><span class="p">)</span>
+    <span class="n">events</span> <span class="o">=</span> <span class="n">tables</span><span class="o">.</span><span class="n">blocks</span>
+    <span class="n">played_rf</span><span class="p">,</span> <span class="n">rf_map</span> <span class="o">=</span> <span class="n">_played</span><span class="p">(</span><span class="n">events</span><span class="p">,</span> <span class="p">(</span><span class="mi">0</span><span class="p">,))</span>
+    <span class="n">played_grad</span><span class="p">,</span> <span class="n">grad_map</span> <span class="o">=</span> <span class="n">_played</span><span class="p">(</span><span class="n">events</span><span class="p">,</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">))</span>
+    <span class="n">_</span><span class="p">,</span> <span class="n">adc_map</span> <span class="o">=</span> <span class="n">_played</span><span class="p">(</span><span class="n">events</span><span class="p">,</span> <span class="p">(</span><span class="mi">4</span><span class="p">,))</span>
+    <span class="n">shapes</span> <span class="o">=</span> <span class="n">_ShapeTable</span><span class="p">(</span><span class="n">tables</span><span class="o">.</span><span class="n">shapes</span><span class="p">)</span>
+    <span class="n">rf</span><span class="p">,</span> <span class="n">rf_use</span><span class="p">,</span> <span class="n">rf_spectra</span><span class="p">,</span> <span class="n">rf_b1sq</span> <span class="o">=</span> <span class="n">_rf_library</span><span class="p">(</span><span class="n">sequence</span><span class="p">,</span> <span class="n">tables</span><span class="p">,</span> <span class="n">played_rf</span><span class="p">)</span>
+    <span class="n">rf_offsets</span><span class="p">,</span> <span class="n">adc_offsets</span> <span class="o">=</span> <span class="n">tables</span><span class="o">.</span><span class="n">absolute_offsets</span><span class="p">(</span><span class="n">system</span><span class="p">)</span>
+    <span class="n">rf</span><span class="p">[:,</span> <span class="mi">8</span><span class="p">:</span><span class="mi">10</span><span class="p">]</span> <span class="o">=</span> <span class="n">rf_offsets</span>
+    <span class="n">rf</span><span class="p">[:,</span> <span class="mi">6</span><span class="p">:</span><span class="mi">8</span><span class="p">]</span> <span class="o">=</span> <span class="mf">0.0</span>
+    <span class="n">grad</span> <span class="o">=</span> <span class="n">_grad_library</span><span class="p">(</span><span class="n">tables</span><span class="p">,</span> <span class="n">shapes</span><span class="p">)</span>
+    <span class="n">shapes</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="n">_receiver_only</span><span class="p">(</span><span class="n">tables</span><span class="p">))</span>
+    <span class="n">interned</span> <span class="o">=</span> <span class="n">sequence</span><span class="o">.</span><span class="n">event_definitions</span><span class="p">()</span>
     <span class="n">specifications</span> <span class="o">=</span> <span class="n">_specification_libraries</span><span class="p">(</span><span class="n">tables</span><span class="p">)</span>
-    <span class="n">blocks</span> <span class="o">=</span> <span class="n">libraries</span><span class="o">.</span><span class="n">blocks</span>
-    <span class="p">(</span>
-        <span class="n">rf</span><span class="p">,</span>
-        <span class="n">grad</span><span class="p">,</span>
-        <span class="n">grad_statistics</span><span class="p">,</span>
-        <span class="n">adc</span><span class="p">,</span>
-        <span class="n">rf_use</span><span class="p">,</span>
-        <span class="n">rf_spectra</span><span class="p">,</span>
-        <span class="n">rf_flip_deg</span><span class="p">,</span>
-        <span class="n">rf_channels</span><span class="p">,</span>
-        <span class="n">rf_b1sq</span><span class="p">,</span>
-        <span class="n">rf_definitions</span><span class="p">,</span>
-        <span class="n">grad_definitions</span><span class="p">,</span>
-        <span class="n">adc_definitions</span><span class="p">,</span>
-    <span class="p">)</span> <span class="o">=</span> <span class="n">_compact</span><span class="p">(</span><span class="n">blocks</span><span class="p">,</span> <span class="n">libraries</span><span class="p">)</span>
     <span class="n">declared</span> <span class="o">=</span> <span class="n">sequence</span><span class="o">.</span><span class="n">definitions</span>
 
     <span class="k">return</span> <span class="p">{</span>
@@ -803,25 +803,32 @@
             <span class="s2">"next_sequence"</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="n">declared</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"NextSequence"</span><span class="p">,</span> <span class="s2">""</span><span class="p">)),</span>
         <span class="p">},</span>
         <span class="s2">"definitions"</span><span class="p">:</span> <span class="p">{</span><span class="n">name</span><span class="p">:</span> <span class="n">_texts</span><span class="p">(</span><span class="n">value</span><span class="p">)</span> <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">declared</span><span class="o">.</span><span class="n">items</span><span class="p">()},</span>
-        <span class="s2">"blocks"</span><span class="p">:</span> <span class="n">blocks</span><span class="p">,</span>
-        <span class="s2">"rf"</span><span class="p">:</span> <span class="n">rf</span><span class="p">,</span>
-        <span class="s2">"rf_use"</span><span class="p">:</span> <span class="n">rf_use</span><span class="p">,</span>
-        <span class="s2">"rf_spectra"</span><span class="p">:</span> <span class="n">rf_spectra</span><span class="p">,</span>
-        <span class="s2">"rf_flip_deg"</span><span class="p">:</span> <span class="n">rf_flip_deg</span><span class="p">,</span>
-        <span class="s2">"rf_channels"</span><span class="p">:</span> <span class="n">rf_channels</span><span class="p">,</span>
-        <span class="s2">"rf_b1sq_integral"</span><span class="p">:</span> <span class="n">rf_b1sq</span><span class="p">,</span>
-        <span class="s2">"grad"</span><span class="p">:</span> <span class="n">grad</span><span class="p">,</span>
-        <span class="s2">"grad_statistics"</span><span class="p">:</span> <span class="n">grad_statistics</span><span class="p">,</span>
-        <span class="s2">"adc"</span><span class="p">:</span> <span class="n">adc</span><span class="p">,</span>
-        <span class="s2">"rf_definitions"</span><span class="p">:</span> <span class="n">rf_definitions</span><span class="p">,</span>
-        <span class="s2">"grad_definitions"</span><span class="p">:</span> <span class="n">grad_definitions</span><span class="p">,</span>
-        <span class="s2">"adc_definitions"</span><span class="p">:</span> <span class="n">adc_definitions</span><span class="p">,</span>
-        <span class="s2">"block_definitions"</span><span class="p">:</span> <span class="n">_densified</span><span class="p">(</span>
-            <span class="n">libraries</span><span class="o">.</span><span class="n">block_definitions</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">libraries</span><span class="o">.</span><span class="n">block_definitions</span><span class="p">))</span>
-        <span class="p">),</span>
+        <span class="s2">"block_events"</span><span class="p">:</span> <span class="n">events</span><span class="p">,</span>
+        <span class="s2">"block_durations"</span><span class="p">:</span> <span class="n">tables</span><span class="o">.</span><span class="n">block_durations</span><span class="p">,</span>
+        <span class="s2">"block_duration_raster"</span><span class="p">:</span> <span class="n">sequence</span><span class="o">.</span><span class="n">block_duration_raster</span><span class="p">,</span>
+        <span class="s2">"rf_map"</span><span class="p">:</span> <span class="n">rf_map</span><span class="p">,</span>
+        <span class="s2">"grad_map"</span><span class="p">:</span> <span class="n">grad_map</span><span class="p">,</span>
+        <span class="s2">"adc_map"</span><span class="p">:</span> <span class="n">adc_map</span><span class="p">,</span>
+        <span class="s2">"rf"</span><span class="p">:</span> <span class="n">rf</span><span class="p">[</span><span class="n">played_rf</span><span class="p">],</span>
+        <span class="s2">"rf_use"</span><span class="p">:</span> <span class="n">rf_use</span><span class="p">[</span><span class="n">played_rf</span><span class="p">],</span>
+        <span class="s2">"rf_spectra"</span><span class="p">:</span> <span class="n">rf_spectra</span><span class="p">[</span><span class="n">played_rf</span><span class="p">],</span>
+        <span class="s2">"rf_flip_deg"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">sequence</span><span class="o">.</span><span class="n">rf_flip_angles</span><span class="p">(),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)[</span>
+            <span class="n">played_rf</span>
+        <span class="p">],</span>
+        <span class="s2">"rf_channels"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">sequence</span><span class="o">.</span><span class="n">rf_channels</span><span class="p">(),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int32</span><span class="p">)[</span><span class="n">played_rf</span><span class="p">],</span>
+        <span class="s2">"rf_b1sq_integral"</span><span class="p">:</span> <span class="n">rf_b1sq</span><span class="p">[</span><span class="n">played_rf</span><span class="p">],</span>
+        <span class="s2">"grad"</span><span class="p">:</span> <span class="n">grad</span><span class="p">[</span><span class="n">played_grad</span><span class="p">],</span>
+        <span class="s2">"grad_statistics"</span><span class="p">:</span> <span class="n">_grad_statistics</span><span class="p">(</span><span class="n">sequence</span><span class="p">)[</span><span class="n">played_grad</span><span class="p">],</span>
+        <span class="s2">"adc"</span><span class="p">:</span> <span class="n">tables</span><span class="o">.</span><span class="n">adc</span><span class="p">,</span>
+        <span class="s2">"adc_offsets"</span><span class="p">:</span> <span class="n">adc_offsets</span><span class="p">,</span>
+        <span class="s2">"shape_sizes"</span><span class="p">:</span> <span class="p">[</span><span class="n">shape</span><span class="o">.</span><span class="n">num_samples</span> <span class="k">for</span> <span class="n">shape</span> <span class="ow">in</span> <span class="n">tables</span><span class="o">.</span><span class="n">shapes</span><span class="p">],</span>
+        <span class="s2">"rf_definitions"</span><span class="p">:</span> <span class="n">interned</span><span class="o">.</span><span class="n">rf</span><span class="p">,</span>
+        <span class="s2">"grad_definitions"</span><span class="p">:</span> <span class="n">interned</span><span class="o">.</span><span class="n">gradient</span><span class="p">,</span>
+        <span class="s2">"adc_definitions"</span><span class="p">:</span> <span class="n">interned</span><span class="o">.</span><span class="n">adc</span><span class="p">,</span>
+        <span class="s2">"block_definitions"</span><span class="p">:</span> <span class="n">sequence</span><span class="o">.</span><span class="n">block_definitions</span><span class="p">(),</span>
         <span class="s2">"shapes"</span><span class="p">:</span> <span class="p">[</span>
             <span class="p">(</span><span class="n">shape</span><span class="o">.</span><span class="n">num_uncompressed_samples</span><span class="p">,</span> <span class="n">shape</span><span class="o">.</span><span class="n">samples</span><span class="p">)</span>
-            <span class="k">for</span> <span class="n">shape</span> <span class="ow">in</span> <span class="n">libraries</span><span class="o">.</span><span class="n">shapes</span>
+            <span class="k">for</span> <span class="n">shape</span> <span class="ow">in</span> <span class="n">shapes</span><span class="o">.</span><span class="n">entries</span><span class="p">()</span>
         <span class="p">],</span>
         <span class="s2">"extensions"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">tables</span><span class="o">.</span><span class="n">extensions</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span>
         <span class="s2">"extension_map"</span><span class="p">:</span> <span class="n">_extension_map</span><span class="p">(</span><span class="n">tables</span><span class="p">),</span>
@@ -831,7 +838,7 @@
         <span class="s2">"labelinc"</span><span class="p">:</span> <span class="n">specifications</span><span class="o">.</span><span class="n">labelinc</span><span class="p">,</span>
         <span class="s2">"soft_delays"</span><span class="p">:</span> <span class="n">specifications</span><span class="o">.</span><span class="n">soft_delays</span><span class="p">,</span>
         <span class="s2">"rf_shims"</span><span class="p">:</span> <span class="nb">list</span><span class="p">(</span><span class="n">specifications</span><span class="o">.</span><span class="n">rf_shims</span><span class="p">),</span>
-        <span class="o">**</span><span class="n">_block_states</span><span class="p">(</span><span class="n">sequence</span><span class="p">,</span> <span class="n">blocks</span><span class="p">),</span>
+        <span class="o">**</span><span class="n">_block_states</span><span class="p">(</span><span class="n">sequence</span><span class="p">),</span>
     <span class="p">}</span>
 
 
@@ -858,14 +865,12 @@
     <span class="n">blocks</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">:]</span> <span class="o">=</span> <span class="n">tables</span><span class="o">.</span><span class="n">blocks</span>
 
     <span class="n">shapes</span> <span class="o">=</span> <span class="n">_ShapeTable</span><span class="p">(</span><span class="n">tables</span><span class="o">.</span><span class="n">shapes</span><span class="p">)</span>
-    <span class="n">rf</span><span class="p">,</span> <span class="n">rf_use</span><span class="p">,</span> <span class="n">rf_spectra</span><span class="p">,</span> <span class="n">rf_b1sq</span> <span class="o">=</span> <span class="n">_rf_library</span><span class="p">(</span><span class="n">sequence</span><span class="p">,</span> <span class="n">tables</span><span class="p">,</span> <span class="n">blocks</span><span class="p">)</span>
+    <span class="n">played</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">_played</span><span class="p">(</span><span class="n">tables</span><span class="o">.</span><span class="n">blocks</span><span class="p">,</span> <span class="p">(</span><span class="mi">0</span><span class="p">,))</span>
+    <span class="n">rf</span><span class="p">,</span> <span class="n">rf_use</span><span class="p">,</span> <span class="n">rf_spectra</span><span class="p">,</span> <span class="n">rf_b1sq</span> <span class="o">=</span> <span class="n">_rf_library</span><span class="p">(</span><span class="n">sequence</span><span class="p">,</span> <span class="n">tables</span><span class="p">,</span> <span class="n">played</span><span class="p">)</span>
     <span class="n">grad</span> <span class="o">=</span> <span class="n">_grad_library</span><span class="p">(</span><span class="n">tables</span><span class="p">,</span> <span class="n">shapes</span><span class="p">)</span>
-    <span class="n">measured</span> <span class="o">=</span> <span class="n">sequence</span><span class="o">.</span><span class="n">gradient_statistics</span><span class="p">()</span>
-    <span class="n">grad_statistics</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span>
-        <span class="p">(</span><span class="n">measured</span><span class="o">.</span><span class="n">peak_slew</span><span class="p">,</span> <span class="n">measured</span><span class="o">.</span><span class="n">energy</span><span class="p">,</span> <span class="n">measured</span><span class="o">.</span><span class="n">slew_energy</span><span class="p">),</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span>
-    <span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
+    <span class="n">grad_statistics</span> <span class="o">=</span> <span class="n">_grad_statistics</span><span class="p">(</span><span class="n">sequence</span><span class="p">)</span>
     <span class="n">adc</span> <span class="o">=</span> <span class="n">_adc_library</span><span class="p">(</span><span class="n">tables</span><span class="p">)</span>
-    <span class="n">shapes</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="n">_receiver_only</span><span class="p">(</span><span class="n">adc</span><span class="p">,</span> <span class="n">tables</span><span class="p">))</span>
+    <span class="n">shapes</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="n">_receiver_only</span><span class="p">(</span><span class="n">tables</span><span class="p">))</span>
     <span class="n">adc</span><span class="p">[:,</span> <span class="mi">7</span><span class="p">]</span> <span class="o">=</span> <span class="mi">0</span>
     <span class="n">interned</span> <span class="o">=</span> <span class="n">sequence</span><span class="o">.</span><span class="n">event_definitions</span><span class="p">()</span>
     <span class="k">return</span> <span class="n">SequenceLibraries</span><span class="p">(</span>
@@ -912,13 +917,20 @@
         <span class="k">return</span> <span class="nb">tuple</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_entries</span><span class="p">)</span>
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_receiver_only</span><span class="p">(</span><span class="n">adc</span><span class="p">:</span> <span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">],</span> <span class="n">tables</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">set</span><span class="p">[</span><span class="nb">int</span><span class="p">]:</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_grad_statistics</span><span class="p">(</span><span class="n">sequence</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]:</span>
+    <span class="n">measured</span> <span class="o">=</span> <span class="n">sequence</span><span class="o">.</span><span class="n">gradient_statistics</span><span class="p">()</span>
+    <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span>
+        <span class="p">(</span><span class="n">measured</span><span class="o">.</span><span class="n">peak_slew</span><span class="p">,</span> <span class="n">measured</span><span class="o">.</span><span class="n">energy</span><span class="p">,</span> <span class="n">measured</span><span class="o">.</span><span class="n">slew_energy</span><span class="p">),</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span>
+    <span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_receiver_only</span><span class="p">(</span><span class="n">tables</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">set</span><span class="p">[</span><span class="nb">int</span><span class="p">]:</span>
 <span class="w">    </span><span class="sd">"""Return the shapes only ADC phase modulation names.</span>
 
 <span class="sd">    The modulation is applied to the received samples by the reconstruction</span>
 <span class="sd">    proxy from the sequence file, so the cache carries neither it nor them.</span>
 <span class="sd">    """</span>
-    <span class="n">modulation</span> <span class="o">=</span> <span class="n">adc</span><span class="p">[:,</span> <span class="mi">7</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
+    <span class="n">modulation</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">tables</span><span class="o">.</span><span class="n">adc</span><span class="p">)[:,</span> <span class="mi">7</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
     <span class="n">named</span> <span class="o">=</span> <span class="n">_present</span><span class="p">(</span><span class="n">modulation</span><span class="p">[</span><span class="n">modulation</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">])</span>
     <span class="n">rf</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">tables</span><span class="o">.</span><span class="n">rf</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">10</span><span class="p">)[:,</span> <span class="mi">1</span><span class="p">:</span><span class="mi">4</span><span class="p">]</span><span class="o">.</span><span class="n">ravel</span><span class="p">()</span>
     <span class="n">arbitrary</span> <span class="o">=</span> <span class="p">(</span>
@@ -931,7 +943,7 @@
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_rf_library</span><span class="p">(</span>
-    <span class="n">sequence</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">tables</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">blocks</span><span class="p">:</span> <span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]</span>
+    <span class="n">sequence</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">tables</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">played</span><span class="p">:</span> <span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">]</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span>
     <span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">],</span> <span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">int32</span><span class="p">],</span> <span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">],</span> <span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]</span>
 <span class="p">]:</span>
@@ -947,13 +959,13 @@
     <span class="c1"># of shapes, on a row that plays something: a pulse of zero amplitude has</span>
     <span class="c1"># no spectrum, and its row keeps none.</span>
     <span class="n">measured</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">],</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">],</span> <span class="nb">float</span><span class="p">]]</span> <span class="o">=</span> <span class="p">{}</span>
-    <span class="n">played</span> <span class="o">=</span> <span class="n">blocks</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
-    <span class="n">identifiers</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">played</span><span class="p">[</span><span class="n">played</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">])</span>
+    <span class="n">column</span> <span class="o">=</span> <span class="n">tables</span><span class="o">.</span><span class="n">blocks</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">]</span>
+    <span class="n">identifiers</span> <span class="o">=</span> <span class="n">played</span> <span class="o">+</span> <span class="mi">1</span>
     <span class="k">for</span> <span class="n">identifier</span> <span class="ow">in</span> <span class="n">identifiers</span><span class="p">:</span>
         <span class="n">row</span> <span class="o">=</span> <span class="n">rows</span><span class="p">[</span><span class="n">identifier</span> <span class="o">-</span> <span class="mi">1</span><span class="p">]</span>
         <span class="n">key</span> <span class="o">=</span> <span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">row</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span> <span class="n">row</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span>
         <span class="k">if</span> <span class="n">row</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">!=</span> <span class="mf">0.0</span> <span class="ow">and</span> <span class="n">key</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">measured</span><span class="p">:</span>
-            <span class="n">block</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">argmax</span><span class="p">(</span><span class="n">played</span> <span class="o">==</span> <span class="n">identifier</span><span class="p">))</span> <span class="o">+</span> <span class="mi">1</span>
+            <span class="n">block</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">argmax</span><span class="p">(</span><span class="n">column</span> <span class="o">==</span> <span class="n">identifier</span><span class="p">))</span> <span class="o">+</span> <span class="mi">1</span>
             <span class="n">event</span> <span class="o">=</span> <span class="n">sequence</span><span class="o">.</span><span class="n">get_block</span><span class="p">(</span><span class="n">block</span><span class="p">)</span><span class="o">.</span><span class="n">rf</span>
             <span class="n">energy</span><span class="p">,</span> <span class="n">peak</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">pp</span><span class="o">.</span><span class="n">calc_rf_power</span><span class="p">(</span><span class="n">event</span><span class="p">,</span> <span class="n">dt</span><span class="o">=</span><span class="n">raster</span><span class="p">)</span>
             <span class="n">measured</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
@@ -985,8 +997,9 @@
     <span class="n">row</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">num_bands</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
     <span class="n">row</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">band_bandwidths</span><span class="o">.</span><span class="n">max</span><span class="p">()</span> <span class="k">if</span> <span class="n">result</span><span class="o">.</span><span class="n">num_bands</span> <span class="k">else</span> <span class="n">result</span><span class="o">.</span><span class="n">bandwidth</span>
     <span class="c1"># Measured on 10 Hz bins; below a millihertz an offset is the float32 of a</span>
-    <span class="c1"># binary file's shape samples, not a property of the pulse.</span>
-    <span class="n">row</span><span class="p">[</span><span class="mi">3</span> <span class="p">:</span> <span class="mi">3</span> <span class="o">+</span> <span class="n">count</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">round</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">band_offsets</span><span class="p">[:</span><span class="n">count</span><span class="p">],</span> <span class="mi">3</span><span class="p">)</span>
+    <span class="c1"># binary file's shape samples, not a property of the pulse; adding zero</span>
+    <span class="c1"># folds the -0.0 a small negative offset rounds to.</span>
+    <span class="n">row</span><span class="p">[</span><span class="mi">3</span> <span class="p">:</span> <span class="mi">3</span> <span class="o">+</span> <span class="n">count</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">round</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">band_offsets</span><span class="p">[:</span><span class="n">count</span><span class="p">],</span> <span class="mi">3</span><span class="p">)</span> <span class="o">+</span> <span class="mf">0.0</span>
     <span class="k">return</span> <span class="n">row</span>
 
 
@@ -1057,8 +1070,8 @@
     <span class="n">kinds</span> <span class="o">=</span> <span class="n">_declared_types</span><span class="p">(</span><span class="n">tables</span><span class="p">)</span>
     <span class="n">referenced</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">set</span><span class="p">[</span><span class="nb">int</span><span class="p">]]</span> <span class="o">=</span> <span class="p">{</span><span class="n">kind</span><span class="p">:</span> <span class="nb">set</span><span class="p">()</span> <span class="k">for</span> <span class="n">kind</span> <span class="ow">in</span> <span class="n">_EXTENSION_KINDS</span><span class="p">}</span>
     <span class="n">numbers</span> <span class="o">=</span> <span class="p">{</span><span class="n">number</span><span class="p">:</span> <span class="n">kind</span> <span class="k">for</span> <span class="n">kind</span><span class="p">,</span> <span class="n">number</span> <span class="ow">in</span> <span class="n">kinds</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">number</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">}</span>
-    <span class="n">heads</span> <span class="o">=</span> <span class="n">_present</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">tables</span><span class="o">.</span><span class="n">blocks</span><span class="p">[:,</span> <span class="mi">5</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">))</span>
-    <span class="k">for</span> <span class="n">head</span> <span class="ow">in</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">flatnonzero</span><span class="p">(</span><span class="n">heads</span><span class="p">[</span><span class="mi">1</span><span class="p">:])</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">tolist</span><span class="p">():</span>
+    <span class="n">heads</span> <span class="o">=</span> <span class="n">require</span><span class="p">(</span><span class="s2">"played"</span><span class="p">)(</span><span class="n">tables</span><span class="o">.</span><span class="n">blocks</span><span class="p">,</span> <span class="p">[</span><span class="mi">5</span><span class="p">])</span>
+    <span class="k">for</span> <span class="n">head</span> <span class="ow">in</span> <span class="n">np</span><span class="o">.</span><span class="n">flatnonzero</span><span class="p">(</span><span class="n">heads</span><span class="p">)</span><span class="o">.</span><span class="n">tolist</span><span class="p">():</span>
         <span class="k">for</span> <span class="n">kind</span><span class="p">,</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">_links</span><span class="p">(</span><span class="n">tables</span><span class="o">.</span><span class="n">extensions</span><span class="p">,</span> <span class="n">head</span><span class="p">):</span>
             <span class="k">if</span> <span class="n">kind</span> <span class="ow">in</span> <span class="n">numbers</span><span class="p">:</span>
                 <span class="n">referenced</span><span class="p">[</span><span class="n">numbers</span><span class="p">[</span><span class="n">kind</span><span class="p">]]</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">row</span><span class="p">)</span>
@@ -1099,49 +1112,34 @@
     <span class="k">return</span> <span class="n">rows</span>
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_block_states</span><span class="p">(</span>
-    <span class="n">sequence</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">blocks</span><span class="p">:</span> <span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">NDArray</span><span class="p">[</span><span class="n">Any</span><span class="p">]]:</span>
-<span class="w">    </span><span class="sd">"""Per block, the rows it plays, the flags in force and the gradient under its RF; per readout, the labels.</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_block_states</span><span class="p">(</span><span class="n">sequence</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Return the per-block state pypulseqpp evaluates, which the converter lays out per block and per readout.</span>
 
-<span class="sd">    ``block_rotations`` and ``block_shims`` count the ROTATIONS and RF_SHIMS</span>
-<span class="sd">    rows from 0, -1 for none. ``block_flags`` holds :data:`_BLOCK_FLAGS` and</span>
-<span class="sd">    ``adc_labels``, one row per acquiring block in block order,</span>
-<span class="sd">    :data:`_READOUT_LABELS`: the values in force once the block's own labels</span>
-<span class="sd">    apply, PMC starting at 1 and every other label at 0, with OFF as 0 or 1.</span>
-<span class="sd">    ``trid_set`` is 1 at a block that sets TRID, which is where a repetition of</span>
-<span class="sd">    that group starts even when it sets the value already in force.</span>
-<span class="sd">    ``rf_steady`` is 1 at a block whose RF pulse plays under a gradient that</span>
-<span class="sd">    holds one value along every channel axis, and ``rf_gradient`` is the</span>
-<span class="sd">    gradient along x, y and z at the pulse's centre, in Hz/m.</span>
+<span class="sd">    ``flag_labels`` and ``readout_labels`` hold, in the order of</span>
+<span class="sd">    :data:`_BLOCK_FLAGS` and :data:`_READOUT_LABELS`, the values in force once</span>
+<span class="sd">    each block's own labels apply, PMC starting at 1 and every other label at</span>
+<span class="sd">    0; the converter keeps the readout labels at acquiring blocks, with OFF as</span>
+<span class="sd">    0 or 1. ``trid_blocks`` are the blocks that set TRID, which is where a</span>
+<span class="sd">    repetition of that group starts even when it sets the value already in</span>
+<span class="sd">    force. ``rf_pulsed``, ``rf_steady`` and ``rf_gradient`` are</span>
+<span class="sd">    ``pypulseqpp.Sequence.rf_gradients``: per RF block, whether the gradient</span>
+<span class="sd">    holds one value along each channel axis and its value at the pulse's</span>
+<span class="sd">    centre, in Hz/m. ``block_rotations`` and ``block_shims`` count from 1, 0</span>
+<span class="sd">    for none.</span>
 <span class="sd">    """</span>
-    <span class="n">count</span> <span class="o">=</span> <span class="n">blocks</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
     <span class="n">start</span> <span class="o">=</span> <span class="nb">dict</span><span class="o">.</span><span class="n">fromkeys</span><span class="p">((</span><span class="o">*</span><span class="n">_BLOCK_FLAGS</span><span class="p">,</span> <span class="o">*</span><span class="n">_READOUT_LABELS</span><span class="p">),</span> <span class="mi">0</span><span class="p">)</span>
     <span class="n">start</span><span class="p">[</span><span class="s2">"PMC"</span><span class="p">]</span> <span class="o">=</span> <span class="mi">1</span>
     <span class="n">found</span> <span class="o">=</span> <span class="n">sequence</span><span class="o">.</span><span class="n">evaluate_labels</span><span class="p">(</span><span class="n">init</span><span class="o">=</span><span class="n">start</span><span class="p">,</span> <span class="n">evolution</span><span class="o">=</span><span class="s2">"blocks"</span><span class="p">)</span>
-    <span class="n">state</span> <span class="o">=</span> <span class="p">{</span>
-        <span class="n">name</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">broadcast_to</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">found</span><span class="p">[</span><span class="n">name</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int32</span><span class="p">),</span> <span class="p">(</span><span class="n">count</span><span class="p">,))</span>
-        <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">start</span>
-    <span class="p">}</span>
-    <span class="n">labels</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">stack</span><span class="p">([</span><span class="n">state</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">_READOUT_LABELS</span><span class="p">],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
-    <span class="n">labels</span> <span class="o">=</span> <span class="n">labels</span><span class="p">[</span><span class="n">blocks</span><span class="p">[:,</span> <span class="mi">5</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">]</span>
-    <span class="n">labels</span><span class="p">[:,</span> <span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="n">labels</span><span class="p">[:,</span> <span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">!=</span> <span class="mi">0</span>
-    <span class="n">trid_set</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">count</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int32</span><span class="p">)</span>
-    <span class="n">trid_set</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">sequence</span><span class="o">.</span><span class="n">label_blocks</span><span class="p">(</span><span class="s2">"TRID"</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="mi">1</span>
     <span class="n">under</span> <span class="o">=</span> <span class="n">sequence</span><span class="o">.</span><span class="n">rf_gradients</span><span class="p">()</span>
-    <span class="n">pulsed</span> <span class="o">=</span> <span class="n">under</span><span class="o">.</span><span class="n">block</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span>
-    <span class="n">rf_steady</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">count</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int32</span><span class="p">)</span>
-    <span class="n">rf_steady</span><span class="p">[</span><span class="n">pulsed</span><span class="p">]</span> <span class="o">=</span> <span class="n">under</span><span class="o">.</span><span class="n">steady</span><span class="o">.</span><span class="n">all</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
-    <span class="n">rf_gradient</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">count</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
-    <span class="n">rf_gradient</span><span class="p">[</span><span class="n">pulsed</span><span class="p">]</span> <span class="o">=</span> <span class="n">under</span><span class="o">.</span><span class="n">gradient</span>
     <span class="k">return</span> <span class="p">{</span>
-        <span class="s2">"block_rotations"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">sequence</span><span class="o">.</span><span class="n">block_rotations</span><span class="p">(),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int32</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span><span class="p">,</span>
-        <span class="s2">"block_shims"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">sequence</span><span class="o">.</span><span class="n">block_shims</span><span class="p">(),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int32</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span><span class="p">,</span>
-        <span class="s2">"block_flags"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">stack</span><span class="p">([</span><span class="n">state</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">_BLOCK_FLAGS</span><span class="p">],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">),</span>
-        <span class="s2">"trid_set"</span><span class="p">:</span> <span class="n">trid_set</span><span class="p">,</span>
-        <span class="s2">"rf_steady"</span><span class="p">:</span> <span class="n">rf_steady</span><span class="p">,</span>
-        <span class="s2">"rf_gradient"</span><span class="p">:</span> <span class="n">rf_gradient</span><span class="p">,</span>
-        <span class="s2">"adc_labels"</span><span class="p">:</span> <span class="n">labels</span><span class="p">,</span>
+        <span class="s2">"flag_labels"</span><span class="p">:</span> <span class="p">[</span><span class="n">found</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">_BLOCK_FLAGS</span><span class="p">],</span>
+        <span class="s2">"readout_labels"</span><span class="p">:</span> <span class="p">[</span><span class="n">found</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">_READOUT_LABELS</span><span class="p">],</span>
+        <span class="s2">"trid_blocks"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">sequence</span><span class="o">.</span><span class="n">label_blocks</span><span class="p">(</span><span class="s2">"TRID"</span><span class="p">))</span><span class="o">.</span><span class="n">tolist</span><span class="p">(),</span>
+        <span class="s2">"rf_pulsed"</span><span class="p">:</span> <span class="n">under</span><span class="o">.</span><span class="n">block</span><span class="p">,</span>
+        <span class="s2">"rf_steady"</span><span class="p">:</span> <span class="n">under</span><span class="o">.</span><span class="n">steady</span><span class="p">,</span>
+        <span class="s2">"rf_gradient"</span><span class="p">:</span> <span class="n">under</span><span class="o">.</span><span class="n">gradient</span><span class="p">,</span>
+        <span class="s2">"block_rotations"</span><span class="p">:</span> <span class="n">sequence</span><span class="o">.</span><span class="n">block_rotations</span><span class="p">(),</span>
+        <span class="s2">"block_shims"</span><span class="p">:</span> <span class="n">sequence</span><span class="o">.</span><span class="n">block_shims</span><span class="p">(),</span>
     <span class="p">}</span>
 
 
@@ -1165,11 +1163,11 @@
 <span class="sd">        The definition, and the angle the row turns the magnetisation through</span>
 <span class="sd">        in degrees.</span>
 <span class="sd">    """</span>
-    <span class="n">libraries</span> <span class="o">=</span> <span class="n">_sequence_libraries</span><span class="p">(</span><span class="n">sequence</span><span class="p">,</span> <span class="n">_tables</span><span class="p">(</span><span class="n">sequence</span><span class="p">))</span>
-    <span class="n">rows</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">_played</span><span class="p">(</span><span class="n">libraries</span><span class="o">.</span><span class="n">blocks</span><span class="p">,</span> <span class="p">(</span><span class="mi">1</span><span class="p">,))</span>
-    <span class="n">definitions</span> <span class="o">=</span> <span class="n">_densified</span><span class="p">(</span><span class="n">libraries</span><span class="o">.</span><span class="n">rf_definitions</span><span class="p">,</span> <span class="n">rows</span><span class="p">)</span>
+    <span class="n">rows</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">_played</span><span class="p">(</span><span class="n">_tables</span><span class="p">(</span><span class="n">sequence</span><span class="p">)</span><span class="o">.</span><span class="n">blocks</span><span class="p">,</span> <span class="p">(</span><span class="mi">0</span><span class="p">,))</span>
+    <span class="n">definitions</span> <span class="o">=</span> <span class="n">_densified</span><span class="p">(</span><span class="n">sequence</span><span class="o">.</span><span class="n">event_definitions</span><span class="p">()</span><span class="o">.</span><span class="n">rf</span><span class="p">,</span> <span class="n">rows</span><span class="p">)</span>
+    <span class="n">flips</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">sequence</span><span class="o">.</span><span class="n">rf_flip_angles</span><span class="p">(),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
     <span class="k">return</span> <span class="nb">tuple</span><span class="p">(</span>
-        <span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">definition</span><span class="p">),</span> <span class="nb">float</span><span class="p">(</span><span class="n">libraries</span><span class="o">.</span><span class="n">rf_flip_deg</span><span class="p">[</span><span class="n">row</span><span class="p">]))</span>
+        <span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">definition</span><span class="p">),</span> <span class="nb">float</span><span class="p">(</span><span class="n">flips</span><span class="p">[</span><span class="n">row</span><span class="p">]))</span>
         <span class="k">for</span> <span class="n">definition</span><span class="p">,</span> <span class="n">row</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">definitions</span><span class="p">,</span> <span class="n">rows</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
     <span class="p">)</span></div>
 
@@ -1183,58 +1181,6 @@
             <span class="s2">"repetition that starts at the first block"</span>
         <span class="p">)</span>
     <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="n">size</span><span class="p">)</span>
-
-
-<span class="k">def</span><span class="w"> </span><span class="nf">_resolve_ppm</span><span class="p">(</span><span class="n">libraries</span><span class="p">:</span> <span class="n">SequenceLibraries</span><span class="p">,</span> <span class="n">tables</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">system</span><span class="p">:</span> <span class="n">pp</span><span class="o">.</span><span class="n">Opts</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""Fold the ppm offsets of the RF and ADC rows into their absolute offsets, in place."""</span>
-    <span class="n">rf_offsets</span><span class="p">,</span> <span class="n">adc_offsets</span> <span class="o">=</span> <span class="n">tables</span><span class="o">.</span><span class="n">absolute_offsets</span><span class="p">(</span><span class="n">system</span><span class="p">)</span>
-    <span class="n">libraries</span><span class="o">.</span><span class="n">rf</span><span class="p">[:,</span> <span class="mi">8</span><span class="p">:</span><span class="mi">10</span><span class="p">]</span> <span class="o">=</span> <span class="n">rf_offsets</span>
-    <span class="n">libraries</span><span class="o">.</span><span class="n">rf</span><span class="p">[:,</span> <span class="mi">6</span><span class="p">:</span><span class="mi">8</span><span class="p">]</span> <span class="o">=</span> <span class="mf">0.0</span>
-    <span class="n">libraries</span><span class="o">.</span><span class="n">adc</span><span class="p">[:,</span> <span class="mi">5</span><span class="p">:</span><span class="mi">7</span><span class="p">]</span> <span class="o">=</span> <span class="n">adc_offsets</span>
-    <span class="n">libraries</span><span class="o">.</span><span class="n">adc</span><span class="p">[:,</span> <span class="mi">3</span><span class="p">:</span><span class="mi">5</span><span class="p">]</span> <span class="o">=</span> <span class="mf">0.0</span>
-
-
-<span class="k">def</span><span class="w"> </span><span class="nf">_compact</span><span class="p">(</span>
-    <span class="n">blocks</span><span class="p">:</span> <span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">],</span> <span class="n">libraries</span><span class="p">:</span> <span class="n">SequenceLibraries</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="o">...</span><span class="p">]:</span>
-<span class="w">    </span><span class="sd">"""Drop the library rows no block plays, renumbering the block table in place.</span>
-
-<span class="sd">    A row no block plays would deduplicate into a definition of its own that</span>
-<span class="sd">    nothing plays. Numbering the played rows again keeps the libraries to what</span>
-<span class="sd">    the scan actually asks for.</span>
-<span class="sd">    """</span>
-    <span class="n">played_rf</span><span class="p">,</span> <span class="n">rf_map</span> <span class="o">=</span> <span class="n">_played</span><span class="p">(</span><span class="n">blocks</span><span class="p">,</span> <span class="p">(</span><span class="mi">1</span><span class="p">,))</span>
-    <span class="n">played_grad</span><span class="p">,</span> <span class="n">grad_map</span> <span class="o">=</span> <span class="n">_played</span><span class="p">(</span><span class="n">blocks</span><span class="p">,</span> <span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">))</span>
-    <span class="n">played_adc</span><span class="p">,</span> <span class="n">adc_map</span> <span class="o">=</span> <span class="n">_played</span><span class="p">(</span><span class="n">blocks</span><span class="p">,</span> <span class="p">(</span><span class="mi">5</span><span class="p">,))</span>
-    <span class="n">rf</span> <span class="o">=</span> <span class="n">libraries</span><span class="o">.</span><span class="n">rf</span><span class="p">[</span><span class="n">played_rf</span><span class="p">]</span>
-    <span class="n">grad</span> <span class="o">=</span> <span class="n">libraries</span><span class="o">.</span><span class="n">grad</span><span class="p">[</span><span class="n">played_grad</span><span class="p">]</span>
-    <span class="n">grad_statistics</span> <span class="o">=</span> <span class="n">libraries</span><span class="o">.</span><span class="n">grad_statistics</span><span class="p">[</span><span class="n">played_grad</span><span class="p">]</span>
-    <span class="n">adc</span> <span class="o">=</span> <span class="n">libraries</span><span class="o">.</span><span class="n">adc</span><span class="p">[</span><span class="n">played_adc</span><span class="p">]</span>
-    <span class="n">uses</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">libraries</span><span class="o">.</span><span class="n">rf_use</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int32</span><span class="p">)[</span><span class="n">played_rf</span><span class="p">]</span>
-    <span class="n">spectra</span> <span class="o">=</span> <span class="n">libraries</span><span class="o">.</span><span class="n">rf_spectra</span><span class="p">[</span><span class="n">played_rf</span><span class="p">]</span>
-    <span class="n">flips</span> <span class="o">=</span> <span class="n">libraries</span><span class="o">.</span><span class="n">rf_flip_deg</span><span class="p">[</span><span class="n">played_rf</span><span class="p">]</span>
-    <span class="n">channels</span> <span class="o">=</span> <span class="n">libraries</span><span class="o">.</span><span class="n">rf_channels</span><span class="p">[</span><span class="n">played_rf</span><span class="p">]</span>
-    <span class="n">integrals</span> <span class="o">=</span> <span class="n">libraries</span><span class="o">.</span><span class="n">rf_b1sq_integral</span><span class="p">[</span><span class="n">played_rf</span><span class="p">]</span>
-    <span class="n">rf_defs</span> <span class="o">=</span> <span class="n">_densified</span><span class="p">(</span><span class="n">libraries</span><span class="o">.</span><span class="n">rf_definitions</span><span class="p">,</span> <span class="n">played_rf</span><span class="p">)</span>
-    <span class="n">grad_defs</span> <span class="o">=</span> <span class="n">_densified</span><span class="p">(</span><span class="n">libraries</span><span class="o">.</span><span class="n">grad_definitions</span><span class="p">,</span> <span class="n">played_grad</span><span class="p">)</span>
-    <span class="n">adc_defs</span> <span class="o">=</span> <span class="n">_densified</span><span class="p">(</span><span class="n">libraries</span><span class="o">.</span><span class="n">adc_definitions</span><span class="p">,</span> <span class="n">played_adc</span><span class="p">)</span>
-    <span class="k">for</span> <span class="n">columns</span><span class="p">,</span> <span class="n">mapping</span> <span class="ow">in</span> <span class="p">(((</span><span class="mi">1</span><span class="p">,),</span> <span class="n">rf_map</span><span class="p">),</span> <span class="p">((</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">),</span> <span class="n">grad_map</span><span class="p">),</span> <span class="p">((</span><span class="mi">5</span><span class="p">,),</span> <span class="n">adc_map</span><span class="p">)):</span>
-        <span class="k">for</span> <span class="n">column</span> <span class="ow">in</span> <span class="n">columns</span><span class="p">:</span>
-            <span class="n">blocks</span><span class="p">[:,</span> <span class="n">column</span><span class="p">]</span> <span class="o">=</span> <span class="n">mapping</span><span class="p">[</span><span class="n">blocks</span><span class="p">[:,</span> <span class="n">column</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)]</span>
-    <span class="k">return</span> <span class="p">(</span>
-        <span class="n">rf</span><span class="p">,</span>
-        <span class="n">grad</span><span class="p">,</span>
-        <span class="n">grad_statistics</span><span class="p">,</span>
-        <span class="n">adc</span><span class="p">,</span>
-        <span class="n">uses</span><span class="p">,</span>
-        <span class="n">spectra</span><span class="p">,</span>
-        <span class="n">flips</span><span class="p">,</span>
-        <span class="n">channels</span><span class="p">,</span>
-        <span class="n">integrals</span><span class="p">,</span>
-        <span class="n">rf_defs</span><span class="p">,</span>
-        <span class="n">grad_defs</span><span class="p">,</span>
-        <span class="n">adc_defs</span><span class="p">,</span>
-    <span class="p">)</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_densified</span><span class="p">(</span>
@@ -1260,21 +1206,18 @@
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_played</span><span class="p">(</span>
-    <span class="n">blocks</span><span class="p">:</span> <span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">],</span> <span class="n">columns</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">],</span> <span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]]:</span>
+    <span class="n">events</span><span class="p">:</span> <span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">int32</span><span class="p">],</span> <span class="n">columns</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">],</span> <span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">int32</span><span class="p">]]:</span>
 <span class="w">    </span><span class="sd">"""Return the 0-based rows some block names, and the new id of each old id.</span>
 
-<span class="sd">    The new ids number the named rows from 1 in order; id 0 stays 0.</span>
+<span class="sd">    ``events`` is pypulseqpp's block table. The new ids number the named rows</span>
+<span class="sd">    from 1 in order; id 0 stays 0.</span>
 <span class="sd">    """</span>
-    <span class="n">present</span> <span class="o">=</span> <span class="n">_present</span><span class="p">(</span><span class="n">blocks</span><span class="p">[:,</span> <span class="nb">list</span><span class="p">(</span><span class="n">columns</span><span class="p">)]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span><span class="o">.</span><span class="n">ravel</span><span class="p">())</span>
-    <span class="n">present</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="kc">False</span>
-    <span class="n">named</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">flatnonzero</span><span class="p">(</span><span class="n">present</span><span class="p">)</span>
-    <span class="n">mapping</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">present</span><span class="o">.</span><span class="n">size</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
-    <span class="n">mapping</span><span class="p">[</span><span class="n">named</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">named</span><span class="o">.</span><span class="n">size</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
-    <span class="k">return</span> <span class="n">named</span> <span class="o">-</span> <span class="mi">1</span><span class="p">,</span> <span class="n">mapping</span>
+    <span class="n">mapping</span> <span class="o">=</span> <span class="n">require</span><span class="p">(</span><span class="s2">"played"</span><span class="p">)(</span><span class="n">events</span><span class="p">,</span> <span class="nb">list</span><span class="p">(</span><span class="n">columns</span><span class="p">))</span>
+    <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">flatnonzero</span><span class="p">(</span><span class="n">mapping</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span><span class="p">,</span> <span class="n">mapping</span>
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_present</span><span class="p">(</span><span class="n">ids</span><span class="p">:</span> <span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">bool_</span><span class="p">]:</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_present</span><span class="p">(</span><span class="n">ids</span><span class="p">:</span> <span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">integer</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">bool_</span><span class="p">]:</span>
 <span class="w">    </span><span class="sd">"""Return a mask over ``0..max(ids)`` that is True at every id in ``ids``, which are non-negative."""</span>
     <span class="n">present</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">ids</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">initial</span><span class="o">=</span><span class="mi">0</span><span class="p">))</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">)</span>
     <span class="n">present</span><span class="p">[</span><span class="n">ids</span><span class="p">]</span> <span class="o">=</span> <span class="kc">True</span>

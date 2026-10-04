@@ -516,6 +516,20 @@
 
 
 
+<span class="k">def</span><span class="w"> </span><span class="nf">designed_chain</span><span class="p">(</span><span class="n">written</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="n">Path</span><span class="p">,</span> <span class="n">Any</span><span class="p">]])</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="n">Path</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]:</span>
+<span class="w">    </span><span class="sd">"""Return a chain as written, each pulse labelled as :func:`read_chain` labels the file.</span>
+
+<span class="sd">    The sequences are the ones the files were written from, deduplicated as</span>
+<span class="sd">    written, so the chain stands for reading the files back. A file is read</span>
+<span class="sd">    with no system, at 1.5 T and the proton gyromagnetic ratio, and its</span>
+<span class="sd">    unlabelled pulses are labelled there; the sequences are labelled in place</span>
+<span class="sd">    at the same field.</span>
+<span class="sd">    """</span>
+    <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">sequence</span> <span class="ow">in</span> <span class="n">written</span><span class="p">:</span>
+        <span class="n">sequence</span><span class="o">.</span><span class="n">detect_rf_use</span><span class="p">(</span><span class="n">B0</span><span class="o">=</span><span class="mf">1.5</span><span class="p">,</span> <span class="n">gamma</span><span class="o">=</span><span class="mf">42.576e6</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">written</span>
+
+
 <div class="viewcode-block" id="SequenceDefinitions">
 <a class="viewcode-back" href="../../../generated/pulserver.mrd.SequenceDefinitions.html#pulserver.mrd.SequenceDefinitions">[docs]</a>
 <span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>

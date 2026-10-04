@@ -824,12 +824,24 @@
 <span class="sd">        TypeError</span>
 <span class="sd">            If ``app`` returns neither a sequence nor a list of them.</span>
 <span class="sd">        """</span>
+        <span class="n">validation</span><span class="p">,</span> <span class="n">paths</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_design</span><span class="p">(</span><span class="n">system</span><span class="p">,</span> <span class="n">request</span><span class="p">,</span> <span class="n">directory</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">validation</span><span class="p">,</span> <span class="n">paths</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_design</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">system</span><span class="p">:</span> <span class="n">pp</span><span class="o">.</span><span class="n">Opts</span><span class="p">,</span>
+        <span class="n">request</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="n">ProtocolKey</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
+        <span class="n">directory</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">Validation</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="n">Path</span><span class="p">,</span> <span class="n">pp</span><span class="o">.</span><span class="n">Sequence</span><span class="p">]]]:</span>
+<span class="w">        </span><span class="sd">"""Return what :meth:`design` returns, and each written path with its sequence as written."""</span>
         <span class="n">validation</span><span class="p">,</span> <span class="n">protocol</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_validated</span><span class="p">(</span><span class="n">system</span><span class="p">,</span> <span class="n">request</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">protocol</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">return</span> <span class="n">validation</span><span class="p">,</span> <span class="p">[]</span>
+            <span class="k">return</span> <span class="n">validation</span><span class="p">,</span> <span class="p">[],</span> <span class="p">[]</span>
         <span class="n">built</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">generate</span><span class="p">(</span><span class="n">system</span><span class="p">,</span> <span class="n">protocol</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">validation</span><span class="p">,</span> <span class="n">_write</span><span class="p">(</span><span class="n">built</span><span class="p">,</span> <span class="n">Path</span><span class="p">(</span><span class="n">directory</span><span class="p">)</span> <span class="o">/</span> <span class="n">_FIRST_FILE</span><span class="p">)</span></div>
-
+        <span class="n">paths</span> <span class="o">=</span> <span class="n">_write</span><span class="p">(</span><span class="n">built</span><span class="p">,</span> <span class="n">Path</span><span class="p">(</span><span class="n">directory</span><span class="p">)</span> <span class="o">/</span> <span class="n">_FIRST_FILE</span><span class="p">)</span>
+        <span class="n">chain</span> <span class="o">=</span> <span class="p">[</span><span class="n">built</span><span class="p">]</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">built</span><span class="p">,</span> <span class="n">pp</span><span class="o">.</span><span class="n">Sequence</span><span class="p">)</span> <span class="k">else</span> <span class="n">built</span>
+        <span class="k">return</span> <span class="n">validation</span><span class="p">,</span> <span class="n">paths</span><span class="p">,</span> <span class="nb">list</span><span class="p">(</span><span class="nb">zip</span><span class="p">(</span><span class="nb">map</span><span class="p">(</span><span class="n">Path</span><span class="p">,</span> <span class="n">paths</span><span class="p">),</span> <span class="n">chain</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_defaults</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">"""Return the default of each argument of the app, ``inspect.Parameter.empty`` for none."""</span>

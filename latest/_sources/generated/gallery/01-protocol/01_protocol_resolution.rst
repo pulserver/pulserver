@@ -322,7 +322,7 @@ interpreter shows to the operator.
 
     infeasible protocol in Gre2D.evaluate: the requested TE of 1.500 ms is shorter than the 3.550 ms this readout can achieve
     Traceback (most recent call last):
-      File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/pulserver/design/_plugin.py", line 380, in _validated
+      File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/pulserver/design/_plugin.py", line 392, in _validated
         evaluation = self.evaluate(system, protocol)
                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
       File "/home/runner/work/pulserver/pulserver/gallery/01-protocol/01_protocol_resolution.py", line 84, in evaluate
@@ -386,7 +386,7 @@ which is what lets a design be identified by its resolved protocol
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 4.618 seconds)
+   **Total running time of the script:** (0 minutes 2.964 seconds)
 
 
 .. _sphx_glr_download_generated_gallery_01-protocol_01_protocol_resolution.py:
