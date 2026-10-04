@@ -552,12 +552,30 @@ def _boundary_flags(
         keys = np.stack(
             [space, *(counters[other] for other in enclosing), counters[name]], axis=1
         )
-        order = np.lexsort(keys.T[::-1])
-        ordered = keys[order]
-        change = np.any(ordered[1:] != ordered[:-1], axis=1)
+        order, change = _groups(keys)
         flags[order[np.concatenate(([True], change))]] |= np.uint64(first.value)
         flags[order[np.concatenate((change, [True]))]] |= np.uint64(last.value)
     return flags
+
+
+def _groups(keys: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Return a stable order grouping equal rows of ``keys``, and where each row of it differs from the next.
+
+    Rows of non-negative counters are packed into one integer per row where
+    they fit, which sorts faster than ordering by each column in turn.
+    """
+    keys = keys.astype(np.int64)
+    sizes = keys.max(axis=0, initial=0) + 1
+    if keys.size and keys.min() >= 0 and float(np.prod(sizes.astype(float))) < 2.0**62:
+        packed = np.zeros(keys.shape[0], dtype=np.int64)
+        for column, size in zip(keys.T, sizes, strict=True):
+            packed = packed * size + column
+        order = np.argsort(packed, kind="stable")
+        ordered = packed[order]
+        return order, ordered[1:] != ordered[:-1]
+    order = np.lexsort(keys.T[::-1])
+    ordered = keys[order]
+    return order, np.any(ordered[1:] != ordered[:-1], axis=1)
 
 
 def _limit(values: np.ndarray, centre: int | None = None) -> Any:

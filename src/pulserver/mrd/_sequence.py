@@ -23,8 +23,8 @@ _RUN_SAMPLES = 1 << 17
 #: Runs whose k-space a table keeps.
 _KEPT_RUNS = 2
 
-#: ADC column of ``Sequence.block_events``, and the number of columns.
-_ADC, _COLUMNS = 5, 7
+#: ADC column of ``Sequence.libraries().blocks``.
+_ADC = 4
 
 
 def read_chain(path: Path | str, *, verify: bool = False) -> list[tuple[Path, Any]]:
@@ -192,14 +192,15 @@ class ReadoutTable:
     @classmethod
     def from_sequence(cls, seq: Any) -> ReadoutTable:
         """Tabulate the readouts of a ``pypulseqpp.Sequence``."""
-        events = np.array(list(seq.block_events.values()), dtype=np.int64)
-        events = events.reshape(-1, _COLUMNS)
+        tables = seq.libraries()
         echoes = seq.adc_echoes()
         block = echoes.block.astype(np.int64)
         count = block.size
         num_samples = echoes.num_samples.astype(np.int32)
-        adc_rows = np.asarray(seq.libraries().adc, dtype=np.float64).reshape(-1, 8)
-        played = adc_rows[events[block - 1, _ADC] - 1]
+        adc_rows = np.asarray(tables.adc, dtype=np.float64).reshape(-1, 8)
+        played = adc_rows[
+            np.asarray(tables.blocks)[block - 1, _ADC].astype(np.int64) - 1
+        ]
         dwell = played[:, 1]
         # A shifted field of view gives every readout an ADC row of its own;
         # the modulation is decoded once per shape the rows name.
