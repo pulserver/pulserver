@@ -90,6 +90,10 @@ class TableSpace:
         of the echo that is symmetric about the readout's ``center_sample``.
         ``None`` for a space with a trajectory, whose readouts are not echoes
         of one grid, and for a space with no readout.
+    ramp_sampled
+        Whether the space's readouts are sampled on the ramps of their
+        trapezoid, so that a Cartesian readout still carries its k as a 1D
+        trajectory.
     """
 
     subsequence: int
@@ -100,6 +104,7 @@ class TableSpace:
     centre_line: int | None = None
     centre_partition: int | None = None
     readout_samples: int | None = None
+    ramp_sampled: bool = False
 
 
 @dataclass(frozen=True, eq=False)
@@ -125,7 +130,8 @@ class SequenceTable:
     trajectory_dimensions : ndarray
         ``int8`` axes of k a readout carries as its trajectory: every axis its
         encoding space varies along, up to the last, including those constant
-        across the readout; 0 for a readout whose k does not move.
+        across the readout; 0 for a readout whose k does not move and for
+        every readout of a Cartesian space not :attr:`TableSpace.ramp_sampled`.
     sample_time_us : ndarray
         ``float32`` dwell, in µs.
     encoding_space : ndarray
@@ -245,6 +251,7 @@ class SequenceTable:
         moving = joined("trajectory_dimensions", np.int8)
         widest = np.zeros(len(spaces), dtype=np.int8)
         np.maximum.at(widest, encoding_space, moving)
+        widest[[not (space.trajectory or space.ramp_sampled) for space in spaces]] = 0
 
         parameters: dict[str, list[float]] = {}
         if tr:
@@ -397,7 +404,8 @@ def enrich_acquisition(
     Sets the encoding counters, flags, ``sample_time_us`` and
     ``encoding_space_ref``, and ``center_sample`` unless k does not move
     across the readout, in which case the received value stays. A readout
-    whose k moves gets it as ``traj``, trailing constant axes dropped.
+    whose k moves gets it as ``traj``, trailing constant axes dropped, unless
+    it is a Cartesian readout sampled on its flat top alone.
 
     The samples are left as received, except where
     :meth:`SequenceTable.readout_phase_modulation` gives a phase, with the
@@ -500,6 +508,9 @@ def _map_readouts(
                     readouts.center_sample[members],
                     reverse[members],
                 ),
+                ramp_sampled=not trajectory
+                and bool(members.any())
+                and _ramp_sampled(readouts, int(np.argmax(members))),
             )
         )
 
@@ -513,6 +524,30 @@ def _map_readouts(
         "num_samples": readouts.num_samples,
     }
     return part, spaces
+
+
+def _ramp_sampled(readouts: ReadoutTable, index: int) -> bool:
+    """Whether a readout samples the ramps of its readout gradient.
+
+    The readout gradient is the trapezoid with the longest flat top in the
+    block; a block with none is not ramp sampled.
+    """
+    block = readouts.readout_block(index)
+    adc = block.adc
+    trapezoids = [
+        g
+        for g in (block.gx, block.gy, block.gz)
+        if g is not None and getattr(g, "type", "") == "trap"
+    ]
+    if adc is None or not trapezoids:
+        return False
+    g = max(trapezoids, key=lambda g: g.flat_time)
+    start = float(adc.delay) - float(g.delay)
+    stop = start + int(adc.num_samples) * float(adc.dwell)
+    tolerance = 1e-9
+    return g.flat_time > 0 and (
+        start < g.rise_time - tolerance or stop > g.rise_time + g.flat_time + tolerance
+    )
 
 
 def _full_echo(

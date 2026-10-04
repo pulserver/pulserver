@@ -259,6 +259,10 @@ class ReadoutTable:
         """
         return self._phase_modulation[int(self._modulated_by[index])]
 
+    def readout_block(self, index: int) -> Any:
+        """Return the decoded block holding one readout, as ``Sequence.get_block`` does."""
+        return self._runs.sequence.get_block(int(self.block[index]))
+
     def readout_k(self, index: int) -> np.ndarray:
         """Return the k-space position of each sample of one readout, in 1/m.
 
@@ -281,7 +285,7 @@ class _Runs:
     """
 
     def __init__(self, seq: Any, num_samples: np.ndarray) -> None:
-        self._sequence = seq
+        self.sequence = seq
         #: Samples before each readout, and after the last.
         self.before = np.concatenate(([0], np.cumsum(num_samples, dtype=np.int64)))
         #: First readout of each run.
@@ -300,7 +304,7 @@ class _Runs:
                 return self._kept[run]
             readouts = (int(self.first[run]), int(self._stop[run]))
             k = np.asarray(
-                self._sequence.adc_kspace(readouts=readouts), dtype=np.float64
+                self.sequence.adc_kspace(readouts=readouts), dtype=np.float64
             ).reshape(3, -1)
             self._kept[run] = k
             while len(self._kept) > _KEPT_RUNS:

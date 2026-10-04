@@ -176,10 +176,23 @@ def test_navigator_readouts_form_their_own_encoding_space(tmp_path):
     ]
 
 
-@pytest.mark.parametrize("name", ["gre_2d_3sl.seq", "epi_2d_main.seq"])
-def test_a_line_of_k_carries_one_axis_under_a_cartesian_header(name):
+def test_a_cartesian_readout_sampled_on_its_flat_top_carries_no_trajectory():
+    table = fixture("gre_2d_3sl.seq")
+    assert not table.spaces[0].ramp_sampled
+    for index, acquisition in enumerate(acquisitions(table)):
+        enrich_acquisition(acquisition, table, index)
+        assert acquisition.trajectory_dimensions == 0
+        assert acquisition.center_sample == table.center_sample[index]
+    enriched = header()
+    enrich_header(enriched, table)
+    assert enriched.encoding[0].trajectory == ismrmrd.xsd.trajectoryType.CARTESIAN
+
+
+def test_a_ramp_sampled_cartesian_readout_carries_its_k_as_one_axis():
+    name = "epi_2d_main.seq"
     table = fixture(name)
     k_adc = reference(name).calculate_kspace()[0]
+    assert table.spaces[0].ramp_sampled
     for index, acquisition in enumerate(acquisitions(table)):
         enrich_acquisition(acquisition, table, index)
         assert acquisition.trajectory_dimensions == 1
