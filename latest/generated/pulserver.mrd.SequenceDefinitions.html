@@ -537,10 +537,11 @@
 <span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">pulserver.mrd.</span></span><span class="sig-name descname"><span class="pre">SequenceDefinitions</span></span><a class="reference internal" href="../_modules/pulserver/mrd/_sequence.html#SequenceDefinitions"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.mrd.SequenceDefinitions" title="Link to this definition">#</a></dt>
 <dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/builtins/functions.html#object" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
 <p>Definitions describing what a sequence acquires, in Pulseq units.</p>
-<p><code class="docutils literal notranslate"><span class="pre">TR</span></code>, <code class="docutils literal notranslate"><span class="pre">TE</span></code> and <code class="docutils literal notranslate"><span class="pre">FlipAngle</span></code> a sequence does not define are measured
-by <code class="docutils literal notranslate"><span class="pre">Sequence.test_report_dict</span></code>: TE from the excitation before the
-closest approach to the k-space centre, TR between the excitations around
-it, and every distinct flip angle the sequence plays.</p>
+<p><code class="docutils literal notranslate"><span class="pre">TR</span></code> and <code class="docutils literal notranslate"><span class="pre">TE</span></code> a sequence does not define are measured by
+<code class="docutils literal notranslate"><span class="pre">Sequence.test_report_dict</span></code>: TE from the excitation before the closest
+approach to the k-space centre, TR between the excitations around it. An
+undefined <code class="docutils literal notranslate"><span class="pre">FlipAngle</span></code> is every distinct value of
+<code class="docutils literal notranslate"><span class="pre">Sequence.rf_flip_angles</span></code>, as the report lists them.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Attributes<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">

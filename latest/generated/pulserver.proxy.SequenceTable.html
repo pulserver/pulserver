@@ -561,6 +561,9 @@ navigator space when it has <code class="docutils literal notranslate"><span cla
 <code class="docutils literal notranslate"><span class="pre">TR</span></code> and <code class="docutils literal notranslate"><span class="pre">TI</span></code> minima and every distinct <code class="docutils literal notranslate"><span class="pre">TE</span></code> in ascending order,
 in ms, and every distinct <code class="docutils literal notranslate"><span class="pre">FlipAngle</span></code> in ascending order, in
 degrees. Keys no file defines or measures are absent.</p></li>
+<li><p><strong>fov_offset_m</strong> (<em>tuple of float</em>) – The field-of-view shift the scanner plays the chain at, in m, along
+the axes the design’s blocks are rotated onto, as
+<a class="reference internal" href="pulserver.ir.prescribe.html#pulserver.ir.prescribe" title="pulserver.ir.prescribe"><code class="xref py py-func docutils literal notranslate"><span class="pre">pulserver.ir.prescribe()</span></code></a> takes it.</p></li>
 </ul>
 </dd>
 </dl>
@@ -576,7 +579,7 @@ degrees. Keys no file defines or measures are absent.</p></li>
 <td><p>Return the k-space position of each sample of one readout, in 1/m.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="pulserver.proxy.SequenceTable.readout_phase_modulation.html#pulserver.proxy.SequenceTable.readout_phase_modulation" title="pulserver.proxy.SequenceTable.readout_phase_modulation"><code class="xref py py-obj docutils literal notranslate"><span class="pre">readout_phase_modulation</span></code></a></p></td>
-<td><p>Return the phase modulation of one readout's ADC, in rad, or None.</p></td>
+<td><p>Return the phase one readout's samples are corrected by, in rad, or None.</p></td>
 </tr>
 </tbody>
 </table>
@@ -584,31 +587,34 @@ degrees. Keys no file defines or measures are absent.</p></li>
 <p class="rubric">Attributes</p>
 <div class="pst-scrollable-table-container"><table class="autosummary longtable table">
 <tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.proxy.SequenceTable.counters.html#pulserver.proxy.SequenceTable.counters" title="pulserver.proxy.SequenceTable.counters"><code class="xref py py-obj docutils literal notranslate"><span class="pre">counters</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.proxy.SequenceTable.fov_offset_m.html#pulserver.proxy.SequenceTable.fov_offset_m" title="pulserver.proxy.SequenceTable.fov_offset_m"><code class="xref py py-obj docutils literal notranslate"><span class="pre">fov_offset_m</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pulserver.proxy.SequenceTable.flags.html#pulserver.proxy.SequenceTable.flags" title="pulserver.proxy.SequenceTable.flags"><code class="xref py py-obj docutils literal notranslate"><span class="pre">flags</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pulserver.proxy.SequenceTable.counters.html#pulserver.proxy.SequenceTable.counters" title="pulserver.proxy.SequenceTable.counters"><code class="xref py py-obj docutils literal notranslate"><span class="pre">counters</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.proxy.SequenceTable.center_sample.html#pulserver.proxy.SequenceTable.center_sample" title="pulserver.proxy.SequenceTable.center_sample"><code class="xref py py-obj docutils literal notranslate"><span class="pre">center_sample</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.proxy.SequenceTable.flags.html#pulserver.proxy.SequenceTable.flags" title="pulserver.proxy.SequenceTable.flags"><code class="xref py py-obj docutils literal notranslate"><span class="pre">flags</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pulserver.proxy.SequenceTable.trajectory_dimensions.html#pulserver.proxy.SequenceTable.trajectory_dimensions" title="pulserver.proxy.SequenceTable.trajectory_dimensions"><code class="xref py py-obj docutils literal notranslate"><span class="pre">trajectory_dimensions</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pulserver.proxy.SequenceTable.center_sample.html#pulserver.proxy.SequenceTable.center_sample" title="pulserver.proxy.SequenceTable.center_sample"><code class="xref py py-obj docutils literal notranslate"><span class="pre">center_sample</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.proxy.SequenceTable.sample_time_us.html#pulserver.proxy.SequenceTable.sample_time_us" title="pulserver.proxy.SequenceTable.sample_time_us"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sample_time_us</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.proxy.SequenceTable.trajectory_dimensions.html#pulserver.proxy.SequenceTable.trajectory_dimensions" title="pulserver.proxy.SequenceTable.trajectory_dimensions"><code class="xref py py-obj docutils literal notranslate"><span class="pre">trajectory_dimensions</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pulserver.proxy.SequenceTable.encoding_space.html#pulserver.proxy.SequenceTable.encoding_space" title="pulserver.proxy.SequenceTable.encoding_space"><code class="xref py py-obj docutils literal notranslate"><span class="pre">encoding_space</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pulserver.proxy.SequenceTable.sample_time_us.html#pulserver.proxy.SequenceTable.sample_time_us" title="pulserver.proxy.SequenceTable.sample_time_us"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sample_time_us</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.proxy.SequenceTable.num_samples.html#pulserver.proxy.SequenceTable.num_samples" title="pulserver.proxy.SequenceTable.num_samples"><code class="xref py py-obj docutils literal notranslate"><span class="pre">num_samples</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.proxy.SequenceTable.encoding_space.html#pulserver.proxy.SequenceTable.encoding_space" title="pulserver.proxy.SequenceTable.encoding_space"><code class="xref py py-obj docutils literal notranslate"><span class="pre">encoding_space</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pulserver.proxy.SequenceTable.spaces.html#pulserver.proxy.SequenceTable.spaces" title="pulserver.proxy.SequenceTable.spaces"><code class="xref py py-obj docutils literal notranslate"><span class="pre">spaces</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pulserver.proxy.SequenceTable.num_samples.html#pulserver.proxy.SequenceTable.num_samples" title="pulserver.proxy.SequenceTable.num_samples"><code class="xref py py-obj docutils literal notranslate"><span class="pre">num_samples</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.proxy.SequenceTable.sequence_parameters.html#pulserver.proxy.SequenceTable.sequence_parameters" title="pulserver.proxy.SequenceTable.sequence_parameters"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sequence_parameters</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.proxy.SequenceTable.spaces.html#pulserver.proxy.SequenceTable.spaces" title="pulserver.proxy.SequenceTable.spaces"><code class="xref py py-obj docutils literal notranslate"><span class="pre">spaces</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pulserver.proxy.SequenceTable.sequence_parameters.html#pulserver.proxy.SequenceTable.sequence_parameters" title="pulserver.proxy.SequenceTable.sequence_parameters"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sequence_parameters</span></code></a></p></td>
 <td><p></p></td>
 </tr>
 </tbody>

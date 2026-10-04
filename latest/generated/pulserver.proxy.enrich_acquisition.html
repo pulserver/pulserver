@@ -540,11 +540,13 @@
 <code class="docutils literal notranslate"><span class="pre">encoding_space_ref</span></code>, and <code class="docutils literal notranslate"><span class="pre">center_sample</span></code> unless k does not move
 across the readout, in which case the received value stays. A readout
 whose k moves gets it as <code class="docutils literal notranslate"><span class="pre">traj</span></code>, trailing constant axes dropped.</p>
-<p>The samples are left as received, except where the readout’s ADC carries a
-phase modulation. That is the part of a shifted field of view a receiver
-cannot apply itself: under a gradient that holds one value, a shift is a
-phase and a frequency offset, but under one that does not, the phase
-curves over the readout and is applied here.</p>
+<p>The samples are left as received, except where
+<a class="reference internal" href="pulserver.proxy.SequenceTable.readout_phase_modulation.html#pulserver.proxy.SequenceTable.readout_phase_modulation" title="pulserver.proxy.SequenceTable.readout_phase_modulation"><code class="xref py py-meth docutils literal notranslate"><span class="pre">SequenceTable.readout_phase_modulation()</span></code></a> gives a phase, with the
+object at <code class="docutils literal notranslate"><span class="pre">fov_offset_m</span></code> when given. That is the
+part of a shifted field of view a receiver cannot apply itself: under a
+gradient that holds one value, a shift is a phase and a frequency offset,
+but under one that does not, the phase curves over the readout and is
+applied here.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Raises<span class="colon">:</span></dt>
 <dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If the acquisition’s sample count differs from the row’s.</p>

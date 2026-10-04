@@ -535,7 +535,15 @@
 <dl class="py method">
 <dt class="sig sig-object py" id="pulserver.proxy.SequenceTable.readout_phase_modulation">
 <span class="sig-prename descclassname"><span class="pre">SequenceTable.</span></span><span class="sig-name descname"><span class="pre">readout_phase_modulation</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pulserver/proxy/_enrich.html#SequenceTable.readout_phase_modulation"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.proxy.SequenceTable.readout_phase_modulation" title="Link to this definition">#</a></dt>
-<dd><p>Return the phase modulation of one readout’s ADC, in rad, or None.</p>
+<dd><p>Return the phase one readout’s samples are corrected by, in rad, or None.</p>
+<p>The phase modulation its ADC stores, plus what the shift
+<a class="reference internal" href="pulserver.proxy.SequenceTable.fov_offset_m.html#pulserver.proxy.SequenceTable.fov_offset_m" title="pulserver.proxy.SequenceTable.fov_offset_m"><code class="xref py py-attr docutils literal notranslate"><span class="pre">fov_offset_m</span></code></a> the cache was converted at adds beyond the
+frequency and phase offsets the scanner plays at the middle of the
+sampling window. <code class="docutils literal notranslate"><span class="pre">fov_offset_m</span></code>, in m along the logical axes, is the
+position the object is at when it differs from that shift, as a
+motion update states it: the difference is applied in full, as
+<code class="docutils literal notranslate"><span class="pre">2</span> <span class="pre">pi</span> <span class="pre">(fov_offset_m</span> <span class="pre">-</span> <span class="pre">self.fov_offset_m)</span> <span class="pre">.</span> <span class="pre">k</span></code>. None when nothing is
+applied.</p>
 </dd></dl>
 
 </section>

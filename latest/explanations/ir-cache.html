@@ -584,14 +584,17 @@ relative to its excitation is <span class="math notranslate nohighlight">\(2\pi\
 </ul>
 <p>A block that carries a rotation extension plays its drawn gradients turned by
 that rotation, and it is moved by the gradients it plays.</p>
-<p>The readouts are therefore demodulated to the prescribed centre as they are
-acquired, and the reconstruction receives an object at <span class="math notranslate nohighlight">\(\mathbf{d}\)</span> at the
-centre of its field of view. The cache carries each readout’s frequency and
-phase offsets and its phase modulation, one phase per sample, which
-<code class="docutils literal notranslate"><span class="pre">pulseg_get_cursor_adc_phase_modulation</span></code> returns; a playout whose receiver
-cannot vary its phase within a readout applies the modulation to the samples
-before they are sent. A chain whose modulation does not hold one phase per ADC
-sample is refused. The rotation of the prescription is not applied
+<p>The cache carries each readout’s frequency and phase offsets, taken at the
+middle of its sampling window, and no phase modulation: the scanner
+demodulates by the offsets alone. The reconstruction proxy applies the rest,
+<span class="math notranslate nohighlight">\(2\pi\,\mathbf{d}\cdot(\mathbf{k}(t) - \mathbf{k}(t_c) - \dot{\mathbf{k}}(t_c)(t - t_c))\)</span>
+about the window centre <span class="math notranslate nohighlight">\(t_c\)</span>, from the readout’s k-space and the offset
+<span class="math notranslate nohighlight">\(\mathbf{d}\)</span> the design was converted at. Where the MRD header states the
+object at another position (<code class="docutils literal notranslate"><span class="pre">fov_offset_mm</span></code>), such as one a motion correction
+updates, the proxy also applies <span class="math notranslate nohighlight">\(2\pi\,\Delta\mathbf{d}\cdot\mathbf{k}(t)\)</span>
+for the difference, which needs no new cache. The reconstruction then receives an object at
+the stated position at the centre of its field of view. A chain whose stored
+modulation does not hold one phase per ADC sample is refused. The rotation of the prescription is not applied
 to the cache: the scanner plays it through its rotation matrix, composed after
 each block’s own rotation. Two offsets make two caches of one design, and two
 designs (<a class="reference internal" href="designs.html"><span class="doc">Designs and the design store</span></a>).</p>

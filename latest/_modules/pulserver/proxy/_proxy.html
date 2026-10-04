@@ -487,7 +487,7 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">..recon._runtime.readers</span><span class="w"> </span><span class="kn">import</span> <span class="n">deserialize_config</span><span class="p">,</span> <span class="n">read_text</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.</span><span class="w"> </span><span class="kn">import</span> <span class="n">_held</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">._designs</span><span class="w"> </span><span class="kn">import</span> <span class="n">Design</span><span class="p">,</span> <span class="n">DesignCache</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">._enrich</span><span class="w"> </span><span class="kn">import</span> <span class="n">enrich_acquisition</span><span class="p">,</span> <span class="n">enrich_header</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">._enrich</span><span class="w"> </span><span class="kn">import</span> <span class="n">enrich_acquisition</span><span class="p">,</span> <span class="n">enrich_header</span><span class="p">,</span> <span class="n">header_fov_offset_m</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">._motion</span><span class="w"> </span><span class="kn">import</span> <span class="n">FILENAME</span><span class="p">,</span> <span class="n">MotionWriter</span><span class="p">,</span> <span class="n">Pose</span><span class="p">,</span> <span class="n">pose_of</span><span class="p">,</span> <span class="n">pose_waveform</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">._queue</span><span class="w"> </span><span class="kn">import</span> <span class="n">QueueFile</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">._seqdesc</span><span class="w"> </span><span class="kn">import</span> <span class="n">is_message</span>
@@ -782,7 +782,10 @@
                 <span class="n">config</span><span class="p">,</span>
                 <span class="n">header</span><span class="p">,</span>
                 <span class="n">plugin</span><span class="p">,</span>
-                <span class="n">itertools</span><span class="o">.</span><span class="n">chain</span><span class="p">((</span><span class="n">design</span><span class="o">.</span><span class="n">description</span><span class="p">,),</span> <span class="n">_enriched</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="n">design</span><span class="p">)),</span>
+                <span class="n">itertools</span><span class="o">.</span><span class="n">chain</span><span class="p">(</span>
+                    <span class="p">(</span><span class="n">design</span><span class="o">.</span><span class="n">description</span><span class="p">,),</span>
+                    <span class="n">_enriched</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="n">design</span><span class="p">,</span> <span class="n">header_fov_offset_m</span><span class="p">(</span><span class="n">header</span><span class="p">)),</span>
+                <span class="p">),</span>
                 <span class="n">motion</span><span class="o">=</span><span class="n">design</span><span class="o">.</span><span class="n">directory</span> <span class="o">/</span> <span class="n">FILENAME</span>
                 <span class="k">if</span> <span class="n">design</span><span class="o">.</span><span class="n">prospective_motion</span>
                 <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
@@ -1347,9 +1350,13 @@
     <span class="p">)</span>
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_enriched</span><span class="p">(</span><span class="n">client</span><span class="p">:</span> <span class="n">Connection</span><span class="p">,</span> <span class="n">design</span><span class="p">:</span> <span class="n">Design</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">Any</span><span class="p">]:</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_enriched</span><span class="p">(</span>
+    <span class="n">client</span><span class="p">:</span> <span class="n">Connection</span><span class="p">,</span> <span class="n">design</span><span class="p">:</span> <span class="n">Design</span><span class="p">,</span> <span class="n">fov_offset_m</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">Any</span><span class="p">]:</span>
 <span class="w">    </span><span class="sd">"""Yield the client's stream up to its close, acquisitions enriched in play order.</span>
 
+<span class="sd">    ``fov_offset_m`` is the position the header states; its difference from</span>
+<span class="sd">    the design's shift is applied to the samples in full.</span>
 <span class="sd">    Acquisitions are matched to readouts by position, so the stream carries</span>
 <span class="sd">    one per readout of the chain, and once the client numbers them, every</span>
 <span class="sd">    ``scan_counter`` must follow the previous one by one: a gap or a repeat is</span>
@@ -1394,7 +1401,7 @@
                     <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">design</span><span class="o">.</span><span class="n">directory</span><span class="si">}</span><span class="s2"> plays"</span>
                 <span class="p">)</span>
             <span class="n">previous</span> <span class="o">=</span> <span class="n">counter</span>
-            <span class="n">enrich_acquisition</span><span class="p">(</span><span class="n">item</span><span class="p">,</span> <span class="n">design</span><span class="o">.</span><span class="n">table</span><span class="p">,</span> <span class="n">index</span><span class="p">)</span>
+            <span class="n">enrich_acquisition</span><span class="p">(</span><span class="n">item</span><span class="p">,</span> <span class="n">design</span><span class="o">.</span><span class="n">table</span><span class="p">,</span> <span class="n">index</span><span class="p">,</span> <span class="n">fov_offset_m</span><span class="p">)</span>
             <span class="n">index</span> <span class="o">+=</span> <span class="mi">1</span>
         <span class="k">yield</span> <span class="n">item</span>
     <span class="k">if</span> <span class="n">index</span> <span class="o">&lt;</span> <span class="n">readouts</span><span class="p">:</span>

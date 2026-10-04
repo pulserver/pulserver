@@ -617,7 +617,8 @@ one;</p></li>
 readout, one phase per sample in radians, concatenated in play
 order; the receiver phase of a sample is the ADC phase offset, plus
 its frequency offset times the time since the ADC’s start, plus
-this;</p></li>
+this. Empty for a cache converted here, which leaves the
+modulation to the reconstruction proxy;</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">adc_modulation_span</span></code>: <code class="docutils literal notranslate"><span class="pre">(blocks,</span> <span class="pre">2)</span></code>, the start and stop of each
 block’s modulation in that array; empty without one.</p></li>
 </ul>

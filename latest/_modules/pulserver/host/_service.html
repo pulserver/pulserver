@@ -663,6 +663,7 @@
             <span class="s2">"plugin"</span><span class="p">:</span> <span class="n">plugin</span><span class="p">,</span>
             <span class="s2">"source"</span><span class="p">:</span> <span class="n">source</span><span class="p">,</span>
             <span class="s2">"scan_time"</span><span class="p">:</span> <span class="n">validation</span><span class="o">.</span><span class="n">duration</span><span class="p">,</span>
+            <span class="s2">"fov_offset_mm"</span><span class="p">:</span> <span class="p">[</span><span class="mf">1e3</span> <span class="o">*</span> <span class="n">value</span> <span class="k">for</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">offset</span><span class="p">],</span>
         <span class="p">}</span>
         <span class="n">design</span> <span class="o">=</span> <span class="n">store</span><span class="o">.</span><span class="n">commit</span><span class="p">(</span><span class="n">identity</span><span class="p">,</span> <span class="n">staged</span><span class="p">,</span> <span class="n">manifest</span><span class="p">)</span>
     <span class="k">except</span> <span class="ne">BaseException</span><span class="p">:</span>

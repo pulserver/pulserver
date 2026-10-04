@@ -457,6 +457,8 @@
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
+<span class="kn">import</span><span class="w"> </span><span class="nn">json</span>
+
 <span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"DESIGN_PARAMETER"</span><span class="p">,</span> <span class="s2">"Design"</span><span class="p">,</span> <span class="s2">"DesignCache"</span><span class="p">]</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">re</span>
@@ -585,7 +587,9 @@
                     <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_designs</span><span class="p">[</span><span class="n">directory</span><span class="p">]</span>
             <span class="n">design</span> <span class="o">=</span> <span class="n">Design</span><span class="p">(</span>
                 <span class="n">directory</span><span class="o">=</span><span class="n">directory</span><span class="p">,</span>
-                <span class="n">table</span><span class="o">=</span><span class="n">SequenceTable</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">directory</span> <span class="o">/</span> <span class="n">_ENTRY</span><span class="p">),</span>
+                <span class="n">table</span><span class="o">=</span><span class="n">SequenceTable</span><span class="o">.</span><span class="n">read</span><span class="p">(</span>
+                    <span class="n">directory</span> <span class="o">/</span> <span class="n">_ENTRY</span><span class="p">,</span> <span class="n">fov_offset_m</span><span class="o">=</span><span class="n">_fov_offset_m</span><span class="p">(</span><span class="n">directory</span><span class="p">)</span>
+                <span class="p">),</span>
                 <span class="n">prospective_motion</span><span class="o">=</span><span class="n">_asks_for_motion_correction</span><span class="p">(</span><span class="n">directory</span> <span class="o">/</span> <span class="n">_ENTRY</span><span class="p">),</span>
             <span class="p">)</span>
             <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_lock</span><span class="p">:</span>
@@ -603,6 +607,14 @@
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">locate</span><span class="p">(</span><span class="n">header</span><span class="p">))</span></div>
 </div>
 
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_fov_offset_m</span><span class="p">(</span><span class="n">directory</span><span class="p">:</span> <span class="n">Path</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Return the field-of-view shift a design was converted at, in m."""</span>
+    <span class="n">manifest</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">((</span><span class="n">directory</span> <span class="o">/</span> <span class="n">MANIFEST</span><span class="p">)</span><span class="o">.</span><span class="n">read_text</span><span class="p">())</span>
+    <span class="k">return</span> <span class="nb">tuple</span><span class="p">(</span>
+        <span class="mf">1e-3</span> <span class="o">*</span> <span class="nb">float</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">manifest</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"fov_offset_mm"</span><span class="p">,</span> <span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">))</span>
+    <span class="p">)</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_asks_for_motion_correction</span><span class="p">(</span><span class="n">entry</span><span class="p">:</span> <span class="n">Path</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
