@@ -144,10 +144,12 @@ class SequenceDefinitions:
 class ReadoutTable:
     """Every ADC readout of one sequence, in play order.
 
-    k-space is integrated a run of consecutive readouts at a time, by
-    ``Sequence.adc_kspace(readouts=...)``, from the last pulse before the run
-    that resets it. Tabulating integrates the whole sequence once, to find
-    each readout's echo; :meth:`readout_k` integrates a readout's run when it
+    Tabulating follows k-space through the whole sequence once, to find each
+    readout's echo. Where ``Sequence.adc_echoes`` returns each readout's k as
+    its block's origin plus the sweep of a block of its kind,
+    :meth:`readout_k` adds the two. Otherwise k-space is integrated a run of
+    consecutive readouts at a time, by ``Sequence.adc_kspace(readouts=...)``,
+    from the last pulse before the run that resets it, when the readout's run
     is not among the last few kept. The table holds the sequence for this,
     which must not change once tabulated.
 
@@ -199,6 +201,10 @@ class ReadoutTable:
     _modulated_by: np.ndarray = field(
         default_factory=lambda: np.zeros(0, dtype=np.int64), repr=False
     )
+    #: Per readout, k at the start of its block, in 1/m; None where not walked.
+    _origin: np.ndarray | None = field(default=None, repr=False)
+    _sweep: np.ndarray | None = field(default=None, repr=False)
+    _sweeps: tuple[np.ndarray, ...] = field(default=(), repr=False)
 
     def __len__(self) -> int:
         return int(self.num_samples.size)
@@ -239,6 +245,9 @@ class ReadoutTable:
             _runs=_Runs(seq, num_samples),
             _phase_modulation=tuple(_phase_modulation_of(adc) for adc in adcs),
             _modulated_by=which,
+            _origin=getattr(echoes, "origin", None),
+            _sweep=getattr(echoes, "sweep", None),
+            _sweeps=getattr(echoes, "sweeps", None) or (),
         )
 
     def readout_phase_modulation(self, index: int) -> np.ndarray | None:
@@ -256,6 +265,8 @@ class ReadoutTable:
         ``(3, num_samples)``, absolute, with block rotations applied, as
         ``Sequence.adc_kspace`` returns it.
         """
+        if self._origin is not None:
+            return self._origin[index][:, None] + self._sweeps[self._sweep[index]]
         runs = self._runs
         run = int(np.searchsorted(runs.first, index, side="right")) - 1
         start = int(runs.before[index] - runs.before[runs.first[run]])
