@@ -18,7 +18,4 @@ def without_huge_page_advice() -> None:
     numpy = sys.modules.get("numpy")
     if numpy is None or os.environ["NUMPY_MADVISE_HUGEPAGE"] != "0":
         return
-    core = getattr(numpy, "_core", None) or numpy.core
-    setter = getattr(core.multiarray, "_set_madvise_hugepage", None)
-    if setter is not None:
-        setter(False)
+    numpy._core.multiarray._set_madvise_hugepage(False)
