@@ -8,6 +8,7 @@
 #include <pybind11/numpy.h>
 #include <pybind11/stl.h>
 
+#include <cmath>
 #include <cstring>
 #include <stdexcept>
 #include <string>
@@ -232,6 +233,237 @@ void build_extensions(pulseq_file &seq, const py::dict &libraries)
     seq.is_extensions_library_parsed = 1;
 }
 
+using Integers = py::array_t<int32_t, py::array::forcecast>;
+using Reals = py::array_t<double, py::array::forcecast>;
+
+/* Old library id to the id of the played rows, numbered from 1 in id order;
+ * 0 for a row no block plays. */
+std::vector<int32_t> id_map(const py::object &value)
+{
+    const auto array = value.cast<py::array_t<int32_t, py::array::c_style | py::array::forcecast>>();
+    return std::vector<int32_t>(array.data(), array.data() + array.size());
+}
+
+int32_t mapped(const std::vector<int32_t> &map, int32_t id)
+{
+    if (id < 0 || static_cast<size_t>(id) >= map.size())
+        throw std::invalid_argument("a block names an event its library does not hold");
+    return map[static_cast<size_t>(id)];
+}
+
+int played_count(const std::vector<int32_t> &map)
+{
+    int count = 0;
+    for (const int32_t id : map)
+        count = id > count ? id : count;
+    return count;
+}
+
+/* The definition of each played row, numbered from 0 in order of first
+ * appearance; every row when no map is given. */
+int *dense_definitions(const py::object &value, const std::vector<int32_t> *map, int count)
+{
+    const auto raw = value.cast<Integers>().unchecked<1>();
+    if (count == 0)
+        return nullptr;
+    auto *out = static_cast<int *>(PULSEQ_ALLOC(sizeof(int) * (size_t)count));
+    if (!out)
+        throw std::bad_alloc();
+    std::vector<int> rank;
+    int next = 0;
+    int row = 0;
+    for (py::ssize_t old = 0; old < raw.shape(0) && row < count; ++old)
+    {
+        if (map && mapped(*map, static_cast<int32_t>(old + 1)) == 0)
+            continue;
+        const int32_t definition = raw(old);
+        if (definition < 0)
+            throw std::invalid_argument("a negative event definition");
+        if (static_cast<size_t>(definition) >= rank.size())
+            rank.resize(static_cast<size_t>(definition) + 1, -1);
+        if (rank[static_cast<size_t>(definition)] < 0)
+            rank[static_cast<size_t>(definition)] = next++;
+        out[row++] = rank[static_cast<size_t>(definition)];
+    }
+    if (row != count)
+        throw std::invalid_argument("a definition column of the wrong length");
+    return out;
+}
+
+/* The block table from pypulseqpp's event ids, renumbered to the played
+ * rows, and durations in block rasters. */
+void build_blocks(
+    pulseq_file &seq,
+    const py::dict &libraries,
+    const std::vector<int32_t> &rf_map,
+    const std::vector<int32_t> &grad_map,
+    const std::vector<int32_t> &adc_map)
+{
+    const auto events = libraries["block_events"].cast<Integers>().unchecked<2>();
+    const auto durations = libraries["block_durations"].cast<Reals>().unchecked<1>();
+    const double raster = libraries["block_duration_raster"].cast<double>();
+    if (events.shape(0) > 0 && events.shape(1) != 6)
+        throw std::invalid_argument("expected an (n, 6) block event table");
+    if (durations.shape(0) != events.shape(0))
+        throw std::invalid_argument("a block duration column of the wrong length");
+    seq.num_blocks = static_cast<int>(events.shape(0));
+    if (seq.num_blocks == 0)
+        return;
+    seq.block_library = static_cast<PULSEQ_REAL (*)[7]>(
+        PULSEQ_ALLOC(sizeof(PULSEQ_REAL) * (size_t)seq.num_blocks * 7));
+    if (!seq.block_library)
+        throw std::bad_alloc();
+    for (int i = 0; i < seq.num_blocks; ++i)
+    {
+        PULSEQ_REAL *row = seq.block_library[i];
+        row[0] = static_cast<PULSEQ_REAL>(std::rint(durations(i) / raster));
+        row[1] = static_cast<PULSEQ_REAL>(mapped(rf_map, events(i, 0)));
+        for (int axis = 0; axis < 3; ++axis)
+            row[2 + axis] = static_cast<PULSEQ_REAL>(mapped(grad_map, events(i, 1 + axis)));
+        row[5] = static_cast<PULSEQ_REAL>(mapped(adc_map, events(i, 4)));
+        row[6] = static_cast<PULSEQ_REAL>(events(i, 5));
+    }
+}
+
+/* The played ADC rows: sample count, dwell in ns, delay in µs, zero ppm
+ * offsets, the absolute frequency (Hz) and phase (rad) offsets, and no
+ * phase modulation. */
+void build_adc(pulseq_file &seq, const py::dict &libraries, const std::vector<int32_t> &adc_map)
+{
+    const auto raw = libraries["adc"].cast<Reals>().unchecked<2>();
+    const auto offsets = libraries["adc_offsets"].cast<Reals>().unchecked<2>();
+    const auto sizes = libraries["shape_sizes"].cast<std::vector<int>>();
+    seq.adc_library_size = played_count(adc_map);
+    if (seq.adc_library_size == 0)
+        return;
+    if (raw.shape(1) != 8 || offsets.shape(0) != raw.shape(0))
+        throw std::invalid_argument("expected an (n, 8) ADC table and one offset pair per row");
+    seq.adc_library = static_cast<PULSEQ_REAL (*)[8]>(
+        PULSEQ_ALLOC(sizeof(PULSEQ_REAL) * (size_t)seq.adc_library_size * 8));
+    if (!seq.adc_library)
+        throw std::bad_alloc();
+    for (py::ssize_t old = 0; old < raw.shape(0); ++old)
+    {
+        const int32_t id = static_cast<size_t>(old + 1) < adc_map.size()
+                               ? adc_map[static_cast<size_t>(old + 1)]
+                               : 0;
+        if (id == 0)
+            continue;
+        const long modulation = std::lround(raw(old, 7));
+        if (modulation > 0 && static_cast<size_t>(modulation) <= sizes.size() &&
+            sizes[static_cast<size_t>(modulation - 1)] > 0 &&
+            sizes[static_cast<size_t>(modulation - 1)] != raw(old, 0))
+            throw std::invalid_argument(
+                "ADC " + std::to_string(old + 1) + " acquires " +
+                std::to_string(std::lround(raw(old, 0))) + " samples but its phase modulation has " +
+                std::to_string(sizes[static_cast<size_t>(modulation - 1)]));
+        PULSEQ_REAL *row = seq.adc_library[id - 1];
+        row[0] = static_cast<PULSEQ_REAL>(raw(old, 0));
+        row[1] = static_cast<PULSEQ_REAL>(std::rint(raw(old, 1) * 1e9));
+        row[2] = static_cast<PULSEQ_REAL>(std::rint(raw(old, 2) * 1e6));
+        row[3] = 0;
+        row[4] = 0;
+        row[5] = static_cast<PULSEQ_REAL>(offsets(old, 0));
+        row[6] = static_cast<PULSEQ_REAL>(offsets(old, 1));
+        row[7] = 0;
+    }
+}
+
+/* A per-block label column, or one value for every block. */
+struct Column
+{
+    Integers array;
+    int value(int block) const
+    {
+        return array.size() == 1 ? array.data()[0] : array.data()[block];
+    }
+};
+
+std::vector<Column> label_columns(const py::object &value, int count)
+{
+    std::vector<Column> columns;
+    for (const auto &item : value.cast<py::list>())
+    {
+        Column column{py::array_t<int32_t, py::array::c_style | py::array::forcecast>::ensure(item)};
+        if (!column.array || (column.array.size() != 1 && column.array.size() != count))
+            throw std::invalid_argument("a label column of the wrong length");
+        columns.push_back(std::move(column));
+    }
+    return columns;
+}
+
+/* Per block, the rotation and shim rows from 0, the flags in force, where a
+ * TRID is set and the gradient under its RF pulse; per readout, the labels. */
+void build_block_states(pulseq_file &seq, const py::dict &libraries)
+{
+    const int count = seq.num_blocks;
+    const auto events = libraries["block_events"].cast<Integers>().unchecked<2>();
+    seq.block_rotations = integers(libraries["block_rotations"], count);
+    seq.block_shims = integers(libraries["block_shims"], count);
+    for (int i = 0; i < count; ++i)
+    {
+        seq.block_rotations[i] -= 1;
+        seq.block_shims[i] -= 1;
+    }
+
+    const auto allocate = [](size_t bytes) {
+        void *memory = PULSEQ_ALLOC(bytes);
+        if (!memory)
+            throw std::bad_alloc();
+        std::memset(memory, 0, bytes);
+        return memory;
+    };
+    seq.block_trid_set = static_cast<int *>(allocate(sizeof(int) * (size_t)count));
+    for (const int block : libraries["trid_blocks"].cast<std::vector<int>>())
+        if (block >= 1 && block <= count)
+            seq.block_trid_set[block - 1] = 1;
+
+    seq.block_rf_steady = static_cast<int *>(allocate(sizeof(int) * (size_t)count));
+    seq.block_rf_gradient =
+        static_cast<PULSEQ_REAL (*)[3]>(allocate(sizeof(PULSEQ_REAL) * (size_t)count * 3));
+    const auto pulsed = libraries["rf_pulsed"].cast<Integers>().unchecked<1>();
+    const auto steady = libraries["rf_steady"].cast<py::array_t<bool, py::array::forcecast>>().unchecked<2>();
+    const auto gradient = libraries["rf_gradient"].cast<Reals>().unchecked<2>();
+    for (py::ssize_t p = 0; p < pulsed.shape(0); ++p)
+    {
+        const int block = pulsed(p) - 1;
+        if (block < 0 || block >= count)
+            throw std::invalid_argument("an RF gradient for a block the sequence does not hold");
+        seq.block_rf_steady[block] = steady(p, 0) && steady(p, 1) && steady(p, 2);
+        for (int axis = 0; axis < 3; ++axis)
+            seq.block_rf_gradient[block][axis] = static_cast<PULSEQ_REAL>(gradient(p, axis));
+    }
+
+    const auto flags = label_columns(libraries["flag_labels"], count);
+    const auto readout = label_columns(libraries["readout_labels"], count);
+    if (flags.size() != PULSEQ_BLOCK_FLAG_WIDTH || readout.size() != PULSEQ_ADC_LABEL_WIDTH)
+        throw std::invalid_argument("a label state of the wrong width");
+    seq.block_flags = static_cast<int (*)[PULSEQ_BLOCK_FLAG_WIDTH]>(
+        allocate(sizeof(int) * (size_t)count * PULSEQ_BLOCK_FLAG_WIDTH));
+    seq.num_adc_labels = 0;
+    for (int i = 0; i < count; ++i)
+    {
+        for (int f = 0; f < PULSEQ_BLOCK_FLAG_WIDTH; ++f)
+            seq.block_flags[i][f] = flags[(size_t)f].value(i);
+        seq.num_adc_labels += events(i, 4) > 0;
+    }
+    if (seq.num_adc_labels == 0)
+        return;
+    seq.adc_labels = static_cast<int (*)[PULSEQ_ADC_LABEL_WIDTH]>(
+        allocate(sizeof(int) * (size_t)seq.num_adc_labels * PULSEQ_ADC_LABEL_WIDTH));
+    int row = 0;
+    for (int i = 0; i < count; ++i)
+    {
+        if (events(i, 4) <= 0)
+            continue;
+        for (int l = 0; l < PULSEQ_ADC_LABEL_WIDTH; ++l)
+            seq.adc_labels[row][l] = readout[(size_t)l].value(i);
+        seq.adc_labels[row][PULSEQ_ADC_LABEL_WIDTH - 1] =
+            seq.adc_labels[row][PULSEQ_ADC_LABEL_WIDTH - 1] != 0;
+        ++row;
+    }
+}
+
 } // namespace
 
 void build_pulseq_file(pulseq_file &seq, const py::dict &libraries)
@@ -272,32 +504,17 @@ void build_pulseq_file(pulseq_file &seq, const py::dict &libraries)
 
     build_definitions(seq, libraries["definitions"].cast<py::dict>());
 
-    seq.block_library = rows<7>(libraries["blocks"], seq.num_blocks);
+    const auto rf_map = id_map(libraries["rf_map"]);
+    const auto grad_map = id_map(libraries["grad_map"]);
+    const auto adc_map = id_map(libraries["adc_map"]);
+    build_blocks(seq, libraries, rf_map, grad_map, adc_map);
     seq.block_ids = static_cast<int *>(PULSEQ_ALLOC(sizeof(int) * (size_t)(seq.num_blocks + 1)));
     if (!seq.block_ids)
         throw std::bad_alloc();
     for (int i = 0; i < seq.num_blocks; ++i)
         seq.block_ids[i] = i + 1;
     seq.is_block_library_parsed = 1;
-    seq.block_rotations = integers(libraries["block_rotations"], seq.num_blocks);
-    seq.block_shims = integers(libraries["block_shims"], seq.num_blocks);
-    seq.block_trid_set = integers(libraries["trid_set"], seq.num_blocks);
-    seq.block_rf_steady = integers(libraries["rf_steady"], seq.num_blocks);
-    {
-        int pulses = 0;
-        seq.block_rf_gradient = rows<3>(libraries["rf_gradient"], pulses);
-        if (pulses != seq.num_blocks)
-            throw std::invalid_argument("an RF gradient table of the wrong length");
-    }
-    {
-        int flagged = 0;
-        seq.block_flags =
-            integer_rows<PULSEQ_BLOCK_FLAG_WIDTH>(libraries["block_flags"], flagged);
-        if (flagged != seq.num_blocks)
-            throw std::invalid_argument("a block flag table of the wrong length");
-    }
-    seq.adc_labels =
-        integer_rows<PULSEQ_ADC_LABEL_WIDTH>(libraries["adc_labels"], seq.num_adc_labels);
+    build_block_states(seq, libraries);
 
     seq.rf_library = rows<10>(libraries["rf"], seq.rf_library_size);
     seq.rf_use_tags = integers(libraries["rf_use"], seq.rf_library_size);
@@ -322,13 +539,15 @@ void build_pulseq_file(pulseq_file &seq, const py::dict &libraries)
             throw std::invalid_argument("a gradient statistics table of the wrong length");
     }
 
-    seq.adc_library = rows<8>(libraries["adc"], seq.adc_library_size);
+    build_adc(seq, libraries, adc_map);
     seq.is_adc_library_parsed = 1;
 
-    seq.rf_definitions = integers(libraries["rf_definitions"], seq.rf_library_size);
-    seq.grad_definitions = integers(libraries["grad_definitions"], seq.grad_library_size);
-    seq.adc_definitions = integers(libraries["adc_definitions"], seq.adc_library_size);
-    seq.block_definitions = integers(libraries["block_definitions"], seq.num_blocks);
+    seq.rf_definitions = dense_definitions(libraries["rf_definitions"], &rf_map, seq.rf_library_size);
+    seq.grad_definitions =
+        dense_definitions(libraries["grad_definitions"], &grad_map, seq.grad_library_size);
+    seq.adc_definitions =
+        dense_definitions(libraries["adc_definitions"], &adc_map, seq.adc_library_size);
+    seq.block_definitions = dense_definitions(libraries["block_definitions"], nullptr, seq.num_blocks);
 
     build_extensions(seq, libraries);
     build_shapes(seq, libraries["shapes"].cast<py::list>());
