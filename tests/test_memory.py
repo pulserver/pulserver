@@ -6,9 +6,10 @@ from pulserver._memory import without_huge_page_advice
 
 @pytest.fixture
 def advising():
+    """Advice on where NumPy gives it: Linux; elsewhere the setting stays off."""
     before = multiarray._get_madvise_hugepage()
     multiarray._set_madvise_hugepage(True)
-    yield
+    yield multiarray._get_madvise_hugepage()
     multiarray._set_madvise_hugepage(before)
 
 
@@ -23,4 +24,4 @@ def test_the_services_stop_numpy_advising_huge_pages_unless_the_environment_choo
 
     without_huge_page_advice()
 
-    assert multiarray._get_madvise_hugepage() is (environment == "1")
+    assert multiarray._get_madvise_hugepage() is (environment == "1" and advising)
