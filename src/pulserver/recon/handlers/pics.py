@@ -10,6 +10,7 @@ from ...mrd._acquisitions import AcquisitionFlag
 from ...mrd._images import center_crop
 from .._buffers import ReconBuffer, ReconData
 from .._calibration import coil_maps
+from .._correct import gradient_unwarped, states_gradient_coefficients
 from ..gadgets import AsymmetricEcho, Prewhiten, RemoveReadoutOversampling
 from ..plugin import ReconContext, ReconPlugin, ReconResult
 
@@ -85,10 +86,11 @@ class PicsRecon(ReconPlugin):
             image = self.image(averaged(buffer), buffer.image_shape, context, data)
         else:
             image = self.wave_image(context, data)
-        return ReconResult(
-            image,
-            attributes={"ImageProcessingHistory": ["PULSERVER", "PYTHON", "PICS"]},
-        )
+        history = ["PULSERVER", "PYTHON", "PICS"]
+        if states_gradient_coefficients(context.header):
+            image = gradient_unwarped(image, context, data)
+            history.append("GRADUNWARP")
+        return ReconResult(image, attributes={"ImageProcessingHistory": history})
 
     def image(
         self,
