@@ -817,9 +817,18 @@ def _in_process(
     design=None,
     config="gre2d",
     plugins=RECON_PLUGINS,
+    fov_offset_mm=None,
 ):
     """Reconstruct one series with :class:`LocalReconstruction`; return whether it was, and what it sent."""
     header = ismrmrd.xsd.CreateFromDocument(header_xml(series, design=design))
+    if fov_offset_mm is not None:
+        if header.userParameters is None:
+            header.userParameters = ismrmrd.xsd.userParametersType()
+        header.userParameters.userParameterString.append(
+            ismrmrd.xsd.userParameterStringType(
+                name="fov_offset_mm", value=" ".join(map(str, fov_offset_mm))
+            )
+        )
     count = len(series.table) if readouts is None else readouts
     acquisitions = (
         ismrmrd.Acquisition.from_array(data(series.table, index))
@@ -830,6 +839,31 @@ def _in_process(
         header, acquisitions, received.append, config
     )
     return done, received
+
+
+def test_a_series_reconstructed_in_this_process_is_centred_at_the_offset_its_header_states(
+    bucket,
+):
+    root, series = bucket
+    position_m = (0.004, -0.002, 0.0)
+
+    def displaced(table, index):
+        return point(table, index, position_m)
+
+    def centred(table, index):
+        return point(table, index, (0.0, 0.0, 0.0))
+
+    _, shifted = _in_process(
+        root,
+        series["gre2d"],
+        data=displaced,
+        fov_offset_mm=[1e3 * value for value in position_m],
+    )
+    _, reference = _in_process(root, series["gre2d"], data=centred)
+
+    np.testing.assert_allclose(
+        images(shifted)[0].data, images(reference)[0].data, atol=1e-4
+    )
 
 
 def test_a_series_reconstructed_in_this_process_returns_the_image_a_worker_returns(

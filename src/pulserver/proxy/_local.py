@@ -14,7 +14,7 @@ from ..recon._runtime.application import run_application
 from ..recon._runtime.exam import ExamCacheManager
 from ..recon._runtime.readers import deserialize_config
 from ._designs import DesignCache
-from ._enrich import enrich_header
+from ._enrich import enrich_header, header_fov_offset_m
 from ._proxy import _config_plugin, _enriched, _plugin_path
 
 
@@ -71,7 +71,7 @@ class LocalReconstruction:
 
         def enriched() -> Iterator[Any]:
             try:
-                yield from _enriched(items, design)
+                yield from _enriched(items, design, header_fov_offset_m(header))
             except ValueError as error:
                 refused.append(error)
                 raise
