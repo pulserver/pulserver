@@ -19,7 +19,7 @@ def fixture(name):
 
 def integrated(table):
     """The table with k integrated a run at a time where the walk gave it."""
-    return dataclasses.replace(table, _origin=None)
+    return dataclasses.replace(table, _start=None)
 
 
 def synthetic(*readouts):
@@ -61,6 +61,25 @@ def test_k_integrated_a_run_at_a_time_is_k_integrated_from_the_first_block(
                 table.readout_k(index), whole[:, start:stop], rtol=0, atol=tolerance
             )
             start = stop
+
+
+def test_spokes_turned_by_rotations_of_their_own_are_their_path_turned_by_each():
+    system = pp.Opts()
+    excitation = pp.make_block_pulse(np.pi / 12, duration=1e-3, use="excitation")
+    adc = pp.make_adc(num_samples=8, duration=0.8e-3, delay=0.2e-3, system=system)
+    spoke = pp.make_trapezoid(
+        "x", area=400, duration=1.2e-3, rise_time=0.2e-3, system=system
+    )
+    seq = pp.Sequence(system)
+    for angle in np.linspace(0.0, np.pi, 40, endpoint=False):
+        turn = pp.make_rotation(angle, 0.3)
+        seq.add_block(excitation)
+        seq.add_block(adc, spoke, turn)
+    table = ReadoutTable.from_sequence(seq)
+    whole = seq.calculate_kspace()[0]
+
+    k = np.concatenate([table.readout_k(index) for index in range(len(table))], axis=1)
+    np.testing.assert_allclose(k, whole, rtol=0, atol=1e-6 * np.abs(whole).max())
 
 
 def test_a_spin_echo_train_keeps_the_k_its_refocusing_pulses_reverse(monkeypatch):

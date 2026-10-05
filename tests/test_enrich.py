@@ -105,7 +105,7 @@ def test_counters_are_the_labels_each_readout_sees(name):
     labels = reference(name).evaluate_labels(evolution="adc")
     for label in ("LIN", "PAR", "SLC", "SEG", "REP"):
         expected = np.broadcast_to(labels.get(label, 0), (len(table),))
-        np.testing.assert_array_equal(table.counters[label], expected)
+        np.testing.assert_array_equal(table.counters.get(label, 0), expected)
 
 
 def test_a_slice_closes_once_per_echo(tmp_path):
