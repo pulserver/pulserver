@@ -36,7 +36,7 @@
     <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-binder.css?v=f4aeca0c" />
     <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
     <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
-    <link rel="stylesheet" type="text/css" href="../../../_static/pulserver.css?v=36f0fcfd" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/pulserver.css?v=e08ae8f3" />
   
   <!-- So that users can add custom icons -->
   <script defer src="../../../_static/scripts/fontawesome.js?digest=90905a2f556bf617f1a9"></script>
@@ -61,6 +61,7 @@
         </script>
     <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
     <link rel="canonical" href="https://pulserver.github.io/pulserver/latest/_modules/pulserver/design/_entries.html" />
+    <link rel="icon" href="../../../_static/pulserver-mark.svg"/>
     <link rel="index" title="Index" href="../../../genindex.html" />
     <link rel="search" title="Search" href="../../../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -192,8 +193,8 @@
       
     
     
-    <img src="../../../_static/pulserver-mark.svg" class="logo__image only-light" alt="pulserver documentation - Home"/>
-    <img src="../../../_static/pulserver-mark.svg" class="logo__image only-dark pst-js-only" alt="pulserver documentation - Home"/>
+    <img src="../../../_static/pulserver-mark.svg" class="logo__image only-light" alt="pulserver"/>
+    <img src="../../../_static/pulserver-mark-dark.svg" class="logo__image only-dark pst-js-only" alt="pulserver"/>
   
   
 </a></div>
@@ -242,28 +243,50 @@
 <li class="toctree-l2"><a class="reference internal" href="../../../user-guide/virtual-scanner.html">Scanning a phantom without a scanner</a></li>
 </ul>
 </details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../developer-guide/index.html">Developer guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/prerequisites.html">Development prerequisites</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/installation.html">Editable installation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/workflow.html">Development workflow</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/style.html">Coding style</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/documentation.html">Documentation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/terminology.html">Terminology and conventions</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../../developer-guide/internals/index.html">Internals</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/ir-cache.html">IR cache</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/protocol-wire.html">Protocol text blocks</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/reconstruction-proxy.html">Reconstruction proxy</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/virtual-scanner.html">Virtual scanner</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/bloch-engine.html">Bloch engine</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/pre-commit.html">Pre-commit</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/pull-requests.html">Pull requests</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/releases.html">Releases</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/code-of-conduct.html">Code of conduct</a></li>
+</ul>
+</details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../explanations/index.html">Explanations</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="../../../explanations/architecture.html">Architecture</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../explanations/protocol.html">Protocol resolution</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../explanations/designs.html">Designs and the design store</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../explanations/ir-cache.html">The scanner IR</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/scanner-representation.html">Scanner representation (PulSeg)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/virtual-scanner.html">The virtual scanner</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../explanations/reconstruction.html">Raw-data enrichment and routing</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../explanations/calibration.html">Calibration, noise and coil compression</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../explanations/virtual-scanner.html">The virtual scanner</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../explanations/bloch-simulation.html">Bloch simulation on isochromats</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../examples/index.html">Examples</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2 has-children"><a class="reference internal" href="../../../examples/protocol.html">Protocol resolution</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-protocol/01_protocol_resolution.html">Protocol resolution for a 2D gradient echo</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../../examples/course.html">Course</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/01_protocol_to_image.html">1. From protocol to image</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/02_sequence_plugin.html">2. A scanner sequence and its protocol</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/03_scanner_representation.html">3. Scanner representation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/04_reconstruction_plugin.html">4. A reconstruction plugin</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/05_testing_on_the_virtual_scanner.html">5. Testing on the virtual scanner</a></li>
 </ul>
 </details></li>
-<li class="toctree-l2 has-children"><a class="reference internal" href="../../../examples/scanner-ir.html">Scanner IR</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/02-scanner-ir/01_segmentation.html">Segmentation of a sequence for the scanner</a></li>
-</ul>
-</details></li>
-<li class="toctree-l2 has-children"><a class="reference internal" href="../../../examples/reconstruction.html">Reconstruction</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/03-reconstruction/01_enrichment.html">Raw-data enrichment and reconstruction</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../../examples/tours.html">Tours</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/02-tours/01_protocol_resolution.html">Protocol resolution for a 2D gradient echo</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/02-tours/02_segmentation.html">Segmentation of a sequence for the scanner</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/02-tours/03_fov_offset_enrichment.html">Field-of-view offset and the proxy phase</a></li>
 </ul>
 </details></li>
 </ul>
@@ -278,19 +301,6 @@
 <li class="toctree-l2"><a class="reference internal" href="../../../api/mrd.html">MRD data</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../api/validate.html">Validation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../api/virtual.html">Virtual scanner</a></li>
-</ul>
-</details></li>
-<li class="toctree-l1 has-children"><a class="reference internal" href="../../../developer-guide/index.html">Developer guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/prerequisites.html">Development prerequisites</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/installation.html">Editable installation</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/workflow.html">Development workflow</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/style.html">Coding style</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/documentation.html">Documentation</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/terminology.html">Terminology and conventions</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/pre-commit.html">Pre-commit</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/pull-requests.html">Pull requests</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/releases.html">Releases</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/code-of-conduct.html">Code of conduct</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../misc/index.html">Miscellaneous</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -488,11 +498,11 @@
 <a class="viewcode-back" href="../../../generated/pulserver.design.FloatParam.html#pulserver.design.FloatParam">[docs]</a>
 <span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 <span class="k">class</span><span class="w"> </span><span class="nc">FloatParam</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""A float UI entry bound to an argument of the app.</span>
+<span class="w">    </span><span class="sd">"""A float UI entry bound to an argument of the sequence function.</span>
 
 <span class="sd">    The UI value is the argument divided by ``scale``, in ``unit``; a dropdown</span>
 <span class="sd">    when it has options. ``default`` is the UI value the protocol starts at;</span>
-<span class="sd">    ``None`` starts it at the app's default.</span>
+<span class="sd">    ``None`` starts it at the sequence function's default.</span>
 <span class="sd">    """</span>
 
     <span class="n">argument</span><span class="p">:</span> <span class="nb">str</span>
@@ -510,16 +520,16 @@
 <a class="viewcode-back" href="../../../generated/pulserver.design.TimeParam.html#pulserver.design.TimeParam">[docs]</a>
 <span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 <span class="k">class</span><span class="w"> </span><span class="nc">TimeParam</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""A time UI entry bound to an argument of the app, in seconds.</span>
+<span class="w">    </span><span class="sd">"""A time UI entry bound to an argument of the sequence function, in seconds.</span>
 
 <span class="sd">    Values, ranges and options are integer microseconds, the unit of the</span>
 <span class="sd">    scanner's time parameters, so the value a parameter holds is the value the design</span>
 <span class="sd">    reported. Each key of ``presets`` is a dropdown preset; its value is the</span>
-<span class="sd">    time it requests: seconds, ``None`` for the app's own shortest</span>
+<span class="sd">    time it requests: seconds, ``None`` for the sequence function's own shortest</span>
 <span class="sd">    choice, or a function of the scanner limits. The entry is a dropdown when</span>
 <span class="sd">    it has options or presets. ``default``, microseconds or a key of</span>
 <span class="sd">    ``presets``, is the value the protocol starts at; ``None`` starts it at the</span>
-<span class="sd">    app's default.</span>
+<span class="sd">    sequence function's default.</span>
 <span class="sd">    """</span>
 
     <span class="n">argument</span><span class="p">:</span> <span class="nb">str</span>
@@ -536,10 +546,10 @@
 <a class="viewcode-back" href="../../../generated/pulserver.design.IntParam.html#pulserver.design.IntParam">[docs]</a>
 <span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 <span class="k">class</span><span class="w"> </span><span class="nc">IntParam</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""An integer UI entry bound to an argument of the app; a dropdown when it has options.</span>
+<span class="w">    </span><span class="sd">"""An integer UI entry bound to an argument of the sequence function; a dropdown when it has options.</span>
 
 <span class="sd">    ``default`` is the value the protocol starts at; ``None`` starts it at the</span>
-<span class="sd">    app's default.</span>
+<span class="sd">    sequence function's default.</span>
 <span class="sd">    """</span>
 
     <span class="n">argument</span><span class="p">:</span> <span class="nb">str</span>
@@ -556,10 +566,10 @@
 <a class="viewcode-back" href="../../../generated/pulserver.design.BoolParam.html#pulserver.design.BoolParam">[docs]</a>
 <span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 <span class="k">class</span><span class="w"> </span><span class="nc">BoolParam</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""A checkbox UI entry bound to an argument of the app.</span>
+<span class="w">    </span><span class="sd">"""A checkbox UI entry bound to an argument of the sequence function.</span>
 
 <span class="sd">    ``default`` is the value the protocol starts at; ``None`` starts it at the</span>
-<span class="sd">    app's default.</span>
+<span class="sd">    sequence function's default.</span>
 <span class="sd">    """</span>
 
     <span class="n">argument</span><span class="p">:</span> <span class="nb">str</span>
@@ -571,12 +581,12 @@
 <a class="viewcode-back" href="../../../generated/pulserver.design.ChoiceParam.html#pulserver.design.ChoiceParam">[docs]</a>
 <span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 <span class="k">class</span><span class="w"> </span><span class="nc">ChoiceParam</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""A choice among the members of a ``StrEnum``, bound to an argument of the app.</span>
+<span class="w">    </span><span class="sd">"""A choice among the members of a ``StrEnum``, bound to an argument of the sequence function.</span>
 
 <span class="sd">    The argument receives the chosen member, a ``str`` equal to its option. The</span>
 <span class="sd">    options are the members in definition order, and the wire carries the index</span>
 <span class="sd">    of the chosen one. ``default`` is the member the protocol starts at;</span>
-<span class="sd">    ``None`` starts it at the app's default, which has to be a member</span>
+<span class="sd">    ``None`` starts it at the sequence function's default, which has to be a member</span>
 <span class="sd">    or the value of one.</span>
 <span class="sd">    """</span>
 
@@ -627,7 +637,7 @@
 <span class="sd">    Deprecated: declare the enum and use :class:`ChoiceParam`. The argument</span>
 <span class="sd">    receives the member of the chosen option, a ``str`` equal to it.</span>
 <span class="sd">    ``default`` is the option the protocol starts at; ``None`` starts it at the</span>
-<span class="sd">    app's default.</span>
+<span class="sd">    sequence function's default.</span>
 
 <span class="sd">    Warns</span>
 <span class="sd">    -----</span>
@@ -756,13 +766,13 @@
 <div class="viewcode-block" id="Protocol">
 <a class="viewcode-back" href="../../../generated/pulserver.design.Protocol.html#pulserver.design.Protocol">[docs]</a>
 <span class="k">class</span><span class="w"> </span><span class="nc">Protocol</span><span class="p">(</span><span class="n">Mapping</span><span class="p">[</span><span class="n">ProtocolKey</span><span class="p">,</span> <span class="n">Any</span><span class="p">]):</span>
-<span class="w">    </span><span class="sd">"""The values of a plugin's protocol, in the units of the app's arguments.</span>
+<span class="w">    </span><span class="sd">"""The values of a plugin's protocol, in the units of the sequence function's arguments.</span>
 
 <span class="sd">    An immutable mapping from :data:`~pulserver.protocol.ProtocolKey` to value.</span>
 <span class="sd">    A time is in seconds and a float in the unit of the argument it binds,</span>
 <span class="sd">    metres for a length; an integer is an ``int``, a checkbox a ``bool`` and a</span>
 <span class="sd">    choice a member of its enum. A time entry showing a preset holds what the</span>
-<span class="sd">    preset requests, a number of seconds or ``None`` for the app's own</span>
+<span class="sd">    preset requests, a number of seconds or ``None`` for the sequence function's own</span>
 <span class="sd">    shortest choice, and :meth:`preset` names the preset. The prescription</span>
 <span class="sd">    entries bind no argument and keep the units of the wire: mm for the</span>
 <span class="sd">    offset, unitless for the rotation.</span>
@@ -895,7 +905,7 @@
 
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">arguments</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
-<span class="w">        </span><span class="sd">"""The values by the name of the app argument each binds.</span>
+<span class="w">        </span><span class="sd">"""The values by the name of the sequence function argument each binds.</span>
 
 <span class="sd">        The prescription entries bind no argument and are left out.</span>
 <span class="sd">        """</span>

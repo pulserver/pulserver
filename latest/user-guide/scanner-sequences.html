@@ -37,7 +37,7 @@
     <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-binder.css?v=f4aeca0c" />
     <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-dataframe.css?v=2082cf3c" />
     <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
-    <link rel="stylesheet" type="text/css" href="../_static/pulserver.css?v=36f0fcfd" />
+    <link rel="stylesheet" type="text/css" href="../_static/pulserver.css?v=e08ae8f3" />
   
   <!-- So that users can add custom icons -->
   <script defer src="../_static/scripts/fontawesome.js?digest=90905a2f556bf617f1a9"></script>
@@ -62,6 +62,7 @@
         </script>
     <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
     <link rel="canonical" href="https://pulserver.github.io/pulserver/latest/user-guide/scanner-sequences.html" />
+    <link rel="icon" href="../_static/pulserver-mark.svg"/>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
     <link rel="next" title="Reconstruction plugins" href="reconstruction-plugins.html" />
@@ -197,8 +198,8 @@
       
     
     
-    <img src="../_static/pulserver-mark.svg" class="logo__image only-light" alt="pulserver documentation - Home"/>
-    <img src="../_static/pulserver-mark.svg" class="logo__image only-dark pst-js-only" alt="pulserver documentation - Home"/>
+    <img src="../_static/pulserver-mark.svg" class="logo__image only-light" alt="pulserver"/>
+    <img src="../_static/pulserver-mark-dark.svg" class="logo__image only-dark pst-js-only" alt="pulserver"/>
   
   
 </a></div>
@@ -247,28 +248,50 @@
 <li class="toctree-l2"><a class="reference internal" href="virtual-scanner.html">Scanning a phantom without a scanner</a></li>
 </ul>
 </details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../developer-guide/index.html">Developer guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../developer-guide/prerequisites.html">Development prerequisites</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer-guide/installation.html">Editable installation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer-guide/workflow.html">Development workflow</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer-guide/style.html">Coding style</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer-guide/documentation.html">Documentation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer-guide/terminology.html">Terminology and conventions</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../developer-guide/internals/index.html">Internals</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/ir-cache.html">IR cache</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/protocol-wire.html">Protocol text blocks</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/reconstruction-proxy.html">Reconstruction proxy</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/virtual-scanner.html">Virtual scanner</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/bloch-engine.html">Bloch engine</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer-guide/pre-commit.html">Pre-commit</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer-guide/pull-requests.html">Pull requests</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer-guide/releases.html">Releases</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer-guide/code-of-conduct.html">Code of conduct</a></li>
+</ul>
+</details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../explanations/index.html">Explanations</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="../explanations/architecture.html">Architecture</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../explanations/protocol.html">Protocol resolution</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../explanations/designs.html">Designs and the design store</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../explanations/ir-cache.html">The scanner IR</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../explanations/scanner-representation.html">Scanner representation (PulSeg)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../explanations/virtual-scanner.html">The virtual scanner</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../explanations/reconstruction.html">Raw-data enrichment and routing</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../explanations/calibration.html">Calibration, noise and coil compression</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../explanations/virtual-scanner.html">The virtual scanner</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../explanations/bloch-simulation.html">Bloch simulation on isochromats</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../examples/index.html">Examples</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2 has-children"><a class="reference internal" href="../examples/protocol.html">Protocol resolution</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-protocol/01_protocol_resolution.html">Protocol resolution for a 2D gradient echo</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../examples/course.html">Course</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/01_protocol_to_image.html">1. From protocol to image</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/02_sequence_plugin.html">2. A scanner sequence and its protocol</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/03_scanner_representation.html">3. Scanner representation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/04_reconstruction_plugin.html">4. A reconstruction plugin</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/05_testing_on_the_virtual_scanner.html">5. Testing on the virtual scanner</a></li>
 </ul>
 </details></li>
-<li class="toctree-l2 has-children"><a class="reference internal" href="../examples/scanner-ir.html">Scanner IR</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/02-scanner-ir/01_segmentation.html">Segmentation of a sequence for the scanner</a></li>
-</ul>
-</details></li>
-<li class="toctree-l2 has-children"><a class="reference internal" href="../examples/reconstruction.html">Reconstruction</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/03-reconstruction/01_enrichment.html">Raw-data enrichment and reconstruction</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../examples/tours.html">Tours</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/02-tours/01_protocol_resolution.html">Protocol resolution for a 2D gradient echo</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/02-tours/02_segmentation.html">Segmentation of a sequence for the scanner</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/02-tours/03_fov_offset_enrichment.html">Field-of-view offset and the proxy phase</a></li>
 </ul>
 </details></li>
 </ul>
@@ -283,19 +306,6 @@
 <li class="toctree-l2"><a class="reference internal" href="../api/mrd.html">MRD data</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/validate.html">Validation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/virtual.html">Virtual scanner</a></li>
-</ul>
-</details></li>
-<li class="toctree-l1 has-children"><a class="reference internal" href="../developer-guide/index.html">Developer guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="../developer-guide/prerequisites.html">Development prerequisites</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../developer-guide/installation.html">Editable installation</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../developer-guide/workflow.html">Development workflow</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../developer-guide/style.html">Coding style</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../developer-guide/documentation.html">Documentation</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../developer-guide/terminology.html">Terminology and conventions</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../developer-guide/pre-commit.html">Pre-commit</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../developer-guide/pull-requests.html">Pull requests</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../developer-guide/releases.html">Releases</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../developer-guide/code-of-conduct.html">Code of conduct</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../misc/index.html">Miscellaneous</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -521,7 +531,7 @@
             <nav aria-label="Page">
                 <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#binding-the-protocol">Binding the protocol</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#function-apps">Function apps</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#sequence-functions">Sequence functions</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#shipped-sequences">Shipped sequences</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#resolving-a-protocol">Resolving a protocol</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#evaluating-a-protocol">Evaluating a protocol</a></li>
@@ -541,9 +551,9 @@
   <section class="tex2jax_ignore mathjax_ignore" id="scanner-sequences">
 <h1>Scanner sequences<a class="headerlink" href="#scanner-sequences" title="Link to this heading">#</a></h1>
 <p>A scanner sequence is a plugin file, <code class="docutils literal notranslate"><span class="pre">&lt;name&gt;.py</span></code> in a <code class="docutils literal notranslate"><span class="pre">--plugins</span></code> directory,
-that binds an app to the scanner protocol with one
-<a class="reference internal" href="../generated/pulserver.design.SequencePlugin.html#pulserver.design.SequencePlugin" title="pulserver.design.SequencePlugin"><code class="xref py py-class docutils literal notranslate"><span class="pre">SequencePlugin</span></code></a> subclass. The app is a function that
-returns the designed sequences (<a class="reference internal" href="#function-apps"><span class="std std-ref">Function apps</span></a>), as every sequence of
+that binds a sequence function to the scanner protocol with one
+<a class="reference internal" href="../generated/pulserver.design.SequencePlugin.html#pulserver.design.SequencePlugin" title="pulserver.design.SequencePlugin"><code class="xref py py-class docutils literal notranslate"><span class="pre">SequencePlugin</span></code></a> subclass. The sequence function is a function that
+returns the designed sequences (<a class="reference internal" href="#sequence-functions"><span class="std std-ref">Sequence functions</span></a>), as every sequence of
 pypulseqpp is:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># sequences/gre.py</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">pypulseqpp.sequences.sequence.gre2D_sequence</span><span class="w"> </span><span class="kn">import</span> <span class="n">gre2d</span>
@@ -554,7 +564,7 @@ pypulseqpp is:</p>
 </pre></div>
 </div>
 <p>The interpreter names it <code class="docutils literal notranslate"><span class="pre">--plugin</span> <span class="pre">gre</span></code>. Without <code class="docutils literal notranslate"><span class="pre">protocol</span></code>, the protocol is the
-app’s defaults. A PyPulseq script becomes a function app by taking the scanner
+sequence function’s defaults. A PyPulseq script becomes a sequence function by taking the scanner
 limits and its parameters as arguments and returning its sequence
 (<a class="reference external" href="https://pulserver.github.io/pypulseqpp/latest/user-guide/from-pypulseq.html">from a PyPulseq script</a>).</p>
 <section id="binding-the-protocol">
@@ -564,7 +574,7 @@ limits and its parameters as arguments and returning its sequence
 <a class="reference internal" href="../generated/pulserver.protocol.UIParam.html#pulserver.protocol.UIParam" title="pulserver.protocol.UIParam"><code class="xref py py-class docutils literal notranslate"><span class="pre">UIParam</span></code></a> collects those of the UI controls. A plain
 string naming a parameter is stored as its member, and a name outside the table
 is refused when the class is defined. An entry names the keyword argument of the
-app it sets. The class does not name a reconstruction: the console’s scan
+sequence function it sets. The class does not name a reconstruction: the console’s scan
 or the reconstruction client does (<a class="reference internal" href="reconstruction-plugins.html"><span class="doc">Reconstruction plugins</span></a>). A <code class="docutils literal notranslate"><span class="pre">recon</span></code>
 attribute has no effect, and defining one raises a <code class="docutils literal notranslate"><span class="pre">DeprecationWarning</span></code>.
 <code class="docutils literal notranslate"><span class="pre">ui</span></code> and <code class="docutils literal notranslate"><span class="pre">ScannerSequence</span></code> are deprecated names of <code class="docutils literal notranslate"><span class="pre">protocol</span></code> and
@@ -600,7 +610,7 @@ attribute has no effect, and defining one raises a <code class="docutils literal
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="../generated/pulserver.design.FloatParam.html#pulserver.design.FloatParam" title="pulserver.design.FloatParam"><code class="xref py py-class docutils literal notranslate"><span class="pre">FloatParam</span></code></a></p></td>
 <td><p>the argument divided by <code class="docutils literal notranslate"><span class="pre">scale</span></code>, in <code class="docutils literal notranslate"><span class="pre">unit</span></code></p></td>
-<td><p>as the app takes it</p></td>
+<td><p>as the sequence function takes it</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.design.IntParam.html#pulserver.design.IntParam" title="pulserver.design.IntParam"><code class="xref py py-class docutils literal notranslate"><span class="pre">IntParam</span></code></a></p></td>
 <td><p>integer</p></td>
@@ -635,19 +645,19 @@ attribute has no effect, and defining one raises a <code class="docutils literal
 equal to the option. <a class="reference internal" href="../generated/pulserver.design.StringListParam.html#pulserver.design.StringListParam" title="pulserver.design.StringListParam"><code class="xref py py-func docutils literal notranslate"><span class="pre">StringListParam()</span></code></a>, which builds
 the enum from option strings, is deprecated.</p>
 <p>A preset is a negative value the interpreter sends in place of a time;
-<code class="docutils literal notranslate"><span class="pre">{TEPreset.MINIMUM:</span> <span class="pre">None}</span></code> passes <code class="docutils literal notranslate"><span class="pre">None</span></code>, for which the app designs its
-shortest echo time. An entry’s <code class="docutils literal notranslate"><span class="pre">default</span></code> replaces the app’s default as the
+<code class="docutils literal notranslate"><span class="pre">{TEPreset.MINIMUM:</span> <span class="pre">None}</span></code> passes <code class="docutils literal notranslate"><span class="pre">None</span></code>, for which the sequence function designs its
+shortest echo time. An entry’s <code class="docutils literal notranslate"><span class="pre">default</span></code> replaces the sequence function’s default as the
 initial value, in UI units: <code class="docutils literal notranslate"><span class="pre">default=TEPreset.MINIMUM</span></code> offers a protocol a
-scanner with weaker gradients than the app’s default assumes can play.</p>
+scanner with weaker gradients than the sequence function’s default assumes can play.</p>
 </section>
-<section id="function-apps">
-<span id="id1"></span><h2>Function apps<a class="headerlink" href="#function-apps" title="Link to this heading">#</a></h2>
-<p>A function app takes the scanner limits, a <a class="reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.Opts.html#pypulseqpp.Opts" title="(in pypulseqpp latest)"><code class="xref py py-class docutils literal notranslate"><span class="pre">pypulseqpp.Opts</span></code></a>, and one
+<section id="sequence-functions">
+<span id="id1"></span><h2>Sequence functions<a class="headerlink" href="#sequence-functions" title="Link to this heading">#</a></h2>
+<p>A sequence function takes the scanner limits, a <a class="reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.Opts.html#pypulseqpp.Opts" title="(in pypulseqpp latest)"><code class="xref py py-class docutils literal notranslate"><span class="pre">pypulseqpp.Opts</span></code></a>, and one
 keyword argument for each entry of <code class="docutils literal notranslate"><span class="pre">protocol</span></code>, and returns the designed
 <a class="reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.Sequence.html#pypulseqpp.Sequence" title="(in pypulseqpp latest)"><code class="xref py py-class docutils literal notranslate"><span class="pre">pypulseqpp.Sequence</span></code></a>. A list of sequences is a chain, the prescans first
 and the main sequence last; each file names the next as its <code class="docutils literal notranslate"><span class="pre">NextSequence</span></code>
 definition. The initial value of an entry is the default of its argument in the
-signature, so a <a class="reference external" href="https://docs.python.org/3/library/functools.html#functools.partial" title="(in Python v3.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">functools.partial()</span></code></a> is an app too. The default evaluation
+signature, so a <a class="reference external" href="https://docs.python.org/3/library/functools.html#functools.partial" title="(in Python v3.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">functools.partial()</span></code></a> is a sequence function too. The default evaluation
 does not call the function; <a class="reference internal" href="../generated/pulserver.design.SequencePlugin.generate.html#pulserver.design.SequencePlugin.generate" title="pulserver.design.SequencePlugin.generate"><code class="xref py py-meth docutils literal notranslate"><span class="pre">generate()</span></code></a>
 calls it when the design is generated (<a class="reference internal" href="#evaluating-a-protocol"><span class="std std-ref">Evaluating a protocol</span></a>).</p>
 <div class="highlight-pycon notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
@@ -770,10 +780,10 @@ schema, as the <code class="docutils literal notranslate"><span class="pre">list
 <p>The last twelve entries are the prescription, which the interpreter fills from
 the scanner’s: the field-of-view offset, which the host applies when it builds
 the IR, and the rotation from the logical to the physical axes, in whose frame
-the host checks the design (<a class="reference internal" href="../explanations/ir-cache.html"><span class="doc">The scanner IR</span></a>).</p>
+the host checks the design (<a class="reference internal" href="../explanations/designs.html"><span class="doc">Designs and the design store</span></a>).</p>
 <p><a class="reference internal" href="../generated/pulserver.design.SequencePlugin.validate.html#pulserver.design.SequencePlugin.validate" title="pulserver.design.SequencePlugin.validate"><code class="xref py py-meth docutils literal notranslate"><span class="pre">validate()</span></code></a> evaluates a request under the
 scanner limits and returns the protocol the design plays. Entries the request
-omits keep their initial values. The default evaluation of a function app
+omits keep their initial values. The default evaluation of a sequence function
 accepts the protocol unchanged, so the reply repeats the request, a preset
 included, and states no scan time:</p>
 <div class="highlight-pycon notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">pypulseqpp</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pp</span>
@@ -832,7 +842,7 @@ stores it (<a class="reference internal" href="../explanations/designs.html"><sp
 <p>A plugin overrides <a class="reference internal" href="../generated/pulserver.design.SequencePlugin.evaluate.html#pulserver.design.SequencePlugin.evaluate" title="pulserver.design.SequencePlugin.evaluate"><code class="xref py py-meth docutils literal notranslate"><span class="pre">evaluate()</span></code></a> to check a
 protocol and to state what the console shows with it. The hook takes the scanner
 limits and the requested <a class="reference internal" href="../generated/pulserver.design.Protocol.html#pulserver.design.Protocol" title="pulserver.design.Protocol"><code class="xref py py-class docutils literal notranslate"><span class="pre">Protocol</span></code></a>, in the units of the
-app’s arguments, and returns an <a class="reference internal" href="../generated/pulserver.design.Evaluation.html#pulserver.design.Evaluation" title="pulserver.design.Evaluation"><code class="xref py py-class docutils literal notranslate"><span class="pre">Evaluation</span></code></a>: the
+sequence function’s arguments, and returns an <a class="reference internal" href="../generated/pulserver.design.Evaluation.html#pulserver.design.Evaluation" title="pulserver.design.Evaluation"><code class="xref py py-class docutils literal notranslate"><span class="pre">Evaluation</span></code></a>: the
 protocol holding the values the design achieves, the scan time in seconds, a
 note shown with the valid protocol and, optionally, the RF layout
 (<a class="reference internal" href="#stating-the-rf-layout"><span class="std std-ref">Stating the RF layout</span></a>). Returning <code class="docutils literal notranslate"><span class="pre">None</span></code> accepts the protocol
@@ -853,8 +863,8 @@ unchanged. Raising an exception makes the protocol invalid:</p>
 
 </pre></div>
 </div>
-<p>The default for a function app accepts the protocol unchanged, states no scan
-time and does not call the app. A protocol the function cannot realize is then
+<p>The default for a sequence function accepts the protocol unchanged, states no scan
+time and does not call the sequence function. A protocol the function cannot realize is then
 found when the sequence is generated, as an error of that call, and not reported
 as invalid while the operator edits it. An <code class="docutils literal notranslate"><span class="pre">evaluate</span></code> that builds or checks the
 design rejects the protocol when it is evaluated.</p>
@@ -866,7 +876,7 @@ type, as in <code class="docutils literal notranslate"><span class="pre">TypeErr
 error with its traceback. A request that names an entry the protocol does not
 declare, or an option a choice does not offer, is invalid in the same way.</p>
 <p><a class="reference internal" href="../generated/pulserver.design.SequencePlugin.generate.html#pulserver.design.SequencePlugin.generate" title="pulserver.design.SequencePlugin.generate"><code class="xref py py-meth docutils literal notranslate"><span class="pre">generate()</span></code></a> is the hook that builds the
-sequence of a requested protocol. The default calls the app with the arguments
+sequence of a requested protocol. The default calls the sequence function with the arguments
 of the protocol. A plugin overrides <code class="docutils literal notranslate"><span class="pre">generate</span></code> to return a sequence, or a list
 of them, built another way. <code class="docutils literal notranslate"><span class="pre">validate</span></code> and <code class="docutils literal notranslate"><span class="pre">design</span></code> are not overridden: they
 are the boundary between a request and the code of a plugin, and <code class="docutils literal notranslate"><span class="pre">design</span></code>
@@ -968,7 +978,7 @@ layout are described in <a class="reference internal" href="../explanations/prot
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#binding-the-protocol">Binding the protocol</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#function-apps">Function apps</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#sequence-functions">Sequence functions</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#shipped-sequences">Shipped sequences</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#resolving-a-protocol">Resolving a protocol</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#evaluating-a-protocol">Evaluating a protocol</a></li>

@@ -37,7 +37,7 @@
     <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-binder.css?v=f4aeca0c" />
     <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-dataframe.css?v=2082cf3c" />
     <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
-    <link rel="stylesheet" type="text/css" href="../_static/pulserver.css?v=36f0fcfd" />
+    <link rel="stylesheet" type="text/css" href="../_static/pulserver.css?v=e08ae8f3" />
   
   <!-- So that users can add custom icons -->
   <script defer src="../_static/scripts/fontawesome.js?digest=90905a2f556bf617f1a9"></script>
@@ -52,6 +52,8 @@
     <script src="../_static/copybutton.js?v=f281be69"></script>
     <script src="../_static/sg-tags.js?v=d80f6fa4"></script>
     <script src="../_static/scripts/sphinx-book-theme.js?v=fab101a9"></script>
+    <script>window.MathJax = {"options": {"processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
+    <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-mml-chtml.js"></script>
     <script>DOCUMENTATION_OPTIONS.pagename = 'explanations/reconstruction';</script>
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
@@ -62,10 +64,11 @@
         </script>
     <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
     <link rel="canonical" href="https://pulserver.github.io/pulserver/latest/explanations/reconstruction.html" />
+    <link rel="icon" href="../_static/pulserver-mark.svg"/>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
     <link rel="next" title="Calibration, noise and coil compression" href="calibration.html" />
-    <link rel="prev" title="The scanner IR" href="ir-cache.html" />
+    <link rel="prev" title="The virtual scanner" href="virtual-scanner.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   <meta name="docsearch:version" content="latest" />
@@ -197,8 +200,8 @@
       
     
     
-    <img src="../_static/pulserver-mark.svg" class="logo__image only-light" alt="pulserver documentation - Home"/>
-    <img src="../_static/pulserver-mark.svg" class="logo__image only-dark pst-js-only" alt="pulserver documentation - Home"/>
+    <img src="../_static/pulserver-mark.svg" class="logo__image only-light" alt="pulserver"/>
+    <img src="../_static/pulserver-mark-dark.svg" class="logo__image only-dark pst-js-only" alt="pulserver"/>
   
   
 </a></div>
@@ -247,28 +250,50 @@
 <li class="toctree-l2"><a class="reference internal" href="../user-guide/virtual-scanner.html">Scanning a phantom without a scanner</a></li>
 </ul>
 </details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../developer-guide/index.html">Developer guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../developer-guide/prerequisites.html">Development prerequisites</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer-guide/installation.html">Editable installation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer-guide/workflow.html">Development workflow</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer-guide/style.html">Coding style</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer-guide/documentation.html">Documentation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer-guide/terminology.html">Terminology and conventions</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../developer-guide/internals/index.html">Internals</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/ir-cache.html">IR cache</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/protocol-wire.html">Protocol text blocks</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/reconstruction-proxy.html">Reconstruction proxy</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/virtual-scanner.html">Virtual scanner</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/bloch-engine.html">Bloch engine</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer-guide/pre-commit.html">Pre-commit</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer-guide/pull-requests.html">Pull requests</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer-guide/releases.html">Releases</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer-guide/code-of-conduct.html">Code of conduct</a></li>
+</ul>
+</details></li>
 <li class="toctree-l1 current active has-children"><a class="reference internal" href="index.html">Explanations</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
 <li class="toctree-l2"><a class="reference internal" href="architecture.html">Architecture</a></li>
 <li class="toctree-l2"><a class="reference internal" href="protocol.html">Protocol resolution</a></li>
 <li class="toctree-l2"><a class="reference internal" href="designs.html">Designs and the design store</a></li>
-<li class="toctree-l2"><a class="reference internal" href="ir-cache.html">The scanner IR</a></li>
+<li class="toctree-l2"><a class="reference internal" href="scanner-representation.html">Scanner representation (PulSeg)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="virtual-scanner.html">The virtual scanner</a></li>
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">Raw-data enrichment and routing</a></li>
 <li class="toctree-l2"><a class="reference internal" href="calibration.html">Calibration, noise and coil compression</a></li>
-<li class="toctree-l2"><a class="reference internal" href="virtual-scanner.html">The virtual scanner</a></li>
-<li class="toctree-l2"><a class="reference internal" href="bloch-simulation.html">Bloch simulation on isochromats</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../examples/index.html">Examples</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2 has-children"><a class="reference internal" href="../examples/protocol.html">Protocol resolution</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-protocol/01_protocol_resolution.html">Protocol resolution for a 2D gradient echo</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../examples/course.html">Course</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/01_protocol_to_image.html">1. From protocol to image</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/02_sequence_plugin.html">2. A scanner sequence and its protocol</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/03_scanner_representation.html">3. Scanner representation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/04_reconstruction_plugin.html">4. A reconstruction plugin</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/05_testing_on_the_virtual_scanner.html">5. Testing on the virtual scanner</a></li>
 </ul>
 </details></li>
-<li class="toctree-l2 has-children"><a class="reference internal" href="../examples/scanner-ir.html">Scanner IR</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/02-scanner-ir/01_segmentation.html">Segmentation of a sequence for the scanner</a></li>
-</ul>
-</details></li>
-<li class="toctree-l2 has-children"><a class="reference internal" href="../examples/reconstruction.html">Reconstruction</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/03-reconstruction/01_enrichment.html">Raw-data enrichment and reconstruction</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../examples/tours.html">Tours</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/02-tours/01_protocol_resolution.html">Protocol resolution for a 2D gradient echo</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/02-tours/02_segmentation.html">Segmentation of a sequence for the scanner</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/02-tours/03_fov_offset_enrichment.html">Field-of-view offset and the proxy phase</a></li>
 </ul>
 </details></li>
 </ul>
@@ -283,19 +308,6 @@
 <li class="toctree-l2"><a class="reference internal" href="../api/mrd.html">MRD data</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/validate.html">Validation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/virtual.html">Virtual scanner</a></li>
-</ul>
-</details></li>
-<li class="toctree-l1 has-children"><a class="reference internal" href="../developer-guide/index.html">Developer guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="../developer-guide/prerequisites.html">Development prerequisites</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../developer-guide/installation.html">Editable installation</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../developer-guide/workflow.html">Development workflow</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../developer-guide/style.html">Coding style</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../developer-guide/documentation.html">Documentation</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../developer-guide/terminology.html">Terminology and conventions</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../developer-guide/pre-commit.html">Pre-commit</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../developer-guide/pull-requests.html">Pull requests</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../developer-guide/releases.html">Releases</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../developer-guide/code-of-conduct.html">Code of conduct</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../misc/index.html">Miscellaneous</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -523,14 +535,11 @@
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#enrichment">Enrichment</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#trajectory">Trajectory</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#reconstruction-units">Reconstruction units</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#placement">Placement</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#images">Images</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#header">Header</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#values">Values</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#dicom-pixels">DICOM pixels</a></li>
 </ul>
 </li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#workers">Workers</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#reconstruction-server">Reconstruction server</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#see-also">See also</a></li>
 </ul>
@@ -546,6 +555,20 @@
                   
   <section class="tex2jax_ignore mathjax_ignore" id="raw-data-enrichment-and-routing">
 <h1>Raw-data enrichment and routing<a class="headerlink" href="#raw-data-enrichment-and-routing" title="Link to this heading">#</a></h1>
+<div class="tldr admonition">
+<p class="admonition-title">TL;DR</p>
+<ul class="simple">
+<li><p>The proxy replaces the encoding counters, flags, encoding spaces and
+trajectory a client records with those the sequence states, before any
+reconstruction code reads the stream.</p></li>
+<li><p>The field-of-view offset is played as frequency and phase offsets; where the
+readout gradient varies across the sampling window, the proxy applies the
+remaining phase.</p></li>
+<li><p>A reconstruction unit is the readouts of one branch and encoding space that
+share their image-selecting counters; it closes on the flag its branch
+declares, and its images carry the values the plugin returned.</p></li>
+</ul>
+</div>
 <p>The scanner’s reconstruction client streams each series as MRD: a configuration
 text, the XML header and the acquisitions. The encoding counters, flags,
 encoding spaces and trajectory a vendor client records describe the
@@ -554,10 +577,22 @@ non-Cartesian or segmented acquisition, the navigator readouts and the k-space
 location of each sample are defined by the sequence. The reconstruction proxy
 therefore replaces them with the values the sequence states, before any
 reconstruction code reads the stream.</p>
-<p>The readouts arrive demodulated to the prescribed field-of-view centre, which
-is applied to the sequence when its IR is built (<a class="reference internal" href="ir-cache.html"><span class="doc">The scanner IR</span></a>). The proxy
-leaves the samples as received, and the trajectory it attaches is that of the
-sequence as designed, in the logical frame.</p>
+<p>The prescribed field-of-view offset is applied to the sequence when its IR is
+built (<a class="reference internal" href="scanner-representation.html"><span class="doc">Scanner representation (PulSeg)</span></a>), as the frequency and phase offsets the
+scanner plays at the middle of each sampling window. Under a readout gradient
+that holds one value across the window, these are the whole phase of the
+offset. Under one that does not, as on a ramp-sampled or non-Cartesian
+readout, the phase is not linear in time, and the proxy applies the remainder,</p>
+<div class="math notranslate nohighlight">
+\[
+\phi(t) = 2\pi\, \mathbf{c} \cdot \bigl(\mathbf{k}(t) - \mathbf{k}(t_c)
+- \dot{\mathbf{k}}(t_c)\,(t - t_c)\bigr),
+\]</div>
+<p>for the offset <span class="math notranslate nohighlight">\(\mathbf{c}\)</span> along the logical axes and the window centre
+<span class="math notranslate nohighlight">\(t_c\)</span>, together with any phase modulation the sequence’s ADC events store,
+which the IR cache does not carry. The samples are otherwise left as received,
+and the trajectory the proxy attaches is that of the sequence as designed, in
+the logical frame.</p>
 <section id="enrichment">
 <h2>Enrichment<a class="headerlink" href="#enrichment" title="Link to this heading">#</a></h2>
 <p>The header names the design the series was acquired with
@@ -583,14 +618,16 @@ defines (<code class="docutils literal notranslate"><span class="pre">kSpaceCent
 none, and for every other counter, the centre is the minimum plus half the
 number of positions between the minimum and the maximum, rounded down.</p></li>
 <li><p>The header’s sequence parameters are the TR, TE, TI and flip angles the
-sequence defines. The TR, TE and flip angles it does not define are
-measured by pypulseqpp’s <code class="docutils literal notranslate"><span class="pre">Sequence.test_report_dict</span></code>: TE from the excitation
-before the closest approach to the k-space centre, TR between the
-excitations around it, and every distinct flip angle the sequence plays.</p></li>
+sequence defines. The TR and TE it does not define are measured by
+pypulseqpp’s <code class="docutils literal notranslate"><span class="pre">Sequence.test_report_dict</span></code>: TE from the excitation before the
+closest approach to the k-space centre, and TR between the excitations
+around it. The flip angles it does not define are the distinct values of
+<code class="docutils literal notranslate"><span class="pre">Sequence.rf_flip_angles</span></code>.</p></li>
 <li><p>Each acquisition is matched to a table row by its position in the stream and
 receives the encoding counters, the MRD flags, the dwell time and the
 encoding space reference, and the k-space trajectory when the k-space
-location changes across the readout. When the client numbers its
+location changes across the readout, except on a Cartesian readout sampled
+on the flat top of its readout gradient alone. When the client numbers its
 acquisitions, each <code class="docutils literal notranslate"><span class="pre">scan_counter</span></code> must follow the previous one by one; a gap
 or a repeat stops the series before it is reconstructed, since every later
 row would be shifted.</p></li>
@@ -619,6 +656,10 @@ their <code class="docutils literal notranslate"><span class="pre">kspace_encode
 trajectory. A reconstruction takes the trajectory in grid units, k times the
 reconstructed field of view, through
 <a class="reference internal" href="../generated/pulserver.recon.ReconBuffer.grid_trajectory.html#pulserver.recon.ReconBuffer.grid_trajectory" title="pulserver.recon.ReconBuffer.grid_trajectory"><code class="xref py py-meth docutils literal notranslate"><span class="pre">grid_trajectory()</span></code></a>.</p>
+<p>A Cartesian readout carries a trajectory only when it samples the ramps of its
+readout gradient. Sampled on the flat top alone, its samples are equally
+spaced in k and placed by the encoding counters and <code class="docutils literal notranslate"><span class="pre">center_sample</span></code>, and an
+encoding space whose readouts are all of that kind carries no trajectory.</p>
 <p>Tabulating a design integrates every range once, for the echo sample of each
 readout and the k-space axes its trajectory spans, which decide the header’s
 trajectory type. An acquisition’s trajectory is integrated again when it is
@@ -641,7 +682,7 @@ k-space instead, such as the echoes of a multi-echo acquisition, and these do
 not separate units either.</p>
 <p>A unit allocates its imaging k-space when its first imaging readout arrives,
 from the encoding space the header gives it, and places each readout as
-described under <a class="reference internal" href="#reconstruction-placement"><span class="std std-ref">Placement</span></a>. The flags of a readout select
+described under <a class="reference internal" href="../developer-guide/internals/reconstruction-proxy.html#reconstruction-placement"><span class="std std-ref">Placement</span></a>. The flags of a readout select
 its buffer as Gadgetron’s acquisition bucket divides readouts: parallel-imaging
 calibration readouts are placed in <code class="docutils literal notranslate"><span class="pre">ref</span></code>, readouts flagged as calibration and
 imaging in <code class="docutils literal notranslate"><span class="pre">ref</span></code> and <code class="docutils literal notranslate"><span class="pre">data</span></code>, phase-correction readouts in neither, and any
@@ -659,46 +700,6 @@ the runtime holds it afterwards, so the memory a series holds is that of the
 units open at once, not that of the series. A unit still open at the last
 readout of the measurement or at the end of the stream is reconstructed then,
 under its own branch, in the order the units opened.</p>
-</section>
-<section id="placement">
-<span id="reconstruction-placement"></span><h2>Placement<a class="headerlink" href="#placement" title="Link to this heading">#</a></h2>
-<p>The readouts of a Cartesian encoding space are placed as Gadgetron’s
-acquisition bucket places them.</p>
-<p>Along the readout axis, a readout is placed by its echo. The samples from
-<code class="docutils literal notranslate"><span class="pre">discard_pre</span></code> to <code class="docutils literal notranslate"><span class="pre">number_of_samples</span> <span class="pre">-</span> <span class="pre">discard_post</span></code> are copied so that the
-sample at <code class="docutils literal notranslate"><span class="pre">center_sample</span></code> lies at sample <code class="docutils literal notranslate"><span class="pre">N</span> <span class="pre">//</span> <span class="pre">2</span></code> of the buffer, <code class="docutils literal notranslate"><span class="pre">N</span></code> being the
-number of samples of the buffer along the readout. <code class="docutils literal notranslate"><span class="pre">N</span></code> is the number of samples
-of the unit’s first readout when that is a full echo centred in its samples
-(<code class="docutils literal notranslate"><span class="pre">center_sample</span> <span class="pre">==</span> <span class="pre">number_of_samples</span> <span class="pre">//</span> <span class="pre">2</span></code>), and otherwise the matrix size of
-the encoded space along the readout. Readouts that sample different parts of
-the echo, such as a partial echo and a full one, are aligned by it, and the
-samples a gadget added to complete an echo, which the gadget declares as
-discarded, are not placed. <code class="docutils literal notranslate"><span class="pre">ReconBuffer.readout</span></code> is the first and last sample
-placed. A readout whose placed samples fall outside the buffer is an error.</p>
-<p>Along the phase-encoding and partition axes, a counter is placed at
-<code class="docutils literal notranslate"><span class="pre">counter</span> <span class="pre">-</span> <span class="pre">center</span> <span class="pre">+</span> <span class="pre">extent</span> <span class="pre">//</span> <span class="pre">2</span></code>, with <code class="docutils literal notranslate"><span class="pre">extent</span></code> the matrix size of the encoded
-space along the axis and <code class="docutils literal notranslate"><span class="pre">center</span></code> the centre of the counter’s encoding limit.
-The k-space centre lies at <code class="docutils literal notranslate"><span class="pre">extent</span> <span class="pre">//</span> <span class="pre">2</span></code> whichever counter the sequence gives
-it, so undersampled, partial-Fourier and offset-numbered acquisitions are
-placed on one grid. The partition axis is shifted only when the encoded space
-has more than one partition. A counter that falls outside the grid once placed
-is an error. The calibration buffer is placed by the same rule and holds the
-lines its readouts cover; its <code class="docutils literal notranslate"><span class="pre">origin</span></code> is the position of its first line on the
-grid of the imaging buffer.</p>
-<p>A space with a trajectory has no echo or centre line to place by. Its readouts
-are aligned to the end of the readout axis, its counters are the positions of
-its views, and the k-space location of each sample is the trajectory the buffer
-holds.</p>
-<p>Two gadgets bring a Cartesian readout to the form the buffer places.
-<a class="reference internal" href="../generated/pulserver.recon.AsymmetricEcho.html#pulserver.recon.AsymmetricEcho" title="pulserver.recon.AsymmetricEcho"><code class="xref py py-class docutils literal notranslate"><span class="pre">AsymmetricEcho</span></code></a> zero-fills a partial echo to the full
-echo that is symmetric about its <code class="docutils literal notranslate"><span class="pre">center_sample</span></code> and declares the zeros as
-discarded. <a class="reference internal" href="../generated/pulserver.recon.RemoveReadoutOversampling.html#pulserver.recon.RemoveReadoutOversampling" title="pulserver.recon.RemoveReadoutOversampling"><code class="xref py py-class docutils literal notranslate"><span class="pre">RemoveReadoutOversampling</span></code></a> crops a full
-echo to the readout field of view of the reconstruction, the ratio of the
-encoded to the reconstructed field of view being the oversampling. A gadget
-states the echo of the readout it returns by assigning <code class="docutils literal notranslate"><span class="pre">center_sample</span></code>,
-<code class="docutils literal notranslate"><span class="pre">discard_pre</span></code> and <code class="docutils literal notranslate"><span class="pre">discard_post</span></code> of the acquisition it is given. That is a copy
-of the acquisition: neither the stream’s acquisition nor
-<code class="docutils literal notranslate"><span class="pre">ReconData.acquisitions</span></code> changes.</p>
 </section>
 <section id="images">
 <h2>Images<a class="headerlink" href="#images" title="Link to this heading">#</a></h2>
@@ -718,7 +719,7 @@ of the unit’s <em>reference acquisition</em>, the imaging acquisition placed n
 k-space centre, as Gadgetron selects it for an image header. The centre lies at
 <code class="docutils literal notranslate"><span class="pre">extent</span> <span class="pre">//</span> <span class="pre">2</span></code> along the phase-encoding axis and, where the encoded space has more
 than one partition, the partition axis, as described under
-<a class="reference internal" href="#reconstruction-placement"><span class="std std-ref">Placement</span></a>; nearness is the Euclidean distance from it in
+<a class="reference internal" href="../developer-guide/internals/reconstruction-proxy.html#reconstruction-placement"><span class="std std-ref">Placement</span></a>; nearness is the Euclidean distance from it in
 grid positions. Of acquisitions at the same distance, the first placed is the
 reference. The acquisition time stamp of the image is the earliest of the unit’s
 imaging acquisitions.</p>
@@ -738,98 +739,6 @@ of the reconstruction. The units are the reconstruction’s own.</p>
 smallest and largest finite value of the result, of its magnitude where it is
 complex, in the meta attributes <code class="docutils literal notranslate"><span class="pre">ArrayMinimum</span></code> and <code class="docutils literal notranslate"><span class="pre">ArrayMaximum</span></code>.</p>
 </section>
-<section id="dicom-pixels">
-<h3>DICOM pixels<a class="headerlink" href="#dicom-pixels" title="Link to this heading">#</a></h3>
-<p>A DICOM dataset stores integer pixels, and the integers are made when a result
-with <code class="docutils literal notranslate"><span class="pre">dicom=True</span></code> is converted, from the image the plugin returned. The
-dataset’s rescale maps them to the values of the image,
-<code class="docutils literal notranslate"><span class="pre">value</span> <span class="pre">=</span> <span class="pre">stored</span> <span class="pre">×</span> <span class="pre">RescaleSlope</span> <span class="pre">+</span> <span class="pre">RescaleIntercept</span></code>, with one mapping for each
-DICOM series, a series being the images that share <code class="docutils literal notranslate"><span class="pre">image_series_index</span></code>.</p>
-<ul class="simple">
-<li><p>An integer image is stored as it is. Its dataset carries a rescale only when
-the attributes of the result state one.</p></li>
-<li><p>The first floating-point image of a series fixes the mapping of the series.
-The intercept is 0, so that zero is stored as zero, and the slope stores the
-peak magnitude of the image at half the stored range, which leaves headroom
-for later images of the series up to twice as large. The stored type is
-16-bit, signed when that image has a negative value and unsigned when it has
-none. An image that states <code class="docutils literal notranslate"><span class="pre">ArrayMinimum</span></code> and <code class="docutils literal notranslate"><span class="pre">ArrayMaximum</span></code> is mapped as the
-array of images it belongs to, so the mapping of a series that begins with a
-volume does not depend on which partition arrives first. A complex image is
-stored as its magnitude. An image with no nonzero finite value fixes no
-mapping.</p></li>
-<li><p>Every later image of the series is stored under the mapping of the series, so
-the ratios between the values of its images are the ratios between their
-stored integers.</p></li>
-<li><p>A mapping stated in the attributes of a result, <code class="docutils literal notranslate"><span class="pre">RescaleSlope</span></code> or
-<code class="docutils literal notranslate"><span class="pre">RescaleIntercept</span></code>, is the mapping of that image:
-<code class="docutils literal notranslate"><span class="pre">stored</span> <span class="pre">=</span> <span class="pre">round((value</span> <span class="pre">-</span> <span class="pre">intercept)</span> <span class="pre">/</span> <span class="pre">slope)</span></code>, a slope left out being 1 and an
-intercept left out 0. It is also the mapping of the series when the image is
-the first floating-point image of the series, and the images that follow it
-and state none are stored under it. The slope is nonzero and both are finite.</p></li>
-<li><p>A value outside the range of the stored type is clipped to the nearest end of
-the range, never wrapped, and NaN is stored as 0. The clipped pixels are
-counted for each series, and the first clipping of a series is logged with its
-count. An image whose peak exceeds twice the peak its series was mapped from
-clips under the mapping of the series, unless the plugin states a mapping.</p></li>
-</ul>
-<p><code class="docutils literal notranslate"><span class="pre">RescaleType</span></code> is <code class="docutils literal notranslate"><span class="pre">US</span></code>, unspecified: the units are those of the reconstruction.</p>
-</section>
-</section>
-<section id="workers">
-<h2>Workers<a class="headerlink" href="#workers" title="Link to this heading">#</a></h2>
-<p>Each series is reconstructed in its own worker process, with the reconstruction
-plugin the client’s configuration names. The design names none, so the choice is
-independent of the scanner sequence the series was played from, and one design
-can be reconstructed by different plugins. A worker reconstructs one series and
-exits, which releases the host and GPU memory the reconstruction allocated.
-Importing a reconstruction engine takes seconds, so the proxy keeps spare
-worker processes that have already imported it.</p>
-<p>The series of one exam share a directory on the reconstruction computer. What
-a series stores in its exam cache is written there, and a later series of the
-exam reads it back, such as a coil calibration it need not compute again. The
-exam is the one the header names, and the directory is the host’s rather than
-one proxy’s: a reconstruction computer runs one proxy per acquisition, so the
-series of an exam are reconstructed by different processes. It is deleted once
-no series of that exam is being reconstructed anywhere on the host.</p>
-<p>Three maps have names the series agree on, and a hook reaches them as
-attributes of its context: <code class="docutils literal notranslate"><span class="pre">b0_map</span></code> is off-resonance in Hz, <code class="docutils literal notranslate"><span class="pre">b1_map</span></code> the
-transmit field as a fraction of what was asked for, and <code class="docutils literal notranslate"><span class="pre">coil_sensitivities</span></code>
-the receive sensitivity of each coil, a
-<a class="reference internal" href="../generated/pulserver.recon.CoilSensitivities.html#pulserver.recon.CoilSensitivities" title="pulserver.recon.CoilSensitivities"><code class="xref py py-class docutils literal notranslate"><span class="pre">CoilSensitivities</span></code></a>. A calibration hook assigns what it
-measured and a later hook reads it, with <code class="docutils literal notranslate"><span class="pre">None</span></code> meaning no series of the exam
-has measured it yet.</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">recon</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">context</span><span class="p">,</span> <span class="n">branch</span><span class="p">,</span> <span class="n">data</span><span class="p">):</span>
-    <span class="n">maps</span> <span class="o">=</span> <span class="n">context</span><span class="o">.</span><span class="n">coil_sensitivities</span>  <span class="c1"># measured by an earlier series</span>
-    <span class="n">image</span><span class="p">,</span> <span class="n">transmit</span> <span class="o">=</span> <span class="n">parallel_imaging_and_b1_fit</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">maps</span><span class="p">)</span>
-    <span class="n">context</span><span class="o">.</span><span class="n">b1_map</span> <span class="o">=</span> <span class="n">transmit</span>          <span class="c1"># read by a later one</span>
-    <span class="k">return</span> <span class="n">recon</span><span class="o">.</span><span class="n">ReconResult</span><span class="p">(</span><span class="n">image</span><span class="p">)</span>
-</pre></div>
-</div>
-<p>A map is stored as measured, in the frame and on the grid of its series.
-Nothing resamples, regrids or reslices it for a series acquired at another
-position, orientation or matrix; <a class="reference internal" href="../generated/pulserver.recon.coil_maps.html#pulserver.recon.coil_maps" title="pulserver.recon.coil_maps"><code class="xref py py-func docutils literal notranslate"><span class="pre">coil_maps()</span></code></a> compares the
-coil sensitivities with the unit that needs them, as <a class="reference internal" href="calibration.html"><span class="doc">Calibration, noise and coil compression</span></a> states.</p>
-<p>Those three are the whole vocabulary of the exam’s maps, so a misspelt name
-raises rather than storing a map where nothing looks for it. An artifact a
-plugin carries for itself goes in <code class="docutils literal notranslate"><span class="pre">context.exam</span></code> under a key of its own, as
-<a class="reference internal" href="../generated/pulserver.recon.NOISE_COVARIANCE.html#pulserver.recon.NOISE_COVARIANCE" title="pulserver.recon.NOISE_COVARIANCE"><code class="xref py py-obj docutils literal notranslate"><span class="pre">NOISE_COVARIANCE</span></code></a> does for the whitening of a noise
-series.</p>
-<p>The number of series reconstructed concurrently is bounded by a number of
-slots, derived from the available memory unless it is specified. On a host with
-GPUs, which the proxy finds from <code class="docutils literal notranslate"><span class="pre">CUDA_VISIBLE_DEVICES</span></code> or <code class="docutils literal notranslate"><span class="pre">nvidia-smi</span></code> without
-importing a GPU library, each slot holds one of them, one series per GPU unless
-more are allowed, and the reconstruction finds its GPU in <code class="docutils literal notranslate"><span class="pre">context.device</span></code>. A
-worker is an ordinary process, so a reconstruction may start processes of its
-own. A series that
-arrives when every slot is occupied is written to disk, enriched, as it
-arrives, and replayed to a worker once a slot is released. The client remains
-connected meanwhile, and the images are returned through its connection.</p>
-<p>Images, DICOM datasets and text produced by the worker are relayed to the
-client as they are produced. Closing either connection closes the other. Once
-the client’s stream ends, the proxy waits for the worker to close however long
-the reconstruction takes, unless it was started with a reconstruction timeout,
-past which the worker is terminated and the client told so.</p>
 </section>
 <section id="reconstruction-server">
 <h2>Reconstruction server<a class="headerlink" href="#reconstruction-server" title="Link to this heading">#</a></h2>
@@ -858,7 +767,7 @@ relays, and the client receives a text naming the message’s type.</p>
 <li><p><a class="reference internal" href="calibration.html"><span class="doc">Calibration, noise and coil compression</span></a> — coil sensitivity maps, prewhitening and coil compression.</p></li>
 <li><p><a class="reference internal" href="../api/proxy.html"><span class="doc">Reconstruction proxy</span></a> — the proxy, the reconstruction server and the enrichment interface.</p></li>
 <li><p><a class="reference internal" href="../api/recon.html"><span class="doc">Reconstruction plugins</span></a> — the reconstruction plugin interface.</p></li>
-<li><p><a class="reference internal" href="../generated/gallery/03-reconstruction/01_enrichment.html"><span class="doc">Raw-data enrichment and reconstruction</span></a> — enrichment and reconstruction of a simulated series.</p></li>
+<li><p><a class="reference internal" href="../generated/gallery/02-tours/03_fov_offset_enrichment.html"><span class="doc">Field-of-view offset and the proxy phase</span></a> — enrichment and reconstruction of a simulated series.</p></li>
 </ul>
 </section>
 </section>
@@ -875,12 +784,12 @@ relays, and the client receives a text naming the message’s type.</p>
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="ir-cache.html"
+       href="virtual-scanner.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">The scanner IR</p>
+        <p class="prev-next-title">The virtual scanner</p>
       </div>
     </a>
     <a class="right-next"
@@ -913,14 +822,11 @@ relays, and the client receives a text naming the message’s type.</p>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#enrichment">Enrichment</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#trajectory">Trajectory</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#reconstruction-units">Reconstruction units</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#placement">Placement</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#images">Images</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#header">Header</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#values">Values</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#dicom-pixels">DICOM pixels</a></li>
 </ul>
 </li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#workers">Workers</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#reconstruction-server">Reconstruction server</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#see-also">See also</a></li>
 </ul>

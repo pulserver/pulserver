@@ -213,6 +213,7 @@ from.
    validate
    Comparison
    ChannelAgreement
+   gradient_tolerance_mt_per_m
    read_waveform_xml
    PlayedWaveforms
    VENDORS

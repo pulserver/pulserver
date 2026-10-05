@@ -1,0 +1,958 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Virtual scanner &#8212; pulserver documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  <!--
+    this give us a css class that will be invisible only if js is disabled
+  -->
+  <noscript>
+    <style>
+      .pst-js-only { display: none !important; }
+
+    </style>
+  </noscript>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../_static/styles/theme.css?digest=90905a2f556bf617f1a9" rel="stylesheet" />
+<link href="../../_static/styles/pydata-sphinx-theme.css?digest=90905a2f556bf617f1a9" rel="stylesheet" />
+
+    <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=03e43079" />
+    <link rel="stylesheet" type="text/css" href="../../_static/styles/sphinx-book-theme.css?v=4418a689" />
+    <link rel="stylesheet" type="text/css" href="../../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery.css?v=c83e6b79" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../../_static/pulserver.css?v=e08ae8f3" />
+  
+  <!-- So that users can add custom icons -->
+  <script defer src="../../_static/scripts/fontawesome.js?digest=90905a2f556bf617f1a9"></script>
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
+<link rel="preload" as="script" href="../../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
+
+    <script src="../../_static/documentation_options.js?v=b1def801"></script>
+    <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../../_static/copybutton.js?v=f281be69"></script>
+    <script src="../../_static/sg-tags.js?v=d80f6fa4"></script>
+    <script src="../../_static/scripts/sphinx-book-theme.js?v=fab101a9"></script>
+    <script>window.MathJax = {"options": {"processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
+    <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-mml-chtml.js"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'developer-guide/internals/virtual-scanner';</script>
+    <script>
+        DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
+        DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'latest';
+        DOCUMENTATION_OPTIONS.show_version_warning_banner =
+            true;
+        </script>
+    <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
+    <link rel="canonical" href="https://pulserver.github.io/pulserver/latest/developer-guide/internals/virtual-scanner.html" />
+    <link rel="icon" href="../../_static/pulserver-mark.svg"/>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" />
+    <link rel="next" title="Bloch engine" href="bloch-engine.html" />
+    <link rel="prev" title="Reconstruction proxy" href="reconstruction-proxy.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  <meta name="docsearch:version" content="latest" />
+  
+    
+    <script src="../../_static/searchtools.js"></script>
+    <script src="../../_static/language_data.js"></script>
+    <script src="../../searchindex.js"></script>
+  
+  </head>
+  <body data-default-mode="">
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+  
+  
+  
+  
+  <dialog id="pst-search-dialog">
+    
+<form class="bd-search d-flex align-items-center"
+      action="../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         placeholder="Search..."
+         aria-label="Search..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+  </dialog>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header id="pst-header" class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+  
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+        </div>
+      
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+    </div>
+  
+
+  
+    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
+      <span class="fa-solid fa-outdent"></span>
+    </button>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <dialog id="pst-primary-sidebar-modal"></dialog>
+      <div id="pst-primary-sidebar" class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+    
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../../_static/pulserver-mark.svg" class="logo__image only-light" alt="pulserver"/>
+    <img src="../../_static/pulserver-mark-dark.svg" class="logo__image only-dark pst-js-only" alt="pulserver"/>
+  
+  
+</a></div>
+        <div class="sidebar-primary-item">
+<div class="version-switcher__container dropdown pst-js-only">
+  <button id="pst-version-switcher-button-2"
+    type="button"
+    class="version-switcher__button btn btn-sm dropdown-toggle"
+    data-bs-toggle="dropdown"
+    aria-haspopup="listbox"
+    aria-controls="pst-version-switcher-list-2"
+    aria-label="Version switcher list"
+  >
+    Choose version  <!-- this text may get changed later by javascript -->
+    <span class="caret"></span>
+  </button>
+  <div id="pst-version-switcher-list-2"
+    class="version-switcher__menu dropdown-menu list-group-flush py-0"
+    role="listbox" aria-labelledby="pst-version-switcher-button-2">
+    <!-- dropdown will be populated by javascript on page load -->
+  </div>
+</div></div>
+        <div class="sidebar-primary-item">
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button></div>
+        <div class="sidebar-primary-item"><nav class="bd-links bd-docs-nav" aria-label="Main">
+    <div class="bd-toc-item navbar-nav active">
+        
+        <ul class="nav bd-sidenav bd-sidenav__home-link">
+            <li class="toctree-l1">
+                <a class="reference internal" href="../../index.html">
+                    Homepage
+                </a>
+            </li>
+        </ul>
+        <ul class="current nav bd-sidenav">
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../user-guide/index.html">User guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../user-guide/running.html">Running the services</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../user-guide/scanner-sequences.html">Scanner sequences</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../user-guide/reconstruction-plugins.html">Reconstruction plugins</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../user-guide/reconstruction-client.html">Reconstruction clients</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../user-guide/virtual-scanner.html">Scanning a phantom without a scanner</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 current active has-children"><a class="reference internal" href="../index.html">Developer guide</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="../prerequisites.html">Development prerequisites</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../installation.html">Editable installation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../workflow.html">Development workflow</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../style.html">Coding style</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../documentation.html">Documentation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../terminology.html">Terminology and conventions</a></li>
+<li class="toctree-l2 current active has-children"><a class="reference internal" href="index.html">Internals</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="ir-cache.html">IR cache</a></li>
+<li class="toctree-l3"><a class="reference internal" href="protocol-wire.html">Protocol text blocks</a></li>
+<li class="toctree-l3"><a class="reference internal" href="reconstruction-proxy.html">Reconstruction proxy</a></li>
+<li class="toctree-l3 current active"><a class="current reference internal" href="#">Virtual scanner</a></li>
+<li class="toctree-l3"><a class="reference internal" href="bloch-engine.html">Bloch engine</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2"><a class="reference internal" href="../pre-commit.html">Pre-commit</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../pull-requests.html">Pull requests</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../releases.html">Releases</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../code-of-conduct.html">Code of conduct</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../explanations/index.html">Explanations</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../explanations/architecture.html">Architecture</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../explanations/protocol.html">Protocol resolution</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../explanations/designs.html">Designs and the design store</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../explanations/scanner-representation.html">Scanner representation (PulSeg)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../explanations/virtual-scanner.html">The virtual scanner</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../explanations/reconstruction.html">Raw-data enrichment and routing</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../explanations/calibration.html">Calibration, noise and coil compression</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../examples/index.html">Examples</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../examples/course.html">Course</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../generated/gallery/01-course/01_protocol_to_image.html">1. From protocol to image</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../generated/gallery/01-course/02_sequence_plugin.html">2. A scanner sequence and its protocol</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../generated/gallery/01-course/03_scanner_representation.html">3. Scanner representation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../generated/gallery/01-course/04_reconstruction_plugin.html">4. A reconstruction plugin</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../generated/gallery/01-course/05_testing_on_the_virtual_scanner.html">5. Testing on the virtual scanner</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../examples/tours.html">Tours</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../generated/gallery/02-tours/01_protocol_resolution.html">Protocol resolution for a 2D gradient echo</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../generated/gallery/02-tours/02_segmentation.html">Segmentation of a sequence for the scanner</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../generated/gallery/02-tours/03_fov_offset_enrichment.html">Field-of-view offset and the proxy phase</a></li>
+</ul>
+</details></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../api/index.html">API reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../api/protocol.html">Protocol</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/design.html">Scanner sequences</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/host.html">Design calls</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/ir.html">IR conversion</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/proxy.html">Reconstruction proxy</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/recon.html">Reconstruction plugins</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/mrd.html">MRD data</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/validate.html">Validation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/virtual.html">Virtual scanner</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../misc/index.html">Miscellaneous</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../misc/license.html">License and notices</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../misc/related.html">Related projects</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../misc/contributors.html">Contributors</a></li>
+</ul>
+</details></li>
+</ul>
+
+    </div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+      <div class="sidebar-primary-item">
+<div id="ethical-ad-placement"
+      class="flat"
+      data-ea-publisher="readthedocs"
+      data-ea-type="readthedocs-sidebar"
+      data-ea-manual="true">
+</div></div>
+  </div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+
+<div class="sbt-scroll-pixel-helper"></div>
+
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item"><button class="sidebar-toggle primary-toggle btn btn-sm" title="Toggle primary sidebar" data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <span class="fa-solid fa-bars"></span>
+</button></div>
+      
+    </div>
+  
+  
+    <div class="header-article-items__end">
+      
+        <div class="header-article-item">
+
+<div class="article-header-buttons">
+
+
+
+
+
+<div class="dropdown dropdown-source-buttons">
+  <button class="btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Source repositories">
+    <i class="fab fa-github"></i>
+  </button>
+  <ul class="dropdown-menu">
+      
+      
+      
+      <li><a href="https://github.com/pulserver/pulserver" target="_blank"
+   class="btn btn-sm btn-source-repository-button dropdown-item"
+   title="Source repository"
+   data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fab fa-github"></i>
+  </span>
+<span class="btn__text-container">Repository</span>
+</a>
+</li>
+      
+      
+      
+      
+      <li><a href="https://github.com/pulserver/pulserver/edit/main/docs/developer-guide/internals/virtual-scanner.md" target="_blank"
+   class="btn btn-sm btn-source-edit-button dropdown-item"
+   title="Suggest edit"
+   data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-pencil-alt"></i>
+  </span>
+<span class="btn__text-container">Suggest edit</span>
+</a>
+</li>
+      
+      
+      
+      
+      <li><a href="https://github.com/pulserver/pulserver/issues/new?title=Issue%20on%20page%20%2Fdeveloper-guide/internals/virtual-scanner.html&body=Your%20issue%20content%20here." target="_blank"
+   class="btn btn-sm btn-source-issues-button dropdown-item"
+   title="Open an issue"
+   data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-lightbulb"></i>
+  </span>
+<span class="btn__text-container">Open issue</span>
+</a>
+</li>
+      
+  </ul>
+</div>
+
+
+
+
+
+
+<div class="dropdown dropdown-download-buttons">
+  <button class="btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Download this page">
+    <i class="fas fa-download"></i>
+  </button>
+  <ul class="dropdown-menu">
+      
+      
+      
+      <li><a href="../../_sources/developer-guide/internals/virtual-scanner.md" target="_blank"
+   class="btn btn-sm btn-download-source-button dropdown-item"
+   title="Download source file"
+   data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-file"></i>
+  </span>
+<span class="btn__text-container">.md</span>
+</a>
+</li>
+      
+      
+      
+      
+      <li>
+<button onclick="window.print()"
+  class="btn btn-sm btn-download-pdf-button dropdown-item"
+  title="Print to PDF"
+  data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-file-pdf"></i>
+  </span>
+<span class="btn__text-container">.pdf</span>
+</button>
+</li>
+      
+  </ul>
+</div>
+
+
+
+
+<button onclick="toggleFullScreen()"
+  class="btn btn-sm btn-fullscreen-button pst-navbar-icon"
+  title="Fullscreen mode"
+  data-bs-placement="bottom" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-expand"></i>
+  </span>
+
+</button>
+
+
+
+<div class="theme-switch-container dropdown pst-js-only" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Color mode">
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button dropdown-toggle" aria-label="Color mode" data-bs-toggle="dropdown">
+    <i class="theme-switch fa-solid fa-sun fa-lg fa-fw" data-mode="light" title="Light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg fa-fw" data-mode="dark" title="Dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg fa-fw" data-mode="auto" title="System Settings"></i>
+  </button>
+  <ul class="dropdown-menu dropdown-menu-end">
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg fa-fw me-1"></i>System Settings</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="light"><i class="fa-solid fa-sun fa-lg fa-fw me-1"></i>Light</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="dark"><i class="fa-solid fa-moon fa-lg fa-fw me-1"></i>Dark</button></li>
+  </ul>
+</div>
+
+
+<button class="btn btn-sm pst-navbar-icon search-button search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass fa-lg"></i>
+</button>
+<button class="sidebar-toggle secondary-toggle btn btn-sm pst-navbar-icon" title="Toggle secondary sidebar" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="fa-solid fa-list"></span>
+</button>
+</div></div>
+      
+    </div>
+  
+</div>
+</div>
+              
+              
+
+<div id="jb-print-docs-body" class="onlyprint">
+    <h1>Virtual scanner</h1>
+    <!-- Table of contents -->
+    <div id="print-main-content">
+        <div id="jb-print-toc">
+            
+            <div>
+                <h2> Contents </h2>
+            </div>
+            <nav aria-label="Page">
+                <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#played-waveforms">Played waveforms</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#runs-of-repetitions">Runs of repetitions</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#external-simulators">External simulators</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#what-a-run-establishes">What a run establishes</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#coils-from-field-maps">Coils from field maps</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#scan-clock-and-sound">Scan clock and sound</a></li>
+</ul>
+            </nav>
+        </div>
+    </div>
+</div>
+
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <section class="tex2jax_ignore mathjax_ignore" id="virtual-scanner">
+<h1>Virtual scanner<a class="headerlink" href="#virtual-scanner" title="Link to this heading">#</a></h1>
+<p>The implementation of the virtual scanner
+(<a class="reference internal" href="../../explanations/virtual-scanner.html"><span class="doc">The virtual scanner</span></a>): how the virtual interpreter
+resolves each block’s waveforms, how runs of repetitions are played and to
+what tolerance, how a cache is exported to an external Bloch simulator, what
+the test suite establishes by playing caches, the coils taken from field maps,
+and the scan clock and the sound.</p>
+<section id="played-waveforms">
+<h2>Played waveforms<a class="headerlink" href="#played-waveforms" title="Link to this heading">#</a></h2>
+<p><a class="reference internal" href="../../generated/pulserver.ir.playout.html#pulserver.ir.playout" title="pulserver.ir.playout"><code class="xref py py-func docutils literal notranslate"><span class="pre">playout()</span></code></a> plays the cache through the two stages of a
+playout: the first prepares the events of each segment position, and the
+scan loop sets the registers of each block of each segment instance
+(<a class="reference internal" href="ir-cache.html"><span class="doc">IR cache</span></a>). With <code class="docutils literal notranslate"><span class="pre">waveforms</span></code>, it returns what each block plays, timed
+from the block’s start. Its gradients are the events its position is prepared
+with, through the position’s representative instance, the one of largest
+energy (<code class="docutils literal notranslate"><span class="pre">pulseg_get_grad_amplitude</span></code> and <code class="docutils literal notranslate"><span class="pre">pulseg_get_grad_time_us</span></code>), at the
+amplitudes the scan loop sets. At a position that plays waves, one whose
+blocks carry a rotation or play a shape the prepared events do not hold, as
+the interleaves of a spiral drawn as distinct shapes do, they are the wave
+the scan loop selects, which <code class="docutils literal notranslate"><span class="pre">pulseg_materialize_wave</span></code> returns, at the wave’s
+amplitudes. Its RF pulse is the magnitude and phase shapes its position is
+prepared with, which <code class="docutils literal notranslate"><span class="pre">pulseg_get_rf_magnitude</span></code> and <code class="docutils literal notranslate"><span class="pre">pulseg_get_rf_phase</span></code>
+return, the phase in cycles as Pulseq stores it, at the block’s amplitude.
+A wave plays as the IR defines it, linear between its points; how a
+playout’s hardware plays the samples it loads on its own raster is not
+modelled. <a class="reference internal" href="../../generated/pulserver.ir.play.html#pulserver.ir.play" title="pulserver.ir.play"><code class="xref py py-func docutils literal notranslate"><span class="pre">play()</span></code></a> walks the same cache with the cursor and
+resolves each block by its own instance, and the test suite holds the two to
+the same waveforms, bit for bit.</p>
+</section>
+<section id="runs-of-repetitions">
+<h2>Runs of repetitions<a class="headerlink" href="#runs-of-repetitions" title="Link to this heading">#</a></h2>
+<p>Most of a scan repeats a few blocks many times, changing only the phase
+offsets of its pulses and ADC events, the amplitudes of its phase-encoding
+gradients and the direction of its readout. Such a run plays from each
+isochromat’s map over one repetition, as
+<a class="reference internal" href="../../generated/pulserver.virtual.Isochromats.repetitions.html#pulserver.virtual.Isochromats.repetitions" title="pulserver.virtual.Isochromats.repetitions"><code class="xref py py-meth docutils literal notranslate"><span class="pre">repetitions()</span></code></a> plays it, rather than
+block by block. A repetition is the fewest consecutive blocks, up to 64, that the
+blocks after them repeat event for event, with the same registers but the
+phase offsets, the gradients’ amplitudes and their waves; runs start at any
+block, so a preparation or a train of dummy excitations before the imaging
+blocks is a run of its own or plays block by block. Within a run:</p>
+<ul class="simple">
+<li><p>every pulse of a repetition has its phase offset larger by the same
+increment than in the first repetition, and so has every ADC event;</p></li>
+<li><p>a gradient that varies across the repetitions differs from the first
+repetition’s by a waveform zero during its block’s pulse and held through
+its block’s ADC window: a phase encoding, whose amplitude varies, or a
+readout turned by a rotation with its prephaser, as a radial spoke is, whose
+wave’s corners fall at the first repetition’s times; the waveforms of a
+repetition leave no area by any of its pulses, so that they turn only the
+samples of its windows and, by the area they leave over it, each
+isochromat’s magnetization at its end;</p></li>
+<li><p>or, in the first block, a gradient held through the block, under its pulse,
+varies across the repetitions, as each spoke of a ZTE scan plays its pulse
+under its own readout gradient; the block then reads no ADC window;</p></li>
+<li><p>each ADC window is read under a gradient held throughout it.</p></li>
+</ul>
+<p>A run ends where one of these stops holding. Runs of the same blocks join into
+one run whose repetitions other blocks play between, as far as their
+gradients differ from the first repetition’s as the list states: the spokes of
+a ZTE scan’s shells are one run, with each shell’s closing spoke and the ramp
+onto the next shell’s first spoke between them. The run resumes from the
+magnetization those blocks leave, so its maps are made once rather than for
+every shell. Stretches of blocks between runs that repeat one another at least
+eight times are the repetitions of a run of their own, as those between a ZTE
+scan’s shells are. An interleaved multislice scan
+whose RF spoiling steps each slice’s pulse by its own increment, a spin echo
+phase-encoded before its refocusing pulse, and spiral readouts, whose
+gradients vary during the windows, play block by block; a spiral’s windows are
+read from the lattice the phantom is sampled on, as
+<a class="reference internal" href="bloch-engine.html"><span class="doc">Bloch engine</span></a> states.</p>
+<p>The maps take memory in proportion to the isochromats and to the ADC windows of
+a repetition. A repetition whose maps would take more than 4 GiB is not played
+from them: a run takes a shorter repetition that fits, or its blocks play one
+by one.</p>
+<p><a class="reference internal" href="../../generated/pulserver.virtual.simulate.html#pulserver.virtual.simulate" title="pulserver.virtual.simulate"><code class="xref py py-func docutils literal notranslate"><span class="pre">simulate()</span></code></a> and <a class="reference internal" href="../../generated/pulserver.virtual.Scan.html#pulserver.virtual.Scan" title="pulserver.virtual.Scan"><code class="xref py py-class docutils literal notranslate"><span class="pre">Scan</span></code></a> take
+the <code class="docutils literal notranslate"><span class="pre">tolerance</span></code> of <a class="reference internal" href="../../generated/pulserver.virtual.Isochromats.repetitions.html#pulserver.virtual.Isochromats.repetitions" title="pulserver.virtual.Isochromats.repetitions"><code class="xref py py-meth docutils literal notranslate"><span class="pre">repetitions()</span></code></a>. At zero,
+a run samples what its blocks played one by one sample, to the single precision
+of the cache’s amplitudes, which leave the varying gradients’ area by a pulse
+at rounding where the run takes it as zero. The console and <code class="docutils literal notranslate"><span class="pre">pulserver</span> <span class="pre">scan</span></code>
+play runs, and read the windows of the blocks played one by one, to a
+tolerance of <span class="math notranslate nohighlight">\(10^{-4}\)</span>, at which the transients of a steady state are carried
+until they fall below it and its fixed points are summed once, by columns of isochromats along the encoded axes; a run whose column sums
+would take more than 4 GiB carries every transient instead. Played to a
+tolerance, a run also takes as zero the area its varying gradients leave by a
+pulse or over a repetition at the six significant digits a Pulseq file keeps
+of an amplitude, up to <span class="math notranslate nohighlight">\(2 \times 10^{-5}\)</span> of the largest area one of them
+plays, and its samples then differ from the blocks’ by the phase that area
+accrues.</p>
+</section>
+<section id="external-simulators">
+<h2>External simulators<a class="headerlink" href="#external-simulators" title="Link to this heading">#</a></h2>
+<p>A Bloch simulator that reads Pulseq files, KomaMRI for example, models what
+the signal model above leaves out: relaxation, slice profiles and the action
+of every RF pulse on the magnetization. A simulation of the design would test
+the design alone; <a class="reference internal" href="../../generated/pulserver.virtual.export.html#pulserver.virtual.export" title="pulserver.virtual.export"><code class="xref py py-func docutils literal notranslate"><span class="pre">export()</span></code></a> writes the blocks the
+cache plays instead, so that a simulation of the file tests the IR as the
+virtual interpreter does. Each played block becomes one block of a Pulseq
+1.5.1 file, of the duration it plays:</p>
+<ul class="simple">
+<li><p>The RF pulse as the cache holds it: its samples at their times, its
+frequency and phase offsets with their ppm terms resolved at the field the
+cache was converted at, its centre and its use. The channels of a pTx pulse
+are summed, as at unit, in-phase sensitivity. A simulator reads the pulse as
+it reads the design’s, and applies the offsets as it applies a design’s. In
+Pulseq, a frequency offset and the same phase ramp written into the samples
+play one pulse; KomaMRI simulates the offset in the pulse’s rotating frame
+but takes the samples’ phase in the opposite sense of rotation, so from the
+ramp it would excite the mirror image of an offset slice. It refers the
+offset’s phase to the pulse’s centre, which the file therefore records.</p></li>
+<li><p>The gradients along the physical axes: those the cache plays, the block’s
+rotation in them, turned by <span class="math notranslate nohighlight">\(R\)</span> except in blocks labelled <code class="docutils literal notranslate"><span class="pre">NOROT</span></code>, as the
+virtual interpreter turns them. A time-shaped gradient through the corners of all three axes
+carries each, and a step from or to zero at a gradient’s first or last
+corner is a ramp 10 ns wide, since a time shape holds one value per time.
+The file therefore needs no rotation extension.</p></li>
+<li><p>The ADC window without its offsets. The receiver phase <span class="math notranslate nohighlight">\(\theta\)</span> of every
+sample is returned instead, and the simulated samples are demodulated by it
+as the playout demodulates. The offsets act on the samples alone, so no
+simulator has to apply them; KomaMRI applies an ADC’s phase offset but
+neither its frequency offset nor a phase modulation.</p></li>
+</ul>
+<p>The file holds the standard sections alone. The text format writes a
+gradient’s amplitude to six significant figures, and a turned gradient’s
+amplitude is written as the rotation leaves it, so the k-space of a file
+exported under an oblique prescription agrees with the played trajectory to a
+relative <span class="math notranslate nohighlight">\(10^{-5}\)</span> of its extent.</p>
+<p>A job run every night and on demand simulates every fixture and every sequence
+pypulseqpp ships with KomaMRI, over one phantom whose density, relaxation times
+and off-resonance vary across it: as designed, and as exported from its cache.
+KomaMRI drops the ppm term of an offset, so a design file carrying one is given
+to it as Pulseq 1.4.1, whose writer resolves the term; and its rotation of a
+block can drop a corner a gradient holds twice, such as the peak of a trapezoid
+without a flat top, so the job turns a design’s gradients itself. The two
+simulations then differ only where the cache plays something other than the
+design, or by the rounding of the text format.</p>
+<p>The same job compares KomaMRI with the virtual scanner’s Bloch simulation.
+KomaMRI adds a pulse’s phase shape and phase offset to its field with the
+opposite sign, and refers the phase its frequency offset accrues to the
+pulse’s centre (<a class="reference internal" href="bloch-engine.html"><span class="doc">Bloch engine</span></a>). It also joins a pulse’s samples linearly and takes the field at the
+start of each time step, where the playout holds each sample of a pulse sampled
+at the middles of equal intervals over its interval; read as written, such a
+pulse would play half an interval late. The exported file is therefore
+simulated a third time with each pulse rewritten in KomaMRI’s convention: its
+samples conjugated, each sample of a pulse sampled at the middles of equal
+intervals held from the start of its interval, and its phase offset <span class="math notranslate nohighlight">\(\phi\)</span>
+replaced by <span class="math notranslate nohighlight">\(-\phi - 2\pi f t_c\)</span>, for the frequency offset <span class="math notranslate nohighlight">\(f\)</span> and the centre
+<span class="math notranslate nohighlight">\(t_c\)</span>. KomaMRI then plays the field the virtual scanner plays. That signal,
+demodulated by the receiver phase the export returns, is compared with the
+virtual scanner’s simulation of the cache on the same spins.</p>
+</section>
+<section id="what-a-run-establishes">
+<h2>What a run establishes<a class="headerlink" href="#what-a-run-establishes" title="Link to this heading">#</a></h2>
+<ul class="simple">
+<li><p>The trajectory the cache plays is the one each file designs, for the
+fixtures and for every sequence pypulseqpp ships, at small sizes, and under
+an oblique and a reflected prescription the one <code class="docutils literal notranslate"><span class="pre">pypulseqpp.TransformFOV</span></code>
+turns the design into for the checks. A block labelled <code class="docutils literal notranslate"><span class="pre">NOROT</span></code> plays turned
+by its own rotation alone.</p></li>
+<li><p>The cache carries the RF centre a design records where it is away from the
+magnitude peak, and plays every RF pulse of a fat-saturated EPI and of a
+spin echo as the design draws it.</p></li>
+<li><p>Off resonance, every sample of the fixtures and of every shipped sequence
+accrues the phase its file’s excitation, refocusing and ADC timing give it,
+so the cache plays each echo as the design times it.</p></li>
+<li><p>Fat precesses at its chemical shift at the magnet’s field. A fat saturation
+leaves water and fat what pypulseqpp’s relaxation-free Bloch simulation of
+the designed pulse leaves them, and one converted at another field misses
+the fat.</p></li>
+<li><p>The enrichment states the trajectory of the identity, along the logical
+axes, for every readout.</p></li>
+<li><p>An object posed where an axial, an oblique or a reflected prescription
+places the field of view is acquired by every shipped sequence as it is at
+the isocentre, EPI and spiral readouts, whose curvature the proxy’s phase
+completes, and readouts turned by a rotation extension included; an object
+away from the offset, or turned otherwise than prescribed, is not.</p></li>
+<li><p>A series streamed through the proxy under an axial, an oblique and a
+reflected prescription is reconstructed into the image of the phantom at the
+isocentre, and the image carries the prescribed centre and the columns of
+<span class="math notranslate nohighlight">\(R\)</span> as its read, phase and slice directions; a series short of a readout is
+refused.</p></li>
+<li><p>Played on isochromats, the cache of every fixture samples what its design’s
+blocks played one by one sample, under an axial, an oblique and a reflected
+prescription, with the magnetization carried across the files of a chain.</p></li>
+<li><p>The runs of a balanced SSFP, a spoiled and a multi-echo gradient echo, a
+spin echo, a fast spin echo and an MPRAGE sample what their blocks played
+one by one sample; a balanced SSFP plays as runs of one repetition but for
+its preparation, and to a tolerance of <span class="math notranslate nohighlight">\(10^{-4}\)</span> samples within a thousandth
+of its exact samples, with its fixed points summed by columns and without.
+An interleaved multislice scan whose pulses step unevenly, a spin echo
+phase-encoded before its refocusing pulse, and spiral readouts play block by
+block, and so do the echoes of a three-echo gradient echo where the maps of
+one window fit and those of three do not. A balanced gradient echo whose
+rewinders are off by a few millionths plays as one run to a tolerance. A run
+played across spans samples what it samples played whole.</p></li>
+<li><p>The spokes of a ZTE scan of ten shells play as one run, each spoke’s pulse
+read off its tables, resumed after the blocks between its shells, which play
+as a run of their own; the scan samples what its blocks played one by one
+sample, played whole and in spans that end within a shell.</p></li>
+<li><p>The phantom sampled as isochromats, posed where an axial, an oblique or a
+reflected prescription places the field of view and scanned by a
+single-shot EPI, is acquired as the analytic phantom is: a 90° excitation
+leaves its density at the phase the signal model states. Each ellipse’s
+isochromats relax with its <span class="math notranslate nohighlight">\(T_1\)</span> and <span class="math notranslate nohighlight">\(T_2\)</span> and precess at its chemical shift
+at the magnet’s field.</p></li>
+<li><p>Played in spans, the scan of every fixture plays each block once: the
+spans’ readouts are those of the whole scan, and the sound of a single-file
+fixture, joined across its spans, is <code class="docutils literal notranslate"><span class="pre">Sequence.sound</span></code> of its design as the
+checks turn it, under an axial, an oblique and a reflected prescription. A
+span played at a speed is released once the clock has passed it, and a
+series streamed readout by readout is reconstructed as the same series sent
+whole. A scan simulated twice as slowly as it plays starts its clock late
+enough that no span holds it; a span simulated after its time holds the
+clock, and the spans after it keep its pace.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">pulserver</span> <span class="pre">scan</span></code> records the series the virtual scanner acquires of an
+imported file, sample for sample, and streams a generated design to a
+reconstruction proxy, whose image carries the prescribed centre and
+directions.</p></li>
+<li><p>The exported file of every fixture and every shipped sequence, read and
+integrated by pypulseqpp, has the trajectory the cache plays, under an
+axial, an oblique and a reflected prescription, and holds each RF pulse with
+the samples, offsets, centre and use of the design’s.</p></li>
+<li><p>In the scheduled KomaMRI job, the signal simulated from the exported file of
+every fixture and every shipped sequence is the one simulated from its
+design, to the rounding of the text format, and the virtual scanner’s Bloch
+simulation of the cache gives the signal KomaMRI simulates of the exported
+file in its own RF convention, to the difference of the two simulators’ time
+steps through an RF pulse.</p></li>
+</ul>
+</section>
+<section id="coils-from-field-maps">
+<h2>Coils from field maps<a class="headerlink" href="#coils-from-field-maps" title="Link to this heading">#</a></h2>
+<p>A console given field maps takes the same coils from electromagnetic
+simulations of BrainWeb’s head instead. mariepy, a port of MARIE 3.0, solves
+the head in a quadrature birdcage, whose two linear modes are the body coil’s
+two channels, in the 8-channel coil and in the two arrays, and writes each
+channel’s circular components <span class="math notranslate nohighlight">\(B^\pm_c = \mu_0 (H_x \pm j H_y)\)</span> over the head,
+for the time dependence <span class="math notranslate nohighlight">\(e^{+j\omega t}\)</span>. With <span class="math notranslate nohighlight">\(B_0\)</span> along <span class="math notranslate nohighlight">\(+z\)</span>, the part of a
+channel’s field that rotates with the magnetization is half the complex
+conjugate of its <span class="math notranslate nohighlight">\(B^-_c\)</span>, and what it receives is weighted by the complex
+conjugate of its <span class="math notranslate nohighlight">\(B^+_c\)</span>: <span class="math notranslate nohighlight">\(s^+_c \propto \overline{B^-_c}\)</span> and
+<span class="math notranslate nohighlight">\(s_c \propto \overline{B^+_c}\)</span>, scaled as the models’ are. Outside the head
+each map takes the value of the nearest voxel inside it, and between voxels it
+is interpolated linearly. The maps show the dielectric effects the models do
+not; they are solved in BrainWeb’s head alone, so such a console examines
+BrainWeb whatever the subject is called.</p>
+<p>The maps’ transmit coils come with the VOPs mariepy compresses from the same
+fields, and every design is made under those of the exam’s transmit coil: its
+limits name the VOP file, the default shim, and the drive of every channel per
+hertz of a pulse’s amplitude with which the channels’ fields reach that
+amplitude at the isocentre, <span class="math notranslate nohighlight">\(2 / (\gamma \sum_c |B^-_c(\mathbf{0})|)\)</span> in the
+maps’ unit of drive. The IR cache then reports each subsequence’s SAR against
+the reference pulse in that coil (<a class="reference internal" href="../../explanations/designs.html"><span class="doc">Designs and the design store</span></a>).</p>
+<p><a class="reference internal" href="../../generated/pulserver.virtual.BrainWeb.html#pulserver.virtual.BrainWeb" title="pulserver.virtual.BrainWeb"><code class="xref py py-class docutils literal notranslate"><span class="pre">BrainWeb</span></code></a> carries the field its own susceptibility
+adds to <span class="math notranslate nohighlight">\(B_0\)</span>. Its head is water, of volume susceptibility <span class="math notranslate nohighlight">\(-9.05\)</span> ppm, in air
+of <span class="math notranslate nohighlight">\(0.36\)</span> ppm (Schenck, Med Phys 23:815, 1996), and the field along <span class="math notranslate nohighlight">\(B_0\)</span> is
+the susceptibility difference convolved with the dipole kernel
+<span class="math notranslate nohighlight">\(1/3 - k_z^2/|\mathbf{k}|^2\)</span>, whose <span class="math notranslate nohighlight">\(1/3\)</span> is the Lorentz sphere’s (Marques and
+Bowtell, Concepts Magn Reson B 25:65, 2005). The constant and linear terms over
+the head are removed, as a first-order shim removes them. The field is in ppm
+of <span class="math notranslate nohighlight">\(B_0\)</span>, so an isochromat precesses <span class="math notranslate nohighlight">\(\gamma B_0\)</span> times it faster, whatever
+the magnet’s field.</p>
+</section>
+<section id="scan-clock-and-sound">
+<h2>Scan clock and sound<a class="headerlink" href="#scan-clock-and-sound" title="Link to this heading">#</a></h2>
+<p>A scanner acquires in real time: each readout reaches the reconstruction once
+the scanner has played it, and the gradients sound as they play.
+<a class="reference internal" href="../../generated/pulserver.virtual.Scan.html#pulserver.virtual.Scan" title="pulserver.virtual.Scan"><code class="xref py py-class docutils literal notranslate"><span class="pre">Scan</span></code></a> plays the cache on isochromats against a scan
+clock, the sum of the durations of the blocks played, in spans of whole blocks
+that end where a repetition of a run starts. Each span carries the readouts of
+its blocks, as
+<a class="reference internal" href="../../generated/pulserver.virtual.simulate.html#pulserver.virtual.simulate" title="pulserver.virtual.simulate"><code class="xref py py-func docutils literal notranslate"><span class="pre">simulate()</span></code></a> returns them, and the sound of the gradients
+it plays. At a speed, a span is released once the wall clock, running that many
+times as fast as the scan, has passed its end, so that a reconstruction
+receives the readouts at the rate a scanner acquires them;
+<a class="reference internal" href="../../generated/pulserver.virtual.send.html#pulserver.virtual.send" title="pulserver.virtual.send"><code class="xref py py-func docutils literal notranslate"><span class="pre">send()</span></code></a> sends each readout as it is released.</p>
+<p>The spans are simulated in a thread of their own, ahead of their release, and
+the clock starts once the simulation will stay ahead of it to the end of the
+scan. A span’s simulation time is estimated from the spans simulated before it:
+per ADC sample for a span that acquires, since the readouts’ coil sums dominate
+it, and per second of scan time for one that does not, such as a train of
+dummy excitations. Where the simulation runs faster than the scan, the clock
+starts once a span of each kind has been simulated; where it runs slower, as
+for a short-TR balanced SSFP on a head of many isochromats and coils, most of
+the scan is simulated before the clock starts and the rest while it runs. A
+span simulated after its end on the clock, where the estimate fell short,
+holds the clock until it is, and the spans after it keep the scanner’s pace.</p>
+<p>The sound is MATLAB Pulseq’s, from <code class="docutils literal notranslate"><span class="pre">pypulseqpp.gradient_sound</span></code>: the gradients
+along the physical axes, the x axis on the left channel, the y axis on the
+right and half of the z axis on both, smoothed by MATLAB’s Gaussian window of
+<span class="math notranslate nohighlight">\(2\,\mathrm{round}(f_s/6000) + 1\)</span> samples at the sample rate <span class="math notranslate nohighlight">\(f_s\)</span>, and scaled
+so that the loudest sample of the scan is 0.95. The window reaches past the
+ends of each span into the gradients on either side, so the spans’ sounds,
+joined, are the sound of the whole scan: that of <code class="docutils literal notranslate"><span class="pre">Sequence.sound</span></code> of the design
+under the same prescription, to the single precision of the cache.</p>
+</section>
+</section>
+
+
+                </article>
+              
+
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="reconstruction-proxy.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">Reconstruction proxy</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="bloch-engine.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">Bloch engine</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <dialog id="pst-secondary-sidebar-modal"></dialog>
+                <div id="pst-secondary-sidebar" class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item"><div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> Contents
+  </div>
+  <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#played-waveforms">Played waveforms</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#runs-of-repetitions">Runs of repetitions</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#external-simulators">External simulators</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#what-a-run-establishes">What a run establishes</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#coils-from-field-maps">Coils from field maps</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#scan-clock-and-sound">Scan clock and sound</a></li>
+</ul>
+  </nav></div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+<div class="bd-footer-content__inner container">
+  
+  <div class="footer-item">
+    
+<p class="component-author">
+By pulserver contributors
+</p>
+
+  </div>
+  
+  <div class="footer-item">
+    
+
+  <p class="copyright">
+    
+      © Copyright 2024-2026, pulserver contributors.
+      <br/>
+    
+  </p>
+
+  </div>
+  
+  <div class="footer-item">
+    
+  </div>
+  
+  <div class="footer-item">
+    
+  </div>
+  
+</div>
+          </footer>
+        
+
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script defer src="../../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9"></script>
+<script defer src="../../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9"></script>
+
+  <footer class="bd-footer">
+  </footer>
+  </body>
+</html>

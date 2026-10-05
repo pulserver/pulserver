@@ -36,7 +36,7 @@
     <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-binder.css?v=f4aeca0c" />
     <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
     <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
-    <link rel="stylesheet" type="text/css" href="../../../_static/pulserver.css?v=36f0fcfd" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/pulserver.css?v=e08ae8f3" />
   
   <!-- So that users can add custom icons -->
   <script defer src="../../../_static/scripts/fontawesome.js?digest=90905a2f556bf617f1a9"></script>
@@ -61,6 +61,7 @@
         </script>
     <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
     <link rel="canonical" href="https://pulserver.github.io/pulserver/latest/_modules/pulserver/design/_plugin.html" />
+    <link rel="icon" href="../../../_static/pulserver-mark.svg"/>
     <link rel="index" title="Index" href="../../../genindex.html" />
     <link rel="search" title="Search" href="../../../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -192,8 +193,8 @@
       
     
     
-    <img src="../../../_static/pulserver-mark.svg" class="logo__image only-light" alt="pulserver documentation - Home"/>
-    <img src="../../../_static/pulserver-mark.svg" class="logo__image only-dark pst-js-only" alt="pulserver documentation - Home"/>
+    <img src="../../../_static/pulserver-mark.svg" class="logo__image only-light" alt="pulserver"/>
+    <img src="../../../_static/pulserver-mark-dark.svg" class="logo__image only-dark pst-js-only" alt="pulserver"/>
   
   
 </a></div>
@@ -242,28 +243,50 @@
 <li class="toctree-l2"><a class="reference internal" href="../../../user-guide/virtual-scanner.html">Scanning a phantom without a scanner</a></li>
 </ul>
 </details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../developer-guide/index.html">Developer guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/prerequisites.html">Development prerequisites</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/installation.html">Editable installation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/workflow.html">Development workflow</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/style.html">Coding style</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/documentation.html">Documentation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/terminology.html">Terminology and conventions</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../../developer-guide/internals/index.html">Internals</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/ir-cache.html">IR cache</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/protocol-wire.html">Protocol text blocks</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/reconstruction-proxy.html">Reconstruction proxy</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/virtual-scanner.html">Virtual scanner</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/bloch-engine.html">Bloch engine</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/pre-commit.html">Pre-commit</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/pull-requests.html">Pull requests</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/releases.html">Releases</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/code-of-conduct.html">Code of conduct</a></li>
+</ul>
+</details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../explanations/index.html">Explanations</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="../../../explanations/architecture.html">Architecture</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../explanations/protocol.html">Protocol resolution</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../explanations/designs.html">Designs and the design store</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../explanations/ir-cache.html">The scanner IR</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/scanner-representation.html">Scanner representation (PulSeg)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/virtual-scanner.html">The virtual scanner</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../explanations/reconstruction.html">Raw-data enrichment and routing</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../explanations/calibration.html">Calibration, noise and coil compression</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../explanations/virtual-scanner.html">The virtual scanner</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../explanations/bloch-simulation.html">Bloch simulation on isochromats</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../examples/index.html">Examples</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2 has-children"><a class="reference internal" href="../../../examples/protocol.html">Protocol resolution</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-protocol/01_protocol_resolution.html">Protocol resolution for a 2D gradient echo</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../../examples/course.html">Course</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/01_protocol_to_image.html">1. From protocol to image</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/02_sequence_plugin.html">2. A scanner sequence and its protocol</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/03_scanner_representation.html">3. Scanner representation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/04_reconstruction_plugin.html">4. A reconstruction plugin</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/05_testing_on_the_virtual_scanner.html">5. Testing on the virtual scanner</a></li>
 </ul>
 </details></li>
-<li class="toctree-l2 has-children"><a class="reference internal" href="../../../examples/scanner-ir.html">Scanner IR</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/02-scanner-ir/01_segmentation.html">Segmentation of a sequence for the scanner</a></li>
-</ul>
-</details></li>
-<li class="toctree-l2 has-children"><a class="reference internal" href="../../../examples/reconstruction.html">Reconstruction</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/03-reconstruction/01_enrichment.html">Raw-data enrichment and reconstruction</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../../examples/tours.html">Tours</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/02-tours/01_protocol_resolution.html">Protocol resolution for a 2D gradient echo</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/02-tours/02_segmentation.html">Segmentation of a sequence for the scanner</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/02-tours/03_fov_offset_enrichment.html">Field-of-view offset and the proxy phase</a></li>
 </ul>
 </details></li>
 </ul>
@@ -278,19 +301,6 @@
 <li class="toctree-l2"><a class="reference internal" href="../../../api/mrd.html">MRD data</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../api/validate.html">Validation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../api/virtual.html">Virtual scanner</a></li>
-</ul>
-</details></li>
-<li class="toctree-l1 has-children"><a class="reference internal" href="../../../developer-guide/index.html">Developer guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/prerequisites.html">Development prerequisites</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/installation.html">Editable installation</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/workflow.html">Development workflow</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/style.html">Coding style</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/documentation.html">Documentation</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/terminology.html">Terminology and conventions</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/pre-commit.html">Pre-commit</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/pull-requests.html">Pull requests</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/releases.html">Releases</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/code-of-conduct.html">Code of conduct</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../misc/index.html">Miscellaneous</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -453,7 +463,7 @@
                 <article class="bd-article">
                   
   <h1>Source code for pulserver.design._plugin</h1><div class="highlight"><pre>
-<span></span><span class="sd">"""Scanner-sequence plugins: a sequence app bound to the scanner protocol."""</span>
+<span></span><span class="sd">"""Scanner-sequence plugins: a sequence function bound to the scanner protocol."""</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
@@ -536,12 +546,12 @@
 <div class="viewcode-block" id="SequencePlugin">
 <a class="viewcode-back" href="../../../generated/pulserver.design.SequencePlugin.html#pulserver.design.SequencePlugin">[docs]</a>
 <span class="k">class</span><span class="w"> </span><span class="nc">SequencePlugin</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""A sequence app bound to the entries of the scanner protocol.</span>
+<span class="w">    </span><span class="sd">"""A sequence function bound to the entries of the scanner protocol.</span>
 
 <span class="sd">    A subclass sets :attr:`app` and, for the arguments the operator edits,</span>
-<span class="sd">    :attr:`protocol`; without ``protocol`` the app plays its defaults. Entries</span>
+<span class="sd">    :attr:`protocol`; without ``protocol`` the sequence function plays its defaults. Entries</span>
 <span class="sd">    a request omits keep their initial values, the entry's ``default`` or else</span>
-<span class="sd">    the app's. Times travel as integer microseconds and other floats to six</span>
+<span class="sd">    the sequence function's. Times travel as integer microseconds and other floats to six</span>
 <span class="sd">    significant digits, the precision of a float32 parameter, so a reply stored</span>
 <span class="sd">    in scanner parameters and sent back evaluates to itself.</span>
 
@@ -553,13 +563,13 @@
 <span class="sd">    Attributes</span>
 <span class="sd">    ----------</span>
 <span class="sd">    app : callable</span>
-<span class="sd">        A function ``app(system, **arguments)`` that designs the sequence. It</span>
+<span class="sd">        The sequence function, ``app(system, **arguments)``. It</span>
 <span class="sd">        takes the scanner limits, a :class:`pypulseqpp.Opts`, and the keyword</span>
 <span class="sd">        arguments the entries of :attr:`protocol` bind, and returns a</span>
 <span class="sd">        :class:`pypulseqpp.Sequence` or a list of them, which is a chain: the</span>
 <span class="sd">        prescans first and the main sequence last. The defaults the listing</span>
-<span class="sd">        shows are those of its signature, so a :func:`functools.partial` is an</span>
-<span class="sd">        app. :meth:`generate` calls it, and so does an :meth:`evaluate` that</span>
+<span class="sd">        shows are those of its signature, so a :func:`functools.partial` is a</span>
+<span class="sd">        sequence function too. :meth:`generate` calls it, and so does an :meth:`evaluate` that</span>
 <span class="sd">        designs the sequence; the default :meth:`evaluate` does not.</span>
 <span class="sd">    protocol : mapping</span>
 <span class="sd">        The entries the operator edits, by key: the interpreter's parameter</span>
@@ -671,7 +681,7 @@
 <div class="viewcode-block" id="SequencePlugin.listing">
 <a class="viewcode-back" href="../../../generated/pulserver.design.SequencePlugin.listing.html#pulserver.design.SequencePlugin.listing">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">listing</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="n">ProtocolKey</span><span class="p">,</span> <span class="n">Parameter</span><span class="p">]:</span>
-<span class="w">        </span><span class="sd">"""Return the protocol with its schema, valued at the app's defaults.</span>
+<span class="w">        </span><span class="sd">"""Return the protocol with its schema, valued at the sequence function's defaults.</span>
 
 <span class="sd">        An argument defaulting to ``None`` shows the preset that requests ``None``.</span>
 <span class="sd">        The ``PRESCRIPTION`` entries of :mod:`pulserver.protocol` follow the</span>
@@ -711,14 +721,14 @@
 <span class="sd">        :meth:`validate` describes.</span>
 
 <span class="sd">        The default accepts the protocol unchanged with no scan time estimate,</span>
-<span class="sd">        and does not call the app.</span>
+<span class="sd">        and does not call the sequence function.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
 <span class="sd">        system</span>
 <span class="sd">            The scanner limits the sequence is designed under.</span>
 <span class="sd">        protocol</span>
-<span class="sd">            The requested protocol, in the units of the app's arguments.</span>
+<span class="sd">            The requested protocol, in the units of the sequence function's arguments.</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
@@ -743,7 +753,7 @@
 <span class="sd">        system</span>
 <span class="sd">            The scanner limits the sequence is designed under.</span>
 <span class="sd">        protocol</span>
-<span class="sd">            The requested protocol, in the units of the app's arguments.</span>
+<span class="sd">            The requested protocol, in the units of the sequence function's arguments.</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
@@ -782,7 +792,7 @@
 <span class="sd">        Raises</span>
 <span class="sd">        ------</span>
 <span class="sd">        ValueError</span>
-<span class="sd">            If the declared entries are inconsistent with the app, as</span>
+<span class="sd">            If the declared entries are inconsistent with the sequence function, as</span>
 <span class="sd">            :meth:`listing` reports; this is a defect of the plugin and not of</span>
 <span class="sd">            the request.</span>
 <span class="sd">        """</span>
@@ -844,7 +854,7 @@
         <span class="k">return</span> <span class="n">validation</span><span class="p">,</span> <span class="n">paths</span><span class="p">,</span> <span class="nb">list</span><span class="p">(</span><span class="nb">zip</span><span class="p">(</span><span class="nb">map</span><span class="p">(</span><span class="n">Path</span><span class="p">,</span> <span class="n">paths</span><span class="p">),</span> <span class="n">chain</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_defaults</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
-<span class="w">        </span><span class="sd">"""Return the default of each argument of the app, ``inspect.Parameter.empty`` for none."""</span>
+<span class="w">        </span><span class="sd">"""Return the default of each argument of the sequence function, ``inspect.Parameter.empty`` for none."""</span>
         <span class="c1"># The first parameter is the scanner limits.</span>
         <span class="n">arguments</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">inspect</span><span class="o">.</span><span class="n">signature</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">app</span><span class="p">)</span><span class="o">.</span><span class="n">parameters</span><span class="o">.</span><span class="n">values</span><span class="p">())[</span><span class="mi">1</span><span class="p">:]</span>
         <span class="k">return</span> <span class="p">{</span>

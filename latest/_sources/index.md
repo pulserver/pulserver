@@ -8,9 +8,9 @@
 :maxdepth: 2
 
 user-guide/index
+developer-guide/index
 explanations/index
 examples/index
 api/index
-developer-guide/index
 misc/index
 ```

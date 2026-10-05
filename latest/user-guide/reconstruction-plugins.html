@@ -37,7 +37,7 @@
     <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-binder.css?v=f4aeca0c" />
     <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-dataframe.css?v=2082cf3c" />
     <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
-    <link rel="stylesheet" type="text/css" href="../_static/pulserver.css?v=36f0fcfd" />
+    <link rel="stylesheet" type="text/css" href="../_static/pulserver.css?v=e08ae8f3" />
   
   <!-- So that users can add custom icons -->
   <script defer src="../_static/scripts/fontawesome.js?digest=90905a2f556bf617f1a9"></script>
@@ -62,6 +62,7 @@
         </script>
     <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
     <link rel="canonical" href="https://pulserver.github.io/pulserver/latest/user-guide/reconstruction-plugins.html" />
+    <link rel="icon" href="../_static/pulserver-mark.svg"/>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
     <link rel="next" title="Reconstruction clients" href="reconstruction-client.html" />
@@ -197,8 +198,8 @@
       
     
     
-    <img src="../_static/pulserver-mark.svg" class="logo__image only-light" alt="pulserver documentation - Home"/>
-    <img src="../_static/pulserver-mark.svg" class="logo__image only-dark pst-js-only" alt="pulserver documentation - Home"/>
+    <img src="../_static/pulserver-mark.svg" class="logo__image only-light" alt="pulserver"/>
+    <img src="../_static/pulserver-mark-dark.svg" class="logo__image only-dark pst-js-only" alt="pulserver"/>
   
   
 </a></div>
@@ -247,28 +248,50 @@
 <li class="toctree-l2"><a class="reference internal" href="virtual-scanner.html">Scanning a phantom without a scanner</a></li>
 </ul>
 </details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../developer-guide/index.html">Developer guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../developer-guide/prerequisites.html">Development prerequisites</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer-guide/installation.html">Editable installation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer-guide/workflow.html">Development workflow</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer-guide/style.html">Coding style</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer-guide/documentation.html">Documentation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer-guide/terminology.html">Terminology and conventions</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../developer-guide/internals/index.html">Internals</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/ir-cache.html">IR cache</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/protocol-wire.html">Protocol text blocks</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/reconstruction-proxy.html">Reconstruction proxy</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/virtual-scanner.html">Virtual scanner</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/bloch-engine.html">Bloch engine</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer-guide/pre-commit.html">Pre-commit</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer-guide/pull-requests.html">Pull requests</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer-guide/releases.html">Releases</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer-guide/code-of-conduct.html">Code of conduct</a></li>
+</ul>
+</details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../explanations/index.html">Explanations</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="../explanations/architecture.html">Architecture</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../explanations/protocol.html">Protocol resolution</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../explanations/designs.html">Designs and the design store</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../explanations/ir-cache.html">The scanner IR</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../explanations/scanner-representation.html">Scanner representation (PulSeg)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../explanations/virtual-scanner.html">The virtual scanner</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../explanations/reconstruction.html">Raw-data enrichment and routing</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../explanations/calibration.html">Calibration, noise and coil compression</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../explanations/virtual-scanner.html">The virtual scanner</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../explanations/bloch-simulation.html">Bloch simulation on isochromats</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../examples/index.html">Examples</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2 has-children"><a class="reference internal" href="../examples/protocol.html">Protocol resolution</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-protocol/01_protocol_resolution.html">Protocol resolution for a 2D gradient echo</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../examples/course.html">Course</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/01_protocol_to_image.html">1. From protocol to image</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/02_sequence_plugin.html">2. A scanner sequence and its protocol</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/03_scanner_representation.html">3. Scanner representation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/04_reconstruction_plugin.html">4. A reconstruction plugin</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/05_testing_on_the_virtual_scanner.html">5. Testing on the virtual scanner</a></li>
 </ul>
 </details></li>
-<li class="toctree-l2 has-children"><a class="reference internal" href="../examples/scanner-ir.html">Scanner IR</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/02-scanner-ir/01_segmentation.html">Segmentation of a sequence for the scanner</a></li>
-</ul>
-</details></li>
-<li class="toctree-l2 has-children"><a class="reference internal" href="../examples/reconstruction.html">Reconstruction</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/03-reconstruction/01_enrichment.html">Raw-data enrichment and reconstruction</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../examples/tours.html">Tours</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/02-tours/01_protocol_resolution.html">Protocol resolution for a 2D gradient echo</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/02-tours/02_segmentation.html">Segmentation of a sequence for the scanner</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/02-tours/03_fov_offset_enrichment.html">Field-of-view offset and the proxy phase</a></li>
 </ul>
 </details></li>
 </ul>
@@ -283,19 +306,6 @@
 <li class="toctree-l2"><a class="reference internal" href="../api/mrd.html">MRD data</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/validate.html">Validation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/virtual.html">Virtual scanner</a></li>
-</ul>
-</details></li>
-<li class="toctree-l1 has-children"><a class="reference internal" href="../developer-guide/index.html">Developer guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="../developer-guide/prerequisites.html">Development prerequisites</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../developer-guide/installation.html">Editable installation</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../developer-guide/workflow.html">Development workflow</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../developer-guide/style.html">Coding style</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../developer-guide/documentation.html">Documentation</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../developer-guide/terminology.html">Terminology and conventions</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../developer-guide/pre-commit.html">Pre-commit</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../developer-guide/pull-requests.html">Pull requests</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../developer-guide/releases.html">Releases</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../developer-guide/code-of-conduct.html">Code of conduct</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../misc/index.html">Miscellaneous</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -525,6 +535,7 @@
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#readout-placement">Readout placement</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#non-cartesian-data">Non-Cartesian data</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#coil-sensitivities-noise-and-compression">Coil sensitivities, noise and compression</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#dicom-pixel-values">DICOM pixel values</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#running-a-plugin-offline">Running a plugin offline</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#see-also">See also</a></li>
 </ul>
@@ -563,7 +574,7 @@ and a module-level <code class="docutils literal notranslate"><span class="pre">
 and <code class="docutils literal notranslate"><span class="pre">data.data</span></code> its k-space, <code class="docutils literal notranslate"><span class="pre">(coils,</span> <span class="pre">...,</span> <span class="pre">readout)</span></code>, with the axes
 <code class="docutils literal notranslate"><span class="pre">data.data.axes</span></code> names. Readouts are placed by their echo along the readout and
 by their encoding counters along the encoded axes
-(<a class="reference internal" href="../explanations/reconstruction.html#reconstruction-placement"><span class="std std-ref">Placement</span></a>); a sequence sets the counters with
+(<a class="reference internal" href="../developer-guide/internals/reconstruction-proxy.html#reconstruction-placement"><span class="std std-ref">Placement</span></a>); a sequence sets the counters with
 <a class="reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.sequences.Labels.html#pypulseqpp.sequences.Labels" title="(in pypulseqpp latest)"><code class="xref py py-class docutils literal notranslate"><span class="pre">pypulseqpp.sequences.Labels</span></code></a> or <code class="docutils literal notranslate"><span class="pre">pp.make_label</span></code> as in PyPulseq, and a
 readout placed over another is warned about.
 The proxy runs the plugin in a worker process, one per series, over an MRD
@@ -851,6 +862,43 @@ first field that differs with both values. The failure text the client
 receives carries the message. <code class="docutils literal notranslate"><span class="pre">required=False</span></code> returns <code class="docutils literal notranslate"><span class="pre">None</span></code> instead of
 raising.</p>
 </section>
+<section id="dicom-pixel-values">
+<h2>DICOM pixel values<a class="headerlink" href="#dicom-pixel-values" title="Link to this heading">#</a></h2>
+<p>A DICOM dataset stores integer pixels, and the integers are made when a result
+with <code class="docutils literal notranslate"><span class="pre">dicom=True</span></code> is converted, from the image the plugin returned. The
+dataset’s rescale maps them to the values of the image,
+<code class="docutils literal notranslate"><span class="pre">value</span> <span class="pre">=</span> <span class="pre">stored</span> <span class="pre">×</span> <span class="pre">RescaleSlope</span> <span class="pre">+</span> <span class="pre">RescaleIntercept</span></code>, with one mapping for each
+DICOM series, a series being the images that share <code class="docutils literal notranslate"><span class="pre">image_series_index</span></code>.</p>
+<ul class="simple">
+<li><p>An integer image is stored as it is. Its dataset carries a rescale only when
+the attributes of the result state one.</p></li>
+<li><p>The first floating-point image of a series fixes the mapping of the series.
+The intercept is 0, so that zero is stored as zero, and the slope stores the
+peak magnitude of the image at half the stored range, which leaves headroom
+for later images of the series up to twice as large. The stored type is
+16-bit, signed when that image has a negative value and unsigned when it has
+none. An image that states <code class="docutils literal notranslate"><span class="pre">ArrayMinimum</span></code> and <code class="docutils literal notranslate"><span class="pre">ArrayMaximum</span></code> is mapped as the
+array of images it belongs to, so the mapping of a series that begins with a
+volume does not depend on which partition arrives first. A complex image is
+stored as its magnitude. An image with no nonzero finite value fixes no
+mapping.</p></li>
+<li><p>Every later image of the series is stored under the mapping of the series, so
+the ratios between the values of its images are the ratios between their
+stored integers.</p></li>
+<li><p>A mapping stated in the attributes of a result, <code class="docutils literal notranslate"><span class="pre">RescaleSlope</span></code> or
+<code class="docutils literal notranslate"><span class="pre">RescaleIntercept</span></code>, is the mapping of that image:
+<code class="docutils literal notranslate"><span class="pre">stored</span> <span class="pre">=</span> <span class="pre">round((value</span> <span class="pre">-</span> <span class="pre">intercept)</span> <span class="pre">/</span> <span class="pre">slope)</span></code>, a slope left out being 1 and an
+intercept left out 0. It is also the mapping of the series when the image is
+the first floating-point image of the series, and the images that follow it
+and state none are stored under it. The slope is nonzero and both are finite.</p></li>
+<li><p>A value outside the range of the stored type is clipped to the nearest end of
+the range, never wrapped, and NaN is stored as 0. The clipped pixels are
+counted for each series, and the first clipping of a series is logged with its
+count. An image whose peak exceeds twice the peak its series was mapped from
+clips under the mapping of the series, unless the plugin states a mapping.</p></li>
+</ul>
+<p><code class="docutils literal notranslate"><span class="pre">RescaleType</span></code> is <code class="docutils literal notranslate"><span class="pre">US</span></code>, unspecified: the units are those of the reconstruction.</p>
+</section>
 <section id="running-a-plugin-offline">
 <h2>Running a plugin offline<a class="headerlink" href="#running-a-plugin-offline" title="Link to this heading">#</a></h2>
 <p><a class="reference internal" href="../generated/pulserver.recon.ReconPlugin.run.html#pulserver.recon.ReconPlugin.run" title="pulserver.recon.ReconPlugin.run"><code class="xref py py-meth docutils literal notranslate"><span class="pre">run()</span></code></a> reconstructs an ISMRMRD HDF5 file in
@@ -989,6 +1037,7 @@ reconstruction.</p>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#readout-placement">Readout placement</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#non-cartesian-data">Non-Cartesian data</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#coil-sensitivities-noise-and-compression">Coil sensitivities, noise and compression</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#dicom-pixel-values">DICOM pixel values</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#running-a-plugin-offline">Running a plugin offline</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#see-also">See also</a></li>
 </ul>

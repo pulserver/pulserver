@@ -7,6 +7,9 @@ scanner's reconstruction client does ({doc}`../explanations/virtual-scanner`). A
 reconstruction plugin are exercised together, through the production design
 calls and proxy.
 
+A browser build of the virtual scanner's console runs without an installation
+at <https://pulserver.github.io/MaRGE/>.
+
 ## Generate a design
 
 Generate the design as the interpreter host process does, with the prescribed
@@ -53,7 +56,10 @@ proxy refuses a series whose config names none.
 
 The phantom lies in the physical frame, whose axes are the logical ones under
 a prescription without a rotation; the object above is centred on the
-prescribed field of view, so it appears at the centre of the image. `received`
+prescribed field of view, so it appears at the centre of the image.
+`position_mm` is written as each acquisition's `position`; `send` writes no
+`fov_offset_mm` user parameter, so the proxy corrects the samples for the
+offset the design was converted at and for no further displacement. `received`
 holds the images, DICOM datasets and texts the reconstruction returned; a text
 beginning `pulserver:` reports a refused or failed series.
 
@@ -81,7 +87,7 @@ offsets of the design's RF pulses at it when it builds the IR
 
 The analytic acquisition acts on the phantom's density alone. For relaxation,
 flip angles and slice profiles, sample the phantom as isochromats and play the
-cache on them ({doc}`../explanations/bloch-simulation`); the readouts are sent
+cache on them ({doc}`../explanations/virtual-scanner`); the readouts are sent
 as before:
 
 ```python
@@ -202,7 +208,7 @@ line, is written to standard output, and the scan clock to standard error.
 - `--spins` spreads each voxel over that many isochromats, at the quantiles of
   the Lorentzian line of its tissue's T2′, at its centre or, with
   `--voxel box`, over it; `--diffusion` lets BrainWeb's tissue classes diffuse
-  ({doc}`../explanations/bloch-simulation`). A phantom file gives each ellipse
+  ({doc}`../developer-guide/internals/bloch-engine`). A phantom file gives each ellipse
   its `t2_prime`, in s, and `diffusion`, in m²/s. Isochromats that diffuse are
   played block by block, and a voxel's diffusion attenuation needs many spins
   to be resolved.
@@ -392,7 +398,8 @@ here: its sequences are then the plugins, its subject names the phantom, its RF
 coil names the coil, and it opens each exam on the localizer. The
 browser build of MaRGE in [pulserver/MaRGE](https://github.com/pulserver/MaRGE)
 runs it in a browser tab, opened with `?console=ws://127.0.0.1:8765`, and plays
-each scan's sound as it streams.
+each scan's sound as it streams; it is published at
+<https://pulserver.github.io/MaRGE/>.
 
 ## See also
 

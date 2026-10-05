@@ -37,7 +37,7 @@
     <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-binder.css?v=f4aeca0c" />
     <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-dataframe.css?v=2082cf3c" />
     <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
-    <link rel="stylesheet" type="text/css" href="../_static/pulserver.css?v=36f0fcfd" />
+    <link rel="stylesheet" type="text/css" href="../_static/pulserver.css?v=e08ae8f3" />
   
   <!-- So that users can add custom icons -->
   <script defer src="../_static/scripts/fontawesome.js?digest=90905a2f556bf617f1a9"></script>
@@ -62,9 +62,10 @@
         </script>
     <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
     <link rel="canonical" href="https://pulserver.github.io/pulserver/latest/developer-guide/terminology.html" />
+    <link rel="icon" href="../_static/pulserver-mark.svg"/>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Pre-commit" href="pre-commit.html" />
+    <link rel="next" title="Internals" href="internals/index.html" />
     <link rel="prev" title="Documentation" href="documentation.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
@@ -197,8 +198,8 @@
       
     
     
-    <img src="../_static/pulserver-mark.svg" class="logo__image only-light" alt="pulserver documentation - Home"/>
-    <img src="../_static/pulserver-mark.svg" class="logo__image only-dark pst-js-only" alt="pulserver documentation - Home"/>
+    <img src="../_static/pulserver-mark.svg" class="logo__image only-light" alt="pulserver"/>
+    <img src="../_static/pulserver-mark-dark.svg" class="logo__image only-dark pst-js-only" alt="pulserver"/>
   
   
 </a></div>
@@ -247,28 +248,50 @@
 <li class="toctree-l2"><a class="reference internal" href="../user-guide/virtual-scanner.html">Scanning a phantom without a scanner</a></li>
 </ul>
 </details></li>
+<li class="toctree-l1 current active has-children"><a class="reference internal" href="index.html">Developer guide</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="prerequisites.html">Development prerequisites</a></li>
+<li class="toctree-l2"><a class="reference internal" href="installation.html">Editable installation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="workflow.html">Development workflow</a></li>
+<li class="toctree-l2"><a class="reference internal" href="style.html">Coding style</a></li>
+<li class="toctree-l2"><a class="reference internal" href="documentation.html">Documentation</a></li>
+<li class="toctree-l2 current active"><a class="current reference internal" href="#">Terminology and conventions</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="internals/index.html">Internals</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="internals/ir-cache.html">IR cache</a></li>
+<li class="toctree-l3"><a class="reference internal" href="internals/protocol-wire.html">Protocol text blocks</a></li>
+<li class="toctree-l3"><a class="reference internal" href="internals/reconstruction-proxy.html">Reconstruction proxy</a></li>
+<li class="toctree-l3"><a class="reference internal" href="internals/virtual-scanner.html">Virtual scanner</a></li>
+<li class="toctree-l3"><a class="reference internal" href="internals/bloch-engine.html">Bloch engine</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2"><a class="reference internal" href="pre-commit.html">Pre-commit</a></li>
+<li class="toctree-l2"><a class="reference internal" href="pull-requests.html">Pull requests</a></li>
+<li class="toctree-l2"><a class="reference internal" href="releases.html">Releases</a></li>
+<li class="toctree-l2"><a class="reference internal" href="code-of-conduct.html">Code of conduct</a></li>
+</ul>
+</details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../explanations/index.html">Explanations</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="../explanations/architecture.html">Architecture</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../explanations/protocol.html">Protocol resolution</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../explanations/designs.html">Designs and the design store</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../explanations/ir-cache.html">The scanner IR</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../explanations/scanner-representation.html">Scanner representation (PulSeg)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../explanations/virtual-scanner.html">The virtual scanner</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../explanations/reconstruction.html">Raw-data enrichment and routing</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../explanations/calibration.html">Calibration, noise and coil compression</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../explanations/virtual-scanner.html">The virtual scanner</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../explanations/bloch-simulation.html">Bloch simulation on isochromats</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../examples/index.html">Examples</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2 has-children"><a class="reference internal" href="../examples/protocol.html">Protocol resolution</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-protocol/01_protocol_resolution.html">Protocol resolution for a 2D gradient echo</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../examples/course.html">Course</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/01_protocol_to_image.html">1. From protocol to image</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/02_sequence_plugin.html">2. A scanner sequence and its protocol</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/03_scanner_representation.html">3. Scanner representation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/04_reconstruction_plugin.html">4. A reconstruction plugin</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/05_testing_on_the_virtual_scanner.html">5. Testing on the virtual scanner</a></li>
 </ul>
 </details></li>
-<li class="toctree-l2 has-children"><a class="reference internal" href="../examples/scanner-ir.html">Scanner IR</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/02-scanner-ir/01_segmentation.html">Segmentation of a sequence for the scanner</a></li>
-</ul>
-</details></li>
-<li class="toctree-l2 has-children"><a class="reference internal" href="../examples/reconstruction.html">Reconstruction</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/03-reconstruction/01_enrichment.html">Raw-data enrichment and reconstruction</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../examples/tours.html">Tours</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/02-tours/01_protocol_resolution.html">Protocol resolution for a 2D gradient echo</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/02-tours/02_segmentation.html">Segmentation of a sequence for the scanner</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/02-tours/03_fov_offset_enrichment.html">Field-of-view offset and the proxy phase</a></li>
 </ul>
 </details></li>
 </ul>
@@ -283,19 +306,6 @@
 <li class="toctree-l2"><a class="reference internal" href="../api/mrd.html">MRD data</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/validate.html">Validation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/virtual.html">Virtual scanner</a></li>
-</ul>
-</details></li>
-<li class="toctree-l1 current active has-children"><a class="reference internal" href="index.html">Developer guide</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
-<li class="toctree-l2"><a class="reference internal" href="prerequisites.html">Development prerequisites</a></li>
-<li class="toctree-l2"><a class="reference internal" href="installation.html">Editable installation</a></li>
-<li class="toctree-l2"><a class="reference internal" href="workflow.html">Development workflow</a></li>
-<li class="toctree-l2"><a class="reference internal" href="style.html">Coding style</a></li>
-<li class="toctree-l2"><a class="reference internal" href="documentation.html">Documentation</a></li>
-<li class="toctree-l2 current active"><a class="current reference internal" href="#">Terminology and conventions</a></li>
-<li class="toctree-l2"><a class="reference internal" href="pre-commit.html">Pre-commit</a></li>
-<li class="toctree-l2"><a class="reference internal" href="pull-requests.html">Pull requests</a></li>
-<li class="toctree-l2"><a class="reference internal" href="releases.html">Releases</a></li>
-<li class="toctree-l2"><a class="reference internal" href="code-of-conduct.html">Code of conduct</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../misc/index.html">Miscellaneous</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -598,11 +608,17 @@ wording.</p>
 <tr class="row-odd"><td><p>the compiled form of a sequence</p></td>
 <td><p>the IR, the IR cache</p></td>
 </tr>
-<tr class="row-even"><td><p>the part that repeats</p></td>
-<td><p>the repeating unit, the TR</p></td>
+<tr class="row-even"><td><p>a distinct block, amplitudes aside</p></td>
+<td><p>a base block</p></td>
 </tr>
-<tr class="row-odd"><td><p>pieces of a TR</p></td>
-<td><p>segments</p></td>
+<tr class="row-odd"><td><p>the part that repeats, the repeating unit</p></td>
+<td><p>the repetition, the TR</p></td>
+</tr>
+<tr class="row-even"><td><p>pieces of a TR, a segment definition</p></td>
+<td><p>a virtual segment</p></td>
+</tr>
+<tr class="row-odd"><td><p>one occurrence of such a piece</p></td>
+<td><p>a segment instance</p></td>
 </tr>
 <tr class="row-even"><td><p>the order the pieces are played in</p></td>
 <td><p>the execution stream</p></td>
@@ -632,8 +648,9 @@ design choice, not a time.</p>
 <p><strong>Design.</strong> A <em>sequence function</em> is a function of the scanner limits and the
 protocol arguments that returns the designed sequences, a chain with the
 prescans first and the main sequence last. A <em>scanner sequence</em> is the
-pulserver <code class="docutils literal notranslate"><span class="pre">SequencePlugin</span></code> that binds an <em>app</em>, a sequence function, to protocol
-entries. A <em>plugin</em> is the file a scanner sequence or a reconstruction is loaded
+pulserver <code class="docutils literal notranslate"><span class="pre">SequencePlugin</span></code> that binds a sequence function, its <code class="docutils literal notranslate"><span class="pre">app</span></code>
+attribute, to protocol entries. “App” names that attribute only; in prose the
+bound function is the <em>sequence function</em>. A <em>plugin</em> is the file a scanner sequence or a reconstruction is loaded
 from; say which kind. The <em>evaluation</em> of a prescription is what the scanner
 sequence’s <code class="docutils literal notranslate"><span class="pre">evaluate</span></code> returns: the resolved protocol, the scan time, a note and,
 optionally, the <em>RF layout</em>. An RF layout is the RF <em>definitions</em> of a sequence,
@@ -649,12 +666,23 @@ store</em> is the directory holding every design. A <em>design call</em> is one 
 keeps state beyond the designs it stores. A design is <em>pushed</em> to the <em>design intake</em>, the
 proxy’s HTTP endpoint writing its store, as a <em>bundle</em> of the files of its
 directory.</p>
-<p><strong>IR.</strong> A <em>subsequence</em> is one file of a <code class="docutils literal notranslate"><span class="pre">NextSequence</span></code> chain. A <em>definition</em>
-is a distinct event after deduplication; an <em>instance</em> is its occurrence in a
-block, with its own amplitude. The <em>repeating unit</em> is the TR of a
-subsequence; a <em>segment</em> is part of it bounded by zero gradient amplitude; the
-<em>execution stream</em> is the order of segments over the scan. The <em>IR cache</em> is
-the file; the <em>collection</em> is what a reader loads from it.</p>
+<p><strong>IR.</strong> The IR follows the model of PulSeg, whose terms are used for its
+concepts. A <em>subsequence</em> is one file of a <code class="docutils literal notranslate"><span class="pre">NextSequence</span></code> chain. An event
+<em>definition</em> is a distinct RF, gradient or ADC event after deduplication; an
+event <em>instance</em> is its occurrence in a block, with its own amplitude. A <em>base
+block</em> is a block with its waveform amplitudes normalised; blocks that differ
+only in amplitudes, offsets, rotation or, for a pure delay, duration share one.
+A <em>virtual segment</em> is an ordered list of base blocks, a reusable structural
+unit that need not be periodic; a <em>segment instance</em> is one occurrence of it,
+with the amplitudes, offsets, rotations and durations it plays; the <em>execution
+stream</em> is the order of segment instances over the scan, which accounts for
+every block. The <em>repetition</em> of a subsequence is the period
+<code class="docutils literal notranslate"><span class="pre">pypulseqpp.Sequence.repetition()</span></code> reports, the whole subsequence where it
+does not repeat; the conversion finds virtual segments within it. Do not write
+“repeating unit”, which implies that every sequence is periodic, nor “segment
+definition” for a virtual segment. A <code class="docutils literal notranslate"><span class="pre">TRID</span></code> label marks a <em>safety group</em> here,
+not a segment boundary. The <em>IR cache</em> is the file; the <em>collection</em> is what a
+reader loads from it.</p>
 <p><strong>Virtual scanner.</strong> The stand-ins for the scanner in tests: the <em>virtual
 interpreter</em>, which plays a cache with the C library’s cursor, the <em>phantom</em>
 acquired along the trajectory it plays, and the <em>virtual reconstruction
@@ -729,7 +757,7 @@ verb that classifies the operation: “Return…”, “Read…”, “Format…
 <tr class="row-even"><td><p>Time entry of a protocol, on the wire and in a scanner parameter</p></td>
 <td><p>integer µs</p></td>
 </tr>
-<tr class="row-odd"><td><p>Time argument of an app</p></td>
+<tr class="row-odd"><td><p>Time argument of a sequence function</p></td>
 <td><p>s</p></td>
 </tr>
 <tr class="row-even"><td><p>Float protocol entry</p></td>
@@ -876,11 +904,11 @@ the task.</p>
       </div>
     </a>
     <a class="right-next"
-       href="pre-commit.html"
+       href="internals/index.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Pre-commit</p>
+        <p class="prev-next-title">Internals</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>

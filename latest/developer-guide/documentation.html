@@ -37,7 +37,7 @@
     <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-binder.css?v=f4aeca0c" />
     <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-dataframe.css?v=2082cf3c" />
     <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
-    <link rel="stylesheet" type="text/css" href="../_static/pulserver.css?v=36f0fcfd" />
+    <link rel="stylesheet" type="text/css" href="../_static/pulserver.css?v=e08ae8f3" />
   
   <!-- So that users can add custom icons -->
   <script defer src="../_static/scripts/fontawesome.js?digest=90905a2f556bf617f1a9"></script>
@@ -64,6 +64,7 @@
         </script>
     <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
     <link rel="canonical" href="https://pulserver.github.io/pulserver/latest/developer-guide/documentation.html" />
+    <link rel="icon" href="../_static/pulserver-mark.svg"/>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
     <link rel="next" title="Terminology and conventions" href="terminology.html" />
@@ -199,8 +200,8 @@
       
     
     
-    <img src="../_static/pulserver-mark.svg" class="logo__image only-light" alt="pulserver documentation - Home"/>
-    <img src="../_static/pulserver-mark.svg" class="logo__image only-dark pst-js-only" alt="pulserver documentation - Home"/>
+    <img src="../_static/pulserver-mark.svg" class="logo__image only-light" alt="pulserver"/>
+    <img src="../_static/pulserver-mark-dark.svg" class="logo__image only-dark pst-js-only" alt="pulserver"/>
   
   
 </a></div>
@@ -249,28 +250,50 @@
 <li class="toctree-l2"><a class="reference internal" href="../user-guide/virtual-scanner.html">Scanning a phantom without a scanner</a></li>
 </ul>
 </details></li>
+<li class="toctree-l1 current active has-children"><a class="reference internal" href="index.html">Developer guide</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="prerequisites.html">Development prerequisites</a></li>
+<li class="toctree-l2"><a class="reference internal" href="installation.html">Editable installation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="workflow.html">Development workflow</a></li>
+<li class="toctree-l2"><a class="reference internal" href="style.html">Coding style</a></li>
+<li class="toctree-l2 current active"><a class="current reference internal" href="#">Documentation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="terminology.html">Terminology and conventions</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="internals/index.html">Internals</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="internals/ir-cache.html">IR cache</a></li>
+<li class="toctree-l3"><a class="reference internal" href="internals/protocol-wire.html">Protocol text blocks</a></li>
+<li class="toctree-l3"><a class="reference internal" href="internals/reconstruction-proxy.html">Reconstruction proxy</a></li>
+<li class="toctree-l3"><a class="reference internal" href="internals/virtual-scanner.html">Virtual scanner</a></li>
+<li class="toctree-l3"><a class="reference internal" href="internals/bloch-engine.html">Bloch engine</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2"><a class="reference internal" href="pre-commit.html">Pre-commit</a></li>
+<li class="toctree-l2"><a class="reference internal" href="pull-requests.html">Pull requests</a></li>
+<li class="toctree-l2"><a class="reference internal" href="releases.html">Releases</a></li>
+<li class="toctree-l2"><a class="reference internal" href="code-of-conduct.html">Code of conduct</a></li>
+</ul>
+</details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../explanations/index.html">Explanations</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="../explanations/architecture.html">Architecture</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../explanations/protocol.html">Protocol resolution</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../explanations/designs.html">Designs and the design store</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../explanations/ir-cache.html">The scanner IR</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../explanations/scanner-representation.html">Scanner representation (PulSeg)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../explanations/virtual-scanner.html">The virtual scanner</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../explanations/reconstruction.html">Raw-data enrichment and routing</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../explanations/calibration.html">Calibration, noise and coil compression</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../explanations/virtual-scanner.html">The virtual scanner</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../explanations/bloch-simulation.html">Bloch simulation on isochromats</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../examples/index.html">Examples</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2 has-children"><a class="reference internal" href="../examples/protocol.html">Protocol resolution</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-protocol/01_protocol_resolution.html">Protocol resolution for a 2D gradient echo</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../examples/course.html">Course</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/01_protocol_to_image.html">1. From protocol to image</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/02_sequence_plugin.html">2. A scanner sequence and its protocol</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/03_scanner_representation.html">3. Scanner representation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/04_reconstruction_plugin.html">4. A reconstruction plugin</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/05_testing_on_the_virtual_scanner.html">5. Testing on the virtual scanner</a></li>
 </ul>
 </details></li>
-<li class="toctree-l2 has-children"><a class="reference internal" href="../examples/scanner-ir.html">Scanner IR</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/02-scanner-ir/01_segmentation.html">Segmentation of a sequence for the scanner</a></li>
-</ul>
-</details></li>
-<li class="toctree-l2 has-children"><a class="reference internal" href="../examples/reconstruction.html">Reconstruction</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/03-reconstruction/01_enrichment.html">Raw-data enrichment and reconstruction</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../examples/tours.html">Tours</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/02-tours/01_protocol_resolution.html">Protocol resolution for a 2D gradient echo</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/02-tours/02_segmentation.html">Segmentation of a sequence for the scanner</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/02-tours/03_fov_offset_enrichment.html">Field-of-view offset and the proxy phase</a></li>
 </ul>
 </details></li>
 </ul>
@@ -285,19 +308,6 @@
 <li class="toctree-l2"><a class="reference internal" href="../api/mrd.html">MRD data</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/validate.html">Validation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/virtual.html">Virtual scanner</a></li>
-</ul>
-</details></li>
-<li class="toctree-l1 current active has-children"><a class="reference internal" href="index.html">Developer guide</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
-<li class="toctree-l2"><a class="reference internal" href="prerequisites.html">Development prerequisites</a></li>
-<li class="toctree-l2"><a class="reference internal" href="installation.html">Editable installation</a></li>
-<li class="toctree-l2"><a class="reference internal" href="workflow.html">Development workflow</a></li>
-<li class="toctree-l2"><a class="reference internal" href="style.html">Coding style</a></li>
-<li class="toctree-l2 current active"><a class="current reference internal" href="#">Documentation</a></li>
-<li class="toctree-l2"><a class="reference internal" href="terminology.html">Terminology and conventions</a></li>
-<li class="toctree-l2"><a class="reference internal" href="pre-commit.html">Pre-commit</a></li>
-<li class="toctree-l2"><a class="reference internal" href="pull-requests.html">Pull requests</a></li>
-<li class="toctree-l2"><a class="reference internal" href="releases.html">Releases</a></li>
-<li class="toctree-l2"><a class="reference internal" href="code-of-conduct.html">Code of conduct</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../misc/index.html">Miscellaneous</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -537,10 +547,12 @@
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#code-comments">Code comments</a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#results">Results</a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#tone">Tone</a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#course-and-tours">Course and Tours</a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#api-examples-and-gallery-examples">API examples and gallery examples</a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#an-example-is-a-tour-of-an-object-not-a-call-of-it">An example is a tour of an object, not a call of it</a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#defaults-of-a-plotting-helper">Defaults of a plotting helper</a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#legends-sit-outside-the-panel">Legends sit outside the panel</a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#figure-style">Figure style</a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#geometry-and-traversal-are-different-figures">Geometry and traversal are different figures</a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#diagnostics-come-from-the-implementation-they-illustrate">Diagnostics come from the implementation they illustrate</a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#one-subject-one-example">One subject, one example</a></li>
@@ -576,10 +588,11 @@
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#editing-existing-documentation">Editing existing documentation</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#building-and-reviewing-documentation">Building and reviewing documentation</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#review-checklist">Review checklist</a><ul class="nav section-nav flex-column">
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#id2">API reference</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#id3">Examples and gallery</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#id3">API reference</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#course-lessons">Course lessons</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#id4">Examples and gallery</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#explanation">Explanation</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#id4">Tutorials and how-to guides</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#id5">Tutorials and how-to guides</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#all-documentation">All documentation</a></li>
 </ul>
 </li>
@@ -627,13 +640,35 @@
 </table>
 </div>
 <p>These forms may link extensively to one another, but they should not be collapsed into a single style of documentation.</p>
-<p>The three principal modes have distinct levels of detail:</p>
-<ul class="simple">
-<li><p><strong>Explanation</strong> is concise scientific prose organised around equations, figures, tables, schematics, or explicit criteria. Each object is introduced and interpreted briefly.</p></li>
-<li><p><strong>Examples</strong> are executable MRI workflows that connect sequence physics, acquisition strategy, and application to observable output.</p></li>
-<li><p><strong>API reference</strong> is terse and exhaustive. Accurate NumPy-style docstrings carry interface semantics, units, types, and defaults.</p></li>
-</ul>
-<p>Cross-link these modes rather than repeating the same account in all three.</p>
+<p>The principal modes have distinct levels of detail:</p>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Mode</p></th>
+<th class="head"><p>Form</p></th>
+<th class="head"><p>Register</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>Course (tutorial)</strong></p></td>
+<td><p>Sequential lessons at the start of the gallery that teach the framework’s workflow, each with explicit learning objectives.</p></td>
+<td><p>Teaching prose; a lesson may refer to the previous and the next one.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Tour</strong></p></td>
+<td><p>A standalone executable workflow after the course: an application, an advanced branch or a specialised workflow, with an observable result.</p></td>
+<td><p>Concise methodological prose; no tutorial narration; not an API tour.</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Explanation</strong></p></td>
+<td><p>A concept-centred page organised around equations, figures, tables, schematics, or explicit criteria.</p></td>
+<td><p>Brief; each object is introduced and interpreted briefly.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>API reference</strong></p></td>
+<td><p>NumPy-style docstrings and reference pages.</p></td>
+<td><p>Terse and exhaustive: exact semantics, types, units, defaults, and the meaning of every return value, with small object-centred examples.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Cross-link these modes rather than repeating the same account in each.</p>
 <section id="api-reference">
 <h3>API reference<a class="headerlink" href="#api-reference" title="Link to this heading">#</a></h3>
 <p>API reference defines the public interface and its precise semantics.</p>
@@ -725,7 +760,7 @@ A = PFS,
 <p>Each example should have a stated objective and an observable outcome: a quantitative comparison, a measured trade-off, a trajectory or field that can be inspected, a convergence or error curve, a feasibility boundary. Figures must carry the argument rather than decorate it. If the objective cannot be stated without inventing a contrived experiment, the material belongs in a guide, an explanatory page, or the API reference.</p>
 <p>An example should address one question. Where it compares configurations, hold every parameter that is not under study fixed, so the difference in the output is attributable. Titles should name the concept demonstrated rather than the interface exercised.</p>
 <p>Prefer a small number of strong examples to broad coverage. A gallery is not an inventory of the public interface, and no example is warranted merely because a feature would otherwise go unrepresented.</p>
-<p>An example is <strong>not a conversational tutorial</strong>. Code, figures, and scientific results should dominate the page. Prose supplies the context necessary to understand the problem, consequential methodological choices, conventions, and interpretation.</p>
+<p>A Tour is <strong>not a conversational tutorial</strong>. Code, figures, and scientific results should dominate the page. Prose supplies the context necessary to understand the problem, consequential methodological choices, conventions, and interpretation. The course described under <a class="reference internal" href="#course-and-tours"><span class="std std-ref">Course and Tours</span></a> is the one intentional exception, and its register is defined there.</p>
 <p>A substantial example will often include:</p>
 <ol class="arabic simple">
 <li><p>a short statement of the scientific or computational objective;</p></li>
@@ -826,9 +861,25 @@ A = PFS,
 <p>The intended result is <strong>a reproducible scientific example with concise methodological annotation</strong>, not a lesson delivered by a narrator.</p>
 <p>When a sentence merely describes what the next line of code does, it can usually be removed.</p>
 </section>
+<section id="course-and-tours">
+<span id="id1"></span><h4>Course and Tours<a class="headerlink" href="#course-and-tours" title="Link to this heading">#</a></h4>
+<p>The gallery opens with a course and continues with Tours.</p>
+<p>The Course is the shortest coherent path that gives a new user the framework’s core mental model and enough practical competence to work independently. Tours are useful applications, advanced branches or specialised workflows that are not necessary for that core competence.</p>
+<p>Whether a lesson depends on another is not the test of membership; the criterion is. A terminal lesson belongs in the course if it is fundamental, and the number of lessons follows from the criterion rather than from a target. The course reaches an end-to-end result early, and later lessons follow the data flow once each.</p>
+<p>A lesson is written as teaching material. It normally contains:</p>
+<ol class="arabic simple">
+<li><p>a concise introductory paragraph stating the concept the lesson introduces;</p></li>
+<li><p>a short <strong>Learning objectives</strong> section listing what the reader can do after the lesson;</p></li>
+<li><p>the progressive executable lesson;</p></li>
+<li><p>the figures, equations and results used to explain the workflow;</p></li>
+<li><p>where useful, one sentence relating the lesson to the previous or next one.</p></li>
+</ol>
+<p>The section headings are the outline of the lesson; a separate outline that restates them is not added. Pedagogical transitions are allowed. Generated scaffolding is not: “The scope of this notebook is…”, “The observable is…”, an “Outline:” block that repeats the headings, and figurative phrasing. The prose rules of this guide apply otherwise unchanged.</p>
+<p>A Tour opens with its objective and a prerequisites line naming the lessons it assumes, and has no previous or next links. It follows every rule this section states for a gallery example.</p>
+</section>
 <section id="api-examples-and-gallery-examples">
 <h4>API examples and gallery examples<a class="headerlink" href="#api-examples-and-gallery-examples" title="Link to this heading">#</a></h4>
-<p>Two kinds of example are legitimate, and they are not interchangeable.</p>
+<p>Three kinds of example are legitimate, and they are not interchangeable: the course lesson, the Tour, and the API example.</p>
 <p>An <strong>API example</strong> shows how an object is constructed and used. It belongs in the <code class="docutils literal notranslate"><span class="pre">Examples</span></code> section of a docstring or on the reference page for that object, it is a few lines long, and it needs no experiment, sweep or scientific result. Reference material that illustrates one object belongs here; where an executed configuration and the figures it produces are large enough to be a page of their own, the reference page links the gallery example that carries them rather than repeating it.</p>
 <p>A <strong>gallery example</strong> teaches a scientific, numerical or design concept through an executable workflow and an observable result. It exists because running it produces something worth examining.</p>
 <p>The gallery is therefore not a catalogue of what the library ships. A reference page per object fulfils that role, and an object does not earn a gallery example by being undocumented elsewhere.</p>
@@ -846,7 +897,13 @@ A = PFS,
 <section id="legends-sit-outside-the-panel">
 <h4>Legends sit outside the panel<a class="headerlink" href="#legends-sit-outside-the-panel" title="Link to this heading">#</a></h4>
 <p>A legend is placed outside the axes it describes — above them, below them or beside them — in every figure, on an explanation page, in a gallery example and in a docstring plot alike. A legend inside a panel covers data, and which data it covers depends on the values the build happened to produce.</p>
-<p>Where one legend describes series drawn in several panels, it belongs to the figure rather than to one of them, above the row it applies to. Reserve room for it with the <code class="docutils literal notranslate"><span class="pre">rect</span></code> argument of <code class="docutils literal notranslate"><span class="pre">tight_layout</span></code>, or with the <code class="docutils literal notranslate"><span class="pre">top</span></code> and <code class="docutils literal notranslate"><span class="pre">bottom</span></code> of an explicit gridspec, so nothing is clipped.</p>
+<p>Where one legend describes series drawn in several panels, it belongs to the figure rather than to one of them, above the row it applies to: <code class="docutils literal notranslate"><span class="pre">fig.legend(loc=&quot;outside</span> <span class="pre">upper</span> <span class="pre">center&quot;)</span></code> under the constrained layout the figure style sets, which reserves room for it so nothing is clipped.</p>
+</section>
+<section id="figure-style">
+<h4>Figure style<a class="headerlink" href="#figure-style" title="Link to this heading">#</a></h4>
+<p>Every figure takes its typography, resolution and layout from one style module, <code class="docutils literal notranslate"><span class="pre">docs/figure_style.py</span></code>, applied before each gallery script is executed. A script sets no font size, DPI or colour of its own; where it needs a colour, it imports it from the style module. The canvas is transparent and the ink reads against the light and the dark theme alike.</p>
+<p>A figure is sized to the documentation column, <code class="docutils literal notranslate"><span class="pre">PAGE_WIDTH</span></code> of the style module; a figure narrower than the column is a fraction of it.</p>
+<p>A static figure, a schematic or a logo, is a pair of SVG files, one for each theme, drawn by <code class="docutils literal notranslate"><span class="pre">scripts/make_artwork.py</span></code> and shown with the <code class="docutils literal notranslate"><span class="pre">only-light</span></code> and <code class="docutils literal notranslate"><span class="pre">only-dark</span></code> classes. An SVG whose colours follow the reader’s operating-system setting through a media query disagrees with the theme the reader selected on the page and is not used.</p>
 </section>
 <section id="geometry-and-traversal-are-different-figures">
 <h4>Geometry and traversal are different figures<a class="headerlink" href="#geometry-and-traversal-are-different-figures" title="Link to this heading">#</a></h4>
@@ -864,7 +921,7 @@ A = PFS,
 </section>
 <section id="gallery-organization-and-navigation">
 <h4>Gallery organization and navigation<a class="headerlink" href="#gallery-organization-and-navigation" title="Link to this heading">#</a></h4>
-<p>When examples fall into categories, each category gets a landing page the documentation owns, carrying one or two factual sentences and a table of what is below it. A table is preferred to a wall of thumbnails once a category holds more than a handful of examples, because a reader looking for one sequence or one module reads names rather than pictures.</p>
+<p>The examples landing page carries a <strong>Course</strong> table and a <strong>Tours</strong> table. When examples fall into categories, each category gets a landing page the documentation owns, carrying one or two factual sentences and a table of what is below it. A table is preferred to a wall of thumbnails once a category holds more than a handful of examples, because a reader looking for one sequence or one module reads names rather than pictures.</p>
 <p>Global navigation carries the gallery and its categories, to the depth at which a category is still something a reader would look for on its own. Below that depth, an example is reached from the table on its category’s page and from cross-references, not from the navigation tree.</p>
 <p>Give each category a name that states what its examples have in common. Do not add prose to fill the page.</p>
 <p>Prefer the mechanisms the documentation builder supports — landing-page construction, hidden toctrees, navigation depth settings — over hiding generated pages with CSS.</p>
@@ -874,7 +931,9 @@ A = PFS,
 <h3>Explanation and concepts<a class="headerlink" href="#explanation-and-concepts" title="Link to this heading">#</a></h3>
 <p>Explanatory documentation answers questions about concepts, theory, terminology, relationships between methods, architecture, and design rationale.</p>
 <p>Pyxu’s conceptual introductions to inverse problems and proximal optimization, and MRI-NUFFT’s discussion of non-uniform sampling and its operators, are useful models for the desired depth and register.</p>
-<p>This is the appropriate place for material that would be too pedagogical for API reference or too general for an example.</p>
+<p>This is the appropriate place for material that would be too pedagogical for API reference or too general for an example. Implementation design — file layouts, memory budgets, tolerances, the inventory of what the test suite establishes — is not explanation; it belongs to the developer guide’s internals pages.</p>
+<p>An explanation page has one obvious purpose and, where appropriate, a strong conceptual anchor: a figure, a table, an equation, or a similarly compact device that carries the concept. A figure is never required for its own sake.</p>
+<p>An explanation page with more than one <code class="docutils literal notranslate"><span class="pre">##</span></code> section opens with a <strong>TL;DR</strong> block directly under its title: a short list of the page’s conclusions, each stated as the page states it, with no claim the page does not support. It lets a reader decide whether the page answers their question. A page of a single section may omit it. Landing pages, API reference pages and gallery examples have none.</p>
 <section id="organization-of-an-explanatory-page">
 <h4>Organization of an explanatory page<a class="headerlink" href="#organization-of-an-explanatory-page" title="Link to this heading">#</a></h4>
 <p>An explanatory page is usually clearest in this order:</p>
@@ -928,7 +987,7 @@ y = A(x) + \varepsilon
 <p>Explanatory prose may be more discursive than API reference, but it should remain scientific prose. Explanation is not a license for conversational, literary, or promotional writing.</p>
 </section>
 <section id="pedagogical-register">
-<span id="id1"></span><h4>Pedagogical register<a class="headerlink" href="#pedagogical-register" title="Link to this heading">#</a></h4>
+<span id="id2"></span><h4>Pedagogical register<a class="headerlink" href="#pedagogical-register" title="Link to this heading">#</a></h4>
 <p>Explanatory documentation is expected to teach. Teaching is done by stating mechanisms, consequences, and trade-offs explicitly, in conventional scientific prose. It is not done by metaphor, analogy in place of definition, or compressed rhetorical sentences that leave the reader to reconstruct the technical relationship.</p>
 <p>Being pedagogical therefore does not license literary writing. The two failure modes to watch for are personification and rhetorical compression.</p>
 <p><strong>Do not personify.</strong> Algorithms, sequences, parameters, constraints, data structures, waveforms, files, and physical quantities do not want, ask for, know, decide, refuse, or agree. They have values, satisfy or violate conditions, and stand in defined relationships to one another.</p>
@@ -1188,6 +1247,7 @@ Spatial axis along which the finite difference is evaluated.</p>
 <p>Use the same precise terminology and restrained prose.</p>
 <p>Explain rationale where it helps maintainers understand why an architecture, representation, or constraint exists.</p>
 <p>Distinguish current design rationale from historical narration.</p>
+<p>The developer guide’s internals pages hold the implementation design a maintainer or an interpreter author needs: how the IR cache is laid out, how a playout loads it, how the reconstruction proxy places and schedules data, how the virtual scanner’s engine plays repeated blocks. An explanation page states the concept and links to the internals page for the implementation.</p>
 <p>Abandoned alternatives, transient development reasoning, and change history generally belong in issue trackers, design records, release notes, or repository history unless they are necessary to understand a current constraint.</p>
 </section>
 <section id="editing-existing-documentation">
@@ -1223,8 +1283,8 @@ Spatial axis along which the finite difference is evaluated.</p>
 </section>
 <section id="review-checklist">
 <h2>Review checklist<a class="headerlink" href="#review-checklist" title="Link to this heading">#</a></h2>
-<section id="id2">
-<h3>API reference<a class="headerlink" href="#id2" title="Link to this heading">#</a></h3>
+<section id="id3">
+<h3>API reference<a class="headerlink" href="#id3" title="Link to this heading">#</a></h3>
 <ul class="simple">
 <li><p>Is the established technical term used?</p></li>
 <li><p>Is the object or operation defined directly?</p></li>
@@ -1234,8 +1294,17 @@ Spatial axis along which the finite difference is evaluated.</p>
 <li><p>Have implementation details displaced the scientific abstraction?</p></li>
 </ul>
 </section>
-<section id="id3">
-<h3>Examples and gallery<a class="headerlink" href="#id3" title="Link to this heading">#</a></h3>
+<section id="course-lessons">
+<h3>Course lessons<a class="headerlink" href="#course-lessons" title="Link to this heading">#</a></h3>
+<ul class="simple">
+<li><p>Does the lesson belong to the shortest coherent path to the core mental model, or is it a Tour?</p></li>
+<li><p>Does the lesson state its concept and its learning objectives?</p></li>
+<li><p>Is any transition to the previous or next lesson one sentence rather than a recap?</p></li>
+<li><p>Is the scaffolding free of templated phrases and outline blocks that restate the headings?</p></li>
+</ul>
+</section>
+<section id="id4">
+<h3>Examples and gallery<a class="headerlink" href="#id4" title="Link to this heading">#</a></h3>
 <ul class="simple">
 <li><p>Is this a meaningful and reproducible scientific workflow?</p></li>
 <li><p>Do code and results dominate the page?</p></li>
@@ -1261,10 +1330,12 @@ Spatial axis along which the finite difference is evaluated.</p>
 <li><p>Does the depth remain relevant to the software?</p></li>
 <li><p>Does the page reach a formal model or criterion, and then the software abstraction?</p></li>
 <li><p>Are mechanisms and trade-offs stated explicitly rather than compressed into a rhetorical sentence?</p></li>
+<li><p>Does the page open with a TL;DR that states only what the page establishes?</p></li>
+<li><p>Has implementation design been left to the internals pages?</p></li>
 </ul>
 </section>
-<section id="id4">
-<h3>Tutorials and how-to guides<a class="headerlink" href="#id4" title="Link to this heading">#</a></h3>
+<section id="id5">
+<h3>Tutorials and how-to guides<a class="headerlink" href="#id5" title="Link to this heading">#</a></h3>
 <ul class="simple">
 <li><p>Is the task or workflow clear?</p></li>
 <li><p>Are prerequisites stated where necessary?</p></li>
@@ -1355,10 +1426,12 @@ Spatial axis along which the finite difference is evaluated.</p>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#code-comments">Code comments</a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#results">Results</a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#tone">Tone</a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#course-and-tours">Course and Tours</a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#api-examples-and-gallery-examples">API examples and gallery examples</a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#an-example-is-a-tour-of-an-object-not-a-call-of-it">An example is a tour of an object, not a call of it</a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#defaults-of-a-plotting-helper">Defaults of a plotting helper</a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#legends-sit-outside-the-panel">Legends sit outside the panel</a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#figure-style">Figure style</a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#geometry-and-traversal-are-different-figures">Geometry and traversal are different figures</a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#diagnostics-come-from-the-implementation-they-illustrate">Diagnostics come from the implementation they illustrate</a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#one-subject-one-example">One subject, one example</a></li>
@@ -1394,10 +1467,11 @@ Spatial axis along which the finite difference is evaluated.</p>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#editing-existing-documentation">Editing existing documentation</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#building-and-reviewing-documentation">Building and reviewing documentation</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#review-checklist">Review checklist</a><ul class="nav section-nav flex-column">
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#id2">API reference</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#id3">Examples and gallery</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#id3">API reference</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#course-lessons">Course lessons</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#id4">Examples and gallery</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#explanation">Explanation</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#id4">Tutorials and how-to guides</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#id5">Tutorials and how-to guides</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#all-documentation">All documentation</a></li>
 </ul>
 </li>

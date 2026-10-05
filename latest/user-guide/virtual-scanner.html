@@ -37,7 +37,7 @@
     <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-binder.css?v=f4aeca0c" />
     <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-dataframe.css?v=2082cf3c" />
     <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
-    <link rel="stylesheet" type="text/css" href="../_static/pulserver.css?v=36f0fcfd" />
+    <link rel="stylesheet" type="text/css" href="../_static/pulserver.css?v=e08ae8f3" />
   
   <!-- So that users can add custom icons -->
   <script defer src="../_static/scripts/fontawesome.js?digest=90905a2f556bf617f1a9"></script>
@@ -64,9 +64,10 @@
         </script>
     <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
     <link rel="canonical" href="https://pulserver.github.io/pulserver/latest/user-guide/virtual-scanner.html" />
+    <link rel="icon" href="../_static/pulserver-mark.svg"/>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Explanations" href="../explanations/index.html" />
+    <link rel="next" title="Developer guide" href="../developer-guide/index.html" />
     <link rel="prev" title="Reconstruction clients" href="reconstruction-client.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
@@ -199,8 +200,8 @@
       
     
     
-    <img src="../_static/pulserver-mark.svg" class="logo__image only-light" alt="pulserver documentation - Home"/>
-    <img src="../_static/pulserver-mark.svg" class="logo__image only-dark pst-js-only" alt="pulserver documentation - Home"/>
+    <img src="../_static/pulserver-mark.svg" class="logo__image only-light" alt="pulserver"/>
+    <img src="../_static/pulserver-mark-dark.svg" class="logo__image only-dark pst-js-only" alt="pulserver"/>
   
   
 </a></div>
@@ -249,28 +250,50 @@
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">Scanning a phantom without a scanner</a></li>
 </ul>
 </details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../developer-guide/index.html">Developer guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../developer-guide/prerequisites.html">Development prerequisites</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer-guide/installation.html">Editable installation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer-guide/workflow.html">Development workflow</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer-guide/style.html">Coding style</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer-guide/documentation.html">Documentation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer-guide/terminology.html">Terminology and conventions</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../developer-guide/internals/index.html">Internals</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/ir-cache.html">IR cache</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/protocol-wire.html">Protocol text blocks</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/reconstruction-proxy.html">Reconstruction proxy</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/virtual-scanner.html">Virtual scanner</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/bloch-engine.html">Bloch engine</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer-guide/pre-commit.html">Pre-commit</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer-guide/pull-requests.html">Pull requests</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer-guide/releases.html">Releases</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer-guide/code-of-conduct.html">Code of conduct</a></li>
+</ul>
+</details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../explanations/index.html">Explanations</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="../explanations/architecture.html">Architecture</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../explanations/protocol.html">Protocol resolution</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../explanations/designs.html">Designs and the design store</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../explanations/ir-cache.html">The scanner IR</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../explanations/scanner-representation.html">Scanner representation (PulSeg)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../explanations/virtual-scanner.html">The virtual scanner</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../explanations/reconstruction.html">Raw-data enrichment and routing</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../explanations/calibration.html">Calibration, noise and coil compression</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../explanations/virtual-scanner.html">The virtual scanner</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../explanations/bloch-simulation.html">Bloch simulation on isochromats</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../examples/index.html">Examples</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2 has-children"><a class="reference internal" href="../examples/protocol.html">Protocol resolution</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-protocol/01_protocol_resolution.html">Protocol resolution for a 2D gradient echo</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../examples/course.html">Course</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/01_protocol_to_image.html">1. From protocol to image</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/02_sequence_plugin.html">2. A scanner sequence and its protocol</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/03_scanner_representation.html">3. Scanner representation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/04_reconstruction_plugin.html">4. A reconstruction plugin</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/05_testing_on_the_virtual_scanner.html">5. Testing on the virtual scanner</a></li>
 </ul>
 </details></li>
-<li class="toctree-l2 has-children"><a class="reference internal" href="../examples/scanner-ir.html">Scanner IR</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/02-scanner-ir/01_segmentation.html">Segmentation of a sequence for the scanner</a></li>
-</ul>
-</details></li>
-<li class="toctree-l2 has-children"><a class="reference internal" href="../examples/reconstruction.html">Reconstruction</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/03-reconstruction/01_enrichment.html">Raw-data enrichment and reconstruction</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../examples/tours.html">Tours</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/02-tours/01_protocol_resolution.html">Protocol resolution for a 2D gradient echo</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/02-tours/02_segmentation.html">Segmentation of a sequence for the scanner</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/02-tours/03_fov_offset_enrichment.html">Field-of-view offset and the proxy phase</a></li>
 </ul>
 </details></li>
 </ul>
@@ -285,19 +308,6 @@
 <li class="toctree-l2"><a class="reference internal" href="../api/mrd.html">MRD data</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/validate.html">Validation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/virtual.html">Virtual scanner</a></li>
-</ul>
-</details></li>
-<li class="toctree-l1 has-children"><a class="reference internal" href="../developer-guide/index.html">Developer guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="../developer-guide/prerequisites.html">Development prerequisites</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../developer-guide/installation.html">Editable installation</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../developer-guide/workflow.html">Development workflow</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../developer-guide/style.html">Coding style</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../developer-guide/documentation.html">Documentation</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../developer-guide/terminology.html">Terminology and conventions</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../developer-guide/pre-commit.html">Pre-commit</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../developer-guide/pull-requests.html">Pull requests</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../developer-guide/releases.html">Releases</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../developer-guide/code-of-conduct.html">Code of conduct</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../misc/index.html">Miscellaneous</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -551,6 +561,8 @@ phantom’s isochromats, and sends the series to a reconstruction proxy as the
 scanner’s reconstruction client does (<a class="reference internal" href="../explanations/virtual-scanner.html"><span class="doc">The virtual scanner</span></a>). A scanner-sequence plugin and a
 reconstruction plugin are exercised together, through the production design
 calls and proxy.</p>
+<p>A browser build of the virtual scanner’s console runs without an installation
+at <a class="reference external" href="https://pulserver.github.io/MaRGE/">https://pulserver.github.io/MaRGE/</a>.</p>
 <section id="generate-a-design">
 <h2>Generate a design<a class="headerlink" href="#generate-a-design" title="Link to this heading">#</a></h2>
 <p>Generate the design as the interpreter host process does, with the prescribed
@@ -592,7 +604,10 @@ config text of a reconstruction client does (<a class="reference internal" href=
 proxy refuses a series whose config names none.</p>
 <p>The phantom lies in the physical frame, whose axes are the logical ones under
 a prescription without a rotation; the object above is centred on the
-prescribed field of view, so it appears at the centre of the image. <code class="docutils literal notranslate"><span class="pre">received</span></code>
+prescribed field of view, so it appears at the centre of the image.
+<code class="docutils literal notranslate"><span class="pre">position_mm</span></code> is written as each acquisition’s <code class="docutils literal notranslate"><span class="pre">position</span></code>; <code class="docutils literal notranslate"><span class="pre">send</span></code> writes no
+<code class="docutils literal notranslate"><span class="pre">fov_offset_mm</span></code> user parameter, so the proxy corrects the samples for the
+offset the design was converted at and for no further displacement. <code class="docutils literal notranslate"><span class="pre">received</span></code>
 holds the images, DICOM datasets and texts the reconstruction returned; a text
 beginning <code class="docutils literal notranslate"><span class="pre">pulserver:</span></code> reports a refused or failed series.</p>
 </section>
@@ -618,7 +633,7 @@ offsets of the design’s RF pulses at it when it builds the IR
 <h2>Simulate relaxation and the RF pulses<a class="headerlink" href="#simulate-relaxation-and-the-rf-pulses" title="Link to this heading">#</a></h2>
 <p>The analytic acquisition acts on the phantom’s density alone. For relaxation,
 flip angles and slice profiles, sample the phantom as isochromats and play the
-cache on them (<a class="reference internal" href="../explanations/bloch-simulation.html"><span class="doc">Bloch simulation on isochromats</span></a>); the readouts are sent
+cache on them (<a class="reference internal" href="../explanations/virtual-scanner.html"><span class="doc">The virtual scanner</span></a>); the readouts are sent
 as before:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">tissue</span> <span class="o">=</span> <span class="n">virtual</span><span class="o">.</span><span class="n">Phantom</span><span class="p">(</span>
     <span class="p">[</span>
@@ -753,7 +768,7 @@ disk.</p>
 <li><p><code class="docutils literal notranslate"><span class="pre">--spins</span></code> spreads each voxel over that many isochromats, at the quantiles of
 the Lorentzian line of its tissue’s T2′, at its centre or, with
 <code class="docutils literal notranslate"><span class="pre">--voxel</span> <span class="pre">box</span></code>, over it; <code class="docutils literal notranslate"><span class="pre">--diffusion</span></code> lets BrainWeb’s tissue classes diffuse
-(<a class="reference internal" href="../explanations/bloch-simulation.html"><span class="doc">Bloch simulation on isochromats</span></a>). A phantom file gives each ellipse
+(<a class="reference internal" href="../developer-guide/internals/bloch-engine.html"><span class="doc">Bloch engine</span></a>). A phantom file gives each ellipse
 its <code class="docutils literal notranslate"><span class="pre">t2_prime</span></code>, in s, and <code class="docutils literal notranslate"><span class="pre">diffusion</span></code>, in m²/s. Isochromats that diffuse are
 played block by block, and a voxel’s diffusion attenuation needs many spins
 to be resolved.</p></li>
@@ -957,7 +972,8 @@ here: its sequences are then the plugins, its subject names the phantom, its RF
 coil names the coil, and it opens each exam on the localizer. The
 browser build of MaRGE in <a class="reference external" href="https://github.com/pulserver/MaRGE">pulserver/MaRGE</a>
 runs it in a browser tab, opened with <code class="docutils literal notranslate"><span class="pre">?console=ws://127.0.0.1:8765</span></code>, and plays
-each scan’s sound as it streams.</p>
+each scan’s sound as it streams; it is published at
+<a class="reference external" href="https://pulserver.github.io/MaRGE/">https://pulserver.github.io/MaRGE/</a>.</p>
 </section>
 <section id="see-also">
 <h2>See also<a class="headerlink" href="#see-also" title="Link to this heading">#</a></h2>
@@ -990,11 +1006,11 @@ each scan’s sound as it streams.</p>
       </div>
     </a>
     <a class="right-next"
-       href="../explanations/index.html"
+       href="../developer-guide/index.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Explanations</p>
+        <p class="prev-next-title">Developer guide</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>

@@ -23,3 +23,9 @@ html[data-theme="dark"] img:not(.only-dark, .dark-light) {
 section#homepage > h1 {
   display: none;
 }
+
+/* The TL;DR block under an explanation page's title. */
+.admonition.tldr { border-color: var(--pst-color-primary); }
+.admonition.tldr > .admonition-title { background-color: var(--pst-color-primary-bg); }
+.admonition.tldr > .admonition-title::after { color: var(--pst-color-primary); }
+.admonition.tldr ul { margin-bottom: 0; }

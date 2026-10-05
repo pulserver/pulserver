@@ -37,7 +37,7 @@
     <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-binder.css?v=f4aeca0c" />
     <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-dataframe.css?v=2082cf3c" />
     <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
-    <link rel="stylesheet" type="text/css" href="../_static/pulserver.css?v=36f0fcfd" />
+    <link rel="stylesheet" type="text/css" href="../_static/pulserver.css?v=e08ae8f3" />
   
   <!-- So that users can add custom icons -->
   <script defer src="../_static/scripts/fontawesome.js?digest=90905a2f556bf617f1a9"></script>
@@ -64,9 +64,10 @@
         </script>
     <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
     <link rel="canonical" href="https://pulserver.github.io/pulserver/latest/explanations/designs.html" />
+    <link rel="icon" href="../_static/pulserver-mark.svg"/>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="The scanner IR" href="ir-cache.html" />
+    <link rel="next" title="Scanner representation (PulSeg)" href="scanner-representation.html" />
     <link rel="prev" title="Protocol resolution" href="protocol.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
@@ -199,8 +200,8 @@
       
     
     
-    <img src="../_static/pulserver-mark.svg" class="logo__image only-light" alt="pulserver documentation - Home"/>
-    <img src="../_static/pulserver-mark.svg" class="logo__image only-dark pst-js-only" alt="pulserver documentation - Home"/>
+    <img src="../_static/pulserver-mark.svg" class="logo__image only-light" alt="pulserver"/>
+    <img src="../_static/pulserver-mark-dark.svg" class="logo__image only-dark pst-js-only" alt="pulserver"/>
   
   
 </a></div>
@@ -249,28 +250,50 @@
 <li class="toctree-l2"><a class="reference internal" href="../user-guide/virtual-scanner.html">Scanning a phantom without a scanner</a></li>
 </ul>
 </details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../developer-guide/index.html">Developer guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../developer-guide/prerequisites.html">Development prerequisites</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer-guide/installation.html">Editable installation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer-guide/workflow.html">Development workflow</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer-guide/style.html">Coding style</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer-guide/documentation.html">Documentation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer-guide/terminology.html">Terminology and conventions</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../developer-guide/internals/index.html">Internals</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/ir-cache.html">IR cache</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/protocol-wire.html">Protocol text blocks</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/reconstruction-proxy.html">Reconstruction proxy</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/virtual-scanner.html">Virtual scanner</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/bloch-engine.html">Bloch engine</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer-guide/pre-commit.html">Pre-commit</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer-guide/pull-requests.html">Pull requests</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer-guide/releases.html">Releases</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer-guide/code-of-conduct.html">Code of conduct</a></li>
+</ul>
+</details></li>
 <li class="toctree-l1 current active has-children"><a class="reference internal" href="index.html">Explanations</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
 <li class="toctree-l2"><a class="reference internal" href="architecture.html">Architecture</a></li>
 <li class="toctree-l2"><a class="reference internal" href="protocol.html">Protocol resolution</a></li>
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">Designs and the design store</a></li>
-<li class="toctree-l2"><a class="reference internal" href="ir-cache.html">The scanner IR</a></li>
+<li class="toctree-l2"><a class="reference internal" href="scanner-representation.html">Scanner representation (PulSeg)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="virtual-scanner.html">The virtual scanner</a></li>
 <li class="toctree-l2"><a class="reference internal" href="reconstruction.html">Raw-data enrichment and routing</a></li>
 <li class="toctree-l2"><a class="reference internal" href="calibration.html">Calibration, noise and coil compression</a></li>
-<li class="toctree-l2"><a class="reference internal" href="virtual-scanner.html">The virtual scanner</a></li>
-<li class="toctree-l2"><a class="reference internal" href="bloch-simulation.html">Bloch simulation on isochromats</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../examples/index.html">Examples</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2 has-children"><a class="reference internal" href="../examples/protocol.html">Protocol resolution</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-protocol/01_protocol_resolution.html">Protocol resolution for a 2D gradient echo</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../examples/course.html">Course</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/01_protocol_to_image.html">1. From protocol to image</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/02_sequence_plugin.html">2. A scanner sequence and its protocol</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/03_scanner_representation.html">3. Scanner representation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/04_reconstruction_plugin.html">4. A reconstruction plugin</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/05_testing_on_the_virtual_scanner.html">5. Testing on the virtual scanner</a></li>
 </ul>
 </details></li>
-<li class="toctree-l2 has-children"><a class="reference internal" href="../examples/scanner-ir.html">Scanner IR</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/02-scanner-ir/01_segmentation.html">Segmentation of a sequence for the scanner</a></li>
-</ul>
-</details></li>
-<li class="toctree-l2 has-children"><a class="reference internal" href="../examples/reconstruction.html">Reconstruction</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/03-reconstruction/01_enrichment.html">Raw-data enrichment and reconstruction</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../examples/tours.html">Tours</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/02-tours/01_protocol_resolution.html">Protocol resolution for a 2D gradient echo</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/02-tours/02_segmentation.html">Segmentation of a sequence for the scanner</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/02-tours/03_fov_offset_enrichment.html">Field-of-view offset and the proxy phase</a></li>
 </ul>
 </details></li>
 </ul>
@@ -285,19 +308,6 @@
 <li class="toctree-l2"><a class="reference internal" href="../api/mrd.html">MRD data</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/validate.html">Validation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../api/virtual.html">Virtual scanner</a></li>
-</ul>
-</details></li>
-<li class="toctree-l1 has-children"><a class="reference internal" href="../developer-guide/index.html">Developer guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="../developer-guide/prerequisites.html">Development prerequisites</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../developer-guide/installation.html">Editable installation</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../developer-guide/workflow.html">Development workflow</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../developer-guide/style.html">Coding style</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../developer-guide/documentation.html">Documentation</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../developer-guide/terminology.html">Terminology and conventions</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../developer-guide/pre-commit.html">Pre-commit</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../developer-guide/pull-requests.html">Pull requests</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../developer-guide/releases.html">Releases</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../developer-guide/code-of-conduct.html">Code of conduct</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../misc/index.html">Miscellaneous</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -525,6 +535,8 @@
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#design-identity">Design identity</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#design-identifier">Design identifier</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#the-store">The store</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#checks-before-a-design-is-stored">Checks before a design is stored</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#sar-against-a-reference-pulse">SAR against a reference pulse</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#access-from-the-reconstruction-side">Access from the reconstruction side</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#see-also">See also</a></li>
 </ul>
@@ -540,6 +552,21 @@
                   
   <section class="tex2jax_ignore mathjax_ignore" id="designs-and-the-design-store">
 <h1>Designs and the design store<a class="headerlink" href="#designs-and-the-design-store" title="Link to this heading">#</a></h1>
+<div class="tldr admonition">
+<p class="admonition-title">TL;DR</p>
+<ul class="simple">
+<li><p>A design is identified by the SHA-256 of the plugin, the code it designs
+with, the limits and the resolved protocol, and a request that resolves to a
+stored design returns it.</p></li>
+<li><p>The design store holds one directory per design, written whole and never
+modified, and pruned least recently used first.</p></li>
+<li><p>A design is checked under the scanner limits in the physical frame of the
+prescription before it is stored, and the cache records each subsequence’s
+SAR against a reference pulse.</p></li>
+<li><p>The reconstruction side finds a design by the identifier the raw-data
+header carries.</p></li>
+</ul>
+</div>
 <p>A scanner sequence is validated on every protocol edit and generated when the
 scan is prepared, often many times for one protocol, and a generated design
 has to remain available, unchanged, for as long as data acquired with it may
@@ -554,13 +581,13 @@ designs with it, the scanner limits and the resolved protocol. Its identity is
 the SHA-256 hash of these (<a class="reference internal" href="../generated/pulserver.host.design_identity.html#pulserver.host.design_identity" title="pulserver.host.design_identity"><code class="xref py py-func docutils literal notranslate"><span class="pre">design_identity()</span></code></a>):</p>
 <ul class="simple">
 <li><p>the plugin name;</p></li>
-<li><p>a digest of the plugin file, the source file of the app it binds,
+<li><p>a digest of the plugin file, the source file of the sequence function it binds,
 and the installed versions of pypulseqpp and pulserver;</p></li>
 <li><p>the scanner limits, design limits, conversion options and check limits,
 with the contents of the VOP file they name;</p></li>
 <li><p>the resolved protocol, prescription included.</p></li>
 </ul>
-<p>A changed plugin, app or package gives a new design for an unchanged
+<p>A changed plugin, sequence function or package gives a new design for an unchanged
 protocol, and so does a VOP file rewritten at the same path. Because the hash
 is computed over the resolved protocol, two requests that differ only in a
 value the design replaces, such as a preset and the time it resolves to,
@@ -590,8 +617,10 @@ refuses a design whose identifier already holds another identity.</p>
     sequence_main.seq     the remaining files, when there are prescans
     sequence.pseg         IR cache
     resolved.protocol
-    manifest.json         identity, plugin, limits, package versions,
-                          SHA-256 of every file
+    manifest.json         identity and identifier, limits, package
+                          versions, creation time, plugin and source,
+                          scan time, field-of-view offset (and rotation,
+                          for an imported chain), SHA-256 of every file
 </pre></div>
 </div>
 <p>A design is written into a staging directory in the store and renamed into
@@ -599,6 +628,63 @@ place once complete, so a reader sees it whole or not at all, and two processes
 that write one design leave one directory. A design is not modified afterwards.
 Designs are removed only by pruning (<a class="reference internal" href="../user-guide/running.html"><span class="doc">Running the services</span></a>), least
 recently used first; a design is used when it is written or found again.</p>
+</section>
+<section id="checks-before-a-design-is-stored">
+<h2>Checks before a design is stored<a class="headerlink" href="#checks-before-a-design-is-stored" title="Link to this heading">#</a></h2>
+<p>The gradient coils are limited per physical axis, and the peak a gradient
+reaches on one axis depends on the orientation it is played in: two logical
+axes at 0.8 of the amplitude limit each put <span class="math notranslate nohighlight">\(0.8\sqrt{2}\)</span> of it on one physical
+axis at 45°. So the checks are made in the physical frame. The prescription’s
+rotation <span class="math notranslate nohighlight">\(R\)</span>, from logical to physical axes, reaches the host in the nine
+<code class="docutils literal notranslate"><span class="pre">fov_rotation_ij</span></code> entries of the protocol, element <span class="math notranslate nohighlight">\((i, j)\)</span> of <span class="math notranslate nohighlight">\(R\)</span>, and each
+file is rotated by it as the scanner plays it: composed after each block’s own
+rotation, with blocks labelled <code class="docutils literal notranslate"><span class="pre">NOROT</span></code> left unrotated. A prescription with a
+reflection in it is checked as it plays, reflection included. A design is held
+under limits per logical axis that the scanner derates for the rotation, the
+<code class="docutils literal notranslate"><span class="pre">design_max_grad</span></code> and <code class="docutils literal notranslate"><span class="pre">design_max_slew</span></code> of the call’s limits, and its physical
+axes are checked against the gradient coils’ own, <code class="docutils literal notranslate"><span class="pre">max_grad</span></code> and <code class="docutils literal notranslate"><span class="pre">max_slew</span></code>
+(<a class="reference internal" href="../user-guide/running.html"><span class="doc">Running the services</span></a>).</p>
+<p>Before a chain is converted, <a class="reference internal" href="../generated/pulserver.ir.check.html#pulserver.ir.check" title="pulserver.ir.check"><code class="xref py py-func docutils literal notranslate"><span class="pre">check()</span></code></a> runs pypulseqpp’s
+timing check, gradient continuity included, and its gradient amplitude and
+slew-rate checks on every file, against the gradient limits, dead times and
+ringdown time of the scanner. Where the call’s limits carry them
+(<a class="reference internal" href="../generated/pulserver.ir.CheckLimits.html#pulserver.ir.CheckLimits" title="pulserver.ir.CheckLimits"><code class="xref py py-class docutils literal notranslate"><span class="pre">CheckLimits</span></code></a>), it also runs pypulseqpp’s PNS check
+under the scanner’s nerve model and its mechanical-resonance check against the
+scanner’s forbidden gradient bands. The waveforms are timed by the rasters the
+file declares. The interpreter passes these limits with every design call
+(<a class="reference internal" href="../user-guide/running.html"><span class="doc">Running the services</span></a>); it computes the SAR and the gradient heating.</p>
+<p>No design is stored for a generated design or an imported chain that fails a
+check: <code class="docutils literal notranslate"><span class="pre">generate</span></code> and <code class="docutils literal notranslate"><span class="pre">import</span></code> reply with the problems, as they do with a
+design error. The checks compute estimates; passing them does not
+establish scanner or patient safety.</p>
+</section>
+<section id="sar-against-a-reference-pulse">
+<h2>SAR against a reference pulse<a class="headerlink" href="#sar-against-a-reference-pulse" title="Link to this heading">#</a></h2>
+<p>The interpreter computes SAR under its own calibration of the transmit chain. Where
+local SAR is computed from virtual observation points (VOPs), the energy a
+pulse deposits at VOP <span class="math notranslate nohighlight">\(v\)</span> is <span class="math notranslate nohighlight">\(\int \mathbf{b}(t)^H Q_v\, \mathbf{b}(t)\,dt\)</span>,
+with <span class="math notranslate nohighlight">\(\mathbf{b}\)</span> the drive of each transmit channel and <span class="math notranslate nohighlight">\(Q_v\)</span> the VOP’s
+matrix, and it depends on the shape of the pulse and its channel weights. The
+host evaluates it against a reference: the hard pulse of 180° and 1 ms, played
+in the default channel weights. For each repetition <span class="math notranslate nohighlight">\(w\)</span> of a subsequence, the
+blocks before the first repetition and after the last included, as
+pypulseqpp’s SAR check averages over them, <a class="reference internal" href="../generated/pulserver.ir.sar_ratios.html#pulserver.ir.sar_ratios" title="pulserver.ir.sar_ratios"><code class="xref py py-func docutils literal notranslate"><span class="pre">sar_ratios()</span></code></a>
+computes</p>
+<div class="math notranslate nohighlight">
+\[
+r = \max_w \max_v \frac{E_{v,w}}{N_w\, E_v^{\mathrm{ref}}},
+\]</div>
+<p>with <span class="math notranslate nohighlight">\(E_{v,w}\)</span> the energy of the repetition at VOP <span class="math notranslate nohighlight">\(v\)</span>, <span class="math notranslate nohighlight">\(N_w\)</span> the number of
+pulses it plays and <span class="math notranslate nohighlight">\(E_v^{\mathrm{ref}}\)</span> the energy of the reference pulse
+there: the energy of the repetition over that of the same repetition with each
+of its pulses replaced by the reference. A 1 ms hard pulse of 90° counts a
+quarter of the reference, and the ratio is 1 for a repetition of reference
+pulses. The global SAR matrix of the VOP file gives the same ratio for global
+SAR. A scale common to every channel’s drive and to the VOPs cancels in both.</p>
+<p>The cache carries the two ratios of each subsequence in its
+<code class="docutils literal notranslate"><span class="pre">pulseg_subseq_info</span></code>, zero without VOPs or without RF, and the interpreter
+computes the SAR of the subsequence as the ratio times its SAR for the reference
+repetition.</p>
 </section>
 <section id="access-from-the-reconstruction-side">
 <h2>Access from the reconstruction side<a class="headerlink" href="#access-from-the-reconstruction-side" title="Link to this heading">#</a></h2>
@@ -649,11 +735,11 @@ the proxy’s store lacks.</p>
       </div>
     </a>
     <a class="right-next"
-       href="ir-cache.html"
+       href="scanner-representation.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">The scanner IR</p>
+        <p class="prev-next-title">Scanner representation (PulSeg)</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -678,6 +764,8 @@ the proxy’s store lacks.</p>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#design-identity">Design identity</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#design-identifier">Design identifier</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#the-store">The store</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#checks-before-a-design-is-stored">Checks before a design is stored</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#sar-against-a-reference-pulse">SAR against a reference pulse</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#access-from-the-reconstruction-side">Access from the reconstruction side</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#see-also">See also</a></li>
 </ul>
