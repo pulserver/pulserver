@@ -1,7 +1,7 @@
 # Tours
 
 Applications, advanced branches and specialised workflows. Each Tour stands
-alone and states what it assumes.
+alone and states the lessons of the {doc}`course` it assumes.
 
 | Tour | What it establishes |
 | --- | --- |

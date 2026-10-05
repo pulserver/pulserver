@@ -3,27 +3,19 @@
 Protocol resolution for a 2D gradient echo
 ==========================================
 
-The scope of this notebook is to resolve prescriptions of a two-dimensional
-gradient echo the way a design call does for the scanner UI, and to show
-what the resolved protocol depends on: the receiver bandwidth a readout can
-realize on the sampling rasters, and the shortest echo time the readout
-admits.
+This Tour resolves prescriptions of a two-dimensional gradient echo the way a
+design call does for the scanner UI, and shows what the resolved protocol
+depends on: the receiver bandwidth a readout realizes on the sampling rasters,
+and the shortest echo time the readout admits.
 
-A request is resolved by evaluating the protocol under the scanner limits,
-which designs the sequence, and reading back the values the design achieved, as
-described in :doc:`/explanations/protocol`. The sequence is pypulseqpp's
-shipped ``gre2d``, bound to five protocol entries.
+**Prerequisites:** lessons 1 and 2 of the :doc:`course </examples/course>`.
 
-Outline:
-
-#. **Scanner sequence.** The binding of the function to the protocol, and its
-   evaluation.
-#. **Receiver bandwidth.** Requested and achieved bandwidth for two readout
-   lengths.
-#. **Shortest echo time.** The *Minimum* preset against matrix size and
-   bandwidth.
-#. **Infeasible requests and repeated resolution.** The reply to a
-   prescription the design refuses, and to a resolved protocol sent back.
+A request is resolved by evaluating the protocol under the scanner limits and
+reading back the values the design achieved
+(:doc:`/explanations/protocol`). The sequence is pypulseqpp's ``gre2d``, bound
+to five protocol entries. Its evaluation designs the whole scan, which keeps
+the binding short; the shipped plugins, and lesson 2, design one repetition
+instead, so that the time an edit takes does not grow with the matrix.
 """
 
 # sphinx_gallery_start_ignore
@@ -38,7 +30,7 @@ import matplotlib.pyplot as plt
 # ----------------
 #
 # The binding maps interpreter parameter names to keyword arguments of the
-# function. Times are exchanged in integer microseconds, the field of view in
+# sequence function. Times are exchanged in integer microseconds, the field of view in
 # mm, and the *Minimum* preset of TE and TR requests the shortest time the
 # design admits. The evaluation designs the sequence and reads back the echo
 # time and the repetition time, which the sequence records as its ``TE`` and

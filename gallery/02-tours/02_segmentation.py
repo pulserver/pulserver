@@ -3,25 +3,17 @@
 Segmentation of a sequence for the scanner
 ==========================================
 
-The scope of this notebook is to convert Pulseq sequences into the scanner IR
-and to read what the conversion reduces them to: the repeating unit of each
-subsequence, the segments it is divided into, and how those counts scale with
-the length of the scan.
+This Tour converts shipped pypulseqpp sequences into the scanner
+representation and reads what the conversion reduces them to: the repetition
+of each subsequence, the virtual segments it is cut into, and how those counts
+scale with the length of the scan.
 
-A Pulseq file lists every block a scan plays. A scanner interpreter is
-programmed with each distinct segment once and plays the scan as a stream of
-segment instances, so the quantity that determines its memory use is the
-number of segment definitions, not the number of blocks. The passes are
-described in :doc:`/explanations/scanner-representation`.
+**Prerequisites:** lessons 1 and 3 of the :doc:`course </examples/course>`.
 
-Outline:
-
-#. **Repeating unit of a spin echo.** One TR of a 2D spin echo and the
-   segments it is divided into.
-#. **Scan length.** Blocks, repetitions and segment definitions of a 2D
-   gradient echo as the matrix and the slice count grow.
-#. **Subsequences.** A chain of a reference prescan and an echo planar
-   acquisition.
+A scanner interpreter prepares each virtual segment once and plays the scan as
+an execution stream of segment instances, so the number of virtual segments,
+not the number of blocks, sets what it prepares. The model is described in
+:doc:`/explanations/scanner-representation`.
 """
 
 # sphinx_gallery_start_ignore
@@ -30,8 +22,8 @@ import matplotlib
 matplotlib.use("Agg")
 # sphinx_gallery_end_ignore
 # %%
-# Repeating unit of a spin echo
-# -----------------------------
+# Repetition of a spin echo
+# -------------------------
 #
 # The sequence is pypulseqpp's shipped 2D spin echo at its shortest TR,
 # written to a file and converted under the scanner limits. :func:`~pulserver.ir.convert` writes the
@@ -59,7 +51,7 @@ report = ir.summary(work / "se2d.seq", system)
 unit = report["subsequences"][0]
 print(f"{seq.num_blocks} blocks in the file; cache {cache.name}")
 print(
-    f"repeating unit: {unit['tr_size']} blocks, TR {unit['tr_duration_us'] / 1e3:.2f} ms, "
+    f"repetition: {unit['tr_size']} blocks, TR {unit['tr_duration_us'] / 1e3:.2f} ms, "
     f"played {unit['num_trs']} times"
 )
 for index, segment in enumerate(report["segments"]):
@@ -67,20 +59,18 @@ for index, segment in enumerate(report["segments"]):
     last = segment["start_block"] + segment["num_blocks"]
     kind = "pure delay" if segment["pure_delay"] else "events"
     print(
-        f"segment {index}: blocks {first}-{last}, "
+        f"virtual segment {index}: blocks {first}-{last}, "
         f"{segment['duration_us'] / 1e3:.2f} ms, {kind}"
     )
 
 # %%
-# The repeating unit is nine blocks: the excitation with its slice-selection
-# gradient (1) and rephaser (2), a delay (3), the refocusing pulse (4), a
-# second delay (5), the phase-encoding and readout prewinders (6), the readout
-# with the ADC (7), the rewinders (8), and the delay that completes the TR
-# (9). The conversion divides it into three segment definitions, each starting
-# at a block boundary where every gradient is zero. A pure delay has no
-# events, so every pure delay is an instance of one definition, played with its
-# own duration: block 9 is an instance of segment 1, whose listed duration is
-# that of block 3.
+# The repetition is cut only at block boundaries where every gradient is at
+# rest, so blocks joined by a gradient that does not rest stay in one virtual
+# segment. A pure delay has no events: every pure delay of the repetition
+# plays the one pure-delay virtual segment, with its own duration, as the
+# virtual segment of each block, read from the execution stream, shows.
+owner = ir.play(work / "se2d.seq")["segment"][: unit["tr_size"]]
+print("virtual segment of each block of the repetition:", owner.tolist())
 
 # sphinx_gallery_start_ignore
 tr_blocks = unit["tr_size"]
@@ -89,13 +79,6 @@ edges = np.concatenate([[0.0], np.cumsum(durations)]) * 1e3
 waves = seq.waveforms_and_times(append_RF=True, block_range=(1, tr_blocks))[0]
 gamma = 42.576e6
 
-owner = np.full(tr_blocks, -1)
-for index, segment in enumerate(report["segments"]):
-    owner[segment["start_block"] : segment["start_block"] + segment["num_blocks"]] = (
-        index
-    )
-delay = next(i for i, s in enumerate(report["segments"]) if s["pure_delay"])
-owner[owner < 0] = delay
 
 fig, axes = plt.subplots(4, 1, figsize=(PAGE_WIDTH, 5.2), sharex=True)
 rows = (
@@ -129,8 +112,8 @@ plt.show()
 #
 # The same conversion over the shipped 2D gradient echo, with a growing
 # phase-encoding matrix and slice count. The number of blocks and the number
-# of repetitions scale with the scan; the segment definitions do not, because
-# every repetition plays the same waveform shapes with a different
+# of repetitions grow with the scan; the number of virtual segments does not,
+# because every repetition plays the same base blocks with a different
 # phase-encoding amplitude.
 
 from pypulseqpp.sequences import gre2D_sequence
@@ -144,10 +127,12 @@ for n_y, n_slices in ((64, 1), (128, 1), (256, 1), (256, 4)):
     rows.append((n_y, n_slices, gre.num_blocks, result))
 
 # sphinx_gallery_start_ignore
-print(f"{'ny':>5} {'slices':>7} {'blocks':>8} {'repetitions':>12} {'segments':>9}")
+print(
+    f"{'ny':>5} {'slices':>7} {'blocks':>8} {'repetitions':>12} {'virtual segments':>17}"
+)
 for n_y, n_slices, blocks, result in rows:
     trs = sum(sub["num_trs"] for sub in result["subsequences"])
-    print(f"{n_y:5d} {n_slices:7d} {blocks:8d} {trs:12d} {result['num_segments']:9d}")
+    print(f"{n_y:5d} {n_slices:7d} {blocks:8d} {trs:12d} {result['num_segments']:17d}")
 # sphinx_gallery_end_ignore
 
 # %%
@@ -172,10 +157,11 @@ for index, subsequence in enumerate(report["subsequences"]):
         f"subsequence {index}: {subsequence['tr_size']} blocks per repetition, "
         f"{subsequence['num_trs']} repetitions"
     )
-print(f"segment definitions over the chain: {report['num_segments']}")
+print(f"virtual segments over the chain: {report['num_segments']}")
 
 # %%
-# Segment definitions are deduplicated across subsequences as well as within
+# Virtual segments are deduplicated across subsequences as well as within
 # one. The reference prescan reverses the sign of the phase-encoding
-# gradients, which is an amplitude of each instance rather than part of a
-# definition, and both subsequences are played from the same two definitions.
+# gradients, which is an amplitude of each segment instance rather than part
+# of a base block, so both subsequences play the virtual segments printed
+# above.

@@ -72,6 +72,7 @@ intersphinx_mapping = {
 #: directory per landing page under ``docs/examples``; sphinx-gallery nests one
 #: level only, so the hierarchy a reader navigates is built by those pages.
 GALLERY_SECTIONS = [
+    "../gallery/01-course",
     "../gallery/02-tours",
 ]
 

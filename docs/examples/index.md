@@ -6,6 +6,18 @@ every printed number on them is produced by the code as it stands.
 The concepts these pages rely on are in {doc}`/explanations/index`, and the
 interfaces they call are documented in {doc}`/api/index`.
 
+## Course
+
+The shortest path from a protocol to a reconstructed image, read in order.
+
+| Lesson | What it teaches |
+| --- | --- |
+| {doc}`/generated/gallery/01-course/01_protocol_to_image` | A whole scan on the virtual scanner, from the protocol to the image. |
+| {doc}`/generated/gallery/01-course/02_sequence_plugin` | A scanner sequence and the protocol it resolves. |
+| {doc}`/generated/gallery/01-course/03_scanner_representation` | The repetition, virtual segments and execution stream of a design. |
+| {doc}`/generated/gallery/01-course/04_reconstruction_plugin` | Enrichment of a series and a reconstruction plugin. |
+| {doc}`/generated/gallery/01-course/05_testing_on_the_virtual_scanner` | Optional: the Bloch simulation and the conversion check. |
+
 ## Tours
 
 Applications, advanced branches and specialised workflows, each standalone.
@@ -19,5 +31,6 @@ Applications, advanced branches and specialised workflows, each standalone.
 ```{toctree}
 :hidden:
 
+course
 tours
 ```
