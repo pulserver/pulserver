@@ -3,6 +3,7 @@
 import functools
 import importlib.util
 import inspect
+from types import SimpleNamespace
 
 import numpy as np
 import pypulseqpp as pp
@@ -145,6 +146,7 @@ SCANS = [pytest.param(name, {}, id=name) for name in SHIPPED] + [
         ("epi2d", "packets", {"nslices": 7, "TR": 900000, "Ry": 2, "num_shots": 2}),
         ("epi2d", "frames", {"nslices": 12, "TR": 5000000, "num_frames": 3}),
         ("epi2d", "shortest", {"nslices": 6, "TR": TRPreset.MINIMUM}),
+        ("epi2d", "saturation", {"nslices": 3, "sat_x": 3, "sat_x_loc2": 60.0}),
         (
             "epi3d",
             "undersampled",
@@ -335,6 +337,7 @@ LAST_TR_BLOCKS = {"zte3d": 2}
 #: Shipped sequences with a module constant switched on, by the name the scans
 #: below use.
 TOGGLED = {
+    "bssfp2d+RETROSPECTIVE": ("bssfp2d", "RETROSPECTIVE"),
     "epi2d+MULTIBAND": ("epi2d", "MULTIBAND"),
     "fse3d+OPTIMIZED": ("fse3d", "OPTIMIZED"),
     "fse3d+DUAL_REGION": ("fse3d", "DUAL_REGION"),
@@ -487,7 +490,7 @@ def test_an_evaluation_states_the_values_and_the_scan_time_of_the_design(
     protocol = _protocol(plugin, changes)
 
     evaluation = plugin.evaluate(SYSTEM, protocol)
-    chain = _chain(plugin.app(SYSTEM, **protocol.arguments))
+    chain = _chain(plugin.generate(SYSTEM, protocol))
 
     expected = protocol.replace(achieved(plugin, chain[-1]))
     assert evaluation.protocol.to_wire() == expected.to_wire()
@@ -581,7 +584,7 @@ def test_an_evaluation_rejects_a_tr_the_design_rejects(zoo, name, changes):
     protocol = _protocol(plugin, changes)
 
     with pytest.raises(ValueError, match="TR"):
-        plugin.app(SYSTEM, **protocol.arguments)
+        plugin.generate(SYSTEM, protocol)
     with pytest.raises(ValueError, match="TR"):
         plugin.evaluate(SYSTEM, protocol)
 
@@ -760,3 +763,81 @@ def test_a_sequence_with_navigators_asks_for_motion_correction(zoo, name):
 
     assert main.definitions["EnablePmc"][0] == 1
     assert ZOO_PAIRS[TOGGLED[name][0]] == "pmc"
+
+
+def test_epi2d_places_a_scanner_saturation_band_on_its_physical_axis(zoo):
+    from pulserver.protocol import FOV_OFFSET, FOV_ROTATION
+
+    _bands = inspect.getmodule(type(zoo["epi2d"]))._bands
+    # Logical readout along physical y, phase along physical z, slice along x.
+    rotation = np.array([[0.0, 0.0, 1.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]])
+    changes = {
+        "sat_y": 2,
+        "sat_y_loc2": 30.0,
+        "sat_y_thickness": 20.0,
+        **dict(zip(FOV_ROTATION, rotation.ravel(), strict=True)),
+        **dict(zip(FOV_OFFSET, (10.0, 0.0, 0.0), strict=True)),
+    }
+    arguments = _bands(_protocol(zoo["epi2d"], changes))
+
+    # Physical y is the logical readout, offset 10 mm along it.
+    normal = [arguments[f"sat1_normal_{axis}"] for axis in "xyz"]
+    np.testing.assert_allclose(normal, rotation[1])
+    assert arguments["sat1_position"] == pytest.approx(20e-3)
+    assert arguments["sat1_thickness"] == pytest.approx(20e-3)
+    assert "sat2_thickness" not in arguments
+    assert not any(name.startswith("sat_") for name in arguments)
+
+
+def test_epi2d_refuses_more_saturation_bands_than_it_plays(zoo):
+    validation = zoo["epi2d"].validate(SYSTEM, {"sat_x": 3, "sat_z": 1})
+    assert not validation.valid
+    assert "at most 2" in validation.info
+
+
+@pytest.mark.parametrize(
+    ("name", "gating"),
+    [("bssfp2d", "prospective"), ("bssfp2d+RETROSPECTIVE", "retrospective")],
+)
+def test_an_ecg_trigger_gates_the_cine_with_a_segment_per_heartbeat(zoo, name, gating):
+    plugin = zoo[name]
+    module = SimpleNamespace(**type(plugin).generate.__globals__)
+    changes = {"trigger_type": "physio2", "Ry": 2, "num_frames": 20}
+    protocol = _protocol(plugin, changes)
+
+    evaluation = plugin.evaluate(SYSTEM, protocol)
+    gated = module._gated(plugin, SYSTEM, protocol)
+    main = _main(plugin, protocol)
+
+    assert gated["gating"] == gating
+    lines = main.definitions["TR"][0] * gated["views_per_segment"] * 20
+    assert lines <= 1.0 - gated["trigger_delay"]
+    phases = _phase_labels(main)
+    if gating == "prospective":
+        segments = len(
+            module._segments(_arguments(plugin, protocol), gated["views_per_segment"])
+        )
+        assert evaluation.duration == pytest.approx(segments * 1.0)
+        assert phases == set(range(20))
+    else:
+        assert (
+            abs(evaluation.duration - main.duration()[0])
+            <= 2 * SYSTEM.block_duration_raster
+        )
+
+
+def _arguments(plugin, protocol):
+    from pulserver._zoo._evaluation import arguments
+
+    return arguments(plugin, protocol)
+
+
+def _phase_labels(sequence):
+    """The values ``PHS`` holds at the readouts of ``sequence``."""
+    return set(np.asarray(sequence.evaluate_labels(evolution="adc")["PHS"]).tolist())
+
+
+def test_the_cine_refuses_respiratory_triggering(zoo):
+    validation = zoo["bssfp2d"].validate(SYSTEM, {"trigger_type": "physio1"})
+    assert not validation.valid
+    assert "respiratory" in validation.info

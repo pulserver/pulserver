@@ -41,8 +41,17 @@ _ACHIEVED: dict[ProtocolKey, Callable[[pp.Sequence], float]] = {
 
 
 def arguments(plugin: SequencePlugin, protocol: Protocol) -> dict[str, Any]:
-    """Return the arguments the app designs ``protocol`` with, its defaults included."""
-    bound = inspect.signature(plugin.app).bind_partial(**protocol.arguments)
+    """Return the arguments the app designs ``protocol`` with, its defaults included.
+
+    An entry binding a name the app does not take is left out.
+    """
+    signature = inspect.signature(plugin.app)
+    taken = {
+        name: value
+        for name, value in protocol.arguments.items()
+        if name in signature.parameters
+    }
+    bound = signature.bind_partial(**taken)
     bound.apply_defaults()
     return bound.arguments
 

@@ -3,6 +3,7 @@
 import functools
 from typing import Any
 
+import numpy as np
 import pypulseqpp as pp
 from pypulseqpp import sequences
 from pypulseqpp.sequences.sequence.epi2D_sequence import epi2d
@@ -10,16 +11,54 @@ from pypulseqpp.sequences.sequence.epi2D_sequence import epi2d
 from pulserver._zoo._evaluation import achieved, arguments, packets, rf_layout
 from pulserver.design import (
     BoolParam,
+    ConfigParam,
     Evaluation,
     FloatParam,
     IntParam,
     SequencePlugin,
     TimeParam,
 )
-from pulserver.protocol import TEPreset, TRPreset, UIParam
+from pulserver.protocol import (
+    TEPreset,
+    TRPreset,
+    UIParam,
+    prescribed_offset,
+    prescribed_rotation,
+)
 
 #: Simultaneous multislice: adds the multiband factor to the protocol.
 MULTIBAND = False
+
+
+def _saturation_entries() -> dict:
+    """``sat_<axis>`` sets bit 1 for a band at ``loc1`` and bit 2 for one at ``loc2``, in mm from the isocentre."""
+    entries = {}
+    for axis in "XYZ":
+        name = axis.lower()
+        entries[getattr(UIParam, f"SAT_{axis}")] = IntParam(
+            f"sat_{name}", range_min=0, range_max=3, default=0
+        )
+        for loc in ("LOC1", "LOC2"):
+            entries[getattr(UIParam, f"SAT_{axis}_{loc}")] = FloatParam(
+                f"sat_{name}_{loc.lower()}",
+                unit="mm",
+                scale=1e-3,
+                range_min=-500.0,
+                range_max=500.0,
+                default=0.0,
+            )
+        entries[getattr(UIParam, f"SAT_{axis}_THICKNESS")] = FloatParam(
+            f"sat_{name}_thickness",
+            unit="mm",
+            scale=1e-3,
+            range_min=5.0,
+            range_max=200.0,
+            default=40.0,
+        )
+    return entries
+
+
+_SATURATION = _saturation_entries()
 
 
 class Epi2D(SequencePlugin):
@@ -65,6 +104,11 @@ class Epi2D(SequencePlugin):
     }
     if MULTIBAND:
         protocol[UIParam.MULTIBAND] = IntParam("multiband", range_min=1, range_max=8)
+    # Saturation bands on the scanner's physical axes, at most two of them.
+    protocol |= {UIParam.ENABLE_SATURATION_UI: ConfigParam(1), **_SATURATION}
+
+    def generate(self, system, protocol):
+        return self.app(system, **_bands(protocol))
 
     def evaluate(self, system, protocol):
         # A cycle plays one shot of every slice group of a packet, and a TR
@@ -88,7 +132,7 @@ class Epi2D(SequencePlugin):
             "n_frames": 1,
             "n_dummy": 0,
         }
-        *calibration, _, volume = self.app(system, **(protocol.arguments | one))
+        *calibration, _, volume = self.app(system, **(_bands(protocol) | one))
         n_shots, n_frames = a["n_shots"], a["n_frames"]
         shot = volume.definitions["TR"][0] / n_shots
         sizes, cycles = _cycles(
@@ -104,6 +148,43 @@ class Epi2D(SequencePlugin):
             played * sum(cycles) + groups * sequences.duration(calibration),
             rf_layout=rf_layout(volume, scaled=True, copies=max(sizes), period=tr),
         )
+
+
+def _bands(protocol) -> dict[str, Any]:
+    """Return the app's arguments, the scanner's saturation bands as its ``sat1_`` and ``sat2_``.
+
+    A band on physical axis ``i`` has the logical normal ``R.T @ e_i``, ``R``
+    the prescription rotation, and its position from the isocentre, less the
+    prescribed offset along that normal, is its position from the
+    field-of-view centre, where the design places it before the offset moves
+    the sequence.
+
+    Raises
+    ------
+    ValueError
+        If more than two bands are requested.
+    """
+    values = protocol.arguments
+    rotation = prescribed_rotation(protocol)
+    offset = np.asarray(prescribed_offset(protocol))
+    bands = []
+    for row, axis in zip(rotation, "xyz", strict=True):
+        for bit, loc in ((1, "loc1"), (2, "loc2")):
+            if values[f"sat_{axis}"] & bit:
+                position = values[f"sat_{axis}_{loc}"] - float(row @ offset)
+                bands.append((row, position, values[f"sat_{axis}_thickness"]))
+    if len(bands) > 2:
+        raise ValueError(f"{len(bands)} saturation bands requested; at most 2 play")
+    arguments = {k: v for k, v in values.items() if not k.startswith("sat_")}
+    for n, (normal, position, thickness) in enumerate(bands, 1):
+        arguments |= {
+            f"sat{n}_normal_x": float(normal[0]),
+            f"sat{n}_normal_y": float(normal[1]),
+            f"sat{n}_normal_z": float(normal[2]),
+            f"sat{n}_position": position,
+            f"sat{n}_thickness": thickness,
+        }
+    return arguments
 
 
 def _cycles(
