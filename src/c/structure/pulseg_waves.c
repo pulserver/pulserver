@@ -415,6 +415,32 @@ int pulseg__wave_materialize(
     return rc;
 }
 
+int pulseg__wave_measure(
+    const pulseg_sequence_descriptor *desc,
+    const pulseg_wave *wave,
+    float out_peak[3],
+    int *out_num_points,
+    float *out_start_us,
+    float *out_end_us)
+{
+    wave_grid g;
+    int axis, rc;
+
+    rc = materialize_arguments(desc, wave, PULSEG_GRAD_AXIS_X, out_num_points);
+    if (PULSEG_FAILED(rc))
+        return rc;
+    rc = wave_grid_build(desc, wave, &g);
+    if (PULSEG_FAILED(rc))
+        return rc;
+    for (axis = 0; axis < 3; ++axis)
+        out_peak[axis] = wave_grid_fill(wave, &g, axis, NULL, NULL, 0);
+    *out_num_points = g.n;
+    *out_start_us = g.n > 0 ? g.t[0] : 0.0f;
+    *out_end_us = g.n > 0 ? g.t[g.n - 1] : 0.0f;
+    wave_grid_free(&g);
+    return PULSEG_SUCCESS;
+}
+
 /* The amplitude of largest magnitude, with its sign, among the gradient
  * events of @p bte, the first axis on a tie; 0 when it drives none.  What a
  * wave is scaled by. */

@@ -811,6 +811,17 @@ int pulseg__wave_materialize(
     int *out_num_points,
     float *out_peak);
 
+/* The peak of each output axis of @p wave, its point count and the times of
+ * its first and last points, in us, from one grid; 0 points leave the times
+ * at 0. */
+int pulseg__wave_measure(
+    const pulseg_sequence_descriptor *desc,
+    const pulseg_wave *wave,
+    float out_peak[3],
+    int *out_num_points,
+    float *out_start_us,
+    float *out_end_us);
+
 /* The combination block-table entry @p bte plays, as a wave without its
  * peaks, point count or span: each axis's definition and shape, its
  * rotation, the identity without one, and the amplitude ratios over the
