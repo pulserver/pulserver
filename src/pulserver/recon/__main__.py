@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import logging
 import signal
 from pathlib import Path
 
@@ -80,13 +79,10 @@ def main(argv: list[str] | None = None) -> None:
     )
     args = parser.parse_args(argv)
 
+    from .._logs import configure
     from ..proxy import ReconServer
 
-    logging.basicConfig(
-        level=getattr(logging, str(args.log_level).upper(), logging.INFO),
-        format="%(asctime)s %(levelname)s %(message)s",
-        **({"filename": str(args.logfile)} if args.logfile else {}),
-    )
+    configure(args.log_level, args.logfile)
     server = ReconServer(
         args.plugins,
         slots=args.slots,
