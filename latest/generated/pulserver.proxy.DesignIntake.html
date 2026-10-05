@@ -560,6 +560,9 @@ reason. The endpoint is neither authenticated nor encrypted.</p>
 <li><p><strong>store</strong> – Directory of designs; created when missing.</p></li>
 <li><p><strong>host</strong> – Address to listen on; the loopback interface by default.</p></li>
 <li><p><strong>port</strong> – TCP port; 0 takes a free one.</p></li>
+<li><p><strong>received</strong> – Called with the directory of each design stored or found stored, in
+a thread of its own once the request is answered: a proxy tabulates
+the design there, ahead of the scan that plays it.</p></li>
 </ul>
 </dd>
 </dl>
