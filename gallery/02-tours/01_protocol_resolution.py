@@ -3,27 +3,19 @@
 Protocol resolution for a 2D gradient echo
 ==========================================
 
-The scope of this notebook is to resolve prescriptions of a two-dimensional
-gradient echo the way a design call does for the scanner UI, and to show
-what the resolved protocol depends on: the receiver bandwidth a readout can
-realize on the sampling rasters, and the shortest echo time the readout
-admits.
+This Tour resolves prescriptions of a two-dimensional gradient echo the way a
+design call does for the scanner UI, and shows what the resolved protocol
+depends on: the receiver bandwidth a readout realizes on the sampling rasters,
+and the shortest echo time the readout admits.
 
-A request is resolved by evaluating the protocol under the scanner limits,
-which designs the sequence, and reading back the values the design achieved, as
-described in :doc:`/explanations/protocol`. The sequence is pypulseqpp's
-shipped ``gre2d``, bound to five protocol entries.
+**Prerequisites:** lessons 1 and 2 of the :doc:`course </examples/course>`.
 
-Outline:
-
-#. **Scanner sequence.** The binding of the function to the protocol, and its
-   evaluation.
-#. **Receiver bandwidth.** Requested and achieved bandwidth for two readout
-   lengths.
-#. **Shortest echo time.** The *Minimum* preset against matrix size and
-   bandwidth.
-#. **Infeasible requests and repeated resolution.** The reply to a
-   prescription the design refuses, and to a resolved protocol sent back.
+A request is resolved by evaluating the protocol under the scanner limits and
+reading back the values the design achieved
+(:doc:`/explanations/protocol`). The sequence is pypulseqpp's ``gre2d``, bound
+to five protocol entries. Its evaluation designs the whole scan, which keeps
+the binding short; the shipped plugins, and lesson 2, design one repetition
+instead, so that the time an edit takes does not grow with the matrix.
 """
 
 # sphinx_gallery_start_ignore
@@ -32,23 +24,21 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-PAGE_WIDTH = 8.6  # inches, the width of the documentation column
 # sphinx_gallery_end_ignore
-
 # %%
 # Scanner sequence
 # ----------------
 #
 # The binding maps interpreter parameter names to keyword arguments of the
-# function. Times are exchanged in integer microseconds, the field of view in
+# sequence function. Times are exchanged in integer microseconds, the field of view in
 # mm, and the *Minimum* preset of TE and TR requests the shortest time the
 # design admits. The evaluation designs the sequence and reads back the echo
 # time and the repetition time, which the sequence records as its ``TE`` and
 # ``TR`` definitions, and the receiver bandwidth, the inverse of the dwell time
 # of its ADC event. The reply carries those values and the scan time.
-
 import numpy as np
 import pypulseqpp as pp
+from figure_style import MUTED, PAGE_WIDTH
 from pypulseqpp import sequences
 from pypulseqpp.sequences.sequence.gre2D_sequence import gre2d
 
@@ -136,7 +126,7 @@ achieved = {
 }
 
 # sphinx_gallery_start_ignore
-fig, ax = plt.subplots(figsize=(PAGE_WIDTH * 0.62, 3.6), layout="constrained")
+fig, ax = plt.subplots(figsize=(PAGE_WIDTH * 0.62, 3.6))
 for nx, values in achieved.items():
     ax.step(
         requested / 1e3,
@@ -144,10 +134,10 @@ for nx, values in achieved.items():
         where="post",
         label=f"{2 * nx} samples (nx = {nx})",
     )
-ax.plot(requested / 1e3, requested / 1e3, ls=":", lw=1, color="#7d8996")
+ax.plot(requested / 1e3, requested / 1e3, ls=":", lw=1, color=MUTED)
 ax.set_xlabel("requested bandwidth (kHz)")
 ax.set_ylabel("achieved bandwidth (kHz)")
-fig.legend(loc="outside upper center", ncols=2, frameon=False)
+fig.legend(loc="outside upper center", ncols=2)
 plt.show()
 # sphinx_gallery_end_ignore
 
@@ -185,7 +175,7 @@ minimum_te = {
 }
 
 # sphinx_gallery_start_ignore
-fig, ax = plt.subplots(figsize=(PAGE_WIDTH * 0.62, 3.6), layout="constrained")
+fig, ax = plt.subplots(figsize=(PAGE_WIDTH * 0.62, 3.6))
 for bw, values in minimum_te.items():
     ax.plot(
         matrices,
@@ -196,9 +186,7 @@ for bw, values in minimum_te.items():
     )
 ax.set_xlabel("readout matrix size nx")
 ax.set_ylabel("minimum TE (ms)")
-fig.legend(
-    loc="outside upper center", ncols=3, frameon=False, title="requested bandwidth"
-)
+fig.legend(loc="outside upper center", ncols=3, title="requested bandwidth")
 plt.show()
 # sphinx_gallery_end_ignore
 

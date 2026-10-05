@@ -61,7 +61,8 @@ The default branch is `main`; pull requests target it.
 | `src/c/` | The C89 library a scanner links: cache reader and writer, accessors, protocol |
 | `tests/` | pytest suite; `plugins/` and `recon_plugins/` are the plugin files the services load in tests |
 | `gallery/` | sphinx-gallery example scripts, one directory per section, executed when the pages are built |
-| `docs/` | Sphinx sources: `user-guide/`, `explanations/`, `examples/` (the gallery's landing pages), `api/`, `developer-guide/`, `misc/`; `api_objects.py` writes the API stubs |
+| `docs/` | Sphinx sources, in sidebar order: `user-guide/`, `developer-guide/` (with `internals/`), `explanations/` (flat), `examples/` (the gallery's landing pages), `api/`, `misc/`; `api_objects.py` writes the API stubs, `figure_style.py` is the figure style |
+| `scripts/make_artwork.py` | Draws the logo, the mark and the static figures under `docs/_static/`, each as a light and a dark SVG |
 
 ## The scanner IR, and where each half of it lives
 
@@ -253,14 +254,46 @@ above govern docstrings.
 | `README.md` | Project summary; also the documentation's landing page | What is this, and where is the rest? |
 | `docs/user-guide/` | How-to | How do I install, run and extend pulserver? |
 | `docs/explanations/` | Conceptual explanation | Why does it work this way? |
-| `gallery/` | Executable examples, built into `docs/generated/gallery/` | What does a representative acquisition or reconstruction workflow look like? |
+| `gallery/` | Executable examples, built into `docs/generated/gallery/`: a course, then Tours | What does a representative acquisition or reconstruction workflow look like? |
 | `docs/api/` | Reference | What exactly does this object do? |
 | `docs/developer-guide/` | Contributor procedure and conventions | How is this repository developed? |
+| `docs/developer-guide/internals/` | Implementation design, read by interpreter authors and maintainers | How is it built, and what does a playout rely on? |
 | `docs/misc/` | Licensing, related projects, contributors | |
 
 The prose style of one type is not carried into another. An explanation page
 proceeds from the concept to its model, its consequences and the software
-abstraction, and ends with a *See also* list.
+abstraction, and ends with a *See also* list. Explanations are conceptual:
+implementation design, file layouts, tolerances and test inventories go to
+`docs/developer-guide/internals/`. The explanations are one flat list, in the
+order of the data flow.
+
+The IR is described in PulSeg's vocabulary: *base block*, *virtual segment*,
+*segment instance*, *execution stream*. *Repetition* is the period
+`pypulseqpp.Sequence.repetition()` reports; "repeating unit" is not used.
+`docs/developer-guide/terminology.md` states these terms and what pulserver
+adds to PulSeg's model.
+
+The gallery opens with a course, `01-course`, read in order; each lesson has a
+short introduction, learning objectives and previous/next continuity. Tours
+follow in `02-tours` and stand alone: each opens with its
+objective and prerequisites and has no previous/next links. The Course is the
+shortest coherent path that gives a new user the framework's core mental model
+and enough practical competence to work independently. Tours are useful
+applications, advanced branches or specialised workflows that are not
+necessary for that core competence. `docs/examples/index.md` carries a Course
+table and a Tours table, which `tests/test_docs.py` holds to the gallery.
+
+An explanation page with more than one `##` section opens with a TL;DR
+admonition (```` ```{admonition} TL;DR ```` with `:class: tldr`) directly
+under its title, stating only what the page establishes; landing, API and
+example pages have none, and `tests/test_docs.py` holds both.
+
+Figures take their typography, size and layout from `docs/figure_style.py`,
+which sphinx-gallery applies before each script: no script sets font sizes,
+DPI or the figure's colours, and the colours a script needs are imported from
+it. A static figure is a light and a dark SVG drawn by
+`scripts/make_artwork.py` and shown with the `only-light` and `only-dark`
+classes, not an SVG that follows the reader's operating-system theme.
 
 Mechanics:
 
@@ -280,12 +313,15 @@ Mechanics:
   `_gallery_header.md`; the landing page under `docs/examples/` carries a table
   of its examples and a hidden toctree over them, which `tests/test_docs.py`
   checks. A gallery example exists because running it shows something
-  scientifically or computationally useful, not to demonstrate an interface.
+  scientifically or computationally useful, not to demonstrate an interface;
+  a course lesson exists because a new user needs it.
 - A runnable example on a user-guide page is a `pycon` doctest, executed by
   `tests/test_docs.py`. One that needs a running service or a data file is a
   plain `python` block.
 - The README is included as the landing page; `docs/conf.py` rewrites its
-  `raw.githubusercontent.com` image links to `docs/_static/`.
+  `raw.githubusercontent.com` image links to `docs/_static/`, and a
+  `<picture>` that chooses a variant by the reader's colour scheme into the
+  `only-light` and `only-dark` pair the theme switches between.
 
 Verify substantive semantics against the implementation, its tests, pypulseqpp,
 the ISMRMRD specification and the primary literature, in that order. Existing

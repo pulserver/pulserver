@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 176" role="img" aria-labelledby="t d">
+<title id="t">pulserver</title><desc id="d">Two bipolar trapezoidal gradient waveforms in blue and amber, followed by the wordmark pulserver</desc>
+<style>
+.box{fill:#13293a;stroke:#5b9bd0;stroke-width:2}
+.core{fill:#2b76ad;stroke:#8fc3e8;stroke-width:2}
+.a{fill:#2a2415;stroke:#ffbe2e;stroke-width:2}
+.txt{font:22px Arial,sans-serif;fill:#dce7f0}
+.white{font:23px Arial,sans-serif;fill:#ffffff;font-weight:bold}
+.small{font:18px Arial,sans-serif;fill:#dce7f0}
+.label{font:16px Arial,sans-serif;fill:#93a7b5}
+.arrow{stroke:#93a7b5;stroke-width:3;marker-end:url(#m)}
+.head{fill:#93a7b5}
+.ink{fill:none;stroke:#e8eef3;stroke-width:5;stroke-linejoin:miter;stroke-linecap:butt}
+.blue{fill:#5b9bd0}
+.amber{fill:#ffbe2e}
+.word{fill:#8fc3e8}
+.title{font:bold 20px Arial,sans-serif;fill:#dce7f0}
+.wave{fill:none;stroke:#5b9bd0;stroke-width:3;stroke-linejoin:round}
+.rf{fill:none;stroke:#ffbe2e;stroke-width:3;stroke-linejoin:round}
+.adc{fill:#ffbe2e}
+.base{fill:none;stroke:#93a7b5;stroke-width:1.5}
+.bracket{fill:none;stroke:#93a7b5;stroke-width:2}
+</style>
+<g transform="translate(24 70)">
+<g transform="translate(26 0)">
+<path class="blue" d="M24 0 38-28 81-28 93.1 0Z"/>
+<path class="amber" d="M93.1 0 104 25 118 25 130 0Z"/>
+<path class="ink" d="M0 0H24L38-28H81L104 25H118L130 0H158"/>
+</g>
+<g transform="translate(0 39)">
+<path class="amber" d="M24 0 38-28 81-28 93.1 0Z"/>
+<path class="blue" d="M93.1 0 104 25 118 25 130 0Z"/>
+<path class="ink" d="M0 0H24L38-28H81L104 25H118L130 0H158"/>
+</g>
+</g>
+<text x="238" y="116" font-family="Arial,Helvetica,sans-serif" font-size="112" font-style="italic"><tspan class="word">pul</tspan><tspan class="amber" font-weight="700">server</tspan></text>
+</svg>

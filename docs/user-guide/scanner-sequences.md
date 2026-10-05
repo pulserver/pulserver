@@ -1,9 +1,9 @@
 # Scanner sequences
 
 A scanner sequence is a plugin file, `<name>.py` in a `--plugins` directory,
-that binds an app to the scanner protocol with one
-{class}`~pulserver.design.SequencePlugin` subclass. The app is a function that
-returns the designed sequences ({ref}`function-apps`), as every sequence of
+that binds a sequence function to the scanner protocol with one
+{class}`~pulserver.design.SequencePlugin` subclass. The sequence function is a function that
+returns the designed sequences ({ref}`sequence-functions`), as every sequence of
 pypulseqpp is:
 
 ```python
@@ -16,7 +16,7 @@ class Gre(SequencePlugin):
 ```
 
 The interpreter names it `--plugin gre`. Without `protocol`, the protocol is the
-app's defaults. A PyPulseq script becomes a function app by taking the scanner
+sequence function's defaults. A PyPulseq script becomes a sequence function by taking the scanner
 limits and its parameters as arguments and returning its sequence
 ([from a PyPulseq script](https://pulserver.github.io/pypulseqpp/latest/user-guide/from-pypulseq.html)).
 
@@ -27,7 +27,7 @@ limits and its parameters as arguments and returning its sequence
 {class}`~pulserver.protocol.UIParam` collects those of the UI controls. A plain
 string naming a parameter is stored as its member, and a name outside the table
 is refused when the class is defined. An entry names the keyword argument of the
-app it sets. The class does not name a reconstruction: the console's scan
+sequence function it sets. The class does not name a reconstruction: the console's scan
 or the reconstruction client does ({doc}`reconstruction-plugins`). A `recon`
 attribute has no effect, and defining one raises a `DeprecationWarning`.
 `ui` and `ScannerSequence` are deprecated names of `protocol` and
@@ -54,7 +54,7 @@ attribute has no effect, and defining one raises a `DeprecationWarning`.
 | Entry | UI | Argument |
 | --- | --- | --- |
 | {class}`~pulserver.design.TimeParam` | integer microseconds, with presets | seconds |
-| {class}`~pulserver.design.FloatParam` | the argument divided by `scale`, in `unit` | as the app takes it |
+| {class}`~pulserver.design.FloatParam` | the argument divided by `scale`, in `unit` | as the sequence function takes it |
 | {class}`~pulserver.design.IntParam` | integer | integer |
 | {class}`~pulserver.design.BoolParam` | checkbox | boolean |
 | {class}`~pulserver.design.ChoiceParam` | dropdown | the chosen member of a `StrEnum` |
@@ -72,20 +72,20 @@ equal to the option. {func}`~pulserver.design.StringListParam`, which builds
 the enum from option strings, is deprecated.
 
 A preset is a negative value the interpreter sends in place of a time;
-`{TEPreset.MINIMUM: None}` passes `None`, for which the app designs its
-shortest echo time. An entry's `default` replaces the app's default as the
+`{TEPreset.MINIMUM: None}` passes `None`, for which the sequence function designs its
+shortest echo time. An entry's `default` replaces the sequence function's default as the
 initial value, in UI units: `default=TEPreset.MINIMUM` offers a protocol a
-scanner with weaker gradients than the app's default assumes can play.
+scanner with weaker gradients than the sequence function's default assumes can play.
 
-(function-apps)=
-## Function apps
+(sequence-functions)=
+## Sequence functions
 
-A function app takes the scanner limits, a {class}`pypulseqpp.Opts`, and one
+A sequence function takes the scanner limits, a {class}`pypulseqpp.Opts`, and one
 keyword argument for each entry of `protocol`, and returns the designed
 {class}`pypulseqpp.Sequence`. A list of sequences is a chain, the prescans first
 and the main sequence last; each file names the next as its `NextSequence`
 definition. The initial value of an entry is the default of its argument in the
-signature, so a {func}`functools.partial` is an app too. The default evaluation
+signature, so a {func}`functools.partial` is a sequence function too. The default evaluation
 does not call the function; {meth}`~pulserver.design.SequencePlugin.generate`
 calls it when the design is generated ({ref}`evaluating-a-protocol`).
 
@@ -209,11 +209,11 @@ fov_rotation_33: float|off|1.0|-1.0|1.0|1e-06|
 The last twelve entries are the prescription, which the interpreter fills from
 the scanner's: the field-of-view offset, which the host applies when it builds
 the IR, and the rotation from the logical to the physical axes, in whose frame
-the host checks the design ({doc}`../explanations/ir-cache`).
+the host checks the design ({doc}`../explanations/designs`).
 
 {meth}`~pulserver.design.SequencePlugin.validate` evaluates a request under the
 scanner limits and returns the protocol the design plays. Entries the request
-omits keep their initial values. The default evaluation of a function app
+omits keep their initial values. The default evaluation of a sequence function
 accepts the protocol unchanged, so the reply repeats the request, a preset
 included, and states no scan time:
 
@@ -281,7 +281,7 @@ stores it ({doc}`../explanations/designs`).
 A plugin overrides {meth}`~pulserver.design.SequencePlugin.evaluate` to check a
 protocol and to state what the console shows with it. The hook takes the scanner
 limits and the requested {class}`~pulserver.design.Protocol`, in the units of the
-app's arguments, and returns an {class}`~pulserver.design.Evaluation`: the
+sequence function's arguments, and returns an {class}`~pulserver.design.Evaluation`: the
 protocol holding the values the design achieves, the scan time in seconds, a
 note shown with the valid protocol and, optionally, the RF layout
 ({ref}`stating-the-rf-layout`). Returning `None` accepts the protocol
@@ -304,8 +304,8 @@ unchanged. Raising an exception makes the protocol invalid:
 
 ```
 
-The default for a function app accepts the protocol unchanged, states no scan
-time and does not call the app. A protocol the function cannot realize is then
+The default for a sequence function accepts the protocol unchanged, states no scan
+time and does not call the sequence function. A protocol the function cannot realize is then
 found when the sequence is generated, as an error of that call, and not reported
 as invalid while the operator edits it. An `evaluate` that builds or checks the
 design rejects the protocol when it is evaluated.
@@ -319,7 +319,7 @@ error with its traceback. A request that names an entry the protocol does not
 declare, or an option a choice does not offer, is invalid in the same way.
 
 {meth}`~pulserver.design.SequencePlugin.generate` is the hook that builds the
-sequence of a requested protocol. The default calls the app with the arguments
+sequence of a requested protocol. The default calls the sequence function with the arguments
 of the protocol. A plugin overrides `generate` to return a sequence, or a list
 of them, built another way. `validate` and `design` are not overridden: they
 are the boundary between a request and the code of a plugin, and `design`

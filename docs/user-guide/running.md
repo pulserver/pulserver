@@ -97,7 +97,7 @@ wave is held at once on the gradient raster of the chain's first file, and a
 playout that holds them otherwise refuses the cache.
 
 A generated design and an imported chain are checked against the limits before
-their IR cache is written ({doc}`../explanations/ir-cache`), so the limits
+their IR cache is written ({doc}`../explanations/designs`), so the limits
 include the RF and ADC dead times, the RF ringdown time and the ADC sample
 divisor of the scanner; `pypulseqpp.Opts` sets the dead times to zero and the
 divisor to four when they are left out.
@@ -124,7 +124,7 @@ rasters, the scanner's nerve model and its forbidden gradient bands, and, where
 SAR is computed from virtual observation points, the VOPs. A check whose limits
 are left out is not run. No SAR limit is checked on the host: it writes into
 the cache each subsequence's SAR at the VOPs relative to a reference pulse
-({doc}`../explanations/ir-cache`), and the interpreter computes the SAR and
+({doc}`../explanations/designs`), and the interpreter computes the SAR and
 the gradient heating.
 
 | Limit | Meaning |
@@ -163,8 +163,10 @@ A plugin file is imported again when its modification time changes.
 
 The store holds one directory per design, `<store>/<id>/`: the Pulseq files of
 the chain, the IR cache, the resolved protocol and `manifest.json`, which
-records the plugin, the reconstruction plugin, the limits, the package versions
-and the SHA-256 of every file. The identifier is three 24-bit integers, each
+records the identity and identifier, the limits, the package versions, the
+creation time, the plugin and the source it was designed from, the scan time,
+the field-of-view offset (and the rotation, for an imported chain) and the
+SHA-256 of every file. The identifier is three 24-bit integers, each
 held exactly by a float32 scanner parameter. `prune` removes designs least recently used
 first: those unused for longer than `--max-age-days`, then others until the
 store holds at most `--max-bytes`. A design used within the last day is kept

@@ -117,7 +117,9 @@ def main(argv: list[str] | None = None) -> None:
     proxy.bind(args.port, args.host)
     intake = None
     if args.intake_port is not None:
-        intake = DesignIntake(args.store, args.host, args.intake_port)
+        intake = DesignIntake(
+            args.store, args.host, args.intake_port, received=proxy.designs.read
+        )
         intake.start()
     for signum in (signal.SIGTERM, signal.SIGINT):
         signal.signal(signum, lambda _signum, _frame: proxy.stop())

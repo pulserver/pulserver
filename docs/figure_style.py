@@ -2,14 +2,19 @@
 
 Every figure is drawn on a transparent canvas in tones that clear 3:1 against
 white and against the dark theme's background alike, the palette pypulseqpp's
-documentation draws in, so figures of the two projects agree.
-``_static/pulserver.css`` removes the card the theme would otherwise paint
-behind each image.
+documentation draws in, at the type sizes and resolution of bartorch's, so
+figures of the three projects agree. ``_static/pulserver.css`` removes the
+card the theme would otherwise paint behind each image. A script sets no font
+size, DPI or colour of its own: it imports the colours it needs from here and
+sizes its figures as fractions of :data:`PAGE_WIDTH`.
 """
 
 from __future__ import annotations
 
 from cycler import cycler
+
+#: The width of the documentation column, in inches.
+PAGE_WIDTH = 7.8
 
 #: Axis furniture.
 INK = "#717c8b"
@@ -45,6 +50,20 @@ FIGURE_RCPARAMS = {
     "grid.color": FAINT,
     "legend.labelcolor": INK,
     "axes.prop_cycle": cycler(color=list(SERIES)),
+    "figure.dpi": 110,
+    "savefig.dpi": 110,
+    "figure.constrained_layout.use": True,
+    "font.size": 12,
+    "axes.titlesize": 13,
+    "axes.labelsize": 12,
+    "xtick.labelsize": 11,
+    "ytick.labelsize": 11,
+    "legend.fontsize": 11,
+    "legend.title_fontsize": 11,
+    "figure.titlesize": 13,
+    "legend.frameon": False,
+    "image.cmap": "gray",
+    "image.interpolation": "nearest",
 }
 
 

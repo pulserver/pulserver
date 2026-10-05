@@ -118,8 +118,9 @@ class SequenceTable:
     Attributes
     ----------
     counters : dict of str to ndarray
-        Every label of ``MRD_COUNTERS``, one ``int32`` value per readout; 0
-        where the sequence never writes it.
+        Every label of ``MRD_COUNTERS`` some file of the chain writes, one
+        ``int32`` value per readout, 0 in a file that never writes it. A
+        counter no file writes is absent, and 0 on every readout.
     flags : ndarray
         ``uint64`` ISMRMRD flag masks: the non-boundary flags the sequence
         sets, first/last flags of every counter the sequence writes, and
@@ -234,7 +235,7 @@ class SequenceTable:
             part, part_spaces = _map_readouts(
                 readouts, definitions, subsequence, len(spaces)
             )
-            files.append(readouts)
+            files.append(readouts._for_k())
             parts.append(part)
             spaces.extend(part_spaces)
             tr.extend(definitions.tr)
@@ -267,9 +268,16 @@ class SequenceTable:
         return cls(
             counters={
                 name: np.concatenate(
-                    [part["counters"][name] for part in parts], dtype=np.int32
+                    [
+                        part["counters"][name]
+                        if name in part["counters"]
+                        else np.zeros(part["flags"].size, dtype=np.int32)
+                        for part in parts
+                    ],
+                    dtype=np.int32,
                 )
                 for name in MRD_COUNTERS
+                if any(name in part["counters"] for part in parts)
             },
             flags=flags,
             center_sample=joined("center_sample", np.int32),
@@ -343,16 +351,22 @@ def enrich_header(header: Any, table: SequenceTable) -> None:
     encodings = list(header.encoding or ())
     for index, space in enumerate(table.spaces):
         members = table.encoding_space == index
+        whole = bool(members.all())
+        counters = {
+            name: values if whole else values[members]
+            for name, values in table.counters.items()
+        }
         written = [
             name
             for name in MRD_COUNTERS
-            if name in _STANDARD_LIMITS or table.counters[name][members].any()
+            if name in _STANDARD_LIMITS or (name in counters and counters[name].any())
         ]
         centres = {"LIN": space.centre_line, "PAR": space.centre_partition}
+        absent = np.zeros(1, dtype=np.int32)
         limits = xsd.encodingLimitsType(
             **{
                 _LIMIT_FIELDS[name]: _limit(
-                    table.counters[name][members], centres.get(name)
+                    counters.get(name, absent), centres.get(name)
                 )
                 for name in written
             }
@@ -384,11 +398,14 @@ def enrich_header(header: Any, table: SequenceTable) -> None:
 
 
 def header_fov_offset_m(header: Any) -> tuple[float, float, float] | None:
-    """Return the field-of-view shift an MRD header carries, in m, or None.
+    """Return the field-of-view offset an MRD header states, in m, or None.
 
     Read from the ``fov_offset_mm`` user parameter string, three millimetres
-    along the logical readout, phase and slice axes, as the scanner client
-    writes the prescription centre.
+    along the logical readout, phase and slice axes. It is the position the
+    object is at: where it differs from the offset the design was converted
+    at, as after a motion update, the difference is applied to the samples in
+    full (:meth:`SequenceTable.readout_phase_modulation`). None when the header
+    states none, for which the converted offset is taken.
     """
     stated = user_parameter(header, "fov_offset_mm")
     if stated in (None, ""):
@@ -430,7 +447,8 @@ def enrich_acquisition(
 
     counters = acquisition.idx
     for name, field in MRD_COUNTERS.items():
-        value = int(table.counters[name][index])
+        values = table.counters.get(name)
+        value = 0 if values is None else int(values[index])
         if name.startswith("USER"):
             counters.user[int(name.removeprefix("USER"))] = value
         else:
@@ -471,25 +489,24 @@ def _map_readouts(
     """Rows and encoding spaces of one subsequence, spaces numbered from ``first_space``."""
     count = len(readouts)
     labels = readouts.labels
-    counters = {
-        name: labels.get(name, np.zeros(count, dtype=np.int32)) for name in MRD_COUNTERS
-    }
+    counters = {name: labels[name] for name in MRD_COUNTERS if name in labels}
 
     flags = np.zeros(count, dtype=np.uint64)
     for name, bit in _SEQUENCE_FLAGS.items():
         if name in labels:
-            flags[labels[name] != 0] |= np.uint64(bit)
+            np.bitwise_or(flags, np.uint64(bit), out=flags, where=labels[name] != 0)
     navigator = (flags & np.uint64(_F.IS_NAVIGATION_DATA.value)) != 0
     reverse = (flags & np.uint64(_F.IS_REVERSE.value)) != 0
     local_space = navigator.astype(np.int32)
-    flags |= _boundary_flags(counters, local_space, set(labels))
+    _mark_boundaries(flags, counters, local_space, set(labels))
 
     spaces = []
+    navigates = bool(navigator.any())
     for local, is_navigator in ((0, False), (1, True)):
-        if is_navigator and not navigator.any():
+        if is_navigator and not navigates:
             break
         fov = definitions.navigator_fov if is_navigator else definitions.fov
-        members = local_space == local
+        members = local_space == local if navigates else slice(None)
         trajectory = bool((readouts.trajectory_dimensions[members] > 1).any())
         spaces.append(
             TableSpace(
@@ -510,8 +527,10 @@ def _map_readouts(
                     reverse[members],
                 ),
                 ramp_sampled=not trajectory
-                and bool(members.any())
-                and _ramp_sampled(readouts, int(np.argmax(members))),
+                and (bool(members.any()) if navigates else count > 0)
+                and _ramp_sampled(
+                    readouts, int(np.argmax(members)) if navigates else 0
+                ),
             )
         )
 
@@ -569,14 +588,14 @@ def _full_echo(
     return int(full.max())
 
 
-def _boundary_flags(
-    counters: dict[str, np.ndarray], space: np.ndarray, written: set[str]
-) -> np.ndarray:
-    """First and last flags of every written counter, keyed by space and the other written image counters."""
-    count = space.size
-    flags = np.zeros(count, dtype=np.uint64)
-    if not count:
-        return flags
+def _mark_boundaries(
+    flags: np.ndarray,
+    counters: dict[str, np.ndarray],
+    space: np.ndarray,
+    written: set[str],
+) -> None:
+    """Set the first and last flags of every written counter, keyed by space and the other written image counters."""
+    sets = []
     for name, first, last, _ in _BOUNDARY_COUNTERS:
         if name not in written:
             continue
@@ -585,12 +604,9 @@ def _boundary_flags(
             for other, _, _, selects_image in _BOUNDARY_COUNTERS
             if selects_image and other != name and other in written
         ]
-        marks = require("first_and_last")(
-            [space, *(counters[other] for other in enclosing), counters[name]]
-        )
-        flags[(marks & 1) != 0] |= np.uint64(first.value)
-        flags[(marks & 2) != 0] |= np.uint64(last.value)
-    return flags
+        columns = [space, *(counters[other] for other in enclosing), counters[name]]
+        sets.append((columns, first.value, last.value))
+    require("mark_boundaries")(sets, flags)
 
 
 def _limit(values: np.ndarray, centre: int | None = None) -> Any:
