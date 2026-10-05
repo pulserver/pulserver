@@ -9,6 +9,8 @@ _USAGE = (
     "       pulserver scan (--seq FILE | --plugin NAME --plugins DIR) --limits FILE ...\n"
     "       pulserver console --plugins DIR --limits FILE --store DIR ...\n"
     "       pulserver validate SEQ [--vendor NAME] [--played FILE] ...\n"
+    "       pulserver proxy --store DIR --port N (--plugins DIR | --forward HOST:PORT) ...\n"
+    "       pulserver recon --plugins DIR --port N ...\n"
 )
 
 
@@ -26,6 +28,16 @@ def main(argv: list[str] | None = None) -> int:
         from .virtual._command import main as scan
 
         return scan(argv[1:])
+    if argv and argv[0] == "proxy":
+        from .proxy.__main__ import main as proxy
+
+        proxy(argv[1:])
+        return 0
+    if argv and argv[0] == "recon":
+        from .recon.__main__ import main as recon
+
+        recon(argv[1:])
+        return 0
     if argv and argv[0] == "validate":
         from .validate._command import main as check
 

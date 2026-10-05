@@ -1,4 +1,4 @@
-"""Run the reconstruction proxy: ``python -m pulserver.proxy --store DIR --port N (--plugins DIR | --forward HOST:PORT)``."""
+"""Run the reconstruction proxy: ``pulserver proxy --store DIR --port N (--plugins DIR | --forward HOST:PORT)``."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from ._proxy import ReconProxy
 
 def main(argv: list[str] | None = None) -> None:
     without_huge_page_advice()
-    parser = argparse.ArgumentParser(prog="python -m pulserver.proxy")
+    parser = argparse.ArgumentParser(prog="pulserver proxy")
     parser.add_argument(
         "--store",
         type=Path,
@@ -94,12 +94,41 @@ def main(argv: list[str] | None = None) -> None:
         action="store_true",
         help="convert the images the --forward server sends back to DICOM",
     )
+    parser.add_argument(
+        "--save-data",
+        type=Path,
+        default=None,
+        metavar="DIR",
+        help="keep each series there as the scanner sends it, so one can be "
+        "reconstructed again offline; kept nowhere when unset",
+    )
+    parser.add_argument(
+        "--idle-timeout",
+        type=float,
+        default=None,
+        help="seconds without a client after which the proxy closes. A proxy "
+        "started for one scan outlives whoever started it, and this is how it "
+        "ends on its own; it never closes while a reconstruction is running",
+    )
+    parser.add_argument(
+        "--logfile",
+        type=Path,
+        default=None,
+        help="file the log is written to; the standard error when unset",
+    )
+    parser.add_argument(
+        "--log-level",
+        default="INFO",
+        help="DEBUG, INFO, WARNING or ERROR",
+    )
     args = parser.parse_args(argv)
     if args.forward is None and args.plugins is None:
         parser.error("--plugins is required unless --forward is given")
 
     logging.basicConfig(
-        level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s"
+        level=getattr(logging, str(args.log_level).upper(), logging.INFO),
+        format="%(asctime)s %(levelname)s %(message)s",
+        **({"filename": str(args.logfile)} if args.logfile else {}),
     )
     proxy = ReconProxy(
         args.store,
@@ -113,6 +142,8 @@ def main(argv: list[str] | None = None) -> None:
         forward=args.forward,
         forward_config=args.forward_config,
         forward_dicom=args.forward_dicom,
+        save_to=args.save_data,
+        idle_timeout=args.idle_timeout,
     )
     proxy.bind(args.port, args.host)
     intake = None

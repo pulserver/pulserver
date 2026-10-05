@@ -1,4 +1,4 @@
-"""Run the reconstruction server: ``python -m pulserver.recon --plugins DIR --port N``."""
+"""Run the reconstruction server: ``pulserver recon --plugins DIR --port N``."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from pathlib import Path
 
 
 def main(argv: list[str] | None = None) -> None:
-    parser = argparse.ArgumentParser(prog="python -m pulserver.recon")
+    parser = argparse.ArgumentParser(prog="pulserver recon")
     parser.add_argument(
         "--plugins",
         type=Path,
@@ -51,12 +51,41 @@ def main(argv: list[str] | None = None) -> None:
         default=None,
         help="seconds a reconstruction may run after its series ends; unlimited when unset",
     )
+    parser.add_argument(
+        "--save-data",
+        type=Path,
+        default=None,
+        metavar="DIR",
+        help="keep each series there as the proxy forwards it, so one can be "
+        "reconstructed again offline; kept nowhere when unset",
+    )
+    parser.add_argument(
+        "--idle-timeout",
+        type=float,
+        default=None,
+        help="seconds without a client after which the server closes. A server "
+        "started for one scan outlives whoever started it, and this is how it "
+        "ends on its own; it never closes while a reconstruction is running",
+    )
+    parser.add_argument(
+        "--logfile",
+        type=Path,
+        default=None,
+        help="file the log is written to; the standard error when unset",
+    )
+    parser.add_argument(
+        "--log-level",
+        default="INFO",
+        help="DEBUG, INFO, WARNING or ERROR",
+    )
     args = parser.parse_args(argv)
 
     from ..proxy import ReconServer
 
     logging.basicConfig(
-        level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s"
+        level=getattr(logging, str(args.log_level).upper(), logging.INFO),
+        format="%(asctime)s %(levelname)s %(message)s",
+        **({"filename": str(args.logfile)} if args.logfile else {}),
     )
     server = ReconServer(
         args.plugins,
@@ -65,6 +94,8 @@ def main(argv: list[str] | None = None) -> None:
         spares=args.spares,
         recon_timeout=args.recon_timeout,
         queue=args.queue,
+        save_to=args.save_data,
+        idle_timeout=args.idle_timeout,
     )
     server.bind(args.port, args.host)
     for signum in (signal.SIGTERM, signal.SIGINT):

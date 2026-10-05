@@ -12,6 +12,7 @@ import shutil
 import socket
 import tempfile
 import threading
+import time
 from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import Any
@@ -56,12 +57,21 @@ _EXPIRY_POLL = 60.0
 class _Listener:
     """Accepts MRD clients on a TCP port, one series per connection and a thread each."""
 
-    def __init__(self, serving: Path | str) -> None:
+    def __init__(
+        self,
+        serving: Path | str,
+        save_to: Path | str | None = None,
+        idle_timeout: float | None = None,
+    ) -> None:
         self._serving = serving
+        self.save_to = None if save_to is None else Path(save_to)
+        self._idle_timeout = idle_timeout
         self._server: socket.socket | None = None
         self._closing = threading.Event()
         self._stopping = False
         self._threads: list[threading.Thread] = []
+        self._idle_since = time.monotonic()
+        self._keeping = threading.Lock()
 
     def bind(self, port: int = 0, host: str = "127.0.0.1") -> int:
         """Listen on ``port`` and return the port bound; 0 takes a free one.
@@ -79,14 +89,31 @@ class _Listener:
         return int(server.getsockname()[1])
 
     def serve(self) -> None:
-        """Accept clients until :meth:`stop` or :meth:`close`, one thread each."""
+        """Accept clients until :meth:`stop`, :meth:`close`, or nothing comes.
+
+        A server started for one scan outlives it: whoever started it has gone
+        by the time the last series is reconstructed, and nothing is left to
+        stop it. An idle timeout is how it ends on its own, counted from the
+        last client to leave rather than from when it started, so a long
+        reconstruction never trips it.
+        """
         if self._server is None:
             self.bind()
         _log.info("serving %s on port %d", self._serving, self.port)
+        self._idle_since = time.monotonic()
         while not (self._stopping or self._closing.is_set()):
             try:
                 stream, _ = self._server.accept()
             except TimeoutError:
+                if (
+                    self._idle_timeout is not None
+                    and self._idle_elapsed() > self._idle_timeout
+                ):
+                    _log.info(
+                        "nothing has connected for %.0f s; closing",
+                        self._idle_timeout,
+                    )
+                    break
                 continue
             except OSError:
                 break
@@ -94,6 +121,14 @@ class _Listener:
             thread.start()
             self._threads = [t for t in self._threads if t.is_alive()]
             self._threads.append(thread)
+            self._idle_since = time.monotonic()
+
+    def _idle_elapsed(self) -> float:
+        """Seconds since the last client left; 0 while one is still connected."""
+        if any(thread.is_alive() for thread in self._threads):
+            self._idle_since = time.monotonic()
+            return 0.0
+        return time.monotonic() - self._idle_since
 
     @property
     def port(self) -> int:
@@ -140,6 +175,21 @@ class _Listener:
 
     def _series(self, client: Connection, config: str, header: Any) -> None:
         raise NotImplementedError
+
+    def _kept(self, header: Any, items: Iterator[Any]) -> Iterator[Any]:
+        """Return a series, written where it can be received again.
+
+        The header is written as this is called, before anything enriches it,
+        so replaying the file offline puts this server back where the scan put
+        it.
+        """
+        if self.save_to is None:
+            return items
+        with self._keeping:
+            kept = QueueFile(_unkept_path(self.save_to))
+        _log.info("keeping the series in %s", kept.path)
+        kept.write_header(header)
+        return _keeping(kept, items)
 
 
 class ReconProxy(_Listener):
@@ -273,8 +323,10 @@ class ReconProxy(_Listener):
         forward: tuple[str, int] | None = None,
         forward_config: str | None = None,
         forward_dicom: bool = False,
+        save_to: Path | str | None = None,
+        idle_timeout: float | None = None,
     ) -> None:
-        super().__init__(store)
+        super().__init__(store, save_to, idle_timeout)
         self.designs = DesignCache(store)
         self.held = Path(_held.DEFAULT_HELD_DIRECTORY)
         self.workers = self.exams = self.queue = None
@@ -309,6 +361,7 @@ class ReconProxy(_Listener):
             return
         design = self.designs.resolve(header)
         plugin = _config_plugin(config)
+        received = self._kept(header, _received(client))
         enrich_header(header, design.table)
         _log.info(
             "series on %s: %s, %d readouts",
@@ -324,7 +377,7 @@ class ReconProxy(_Listener):
                 plugin,
                 itertools.chain(
                     (design.description,),
-                    _enriched(client, design, header_fov_offset_m(header)),
+                    _enriched(received, design, header_fov_offset_m(header)),
                 ),
                 motion=design.directory / FILENAME
                 if design.prospective_motion
@@ -395,8 +448,10 @@ class ReconServer(_Listener):
         queue: Path | str | None = None,
         slot_directory: Path | str | None = None,
         exam_directory: Path | str | None = None,
+        save_to: Path | str | None = None,
+        idle_timeout: float | None = None,
     ) -> None:
-        super().__init__(plugins)
+        super().__init__(plugins, save_to, idle_timeout)
         local = self._reconstruction = _Workers(
             plugins,
             slots,
@@ -426,7 +481,7 @@ class ReconServer(_Listener):
             config,
             header,
             plugin,
-            _received(client),
+            self._kept(header, _received(client)),
             poses=lambda pose: client.send(pose_waveform(pose)),
         )
 
@@ -884,9 +939,9 @@ def _is_close_marker(item: Any) -> bool:
 
 
 def _enriched(
-    client: Connection, design: Design, fov_offset_m: Any = None
+    items: Iterator[Any], design: Design, fov_offset_m: Any = None
 ) -> Iterator[Any]:
-    """Yield the client's stream up to its close, acquisitions enriched in play order.
+    """Yield a received series, its acquisitions enriched in play order.
 
     ``fov_offset_m`` is the position the header states; its difference from
     the design's shift is applied to the samples in full.
@@ -909,9 +964,7 @@ def _enriched(
     index = 0
     previous = None
     readouts = len(design.table)
-    for item in client:
-        if _is_close_marker(item):
-            break
+    for item in items:
         if isinstance(item, xsd.ismrmrdHeader):
             raise ValueError("the stream carries a second MRD header")
         if isinstance(item, ismrmrd.Acquisition):
@@ -942,6 +995,30 @@ def _enriched(
             f"the stream ended after {index} of the {readouts} readouts "
             f"{design.directory} plays"
         )
+
+
+def _keeping(kept: QueueFile, items: Iterator[Any]) -> Iterator[Any]:
+    """Yield a series, appending each item to an open file."""
+    try:
+        for item in items:
+            kept.append(item)
+            yield item
+    finally:
+        kept.close()
+
+
+def _unkept_path(directory: Path) -> Path:
+    """Return a name in ``directory`` no kept series holds.
+
+    Two series may start within one second, and a second writer opening the
+    file of the first would append to it, leaving one file holding both.
+    """
+    stamp = time.strftime("%Y%m%dT%H%M%S")
+    for index in itertools.count():
+        path = directory / f"mrd_{stamp}{f'-{index}' if index else ''}.h5"
+        if not path.exists():
+            return path
+    raise AssertionError("unreachable")
 
 
 def _received(client: Connection) -> Iterator[Any]:

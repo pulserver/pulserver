@@ -219,8 +219,8 @@ permissions decide who may call.
 ## Reconstruction proxy
 
 ```bash
-python -m pulserver.proxy --store DIR --port N --plugins DIR [--host ADDR] [--intake-port N] [--queue DIR] [--exams DIR] [--slots N] [--gpu-slots 1] [--spares 1] [--recon-timeout S]
-python -m pulserver.proxy --store DIR --port N --forward HOST:PORT [--forward-config NAME] [--forward-dicom] [--host ADDR] [--intake-port N] [--recon-timeout S]
+pulserver proxy --store DIR --port N --plugins DIR [--host ADDR] [--intake-port N] [--queue DIR] [--exams DIR] [--slots N] [--gpu-slots 1] [--spares 1] [--recon-timeout S] [--save-data DIR] [--idle-timeout S] [--logfile FILE] [--log-level LEVEL]
+pulserver proxy --store DIR --port N --forward HOST:PORT [--forward-config NAME] [--forward-dicom] [--host ADDR] [--intake-port N] [--recon-timeout S] [--save-data DIR] [--idle-timeout S] [--logfile FILE] [--log-level LEVEL]
 ```
 
 | Option | Meaning |
@@ -239,6 +239,10 @@ python -m pulserver.proxy --store DIR --port N --forward HOST:PORT [--forward-co
 | `--forward` | `HOST:PORT` of the MRD server that reconstructs every series, instead of local workers |
 | `--forward-config` | Config name sent to the `--forward` server; the series' reconstruction plugin when unset |
 | `--forward-dicom` | Convert each image the `--forward` server returns to DICOM before it is relayed |
+| `--save-data` | Directory each series is kept in as the scanner sends it; kept nowhere when unset |
+| `--idle-timeout` | Seconds without a client after which the proxy closes; it waits for whatever is running. Unlimited when unset |
+| `--logfile` | File the log is written to; the standard error when unset |
+| `--log-level` | `DEBUG`, `INFO`, `WARNING` or `ERROR`; `INFO` when unset |
 
 The MRD header of each series names the design it was played from in the
 `pulserver_design` user parameter, and the proxy refuses a series whose header
@@ -251,6 +255,18 @@ fields the client sends are listed in {doc}`reconstruction-client`.
 A series that finds every slot busy is written to the queue directory as it
 arrives and reconstructed once a slot frees; the client stays connected
 meanwhile.
+
+With `--save-data`, each series is also written to
+`<save-data>/mrd_<timestamp>.h5` as the scanner sends it, header first and each
+acquisition as it arrives, before anything enriches it. A plugin runs on the
+file against the store the series names, which reconstructs it again offline
+exactly as the proxy did ({doc}`reconstruction-plugins`). The queue directory
+holds a series only until it is reconstructed; this is what survives the scan.
+
+A proxy started for one scan outlives whoever started it, so `--idle-timeout`
+is how it ends: it closes once nothing has been connected for that long,
+counted from the last client leaving, never while a series is still being
+reconstructed. Without one it serves until it is signalled.
 
 A reconstruction computer runs one proxy per acquisition, so the series of one
 exam are reconstructed by different processes. What a calibration series
@@ -301,7 +317,7 @@ waits for the series it is running before it exits.
 ## Reconstruction server
 
 ```bash
-python -m pulserver.recon --plugins DIR --port N [--host ADDR] [--queue DIR] [--slots N] [--gpu-slots 1] [--spares 1] [--recon-timeout S]
+pulserver recon --plugins DIR --port N [--host ADDR] [--queue DIR] [--slots N] [--gpu-slots 1] [--spares 1] [--recon-timeout S] [--save-data DIR] [--idle-timeout S] [--logfile FILE] [--log-level LEVEL]
 ```
 
 The reconstruction server is what a forwarding proxy sends its series to, on
@@ -309,7 +325,9 @@ the computer that reconstructs them. It reconstructs each series it receives
 with the plugin its config names, as a config file message or as a config text
 naming it as a bare name or under `parameters.config`, and enriches nothing:
 the series a proxy forwards arrive enriched. Its options are the proxy's, with
-the same workers, slots, queue and exam directories. Its stream is neither
+the same workers, slots, queue and exam directories, and `--save-data`,
+`--idle-timeout`, `--logfile` and `--log-level` behave as they do there; what
+it keeps is the series as the proxy forwarded it, enriched. Its stream is neither
 authenticated nor encrypted, and `--host` names the interface the proxy
 reaches it on. It stops on `SIGINT` or `SIGTERM` and waits for the series it is
 running.
