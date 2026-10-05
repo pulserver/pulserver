@@ -156,9 +156,12 @@ class ReconResult:
 #: fraction of what was asked for, and ``COIL_SENSITIVITIES`` the receive
 #: sensitivity of each coil, a :class:`~pulserver.recon.CoilSensitivities`. A
 #: value is stored as measured, in the frame and on the grid it was measured
-#: on. Nothing resamples, regrids or reslices it: a series whose geometry or
-#: matrix differs does not reuse it. :func:`~pulserver.recon.coil_maps` makes
-#: that comparison for the coil sensitivities.
+#: on. A map stored as an :class:`~pulserver.recon.ExamImage` carries that
+#: geometry, and a series with another orientation, centre, field of view or
+#: matrix reads it resampled onto its own grid with
+#: :meth:`~pulserver.recon.ExamImage.on`. Coil sensitivities are reused only
+#: on the grid they were estimated on: :func:`~pulserver.recon.coil_maps`
+#: makes that comparison.
 B0_MAP = "b0_map"
 B1_MAP = "b1_map"
 COIL_SENSITIVITIES = "coil_sensitivities"

@@ -6,6 +6,7 @@ from ._calibration import (
     MissingCalibration,
     coil_maps,
 )
+from ._exam_image import ExamImage
 from ._loader import load_plugin
 from .gadgets import AsymmetricEcho, Prewhiten, RemoveReadoutOversampling
 from .plugin import (
@@ -33,6 +34,7 @@ __all__ = [
     "CoilCompression",
     "CoilSensitivities",
     "ExamCache",
+    "ExamImage",
     "Gadget",
     "MissingCalibration",
     "Prewhiten",

@@ -41,6 +41,7 @@ sensitivity maps, noise prewhitening and coil compression are the subject of
 | --- | --- |
 | {obj}`~pulserver.recon.ReconContext` | Header, exam cache and configuration passed to every hook. |
 | {obj}`~pulserver.recon.ExamCache` | Thread-safe store of artifacts shared by the series of one exam. |
+| {obj}`~pulserver.recon.ExamImage` | A map one series measured, with its geometry, resampled onto a later series' grid. |
 | {obj}`~pulserver.recon.B0_MAP` | Where a calibration scan leaves the off-resonance map, in Hz, for the series that follow. |
 | {obj}`~pulserver.recon.B1_MAP` | Where a calibration scan leaves the transmit field map, as a fraction of what was asked for. |
 | {obj}`~pulserver.recon.COIL_SENSITIVITIES` | Where a calibration scan leaves the receive coil sensitivities, a {class}`~pulserver.recon.CoilSensitivities`. |
