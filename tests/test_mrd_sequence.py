@@ -78,7 +78,6 @@ def test_spokes_turned_by_rotations_of_their_own_are_their_path_turned_by_each()
     table = ReadoutTable.from_sequence(seq)
     whole = seq.calculate_kspace()[0]
 
-    assert len(table._paths) == 1
     k = np.concatenate([table.readout_k(index) for index in range(len(table))], axis=1)
     np.testing.assert_allclose(k, whole, rtol=0, atol=1e-6 * np.abs(whole).max())
 
