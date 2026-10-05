@@ -122,14 +122,17 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
-          python -m pip install .[dev,coils]
-          python -c "import bartorch.tools"
+          python -m pip install .[dev,coils,design]
+          python -c "import bartorch.tools, torchsim"
 
       - name: Run the coil tests
         run: pytest -q -ra tests/test_virtual_coils.py --cov
 
       - name: Run the bartorch reconstructions, navigator poses included
         run: pytest -q -ra --cov --cov-append tests/recon tests/test_exam_calibration.py
+
+      - name: Evaluate the fse3d plugin's optimized refocusing trains
+        run: pytest -q -ra --cov --cov-append tests/test_zoo_evaluation.py -k "OPTIMIZED or DUAL_REGION"
 
       - name: Scan the console image's sequences, NUFFT reconstructions included
         run: pytest -q -ra --cov --cov-append --cov-report=xml tests/test_console_sequences.py

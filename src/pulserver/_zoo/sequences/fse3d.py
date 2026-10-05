@@ -1,5 +1,7 @@
 """pypulseqpp's 3D fast spin echo bound to the scanner UI, its partitions counted by the number of slices."""
 
+import functools
+
 import pypulseqpp as pp
 from pypulseqpp.sequences.sequence.fse3D_sequence import fse3d, shot_parameters
 
@@ -19,13 +21,24 @@ from pulserver.protocol import TEPreset, TRPreset, UIParam
 #: reconstruction states to the scan.
 NAVIGATOR = False
 
-#: Individually parameterized trains: adds the TR and the echo train length
-#: at the periphery of k-space as user entries; TR and ETL are the centre's.
-PERIPHERY = False
+#: Refocusing trains designed with torchsim's extended phase graphs around
+#: the refocusing angle at the TE echo, one train shared by every shot.
+OPTIMIZED = False
+
+#: Optimized trains individually parameterized for the centre and the
+#: periphery of k-space: adds the TR and the echo train length at the
+#: periphery as user entries, TR and ETL being the centre's; each shot's train
+#: is a cubic step between the two designs.
+DUAL_REGION = False
+
+if OPTIMIZED or DUAL_REGION:
+    import torchsim  # noqa: F401  the trains are designed with it
 
 
 class Fse3D(SequencePlugin):
     app = navigated(fse3d) if NAVIGATOR else fse3d
+    if OPTIMIZED or DUAL_REGION:
+        app = functools.partial(app, flip_modulation="optimized")
     protocol = {
         UIParam.TE: TimeParam(
             "te", range_min=2000, range_max=500000, presets={TEPreset.MINIMUM: None}
@@ -52,7 +65,15 @@ class Fse3D(SequencePlugin):
         UIParam.RY: IntParam("ry", range_min=1, range_max=4),
         UIParam.RZ: IntParam("rz", range_min=1, range_max=4),
     }
-    if PERIPHERY:
+    if OPTIMIZED or DUAL_REGION:
+        protocol[UIParam.FLIP] = FloatParam(
+            "refocusing_angle_deg",
+            unit="deg",
+            range_min=60.0,
+            range_max=180.0,
+            default=120.0,
+        )
+    if DUAL_REGION:
         protocol |= {
             UIParam.user_name(0): Description("TR at the periphery"),
             UIParam.user_value(0): FloatParam(
@@ -71,9 +92,13 @@ class Fse3D(SequencePlugin):
 
     def evaluate(self, system, protocol):
         # A TR is one echo train. The design of the centre view plays one
-        # train of the full length at the centre's TR.
+        # train of the full length at the centre's TR; a dual-region layout is
+        # the centre's train designed alone, the transition's ends being
+        # optimized against shots a single view does not make.
         a = arguments(self, protocol)
         one = {"n_dummy": 0, "ry": a["n_y"], "rz": a["n_z"], "n_acs_y": 0, "n_acs_z": 0}
+        if DUAL_REGION:
+            one |= {"tr_periphery": None, "etl_periphery": None}
         train = self.app(system, **(protocol.arguments | one))
         calibrating, imaging = pp.make_cartesian_plane_sampling(
             (a["n_y"], a["n_z"]),

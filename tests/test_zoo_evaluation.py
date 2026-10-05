@@ -1,6 +1,7 @@
 """The shipped scanner sequences' evaluations: their scan time, the values they read back and the RF they state."""
 
 import functools
+import importlib.util
 import inspect
 
 import numpy as np
@@ -83,12 +84,23 @@ REQUESTS = [pytest.param(name, {}, id=f"{name}-default") for name in SHIPPED] + 
     pytest.param(name, CHANGED[name], id=f"{name}-changed") for name in SHIPPED
 ]
 
+#: The toggled sequences whose refocusing trains torchsim designs.
+OPTIMIZED = ("fse3d+OPTIMIZED", "fse3d+DUAL_REGION")
+WITH_TORCHSIM = pytest.mark.skipif(
+    importlib.util.find_spec("torchsim") is None, reason="needs torchsim"
+)
+
 # The defaults, and prescriptions that change what the repetitions of a scan
 # are counted from: slices in packets of unequal size at a requested TR or in
 # one packet at the shortest, undersampling, partitions, shots, frames, blades,
 # echo trains and inversion shots; by wire name.
 SCANS = [pytest.param(name, {}, id=name) for name in SHIPPED] + [
-    pytest.param(name, changes, id=f"{name}-{label}")
+    pytest.param(
+        name,
+        changes,
+        id=f"{name}-{label}",
+        marks=WITH_TORCHSIM if name in OPTIMIZED else (),
+    )
     for name, label, changes in (
         ("bssfp2d", "slices", {"nslices": 3, "TR": 6000, "ny": 64}),
         ("bssfp3d", "longer-tr", {"TR": 9000, "nslices": 8, "ny": 32}),
@@ -101,7 +113,7 @@ SCANS = [pytest.param(name, {}, id=name) for name in SHIPPED] + [
             {"nslices": 8, "multiband": 2, "TR": 900000, "num_shots": 2},
         ),
         (
-            "fse3d+PERIPHERY",
+            "fse3d+DUAL_REGION",
             "periphery",
             {
                 "nslices": 16,
@@ -112,6 +124,11 @@ SCANS = [pytest.param(name, {}, id=name) for name in SHIPPED] + [
                 "user0_value": 1500.0,
                 "user1_value": 14,
             },
+        ),
+        (
+            "fse3d+OPTIMIZED",
+            "optimized",
+            {"nslices": 16, "etl": 10, "nx": 64, "ny": 32, "flip": 120.0},
         ),
         (
             "fse3d+NAVIGATOR",
@@ -319,7 +336,8 @@ LAST_TR_BLOCKS = {"zte3d": 2}
 #: below use.
 TOGGLED = {
     "epi2d+MULTIBAND": ("epi2d", "MULTIBAND"),
-    "fse3d+PERIPHERY": ("fse3d", "PERIPHERY"),
+    "fse3d+OPTIMIZED": ("fse3d", "OPTIMIZED"),
+    "fse3d+DUAL_REGION": ("fse3d", "DUAL_REGION"),
     "fse3d+NAVIGATOR": ("fse3d", "NAVIGATOR"),
     "mprage3d+NAVIGATOR": ("mprage3d", "NAVIGATOR"),
     "gre_spiral2d+VARIABLE_DENSITY": ("gre_spiral2d", "VARIABLE_DENSITY"),
@@ -335,6 +353,8 @@ def zoo(tmp_path_factory):
     """The shipped scanner sequences by name, and those of ``TOGGLED`` as a copy of the file with the constant set."""
     plugins = {name: load_plugin(_plugins.SEQUENCES / f"{name}.py") for name in SHIPPED}
     for key, (name, constant) in TOGGLED.items():
+        if key in OPTIMIZED and importlib.util.find_spec("torchsim") is None:
+            continue
         source = (_plugins.SEQUENCES / f"{name}.py").read_text()
         assert f"\n{constant} = False\n" in source
         path = tmp_path_factory.mktemp(key.replace("+", "-")) / f"{name}.py"
@@ -487,19 +507,28 @@ def test_an_evaluation_states_as_its_layout_a_regular_tr_of_the_design(
 
     layout = plugin.evaluate(SYSTEM, protocol).rf_layout
 
+    if name == "fse3d+DUAL_REGION":
+        # Each shot's train is its own; the layout is the centre's, designed
+        # as every shot's.
+        plugin = zoo["fse3d+OPTIMIZED"]
+        changes = {k: v for k, v in changes.items() if not k.startswith("user")}
+        protocol = _protocol(plugin, changes)
     main = _main(plugin, protocol)
     # The first TR holds the largest packet of slices; a balanced steady state
     # opens with its half-angle pulse, so its last TR is the regular one.
     balanced = name.startswith("bssfp")
     start = main.duration()[0] - main.definitions["TR"][0] if balanced else 0
-    expected = rf_layout(main, UIParam.FLIP in plugin.protocol, start=start)
+    # An optimized refocusing train is designed around its flip angle rather
+    # than scaled by it, by an optimization converged to float32 round-off.
+    scaled = UIParam.FLIP in plugin.protocol and not name.startswith("fse3d")
+    expected = rf_layout(main, scaled, start=start)
     assert layout.period == pytest.approx(expected.period, rel=1e-12)
     assert layout.instances.definition.tolist() == (
         expected.instances.definition.tolist()
     )
     assert layout.control == expected.control
     assert layout.instances.amplitude == pytest.approx(
-        expected.instances.amplitude, rel=1e-9
+        expected.instances.amplitude, rel=1e-6 if name in OPTIMIZED else 1e-9
     )
     definitions = layout.instances.definitions
     assert [d.use for d in definitions] == [
