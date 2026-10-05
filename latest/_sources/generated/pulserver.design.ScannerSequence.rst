@@ -29,4 +29,5 @@
    :nosignatures:
 
    ~ScannerSequence.protocol
+   ~ScannerSequence.reads_exam
    ~ScannerSequence.app

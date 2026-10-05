@@ -29,4 +29,5 @@
    :nosignatures:
 
    ~SequencePlugin.protocol
+   ~SequencePlugin.reads_exam
    ~SequencePlugin.app

@@ -562,6 +562,9 @@ not positive, is a <code class="docutils literal notranslate"><span class="pre">
 they cannot realize, are logged at WARNING and the message is the
 reply’s <code class="docutils literal notranslate"><span class="pre">info</span></code>. Any other exception is logged at ERROR, and the
 <code class="docutils literal notranslate"><span class="pre">info</span></code> is <code class="docutils literal notranslate"><span class="pre">&quot;&lt;ExceptionType&gt;</span> <span class="pre">in</span> <span class="pre">&lt;Plugin&gt;.evaluate&quot;</span></code>.</p>
+<p><code class="docutils literal notranslate"><span class="pre">exam</span></code>, the directory of the current exam’s cache, is passed to
+<a class="reference internal" href="pulserver.design.SequencePlugin.evaluate.html#pulserver.design.SequencePlugin.evaluate" title="pulserver.design.SequencePlugin.evaluate"><code class="xref py py-meth docutils literal notranslate"><span class="pre">evaluate()</span></code></a> as its <code class="docutils literal notranslate"><span class="pre">exam</span></code> argument where it takes one, and read
+with <a class="reference internal" href="pulserver.design.load_exam.html#pulserver.design.load_exam" title="pulserver.design.load_exam"><code class="xref py py-func docutils literal notranslate"><span class="pre">load_exam()</span></code></a>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Raises<span class="colon">:</span></dt>
 <dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If the declared entries are inconsistent with the sequence function, as

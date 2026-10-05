@@ -572,7 +572,10 @@ designs the sequence; the default <a class="reference internal" href="pulserver.
 names, which are the members of
 <a class="reference internal" href="pulserver.protocol.ProtocolKey.html#pulserver.protocol.ProtocolKey" title="pulserver.protocol.ProtocolKey"><code class="xref py py-data docutils literal notranslate"><span class="pre">ProtocolKey</span></code></a> that
 <a class="reference internal" href="pulserver.protocol.UIParam.html#pulserver.protocol.UIParam" title="pulserver.protocol.UIParam"><code class="xref py py-class docutils literal notranslate"><span class="pre">UIParam</span></code></a> collects. A plain string naming an
-entry is stored as its member. Empty by default.</p></li>
+entry is stored as its member. Empty by default. An entry that states
+its <code class="docutils literal notranslate"><span class="pre">default</span></code> may bind a name the app does not take; it is then read
+by the plugin’s own <a class="reference internal" href="pulserver.design.SequencePlugin.evaluate.html#pulserver.design.SequencePlugin.evaluate" title="pulserver.design.SequencePlugin.evaluate"><code class="xref py py-meth docutils literal notranslate"><span class="pre">evaluate()</span></code></a> and <a class="reference internal" href="pulserver.design.SequencePlugin.generate.html#pulserver.design.SequencePlugin.generate" title="pulserver.design.SequencePlugin.generate"><code class="xref py py-meth docutils literal notranslate"><span class="pre">generate()</span></code></a>, which do
+not pass it to the app.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Raises<span class="colon">:</span></dt>
@@ -622,7 +625,10 @@ subclasses <a class="reference internal" href="pulserver.design.ScannerSequence.
 <tr class="row-odd"><td><p><a class="reference internal" href="pulserver.design.SequencePlugin.protocol.html#pulserver.design.SequencePlugin.protocol" title="pulserver.design.SequencePlugin.protocol"><code class="xref py py-obj docutils literal notranslate"><span class="pre">protocol</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pulserver.design.SequencePlugin.app.html#pulserver.design.SequencePlugin.app" title="pulserver.design.SequencePlugin.app"><code class="xref py py-obj docutils literal notranslate"><span class="pre">app</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pulserver.design.SequencePlugin.reads_exam.html#pulserver.design.SequencePlugin.reads_exam" title="pulserver.design.SequencePlugin.reads_exam"><code class="xref py py-obj docutils literal notranslate"><span class="pre">reads_exam</span></code></a></p></td>
+<td><p>Whether <code class="xref py py-meth docutils literal notranslate"><span class="pre">evaluate()</span></code> or <code class="xref py py-meth docutils literal notranslate"><span class="pre">generate()</span></code> takes <code class="docutils literal notranslate"><span class="pre">exam</span></code>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.design.SequencePlugin.app.html#pulserver.design.SequencePlugin.app" title="pulserver.design.SequencePlugin.app"><code class="xref py py-obj docutils literal notranslate"><span class="pre">app</span></code></a></p></td>
 <td><p></p></td>
 </tr>
 </tbody>

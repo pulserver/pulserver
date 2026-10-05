@@ -474,7 +474,7 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">sys</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Mapping</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Hashable</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">,</span> <span class="n">MutableMapping</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">numbers</span><span class="w"> </span><span class="kn">import</span> <span class="n">Real</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
@@ -576,7 +576,10 @@
 <span class="sd">        names, which are the members of</span>
 <span class="sd">        :data:`~pulserver.protocol.ProtocolKey` that</span>
 <span class="sd">        :class:`~pulserver.protocol.UIParam` collects. A plain string naming an</span>
-<span class="sd">        entry is stored as its member. Empty by default.</span>
+<span class="sd">        entry is stored as its member. Empty by default. An entry that states</span>
+<span class="sd">        its ``default`` may bind a name the app does not take; it is then read</span>
+<span class="sd">        by the plugin's own :meth:`evaluate` and :meth:`generate`, which do</span>
+<span class="sd">        not pass it to the app.</span>
 
 <span class="sd">    Raises</span>
 <span class="sd">    ------</span>
@@ -767,7 +770,10 @@
 <div class="viewcode-block" id="SequencePlugin.validate">
 <a class="viewcode-back" href="../../../generated/pulserver.design.SequencePlugin.validate.html#pulserver.design.SequencePlugin.validate">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">validate</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span> <span class="n">system</span><span class="p">:</span> <span class="n">pp</span><span class="o">.</span><span class="n">Opts</span><span class="p">,</span> <span class="n">request</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="n">ProtocolKey</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">system</span><span class="p">:</span> <span class="n">pp</span><span class="o">.</span><span class="n">Opts</span><span class="p">,</span>
+        <span class="n">request</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="n">ProtocolKey</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
+        <span class="n">exam</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Validation</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">"""Return the validation of a request, as the wire carries it.</span>
 
@@ -789,6 +795,10 @@
 <span class="sd">        reply's ``info``. Any other exception is logged at ERROR, and the</span>
 <span class="sd">        ``info`` is ``"&lt;ExceptionType&gt; in &lt;Plugin&gt;.evaluate"``.</span>
 
+<span class="sd">        ``exam``, the directory of the current exam's cache, is passed to</span>
+<span class="sd">        :meth:`evaluate` as its ``exam`` argument where it takes one, and read</span>
+<span class="sd">        with :func:`load_exam`.</span>
+
 <span class="sd">        Raises</span>
 <span class="sd">        ------</span>
 <span class="sd">        ValueError</span>
@@ -796,7 +806,7 @@
 <span class="sd">            :meth:`listing` reports; this is a defect of the plugin and not of</span>
 <span class="sd">            the request.</span>
 <span class="sd">        """</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_validated</span><span class="p">(</span><span class="n">system</span><span class="p">,</span> <span class="n">request</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span></div>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_validated</span><span class="p">(</span><span class="n">system</span><span class="p">,</span> <span class="n">request</span><span class="p">,</span> <span class="n">exam</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span></div>
 
 
 <div class="viewcode-block" id="SequencePlugin.design">
@@ -806,6 +816,7 @@
         <span class="n">system</span><span class="p">:</span> <span class="n">pp</span><span class="o">.</span><span class="n">Opts</span><span class="p">,</span>
         <span class="n">request</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="n">ProtocolKey</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
         <span class="n">directory</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">exam</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">Validation</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]]:</span>
 <span class="w">        </span><span class="sd">"""Write the sequence of a request into ``directory`` as signed binary Pulseq.</span>
 
@@ -819,7 +830,9 @@
 <span class="sd">        The first file is ``sequence.seq``. Each later file of a chain is</span>
 <span class="sd">        ``sequence_prescan&lt;n&gt;.seq``, ``n`` counting from 2, or</span>
 <span class="sd">        ``sequence_main.seq`` for the last, and each file names the next as its</span>
-<span class="sd">        ``NextSequence`` definition, so the chain is one scan.</span>
+<span class="sd">        ``NextSequence`` definition, so the chain is one scan. ``exam`` is</span>
+<span class="sd">        passed to :meth:`evaluate` and :meth:`generate` as :meth:`validate`</span>
+<span class="sd">        passes it.</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
@@ -834,7 +847,7 @@
 <span class="sd">        TypeError</span>
 <span class="sd">            If ``app`` returns neither a sequence nor a list of them.</span>
 <span class="sd">        """</span>
-        <span class="n">validation</span><span class="p">,</span> <span class="n">paths</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_design</span><span class="p">(</span><span class="n">system</span><span class="p">,</span> <span class="n">request</span><span class="p">,</span> <span class="n">directory</span><span class="p">)</span>
+        <span class="n">validation</span><span class="p">,</span> <span class="n">paths</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_design</span><span class="p">(</span><span class="n">system</span><span class="p">,</span> <span class="n">request</span><span class="p">,</span> <span class="n">directory</span><span class="p">,</span> <span class="n">exam</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">validation</span><span class="p">,</span> <span class="n">paths</span></div>
 
 
@@ -843,12 +856,13 @@
         <span class="n">system</span><span class="p">:</span> <span class="n">pp</span><span class="o">.</span><span class="n">Opts</span><span class="p">,</span>
         <span class="n">request</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="n">ProtocolKey</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
         <span class="n">directory</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">exam</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">Validation</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="n">Path</span><span class="p">,</span> <span class="n">pp</span><span class="o">.</span><span class="n">Sequence</span><span class="p">]]]:</span>
 <span class="w">        </span><span class="sd">"""Return what :meth:`design` returns, and each written path with its sequence as written."""</span>
-        <span class="n">validation</span><span class="p">,</span> <span class="n">protocol</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_validated</span><span class="p">(</span><span class="n">system</span><span class="p">,</span> <span class="n">request</span><span class="p">)</span>
+        <span class="n">validation</span><span class="p">,</span> <span class="n">protocol</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_validated</span><span class="p">(</span><span class="n">system</span><span class="p">,</span> <span class="n">request</span><span class="p">,</span> <span class="n">exam</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">protocol</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">return</span> <span class="n">validation</span><span class="p">,</span> <span class="p">[],</span> <span class="p">[]</span>
-        <span class="n">built</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">generate</span><span class="p">(</span><span class="n">system</span><span class="p">,</span> <span class="n">protocol</span><span class="p">)</span>
+        <span class="n">built</span> <span class="o">=</span> <span class="n">_hook</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">generate</span><span class="p">,</span> <span class="n">system</span><span class="p">,</span> <span class="n">protocol</span><span class="p">,</span> <span class="n">exam</span><span class="p">)</span>
         <span class="n">paths</span> <span class="o">=</span> <span class="n">_write</span><span class="p">(</span><span class="n">built</span><span class="p">,</span> <span class="n">Path</span><span class="p">(</span><span class="n">directory</span><span class="p">)</span> <span class="o">/</span> <span class="n">_FIRST_FILE</span><span class="p">)</span>
         <span class="n">chain</span> <span class="o">=</span> <span class="p">[</span><span class="n">built</span><span class="p">]</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">built</span><span class="p">,</span> <span class="n">pp</span><span class="o">.</span><span class="n">Sequence</span><span class="p">)</span> <span class="k">else</span> <span class="n">built</span>
         <span class="k">return</span> <span class="n">validation</span><span class="p">,</span> <span class="n">paths</span><span class="p">,</span> <span class="nb">list</span><span class="p">(</span><span class="nb">zip</span><span class="p">(</span><span class="nb">map</span><span class="p">(</span><span class="n">Path</span><span class="p">,</span> <span class="n">paths</span><span class="p">),</span> <span class="n">chain</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span>
@@ -863,8 +877,16 @@
             <span class="k">if</span> <span class="n">argument</span><span class="o">.</span><span class="n">kind</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="n">argument</span><span class="o">.</span><span class="n">VAR_POSITIONAL</span><span class="p">,</span> <span class="n">argument</span><span class="o">.</span><span class="n">VAR_KEYWORD</span><span class="p">)</span>
         <span class="p">}</span>
 
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">reads_exam</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Whether :meth:`evaluate` or :meth:`generate` takes ``exam``."""</span>
+        <span class="k">return</span> <span class="nb">any</span><span class="p">(</span><span class="n">_takes_exam</span><span class="p">(</span><span class="n">hook</span><span class="p">)</span> <span class="k">for</span> <span class="n">hook</span> <span class="ow">in</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">evaluate</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">generate</span><span class="p">))</span>
+
     <span class="k">def</span><span class="w"> </span><span class="nf">_validated</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span> <span class="n">system</span><span class="p">:</span> <span class="n">pp</span><span class="o">.</span><span class="n">Opts</span><span class="p">,</span> <span class="n">request</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="n">ProtocolKey</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">system</span><span class="p">:</span> <span class="n">pp</span><span class="o">.</span><span class="n">Opts</span><span class="p">,</span>
+        <span class="n">request</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="n">ProtocolKey</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
+        <span class="n">exam</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">Validation</span><span class="p">,</span> <span class="n">Protocol</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">"""Return the validation of a request and the protocol it requests, ``None`` where invalid."""</span>
         <span class="n">listing</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">listing</span><span class="p">()</span>
@@ -874,7 +896,7 @@
         <span class="k">try</span><span class="p">:</span>
             <span class="n">prescribed_rotation</span><span class="p">(</span><span class="n">values</span><span class="p">)</span>
             <span class="n">protocol</span> <span class="o">=</span> <span class="n">Protocol</span><span class="o">.</span><span class="n">from_wire</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">protocol</span><span class="p">,</span> <span class="n">values</span><span class="p">,</span> <span class="n">system</span><span class="p">)</span>
-            <span class="n">evaluation</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">evaluate</span><span class="p">(</span><span class="n">system</span><span class="p">,</span> <span class="n">protocol</span><span class="p">)</span>
+            <span class="n">evaluation</span> <span class="o">=</span> <span class="n">_hook</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">evaluate</span><span class="p">,</span> <span class="n">system</span><span class="p">,</span> <span class="n">protocol</span><span class="p">,</span> <span class="n">exam</span><span class="p">)</span>
             <span class="k">if</span> <span class="n">evaluation</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="n">evaluation</span> <span class="o">=</span> <span class="n">Evaluation</span><span class="p">(</span><span class="n">protocol</span><span class="p">)</span>
             <span class="n">layout</span> <span class="o">=</span> <span class="n">_stated_layout</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">protocol</span><span class="p">,</span> <span class="n">evaluation</span><span class="p">)</span>
@@ -908,6 +930,39 @@
 <span class="sd">    """</span>
 
     <span class="n">_deprecated_alias</span> <span class="o">=</span> <span class="kc">True</span></div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_takes_exam</span><span class="p">(</span><span class="n">hook</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+    <span class="k">return</span> <span class="s2">"exam"</span> <span class="ow">in</span> <span class="n">inspect</span><span class="o">.</span><span class="n">signature</span><span class="p">(</span><span class="n">hook</span><span class="p">)</span><span class="o">.</span><span class="n">parameters</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_hook</span><span class="p">(</span>
+    <span class="n">hook</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
+    <span class="n">system</span><span class="p">:</span> <span class="n">pp</span><span class="o">.</span><span class="n">Opts</span><span class="p">,</span>
+    <span class="n">protocol</span><span class="p">:</span> <span class="n">Protocol</span><span class="p">,</span>
+    <span class="n">exam</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+    <span class="k">if</span> <span class="n">exam</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">_takes_exam</span><span class="p">(</span><span class="n">hook</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">hook</span><span class="p">(</span><span class="n">system</span><span class="p">,</span> <span class="n">protocol</span><span class="p">,</span> <span class="n">exam</span><span class="o">=</span><span class="n">Path</span><span class="p">(</span><span class="n">exam</span><span class="p">))</span>
+    <span class="k">return</span> <span class="n">hook</span><span class="p">(</span><span class="n">system</span><span class="p">,</span> <span class="n">protocol</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="load_exam">
+<a class="viewcode-back" href="../../../generated/pulserver.design.load_exam.html#pulserver.design.load_exam">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">load_exam</span><span class="p">(</span><span class="n">exam</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">MutableMapping</span><span class="p">[</span><span class="n">Hashable</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Return the cache of the exam whose directory a design hook was given.</span>
+
+<span class="sd">    The values the exam's reconstructions stored, such as ``b0_map``,</span>
+<span class="sd">    ``b1_map`` and ``coil_sensitivities``, as a</span>
+<span class="sd">    :class:`~pulserver.recon.ExamCache` over ``exam``. A key no</span>
+<span class="sd">    reconstruction stored raises ``KeyError``. The values are those of the</span>
+<span class="sd">    series that measured them, on their own grid.</span>
+<span class="sd">    """</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">..recon</span><span class="w"> </span><span class="kn">import</span> <span class="n">ExamCache</span>
+
+    <span class="n">exam</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">exam</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">ExamCache</span><span class="p">(</span><span class="n">exam</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">exam</span><span class="p">)</span></div>
 
 
 

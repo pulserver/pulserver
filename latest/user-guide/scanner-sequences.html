@@ -754,7 +754,12 @@ feature needs, a scanner entry where there is one and a user entry otherwise:</p
 <td><p>Three-plane navigators; the design sets <code class="docutils literal notranslate"><span class="pre">EnablePmc</span></code> and <code class="docutils literal notranslate"><span class="pre">pmc</span></code> states each pose to the scan</p></td>
 <td><p>None</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">gre_spiral2d</span></code>, <code class="docutils literal notranslate"><span class="pre">se_spiral2d</span></code>, <code class="docutils literal notranslate"><span class="pre">gre_stack_of_spirals3d</span></code>, <code class="docutils literal notranslate"><span class="pre">se_stack_of_spirals3d</span></code>, <code class="docutils literal notranslate"><span class="pre">mprage_stack_of_spirals3d</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">gre3d</span></code>, <code class="docutils literal notranslate"><span class="pre">gre_multiecho3d</span></code>, <code class="docutils literal notranslate"><span class="pre">mprage3d</span></code>, <code class="docutils literal notranslate"><span class="pre">fse3d</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">WAVE</span></code></p></td>
+<td><p>Wave-CAIPI at <code class="docutils literal notranslate"><span class="pre">WAVE_AMPLITUDE</span></code> (T/m) and <code class="docutils literal notranslate"><span class="pre">WAVE_CYCLES</span></code>; the calibration region is acquired first without the wave, and <code class="docutils literal notranslate"><span class="pre">pics</span></code> and <code class="docutils literal notranslate"><span class="pre">pmc</span></code> reconstruct the wave-encoded volume</p></td>
+<td><p>None</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">gre_spiral2d</span></code>, <code class="docutils literal notranslate"><span class="pre">se_spiral2d</span></code>, <code class="docutils literal notranslate"><span class="pre">gre_stack_of_spirals3d</span></code>, <code class="docutils literal notranslate"><span class="pre">se_stack_of_spirals3d</span></code>, <code class="docutils literal notranslate"><span class="pre">mprage_stack_of_spirals3d</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">VARIABLE_DENSITY</span></code></p></td>
 <td><p>Variable-density spirals</p></td>
 <td><p>User entry 0: periphery undersampling</p></td>

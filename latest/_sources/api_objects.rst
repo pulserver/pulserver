@@ -19,6 +19,7 @@ from.
    Protocol
    ScannerSequence
    load_plugin
+   load_exam
    RfLayout
    RfControl
    TimeParam
@@ -191,6 +192,7 @@ from.
    RemoveReadoutOversampling
    ReconContext
    ExamCache
+   ExamImage
    B0_MAP
    B1_MAP
    COIL_SENSITIVITIES

@@ -554,8 +554,9 @@ samples. The zeros are recorded as discarded: <code class="docutils literal notr
 <code class="docutils literal notranslate"><span class="pre">discard_post</span></code> grow by the zeros added at each end, and <code class="docutils literal notranslate"><span class="pre">center_sample</span></code>
 becomes the centre of the full echo, so that the buffers place the acquired
 samples only. A readout already centred passes unchanged, as do navigator
-and noise readouts. An acquisition that states no <code class="docutils literal notranslate"><span class="pre">center_sample</span></code> is
-centred.</p>
+and noise readouts and a readout carrying a trajectory over more than one
+axis, which is not an echo along one line. An acquisition that states no
+<code class="docutils literal notranslate"><span class="pre">center_sample</span></code> is centred.</p>
 <p>This is Gadgetron’s <code class="docutils literal notranslate"><span class="pre">AsymmetricEchoAdjustROGadget</span></code>.</p>
 </dd></dl>
 

@@ -555,7 +555,9 @@ evaluated protocol is made from <code class="docutils literal notranslate"><span
 <p>The first file is <code class="docutils literal notranslate"><span class="pre">sequence.seq</span></code>. Each later file of a chain is
 <code class="docutils literal notranslate"><span class="pre">sequence_prescan&lt;n&gt;.seq</span></code>, <code class="docutils literal notranslate"><span class="pre">n</span></code> counting from 2, or
 <code class="docutils literal notranslate"><span class="pre">sequence_main.seq</span></code> for the last, and each file names the next as its
-<code class="docutils literal notranslate"><span class="pre">NextSequence</span></code> definition, so the chain is one scan.</p>
+<code class="docutils literal notranslate"><span class="pre">NextSequence</span></code> definition, so the chain is one scan. <code class="docutils literal notranslate"><span class="pre">exam</span></code> is
+passed to <a class="reference internal" href="pulserver.design.SequencePlugin.evaluate.html#pulserver.design.SequencePlugin.evaluate" title="pulserver.design.SequencePlugin.evaluate"><code class="xref py py-meth docutils literal notranslate"><span class="pre">evaluate()</span></code></a> and <a class="reference internal" href="pulserver.design.SequencePlugin.generate.html#pulserver.design.SequencePlugin.generate" title="pulserver.design.SequencePlugin.generate"><code class="xref py py-meth docutils literal notranslate"><span class="pre">generate()</span></code></a> as <a class="reference internal" href="pulserver.design.SequencePlugin.validate.html#pulserver.design.SequencePlugin.validate" title="pulserver.design.SequencePlugin.validate"><code class="xref py py-meth docutils literal notranslate"><span class="pre">validate()</span></code></a>
+passes it.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Returns<span class="colon">:</span></dt>
 <dd class="field-odd"><p><ul class="simple">

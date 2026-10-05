@@ -145,6 +145,7 @@ feature needs, a scanner entry where there is one and a user entry otherwise:
 | `fse3d` | `OPTIMIZED` | Refocusing train designed with torchsim, shared by every shot | Flip angle: the refocusing angle at the TE echo |
 | `fse3d` | `DUAL_REGION` | Trains designed with torchsim for the centre and the periphery of k-space, each shot's a cubic step between them; `TR` and `ETL` are the centre's | Flip angle, as `OPTIMIZED`; user entries 0 and 1: TR and ETL at the periphery |
 | `fse3d`, `mprage3d` | `NAVIGATOR` | Three-plane navigators; the design sets `EnablePmc` and `pmc` states each pose to the scan | None |
+| `gre3d`, `gre_multiecho3d`, `mprage3d`, `fse3d` | `WAVE` | Wave-CAIPI at `WAVE_AMPLITUDE` (T/m) and `WAVE_CYCLES`; the calibration region is acquired first without the wave, and `pics` and `pmc` reconstruct the wave-encoded volume | None |
 | `gre_spiral2d`, `se_spiral2d`, `gre_stack_of_spirals3d`, `se_stack_of_spirals3d`, `mprage_stack_of_spirals3d` | `VARIABLE_DENSITY` | Variable-density spirals | User entry 0: periphery undersampling |
 
 A 3D sequence takes its number of partitions from the number of slices. `Ry`

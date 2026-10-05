@@ -576,6 +576,7 @@
     <span class="n">limits</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
     <span class="n">block</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
     <span class="n">rf_layout</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="n">exam</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Reply ``VALID &lt;seconds&gt;`` or ``INVALID``, an ``INFO`` line and the value block.</span>
 
@@ -585,13 +586,14 @@
 <span class="sd">    evaluation where the plugin states one, with amplitudes over the peaks the</span>
 <span class="sd">    listing states, read by evaluating the plugin again at its default</span>
 <span class="sd">    protocol. Where that evaluation is invalid, a warning is logged and the</span>
-<span class="sd">    amplitudes are the layout's own.</span>
+<span class="sd">    amplitudes are the layout's own. ``exam`` is the directory of the current</span>
+<span class="sd">    exam's cache, which the plugin's hooks read where they take it.</span>
 <span class="sd">    """</span>
     <span class="n">path</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">plugin_path</span><span class="p">(</span><span class="n">plugins</span><span class="p">,</span> <span class="n">plugin</span><span class="p">))</span>
     <span class="n">listing</span> <span class="o">=</span> <span class="n">_listing</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
     <span class="n">request</span> <span class="o">=</span> <span class="n">_request</span><span class="p">(</span><span class="n">block</span><span class="p">,</span> <span class="n">listing</span><span class="p">)</span>
     <span class="n">limits</span> <span class="o">=</span> <span class="n">_read</span><span class="p">(</span><span class="n">limits</span><span class="p">)</span>
-    <span class="n">validation</span> <span class="o">=</span> <span class="n">_validated</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">limits</span><span class="p">,</span> <span class="n">request</span><span class="p">)</span>
+    <span class="n">validation</span> <span class="o">=</span> <span class="n">_validated</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">limits</span><span class="p">,</span> <span class="n">request</span><span class="p">,</span> <span class="n">exam</span><span class="p">)</span>
     <span class="n">listed</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
     <span class="k">if</span> <span class="n">rf_layout</span> <span class="ow">and</span> <span class="n">validation</span><span class="o">.</span><span class="n">valid</span> <span class="ow">and</span> <span class="n">validation</span><span class="o">.</span><span class="n">rf_layout</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">default</span> <span class="o">=</span> <span class="n">_default_rf_layout</span><span class="p">(</span>
@@ -615,6 +617,7 @@
     <span class="n">block</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
     <span class="n">store</span><span class="p">:</span> <span class="n">DesignStore</span><span class="p">,</span>
     <span class="n">push</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">exam</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Reply ``GENERATED &lt;id&gt;`` for the design a request resolves to.</span>
 
@@ -628,7 +631,9 @@
 <span class="sd">    field-of-view offset, and stored. A request that resolves to other values</span>
 <span class="sd">    is designed from the resolved values, so a design is a function of its</span>
 <span class="sd">    identifier. With ``push``, the URL of a design intake, the design is sent</span>
-<span class="sd">    there unless the intake holds it already.</span>
+<span class="sd">    there unless the intake holds it already. ``exam`` is passed as</span>
+<span class="sd">    :func:`validate` passes it; for a plugin whose hooks take it, the files of</span>
+<span class="sd">    the exam's cache are part of the design's identity.</span>
 
 <span class="sd">    Raises</span>
 <span class="sd">    ------</span>
@@ -645,21 +650,26 @@
     <span class="n">scanner</span> <span class="o">=</span> <span class="n">_plugin</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
     <span class="n">requested</span> <span class="o">=</span> <span class="p">{</span><span class="n">key</span><span class="p">:</span> <span class="n">p</span><span class="o">.</span><span class="n">value</span> <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">listing</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">p</span><span class="o">.</span><span class="n">editable</span><span class="p">}</span>
     <span class="n">requested</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">request</span><span class="p">)</span>
-    <span class="n">validation</span> <span class="o">=</span> <span class="n">scanner</span><span class="o">.</span><span class="n">validate</span><span class="p">(</span><span class="n">design</span><span class="p">,</span> <span class="n">requested</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">scanner</span><span class="o">.</span><span class="n">reads_exam</span><span class="p">:</span>
+        <span class="n">exam</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">validation</span> <span class="o">=</span> <span class="n">scanner</span><span class="o">.</span><span class="n">validate</span><span class="p">(</span><span class="n">design</span><span class="p">,</span> <span class="n">requested</span><span class="p">,</span> <span class="n">exam</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">validation</span><span class="o">.</span><span class="n">valid</span> <span class="ow">and</span> <span class="n">validation</span><span class="o">.</span><span class="n">values</span> <span class="o">!=</span> <span class="n">requested</span><span class="p">:</span>
-        <span class="n">validation</span> <span class="o">=</span> <span class="n">scanner</span><span class="o">.</span><span class="n">validate</span><span class="p">(</span><span class="n">design</span><span class="p">,</span> <span class="n">validation</span><span class="o">.</span><span class="n">values</span><span class="p">)</span>
+        <span class="n">validation</span> <span class="o">=</span> <span class="n">scanner</span><span class="o">.</span><span class="n">validate</span><span class="p">(</span><span class="n">design</span><span class="p">,</span> <span class="n">validation</span><span class="o">.</span><span class="n">values</span><span class="p">,</span> <span class="n">exam</span><span class="p">)</span>
     <span class="k">if</span> <span class="ow">not</span> <span class="n">validation</span><span class="o">.</span><span class="n">valid</span><span class="p">:</span>
         <span class="k">raise</span> <span class="n">CallError</span><span class="p">(</span><span class="n">validation</span><span class="o">.</span><span class="n">info</span><span class="p">)</span>
     <span class="n">source</span> <span class="o">=</span> <span class="n">_source</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
-    <span class="n">identity</span> <span class="o">=</span> <span class="n">design_identity</span><span class="p">(</span>
-        <span class="n">plugin</span><span class="p">,</span> <span class="n">identified_limits</span><span class="p">(</span><span class="n">limits</span><span class="p">),</span> <span class="n">validation</span><span class="o">.</span><span class="n">values</span><span class="p">,</span> <span class="n">source</span>
-    <span class="p">)</span>
+    <span class="n">identified</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">validation</span><span class="o">.</span><span class="n">values</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">exam</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">identified</span><span class="p">[</span><span class="s2">"exam"</span><span class="p">]</span> <span class="o">=</span> <span class="n">_exam_digest</span><span class="p">(</span><span class="n">exam</span><span class="p">)</span>
+    <span class="n">identity</span> <span class="o">=</span> <span class="n">design_identity</span><span class="p">(</span><span class="n">plugin</span><span class="p">,</span> <span class="n">identified_limits</span><span class="p">(</span><span class="n">limits</span><span class="p">),</span> <span class="n">identified</span><span class="p">,</span> <span class="n">source</span><span class="p">)</span>
     <span class="n">found</span> <span class="o">=</span> <span class="n">store</span><span class="o">.</span><span class="n">find</span><span class="p">(</span><span class="n">identity</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">found</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">return</span> <span class="sa">f</span><span class="s2">"GENERATED </span><span class="si">{</span><span class="n">_pushed</span><span class="p">(</span><span class="n">store</span><span class="p">,</span><span class="w"> </span><span class="n">found</span><span class="p">,</span><span class="w"> </span><span class="n">push</span><span class="p">)</span><span class="si">}</span><span class="se">\n</span><span class="s2">"</span>
     <span class="n">staged</span> <span class="o">=</span> <span class="n">store</span><span class="o">.</span><span class="n">stage</span><span class="p">()</span>
     <span class="k">try</span><span class="p">:</span>
-        <span class="n">accepted</span><span class="p">,</span> <span class="n">paths</span><span class="p">,</span> <span class="n">written</span> <span class="o">=</span> <span class="n">scanner</span><span class="o">.</span><span class="n">_design</span><span class="p">(</span><span class="n">design</span><span class="p">,</span> <span class="n">validation</span><span class="o">.</span><span class="n">values</span><span class="p">,</span> <span class="n">staged</span><span class="p">)</span>
+        <span class="n">accepted</span><span class="p">,</span> <span class="n">paths</span><span class="p">,</span> <span class="n">written</span> <span class="o">=</span> <span class="n">scanner</span><span class="o">.</span><span class="n">_design</span><span class="p">(</span>
+            <span class="n">design</span><span class="p">,</span> <span class="n">validation</span><span class="o">.</span><span class="n">values</span><span class="p">,</span> <span class="n">staged</span><span class="p">,</span> <span class="n">exam</span>
+        <span class="p">)</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">accepted</span><span class="o">.</span><span class="n">valid</span><span class="p">:</span>
             <span class="k">raise</span> <span class="n">CallError</span><span class="p">(</span><span class="n">accepted</span><span class="o">.</span><span class="n">info</span><span class="p">)</span>
         <span class="c1"># The sequences as written stand for the files. The conversion moves</span>
@@ -883,9 +893,22 @@
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_validated</span><span class="p">(</span>
-    <span class="n">path</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">limits</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span> <span class="n">request</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="n">ProtocolKey</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span>
+    <span class="n">path</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">limits</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
+    <span class="n">request</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="n">ProtocolKey</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
+    <span class="n">exam</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Validation</span><span class="p">:</span>
-    <span class="k">return</span> <span class="n">_plugin</span><span class="p">(</span><span class="n">path</span><span class="p">)</span><span class="o">.</span><span class="n">validate</span><span class="p">(</span><span class="n">design_system</span><span class="p">(</span><span class="n">limits</span><span class="p">),</span> <span class="n">request</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">_plugin</span><span class="p">(</span><span class="n">path</span><span class="p">)</span><span class="o">.</span><span class="n">validate</span><span class="p">(</span><span class="n">design_system</span><span class="p">(</span><span class="n">limits</span><span class="p">),</span> <span class="n">request</span><span class="p">,</span> <span class="n">exam</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_exam_digest</span><span class="p">(</span><span class="n">exam</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return a digest of the name, size and modification time of each file of an exam's cache."""</span>
+    <span class="n">digest</span> <span class="o">=</span> <span class="n">hashlib</span><span class="o">.</span><span class="n">sha256</span><span class="p">()</span>
+    <span class="k">for</span> <span class="n">entry</span> <span class="ow">in</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="n">exam</span><span class="p">)</span><span class="o">.</span><span class="n">glob</span><span class="p">(</span><span class="s2">"*"</span><span class="p">)):</span>
+        <span class="k">if</span> <span class="n">entry</span><span class="o">.</span><span class="n">is_file</span><span class="p">():</span>
+            <span class="n">stat</span> <span class="o">=</span> <span class="n">entry</span><span class="o">.</span><span class="n">stat</span><span class="p">()</span>
+            <span class="n">digest</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">entry</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">stat</span><span class="o">.</span><span class="n">st_size</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">stat</span><span class="o">.</span><span class="n">st_mtime_ns</span><span class="si">}</span><span class="se">\n</span><span class="s2">"</span><span class="o">.</span><span class="n">encode</span><span class="p">())</span>
+    <span class="k">return</span> <span class="n">digest</span><span class="o">.</span><span class="n">hexdigest</span><span class="p">()</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_default_rf_layout</span><span class="p">(</span>

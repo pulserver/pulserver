@@ -624,9 +624,12 @@
 <span class="c1">#: fraction of what was asked for, and ``COIL_SENSITIVITIES`` the receive</span>
 <span class="c1">#: sensitivity of each coil, a :class:`~pulserver.recon.CoilSensitivities`. A</span>
 <span class="c1">#: value is stored as measured, in the frame and on the grid it was measured</span>
-<span class="c1">#: on. Nothing resamples, regrids or reslices it: a series whose geometry or</span>
-<span class="c1">#: matrix differs does not reuse it. :func:`~pulserver.recon.coil_maps` makes</span>
-<span class="c1">#: that comparison for the coil sensitivities.</span>
+<span class="c1">#: on. A map stored as an :class:`~pulserver.recon.ExamImage` carries that</span>
+<span class="c1">#: geometry, and a series with another orientation, centre, field of view or</span>
+<span class="c1">#: matrix reads it resampled onto its own grid with</span>
+<span class="c1">#: :meth:`~pulserver.recon.ExamImage.on`. Coil sensitivities are reused only</span>
+<span class="c1">#: on the grid they were estimated on: :func:`~pulserver.recon.coil_maps`</span>
+<span class="c1">#: makes that comparison.</span>
 <span class="n">B0_MAP</span> <span class="o">=</span> <span class="s2">"b0_map"</span>
 <span class="n">B1_MAP</span> <span class="o">=</span> <span class="s2">"b1_map"</span>
 <span class="n">COIL_SENSITIVITIES</span> <span class="o">=</span> <span class="s2">"coil_sensitivities"</span>
