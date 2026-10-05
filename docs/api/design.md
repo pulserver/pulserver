@@ -24,6 +24,7 @@ control variable, are described in {doc}`../explanations/protocol`.
 | {obj}`~pulserver.design.Protocol` | The values of a protocol in the units of the app's arguments, convertible from and to the wire values. |
 | {obj}`~pulserver.design.ScannerSequence` | Deprecated name of {class}`~pulserver.design.SequencePlugin`. |
 | {obj}`~pulserver.design.load_plugin` | Import a plugin file and instantiate the sequence plugin it defines. |
+| {obj}`~pulserver.design.load_exam` | Open the cache of the current exam, given to a design hook as `exam`. |
 
 ## RF layout
 

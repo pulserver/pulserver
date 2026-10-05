@@ -9,7 +9,7 @@ import inspect
 import logging
 import sys
 import warnings
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Hashable, Mapping, MutableMapping
 from dataclasses import dataclass
 from numbers import Real
 from pathlib import Path
@@ -106,7 +106,10 @@ class SequencePlugin:
         names, which are the members of
         :data:`~pulserver.protocol.ProtocolKey` that
         :class:`~pulserver.protocol.UIParam` collects. A plain string naming an
-        entry is stored as its member. Empty by default.
+        entry is stored as its member. Empty by default. An entry that states
+        its ``default`` may bind a name the app does not take; it is then read
+        by the plugin's own :meth:`evaluate` and :meth:`generate`, which do
+        not pass it to the app.
 
     Raises
     ------
@@ -286,7 +289,10 @@ class SequencePlugin:
         return self.app(system, **protocol.arguments)
 
     def validate(
-        self, system: pp.Opts, request: Mapping[ProtocolKey, Any]
+        self,
+        system: pp.Opts,
+        request: Mapping[ProtocolKey, Any],
+        exam: Path | str | None = None,
     ) -> Validation:
         """Return the validation of a request, as the wire carries it.
 
@@ -308,6 +314,10 @@ class SequencePlugin:
         reply's ``info``. Any other exception is logged at ERROR, and the
         ``info`` is ``"<ExceptionType> in <Plugin>.evaluate"``.
 
+        ``exam``, the directory of the current exam's cache, is passed to
+        :meth:`evaluate` as its ``exam`` argument where it takes one, and read
+        with :func:`load_exam`.
+
         Raises
         ------
         ValueError
@@ -315,13 +325,14 @@ class SequencePlugin:
             :meth:`listing` reports; this is a defect of the plugin and not of
             the request.
         """
-        return self._validated(system, request)[0]
+        return self._validated(system, request, exam)[0]
 
     def design(
         self,
         system: pp.Opts,
         request: Mapping[ProtocolKey, Any],
         directory: Path | str,
+        exam: Path | str | None = None,
     ) -> tuple[Validation, list[str]]:
         """Write the sequence of a request into ``directory`` as signed binary Pulseq.
 
@@ -335,7 +346,9 @@ class SequencePlugin:
         The first file is ``sequence.seq``. Each later file of a chain is
         ``sequence_prescan<n>.seq``, ``n`` counting from 2, or
         ``sequence_main.seq`` for the last, and each file names the next as its
-        ``NextSequence`` definition, so the chain is one scan.
+        ``NextSequence`` definition, so the chain is one scan. ``exam`` is
+        passed to :meth:`evaluate` and :meth:`generate` as :meth:`validate`
+        passes it.
 
         Returns
         -------
@@ -350,7 +363,7 @@ class SequencePlugin:
         TypeError
             If ``app`` returns neither a sequence nor a list of them.
         """
-        validation, paths, _ = self._design(system, request, directory)
+        validation, paths, _ = self._design(system, request, directory, exam)
         return validation, paths
 
     def _design(
@@ -358,12 +371,13 @@ class SequencePlugin:
         system: pp.Opts,
         request: Mapping[ProtocolKey, Any],
         directory: Path | str,
+        exam: Path | str | None = None,
     ) -> tuple[Validation, list[str], list[tuple[Path, pp.Sequence]]]:
         """Return what :meth:`design` returns, and each written path with its sequence as written."""
-        validation, protocol = self._validated(system, request)
+        validation, protocol = self._validated(system, request, exam)
         if protocol is None:
             return validation, [], []
-        built = self.generate(system, protocol)
+        built = _hook(self.generate, system, protocol, exam)
         paths = _write(built, Path(directory) / _FIRST_FILE)
         chain = [built] if isinstance(built, pp.Sequence) else built
         return validation, paths, list(zip(map(Path, paths), chain, strict=True))
@@ -378,8 +392,16 @@ class SequencePlugin:
             if argument.kind not in (argument.VAR_POSITIONAL, argument.VAR_KEYWORD)
         }
 
+    @property
+    def reads_exam(self) -> bool:
+        """Whether :meth:`evaluate` or :meth:`generate` takes ``exam``."""
+        return any(_takes_exam(hook) for hook in (self.evaluate, self.generate))
+
     def _validated(
-        self, system: pp.Opts, request: Mapping[ProtocolKey, Any]
+        self,
+        system: pp.Opts,
+        request: Mapping[ProtocolKey, Any],
+        exam: Path | str | None = None,
     ) -> tuple[Validation, Protocol | None]:
         """Return the validation of a request and the protocol it requests, ``None`` where invalid."""
         listing = self.listing()
@@ -389,7 +411,7 @@ class SequencePlugin:
         try:
             prescribed_rotation(values)
             protocol = Protocol.from_wire(self.protocol, values, system)
-            evaluation = self.evaluate(system, protocol)
+            evaluation = _hook(self.evaluate, system, protocol, exam)
             if evaluation is None:
                 evaluation = Evaluation(protocol)
             layout = _stated_layout(self.protocol, evaluation)
@@ -420,6 +442,36 @@ class ScannerSequence(SequencePlugin):
     """
 
     _deprecated_alias = True
+
+
+def _takes_exam(hook: Callable[..., Any]) -> bool:
+    return "exam" in inspect.signature(hook).parameters
+
+
+def _hook(
+    hook: Callable[..., Any],
+    system: pp.Opts,
+    protocol: Protocol,
+    exam: Path | str | None,
+) -> Any:
+    if exam is not None and _takes_exam(hook):
+        return hook(system, protocol, exam=Path(exam))
+    return hook(system, protocol)
+
+
+def load_exam(exam: Path | str) -> MutableMapping[Hashable, Any]:
+    """Return the cache of the exam whose directory a design hook was given.
+
+    The values the exam's reconstructions stored, such as ``b0_map``,
+    ``b1_map`` and ``coil_sensitivities``, as a
+    :class:`~pulserver.recon.ExamCache` over ``exam``. A key no
+    reconstruction stored raises ``KeyError``. The values are those of the
+    series that measured them, on their own grid.
+    """
+    from ..recon import ExamCache
+
+    exam = Path(exam)
+    return ExamCache(exam.name, exam)
 
 
 def _stated_layout(
