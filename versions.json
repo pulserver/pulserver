@@ -1,5 +1,11 @@
 [
   {
+    "name": "v0.2.0 (stable)",
+    "version": "v0.2.0",
+    "url": "https://pulserver.github.io/pulserver/stable/",
+    "preferred": true
+  },
+  {
     "name": "latest",
     "version": "latest",
     "url": "https://pulserver.github.io/pulserver/latest/"

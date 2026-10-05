@@ -1,0 +1,823 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>pulserver.recon.gadgets &#8212; pulserver documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  <!--
+    this give us a css class that will be invisible only if js is disabled
+  -->
+  <noscript>
+    <style>
+      .pst-js-only { display: none !important; }
+
+    </style>
+  </noscript>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../../_static/styles/theme.css?digest=90905a2f556bf617f1a9" rel="stylesheet" />
+<link href="../../../_static/styles/pydata-sphinx-theme.css?digest=90905a2f556bf617f1a9" rel="stylesheet" />
+
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=03e43079" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/styles/sphinx-book-theme.css?v=4418a689" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery.css?v=c83e6b79" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/pulserver.css?v=e08ae8f3" />
+  
+  <!-- So that users can add custom icons -->
+  <script defer src="../../../_static/scripts/fontawesome.js?digest=90905a2f556bf617f1a9"></script>
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
+<link rel="preload" as="script" href="../../../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
+
+    <script src="../../../_static/documentation_options.js?v=0a6a6ad3"></script>
+    <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../../../_static/copybutton.js?v=f281be69"></script>
+    <script src="../../../_static/sg-tags.js?v=d80f6fa4"></script>
+    <script src="../../../_static/scripts/sphinx-book-theme.js?v=fab101a9"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = '_modules/pulserver/recon/gadgets';</script>
+    <script>
+        DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
+        DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.2.0';
+        DOCUMENTATION_OPTIONS.show_version_warning_banner =
+            true;
+        </script>
+    <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
+    <link rel="canonical" href="https://pulserver.github.io/pulserver/stable/_modules/pulserver/recon/gadgets.html" />
+    <link rel="icon" href="../../../_static/pulserver-mark.svg"/>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  <meta name="docsearch:version" content="v0.2.0" />
+  
+    
+    <script src="../../../_static/searchtools.js"></script>
+    <script src="../../../_static/language_data.js"></script>
+    <script src="../../../searchindex.js"></script>
+  
+  </head>
+  <body data-default-mode="">
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+  
+  
+  
+  
+  <dialog id="pst-search-dialog">
+    
+<form class="bd-search d-flex align-items-center"
+      action="../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         placeholder="Search..."
+         aria-label="Search..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+  </dialog>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header id="pst-header" class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+  
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+        </div>
+      
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+    </div>
+  
+
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+        
+      
+      <dialog id="pst-primary-sidebar-modal"></dialog>
+      <div id="pst-primary-sidebar" class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+    
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../../../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../../../_static/pulserver-mark.svg" class="logo__image only-light" alt="pulserver"/>
+    <img src="../../../_static/pulserver-mark-dark.svg" class="logo__image only-dark pst-js-only" alt="pulserver"/>
+  
+  
+</a></div>
+        <div class="sidebar-primary-item">
+<div class="version-switcher__container dropdown pst-js-only">
+  <button id="pst-version-switcher-button-2"
+    type="button"
+    class="version-switcher__button btn btn-sm dropdown-toggle"
+    data-bs-toggle="dropdown"
+    aria-haspopup="listbox"
+    aria-controls="pst-version-switcher-list-2"
+    aria-label="Version switcher list"
+  >
+    Choose version  <!-- this text may get changed later by javascript -->
+    <span class="caret"></span>
+  </button>
+  <div id="pst-version-switcher-list-2"
+    class="version-switcher__menu dropdown-menu list-group-flush py-0"
+    role="listbox" aria-labelledby="pst-version-switcher-button-2">
+    <!-- dropdown will be populated by javascript on page load -->
+  </div>
+</div></div>
+        <div class="sidebar-primary-item">
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button></div>
+        <div class="sidebar-primary-item"><nav class="bd-links bd-docs-nav" aria-label="Main">
+    <div class="bd-toc-item navbar-nav active">
+        
+        <ul class="nav bd-sidenav bd-sidenav__home-link">
+            <li class="toctree-l1">
+                <a class="reference internal" href="../../../index.html">
+                    Homepage
+                </a>
+            </li>
+        </ul>
+        <ul class="nav bd-sidenav">
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../user-guide/index.html">User guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/running.html">Running the services</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/scanner-sequences.html">Scanner sequences</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/reconstruction-plugins.html">Reconstruction plugins</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/reconstruction-client.html">Reconstruction clients</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/virtual-scanner.html">Scanning a phantom without a scanner</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../developer-guide/index.html">Developer guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/prerequisites.html">Development prerequisites</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/installation.html">Editable installation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/workflow.html">Development workflow</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/style.html">Coding style</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/documentation.html">Documentation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/terminology.html">Terminology and conventions</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../../developer-guide/internals/index.html">Internals</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/ir-cache.html">IR cache</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/protocol-wire.html">Protocol text blocks</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/reconstruction-proxy.html">Reconstruction proxy</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/virtual-scanner.html">Virtual scanner</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/bloch-engine.html">Bloch engine</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/pre-commit.html">Pre-commit</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/pull-requests.html">Pull requests</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/releases.html">Releases</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/code-of-conduct.html">Code of conduct</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../explanations/index.html">Explanations</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/architecture.html">Architecture</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/protocol.html">Protocol resolution</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/designs.html">Designs and the design store</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/scanner-representation.html">Scanner representation (PulSeg)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/virtual-scanner.html">The virtual scanner</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/reconstruction.html">Raw-data enrichment and routing</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/calibration.html">Calibration, noise and coil compression</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../examples/index.html">Examples</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../../examples/course.html">Course</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/01_protocol_to_image.html">1. From protocol to image</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/02_sequence_plugin.html">2. A scanner sequence and its protocol</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/03_scanner_representation.html">3. Scanner representation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/04_reconstruction_plugin.html">4. A reconstruction plugin</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/05_testing_on_the_virtual_scanner.html">5. Testing on the virtual scanner</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../../examples/tours.html">Tours</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/02-tours/01_protocol_resolution.html">Protocol resolution for a 2D gradient echo</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/02-tours/02_segmentation.html">Segmentation of a sequence for the scanner</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/02-tours/03_fov_offset_enrichment.html">Field-of-view offset and the proxy phase</a></li>
+</ul>
+</details></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../api/index.html">API reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/protocol.html">Protocol</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/design.html">Scanner sequences</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/host.html">Design calls</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/ir.html">IR conversion</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/proxy.html">Reconstruction proxy</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/recon.html">Reconstruction plugins</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/mrd.html">MRD data</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/validate.html">Validation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/virtual.html">Virtual scanner</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../misc/index.html">Miscellaneous</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../misc/license.html">License and notices</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../misc/related.html">Related projects</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../misc/contributors.html">Contributors</a></li>
+</ul>
+</details></li>
+</ul>
+
+    </div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+      <div class="sidebar-primary-item">
+<div id="ethical-ad-placement"
+      class="flat"
+      data-ea-publisher="readthedocs"
+      data-ea-type="readthedocs-sidebar"
+      data-ea-manual="true">
+</div></div>
+  </div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+
+<div class="sbt-scroll-pixel-helper"></div>
+
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item"><button class="sidebar-toggle primary-toggle btn btn-sm" title="Toggle primary sidebar" data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <span class="fa-solid fa-bars"></span>
+</button></div>
+      
+    </div>
+  
+  
+    <div class="header-article-items__end">
+      
+        <div class="header-article-item">
+
+<div class="article-header-buttons">
+
+
+
+
+
+<div class="dropdown dropdown-source-buttons">
+  <button class="btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Source repositories">
+    <i class="fab fa-github"></i>
+  </button>
+  <ul class="dropdown-menu">
+      
+      
+      
+      <li><a href="https://github.com/pulserver/pulserver" target="_blank"
+   class="btn btn-sm btn-source-repository-button dropdown-item"
+   title="Source repository"
+   data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fab fa-github"></i>
+  </span>
+<span class="btn__text-container">Repository</span>
+</a>
+</li>
+      
+      
+      
+      
+      <li><a href="https://github.com/pulserver/pulserver/issues/new?title=Issue%20on%20page%20%2F_modules/pulserver/recon/gadgets.html&body=Your%20issue%20content%20here." target="_blank"
+   class="btn btn-sm btn-source-issues-button dropdown-item"
+   title="Open an issue"
+   data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-lightbulb"></i>
+  </span>
+<span class="btn__text-container">Open issue</span>
+</a>
+</li>
+      
+  </ul>
+</div>
+
+
+
+
+<button onclick="toggleFullScreen()"
+  class="btn btn-sm btn-fullscreen-button pst-navbar-icon"
+  title="Fullscreen mode"
+  data-bs-placement="bottom" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-expand"></i>
+  </span>
+
+</button>
+
+
+
+<div class="theme-switch-container dropdown pst-js-only" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Color mode">
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button dropdown-toggle" aria-label="Color mode" data-bs-toggle="dropdown">
+    <i class="theme-switch fa-solid fa-sun fa-lg fa-fw" data-mode="light" title="Light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg fa-fw" data-mode="dark" title="Dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg fa-fw" data-mode="auto" title="System Settings"></i>
+  </button>
+  <ul class="dropdown-menu dropdown-menu-end">
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg fa-fw me-1"></i>System Settings</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="light"><i class="fa-solid fa-sun fa-lg fa-fw me-1"></i>Light</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="dark"><i class="fa-solid fa-moon fa-lg fa-fw me-1"></i>Dark</button></li>
+  </ul>
+</div>
+
+
+<button class="btn btn-sm pst-navbar-icon search-button search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass fa-lg"></i>
+</button>
+
+</div></div>
+      
+    </div>
+  
+</div>
+</div>
+              
+              
+
+<div id="jb-print-docs-body" class="onlyprint">
+    <h1></h1>
+    <!-- Table of contents -->
+    <div id="print-main-content">
+        <div id="jb-print-toc">
+            
+        </div>
+    </div>
+</div>
+
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <h1>Source code for pulserver.recon.gadgets</h1><div class="highlight"><pre>
+<span></span><span class="sd">"""Gadgets applied to each readout on arrival: prewhitening, and the echo of a Cartesian readout brought to the reconstruction matrix's readout."""</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"AsymmetricEcho"</span><span class="p">,</span> <span class="s2">"Prewhiten"</span><span class="p">,</span> <span class="s2">"RemoveReadoutOversampling"</span><span class="p">]</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">..mrd._acquisitions</span><span class="w"> </span><span class="kn">import</span> <span class="n">AcquisitionFlag</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">..mrd._metadata</span><span class="w"> </span><span class="kn">import</span> <span class="n">acquisition_label</span><span class="p">,</span> <span class="n">has_acquisition_flag</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">._buffers</span><span class="w"> </span><span class="kn">import</span> <span class="n">discards</span><span class="p">,</span> <span class="n">echo_centre</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">._calibration</span><span class="w"> </span><span class="kn">import</span> <span class="n">MissingCalibration</span><span class="p">,</span> <span class="n">Whitening</span><span class="p">,</span> <span class="n">coil_labels</span><span class="p">,</span> <span class="n">digest</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">._units</span><span class="w"> </span><span class="kn">import</span> <span class="n">carries</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.plugin</span><span class="w"> </span><span class="kn">import</span> <span class="n">NOISE_COVARIANCE</span><span class="p">,</span> <span class="n">Gadget</span>
+
+<span class="c1">#: The flags either of which marks a navigator readout: pypulseqpp's ``NAV``</span>
+<span class="c1">#: label, or ``RTFEEDBACK``.</span>
+<span class="n">NAVIGATOR</span> <span class="o">=</span> <span class="n">AcquisitionFlag</span><span class="o">.</span><span class="n">IS_NAVIGATION_DATA</span> <span class="o">|</span> <span class="n">AcquisitionFlag</span><span class="o">.</span><span class="n">IS_RTFEEDBACK_DATA</span>
+
+<span class="c1">#: Readouts that are not sampled on the imaging grid: the gadgets pass them on</span>
+<span class="c1">#: as they are.</span>
+<span class="n">_OFF_GRID</span> <span class="o">=</span> <span class="n">NAVIGATOR</span> <span class="o">|</span> <span class="n">AcquisitionFlag</span><span class="o">.</span><span class="n">IS_NOISE_MEASUREMENT</span>
+
+
+<div class="viewcode-block" id="Prewhiten">
+<a class="viewcode-back" href="../../../generated/pulserver.recon.Prewhiten.html#pulserver.recon.Prewhiten">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">Prewhiten</span><span class="p">(</span><span class="n">Gadget</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Whiten the channels of each readout with the stream's noise measurement.</span>
+
+<span class="sd">    Readouts flagged ``IS_NOISE_MEASUREMENT`` are collected and consumed: no</span>
+<span class="sd">    unit receives them. At the first readout that is not noise, the whitening</span>
+<span class="sd">    matrix ``W`` is computed from the collected samples, with ``W Ψ W^H = I``</span>
+<span class="sd">    for their channel covariance ``Ψ`` (:func:`bartorch.tools.whiten`), and is</span>
+<span class="sd">    stored in ``context.noise``. Every readout of the stream, that one</span>
+<span class="sd">    included, is then multiplied by ``W`` from the left, so the noise of the</span>
+<span class="sd">    whitened channels has unit covariance. A readout whose ``sample_time_us``</span>
+<span class="sd">    differs from that of the noise readouts is also multiplied by the square</span>
+<span class="sd">    root of the ratio of the two, the noise variance of a sample being</span>
+<span class="sd">    inversely proportional to its dwell time. Noise readouts after that first</span>
+<span class="sd">    readout are consumed and not used.</span>
+
+<span class="sd">    Without noise readouts, ``W`` is the exam's ``NOISE_COVARIANCE``, which</span>
+<span class="sd">    :meth:`startup` loads when its coil labels are those of the header. With</span>
+<span class="sd">    neither, readouts pass unchanged and a warning is logged once. A plugin</span>
+<span class="sd">    that rejects noise readouts with ``reject_flags`` gives the gadget no noise</span>
+<span class="sd">    to estimate from. bartorch is imported when ``W`` is computed; the</span>
+<span class="sd">    ``coils`` extra installs it.</span>
+
+<span class="sd">    Corresponds to Gadgetron's ``NoiseAdjustGadget``.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    required</span>
+<span class="sd">        Raise :class:`~pulserver.recon.MissingCalibration`, rather than log a</span>
+<span class="sd">        warning, at the first readout that is not noise when there is no ``W``</span>
+<span class="sd">        to apply.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        From a call, if the collected noise has at most as many samples as</span>
+<span class="sd">        channels, or a readout does not have the channels of ``W``.</span>
+<span class="sd">    """</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">required</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">required</span> <span class="o">=</span> <span class="n">required</span>
+
+<div class="viewcode-block" id="Prewhiten.startup">
+<a class="viewcode-back" href="../../../generated/pulserver.recon.Prewhiten.startup.html#pulserver.recon.Prewhiten.startup">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">startup</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">context</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">startup</span><span class="p">(</span><span class="n">context</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_noise</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_dwell_us</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_resolved</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="n">context</span><span class="o">.</span><span class="n">noise</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="n">stored</span> <span class="o">=</span> <span class="n">context</span><span class="o">.</span><span class="n">exam</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">NOISE_COVARIANCE</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">stored</span><span class="p">,</span> <span class="n">Whitening</span><span class="p">)</span> <span class="ow">and</span> <span class="n">stored</span><span class="o">.</span><span class="n">coils</span> <span class="o">==</span> <span class="n">coil_labels</span><span class="p">(</span>
+            <span class="n">context</span><span class="o">.</span><span class="n">header</span>
+        <span class="p">):</span>
+            <span class="n">context</span><span class="o">.</span><span class="n">noise</span> <span class="o">=</span> <span class="n">stored</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">acquisition</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">has_acquisition_flag</span><span class="p">(</span><span class="n">acquisition</span><span class="p">,</span> <span class="s2">"ACQ_IS_NOISE_MEASUREMENT"</span><span class="p">):</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_resolved</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_noise</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">data</span><span class="p">))</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_dwell_us</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dwell_us</span> <span class="ow">or</span> <span class="n">_dwell</span><span class="p">(</span><span class="n">acquisition</span><span class="p">)</span>
+            <span class="k">return</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_resolved</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_resolve</span><span class="p">()</span>
+        <span class="n">whitening</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">noise</span>
+        <span class="k">return</span> <span class="n">data</span> <span class="k">if</span> <span class="n">whitening</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">_whitened</span><span class="p">(</span><span class="n">whitening</span><span class="p">,</span> <span class="n">acquisition</span><span class="p">,</span> <span class="n">data</span><span class="p">)</span>
+
+<div class="viewcode-block" id="Prewhiten.publish">
+<a class="viewcode-back" href="../../../generated/pulserver.recon.Prewhiten.publish.html#pulserver.recon.Prewhiten.publish">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">publish</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Store the whitening of the stream as the exam's ``NOISE_COVARIANCE``.</span>
+
+<span class="sd">        For the ``finish`` of a plugin that reconstructs a noise series, whose</span>
+<span class="sd">        readouts are all noise, so that no readout resolves the whitening.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        MissingCalibration</span>
+<span class="sd">            If the stream has neither noise readouts nor a stored covariance.</span>
+<span class="sd">        """</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_noise</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_resolve</span><span class="p">()</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">noise</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">MissingCalibration</span><span class="p">(</span><span class="s2">"the stream has no noise to publish"</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">exam</span><span class="p">[</span><span class="n">NOISE_COVARIANCE</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">noise</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_resolve</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">context</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">context</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_noise</span><span class="p">:</span>
+            <span class="n">context</span><span class="o">.</span><span class="n">noise</span> <span class="o">=</span> <span class="n">_whitening</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_noise</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dwell_us</span><span class="p">,</span> <span class="n">context</span><span class="o">.</span><span class="n">header</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_noise</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">elif</span> <span class="n">context</span><span class="o">.</span><span class="n">noise</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">message</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="s2">"readouts are not prewhitened: the stream has no noise readouts "</span>
+                <span class="s2">"before its first other readout, and the exam stores no noise "</span>
+                <span class="s2">"covariance for its coil labels"</span>
+            <span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">required</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="n">MissingCalibration</span><span class="p">(</span><span class="n">message</span><span class="p">)</span>
+            <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="n">message</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_resolved</span> <span class="o">=</span> <span class="kc">True</span></div>
+
+
+
+<div class="viewcode-block" id="AsymmetricEcho">
+<a class="viewcode-back" href="../../../generated/pulserver.recon.AsymmetricEcho.html#pulserver.recon.AsymmetricEcho">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">AsymmetricEcho</span><span class="p">(</span><span class="n">Gadget</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Zero-fill a partial echo to the full echo that is symmetric about its ``center_sample``.</span>
+
+<span class="sd">    A readout whose echo does not lie at ``samples // 2`` has more samples on</span>
+<span class="sd">    one side of the echo than the other. Zeros are added on the shorter side,</span>
+<span class="sd">    making a full echo of ``2 * max(center_sample, samples - center_sample)``</span>
+<span class="sd">    samples. The zeros are recorded as discarded: ``discard_pre`` and</span>
+<span class="sd">    ``discard_post`` grow by the zeros added at each end, and ``center_sample``</span>
+<span class="sd">    becomes the centre of the full echo, so that the buffers place the acquired</span>
+<span class="sd">    samples only. A readout already centred passes unchanged, as do navigator</span>
+<span class="sd">    and noise readouts and a readout carrying a trajectory over more than one</span>
+<span class="sd">    axis, which is not an echo along one line. An acquisition that states no</span>
+<span class="sd">    ``center_sample`` is centred.</span>
+
+<span class="sd">    This is Gadgetron's ``AsymmetricEchoAdjustROGadget``.</span>
+<span class="sd">    """</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">acquisition</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">carries</span><span class="p">(</span><span class="n">acquisition</span><span class="p">,</span> <span class="n">_OFF_GRID</span><span class="p">)</span> <span class="ow">or</span> <span class="n">_off_line</span><span class="p">(</span><span class="n">acquisition</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">data</span>
+        <span class="n">samples</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+        <span class="n">centre</span> <span class="o">=</span> <span class="n">echo_centre</span><span class="p">(</span><span class="n">acquisition</span><span class="p">,</span> <span class="n">samples</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">centre</span> <span class="o">==</span> <span class="n">samples</span> <span class="o">//</span> <span class="mi">2</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">data</span>
+        <span class="n">before</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">samples</span> <span class="o">-</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">centre</span><span class="p">)</span>
+        <span class="n">after</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">centre</span> <span class="o">-</span> <span class="n">samples</span><span class="p">)</span>
+        <span class="n">full</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">data</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">before</span> <span class="o">+</span> <span class="n">samples</span> <span class="o">+</span> <span class="n">after</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">data</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span>
+        <span class="n">full</span><span class="p">[:,</span> <span class="n">before</span> <span class="p">:</span> <span class="n">before</span> <span class="o">+</span> <span class="n">samples</span><span class="p">]</span> <span class="o">=</span> <span class="n">data</span>
+        <span class="n">pre</span><span class="p">,</span> <span class="n">post</span> <span class="o">=</span> <span class="n">discards</span><span class="p">(</span><span class="n">acquisition</span><span class="p">)</span>
+        <span class="n">acquisition</span><span class="o">.</span><span class="n">discard_pre</span> <span class="o">=</span> <span class="n">pre</span> <span class="o">+</span> <span class="n">before</span>
+        <span class="n">acquisition</span><span class="o">.</span><span class="n">discard_post</span> <span class="o">=</span> <span class="n">post</span> <span class="o">+</span> <span class="n">after</span>
+        <span class="n">acquisition</span><span class="o">.</span><span class="n">center_sample</span> <span class="o">=</span> <span class="n">full</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">//</span> <span class="mi">2</span>
+        <span class="k">return</span> <span class="n">full</span></div>
+
+
+
+<div class="viewcode-block" id="RemoveReadoutOversampling">
+<a class="viewcode-back" href="../../../generated/pulserver.recon.RemoveReadoutOversampling.html#pulserver.recon.RemoveReadoutOversampling">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">RemoveReadoutOversampling</span><span class="p">(</span><span class="n">Gadget</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Crop each readout to the readout field of view of the reconstruction.</span>
+
+<span class="sd">    The ratio of the field of view of the readout's encoding space to that of</span>
+<span class="sd">    its reconstruction space is the oversampling. A readout of ``n`` samples is</span>
+<span class="sd">    cropped to ``n / ratio`` samples in the image domain</span>
+<span class="sd">    (:func:`bartorch.remove_readout_oversampling`); ``center_sample`` and the</span>
+<span class="sd">    discards are divided by the ratio. The readout has to be a full echo with</span>
+<span class="sd">    ``center_sample`` at ``samples // 2``, which :class:`AsymmetricEcho`</span>
+<span class="sd">    makes of a partial one. Readouts of a space whose fields of view are equal</span>
+<span class="sd">    or not stated pass unchanged, as do navigator and noise readouts.</span>
+
+<span class="sd">    This is Gadgetron's ``RemoveROOversamplingGadget``. bartorch is imported</span>
+<span class="sd">    when the first readout is cropped; the ``coils`` extra installs it.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        From a call, if a readout to be cropped is not a centred full echo.</span>
+<span class="sd">    """</span>
+
+<div class="viewcode-block" id="RemoveReadoutOversampling.startup">
+<a class="viewcode-back" href="../../../generated/pulserver.recon.RemoveReadoutOversampling.startup.html#pulserver.recon.RemoveReadoutOversampling.startup">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">startup</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">context</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">startup</span><span class="p">(</span><span class="n">context</span><span class="p">)</span>
+        <span class="n">encodings</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">context</span><span class="o">.</span><span class="n">header</span><span class="p">,</span> <span class="s2">"encoding"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">or</span> <span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">oversampling</span> <span class="o">=</span> <span class="p">[</span><span class="n">_oversampling</span><span class="p">(</span><span class="n">encoding</span><span class="p">)</span> <span class="k">for</span> <span class="n">encoding</span> <span class="ow">in</span> <span class="n">encodings</span><span class="p">]</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">acquisition</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+        <span class="n">space</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">acquisition_label</span><span class="p">(</span><span class="n">acquisition</span><span class="p">,</span> <span class="s2">"encoding_space_ref"</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span> <span class="ow">or</span> <span class="mi">0</span><span class="p">)</span>
+        <span class="n">ratio</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">oversampling</span><span class="p">[</span><span class="n">space</span><span class="p">]</span> <span class="k">if</span> <span class="n">space</span> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">oversampling</span><span class="p">)</span> <span class="k">else</span> <span class="mf">1.0</span>
+        <span class="k">if</span> <span class="n">ratio</span> <span class="o">&lt;=</span> <span class="mf">1.0</span> <span class="ow">or</span> <span class="n">carries</span><span class="p">(</span><span class="n">acquisition</span><span class="p">,</span> <span class="n">_OFF_GRID</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">data</span>
+        <span class="n">samples</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+        <span class="n">centre</span> <span class="o">=</span> <span class="n">echo_centre</span><span class="p">(</span><span class="n">acquisition</span><span class="p">,</span> <span class="n">samples</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">centre</span> <span class="o">!=</span> <span class="n">samples</span> <span class="o">//</span> <span class="mi">2</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"a readout of </span><span class="si">{</span><span class="n">samples</span><span class="si">}</span><span class="s2"> samples with its echo at </span><span class="si">{</span><span class="n">centre</span><span class="si">}</span><span class="s2"> is not a "</span>
+                <span class="sa">f</span><span class="s2">"centred full echo, which removing the readout oversampling needs; "</span>
+                <span class="sa">f</span><span class="s2">"AsymmetricEcho completes a partial echo"</span>
+            <span class="p">)</span>
+        <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">bartorch</span><span class="w"> </span><span class="kn">import</span> <span class="n">remove_readout_oversampling</span>
+
+        <span class="n">target</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="nb">round</span><span class="p">(</span><span class="n">samples</span> <span class="o">/</span> <span class="n">ratio</span><span class="p">))</span>
+        <span class="n">cropped</span> <span class="o">=</span> <span class="n">remove_readout_oversampling</span><span class="p">(</span>
+            <span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">complex64</span><span class="p">)),</span>
+            <span class="n">target</span><span class="p">,</span>
+            <span class="n">axis</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span>
+        <span class="p">)</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span>
+        <span class="n">pre</span><span class="p">,</span> <span class="n">post</span> <span class="o">=</span> <span class="n">discards</span><span class="p">(</span><span class="n">acquisition</span><span class="p">)</span>
+        <span class="n">acquisition</span><span class="o">.</span><span class="n">discard_pre</span> <span class="o">=</span> <span class="nb">round</span><span class="p">(</span><span class="n">pre</span> <span class="o">/</span> <span class="n">ratio</span><span class="p">)</span>
+        <span class="n">acquisition</span><span class="o">.</span><span class="n">discard_post</span> <span class="o">=</span> <span class="nb">round</span><span class="p">(</span><span class="n">post</span> <span class="o">/</span> <span class="n">ratio</span><span class="p">)</span>
+        <span class="n">acquisition</span><span class="o">.</span><span class="n">center_sample</span> <span class="o">=</span> <span class="n">target</span> <span class="o">//</span> <span class="mi">2</span>
+        <span class="k">return</span> <span class="n">cropped</span></div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_oversampling</span><span class="p">(</span><span class="n">encoding</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return the ratio of an encoding's encoded to reconstructed field of view along the readout, 1 where either is not stated."""</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">readout_fov</span><span class="p">(</span><span class="n">space</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+        <span class="n">fov</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">space</span><span class="p">,</span> <span class="s2">"fieldOfView_mm"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">return</span> <span class="nb">float</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="n">fov</span><span class="p">,</span> <span class="s2">"x"</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span> <span class="ow">or</span> <span class="mi">0</span><span class="p">)</span>
+
+    <span class="n">encoded</span> <span class="o">=</span> <span class="n">readout_fov</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="n">encoding</span><span class="p">,</span> <span class="s2">"encodedSpace"</span><span class="p">,</span> <span class="kc">None</span><span class="p">))</span>
+    <span class="n">recon</span> <span class="o">=</span> <span class="n">readout_fov</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="n">encoding</span><span class="p">,</span> <span class="s2">"reconSpace"</span><span class="p">,</span> <span class="kc">None</span><span class="p">))</span>
+    <span class="k">return</span> <span class="n">encoded</span> <span class="o">/</span> <span class="n">recon</span> <span class="k">if</span> <span class="n">encoded</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="ow">and</span> <span class="n">recon</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="k">else</span> <span class="mf">1.0</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_off_line</span><span class="p">(</span><span class="n">acquisition</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+    <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="n">acquisition_label</span><span class="p">(</span><span class="n">acquisition</span><span class="p">,</span> <span class="s2">"trajectory_dimensions"</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span> <span class="ow">or</span> <span class="mi">0</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_dwell</span><span class="p">(</span><span class="n">acquisition</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return the dwell time of an acquisition in µs, ``None`` where it states none."""</span>
+    <span class="k">return</span> <span class="nb">float</span><span class="p">(</span><span class="n">acquisition_label</span><span class="p">(</span><span class="n">acquisition</span><span class="p">,</span> <span class="s2">"sample_time_us"</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span> <span class="ow">or</span> <span class="mi">0</span><span class="p">)</span> <span class="ow">or</span> <span class="kc">None</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_whitening</span><span class="p">(</span>
+    <span class="n">readouts</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">],</span> <span class="n">dwell_us</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">header</span><span class="p">:</span> <span class="n">Any</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Whitening</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return the whitening of noise readouts ``(coils, samples)`` sampled with ``dwell_us``."""</span>
+    <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">bartorch</span><span class="w"> </span><span class="kn">import</span> <span class="n">tools</span>
+
+    <span class="n">noise</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">(</span><span class="n">readouts</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+    <span class="n">coils</span><span class="p">,</span> <span class="n">samples</span> <span class="o">=</span> <span class="n">noise</span><span class="o">.</span><span class="n">shape</span>
+    <span class="k">if</span> <span class="n">samples</span> <span class="o">&lt;=</span> <span class="n">coils</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">samples</span><span class="si">}</span><span class="s2"> noise samples cannot give the covariance of </span><span class="si">{</span><span class="n">coils</span><span class="si">}</span><span class="s2"> "</span>
+            <span class="sa">f</span><span class="s2">"channels; it takes more samples than channels"</span>
+        <span class="p">)</span>
+    <span class="n">noise</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">noise</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">complex64</span><span class="p">))</span>
+    <span class="n">noise</span> <span class="o">=</span> <span class="n">noise</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">coils</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">samples</span><span class="p">)</span>
+    <span class="n">_</span><span class="p">,</span> <span class="n">matrix</span> <span class="o">=</span> <span class="n">tools</span><span class="o">.</span><span class="n">whiten</span><span class="p">(</span><span class="n">noise</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="p">:</span><span class="mi">1</span><span class="p">],</span> <span class="n">noise</span><span class="p">,</span> <span class="n">return_matrix</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">matrix</span> <span class="o">=</span> <span class="n">matrix</span><span class="o">.</span><span class="n">numpy</span><span class="p">()[:,</span> <span class="p">:,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span>
+    <span class="n">labels</span> <span class="o">=</span> <span class="n">coil_labels</span><span class="p">(</span><span class="n">header</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">Whitening</span><span class="p">(</span><span class="n">matrix</span><span class="p">,</span> <span class="n">labels</span><span class="p">,</span> <span class="n">dwell_us</span><span class="p">,</span> <span class="n">digest</span><span class="p">(</span><span class="n">matrix</span><span class="p">,</span> <span class="n">labels</span><span class="p">,</span> <span class="n">dwell_us</span><span class="p">))</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_whitened</span><span class="p">(</span><span class="n">whitening</span><span class="p">:</span> <span class="n">Whitening</span><span class="p">,</span> <span class="n">acquisition</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return ``(coils, samples)`` readout ``data`` multiplied by the whitening matrix, scaled for the dwell time."""</span>
+    <span class="n">coils</span> <span class="o">=</span> <span class="n">whitening</span><span class="o">.</span><span class="n">matrix</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="k">if</span> <span class="n">data</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">!=</span> <span class="n">coils</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"a readout of </span><span class="si">{</span><span class="n">data</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="si">}</span><span class="s2"> channels cannot be whitened by a "</span>
+            <span class="sa">f</span><span class="s2">"matrix of </span><span class="si">{</span><span class="n">coils</span><span class="si">}</span><span class="s2">"</span>
+        <span class="p">)</span>
+    <span class="n">dwell</span> <span class="o">=</span> <span class="n">_dwell</span><span class="p">(</span><span class="n">acquisition</span><span class="p">)</span>
+    <span class="n">scale</span> <span class="o">=</span> <span class="mf">1.0</span>
+    <span class="k">if</span> <span class="n">dwell</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">whitening</span><span class="o">.</span><span class="n">dwell_us</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">scale</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">dwell</span> <span class="o">/</span> <span class="n">whitening</span><span class="o">.</span><span class="n">dwell_us</span><span class="p">))</span>
+    <span class="k">return</span> <span class="p">(</span><span class="n">scale</span> <span class="o">*</span> <span class="n">whitening</span><span class="o">.</span><span class="n">matrix</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span> <span class="n">copy</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span> <span class="o">@</span> <span class="n">data</span>
+</pre></div>
+
+                </article>
+              
+
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+<div class="bd-footer-content__inner container">
+  
+  <div class="footer-item">
+    
+<p class="component-author">
+By pulserver contributors
+</p>
+
+  </div>
+  
+  <div class="footer-item">
+    
+
+  <p class="copyright">
+    
+      © Copyright 2024-2026, pulserver contributors.
+      <br/>
+    
+  </p>
+
+  </div>
+  
+  <div class="footer-item">
+    
+  </div>
+  
+  <div class="footer-item">
+    
+  </div>
+  
+</div>
+          </footer>
+        
+
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script defer src="../../../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9"></script>
+<script defer src="../../../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9"></script>
+
+  <footer class="bd-footer">
+  </footer>
+  </body>
+</html>

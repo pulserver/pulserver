@@ -1,0 +1,908 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Calibration, noise and coil compression &#8212; pulserver documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  <!--
+    this give us a css class that will be invisible only if js is disabled
+  -->
+  <noscript>
+    <style>
+      .pst-js-only { display: none !important; }
+
+    </style>
+  </noscript>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../_static/styles/theme.css?digest=90905a2f556bf617f1a9" rel="stylesheet" />
+<link href="../_static/styles/pydata-sphinx-theme.css?digest=90905a2f556bf617f1a9" rel="stylesheet" />
+
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
+    <link rel="stylesheet" type="text/css" href="../_static/styles/sphinx-book-theme.css?v=4418a689" />
+    <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery.css?v=c83e6b79" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../_static/pulserver.css?v=e08ae8f3" />
+  
+  <!-- So that users can add custom icons -->
+  <script defer src="../_static/scripts/fontawesome.js?digest=90905a2f556bf617f1a9"></script>
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
+<link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
+
+    <script src="../_static/documentation_options.js?v=0a6a6ad3"></script>
+    <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../_static/copybutton.js?v=f281be69"></script>
+    <script src="../_static/sg-tags.js?v=d80f6fa4"></script>
+    <script src="../_static/scripts/sphinx-book-theme.js?v=fab101a9"></script>
+    <script>window.MathJax = {"options": {"processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
+    <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-mml-chtml.js"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'explanations/calibration';</script>
+    <script>
+        DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
+        DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.2.0';
+        DOCUMENTATION_OPTIONS.show_version_warning_banner =
+            true;
+        </script>
+    <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
+    <link rel="canonical" href="https://pulserver.github.io/pulserver/stable/explanations/calibration.html" />
+    <link rel="icon" href="../_static/pulserver-mark.svg"/>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Examples" href="../examples/index.html" />
+    <link rel="prev" title="Raw-data enrichment and routing" href="reconstruction.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  <meta name="docsearch:version" content="v0.2.0" />
+  
+    
+    <script src="../_static/searchtools.js"></script>
+    <script src="../_static/language_data.js"></script>
+    <script src="../searchindex.js"></script>
+  
+  </head>
+  <body data-default-mode="">
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+  
+  
+  
+  
+  <dialog id="pst-search-dialog">
+    
+<form class="bd-search d-flex align-items-center"
+      action="../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         placeholder="Search..."
+         aria-label="Search..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+  </dialog>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header id="pst-header" class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+  
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+        </div>
+      
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+    </div>
+  
+
+  
+    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
+      <span class="fa-solid fa-outdent"></span>
+    </button>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <dialog id="pst-primary-sidebar-modal"></dialog>
+      <div id="pst-primary-sidebar" class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+    
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../_static/pulserver-mark.svg" class="logo__image only-light" alt="pulserver"/>
+    <img src="../_static/pulserver-mark-dark.svg" class="logo__image only-dark pst-js-only" alt="pulserver"/>
+  
+  
+</a></div>
+        <div class="sidebar-primary-item">
+<div class="version-switcher__container dropdown pst-js-only">
+  <button id="pst-version-switcher-button-2"
+    type="button"
+    class="version-switcher__button btn btn-sm dropdown-toggle"
+    data-bs-toggle="dropdown"
+    aria-haspopup="listbox"
+    aria-controls="pst-version-switcher-list-2"
+    aria-label="Version switcher list"
+  >
+    Choose version  <!-- this text may get changed later by javascript -->
+    <span class="caret"></span>
+  </button>
+  <div id="pst-version-switcher-list-2"
+    class="version-switcher__menu dropdown-menu list-group-flush py-0"
+    role="listbox" aria-labelledby="pst-version-switcher-button-2">
+    <!-- dropdown will be populated by javascript on page load -->
+  </div>
+</div></div>
+        <div class="sidebar-primary-item">
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button></div>
+        <div class="sidebar-primary-item"><nav class="bd-links bd-docs-nav" aria-label="Main">
+    <div class="bd-toc-item navbar-nav active">
+        
+        <ul class="nav bd-sidenav bd-sidenav__home-link">
+            <li class="toctree-l1">
+                <a class="reference internal" href="../index.html">
+                    Homepage
+                </a>
+            </li>
+        </ul>
+        <ul class="current nav bd-sidenav">
+<li class="toctree-l1 has-children"><a class="reference internal" href="../user-guide/index.html">User guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../user-guide/running.html">Running the services</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../user-guide/scanner-sequences.html">Scanner sequences</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../user-guide/reconstruction-plugins.html">Reconstruction plugins</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../user-guide/reconstruction-client.html">Reconstruction clients</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../user-guide/virtual-scanner.html">Scanning a phantom without a scanner</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../developer-guide/index.html">Developer guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../developer-guide/prerequisites.html">Development prerequisites</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer-guide/installation.html">Editable installation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer-guide/workflow.html">Development workflow</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer-guide/style.html">Coding style</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer-guide/documentation.html">Documentation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer-guide/terminology.html">Terminology and conventions</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../developer-guide/internals/index.html">Internals</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/ir-cache.html">IR cache</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/protocol-wire.html">Protocol text blocks</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/reconstruction-proxy.html">Reconstruction proxy</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/virtual-scanner.html">Virtual scanner</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/bloch-engine.html">Bloch engine</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer-guide/pre-commit.html">Pre-commit</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer-guide/pull-requests.html">Pull requests</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer-guide/releases.html">Releases</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer-guide/code-of-conduct.html">Code of conduct</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 current active has-children"><a class="reference internal" href="index.html">Explanations</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="architecture.html">Architecture</a></li>
+<li class="toctree-l2"><a class="reference internal" href="protocol.html">Protocol resolution</a></li>
+<li class="toctree-l2"><a class="reference internal" href="designs.html">Designs and the design store</a></li>
+<li class="toctree-l2"><a class="reference internal" href="scanner-representation.html">Scanner representation (PulSeg)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="virtual-scanner.html">The virtual scanner</a></li>
+<li class="toctree-l2"><a class="reference internal" href="reconstruction.html">Raw-data enrichment and routing</a></li>
+<li class="toctree-l2 current active"><a class="current reference internal" href="#">Calibration, noise and coil compression</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../examples/index.html">Examples</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../examples/course.html">Course</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/01_protocol_to_image.html">1. From protocol to image</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/02_sequence_plugin.html">2. A scanner sequence and its protocol</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/03_scanner_representation.html">3. Scanner representation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/04_reconstruction_plugin.html">4. A reconstruction plugin</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/05_testing_on_the_virtual_scanner.html">5. Testing on the virtual scanner</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../examples/tours.html">Tours</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/02-tours/01_protocol_resolution.html">Protocol resolution for a 2D gradient echo</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/02-tours/02_segmentation.html">Segmentation of a sequence for the scanner</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/02-tours/03_fov_offset_enrichment.html">Field-of-view offset and the proxy phase</a></li>
+</ul>
+</details></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../api/index.html">API reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../api/protocol.html">Protocol</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/design.html">Scanner sequences</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/host.html">Design calls</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/ir.html">IR conversion</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/proxy.html">Reconstruction proxy</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/recon.html">Reconstruction plugins</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/mrd.html">MRD data</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/validate.html">Validation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/virtual.html">Virtual scanner</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../misc/index.html">Miscellaneous</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../misc/license.html">License and notices</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../misc/related.html">Related projects</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../misc/contributors.html">Contributors</a></li>
+</ul>
+</details></li>
+</ul>
+
+    </div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+      <div class="sidebar-primary-item">
+<div id="ethical-ad-placement"
+      class="flat"
+      data-ea-publisher="readthedocs"
+      data-ea-type="readthedocs-sidebar"
+      data-ea-manual="true">
+</div></div>
+  </div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+
+<div class="sbt-scroll-pixel-helper"></div>
+
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item"><button class="sidebar-toggle primary-toggle btn btn-sm" title="Toggle primary sidebar" data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <span class="fa-solid fa-bars"></span>
+</button></div>
+      
+    </div>
+  
+  
+    <div class="header-article-items__end">
+      
+        <div class="header-article-item">
+
+<div class="article-header-buttons">
+
+
+
+
+
+<div class="dropdown dropdown-source-buttons">
+  <button class="btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Source repositories">
+    <i class="fab fa-github"></i>
+  </button>
+  <ul class="dropdown-menu">
+      
+      
+      
+      <li><a href="https://github.com/pulserver/pulserver" target="_blank"
+   class="btn btn-sm btn-source-repository-button dropdown-item"
+   title="Source repository"
+   data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fab fa-github"></i>
+  </span>
+<span class="btn__text-container">Repository</span>
+</a>
+</li>
+      
+      
+      
+      
+      <li><a href="https://github.com/pulserver/pulserver/edit/main/docs/explanations/calibration.md" target="_blank"
+   class="btn btn-sm btn-source-edit-button dropdown-item"
+   title="Suggest edit"
+   data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-pencil-alt"></i>
+  </span>
+<span class="btn__text-container">Suggest edit</span>
+</a>
+</li>
+      
+      
+      
+      
+      <li><a href="https://github.com/pulserver/pulserver/issues/new?title=Issue%20on%20page%20%2Fexplanations/calibration.html&body=Your%20issue%20content%20here." target="_blank"
+   class="btn btn-sm btn-source-issues-button dropdown-item"
+   title="Open an issue"
+   data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-lightbulb"></i>
+  </span>
+<span class="btn__text-container">Open issue</span>
+</a>
+</li>
+      
+  </ul>
+</div>
+
+
+
+
+
+
+<div class="dropdown dropdown-download-buttons">
+  <button class="btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Download this page">
+    <i class="fas fa-download"></i>
+  </button>
+  <ul class="dropdown-menu">
+      
+      
+      
+      <li><a href="../_sources/explanations/calibration.md" target="_blank"
+   class="btn btn-sm btn-download-source-button dropdown-item"
+   title="Download source file"
+   data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-file"></i>
+  </span>
+<span class="btn__text-container">.md</span>
+</a>
+</li>
+      
+      
+      
+      
+      <li>
+<button onclick="window.print()"
+  class="btn btn-sm btn-download-pdf-button dropdown-item"
+  title="Print to PDF"
+  data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-file-pdf"></i>
+  </span>
+<span class="btn__text-container">.pdf</span>
+</button>
+</li>
+      
+  </ul>
+</div>
+
+
+
+
+<button onclick="toggleFullScreen()"
+  class="btn btn-sm btn-fullscreen-button pst-navbar-icon"
+  title="Fullscreen mode"
+  data-bs-placement="bottom" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-expand"></i>
+  </span>
+
+</button>
+
+
+
+<div class="theme-switch-container dropdown pst-js-only" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Color mode">
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button dropdown-toggle" aria-label="Color mode" data-bs-toggle="dropdown">
+    <i class="theme-switch fa-solid fa-sun fa-lg fa-fw" data-mode="light" title="Light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg fa-fw" data-mode="dark" title="Dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg fa-fw" data-mode="auto" title="System Settings"></i>
+  </button>
+  <ul class="dropdown-menu dropdown-menu-end">
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg fa-fw me-1"></i>System Settings</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="light"><i class="fa-solid fa-sun fa-lg fa-fw me-1"></i>Light</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="dark"><i class="fa-solid fa-moon fa-lg fa-fw me-1"></i>Dark</button></li>
+  </ul>
+</div>
+
+
+<button class="btn btn-sm pst-navbar-icon search-button search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass fa-lg"></i>
+</button>
+<button class="sidebar-toggle secondary-toggle btn btn-sm pst-navbar-icon" title="Toggle secondary sidebar" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="fa-solid fa-list"></span>
+</button>
+</div></div>
+      
+    </div>
+  
+</div>
+</div>
+              
+              
+
+<div id="jb-print-docs-body" class="onlyprint">
+    <h1>Calibration, noise and coil compression</h1>
+    <!-- Table of contents -->
+    <div id="print-main-content">
+        <div id="jb-print-toc">
+            
+            <div>
+                <h2> Contents </h2>
+            </div>
+            <nav aria-label="Page">
+                <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#signal-model">Signal model</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#noise-and-prewhitening">Noise and prewhitening</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#coil-compression">Coil compression</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#coil-sensitivity-maps">Coil sensitivity maps</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#calibration-k-space">Calibration k-space</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#resolution">Resolution</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#reuse">Reuse</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#software-abstraction">Software abstraction</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#see-also">See also</a></li>
+</ul>
+            </nav>
+        </div>
+    </div>
+</div>
+
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <section class="tex2jax_ignore mathjax_ignore" id="calibration-noise-and-coil-compression">
+<h1>Calibration, noise and coil compression<a class="headerlink" href="#calibration-noise-and-coil-compression" title="Link to this heading">#</a></h1>
+<div class="tldr admonition">
+<p class="admonition-title">TL;DR</p>
+<ul class="simple">
+<li><p>Sensitivity maps estimated from whitened and compressed data describe only
+data with the same channels, whitening, compression and voxel grid.</p></li>
+<li><p>Prewhitening and coil compression are linear transforms of the channels;
+bartorch computes them and the estimate, and <code class="docutils literal notranslate"><span class="pre">pulserver.recon</span></code> holds,
+compares and routes the results.</p></li>
+<li><p>Stored maps are reused only where every recorded field matches the unit;
+nothing is resampled, and a mismatch is reported.</p></li>
+</ul>
+</div>
+<p>A reconstruction from a receive-coil array needs the sensitivity of each
+channel, estimated from calibration data, and combines the channels with equal
+weight, which is the maximum-likelihood combination only where their noise is
+uncorrelated and of equal variance. Prewhitening makes the noise of the
+channels so, and coil compression reduces their number. Each of the three is
+expressed in a basis of the channels, and a quantity estimated in one basis
+does not describe data in another. This page states the model, the conditions
+under which <code class="docutils literal notranslate"><span class="pre">pulserver.recon</span></code> reuses sensitivity maps, and the interfaces
+that hold them. The transforms and the estimate are computed by bartorch; the
+reconstruction plugin passes the estimate to <a class="reference internal" href="../generated/pulserver.recon.coil_maps.html#pulserver.recon.coil_maps" title="pulserver.recon.coil_maps"><code class="xref py py-func docutils literal notranslate"><span class="pre">coil_maps()</span></code></a>.</p>
+<section id="signal-model">
+<h2>Signal model<a class="headerlink" href="#signal-model" title="Link to this heading">#</a></h2>
+<p>The signal of each channel <span class="math notranslate nohighlight">\(c\)</span> of <span class="math notranslate nohighlight">\(N_c\)</span> is the image <span class="math notranslate nohighlight">\(x\)</span> weighted by the
+channel’s sensitivity <span class="math notranslate nohighlight">\(S_c\)</span> on the voxel grid, Fourier encoded, plus complex
+Gaussian noise <span class="math notranslate nohighlight">\(\mathbf{n}\)</span> of channel covariance
+<span class="math notranslate nohighlight">\(\Psi = \mathrm{E}[\mathbf{n}\mathbf{n}^H]\)</span>: the encoding model bartorch’s
+<a class="reference external" href="https://pulserver.github.io/bartorch/latest/explanation/encoding.html">encoding</a>
+page states. A linear transform <span class="math notranslate nohighlight">\(B\)</span> of the
+channels, <span class="math notranslate nohighlight">\(\tilde{\mathbf{y}} = B\mathbf{y}\)</span>, follows the same model with the
+sensitivities <span class="math notranslate nohighlight">\(B\mathbf{S}(\mathbf{r})\)</span>, <span class="math notranslate nohighlight">\(\mathbf{S} = (S_1, \dots, S_{N_c})\)</span>,
+and the noise covariance <span class="math notranslate nohighlight">\(B\Psi B^H\)</span>. Two transforms are used:</p>
+<ul class="simple">
+<li><p>prewhitening, <span class="math notranslate nohighlight">\(B = W\)</span> with <span class="math notranslate nohighlight">\(W\Psi W^H = I\)</span>, after which the noise of the
+channels is uncorrelated with unit variance;</p></li>
+<li><p>coil compression, <span class="math notranslate nohighlight">\(B = A\)</span>, the <span class="math notranslate nohighlight">\(n \times N_c\)</span> matrix whose rows are the
+conjugated eigenvectors of the channel covariance of the calibration data
+that belong to its <span class="math notranslate nohighlight">\(n\)</span> largest eigenvalues, so that the <span class="math notranslate nohighlight">\(n\)</span> virtual channels
+are uncorrelated and ordered by decreasing power.</p></li>
+</ul>
+<p>Data that is whitened and then compressed is transformed by <span class="math notranslate nohighlight">\(AW\)</span>, and
+sensitivities estimated from it are <span class="math notranslate nohighlight">\(AW\mathbf{S}\)</span> on the voxel grid of the
+calibration k-space. A set of maps therefore describes only data with the same
+channels in the same order, the same whitening, the same compression and the
+same voxel grid at the same position and orientation.</p>
+</section>
+<section id="noise-and-prewhitening">
+<h2>Noise and prewhitening<a class="headerlink" href="#noise-and-prewhitening" title="Link to this heading">#</a></h2>
+<p>Readouts flagged <code class="docutils literal notranslate"><span class="pre">IS_NOISE_MEASUREMENT</span></code> sample <span class="math notranslate nohighlight">\(\mathbf{n}\)</span> with the RF
+off. From <span class="math notranslate nohighlight">\(K\)</span> samples the covariance is estimated as
+<span class="math notranslate nohighlight">\(\hat\Psi = (K-1)^{-1}\sum_k \mathbf{n}_k\mathbf{n}_k^H\)</span>, and <span class="math notranslate nohighlight">\(W = L^{-1}\)</span> for
+its Cholesky factorisation <span class="math notranslate nohighlight">\(\hat\Psi = LL^H\)</span>. Estimating <span class="math notranslate nohighlight">\(\hat\Psi\)</span> takes more
+noise samples than channels.</p>
+<p>The variance of the noise in a sample is inversely proportional to the dwell
+time. A readout of dwell time <span class="math notranslate nohighlight">\(\tau\)</span> is multiplied by <span class="math notranslate nohighlight">\(\sqrt{\tau/\tau_0}\,W\)</span>,
+<span class="math notranslate nohighlight">\(\tau_0\)</span> being the dwell time of the noise readouts, and by <span class="math notranslate nohighlight">\(W\)</span> alone where
+either dwell time is not stated. No other difference between the noise
+measurement and the readout is modelled.</p>
+<p><a class="reference internal" href="../generated/pulserver.recon.Prewhiten.html#pulserver.recon.Prewhiten" title="pulserver.recon.Prewhiten"><code class="xref py py-class docutils literal notranslate"><span class="pre">Prewhiten</span></code></a> takes <span class="math notranslate nohighlight">\(W\)</span> from the first of these:</p>
+<ol class="arabic simple">
+<li><p>the noise readouts that precede the first readout of any other kind in the
+stream;</p></li>
+<li><p>the exam’s <code class="docutils literal notranslate"><span class="pre">NOISE_COVARIANCE</span></code>, stored by a noise series, when its coil
+labels are those of the header;</p></li>
+<li><p>none, in which case readouts pass unchanged and a warning is logged once,
+or <a class="reference internal" href="../generated/pulserver.recon.MissingCalibration.html#pulserver.recon.MissingCalibration" title="pulserver.recon.MissingCalibration"><code class="xref py py-class docutils literal notranslate"><span class="pre">MissingCalibration</span></code></a> is raised for
+<code class="docutils literal notranslate"><span class="pre">required=True</span></code>.</p></li>
+</ol>
+<p>Noise readouts after the first readout of another kind are consumed and not
+used. The gadget applies <span class="math notranslate nohighlight">\(W\)</span> on arrival, so the imaging and the calibration
+readouts of every unit are whitened alike.</p>
+</section>
+<section id="coil-compression">
+<h2>Coil compression<a class="headerlink" href="#coil-compression" title="Link to this heading">#</a></h2>
+<p>The basis <span class="math notranslate nohighlight">\(A\)</span> is that of the channel covariance
+<span class="math notranslate nohighlight">\(\sum_k \mathbf{y}_k\mathbf{y}_k^H\)</span> over the placed samples of the calibration
+k-space of the first unit the stream compresses, or of its imaging k-space
+where that unit holds no calibration k-space. One basis is estimated per
+stream, and every unit is projected onto it, so the virtual channels of
+successive units are the same.</p>
+<p>If the signal of the channels lies in a subspace of dimension at most <span class="math notranslate nohighlight">\(n\)</span>,
+compression discards none of it, and SENSE with compressed data and compressed
+maps reconstructs the image of the full set of channels to round-off.
+Otherwise the discarded signal is that of the <span class="math notranslate nohighlight">\(N_c - n\)</span> smallest eigenvalues.
+Maps estimated from uncompressed data are in another basis than compressed
+data, and are not transformed into this one.</p>
+</section>
+<section id="coil-sensitivity-maps">
+<h2>Coil sensitivity maps<a class="headerlink" href="#coil-sensitivity-maps" title="Link to this heading">#</a></h2>
+<section id="calibration-k-space">
+<h3>Calibration k-space<a class="headerlink" href="#calibration-k-space" title="Link to this heading">#</a></h3>
+<p>The calibration k-space of a unit is <a class="reference internal" href="../generated/pulserver.recon.ReconData.ref.html#pulserver.recon.ReconData.ref" title="pulserver.recon.ReconData.ref"><code class="xref py py-attr docutils literal notranslate"><span class="pre">ReconData.ref</span></code></a>. It comes from one of three arrangements.</p>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Arrangement</p></th>
+<th class="head"><p>Readouts</p></th>
+<th class="head"><p>Maps are estimated by</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Embedded calibration</p></td>
+<td><p>Lines of the imaging space flagged <code class="docutils literal notranslate"><span class="pre">IS_PARALLEL_CALIBRATION_AND_IMAGING</span></code></p></td>
+<td><p>The imaging unit, which holds both <code class="docutils literal notranslate"><span class="pre">data</span></code> and <code class="docutils literal notranslate"><span class="pre">ref</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p>Calibration unit</p></td>
+<td><p>Readouts flagged <code class="docutils literal notranslate"><span class="pre">IS_PARALLEL_CALIBRATION</span></code> in a unit with no imaging readouts, as in an encoding space of their own</p></td>
+<td><p>That unit, whose <code class="docutils literal notranslate"><span class="pre">data.data</span></code> is <code class="docutils literal notranslate"><span class="pre">None</span></code>; the imaging units of the same slice take the maps from the stream</p></td>
+</tr>
+<tr class="row-even"><td><p>Calibration series</p></td>
+<td><p>A series of its own</p></td>
+<td><p>The reconstruction of that series, which stores the maps in the exam</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>The estimate receives the calibration k-space of a Cartesian encoding space
+zero-filled onto the whole grid of the space, the lines its readouts cover
+being at their grid positions, and returns maps on that grid. For a
+non-Cartesian space <a class="reference internal" href="../generated/pulserver.recon.coil_maps.html#pulserver.recon.coil_maps" title="pulserver.recon.coil_maps"><code class="xref py py-func docutils literal notranslate"><span class="pre">coil_maps()</span></code></a> raises <code class="docutils literal notranslate"><span class="pre">ValueError</span></code>.</p>
+</section>
+<section id="resolution">
+<h3>Resolution<a class="headerlink" href="#resolution" title="Link to this heading">#</a></h3>
+<p><a class="reference internal" href="../generated/pulserver.recon.coil_maps.html#pulserver.recon.coil_maps" title="pulserver.recon.coil_maps"><code class="xref py py-func docutils literal notranslate"><span class="pre">coil_maps()</span></code></a> returns the maps of a unit from the first of
+these sources, the location being the unit’s <code class="docutils literal notranslate"><span class="pre">slice</span></code> counter:</p>
+<ol class="arabic simple">
+<li><p>The unit’s own calibration k-space, from which the maps are estimated and
+stored for the slice, replacing any stored there.</p></li>
+<li><p>The maps stored in the stream for the slice.</p></li>
+<li><p>The exam’s <code class="docutils literal notranslate"><span class="pre">COIL_SENSITIVITIES</span></code>, which holds one set of maps.</p></li>
+<li><p>No source: <a class="reference internal" href="../generated/pulserver.recon.MissingCalibration.html#pulserver.recon.MissingCalibration" title="pulserver.recon.MissingCalibration"><code class="xref py py-class docutils literal notranslate"><span class="pre">MissingCalibration</span></code></a> is raised, or
+<code class="docutils literal notranslate"><span class="pre">None</span></code> returned for <code class="docutils literal notranslate"><span class="pre">required=False</span></code>.</p></li>
+</ol>
+<p>The slice is the location because a calibration unit and the imaging units that
+use its maps may be in different encoding spaces. A unit that needs maps before
+the unit that estimates them has closed finds none in the first three sources.</p>
+</section>
+<section id="reuse">
+<h3>Reuse<a class="headerlink" href="#reuse" title="Link to this heading">#</a></h3>
+<p>Stored maps are returned only to a unit for which every field of the
+<a class="reference internal" href="../generated/pulserver.recon.CoilSensitivities.html#pulserver.recon.CoilSensitivities" title="pulserver.recon.CoilSensitivities"><code class="xref py py-class docutils literal notranslate"><span class="pre">CoilSensitivities</span></code></a> is equal to that of the unit. The
+fields are compared in this order, and the first that differs is reported.</p>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Field</p></th>
+<th class="head"><p>Equal to</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">coils</span></code></p></td>
+<td><p>The coil labels of the header in channel order</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">noise</span></code></p></td>
+<td><p>The identifier of the prewhitening in <code class="docutils literal notranslate"><span class="pre">context.noise</span></code>, or <code class="docutils literal notranslate"><span class="pre">None</span></code> on both sides</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">basis</span></code></p></td>
+<td><p>The identifier of the basis in <code class="docutils literal notranslate"><span class="pre">context.coil_compression</span></code>, or <code class="docutils literal notranslate"><span class="pre">None</span></code> on both sides</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">geometry.frame_of_reference</span></code></p></td>
+<td><p>The <code class="docutils literal notranslate"><span class="pre">frameOfReferenceUID</span></code> of the header</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">geometry.table_position</span></code>, <code class="docutils literal notranslate"><span class="pre">geometry.position</span></code>, <code class="docutils literal notranslate"><span class="pre">geometry.read_dir</span></code>, <code class="docutils literal notranslate"><span class="pre">geometry.phase_dir</span></code>, <code class="docutils literal notranslate"><span class="pre">geometry.slice_dir</span></code></p></td>
+<td><p>The same fields of the reference acquisition of the unit’s k-space, in the units the acquisition states</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">geometry.fov</span></code>, <code class="docutils literal notranslate"><span class="pre">geometry.matrix</span></code></p></td>
+<td><p>The field of view in m and the matrix of the reconstruction space of the unit’s encoding space</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">geometry.grid</span></code></p></td>
+<td><p>The shape of the voxel axes of the whole k-space of the unit’s encoding space</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">method</span></code> and <code class="docutils literal notranslate"><span class="pre">source</span></code>, the estimate and the <code class="docutils literal notranslate"><span class="pre">measurementID</span></code> of the series that
+measured the maps, are recorded and appear in a refusal; they are not compared.
+The comparison establishes that the maps and the unit share the listed
+quantities. It does not test the accuracy of the maps.</p>
+<p>Nothing is resampled, regridded or resliced to make maps fit. Maps on a grid or
+at a position other than the unit’s are not returned, and the message of
+<a class="reference internal" href="../generated/pulserver.recon.MissingCalibration.html#pulserver.recon.MissingCalibration" title="pulserver.recon.MissingCalibration"><code class="xref py py-class docutils literal notranslate"><span class="pre">MissingCalibration</span></code></a> names each source and why it was
+not used:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>no coil sensitivities for slice 0; sources consulted:
+  this unit: it holds no calibration readouts
+  this series, slice 0: no maps stored
+  this exam: geometry.matrix differs: stored (96, 96), this unit (192, 192) (estimated by nlinv_maps from measurement 7)
+</pre></div>
+</div>
+</section>
+</section>
+<section id="software-abstraction">
+<h2>Software abstraction<a class="headerlink" href="#software-abstraction" title="Link to this heading">#</a></h2>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Quantity</p></th>
+<th class="head"><p>Interface</p></th>
+<th class="head"><p>State</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Whitening <span class="math notranslate nohighlight">\(W\)</span></p></td>
+<td><p><a class="reference internal" href="../generated/pulserver.recon.Prewhiten.html#pulserver.recon.Prewhiten" title="pulserver.recon.Prewhiten"><code class="xref py py-class docutils literal notranslate"><span class="pre">Prewhiten</span></code></a>, a gadget</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">context.noise</span></code>; the exam key <a class="reference internal" href="../generated/pulserver.recon.NOISE_COVARIANCE.html#pulserver.recon.NOISE_COVARIANCE" title="pulserver.recon.NOISE_COVARIANCE"><code class="xref py py-obj docutils literal notranslate"><span class="pre">NOISE_COVARIANCE</span></code></a></p></td>
+</tr>
+<tr class="row-odd"><td><p>Compression basis <span class="math notranslate nohighlight">\(A\)</span></p></td>
+<td><p><a class="reference internal" href="../generated/pulserver.recon.CoilCompression.html#pulserver.recon.CoilCompression" title="pulserver.recon.CoilCompression"><code class="xref py py-class docutils literal notranslate"><span class="pre">CoilCompression</span></code></a>, called from <code class="docutils literal notranslate"><span class="pre">recon</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">context.coil_compression</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p>Maps <span class="math notranslate nohighlight">\(\mathbf{S}\)</span></p></td>
+<td><p><a class="reference internal" href="../generated/pulserver.recon.coil_maps.html#pulserver.recon.coil_maps" title="pulserver.recon.coil_maps"><code class="xref py py-func docutils literal notranslate"><span class="pre">coil_maps()</span></code></a>, called from <code class="docutils literal notranslate"><span class="pre">recon</span></code>; <a class="reference internal" href="../generated/pulserver.recon.CoilSensitivities.html#pulserver.recon.CoilSensitivities" title="pulserver.recon.CoilSensitivities"><code class="xref py py-class docutils literal notranslate"><span class="pre">CoilSensitivities</span></code></a></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">context.coil_maps</span></code> by slice; the exam key <a class="reference internal" href="../generated/pulserver.recon.COIL_SENSITIVITIES.html#pulserver.recon.COIL_SENSITIVITIES" title="pulserver.recon.COIL_SENSITIVITIES"><code class="xref py py-obj docutils literal notranslate"><span class="pre">COIL_SENSITIVITIES</span></code></a>, read and written as <code class="docutils literal notranslate"><span class="pre">context.coil_sensitivities</span></code></p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>The state in <code class="docutils literal notranslate"><span class="pre">context</span></code> belongs to one stream. What a series leaves to the next
+is what it stores in <code class="docutils literal notranslate"><span class="pre">context.exam</span></code> under the exam keys, which
+<a class="reference internal" href="reconstruction.html"><span class="doc">Raw-data enrichment and routing</span></a> describes. A calibration series publishes its whitening
+with <a class="reference internal" href="../generated/pulserver.recon.Prewhiten.publish.html#pulserver.recon.Prewhiten.publish" title="pulserver.recon.Prewhiten.publish"><code class="xref py py-meth docutils literal notranslate"><span class="pre">Prewhiten.publish</span></code></a> and its maps
+by assigning <code class="docutils literal notranslate"><span class="pre">context.coil_sensitivities</span></code>.</p>
+<p>Whitening runs on arrival, in the <code class="docutils literal notranslate"><span class="pre">gadgets</span></code> of the plugin. Within <code class="docutils literal notranslate"><span class="pre">recon</span></code>, a
+unit is compressed before its maps are requested, because the maps record the
+basis in force when they are estimated. The whitening, the compression basis
+and the estimate are bartorch’s (<code class="docutils literal notranslate"><span class="pre">tools.whiten</span></code>, <code class="docutils literal notranslate"><span class="pre">tools.cc</span></code> and <code class="docutils literal notranslate"><span class="pre">tools.ccapply</span></code>,
+and the estimate the plugin names, such as <code class="docutils literal notranslate"><span class="pre">apps.nlinv_maps</span></code>); the interfaces
+above hold their results, compare them and route them between units and series.
+<a class="reference internal" href="../user-guide/reconstruction-plugins.html"><span class="doc">Reconstruction plugins</span></a> shows the calls.</p>
+</section>
+<section id="see-also">
+<h2>See also<a class="headerlink" href="#see-also" title="Link to this heading">#</a></h2>
+<ul class="simple">
+<li><p><a class="reference internal" href="../user-guide/reconstruction-plugins.html"><span class="doc">Reconstruction plugins</span></a> — requesting maps, prewhitening and compressing in a plugin.</p></li>
+<li><p><a class="reference internal" href="reconstruction.html"><span class="doc">Raw-data enrichment and routing</span></a> — units, the exam cache and workers.</p></li>
+<li><p><a class="reference internal" href="../api/recon.html"><span class="doc">Reconstruction plugins</span></a> — the interfaces named above.</p></li>
+</ul>
+</section>
+</section>
+
+
+                </article>
+              
+
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="reconstruction.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">Raw-data enrichment and routing</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="../examples/index.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">Examples</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <dialog id="pst-secondary-sidebar-modal"></dialog>
+                <div id="pst-secondary-sidebar" class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item"><div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> Contents
+  </div>
+  <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#signal-model">Signal model</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#noise-and-prewhitening">Noise and prewhitening</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#coil-compression">Coil compression</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#coil-sensitivity-maps">Coil sensitivity maps</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#calibration-k-space">Calibration k-space</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#resolution">Resolution</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#reuse">Reuse</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#software-abstraction">Software abstraction</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#see-also">See also</a></li>
+</ul>
+  </nav></div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+<div class="bd-footer-content__inner container">
+  
+  <div class="footer-item">
+    
+<p class="component-author">
+By pulserver contributors
+</p>
+
+  </div>
+  
+  <div class="footer-item">
+    
+
+  <p class="copyright">
+    
+      © Copyright 2024-2026, pulserver contributors.
+      <br/>
+    
+  </p>
+
+  </div>
+  
+  <div class="footer-item">
+    
+  </div>
+  
+  <div class="footer-item">
+    
+  </div>
+  
+</div>
+          </footer>
+        
+
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script defer src="../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9"></script>
+<script defer src="../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9"></script>
+
+  <footer class="bd-footer">
+  </footer>
+  </body>
+</html>

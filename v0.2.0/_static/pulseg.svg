@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 420" role="img" aria-labelledby="t d">
+<title id="t">Scanner representation</title><desc id="d">Deduplicated base blocks with normalised waveforms; virtual segments as ordered lists of base-block IDs; the execution stream as a row of segment instances, each holding its amplitude scales, RF and ADC phase and frequency, rotation and block durations</desc>
+<style>
+.box{fill:#eef4fa;stroke:#2b76ad;stroke-width:2}
+.core{fill:#2b76ad;stroke:#174b70;stroke-width:2}
+.a{fill:#fdf6e6;stroke:#ffb91f;stroke-width:2}
+.txt{font:22px Arial,sans-serif;fill:#173042}
+.white{font:23px Arial,sans-serif;fill:#ffffff;font-weight:bold}
+.small{font:18px Arial,sans-serif;fill:#173042}
+.label{font:16px Arial,sans-serif;fill:#657786}
+.arrow{stroke:#657786;stroke-width:3;marker-end:url(#m)}
+.head{fill:#657786}
+.ink{fill:none;stroke:#12212b;stroke-width:5;stroke-linejoin:miter;stroke-linecap:butt}
+.blue{fill:#3a77a8}
+.amber{fill:#ffbe2e}
+.word{fill:#2b76ad}
+.title{font:bold 20px Arial,sans-serif;fill:#173042}
+.wave{fill:none;stroke:#3a77a8;stroke-width:3;stroke-linejoin:round}
+.rf{fill:none;stroke:#ffbe2e;stroke-width:3;stroke-linejoin:round}
+.adc{fill:#ffbe2e}
+.base{fill:none;stroke:#657786;stroke-width:1.5}
+.bracket{fill:none;stroke:#657786;stroke-width:2}
+</style>
+<defs><marker id="m" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><path class="head" d="M0,0 L0,6 L9,3 z"/></marker></defs>
+<text class="title" x="155" y="36" text-anchor="middle">Base blocks</text>
+<text class="title" x="475" y="36" text-anchor="middle">Virtual segments</text>
+<text class="title" x="805" y="36" text-anchor="middle">Execution stream</text>
+<rect class="box" x="40" y="60" rx="10" width="230" height="62"/><text class="txt" x="58" y="99">B1</text><line class="base" x1="105" y1="108" x2="255" y2="108"/><polyline class="rf" points="130.0,98.0 131.2,97.1 132.3,96.3 133.5,95.5 134.7,95.0 135.8,94.7 137.0,94.7 138.2,95.1 139.3,95.8 140.5,96.8 141.7,98.0 142.8,99.3 144.0,100.7 145.2,101.9 146.3,102.9 147.5,103.5 148.7,103.6 149.8,103.2 151.0,102.1 152.2,100.3 153.3,98.0 154.5,95.2 155.7,91.9 156.8,88.4 158.0,84.9 159.2,81.4 160.3,78.3 161.5,75.7 162.7,73.7 163.8,72.4 165.0,72.0 166.2,72.4 167.3,73.7 168.5,75.7 169.7,78.3 170.8,81.4 172.0,84.9 173.2,88.4 174.3,91.9 175.5,95.2 176.7,98.0 177.8,100.3 179.0,102.1 180.2,103.2 181.3,103.6 182.5,103.5 183.7,102.9 184.8,101.9 186.0,100.7 187.2,99.3 188.3,98.0 189.5,96.8 190.7,95.8 191.8,95.1 193.0,94.7 194.2,94.7 195.3,95.0 196.5,95.5 197.7,96.3 198.8,97.1 200.0,98.0"/><polyline class="wave" points="112,108 133.2,96 196.8,96 218,108"/>
+<rect class="box" x="40" y="135" rx="10" width="230" height="62"/><text class="txt" x="58" y="174">B2</text><line class="base" x1="105" y1="183" x2="255" y2="183"/><polyline class="wave" points="110,183 138,157 222,157 250,183"/><rect class="adc" x="140" y="187" width="80" height="6"/>
+<rect class="box" x="40" y="210" rx="10" width="230" height="62"/><text class="txt" x="58" y="249">B3</text><line class="base" x1="105" y1="258" x2="255" y2="258"/><polyline class="wave" points="140,258 156,228 204,228 220,258"/>
+<rect class="box" x="40" y="285" rx="10" width="230" height="62"/><text class="txt" x="58" y="324">B4</text><line class="base" x1="105" y1="333" x2="255" y2="333"/><text class="label" x="150" y="327">delay</text>
+<text class="label" x="155" y="372" text-anchor="middle">normalised waveforms, deduplicated</text>
+<line class="arrow" x1="275" y1="180" x2="370" y2="180"/>
+<rect class="box" x="375" y="80" rx="12" width="200" height="90"/><text class="txt" x="475" y="119.5" text-anchor="middle">S1</text><text class="txt" x="475" y="144.5" text-anchor="middle">B1 · B2 · B3</text>
+<rect class="box" x="375" y="215" rx="12" width="200" height="70"/><text class="txt" x="475" y="257" text-anchor="middle">S2  ·  B4</text>
+<text class="label" x="475" y="320" text-anchor="middle">ordered lists of base-block IDs</text>
+<line class="arrow" x1="580" y1="150" x2="632" y2="130"/>
+<rect class="core" x="640" y="105" rx="12" width="52" height="46"/><text class="white" x="666" y="135" text-anchor="middle">S1</text><rect class="core" x="698" y="105" rx="12" width="52" height="46"/><text class="white" x="724" y="135" text-anchor="middle">S1</text><rect class="core" x="756" y="105" rx="12" width="52" height="46"/><text class="white" x="782" y="135" text-anchor="middle">S1</text><rect class="a" x="814" y="105" rx="12" width="52" height="46"/><text class="small" x="840" y="135" text-anchor="middle">S2</text><rect class="core" x="872" y="105" rx="12" width="52" height="46"/><text class="white" x="898" y="135" text-anchor="middle">S1</text>
+<text class="label" x="930" y="135">…</text>
+<line class="bracket" x1="666" y1="155" x2="700" y2="195"/>
+<rect class="a" x="640" y="195" rx="12" width="330" height="130"/><text class="small" x="805" y="229.5" text-anchor="middle">one segment instance:</text><text class="small" x="805" y="254.5" text-anchor="middle">amplitude scales s,</text><text class="small" x="805" y="279.5" text-anchor="middle">RF and ADC phase and frequency,</text><text class="small" x="805" y="304.5" text-anchor="middle">rotation R, block durations</text>
+<text class="txt" x="500" y="400" text-anchor="middle">physical gradient  g(t) = R · s · ĝ(t)</text>
+</svg>

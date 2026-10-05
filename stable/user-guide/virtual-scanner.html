@@ -1,0 +1,1099 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Scanning a phantom without a scanner &#8212; pulserver documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  <!--
+    this give us a css class that will be invisible only if js is disabled
+  -->
+  <noscript>
+    <style>
+      .pst-js-only { display: none !important; }
+
+    </style>
+  </noscript>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../_static/styles/theme.css?digest=90905a2f556bf617f1a9" rel="stylesheet" />
+<link href="../_static/styles/pydata-sphinx-theme.css?digest=90905a2f556bf617f1a9" rel="stylesheet" />
+
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
+    <link rel="stylesheet" type="text/css" href="../_static/styles/sphinx-book-theme.css?v=4418a689" />
+    <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery.css?v=c83e6b79" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../_static/pulserver.css?v=e08ae8f3" />
+  
+  <!-- So that users can add custom icons -->
+  <script defer src="../_static/scripts/fontawesome.js?digest=90905a2f556bf617f1a9"></script>
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
+<link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
+
+    <script src="../_static/documentation_options.js?v=0a6a6ad3"></script>
+    <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../_static/copybutton.js?v=f281be69"></script>
+    <script src="../_static/sg-tags.js?v=d80f6fa4"></script>
+    <script src="../_static/scripts/sphinx-book-theme.js?v=fab101a9"></script>
+    <script>window.MathJax = {"options": {"processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
+    <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-mml-chtml.js"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'user-guide/virtual-scanner';</script>
+    <script>
+        DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
+        DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.2.0';
+        DOCUMENTATION_OPTIONS.show_version_warning_banner =
+            true;
+        </script>
+    <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
+    <link rel="canonical" href="https://pulserver.github.io/pulserver/stable/user-guide/virtual-scanner.html" />
+    <link rel="icon" href="../_static/pulserver-mark.svg"/>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Developer guide" href="../developer-guide/index.html" />
+    <link rel="prev" title="Reconstruction clients" href="reconstruction-client.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  <meta name="docsearch:version" content="v0.2.0" />
+  
+    
+    <script src="../_static/searchtools.js"></script>
+    <script src="../_static/language_data.js"></script>
+    <script src="../searchindex.js"></script>
+  
+  </head>
+  <body data-default-mode="">
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+  
+  
+  
+  
+  <dialog id="pst-search-dialog">
+    
+<form class="bd-search d-flex align-items-center"
+      action="../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         placeholder="Search..."
+         aria-label="Search..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+  </dialog>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header id="pst-header" class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+  
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+        </div>
+      
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+    </div>
+  
+
+  
+    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
+      <span class="fa-solid fa-outdent"></span>
+    </button>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <dialog id="pst-primary-sidebar-modal"></dialog>
+      <div id="pst-primary-sidebar" class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+    
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../_static/pulserver-mark.svg" class="logo__image only-light" alt="pulserver"/>
+    <img src="../_static/pulserver-mark-dark.svg" class="logo__image only-dark pst-js-only" alt="pulserver"/>
+  
+  
+</a></div>
+        <div class="sidebar-primary-item">
+<div class="version-switcher__container dropdown pst-js-only">
+  <button id="pst-version-switcher-button-2"
+    type="button"
+    class="version-switcher__button btn btn-sm dropdown-toggle"
+    data-bs-toggle="dropdown"
+    aria-haspopup="listbox"
+    aria-controls="pst-version-switcher-list-2"
+    aria-label="Version switcher list"
+  >
+    Choose version  <!-- this text may get changed later by javascript -->
+    <span class="caret"></span>
+  </button>
+  <div id="pst-version-switcher-list-2"
+    class="version-switcher__menu dropdown-menu list-group-flush py-0"
+    role="listbox" aria-labelledby="pst-version-switcher-button-2">
+    <!-- dropdown will be populated by javascript on page load -->
+  </div>
+</div></div>
+        <div class="sidebar-primary-item">
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button></div>
+        <div class="sidebar-primary-item"><nav class="bd-links bd-docs-nav" aria-label="Main">
+    <div class="bd-toc-item navbar-nav active">
+        
+        <ul class="nav bd-sidenav bd-sidenav__home-link">
+            <li class="toctree-l1">
+                <a class="reference internal" href="../index.html">
+                    Homepage
+                </a>
+            </li>
+        </ul>
+        <ul class="current nav bd-sidenav">
+<li class="toctree-l1 current active has-children"><a class="reference internal" href="index.html">User guide</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="running.html">Running the services</a></li>
+<li class="toctree-l2"><a class="reference internal" href="scanner-sequences.html">Scanner sequences</a></li>
+<li class="toctree-l2"><a class="reference internal" href="reconstruction-plugins.html">Reconstruction plugins</a></li>
+<li class="toctree-l2"><a class="reference internal" href="reconstruction-client.html">Reconstruction clients</a></li>
+<li class="toctree-l2 current active"><a class="current reference internal" href="#">Scanning a phantom without a scanner</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../developer-guide/index.html">Developer guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../developer-guide/prerequisites.html">Development prerequisites</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer-guide/installation.html">Editable installation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer-guide/workflow.html">Development workflow</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer-guide/style.html">Coding style</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer-guide/documentation.html">Documentation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer-guide/terminology.html">Terminology and conventions</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../developer-guide/internals/index.html">Internals</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/ir-cache.html">IR cache</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/protocol-wire.html">Protocol text blocks</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/reconstruction-proxy.html">Reconstruction proxy</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/virtual-scanner.html">Virtual scanner</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/bloch-engine.html">Bloch engine</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer-guide/pre-commit.html">Pre-commit</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer-guide/pull-requests.html">Pull requests</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer-guide/releases.html">Releases</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer-guide/code-of-conduct.html">Code of conduct</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../explanations/index.html">Explanations</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../explanations/architecture.html">Architecture</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../explanations/protocol.html">Protocol resolution</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../explanations/designs.html">Designs and the design store</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../explanations/scanner-representation.html">Scanner representation (PulSeg)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../explanations/virtual-scanner.html">The virtual scanner</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../explanations/reconstruction.html">Raw-data enrichment and routing</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../explanations/calibration.html">Calibration, noise and coil compression</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../examples/index.html">Examples</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../examples/course.html">Course</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/01_protocol_to_image.html">1. From protocol to image</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/02_sequence_plugin.html">2. A scanner sequence and its protocol</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/03_scanner_representation.html">3. Scanner representation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/04_reconstruction_plugin.html">4. A reconstruction plugin</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/05_testing_on_the_virtual_scanner.html">5. Testing on the virtual scanner</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../examples/tours.html">Tours</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/02-tours/01_protocol_resolution.html">Protocol resolution for a 2D gradient echo</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/02-tours/02_segmentation.html">Segmentation of a sequence for the scanner</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/02-tours/03_fov_offset_enrichment.html">Field-of-view offset and the proxy phase</a></li>
+</ul>
+</details></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../api/index.html">API reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../api/protocol.html">Protocol</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/design.html">Scanner sequences</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/host.html">Design calls</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/ir.html">IR conversion</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/proxy.html">Reconstruction proxy</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/recon.html">Reconstruction plugins</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/mrd.html">MRD data</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/validate.html">Validation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/virtual.html">Virtual scanner</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../misc/index.html">Miscellaneous</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../misc/license.html">License and notices</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../misc/related.html">Related projects</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../misc/contributors.html">Contributors</a></li>
+</ul>
+</details></li>
+</ul>
+
+    </div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+      <div class="sidebar-primary-item">
+<div id="ethical-ad-placement"
+      class="flat"
+      data-ea-publisher="readthedocs"
+      data-ea-type="readthedocs-sidebar"
+      data-ea-manual="true">
+</div></div>
+  </div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+
+<div class="sbt-scroll-pixel-helper"></div>
+
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item"><button class="sidebar-toggle primary-toggle btn btn-sm" title="Toggle primary sidebar" data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <span class="fa-solid fa-bars"></span>
+</button></div>
+      
+    </div>
+  
+  
+    <div class="header-article-items__end">
+      
+        <div class="header-article-item">
+
+<div class="article-header-buttons">
+
+
+
+
+
+<div class="dropdown dropdown-source-buttons">
+  <button class="btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Source repositories">
+    <i class="fab fa-github"></i>
+  </button>
+  <ul class="dropdown-menu">
+      
+      
+      
+      <li><a href="https://github.com/pulserver/pulserver" target="_blank"
+   class="btn btn-sm btn-source-repository-button dropdown-item"
+   title="Source repository"
+   data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fab fa-github"></i>
+  </span>
+<span class="btn__text-container">Repository</span>
+</a>
+</li>
+      
+      
+      
+      
+      <li><a href="https://github.com/pulserver/pulserver/edit/main/docs/user-guide/virtual-scanner.md" target="_blank"
+   class="btn btn-sm btn-source-edit-button dropdown-item"
+   title="Suggest edit"
+   data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-pencil-alt"></i>
+  </span>
+<span class="btn__text-container">Suggest edit</span>
+</a>
+</li>
+      
+      
+      
+      
+      <li><a href="https://github.com/pulserver/pulserver/issues/new?title=Issue%20on%20page%20%2Fuser-guide/virtual-scanner.html&body=Your%20issue%20content%20here." target="_blank"
+   class="btn btn-sm btn-source-issues-button dropdown-item"
+   title="Open an issue"
+   data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-lightbulb"></i>
+  </span>
+<span class="btn__text-container">Open issue</span>
+</a>
+</li>
+      
+  </ul>
+</div>
+
+
+
+
+
+
+<div class="dropdown dropdown-download-buttons">
+  <button class="btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Download this page">
+    <i class="fas fa-download"></i>
+  </button>
+  <ul class="dropdown-menu">
+      
+      
+      
+      <li><a href="../_sources/user-guide/virtual-scanner.md" target="_blank"
+   class="btn btn-sm btn-download-source-button dropdown-item"
+   title="Download source file"
+   data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-file"></i>
+  </span>
+<span class="btn__text-container">.md</span>
+</a>
+</li>
+      
+      
+      
+      
+      <li>
+<button onclick="window.print()"
+  class="btn btn-sm btn-download-pdf-button dropdown-item"
+  title="Print to PDF"
+  data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-file-pdf"></i>
+  </span>
+<span class="btn__text-container">.pdf</span>
+</button>
+</li>
+      
+  </ul>
+</div>
+
+
+
+
+<button onclick="toggleFullScreen()"
+  class="btn btn-sm btn-fullscreen-button pst-navbar-icon"
+  title="Fullscreen mode"
+  data-bs-placement="bottom" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-expand"></i>
+  </span>
+
+</button>
+
+
+
+<div class="theme-switch-container dropdown pst-js-only" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Color mode">
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button dropdown-toggle" aria-label="Color mode" data-bs-toggle="dropdown">
+    <i class="theme-switch fa-solid fa-sun fa-lg fa-fw" data-mode="light" title="Light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg fa-fw" data-mode="dark" title="Dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg fa-fw" data-mode="auto" title="System Settings"></i>
+  </button>
+  <ul class="dropdown-menu dropdown-menu-end">
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg fa-fw me-1"></i>System Settings</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="light"><i class="fa-solid fa-sun fa-lg fa-fw me-1"></i>Light</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="dark"><i class="fa-solid fa-moon fa-lg fa-fw me-1"></i>Dark</button></li>
+  </ul>
+</div>
+
+
+<button class="btn btn-sm pst-navbar-icon search-button search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass fa-lg"></i>
+</button>
+<button class="sidebar-toggle secondary-toggle btn btn-sm pst-navbar-icon" title="Toggle secondary sidebar" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="fa-solid fa-list"></span>
+</button>
+</div></div>
+      
+    </div>
+  
+</div>
+</div>
+              
+              
+
+<div id="jb-print-docs-body" class="onlyprint">
+    <h1>Scanning a phantom without a scanner</h1>
+    <!-- Table of contents -->
+    <div id="print-main-content">
+        <div id="jb-print-toc">
+            
+            <div>
+                <h2> Contents </h2>
+            </div>
+            <nav aria-label="Page">
+                <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#generate-a-design">Generate a design</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#start-a-proxy">Start a proxy</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#acquire-and-send-the-series">Acquire and send the series</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#scan-water-and-fat">Scan water and fat</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#simulate-relaxation-and-the-rf-pulses">Simulate relaxation and the RF pulses</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#stream-a-scan-in-real-time-with-its-sound">Stream a scan in real time, with its sound</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#scan-from-the-command-line">Scan from the command line</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#prescribe-an-orientation">Prescribe an orientation</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#serve-a-scanner-console">Serve a scanner console</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#see-also">See also</a></li>
+</ul>
+            </nav>
+        </div>
+    </div>
+</div>
+
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <section class="tex2jax_ignore mathjax_ignore" id="scanning-a-phantom-without-a-scanner">
+<h1>Scanning a phantom without a scanner<a class="headerlink" href="#scanning-a-phantom-without-a-scanner" title="Link to this heading">#</a></h1>
+<p>The virtual scanner plays a stored design’s IR cache, acquires an analytic
+phantom along the trajectory the cache plays or simulates the cache on the
+phantom’s isochromats, and sends the series to a reconstruction proxy as the
+scanner’s reconstruction client does (<a class="reference internal" href="../explanations/virtual-scanner.html"><span class="doc">The virtual scanner</span></a>). A scanner-sequence plugin and a
+reconstruction plugin are exercised together, through the production design
+calls and proxy.</p>
+<p>A browser build of the virtual scanner’s console runs without an installation
+at <a class="reference external" href="https://pulserver.github.io/MaRGE/">https://pulserver.github.io/MaRGE/</a>.</p>
+<section id="generate-a-design">
+<h2>Generate a design<a class="headerlink" href="#generate-a-design" title="Link to this heading">#</a></h2>
+<p>Generate the design as the interpreter host process does, with the prescribed
+field-of-view offset in the protocol block (<a class="reference internal" href="running.html"><span class="doc">Running the services</span></a>):</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">printf</span><span class="w"> </span><span class="s1">'[Protocol]\nTE: 5000\nnx: 64\nny: 64\nfov_offset_x: 20.0\n[Protocol End]\n'</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span><span class="p">|</span><span class="w"> </span>pulserver<span class="w"> </span>design<span class="w"> </span>generate<span class="w"> </span>--plugins<span class="w"> </span>sequences<span class="w"> </span>--plugin<span class="w"> </span>gre2d<span class="w"> </span>--limits<span class="w"> </span>limits.txt<span class="w"> </span>--store<span class="w"> </span>designs
+</pre></div>
+</div>
+<p>The reply is <code class="docutils literal notranslate"><span class="pre">GENERATED</span> <span class="pre">&lt;id&gt;</span></code>.</p>
+</section>
+<section id="start-a-proxy">
+<h2>Start a proxy<a class="headerlink" href="#start-a-proxy" title="Link to this heading">#</a></h2>
+<p>Start a reconstruction proxy on the same store (<a class="reference internal" href="running.html"><span class="doc">Running the services</span></a>):</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pulserver<span class="w"> </span>proxy<span class="w"> </span>--store<span class="w"> </span>designs<span class="w"> </span>--port<span class="w"> </span><span class="m">9002</span><span class="w"> </span>--plugins<span class="w"> </span>recon
+</pre></div>
+</div>
+</section>
+<section id="acquire-and-send-the-series">
+<h2>Acquire and send the series<a class="headerlink" href="#acquire-and-send-the-series" title="Link to this heading">#</a></h2>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pulserver</span><span class="w"> </span><span class="kn">import</span> <span class="n">virtual</span>
+
+<span class="n">design</span> <span class="o">=</span> <span class="s2">"..."</span>  <span class="c1"># the identifier the generation replied</span>
+<span class="n">sequence</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"designs/</span><span class="si">{</span><span class="n">design</span><span class="si">}</span><span class="s2">/sequence.seq"</span>
+<span class="n">phantom</span> <span class="o">=</span> <span class="n">virtual</span><span class="o">.</span><span class="n">Phantom</span><span class="p">(</span>
+    <span class="p">[</span><span class="n">virtual</span><span class="o">.</span><span class="n">Ellipse</span><span class="p">((</span><span class="mf">0.02</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">),</span> <span class="p">(</span><span class="mf">0.08</span><span class="p">,</span> <span class="mf">0.06</span><span class="p">))],</span> <span class="n">coils</span><span class="o">=</span><span class="mi">4</span>
+<span class="p">)</span>
+<span class="n">readouts</span> <span class="o">=</span> <span class="n">virtual</span><span class="o">.</span><span class="n">acquire</span><span class="p">(</span><span class="n">sequence</span><span class="p">,</span> <span class="n">phantom</span><span class="p">)</span>
+<span class="n">received</span> <span class="o">=</span> <span class="n">virtual</span><span class="o">.</span><span class="n">send</span><span class="p">(</span>
+    <span class="p">(</span><span class="s2">"127.0.0.1"</span><span class="p">,</span> <span class="mi">9002</span><span class="p">),</span>
+    <span class="n">design</span><span class="p">,</span>
+    <span class="n">readouts</span><span class="p">,</span>
+    <span class="n">position_mm</span><span class="o">=</span><span class="p">(</span><span class="mf">20.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">),</span>
+    <span class="n">config</span><span class="o">=</span><span class="s2">"pics"</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">config</span></code> names the reconstruction plugin, here the shipped <code class="docutils literal notranslate"><span class="pre">pics</span></code>, as the
+config text of a reconstruction client does (<a class="reference internal" href="reconstruction-client.html"><span class="doc">Reconstruction clients</span></a>); the
+proxy refuses a series whose config names none.</p>
+<p>The phantom lies in the physical frame, whose axes are the logical ones under
+a prescription without a rotation; the object above is centred on the
+prescribed field of view, so it appears at the centre of the image.
+<code class="docutils literal notranslate"><span class="pre">position_mm</span></code> is written as each acquisition’s <code class="docutils literal notranslate"><span class="pre">position</span></code>; <code class="docutils literal notranslate"><span class="pre">send</span></code> writes no
+<code class="docutils literal notranslate"><span class="pre">fov_offset_mm</span></code> user parameter, so the proxy corrects the samples for the
+offset the design was converted at and for no further displacement. <code class="docutils literal notranslate"><span class="pre">received</span></code>
+holds the images, DICOM datasets and texts the reconstruction returned; a text
+beginning <code class="docutils literal notranslate"><span class="pre">pulserver:</span></code> reports a refused or failed series.</p>
+</section>
+<section id="scan-water-and-fat">
+<h2>Scan water and fat<a class="headerlink" href="#scan-water-and-fat" title="Link to this heading">#</a></h2>
+<p>An ellipse of fat carries its chemical shift, and the acquisition the
+magnet’s field strength, at which the shift is resolved; <code class="docutils literal notranslate"><span class="pre">off_resonance_hz</span></code>
+adds a frequency offset common to every spin:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">water</span> <span class="o">=</span> <span class="n">virtual</span><span class="o">.</span><span class="n">Ellipse</span><span class="p">((</span><span class="mf">0.02</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">),</span> <span class="p">(</span><span class="mf">0.06</span><span class="p">,</span> <span class="mf">0.05</span><span class="p">))</span>
+<span class="n">fat</span> <span class="o">=</span> <span class="n">virtual</span><span class="o">.</span><span class="n">Ellipse</span><span class="p">((</span><span class="mf">0.02</span><span class="p">,</span> <span class="mf">0.07</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">),</span> <span class="p">(</span><span class="mf">0.04</span><span class="p">,</span> <span class="mf">0.01</span><span class="p">),</span> <span class="n">shift_ppm</span><span class="o">=-</span><span class="mf">3.45</span><span class="p">)</span>
+<span class="n">readouts</span> <span class="o">=</span> <span class="n">virtual</span><span class="o">.</span><span class="n">acquire</span><span class="p">(</span>
+    <span class="n">sequence</span><span class="p">,</span> <span class="n">virtual</span><span class="o">.</span><span class="n">Phantom</span><span class="p">([</span><span class="n">water</span><span class="p">,</span> <span class="n">fat</span><span class="p">],</span> <span class="n">coils</span><span class="o">=</span><span class="mi">4</span><span class="p">),</span> <span class="n">field_t</span><span class="o">=</span><span class="mf">3.0</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>Fat is acquired at its chemical shift, and a fat saturation the design plays
+leaves it the magnetization its pulse leaves at that frequency. Generate the
+design under limits whose <code class="docutils literal notranslate"><span class="pre">B0</span></code> is the same field: the host resolves the ppm
+offsets of the design’s RF pulses at it when it builds the IR
+(<a class="reference internal" href="running.html"><span class="doc">Running the services</span></a>).</p>
+</section>
+<section id="simulate-relaxation-and-the-rf-pulses">
+<h2>Simulate relaxation and the RF pulses<a class="headerlink" href="#simulate-relaxation-and-the-rf-pulses" title="Link to this heading">#</a></h2>
+<p>The analytic acquisition acts on the phantom’s density alone. For relaxation,
+flip angles and slice profiles, sample the phantom as isochromats and play the
+cache on them (<a class="reference internal" href="../explanations/virtual-scanner.html"><span class="doc">The virtual scanner</span></a>); the readouts are sent
+as before:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">tissue</span> <span class="o">=</span> <span class="n">virtual</span><span class="o">.</span><span class="n">Phantom</span><span class="p">(</span>
+    <span class="p">[</span>
+        <span class="n">virtual</span><span class="o">.</span><span class="n">Ellipse</span><span class="p">((</span><span class="mf">0.02</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">),</span> <span class="p">(</span><span class="mf">0.08</span><span class="p">,</span> <span class="mf">0.06</span><span class="p">),</span> <span class="n">t1</span><span class="o">=</span><span class="mf">0.9</span><span class="p">,</span> <span class="n">t2</span><span class="o">=</span><span class="mf">0.07</span><span class="p">),</span>
+        <span class="n">virtual</span><span class="o">.</span><span class="n">Ellipse</span><span class="p">((</span><span class="mf">0.02</span><span class="p">,</span> <span class="mf">0.02</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">),</span> <span class="p">(</span><span class="mf">0.02</span><span class="p">,</span> <span class="mf">0.015</span><span class="p">),</span> <span class="n">t1</span><span class="o">=</span><span class="mf">1.8</span><span class="p">,</span> <span class="n">t2</span><span class="o">=</span><span class="mf">0.25</span><span class="p">),</span>
+    <span class="p">],</span>
+    <span class="n">coils</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">readouts</span> <span class="o">=</span> <span class="n">virtual</span><span class="o">.</span><span class="n">simulate</span><span class="p">(</span><span class="n">sequence</span><span class="p">,</span> <span class="n">tissue</span><span class="o">.</span><span class="n">isochromats</span><span class="p">(</span><span class="mf">1e-3</span><span class="p">))</span>
+</pre></div>
+</div>
+<p>The isochromats approximate the phantom in k-space below <span class="math notranslate nohighlight">\(1/(2\Delta)\)</span> for a
+grid spacing <span class="math notranslate nohighlight">\(\Delta\)</span>, here 1 mm, so choose a spacing several times finer than
+the pixel; their number, and the time the simulation takes, grow as
+<span class="math notranslate nohighlight">\(1/\Delta^2\)</span>, or as <span class="math notranslate nohighlight">\(1/\Delta^3\)</span> for a phantom that fills a volume. Sample
+such a phantom only where the design’s excitation pulses excite it,
+<code class="docutils literal notranslate"><span class="pre">virtual.BrainWeb().isochromats(1e-3,</span> <span class="pre">field_t=3.0,</span> <span class="pre">region=virtual.excited(sequence))</span></code>,
+giving <code class="docutils literal notranslate"><span class="pre">excited</span></code> the prescription’s rotation where there is one. A phantom with a
+chemical shift is sampled at the magnet’s field,
+<code class="docutils literal notranslate"><span class="pre">tissue.isochromats(1e-3,</span> <span class="pre">field_t=3.0)</span></code>. The simulation starts from the
+magnetization the isochromats hold, so a second scan of the same isochromats
+continues the first: sample them again, or call their <code class="docutils literal notranslate"><span class="pre">reset</span></code>, to start from
+equilibrium.</p>
+</section>
+<section id="stream-a-scan-in-real-time-with-its-sound">
+<h2>Stream a scan in real time, with its sound<a class="headerlink" href="#stream-a-scan-in-real-time-with-its-sound" title="Link to this heading">#</a></h2>
+<p>A scan played against its clock releases each readout once it is acquired, and
+the client sends it on; the sound of its gradients can be written as it plays:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">wave</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+
+<span class="n">scan</span> <span class="o">=</span> <span class="n">virtual</span><span class="o">.</span><span class="n">Scan</span><span class="p">(</span><span class="n">sequence</span><span class="p">,</span> <span class="n">tissue</span><span class="o">.</span><span class="n">isochromats</span><span class="p">(</span><span class="mf">1e-3</span><span class="p">))</span>
+<span class="k">with</span> <span class="n">wave</span><span class="o">.</span><span class="n">open</span><span class="p">(</span><span class="s2">"scan.wav"</span><span class="p">,</span> <span class="s2">"wb"</span><span class="p">)</span> <span class="k">as</span> <span class="n">audio</span><span class="p">:</span>
+    <span class="n">audio</span><span class="o">.</span><span class="n">setnchannels</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
+    <span class="n">audio</span><span class="o">.</span><span class="n">setsampwidth</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
+    <span class="n">audio</span><span class="o">.</span><span class="n">setframerate</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">virtual</span><span class="o">.</span><span class="n">SAMPLE_RATE</span><span class="p">))</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">acquired</span><span class="p">():</span>
+        <span class="k">for</span> <span class="n">chunk</span> <span class="ow">in</span> <span class="n">scan</span><span class="o">.</span><span class="n">chunks</span><span class="p">(</span><span class="n">speed</span><span class="o">=</span><span class="mf">1.0</span><span class="p">):</span>
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">chunk</span><span class="o">.</span><span class="n">stop</span><span class="si">:</span><span class="s2">6.2f</span><span class="si">}</span><span class="s2"> s of </span><span class="si">{</span><span class="n">scan</span><span class="o">.</span><span class="n">duration</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2"> s"</span><span class="p">)</span>
+            <span class="n">audio</span><span class="o">.</span><span class="n">writeframes</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">round</span><span class="p">(</span><span class="mi">32767</span> <span class="o">*</span> <span class="n">chunk</span><span class="o">.</span><span class="n">sound</span><span class="o">.</span><span class="n">T</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="s2">"&lt;i2"</span><span class="p">)</span><span class="o">.</span><span class="n">tobytes</span><span class="p">())</span>
+            <span class="k">yield from</span> <span class="n">chunk</span><span class="o">.</span><span class="n">readouts</span>
+
+    <span class="n">received</span> <span class="o">=</span> <span class="n">virtual</span><span class="o">.</span><span class="n">send</span><span class="p">((</span><span class="s2">"127.0.0.1"</span><span class="p">,</span> <span class="mi">9002</span><span class="p">),</span> <span class="n">design</span><span class="p">,</span> <span class="n">acquired</span><span class="p">(),</span> <span class="n">config</span><span class="o">=</span><span class="s2">"pics"</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>The spans are simulated in a thread of their own, ahead of the clock. At
+<code class="docutils literal notranslate"><span class="pre">speed=1.0</span></code> the clock starts once the simulation, at the rate it has run so
+far, stays ahead of it to the end of the scan, which then lasts as long as it
+would on a scanner; <code class="docutils literal notranslate"><span class="pre">preparing</span></code>, when given, receives the time left before the
+clock starts. A span simulated after its end on the clock holds the clock until
+it is. Without <code class="docutils literal notranslate"><span class="pre">speed</span></code>, the spans come as fast as they are simulated.</p>
+</section>
+<section id="scan-from-the-command-line">
+<h2>Scan from the command line<a class="headerlink" href="#scan-from-the-command-line" title="Link to this heading">#</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">pulserver</span> <span class="pre">scan</span></code> runs a scan without a script. It imports a sequence file or
+generates a design from a scanner-sequence plugin, as the design calls do,
+plays its IR cache on a phantom in the Bloch simulation, and writes the series
+to an ISMRMRD file, streams it to a reconstruction proxy, or both:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pulserver<span class="w"> </span>scan<span class="w"> </span>--seq<span class="w"> </span>sequence.seq<span class="w"> </span>--limits<span class="w"> </span>limits.txt<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--orientation<span class="w"> </span>coronal<span class="w"> </span>--center<span class="w"> </span><span class="m">10</span><span class="w"> </span>-5<span class="w"> </span><span class="m">3</span><span class="w"> </span>--mrd<span class="w"> </span>raw.h5<span class="w"> </span>--sound<span class="w"> </span>scan.wav
+
+pulserver<span class="w"> </span>scan<span class="w"> </span>--plugins<span class="w"> </span>sequences<span class="w"> </span>--plugin<span class="w"> </span>gre2d<span class="w"> </span>--protocol<span class="w"> </span>protocol.txt<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--limits<span class="w"> </span>limits.txt<span class="w"> </span>--store<span class="w"> </span>designs<span class="w"> </span>--recon<span class="w"> </span><span class="m">127</span>.0.0.1:9002<span class="w"> </span>--output<span class="w"> </span>images
+</pre></div>
+</div>
+<p>The design call’s reply, <code class="docutils literal notranslate"><span class="pre">IMPORTED</span> <span class="pre">&lt;id&gt;</span></code> or <code class="docutils literal notranslate"><span class="pre">GENERATED</span> <span class="pre">&lt;id&gt;</span></code>, or its <code class="docutils literal notranslate"><span class="pre">ERROR</span></code>
+line, is written to standard output, and the scan clock to standard error.</p>
+<ul>
+<li><p><code class="docutils literal notranslate"><span class="pre">--limits</span></code> is the <code class="docutils literal notranslate"><span class="pre">[Limits]</span></code> block of <a class="reference internal" href="running.html"><span class="doc">Running the services</span></a>; the phantom’s chemical
+shifts are resolved at its <code class="docutils literal notranslate"><span class="pre">B0</span></code>. <code class="docutils literal notranslate"><span class="pre">--protocol</span></code> holds a protocol block, as
+<code class="docutils literal notranslate"><span class="pre">pulserver</span> <span class="pre">design</span> <span class="pre">generate</span></code> reads it on standard input; without it, the
+plugin’s defaults are designed.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--orientation</span></code> names the rotation from logical to physical axes by the
+physical direction of each logical axis:</p>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Orientation</p></th>
+<th class="head"><p>Readout</p></th>
+<th class="head"><p>Phase encoding</p></th>
+<th class="head"><p>Slice selection</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">axial</span></code></p></td>
+<td><p>+x</p></td>
+<td><p>+y</p></td>
+<td><p>+z</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">coronal</span></code></p></td>
+<td><p>+x</p></td>
+<td><p>+z</p></td>
+<td><p>−y</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">sagittal</span></code></p></td>
+<td><p>+y</p></td>
+<td><p>+z</p></td>
+<td><p>+x</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">--rotation</span></code> gives the nine elements of another, row by row, and <code class="docutils literal notranslate"><span class="pre">--center</span></code>
+the field-of-view centre, in mm along the physical axes. They replace the
+field-of-view entries of the protocol block.</p>
+</li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--phantom</span></code> is a JSON file of ellipses, each an object of the fields of
+<a class="reference internal" href="../generated/pulserver.virtual.Ellipse.html#pulserver.virtual.Ellipse" title="pulserver.virtual.Ellipse"><code class="xref py py-class docutils literal notranslate"><span class="pre">Ellipse</span></code></a>, in its units:</p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span><span class="nt">"ellipses"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">  </span><span class="p">{</span><span class="nt">"centre"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="mf">0.0</span><span class="p">,</span><span class="w"> </span><span class="mf">0.0</span><span class="p">,</span><span class="w"> </span><span class="mf">0.0</span><span class="p">],</span><span class="w"> </span><span class="nt">"semi_axes"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="mf">0.08</span><span class="p">,</span><span class="w"> </span><span class="mf">0.06</span><span class="p">],</span><span class="w"> </span><span class="nt">"t1"</span><span class="p">:</span><span class="w"> </span><span class="mf">0.9</span><span class="p">,</span><span class="w"> </span><span class="nt">"t2"</span><span class="p">:</span><span class="w"> </span><span class="mf">0.07</span><span class="p">},</span>
+<span class="w">  </span><span class="p">{</span><span class="nt">"centre"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="mf">0.02</span><span class="p">,</span><span class="w"> </span><span class="mf">0.02</span><span class="p">,</span><span class="w"> </span><span class="mf">0.0</span><span class="p">],</span><span class="w"> </span><span class="nt">"semi_axes"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="mf">0.02</span><span class="p">,</span><span class="w"> </span><span class="mf">0.015</span><span class="p">],</span><span class="w"> </span><span class="nt">"shift_ppm"</span><span class="p">:</span><span class="w"> </span><span class="mf">-3.45</span><span class="p">}</span>
+<span class="p">]}</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">--phantom</span> <span class="pre">brainweb</span></code> scans <a class="reference internal" href="../generated/pulserver.virtual.BrainWeb.html#pulserver.virtual.BrainWeb" title="pulserver.virtual.BrainWeb"><code class="xref py py-class docutils literal notranslate"><span class="pre">BrainWeb</span></code></a>, BrainWeb’s
+normal brain, downloaded on first use by the <code class="docutils literal notranslate"><span class="pre">brainweb</span></code> extra
+(<code class="docutils literal notranslate"><span class="pre">pip</span> <span class="pre">install</span> <span class="pre">'pulserver[brainweb]'</span></code>); its <code class="docutils literal notranslate"><span class="pre">--spacing</span></code> is a whole number of
+millimetres. Without <code class="docutils literal notranslate"><span class="pre">--phantom</span></code>, the phantom is seven vials of water around
+one of fat, with T1 from 0.3 s to 2.0 s and T2 from 0.04 s to 0.3 s.
+Its isochromats are those in the slabs the design’s excitation pulses excite
+(<a class="reference internal" href="../generated/pulserver.virtual.excited.html#pulserver.virtual.excited" title="pulserver.virtual.excited"><code class="xref py py-func docutils literal notranslate"><span class="pre">excited()</span></code></a>).
+<code class="docutils literal notranslate"><span class="pre">--spacing</span></code>, in mm, and <code class="docutils literal notranslate"><span class="pre">--coils</span></code> set its isochromats and its receive coils;
+<code class="docutils literal notranslate"><span class="pre">--coil</span></code> scans it with one of the scanner’s coils instead, <code class="docutils literal notranslate"><span class="pre">body</span></code>,
+<code class="docutils literal notranslate"><span class="pre">body/head48</span></code> or <code class="docutils literal notranslate"><span class="pre">head8/head32</span></code>, named <code class="docutils literal notranslate"><span class="pre">transmit/receive</span></code>, whose
+sensitivities bartorch samples from BART’s coil models, which the <code class="docutils literal notranslate"><span class="pre">coils</span></code>
+extra installs (<code class="docutils literal notranslate"><span class="pre">pip</span> <span class="pre">install</span> <span class="pre">'pulserver[coils]'</span></code>). The sensitivities at
+every isochromat are written to a temporary file mapped into memory; where
+the temporary directory is a memory file system, set <code class="docutils literal notranslate"><span class="pre">TMPDIR</span></code> to one on
+disk.</p>
+</li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--spins</span></code> spreads each voxel over that many isochromats, at the quantiles of
+the Lorentzian line of its tissue’s T2′, at its centre or, with
+<code class="docutils literal notranslate"><span class="pre">--voxel</span> <span class="pre">box</span></code>, over it; <code class="docutils literal notranslate"><span class="pre">--diffusion</span></code> lets BrainWeb’s tissue classes diffuse
+(<a class="reference internal" href="../developer-guide/internals/bloch-engine.html"><span class="doc">Bloch engine</span></a>). A phantom file gives each ellipse
+its <code class="docutils literal notranslate"><span class="pre">t2_prime</span></code>, in s, and <code class="docutils literal notranslate"><span class="pre">diffusion</span></code>, in m²/s. Isochromats that diffuse are
+played block by block, and a voxel’s diffusion attenuation needs many spins
+to be resolved.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--nod</span> <span class="pre">DEGREES</span> <span class="pre">PERIOD</span></code> turns the subject about the physical x axis through
+the isocentre by <code class="docutils literal notranslate"><span class="pre">DEGREES</span></code> times the sine of 2π t / <code class="docutils literal notranslate"><span class="pre">PERIOD</span></code>, and
+<code class="docutils literal notranslate"><span class="pre">--drift</span> <span class="pre">X</span> <span class="pre">Y</span> <span class="pre">Z</span></code> translates it along the physical axes, in mm/min, t being the
+time from the start of the scan (<a class="reference internal" href="../generated/pulserver.virtual.RigidMotion.html#pulserver.virtual.RigidMotion" title="pulserver.virtual.RigidMotion"><code class="xref py py-class docutils literal notranslate"><span class="pre">RigidMotion</span></code></a>).
+Isochromats that move are played block by block.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--recon</span></code> streams the series to a reconstruction proxy, which looks the
+design up in its store: give that store as <code class="docutils literal notranslate"><span class="pre">--store</span></code>, or the proxy’s design
+intake as <code class="docutils literal notranslate"><span class="pre">--push</span></code>. The images go to <code class="docutils literal notranslate"><span class="pre">images.h5</span></code> in <code class="docutils literal notranslate"><span class="pre">--output</span></code>, the DICOM
+datasets to the files they are named by, and a text beginning <code class="docutils literal notranslate"><span class="pre">pulserver:</span></code>
+ends the command with status 1. <code class="docutils literal notranslate"><span class="pre">--reconstruction</span></code> names the reconstruction
+plugin the proxy reconstructs the series with, independently of the sequence
+the design was generated from. Without it, a shipped <code class="docutils literal notranslate"><span class="pre">--plugin</span></code> is
+reconstructed with the shipped reconstruction paired with it
+(<a class="reference internal" href="scanner-sequences.html#shipped-sequences"><span class="std std-ref">Shipped sequences</span></a>), and a design of another plugin or imported with
+<code class="docutils literal notranslate"><span class="pre">--seq</span></code> needs it.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--speed</span></code> plays the scan that many times as fast as a scanner, once the
+simulation is far enough ahead, writing the time left before it is to
+standard error; without it, the scan runs as fast as the simulation.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--device</span> <span class="pre">cuda</span></code> reads the ADC windows and carries the runs of repetitions
+on the CUDA device. A window outside a run under a changing gradient, such
+as a spiral’s, whose isochromats lie on a lattice along the axes its k
+moves along, as a phantom’s do, is summed onto the lattice by a Triton
+kernel and transformed by cuFINUFFT; every other one, under a held gradient
+or with its isochromats off any lattice, as a moving subject’s are, is
+summed sample by sample by a second Triton kernel. A run of repetitions,
+Cartesian, radial or of ZTE spokes, is carried and spread onto its windows’
+grids by more Triton kernels, a tile of repetitions at a time. The <code class="docutils literal notranslate"><span class="pre">gpu</span></code> extra
+installs all of them (<code class="docutils literal notranslate"><span class="pre">pip</span> <span class="pre">install</span> <span class="pre">'pulserver[gpu]'</span></code>). The rest of the scan
+is simulated on the CPU.</p></li>
+</ul>
+</section>
+<section id="prescribe-an-orientation">
+<h2>Prescribe an orientation<a class="headerlink" href="#prescribe-an-orientation" title="Link to this heading">#</a></h2>
+<p>Add the nine <code class="docutils literal notranslate"><span class="pre">fov_rotation_ij</span></code> entries to the protocol block the design is
+generated from: element (i, j) of the rotation <span class="math notranslate nohighlight">\(R\)</span> from logical to physical
+axes, the identity’s where absent (<a class="reference internal" href="../explanations/protocol.html"><span class="doc">Protocol resolution</span></a>). The design
+is checked in the physical frame <span class="math notranslate nohighlight">\(R\)</span> gives, where logical axes played together
+add on one physical axis, so derate the limits it is designed under for <span class="math notranslate nohighlight">\(R\)</span> in
+the <code class="docutils literal notranslate"><span class="pre">design_max_grad</span></code> and <code class="docutils literal notranslate"><span class="pre">design_max_slew</span></code> lines of the limits file
+(<a class="reference internal" href="running.html"><span class="doc">Running the services</span></a>). The acquisition and the client are given the same <span class="math notranslate nohighlight">\(R\)</span>, and
+the client sends <span class="math notranslate nohighlight">\(R\)</span> times the offset as the field-of-view centre:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+
+<span class="n">rotation</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([[</span><span class="mf">0.866025</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">],</span> <span class="p">[</span><span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.866025</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">],</span> <span class="p">[</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">]])</span>
+<span class="n">centre</span> <span class="o">=</span> <span class="n">rotation</span> <span class="o">@</span> <span class="p">(</span><span class="mf">0.02</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span>
+<span class="n">phantom</span> <span class="o">=</span> <span class="n">virtual</span><span class="o">.</span><span class="n">Phantom</span><span class="p">(</span>
+    <span class="p">[</span><span class="n">virtual</span><span class="o">.</span><span class="n">Ellipse</span><span class="p">((</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">),</span> <span class="p">(</span><span class="mf">0.08</span><span class="p">,</span> <span class="mf">0.06</span><span class="p">))],</span>
+    <span class="n">coils</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span>
+    <span class="n">rotation</span><span class="o">=</span><span class="n">rotation</span><span class="p">,</span>
+    <span class="n">position</span><span class="o">=</span><span class="n">centre</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">readouts</span> <span class="o">=</span> <span class="n">virtual</span><span class="o">.</span><span class="n">acquire</span><span class="p">(</span><span class="n">sequence</span><span class="p">,</span> <span class="n">phantom</span><span class="p">,</span> <span class="n">rotation</span><span class="o">=</span><span class="n">rotation</span><span class="p">)</span>  <span class="c1"># or virtual.simulate</span>
+<span class="n">received</span> <span class="o">=</span> <span class="n">virtual</span><span class="o">.</span><span class="n">send</span><span class="p">(</span>
+    <span class="p">(</span><span class="s2">"127.0.0.1"</span><span class="p">,</span> <span class="mi">9002</span><span class="p">),</span>
+    <span class="n">design</span><span class="p">,</span>
+    <span class="n">readouts</span><span class="p">,</span>
+    <span class="n">position_mm</span><span class="o">=</span><span class="mf">1e3</span> <span class="o">*</span> <span class="n">centre</span><span class="p">,</span>
+    <span class="n">rotation</span><span class="o">=</span><span class="n">rotation</span><span class="p">,</span>
+    <span class="n">config</span><span class="o">=</span><span class="s2">"pics"</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>The phantom, posed at the prescribed centre with its axes turned by <span class="math notranslate nohighlight">\(R\)</span>,
+appears at the centre of the image as it would at the isocentre without a
+rotation, and the images carry the columns of <span class="math notranslate nohighlight">\(R\)</span> as their read, phase and
+slice directions.</p>
+</section>
+<section id="serve-a-scanner-console">
+<h2>Serve a scanner console<a class="headerlink" href="#serve-a-scanner-console" title="Link to this heading">#</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">pulserver</span> <span class="pre">console</span></code> answers a scanner console over a WebSocket: the design
+calls on the interpreter’s text blocks, an exam on a subject, and scans of the
+designs it generates, played on the subject’s phantom:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pulserver<span class="w"> </span>console<span class="w"> </span>--plugins<span class="w"> </span>sequences<span class="w"> </span>--limits<span class="w"> </span>limits.txt<span class="w"> </span>--store<span class="w"> </span>designs<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--recon<span class="w"> </span><span class="m">127</span>.0.0.1:9002<span class="w"> </span>--port<span class="w"> </span><span class="m">8765</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">--plugins</span></code> and <code class="docutils literal notranslate"><span class="pre">--recon-plugins</span></code> may be repeated, the first directory holding a
+plugin supplying it. With <code class="docutils literal notranslate"><span class="pre">--recon-plugins</span> <span class="pre">DIR</span></code> in place of <code class="docutils literal notranslate"><span class="pre">--recon</span></code>, each scan
+is reconstructed in the console’s own process by the plugins of <code class="docutils literal notranslate"><span class="pre">DIR</span></code>, checked
+and enriched as the
+proxy checks and enriches a series (<a class="reference internal" href="../generated/pulserver.proxy.LocalReconstruction.html#pulserver.proxy.LocalReconstruction" title="pulserver.proxy.LocalReconstruction"><code class="xref py py-class docutils literal notranslate"><span class="pre">LocalReconstruction</span></code></a>),
+and no proxy runs. <code class="docutils literal notranslate"><span class="pre">--origin</span></code> names an origin whose browser pages the console
+serves, and may be repeated; without it, pages from every origin are served,
+and a client that sends no <code class="docutils literal notranslate"><span class="pre">Origin</span></code>, which a browser always sends, is served
+either way. <code class="docutils literal notranslate"><span class="pre">--fields</span> <span class="pre">DIR</span></code> takes the coils from the field maps in <code class="docutils literal notranslate"><span class="pre">DIR</span></code>,
+<code class="docutils literal notranslate"><span class="pre">&lt;coil&gt;.npz</span></code> for each of <code class="docutils literal notranslate"><span class="pre">body</span></code>, <code class="docutils literal notranslate"><span class="pre">head8</span></code>, <code class="docutils literal notranslate"><span class="pre">head32</span></code> and <code class="docutils literal notranslate"><span class="pre">head48</span></code>, and
+<code class="docutils literal notranslate"><span class="pre">&lt;coil&gt;_vops.npz</span></code> for the two that transmit, as mariepy writes them for
+BrainWeb’s head (<a class="reference internal" href="../explanations/virtual-scanner.html"><span class="doc">The virtual scanner</span></a>). Every exam is then on
+BrainWeb, and every design is made under the VOP limits of the exam’s transmit
+coil; maps solved at another frequency than the Larmor frequency of the limits’
+<code class="docutils literal notranslate"><span class="pre">B0</span></code> are refused.</p>
+<p>A scan is simulated on the phantom’s isochromats in the slabs its excitation
+pulses excite (<a class="reference internal" href="../generated/pulserver.virtual.excited.html#pulserver.virtual.excited" title="pulserver.virtual.excited"><code class="xref py py-func docutils literal notranslate"><span class="pre">excited()</span></code></a>), sampled <code class="docutils literal notranslate"><span class="pre">--spacing</span></code> apart,
+1 mm by default. Where they number more than <code class="docutils literal notranslate"><span class="pre">--max-isochromats</span></code>, two million
+by default, as over a whole head, the spacing is coarsened in steps of 1 mm
+until they do not, counting <code class="docutils literal notranslate"><span class="pre">--spins</span></code> isochromats per voxel. <code class="docutils literal notranslate"><span class="pre">--device</span></code>,
+<code class="docutils literal notranslate"><span class="pre">--spins</span></code>, <code class="docutils literal notranslate"><span class="pre">--voxel</span></code>, <code class="docutils literal notranslate"><span class="pre">--diffusion</span></code>, <code class="docutils literal notranslate"><span class="pre">--nod</span></code> and <code class="docutils literal notranslate"><span class="pre">--drift</span></code> act as they do for
+<code class="docutils literal notranslate"><span class="pre">pulserver</span> <span class="pre">scan</span></code>; a subject’s motion starts anew with each scan.</p>
+<p>pulserver’s image runs such a console by default, with BrainWeb’s normal brain
+and the field maps solved in it, <code class="docutils literal notranslate"><span class="pre">--fields=/console/fields</span></code>, so that every exam
+is on BrainWeb and downloads nothing, and with bartorch for the non-Cartesian
+reconstructions. It serves the pages of <code class="docutils literal notranslate"><span class="pre">https://pulserver.github.io</span></code>,
+<code class="docutils literal notranslate"><span class="pre">http://localhost:8000</span></code> and <code class="docutils literal notranslate"><span class="pre">http://127.0.0.1:8000</span></code> on port 8765 of this
+computer, and plays each scan at the scanner’s speed, <code class="docutils literal notranslate"><span class="pre">--speed=1</span></code>:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>docker<span class="w"> </span>run<span class="w"> </span>-d<span class="w"> </span>--restart<span class="w"> </span>unless-stopped<span class="w"> </span>--name<span class="w"> </span>pulserver<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-p<span class="w"> </span><span class="m">127</span>.0.0.1:8765:8765<span class="w"> </span>ghcr.io/pulserver/pulserver
+</pre></div>
+</div>
+<p>Options after the image’s name are added to its console’s: an option of one
+value takes the value given last, and <code class="docutils literal notranslate"><span class="pre">--plugins</span></code>, <code class="docutils literal notranslate"><span class="pre">--recon-plugins</span></code> and
+<code class="docutils literal notranslate"><span class="pre">--origin</span></code> add to the image’s. A console whose scans spread each voxel over
+four isochromats, in tissue that diffuses, of a subject that nods through ±2°
+with a period of 8 s:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>docker<span class="w"> </span>run<span class="w"> </span>-d<span class="w"> </span>--restart<span class="w"> </span>unless-stopped<span class="w"> </span>--name<span class="w"> </span>pulserver<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-p<span class="w"> </span><span class="m">127</span>.0.0.1:8765:8765<span class="w"> </span>ghcr.io/pulserver/pulserver<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--spins<span class="w"> </span><span class="m">4</span><span class="w"> </span>--diffusion<span class="w"> </span>--nod<span class="w"> </span><span class="m">2</span><span class="w"> </span><span class="m">8</span>
+</pre></div>
+</div>
+<p>Its sequences are the ones listed under <a class="reference internal" href="scanner-sequences.html#shipped-sequences"><span class="std std-ref">Shipped sequences</span></a>,
+reconstructed by the shipped plugins of <a class="reference internal" href="reconstruction-plugins.html"><span class="doc">Reconstruction plugins</span></a> unless a
+scan names another, and each protocol starts at values the image’s limits
+play.</p>
+<p>Directories mounted at <code class="docutils literal notranslate"><span class="pre">/console/user/plugins</span></code> and <code class="docutils literal notranslate"><span class="pre">/console/user/recon</span></code> add
+sequences and reconstructions to those pulserver ships. They are searched
+first, so a file there takes the place of the shipped file of that name. A
+link must resolve inside the container, as a relative link within the mounted
+directory does. A file added or changed is used from the next call on:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>docker<span class="w"> </span>run<span class="w"> </span>-d<span class="w"> </span>--restart<span class="w"> </span>unless-stopped<span class="w"> </span>--name<span class="w"> </span>pulserver<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-p<span class="w"> </span><span class="m">127</span>.0.0.1:8765:8765<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-v<span class="w"> </span><span class="s2">"</span><span class="nv">$PWD</span><span class="s2">/sequences:/console/user/plugins:ro"</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-v<span class="w"> </span><span class="s2">"</span><span class="nv">$PWD</span><span class="s2">/recon:/console/user/recon:ro"</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>ghcr.io/pulserver/pulserver
+</pre></div>
+</div>
+<p>Each request is a JSON object carrying <code class="docutils literal notranslate"><span class="pre">call</span></code> and an <code class="docutils literal notranslate"><span class="pre">id</span></code> that every reply to
+it repeats:</p>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p><code class="docutils literal notranslate"><span class="pre">call</span></code></p></th>
+<th class="head"><p>Fields</p></th>
+<th class="head"><p>Replies</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">plugins</span></code></p></td>
+<td><p></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">plugins</span></code>: the scanner-sequence plugin names</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">recons</span></code></p></td>
+<td><p></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">recons</span></code>: the reconstruction plugin names, the shipped ones and those of <code class="docutils literal notranslate"><span class="pre">--recon-plugins</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">coils</span></code></p></td>
+<td><p></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">coils</span></code>: each coil’s <code class="docutils literal notranslate"><span class="pre">name</span></code> and its <code class="docutils literal notranslate"><span class="pre">transmit</span></code> and <code class="docutils literal notranslate"><span class="pre">receive</span></code> channels</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">list</span></code>, <code class="docutils literal notranslate"><span class="pre">validate</span></code>, <code class="docutils literal notranslate"><span class="pre">generate</span></code>, <code class="docutils literal notranslate"><span class="pre">import</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">plugin</span></code>, <code class="docutils literal notranslate"><span class="pre">block</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">status</span></code> and <code class="docutils literal notranslate"><span class="pre">reply</span></code>, as <code class="docutils literal notranslate"><span class="pre">pulserver</span> <span class="pre">design</span></code> answers; <code class="docutils literal notranslate"><span class="pre">design</span></code> for a generated or imported design</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">exam</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">subject</span></code>, <code class="docutils literal notranslate"><span class="pre">coil</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">localizer</span></code>: the axial, coronal and sagittal images of the subject’s phantom, as base64 DICOM files</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">scan</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">design</span></code>, <code class="docutils literal notranslate"><span class="pre">rotation</span></code> (nine elements), <code class="docutils literal notranslate"><span class="pre">centre_mm</span></code>, <code class="docutils literal notranslate"><span class="pre">sound</span></code>, <code class="docutils literal notranslate"><span class="pre">recon</span></code></p></td>
+<td><p>at a speed, <code class="docutils literal notranslate"><span class="pre">preparing</span></code> about twice a second until the clock starts, the wall-clock time left in s or <code class="docutils literal notranslate"><span class="pre">null</span></code> before there is an estimate; <code class="docutils literal notranslate"><span class="pre">clock</span></code> and <code class="docutils literal notranslate"><span class="pre">duration</span></code> after each span played, with the span’s <code class="docutils literal notranslate"><span class="pre">sound</span></code> when asked, as base64 of 16-bit little-endian stereo samples at <code class="docutils literal notranslate"><span class="pre">rate</span></code> Hz; <code class="docutils literal notranslate"><span class="pre">dicom</span></code> and <code class="docutils literal notranslate"><span class="pre">name</span></code> for each image the reconstruction returns, <code class="docutils literal notranslate"><span class="pre">text</span></code>, then <code class="docutils literal notranslate"><span class="pre">done</span></code> with the status</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">cancel</span></code></p></td>
+<td><p></p></td>
+<td><p>stops the scan in progress</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>The <code class="docutils literal notranslate"><span class="pre">recon</span></code> field of a <code class="docutils literal notranslate"><span class="pre">scan</span></code> names the reconstruction plugin of the scan,
+independently of the plugin the design was generated from. Without it, a design
+of a shipped sequence is reconstructed with the shipped reconstruction paired
+with it (<a class="reference internal" href="scanner-sequences.html#shipped-sequences"><span class="std std-ref">Shipped sequences</span></a>), and any other design, such as an imported
+one, is refused with an <code class="docutils literal notranslate"><span class="pre">error</span></code> naming the missing reconstruction. A console
+that reconstructs through a proxy lists the shipped reconstructions only, and
+uses a name the proxy holds all the same.</p>
+<p><a class="reference internal" href="../generated/pulserver.virtual.Console.answer.html#pulserver.virtual.Console.answer" title="pulserver.virtual.Console.answer"><code class="xref py py-meth docutils literal notranslate"><span class="pre">Console.answer</span></code></a> answers one request
+in process with the same replies, without the <code class="docutils literal notranslate"><span class="pre">id</span></code>, for a console that reaches
+pulserver by another route than a WebSocket, such as the messages of a Web
+Worker running pulserver beside a browser page.</p>
+<p>A subject named <code class="docutils literal notranslate"><span class="pre">brainweb</span></code> is BrainWeb’s normal brain, and so is every subject
+of a console with field maps; any other is the vials. An exam is scanned in the
+coil it names, or in the one it had, <code class="docutils literal notranslate"><span class="pre">--coil</span></code> at first; a head coil of BART’s
+models needs the <code class="docutils literal notranslate"><span class="pre">coils</span></code> extra. Scans of an exam that excite the same slabs play on
+one set of isochromats, each from equilibrium, so that a repeated scan neither
+builds them nor computes again the pulses an earlier one played. A console
+loads BrainWeb once, and computes the field its head adds while the first
+exam’s localizer is viewed. The localizer is drawn from the
+phantom’s proton density, so an exam can be planned before any scan. MaRGE is
+such a console when <code class="docutils literal notranslate"><span class="pre">MARGE_PULSERVER</span></code> holds the address, <code class="docutils literal notranslate"><span class="pre">ws://127.0.0.1:8765</span></code>
+here: its sequences are then the plugins, its subject names the phantom, its RF
+coil names the coil, and it opens each exam on the localizer. The
+browser build of MaRGE in <a class="reference external" href="https://github.com/pulserver/MaRGE">pulserver/MaRGE</a>
+runs it in a browser tab, opened with <code class="docutils literal notranslate"><span class="pre">?console=ws://127.0.0.1:8765</span></code>, and plays
+each scan’s sound as it streams; it is published at
+<a class="reference external" href="https://pulserver.github.io/MaRGE/">https://pulserver.github.io/MaRGE/</a>.</p>
+</section>
+<section id="see-also">
+<h2>See also<a class="headerlink" href="#see-also" title="Link to this heading">#</a></h2>
+<ul class="simple">
+<li><p><a class="reference internal" href="../explanations/virtual-scanner.html"><span class="doc">The virtual scanner</span></a> — the stand-ins and the signal model.</p></li>
+<li><p><a class="reference internal" href="../api/virtual.html"><span class="doc">Virtual scanner</span></a> — the phantom, the acquisition, the Bloch simulation, the scan clock and the client.</p></li>
+<li><p><a class="reference internal" href="reconstruction-client.html"><span class="doc">Reconstruction clients</span></a> — the stream the client sends.</p></li>
+</ul>
+</section>
+</section>
+
+
+                </article>
+              
+
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="reconstruction-client.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">Reconstruction clients</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="../developer-guide/index.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">Developer guide</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <dialog id="pst-secondary-sidebar-modal"></dialog>
+                <div id="pst-secondary-sidebar" class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item"><div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> Contents
+  </div>
+  <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#generate-a-design">Generate a design</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#start-a-proxy">Start a proxy</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#acquire-and-send-the-series">Acquire and send the series</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#scan-water-and-fat">Scan water and fat</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#simulate-relaxation-and-the-rf-pulses">Simulate relaxation and the RF pulses</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#stream-a-scan-in-real-time-with-its-sound">Stream a scan in real time, with its sound</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#scan-from-the-command-line">Scan from the command line</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#prescribe-an-orientation">Prescribe an orientation</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#serve-a-scanner-console">Serve a scanner console</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#see-also">See also</a></li>
+</ul>
+  </nav></div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+<div class="bd-footer-content__inner container">
+  
+  <div class="footer-item">
+    
+<p class="component-author">
+By pulserver contributors
+</p>
+
+  </div>
+  
+  <div class="footer-item">
+    
+
+  <p class="copyright">
+    
+      © Copyright 2024-2026, pulserver contributors.
+      <br/>
+    
+  </p>
+
+  </div>
+  
+  <div class="footer-item">
+    
+  </div>
+  
+  <div class="footer-item">
+    
+  </div>
+  
+</div>
+          </footer>
+        
+
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script defer src="../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9"></script>
+<script defer src="../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9"></script>
+
+  <footer class="bd-footer">
+  </footer>
+  </body>
+</html>

@@ -1,0 +1,1087 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Scanner sequences &#8212; pulserver documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  <!--
+    this give us a css class that will be invisible only if js is disabled
+  -->
+  <noscript>
+    <style>
+      .pst-js-only { display: none !important; }
+
+    </style>
+  </noscript>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../_static/styles/theme.css?digest=90905a2f556bf617f1a9" rel="stylesheet" />
+<link href="../_static/styles/pydata-sphinx-theme.css?digest=90905a2f556bf617f1a9" rel="stylesheet" />
+
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
+    <link rel="stylesheet" type="text/css" href="../_static/styles/sphinx-book-theme.css?v=4418a689" />
+    <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery.css?v=c83e6b79" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../_static/pulserver.css?v=e08ae8f3" />
+  
+  <!-- So that users can add custom icons -->
+  <script defer src="../_static/scripts/fontawesome.js?digest=90905a2f556bf617f1a9"></script>
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
+<link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
+
+    <script src="../_static/documentation_options.js?v=0a6a6ad3"></script>
+    <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../_static/copybutton.js?v=f281be69"></script>
+    <script src="../_static/sg-tags.js?v=d80f6fa4"></script>
+    <script src="../_static/scripts/sphinx-book-theme.js?v=fab101a9"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'user-guide/scanner-sequences';</script>
+    <script>
+        DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
+        DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.2.0';
+        DOCUMENTATION_OPTIONS.show_version_warning_banner =
+            true;
+        </script>
+    <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
+    <link rel="canonical" href="https://pulserver.github.io/pulserver/stable/user-guide/scanner-sequences.html" />
+    <link rel="icon" href="../_static/pulserver-mark.svg"/>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Reconstruction plugins" href="reconstruction-plugins.html" />
+    <link rel="prev" title="Running the services" href="running.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  <meta name="docsearch:version" content="v0.2.0" />
+  
+    
+    <script src="../_static/searchtools.js"></script>
+    <script src="../_static/language_data.js"></script>
+    <script src="../searchindex.js"></script>
+  
+  </head>
+  <body data-default-mode="">
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+  
+  
+  
+  
+  <dialog id="pst-search-dialog">
+    
+<form class="bd-search d-flex align-items-center"
+      action="../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         placeholder="Search..."
+         aria-label="Search..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+  </dialog>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header id="pst-header" class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+  
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+        </div>
+      
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+    </div>
+  
+
+  
+    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
+      <span class="fa-solid fa-outdent"></span>
+    </button>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <dialog id="pst-primary-sidebar-modal"></dialog>
+      <div id="pst-primary-sidebar" class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+    
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../_static/pulserver-mark.svg" class="logo__image only-light" alt="pulserver"/>
+    <img src="../_static/pulserver-mark-dark.svg" class="logo__image only-dark pst-js-only" alt="pulserver"/>
+  
+  
+</a></div>
+        <div class="sidebar-primary-item">
+<div class="version-switcher__container dropdown pst-js-only">
+  <button id="pst-version-switcher-button-2"
+    type="button"
+    class="version-switcher__button btn btn-sm dropdown-toggle"
+    data-bs-toggle="dropdown"
+    aria-haspopup="listbox"
+    aria-controls="pst-version-switcher-list-2"
+    aria-label="Version switcher list"
+  >
+    Choose version  <!-- this text may get changed later by javascript -->
+    <span class="caret"></span>
+  </button>
+  <div id="pst-version-switcher-list-2"
+    class="version-switcher__menu dropdown-menu list-group-flush py-0"
+    role="listbox" aria-labelledby="pst-version-switcher-button-2">
+    <!-- dropdown will be populated by javascript on page load -->
+  </div>
+</div></div>
+        <div class="sidebar-primary-item">
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button></div>
+        <div class="sidebar-primary-item"><nav class="bd-links bd-docs-nav" aria-label="Main">
+    <div class="bd-toc-item navbar-nav active">
+        
+        <ul class="nav bd-sidenav bd-sidenav__home-link">
+            <li class="toctree-l1">
+                <a class="reference internal" href="../index.html">
+                    Homepage
+                </a>
+            </li>
+        </ul>
+        <ul class="current nav bd-sidenav">
+<li class="toctree-l1 current active has-children"><a class="reference internal" href="index.html">User guide</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="running.html">Running the services</a></li>
+<li class="toctree-l2 current active"><a class="current reference internal" href="#">Scanner sequences</a></li>
+<li class="toctree-l2"><a class="reference internal" href="reconstruction-plugins.html">Reconstruction plugins</a></li>
+<li class="toctree-l2"><a class="reference internal" href="reconstruction-client.html">Reconstruction clients</a></li>
+<li class="toctree-l2"><a class="reference internal" href="virtual-scanner.html">Scanning a phantom without a scanner</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../developer-guide/index.html">Developer guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../developer-guide/prerequisites.html">Development prerequisites</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer-guide/installation.html">Editable installation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer-guide/workflow.html">Development workflow</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer-guide/style.html">Coding style</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer-guide/documentation.html">Documentation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer-guide/terminology.html">Terminology and conventions</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../developer-guide/internals/index.html">Internals</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/ir-cache.html">IR cache</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/protocol-wire.html">Protocol text blocks</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/reconstruction-proxy.html">Reconstruction proxy</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/virtual-scanner.html">Virtual scanner</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/bloch-engine.html">Bloch engine</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer-guide/pre-commit.html">Pre-commit</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer-guide/pull-requests.html">Pull requests</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer-guide/releases.html">Releases</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer-guide/code-of-conduct.html">Code of conduct</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../explanations/index.html">Explanations</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../explanations/architecture.html">Architecture</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../explanations/protocol.html">Protocol resolution</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../explanations/designs.html">Designs and the design store</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../explanations/scanner-representation.html">Scanner representation (PulSeg)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../explanations/virtual-scanner.html">The virtual scanner</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../explanations/reconstruction.html">Raw-data enrichment and routing</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../explanations/calibration.html">Calibration, noise and coil compression</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../examples/index.html">Examples</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../examples/course.html">Course</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/01_protocol_to_image.html">1. From protocol to image</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/02_sequence_plugin.html">2. A scanner sequence and its protocol</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/03_scanner_representation.html">3. Scanner representation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/04_reconstruction_plugin.html">4. A reconstruction plugin</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/05_testing_on_the_virtual_scanner.html">5. Testing on the virtual scanner</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../examples/tours.html">Tours</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/02-tours/01_protocol_resolution.html">Protocol resolution for a 2D gradient echo</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/02-tours/02_segmentation.html">Segmentation of a sequence for the scanner</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/02-tours/03_fov_offset_enrichment.html">Field-of-view offset and the proxy phase</a></li>
+</ul>
+</details></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../api/index.html">API reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../api/protocol.html">Protocol</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/design.html">Scanner sequences</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/host.html">Design calls</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/ir.html">IR conversion</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/proxy.html">Reconstruction proxy</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/recon.html">Reconstruction plugins</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/mrd.html">MRD data</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/validate.html">Validation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/virtual.html">Virtual scanner</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../misc/index.html">Miscellaneous</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../misc/license.html">License and notices</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../misc/related.html">Related projects</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../misc/contributors.html">Contributors</a></li>
+</ul>
+</details></li>
+</ul>
+
+    </div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+      <div class="sidebar-primary-item">
+<div id="ethical-ad-placement"
+      class="flat"
+      data-ea-publisher="readthedocs"
+      data-ea-type="readthedocs-sidebar"
+      data-ea-manual="true">
+</div></div>
+  </div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+
+<div class="sbt-scroll-pixel-helper"></div>
+
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item"><button class="sidebar-toggle primary-toggle btn btn-sm" title="Toggle primary sidebar" data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <span class="fa-solid fa-bars"></span>
+</button></div>
+      
+    </div>
+  
+  
+    <div class="header-article-items__end">
+      
+        <div class="header-article-item">
+
+<div class="article-header-buttons">
+
+
+
+
+
+<div class="dropdown dropdown-source-buttons">
+  <button class="btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Source repositories">
+    <i class="fab fa-github"></i>
+  </button>
+  <ul class="dropdown-menu">
+      
+      
+      
+      <li><a href="https://github.com/pulserver/pulserver" target="_blank"
+   class="btn btn-sm btn-source-repository-button dropdown-item"
+   title="Source repository"
+   data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fab fa-github"></i>
+  </span>
+<span class="btn__text-container">Repository</span>
+</a>
+</li>
+      
+      
+      
+      
+      <li><a href="https://github.com/pulserver/pulserver/edit/main/docs/user-guide/scanner-sequences.md" target="_blank"
+   class="btn btn-sm btn-source-edit-button dropdown-item"
+   title="Suggest edit"
+   data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-pencil-alt"></i>
+  </span>
+<span class="btn__text-container">Suggest edit</span>
+</a>
+</li>
+      
+      
+      
+      
+      <li><a href="https://github.com/pulserver/pulserver/issues/new?title=Issue%20on%20page%20%2Fuser-guide/scanner-sequences.html&body=Your%20issue%20content%20here." target="_blank"
+   class="btn btn-sm btn-source-issues-button dropdown-item"
+   title="Open an issue"
+   data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-lightbulb"></i>
+  </span>
+<span class="btn__text-container">Open issue</span>
+</a>
+</li>
+      
+  </ul>
+</div>
+
+
+
+
+
+
+<div class="dropdown dropdown-download-buttons">
+  <button class="btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Download this page">
+    <i class="fas fa-download"></i>
+  </button>
+  <ul class="dropdown-menu">
+      
+      
+      
+      <li><a href="../_sources/user-guide/scanner-sequences.md" target="_blank"
+   class="btn btn-sm btn-download-source-button dropdown-item"
+   title="Download source file"
+   data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-file"></i>
+  </span>
+<span class="btn__text-container">.md</span>
+</a>
+</li>
+      
+      
+      
+      
+      <li>
+<button onclick="window.print()"
+  class="btn btn-sm btn-download-pdf-button dropdown-item"
+  title="Print to PDF"
+  data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-file-pdf"></i>
+  </span>
+<span class="btn__text-container">.pdf</span>
+</button>
+</li>
+      
+  </ul>
+</div>
+
+
+
+
+<button onclick="toggleFullScreen()"
+  class="btn btn-sm btn-fullscreen-button pst-navbar-icon"
+  title="Fullscreen mode"
+  data-bs-placement="bottom" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-expand"></i>
+  </span>
+
+</button>
+
+
+
+<div class="theme-switch-container dropdown pst-js-only" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Color mode">
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button dropdown-toggle" aria-label="Color mode" data-bs-toggle="dropdown">
+    <i class="theme-switch fa-solid fa-sun fa-lg fa-fw" data-mode="light" title="Light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg fa-fw" data-mode="dark" title="Dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg fa-fw" data-mode="auto" title="System Settings"></i>
+  </button>
+  <ul class="dropdown-menu dropdown-menu-end">
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg fa-fw me-1"></i>System Settings</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="light"><i class="fa-solid fa-sun fa-lg fa-fw me-1"></i>Light</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="dark"><i class="fa-solid fa-moon fa-lg fa-fw me-1"></i>Dark</button></li>
+  </ul>
+</div>
+
+
+<button class="btn btn-sm pst-navbar-icon search-button search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass fa-lg"></i>
+</button>
+<button class="sidebar-toggle secondary-toggle btn btn-sm pst-navbar-icon" title="Toggle secondary sidebar" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="fa-solid fa-list"></span>
+</button>
+</div></div>
+      
+    </div>
+  
+</div>
+</div>
+              
+              
+
+<div id="jb-print-docs-body" class="onlyprint">
+    <h1>Scanner sequences</h1>
+    <!-- Table of contents -->
+    <div id="print-main-content">
+        <div id="jb-print-toc">
+            
+            <div>
+                <h2> Contents </h2>
+            </div>
+            <nav aria-label="Page">
+                <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#binding-the-protocol">Binding the protocol</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#sequence-functions">Sequence functions</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#shipped-sequences">Shipped sequences</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#resolving-a-protocol">Resolving a protocol</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#evaluating-a-protocol">Evaluating a protocol</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#stating-the-rf-layout">Stating the RF layout</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#see-also">See also</a></li>
+</ul>
+            </nav>
+        </div>
+    </div>
+</div>
+
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <section class="tex2jax_ignore mathjax_ignore" id="scanner-sequences">
+<h1>Scanner sequences<a class="headerlink" href="#scanner-sequences" title="Link to this heading">#</a></h1>
+<p>A scanner sequence is a plugin file, <code class="docutils literal notranslate"><span class="pre">&lt;name&gt;.py</span></code> in a <code class="docutils literal notranslate"><span class="pre">--plugins</span></code> directory,
+that binds a sequence function to the scanner protocol with one
+<a class="reference internal" href="../generated/pulserver.design.SequencePlugin.html#pulserver.design.SequencePlugin" title="pulserver.design.SequencePlugin"><code class="xref py py-class docutils literal notranslate"><span class="pre">SequencePlugin</span></code></a> subclass. The sequence function is a function that
+returns the designed sequences (<a class="reference internal" href="#sequence-functions"><span class="std std-ref">Sequence functions</span></a>), as every sequence of
+pypulseqpp is:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># sequences/gre.py</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pypulseqpp.sequences.sequence.gre2D_sequence</span><span class="w"> </span><span class="kn">import</span> <span class="n">gre2d</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pulserver.design</span><span class="w"> </span><span class="kn">import</span> <span class="n">SequencePlugin</span>
+
+<span class="k">class</span><span class="w"> </span><span class="nc">Gre</span><span class="p">(</span><span class="n">SequencePlugin</span><span class="p">):</span>
+    <span class="n">app</span> <span class="o">=</span> <span class="n">gre2d</span>
+</pre></div>
+</div>
+<p>The interpreter names it <code class="docutils literal notranslate"><span class="pre">--plugin</span> <span class="pre">gre</span></code>. Without <code class="docutils literal notranslate"><span class="pre">protocol</span></code>, the protocol is the
+sequence function’s defaults. A PyPulseq script becomes a sequence function by taking the scanner
+limits and its parameters as arguments and returning its sequence
+(<a class="reference external" href="https://pulserver.github.io/pypulseqpp/latest/user-guide/from-pypulseq.html">from a PyPulseq script</a>).</p>
+<section id="binding-the-protocol">
+<h2>Binding the protocol<a class="headerlink" href="#binding-the-protocol" title="Link to this heading">#</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">protocol</span></code> maps the parameters of the interpreter’s table, the members of
+<a class="reference internal" href="../generated/pulserver.protocol.ProtocolKey.html#pulserver.protocol.ProtocolKey" title="pulserver.protocol.ProtocolKey"><code class="xref py py-data docutils literal notranslate"><span class="pre">ProtocolKey</span></code></a>, to entries;
+<a class="reference internal" href="../generated/pulserver.protocol.UIParam.html#pulserver.protocol.UIParam" title="pulserver.protocol.UIParam"><code class="xref py py-class docutils literal notranslate"><span class="pre">UIParam</span></code></a> collects those of the UI controls. A plain
+string naming a parameter is stored as its member, and a name outside the table
+is refused when the class is defined. An entry names the keyword argument of the
+sequence function it sets. The class does not name a reconstruction: the console’s scan
+or the reconstruction client does (<a class="reference internal" href="reconstruction-plugins.html"><span class="doc">Reconstruction plugins</span></a>). A <code class="docutils literal notranslate"><span class="pre">recon</span></code>
+attribute has no effect, and defining one raises a <code class="docutils literal notranslate"><span class="pre">DeprecationWarning</span></code>.
+<code class="docutils literal notranslate"><span class="pre">ui</span></code> and <code class="docutils literal notranslate"><span class="pre">ScannerSequence</span></code> are deprecated names of <code class="docutils literal notranslate"><span class="pre">protocol</span></code> and
+<code class="docutils literal notranslate"><span class="pre">SequencePlugin</span></code>, and a class using either warns with a <code class="docutils literal notranslate"><span class="pre">DeprecationWarning</span></code>.</p>
+<div class="highlight-pycon notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">pypulseqpp.sequences.sequence.gre2D_sequence</span><span class="w"> </span><span class="kn">import</span> <span class="n">gre2d</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">pulserver.design</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span><span class="n">FloatParam</span><span class="p">,</span> <span class="n">IntParam</span><span class="p">,</span> <span class="n">SequencePlugin</span><span class="p">,</span> <span class="n">TEPreset</span><span class="p">,</span>
+<span class="gp">... </span>                              <span class="n">TimeParam</span><span class="p">,</span> <span class="n">TRPreset</span><span class="p">,</span> <span class="n">UIParam</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">Gre2D</span><span class="p">(</span><span class="n">SequencePlugin</span><span class="p">):</span>
+<span class="gp">... </span>    <span class="n">app</span> <span class="o">=</span> <span class="n">gre2d</span>
+<span class="gp">... </span>    <span class="n">protocol</span> <span class="o">=</span> <span class="p">{</span>
+<span class="gp">... </span>        <span class="n">UIParam</span><span class="o">.</span><span class="n">TE</span><span class="p">:</span> <span class="n">TimeParam</span><span class="p">(</span><span class="s2">"te"</span><span class="p">,</span> <span class="n">range_min</span><span class="o">=</span><span class="mi">1000</span><span class="p">,</span> <span class="n">range_max</span><span class="o">=</span><span class="mi">80000</span><span class="p">,</span> <span class="n">range_incr</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>
+<span class="gp">... </span>                        <span class="n">presets</span><span class="o">=</span><span class="p">{</span><span class="n">TEPreset</span><span class="o">.</span><span class="n">MINIMUM</span><span class="p">:</span> <span class="kc">None</span><span class="p">}),</span>
+<span class="gp">... </span>        <span class="n">UIParam</span><span class="o">.</span><span class="n">TR</span><span class="p">:</span> <span class="n">TimeParam</span><span class="p">(</span><span class="s2">"tr"</span><span class="p">,</span> <span class="n">range_min</span><span class="o">=</span><span class="mi">1000</span><span class="p">,</span> <span class="n">range_max</span><span class="o">=</span><span class="mi">5_000_000</span><span class="p">,</span>
+<span class="gp">... </span>                        <span class="n">presets</span><span class="o">=</span><span class="p">{</span><span class="n">TRPreset</span><span class="o">.</span><span class="n">MINIMUM</span><span class="p">:</span> <span class="kc">None</span><span class="p">}),</span>
+<span class="gp">... </span>        <span class="n">UIParam</span><span class="o">.</span><span class="n">FOV</span><span class="p">:</span> <span class="n">FloatParam</span><span class="p">(</span><span class="s2">"fov_x"</span><span class="p">,</span> <span class="n">unit</span><span class="o">=</span><span class="s2">"mm"</span><span class="p">,</span> <span class="n">scale</span><span class="o">=</span><span class="mf">1e-3</span><span class="p">,</span>
+<span class="gp">... </span>                          <span class="n">range_min</span><span class="o">=</span><span class="mf">50.0</span><span class="p">,</span> <span class="n">range_max</span><span class="o">=</span><span class="mf">500.0</span><span class="p">),</span>
+<span class="gp">... </span>        <span class="n">UIParam</span><span class="o">.</span><span class="n">NX</span><span class="p">:</span> <span class="n">IntParam</span><span class="p">(</span><span class="s2">"n_x"</span><span class="p">,</span> <span class="n">range_min</span><span class="o">=</span><span class="mi">32</span><span class="p">,</span> <span class="n">range_max</span><span class="o">=</span><span class="mi">512</span><span class="p">,</span> <span class="n">range_incr</span><span class="o">=</span><span class="mi">2</span><span class="p">),</span>
+<span class="gp">... </span>    <span class="p">}</span>
+
+</pre></div>
+</div>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Entry</p></th>
+<th class="head"><p>UI</p></th>
+<th class="head"><p>Argument</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.design.TimeParam.html#pulserver.design.TimeParam" title="pulserver.design.TimeParam"><code class="xref py py-class docutils literal notranslate"><span class="pre">TimeParam</span></code></a></p></td>
+<td><p>integer microseconds, with presets</p></td>
+<td><p>seconds</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="../generated/pulserver.design.FloatParam.html#pulserver.design.FloatParam" title="pulserver.design.FloatParam"><code class="xref py py-class docutils literal notranslate"><span class="pre">FloatParam</span></code></a></p></td>
+<td><p>the argument divided by <code class="docutils literal notranslate"><span class="pre">scale</span></code>, in <code class="docutils literal notranslate"><span class="pre">unit</span></code></p></td>
+<td><p>as the sequence function takes it</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.design.IntParam.html#pulserver.design.IntParam" title="pulserver.design.IntParam"><code class="xref py py-class docutils literal notranslate"><span class="pre">IntParam</span></code></a></p></td>
+<td><p>integer</p></td>
+<td><p>integer</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="../generated/pulserver.design.BoolParam.html#pulserver.design.BoolParam" title="pulserver.design.BoolParam"><code class="xref py py-class docutils literal notranslate"><span class="pre">BoolParam</span></code></a></p></td>
+<td><p>checkbox</p></td>
+<td><p>boolean</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.design.ChoiceParam.html#pulserver.design.ChoiceParam" title="pulserver.design.ChoiceParam"><code class="xref py py-class docutils literal notranslate"><span class="pre">ChoiceParam</span></code></a></p></td>
+<td><p>dropdown</p></td>
+<td><p>the chosen member of a <code class="docutils literal notranslate"><span class="pre">StrEnum</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="../generated/pulserver.design.ConfigParam.html#pulserver.design.ConfigParam" title="pulserver.design.ConfigParam"><code class="xref py py-class docutils literal notranslate"><span class="pre">ConfigParam</span></code></a></p></td>
+<td><p>not shown</p></td>
+<td><p>none; a value declared to the interpreter</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.design.Description.html#pulserver.design.Description" title="pulserver.design.Description"><code class="xref py py-class docutils literal notranslate"><span class="pre">Description</span></code></a></p></td>
+<td><p>read-only text</p></td>
+<td><p>none</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>The options of the four string-list parameters are
+<a class="reference internal" href="../generated/pulserver.protocol.SequenceType.html#pulserver.protocol.SequenceType" title="pulserver.protocol.SequenceType"><code class="xref py py-class docutils literal notranslate"><span class="pre">SequenceType</span></code></a>,
+<a class="reference internal" href="../generated/pulserver.protocol.ImagingMode.html#pulserver.protocol.ImagingMode" title="pulserver.protocol.ImagingMode"><code class="xref py py-class docutils literal notranslate"><span class="pre">ImagingMode</span></code></a>,
+<a class="reference internal" href="../generated/pulserver.protocol.PreparationType.html#pulserver.protocol.PreparationType" title="pulserver.protocol.PreparationType"><code class="xref py py-class docutils literal notranslate"><span class="pre">PreparationType</span></code></a> and
+<a class="reference internal" href="../generated/pulserver.protocol.TriggerType.html#pulserver.protocol.TriggerType" title="pulserver.protocol.TriggerType"><code class="xref py py-class docutils literal notranslate"><span class="pre">TriggerType</span></code></a>, which
+<a class="reference internal" href="../generated/pulserver.design.ChoiceParam.html#pulserver.design.ChoiceParam" title="pulserver.design.ChoiceParam"><code class="xref py py-class docutils literal notranslate"><span class="pre">ChoiceParam</span></code></a> takes as its <code class="docutils literal notranslate"><span class="pre">choices</span></code>:
+<code class="docutils literal notranslate"><span class="pre">ChoiceParam(&quot;mode&quot;,</span> <span class="pre">ImagingMode)</span></code>. The argument receives the member, a <code class="docutils literal notranslate"><span class="pre">str</span></code>
+equal to the option. <a class="reference internal" href="../generated/pulserver.design.StringListParam.html#pulserver.design.StringListParam" title="pulserver.design.StringListParam"><code class="xref py py-func docutils literal notranslate"><span class="pre">StringListParam()</span></code></a>, which builds
+the enum from option strings, is deprecated.</p>
+<p>A preset is a negative value the interpreter sends in place of a time;
+<code class="docutils literal notranslate"><span class="pre">{TEPreset.MINIMUM:</span> <span class="pre">None}</span></code> passes <code class="docutils literal notranslate"><span class="pre">None</span></code>, for which the sequence function designs its
+shortest echo time. An entry’s <code class="docutils literal notranslate"><span class="pre">default</span></code> replaces the sequence function’s default as the
+initial value, in UI units: <code class="docutils literal notranslate"><span class="pre">default=TEPreset.MINIMUM</span></code> offers a protocol a
+scanner with weaker gradients than the sequence function’s default assumes can play.</p>
+</section>
+<section id="sequence-functions">
+<span id="id1"></span><h2>Sequence functions<a class="headerlink" href="#sequence-functions" title="Link to this heading">#</a></h2>
+<p>A sequence function takes the scanner limits, a <a class="reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.Opts.html#pypulseqpp.Opts" title="(in pypulseqpp latest)"><code class="xref py py-class docutils literal notranslate"><span class="pre">pypulseqpp.Opts</span></code></a>, and one
+keyword argument for each entry of <code class="docutils literal notranslate"><span class="pre">protocol</span></code>, and returns the designed
+<a class="reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.Sequence.html#pypulseqpp.Sequence" title="(in pypulseqpp latest)"><code class="xref py py-class docutils literal notranslate"><span class="pre">pypulseqpp.Sequence</span></code></a>. A list of sequences is a chain, the prescans first
+and the main sequence last; each file names the next as its <code class="docutils literal notranslate"><span class="pre">NextSequence</span></code>
+definition. The initial value of an entry is the default of its argument in the
+signature, so a <a class="reference external" href="https://docs.python.org/3/library/functools.html#functools.partial" title="(in Python v3.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">functools.partial()</span></code></a> is a sequence function too. The default evaluation
+does not call the function; <a class="reference internal" href="../generated/pulserver.design.SequencePlugin.generate.html#pulserver.design.SequencePlugin.generate" title="pulserver.design.SequencePlugin.generate"><code class="xref py py-meth docutils literal notranslate"><span class="pre">generate()</span></code></a>
+calls it when the design is generated (<a class="reference internal" href="#evaluating-a-protocol"><span class="std std-ref">Evaluating a protocol</span></a>).</p>
+<div class="highlight-pycon notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">pypulseqpp</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pp</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">def</span><span class="w"> </span><span class="nf">pulse_acquire</span><span class="p">(</span><span class="n">system</span><span class="p">,</span> <span class="n">flip</span><span class="o">=</span><span class="mf">90.0</span><span class="p">,</span> <span class="n">tr</span><span class="o">=</span><span class="mf">100e-3</span><span class="p">,</span> <span class="n">averages</span><span class="o">=</span><span class="mi">8</span><span class="p">):</span>
+<span class="gp">... </span>    <span class="n">seq</span> <span class="o">=</span> <span class="n">pp</span><span class="o">.</span><span class="n">Sequence</span><span class="p">(</span><span class="n">system</span><span class="p">)</span>
+<span class="gp">... </span>    <span class="n">rf</span> <span class="o">=</span> <span class="n">pp</span><span class="o">.</span><span class="n">make_block_pulse</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">deg2rad</span><span class="p">(</span><span class="n">flip</span><span class="p">),</span> <span class="n">duration</span><span class="o">=</span><span class="mf">1e-3</span><span class="p">,</span> <span class="n">system</span><span class="o">=</span><span class="n">system</span><span class="p">)</span>
+<span class="gp">... </span>    <span class="n">adc</span> <span class="o">=</span> <span class="n">pp</span><span class="o">.</span><span class="n">make_adc</span><span class="p">(</span><span class="mi">256</span><span class="p">,</span> <span class="n">duration</span><span class="o">=</span><span class="mf">10e-3</span><span class="p">,</span> <span class="n">system</span><span class="o">=</span><span class="n">system</span><span class="p">)</span>
+<span class="gp">... </span>    <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">averages</span><span class="p">):</span>
+<span class="gp">... </span>        <span class="n">seq</span><span class="o">.</span><span class="n">add_block</span><span class="p">(</span><span class="n">rf</span><span class="p">)</span>
+<span class="gp">... </span>        <span class="n">seq</span><span class="o">.</span><span class="n">add_block</span><span class="p">(</span><span class="n">adc</span><span class="p">)</span>
+<span class="gp">... </span>        <span class="n">seq</span><span class="o">.</span><span class="n">add_block</span><span class="p">(</span><span class="n">pp</span><span class="o">.</span><span class="n">make_delay</span><span class="p">(</span><span class="n">tr</span> <span class="o">-</span> <span class="mf">11e-3</span><span class="p">))</span>
+<span class="gp">... </span>    <span class="k">return</span> <span class="n">seq</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">PulseAcquire</span><span class="p">(</span><span class="n">SequencePlugin</span><span class="p">):</span>
+<span class="gp">... </span>    <span class="n">app</span> <span class="o">=</span> <span class="n">pulse_acquire</span>
+<span class="gp">... </span>    <span class="n">protocol</span> <span class="o">=</span> <span class="p">{</span>
+<span class="gp">... </span>        <span class="n">UIParam</span><span class="o">.</span><span class="n">FLIP</span><span class="p">:</span> <span class="n">FloatParam</span><span class="p">(</span><span class="s2">"flip"</span><span class="p">,</span> <span class="n">unit</span><span class="o">=</span><span class="s2">"deg"</span><span class="p">,</span> <span class="n">range_min</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">range_max</span><span class="o">=</span><span class="mf">180.0</span><span class="p">),</span>
+<span class="gp">... </span>        <span class="n">UIParam</span><span class="o">.</span><span class="n">TR</span><span class="p">:</span> <span class="n">TimeParam</span><span class="p">(</span><span class="s2">"tr"</span><span class="p">,</span> <span class="n">range_min</span><span class="o">=</span><span class="mi">20000</span><span class="p">,</span> <span class="n">range_max</span><span class="o">=</span><span class="mi">5_000_000</span><span class="p">),</span>
+<span class="gp">... </span>        <span class="n">UIParam</span><span class="o">.</span><span class="n">NEX</span><span class="p">:</span> <span class="n">IntParam</span><span class="p">(</span><span class="s2">"averages"</span><span class="p">,</span> <span class="n">range_min</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">range_max</span><span class="o">=</span><span class="mi">64</span><span class="p">),</span>
+<span class="gp">... </span>    <span class="p">}</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">listing</span> <span class="o">=</span> <span class="n">PulseAcquire</span><span class="p">()</span><span class="o">.</span><span class="n">listing</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="p">{</span><span class="n">key</span><span class="o">.</span><span class="n">value</span><span class="p">:</span> <span class="n">listing</span><span class="p">[</span><span class="n">key</span><span class="p">]</span><span class="o">.</span><span class="n">value</span> <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">PulseAcquire</span><span class="o">.</span><span class="n">protocol</span><span class="p">}</span>
+<span class="go">{'flip': 90.0, 'TR': 100000, 'nex': 8}</span>
+
+</pre></div>
+</div>
+</section>
+<section id="shipped-sequences">
+<span id="id2"></span><h2>Shipped sequences<a class="headerlink" href="#shipped-sequences" title="Link to this heading">#</a></h2>
+<p>pulserver ships a plugin for each of these pypulseqpp sequences, searched after
+every <code class="docutils literal notranslate"><span class="pre">--plugins</span></code> directory, so a file of the same name there replaces it:</p>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Plugin</p></th>
+<th class="head"><p>Paired reconstruction</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">gre2d</span></code>, <code class="docutils literal notranslate"><span class="pre">se2d</span></code>, <code class="docutils literal notranslate"><span class="pre">bssfp2d</span></code>, <code class="docutils literal notranslate"><span class="pre">gre_multiecho2d</span></code>, <code class="docutils literal notranslate"><span class="pre">gre3d</span></code>, <code class="docutils literal notranslate"><span class="pre">se3d</span></code>, <code class="docutils literal notranslate"><span class="pre">bssfp3d</span></code>, <code class="docutils literal notranslate"><span class="pre">gre_multiecho3d</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">pics</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">fse3d</span></code>, <code class="docutils literal notranslate"><span class="pre">mprage3d</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">pmc</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">gre_radial2d</span></code>, <code class="docutils literal notranslate"><span class="pre">gre_spiral2d</span></code>, <code class="docutils literal notranslate"><span class="pre">se_radial2d</span></code>, <code class="docutils literal notranslate"><span class="pre">se_spiral2d</span></code>, <code class="docutils literal notranslate"><span class="pre">gre_propeller2d</span></code>, <code class="docutils literal notranslate"><span class="pre">se_propeller2d</span></code>, <code class="docutils literal notranslate"><span class="pre">se_epi_propeller2d</span></code>, <code class="docutils literal notranslate"><span class="pre">zte3d</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">nufft</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">gre_stack_of_stars3d</span></code>, <code class="docutils literal notranslate"><span class="pre">gre_stack_of_spirals3d</span></code>, <code class="docutils literal notranslate"><span class="pre">gre_stack_of_blades3d</span></code>, <code class="docutils literal notranslate"><span class="pre">se_stack_of_stars3d</span></code>, <code class="docutils literal notranslate"><span class="pre">se_stack_of_spirals3d</span></code>, <code class="docutils literal notranslate"><span class="pre">se_stack_of_blades3d</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">nufft</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">mprage_stack_of_stars3d</span></code>, <code class="docutils literal notranslate"><span class="pre">mprage_stack_of_spirals3d</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">nufft_train</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">epi2d</span></code>, <code class="docutils literal notranslate"><span class="pre">epi3d</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">epi</span></code></p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>The pair is what a console reconstructs a shipped sequence with when the scan
+names no reconstruction (<a class="reference internal" href="virtual-scanner.html"><span class="doc">Scanning a phantom without a scanner</span></a>); a scan can name another, and
+the reconstruction client of a scanner names one in its config
+(<a class="reference internal" href="reconstruction-client.html"><span class="doc">Reconstruction clients</span></a>).</p>
+<p>Optional features are switched by a module constant of the plugin, off in
+the shipped files; a copy of the file in a <code class="docutils literal notranslate"><span class="pre">--plugins</span></code> directory with the
+constant set replaces the shipped plugin. A switch adds the entries the
+feature needs, a scanner entry where there is one and a user entry otherwise:</p>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Plugin</p></th>
+<th class="head"><p>Constant</p></th>
+<th class="head"><p>Feature</p></th>
+<th class="head"><p>Entries added</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">epi2d</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">MULTIBAND</span></code></p></td>
+<td><p>Simultaneous multislice</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">multiband</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">fse3d</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">OPTIMIZED</span></code></p></td>
+<td><p>Refocusing train designed with torchsim, shared by every shot</p></td>
+<td><p>Flip angle: the refocusing angle at the TE echo</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">fse3d</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">DUAL_REGION</span></code></p></td>
+<td><p>Trains designed with torchsim for the centre and the periphery of k-space, each shot’s a cubic step between them; <code class="docutils literal notranslate"><span class="pre">TR</span></code> and <code class="docutils literal notranslate"><span class="pre">ETL</span></code> are the centre’s</p></td>
+<td><p>Flip angle, as <code class="docutils literal notranslate"><span class="pre">OPTIMIZED</span></code>; user entries 0 and 1: TR and ETL at the periphery</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">fse3d</span></code>, <code class="docutils literal notranslate"><span class="pre">mprage3d</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">NAVIGATOR</span></code></p></td>
+<td><p>Three-plane navigators; the design sets <code class="docutils literal notranslate"><span class="pre">EnablePmc</span></code> and <code class="docutils literal notranslate"><span class="pre">pmc</span></code> states each pose to the scan</p></td>
+<td><p>None</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">gre3d</span></code>, <code class="docutils literal notranslate"><span class="pre">gre_multiecho3d</span></code>, <code class="docutils literal notranslate"><span class="pre">mprage3d</span></code>, <code class="docutils literal notranslate"><span class="pre">fse3d</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">WAVE</span></code></p></td>
+<td><p>Wave-CAIPI at <code class="docutils literal notranslate"><span class="pre">WAVE_AMPLITUDE</span></code> (T/m) and <code class="docutils literal notranslate"><span class="pre">WAVE_CYCLES</span></code>; the calibration region is acquired first without the wave, and <code class="docutils literal notranslate"><span class="pre">pics</span></code> and <code class="docutils literal notranslate"><span class="pre">pmc</span></code> reconstruct the wave-encoded volume</p></td>
+<td><p>None</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">gre_spiral2d</span></code>, <code class="docutils literal notranslate"><span class="pre">se_spiral2d</span></code>, <code class="docutils literal notranslate"><span class="pre">gre_stack_of_spirals3d</span></code>, <code class="docutils literal notranslate"><span class="pre">se_stack_of_spirals3d</span></code>, <code class="docutils literal notranslate"><span class="pre">mprage_stack_of_spirals3d</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">VARIABLE_DENSITY</span></code></p></td>
+<td><p>Variable-density spirals</p></td>
+<td><p>User entry 0: periphery undersampling</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>A 3D sequence takes its number of partitions from the number of slices. <code class="docutils literal notranslate"><span class="pre">Ry</span></code>
+undersamples the phase encode of the Cartesian sequences, the blades of
+<code class="docutils literal notranslate"><span class="pre">gre_propeller2d</span></code> and <code class="docutils literal notranslate"><span class="pre">se_propeller2d</span></code> and the shells of <code class="docutils literal notranslate"><span class="pre">zte3d</span></code>, and <code class="docutils literal notranslate"><span class="pre">Rz</span></code> the
+partition encode of the 3D Cartesian ones. The <code class="docutils literal notranslate"><span class="pre">ETL</span></code> of <code class="docutils literal notranslate"><span class="pre">se_epi_propeller2d</span></code> is
+its blade width, and the MPRAGE sequences take their inversion time as
+<code class="docutils literal notranslate"><span class="pre">prep_time</span></code>.</p>
+<p>Each shipped plugin binds the function of its pypulseqpp sequence and evaluates
+a protocol from one repetition of the scan, one line, partition, spoke,
+interleaf, blade line, echo train or inversion shot of one slice without dummy
+repetitions (<a class="reference internal" href="#evaluating-a-protocol"><span class="std std-ref">Evaluating a protocol</span></a>). Most call the function with the
+arguments that reduce it to that repetition; <code class="docutils literal notranslate"><span class="pre">epi3d</span></code> and <code class="docutils literal notranslate"><span class="pre">zte3d</span></code> build the
+repetition from the modules their function builds it from. The scan time is the duration of the repetition
+times the number of repetitions the prescription plays, with the slices that
+share a TR counted in the packets the sequence plays them in. The values are
+those the main sequence states for the prescription: where the plugin has the
+entry, the echo time and the repetition time in its <code class="docutils literal notranslate"><span class="pre">TE</span></code> and <code class="docutils literal notranslate"><span class="pre">TR</span></code> definitions,
+the receiver bandwidth as the inverse of the dwell time of its first ADC event,
+and the slice thickness in its <code class="docutils literal notranslate"><span class="pre">SliceThickness</span></code> definition; a multi-echo
+sequence lists every echo time, and the <code class="docutils literal notranslate"><span class="pre">TE</span></code> entry holds the first. A
+prescription the design refuses is invalid with the message of its error. The
+RF layout is the first TR of the repetition, its shot repeated once per slice of
+the largest packet, with the TR as its period; for the balanced steady state it
+is the TR after the half-angle pulse (<a class="reference internal" href="#stating-the-rf-layout"><span class="std std-ref">Stating the RF layout</span></a>). The TR of
+a fast spin echo holds an echo train, that of an MPRAGE an inversion shot, and
+that of <code class="docutils literal notranslate"><span class="pre">epi3d</span></code> a volume. The flip angle is the control of every excitation of
+the plugins with a <code class="docutils literal notranslate"><span class="pre">flip</span></code> entry, which an MPRAGE’s inversion is not. The
+spin-echo plugins, <code class="docutils literal notranslate"><span class="pre">fse3d</span></code> among them, have none, and the amplitude of their
+excitation and refocusing pulses is that of the design.</p>
+</section>
+<section id="resolving-a-protocol">
+<h2>Resolving a protocol<a class="headerlink" href="#resolving-a-protocol" title="Link to this heading">#</a></h2>
+<p><a class="reference internal" href="../generated/pulserver.design.SequencePlugin.listing.html#pulserver.design.SequencePlugin.listing" title="pulserver.design.SequencePlugin.listing"><code class="xref py py-meth docutils literal notranslate"><span class="pre">listing()</span></code></a> is the protocol with its
+schema, as the <code class="docutils literal notranslate"><span class="pre">list</span></code> design call replies it:</p>
+<div class="highlight-pycon notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">pulserver.protocol</span><span class="w"> </span><span class="kn">import</span> <span class="n">format_listing</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">format_listing</span><span class="p">(</span><span class="n">Gre2D</span><span class="p">()</span><span class="o">.</span><span class="n">listing</span><span class="p">()),</span> <span class="n">end</span><span class="o">=</span><span class="s2">""</span><span class="p">)</span>
+<span class="go">[Protocol]</span>
+<span class="go">TE: int|dropdown|8000|1000|80000|10|us|-2</span>
+<span class="go">TR: int|dropdown|250000|1000|5000000|1|us|-1</span>
+<span class="go">fov: float|typein|220.0|50.0|500.0|1.0|mm</span>
+<span class="go">nx: int|typein|128|32|512|2|</span>
+<span class="go">fov_offset_x: float|off|0.0|-1000.0|1000.0|0.1|mm</span>
+<span class="go">fov_offset_y: float|off|0.0|-1000.0|1000.0|0.1|mm</span>
+<span class="go">fov_offset_z: float|off|0.0|-1000.0|1000.0|0.1|mm</span>
+<span class="go">fov_rotation_11: float|off|1.0|-1.0|1.0|1e-06|</span>
+<span class="go">fov_rotation_12: float|off|0.0|-1.0|1.0|1e-06|</span>
+<span class="go">fov_rotation_13: float|off|0.0|-1.0|1.0|1e-06|</span>
+<span class="go">fov_rotation_21: float|off|0.0|-1.0|1.0|1e-06|</span>
+<span class="go">fov_rotation_22: float|off|1.0|-1.0|1.0|1e-06|</span>
+<span class="go">fov_rotation_23: float|off|0.0|-1.0|1.0|1e-06|</span>
+<span class="go">fov_rotation_31: float|off|0.0|-1.0|1.0|1e-06|</span>
+<span class="go">fov_rotation_32: float|off|0.0|-1.0|1.0|1e-06|</span>
+<span class="go">fov_rotation_33: float|off|1.0|-1.0|1.0|1e-06|</span>
+<span class="go">[Protocol End]</span>
+
+</pre></div>
+</div>
+<p>The last twelve entries are the prescription, which the interpreter fills from
+the scanner’s: the field-of-view offset, which the host applies when it builds
+the IR, and the rotation from the logical to the physical axes, in whose frame
+the host checks the design (<a class="reference internal" href="../explanations/designs.html"><span class="doc">Designs and the design store</span></a>).</p>
+<p><a class="reference internal" href="../generated/pulserver.design.SequencePlugin.validate.html#pulserver.design.SequencePlugin.validate" title="pulserver.design.SequencePlugin.validate"><code class="xref py py-meth docutils literal notranslate"><span class="pre">validate()</span></code></a> evaluates a request under the
+scanner limits and returns the protocol the design plays. Entries the request
+omits keep their initial values. The default evaluation of a sequence function
+accepts the protocol unchanged, so the reply repeats the request, a preset
+included, and states no scan time:</p>
+<div class="highlight-pycon notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">pypulseqpp</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pp</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">system</span> <span class="o">=</span> <span class="n">pp</span><span class="o">.</span><span class="n">Opts</span><span class="p">(</span><span class="n">max_grad</span><span class="o">=</span><span class="mi">40</span><span class="p">,</span> <span class="n">grad_unit</span><span class="o">=</span><span class="s2">"mT/m"</span><span class="p">,</span> <span class="n">max_slew</span><span class="o">=</span><span class="mi">150</span><span class="p">,</span> <span class="n">slew_unit</span><span class="o">=</span><span class="s2">"T/m/s"</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">reply</span> <span class="o">=</span> <span class="n">Gre2D</span><span class="p">()</span><span class="o">.</span><span class="n">validate</span><span class="p">(</span><span class="n">system</span><span class="p">,</span> <span class="p">{</span><span class="s2">"TE"</span><span class="p">:</span> <span class="n">TEPreset</span><span class="o">.</span><span class="n">MINIMUM</span><span class="p">,</span> <span class="s2">"nx"</span><span class="p">:</span> <span class="mi">96</span><span class="p">})</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">reply</span><span class="o">.</span><span class="n">valid</span><span class="p">,</span> <span class="n">reply</span><span class="o">.</span><span class="n">duration</span><span class="p">,</span> <span class="n">reply</span><span class="o">.</span><span class="n">info</span>
+<span class="go">(True, None, '')</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">reply</span><span class="o">.</span><span class="n">values</span><span class="p">[</span><span class="s2">"TE"</span><span class="p">]</span> <span class="ow">is</span> <span class="n">TEPreset</span><span class="o">.</span><span class="n">MINIMUM</span><span class="p">,</span> <span class="n">reply</span><span class="o">.</span><span class="n">values</span><span class="p">[</span><span class="s2">"nx"</span><span class="p">]</span>
+<span class="go">(True, 96)</span>
+
+</pre></div>
+</div>
+<p>An evaluation that designs the sequence states the values the design achieved.
+The <code class="docutils literal notranslate"><span class="pre">TE</span></code> and <code class="docutils literal notranslate"><span class="pre">TR</span></code> definitions of a pypulseqpp sequence record the echo time and
+the repetition time of the design, and
+<a class="reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.sequences.duration.html#pypulseqpp.sequences.duration" title="(in pypulseqpp latest)"><code class="xref py py-func docutils literal notranslate"><span class="pre">pypulseqpp.sequences.duration()</span></code></a> sums the durations of the sequences of a
+chain:</p>
+<div class="highlight-pycon notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">pypulseqpp</span><span class="w"> </span><span class="kn">import</span> <span class="n">sequences</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">pulserver.design</span><span class="w"> </span><span class="kn">import</span> <span class="n">Evaluation</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">Resolved</span><span class="p">(</span><span class="n">Gre2D</span><span class="p">):</span>
+<span class="gp">... </span>    <span class="k">def</span><span class="w"> </span><span class="nf">evaluate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">system</span><span class="p">,</span> <span class="n">protocol</span><span class="p">):</span>
+<span class="gp">... </span>        <span class="n">seq</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">app</span><span class="p">(</span><span class="n">system</span><span class="p">,</span> <span class="o">**</span><span class="n">protocol</span><span class="o">.</span><span class="n">arguments</span><span class="p">)</span>
+<span class="gp">... </span>        <span class="n">achieved</span> <span class="o">=</span> <span class="p">{</span><span class="n">UIParam</span><span class="o">.</span><span class="n">TE</span><span class="p">:</span> <span class="n">seq</span><span class="o">.</span><span class="n">definitions</span><span class="p">[</span><span class="s2">"TE"</span><span class="p">][</span><span class="mi">0</span><span class="p">],</span>
+<span class="gp">... </span>                    <span class="n">UIParam</span><span class="o">.</span><span class="n">TR</span><span class="p">:</span> <span class="n">seq</span><span class="o">.</span><span class="n">definitions</span><span class="p">[</span><span class="s2">"TR"</span><span class="p">][</span><span class="mi">0</span><span class="p">]}</span>
+<span class="gp">... </span>        <span class="k">return</span> <span class="n">Evaluation</span><span class="p">(</span><span class="n">protocol</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="n">achieved</span><span class="p">),</span> <span class="n">sequences</span><span class="o">.</span><span class="n">duration</span><span class="p">(</span><span class="n">seq</span><span class="p">))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">reply</span> <span class="o">=</span> <span class="n">Resolved</span><span class="p">()</span><span class="o">.</span><span class="n">validate</span><span class="p">(</span><span class="n">system</span><span class="p">,</span> <span class="p">{</span><span class="s2">"TE"</span><span class="p">:</span> <span class="n">TEPreset</span><span class="o">.</span><span class="n">MINIMUM</span><span class="p">,</span> <span class="s2">"nx"</span><span class="p">:</span> <span class="mi">96</span><span class="p">})</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">reply</span><span class="o">.</span><span class="n">valid</span><span class="p">,</span> <span class="nb">round</span><span class="p">(</span><span class="n">reply</span><span class="o">.</span><span class="n">duration</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="n">reply</span><span class="o">.</span><span class="n">info</span>
+<span class="go">(True, 36.0, '')</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="p">{</span><span class="n">name</span><span class="p">:</span> <span class="n">reply</span><span class="o">.</span><span class="n">values</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"TE"</span><span class="p">,</span> <span class="s2">"TR"</span><span class="p">,</span> <span class="s2">"fov"</span><span class="p">,</span> <span class="s2">"nx"</span><span class="p">)}</span>
+<span class="go">{'TE': 3080, 'TR': 250000, 'fov': 220.0, 'nx': 96}</span>
+
+</pre></div>
+</div>
+<p>The resolved <code class="docutils literal notranslate"><span class="pre">TE</span></code> is the shortest echo time of the design in place of the
+preset. Values are rounded to the precision a scanner parameter stores, so a
+resolved protocol sent back resolves to itself.</p>
+<p>A protocol the evaluation rejects is invalid, and the message of the error it
+raised is the reply’s <code class="docutils literal notranslate"><span class="pre">info</span></code>:</p>
+<div class="highlight-pycon notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">reply</span> <span class="o">=</span> <span class="n">Resolved</span><span class="p">()</span><span class="o">.</span><span class="n">validate</span><span class="p">(</span><span class="n">system</span><span class="p">,</span> <span class="p">{</span><span class="s2">"TE"</span><span class="p">:</span> <span class="mi">1000</span><span class="p">})</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">reply</span><span class="o">.</span><span class="n">valid</span><span class="p">,</span> <span class="n">reply</span><span class="o">.</span><span class="n">info</span>
+<span class="go">(False, 'the requested TE of 1.000 ms is shorter than the 3.400 ms this readout can achieve')</span>
+
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">duration</span></code> is the scan time in seconds the evaluation states. A duration of
+<code class="docutils literal notranslate"><span class="pre">0.0</span></code> states no estimate: the protocol is valid, <code class="docutils literal notranslate"><span class="pre">duration</span></code> is <code class="docutils literal notranslate"><span class="pre">None</span></code>, and the
+reply reports the scan time as unknown.</p>
+<p><a class="reference internal" href="../generated/pulserver.design.SequencePlugin.design.html#pulserver.design.SequencePlugin.design" title="pulserver.design.SequencePlugin.design"><code class="xref py py-meth docutils literal notranslate"><span class="pre">design()</span></code></a> generates the design, writes it
+as signed binary Pulseq, prescans first, and returns the written paths. The first file
+is <code class="docutils literal notranslate"><span class="pre">sequence.seq</span></code>, and each file names the next as its <code class="docutils literal notranslate"><span class="pre">NextSequence</span></code>
+definition. The <code class="docutils literal notranslate"><span class="pre">generate</span></code> design call converts the design to the IR cache and
+stores it (<a class="reference internal" href="../explanations/designs.html"><span class="doc">Designs and the design store</span></a>).</p>
+</section>
+<section id="evaluating-a-protocol">
+<span id="id3"></span><h2>Evaluating a protocol<a class="headerlink" href="#evaluating-a-protocol" title="Link to this heading">#</a></h2>
+<p>A plugin overrides <a class="reference internal" href="../generated/pulserver.design.SequencePlugin.evaluate.html#pulserver.design.SequencePlugin.evaluate" title="pulserver.design.SequencePlugin.evaluate"><code class="xref py py-meth docutils literal notranslate"><span class="pre">evaluate()</span></code></a> to check a
+protocol and to state what the console shows with it. The hook takes the scanner
+limits and the requested <a class="reference internal" href="../generated/pulserver.design.Protocol.html#pulserver.design.Protocol" title="pulserver.design.Protocol"><code class="xref py py-class docutils literal notranslate"><span class="pre">Protocol</span></code></a>, in the units of the
+sequence function’s arguments, and returns an <a class="reference internal" href="../generated/pulserver.design.Evaluation.html#pulserver.design.Evaluation" title="pulserver.design.Evaluation"><code class="xref py py-class docutils literal notranslate"><span class="pre">Evaluation</span></code></a>: the
+protocol holding the values the design achieves, the scan time in seconds, a
+note shown with the valid protocol and, optionally, the RF layout
+(<a class="reference internal" href="#stating-the-rf-layout"><span class="std std-ref">Stating the RF layout</span></a>). Returning <code class="docutils literal notranslate"><span class="pre">None</span></code> accepts the protocol
+unchanged. Raising an exception makes the protocol invalid:</p>
+<div class="highlight-pycon notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">pulserver.design</span><span class="w"> </span><span class="kn">import</span> <span class="n">Evaluation</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">Timed</span><span class="p">(</span><span class="n">PulseAcquire</span><span class="p">):</span>
+<span class="gp">... </span>    <span class="k">def</span><span class="w"> </span><span class="nf">evaluate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">system</span><span class="p">,</span> <span class="n">protocol</span><span class="p">):</span>
+<span class="gp">... </span>        <span class="k">if</span> <span class="n">protocol</span><span class="p">[</span><span class="n">UIParam</span><span class="o">.</span><span class="n">TR</span><span class="p">]</span> <span class="o">&lt;</span> <span class="mf">12e-3</span><span class="p">:</span>
+<span class="gp">... </span>            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"the TR is shorter than the pulse and the readout"</span><span class="p">)</span>
+<span class="gp">... </span>        <span class="n">scan_time</span> <span class="o">=</span> <span class="n">protocol</span><span class="p">[</span><span class="n">UIParam</span><span class="o">.</span><span class="n">NEX</span><span class="p">]</span> <span class="o">*</span> <span class="n">protocol</span><span class="p">[</span><span class="n">UIParam</span><span class="o">.</span><span class="n">TR</span><span class="p">]</span>
+<span class="gp">... </span>        <span class="k">return</span> <span class="n">Evaluation</span><span class="p">(</span><span class="n">protocol</span><span class="p">,</span> <span class="n">scan_time</span><span class="p">,</span> <span class="s2">"256 samples per average"</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">reply</span> <span class="o">=</span> <span class="n">Timed</span><span class="p">()</span><span class="o">.</span><span class="n">validate</span><span class="p">(</span><span class="n">system</span><span class="p">,</span> <span class="p">{</span><span class="s2">"TR"</span><span class="p">:</span> <span class="mi">50000</span><span class="p">,</span> <span class="s2">"nex"</span><span class="p">:</span> <span class="mi">4</span><span class="p">})</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">reply</span><span class="o">.</span><span class="n">valid</span><span class="p">,</span> <span class="n">reply</span><span class="o">.</span><span class="n">duration</span><span class="p">,</span> <span class="n">reply</span><span class="o">.</span><span class="n">info</span>
+<span class="go">(True, 0.2, '256 samples per average')</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">reply</span> <span class="o">=</span> <span class="n">Timed</span><span class="p">()</span><span class="o">.</span><span class="n">validate</span><span class="p">(</span><span class="n">system</span><span class="p">,</span> <span class="p">{</span><span class="s2">"TR"</span><span class="p">:</span> <span class="mi">10000</span><span class="p">})</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">reply</span><span class="o">.</span><span class="n">valid</span><span class="p">,</span> <span class="n">reply</span><span class="o">.</span><span class="n">info</span>
+<span class="go">(False, 'the TR is shorter than the pulse and the readout')</span>
+
+</pre></div>
+</div>
+<p>The default for a sequence function accepts the protocol unchanged, states no scan
+time and does not call the sequence function. A protocol the function cannot realize is then
+found when the sequence is generated, as an error of that call, and not reported
+as invalid while the operator edits it. An <code class="docutils literal notranslate"><span class="pre">evaluate</span></code> that builds or checks the
+design rejects the protocol when it is evaluated.</p>
+<p><code class="docutils literal notranslate"><span class="pre">ValueError</span></code> and <code class="docutils literal notranslate"><span class="pre">AssertionError</span></code>, which pypulseqpp and PyPulseq raise for an
+event or a timing they cannot realize, reject the protocol with the message of
+the error as <code class="docutils literal notranslate"><span class="pre">info</span></code>, and are logged as a warning with their traceback. Any
+other exception also makes the protocol invalid, but the reply names only its
+type, as in <code class="docutils literal notranslate"><span class="pre">TypeError</span> <span class="pre">in</span> <span class="pre">Timed.evaluate</span></code>, and the exception is logged as an
+error with its traceback. A request that names an entry the protocol does not
+declare, or an option a choice does not offer, is invalid in the same way.</p>
+<p><a class="reference internal" href="../generated/pulserver.design.SequencePlugin.generate.html#pulserver.design.SequencePlugin.generate" title="pulserver.design.SequencePlugin.generate"><code class="xref py py-meth docutils literal notranslate"><span class="pre">generate()</span></code></a> is the hook that builds the
+sequence of a requested protocol. The default calls the sequence function with the arguments
+of the protocol. A plugin overrides <code class="docutils literal notranslate"><span class="pre">generate</span></code> to return a sequence, or a list
+of them, built another way. <code class="docutils literal notranslate"><span class="pre">validate</span></code> and <code class="docutils literal notranslate"><span class="pre">design</span></code> are not overridden: they
+are the boundary between a request and the code of a plugin, and <code class="docutils literal notranslate"><span class="pre">design</span></code>
+writes nothing for an invalid request.</p>
+</section>
+<section id="stating-the-rf-layout">
+<span id="id4"></span><h2>Stating the RF layout<a class="headerlink" href="#stating-the-rf-layout" title="Link to this heading">#</a></h2>
+<p>An evaluation may state the RF its protocol plays, from which a scanner
+estimates the RF of a prescription before the design is generated. The layout is
+one TR: the RF instances one TR plays, and the TR as its <code class="docutils literal notranslate"><span class="pre">period</span></code>.
+<a class="reference internal" href="../generated/pulserver.design.RfLayout.of.html#pulserver.design.RfLayout.of" title="pulserver.design.RfLayout.of"><code class="xref py py-meth docutils literal notranslate"><span class="pre">RfLayout.of</span></code></a> takes the RF instances of a
+sequence that is one TR, as <a class="reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.Sequence.rf_instances.html#pypulseqpp.Sequence.rf_instances" title="(in pypulseqpp latest)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">pypulseqpp.Sequence.rf_instances()</span></code></a> returns
+them, and the control each instance’s amplitude follows: the flip angle,
+<code class="docutils literal notranslate"><span class="pre">UIParam.FLIP</span></code>, or a float user entry, <code class="docutils literal notranslate"><span class="pre">UIParam.user_value(n)</span></code>, either declared
+in <code class="docutils literal notranslate"><span class="pre">protocol</span></code>. One control applies to every instance; a list gives one per
+instance in play order, <code class="docutils literal notranslate"><span class="pre">None</span></code> for an instance no entry scales. The scanner
+multiplies the amplitude of an instance by the ratio of the value of its control
+in the protocol it plays to the value in the evaluated protocol. The <code class="docutils literal notranslate"><span class="pre">period</span></code> is
+the TR in seconds, and the duration of the sequence where omitted:</p>
+<div class="highlight-pycon notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">pulserver.design</span><span class="w"> </span><span class="kn">import</span> <span class="n">RfLayout</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">pulserver.protocol</span><span class="w"> </span><span class="kn">import</span> <span class="n">format_rf_layout</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">Costed</span><span class="p">(</span><span class="n">PulseAcquire</span><span class="p">):</span>
+<span class="gp">... </span>    <span class="k">def</span><span class="w"> </span><span class="nf">evaluate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">system</span><span class="p">,</span> <span class="n">protocol</span><span class="p">):</span>
+<span class="gp">... </span>        <span class="n">one_tr</span> <span class="o">=</span> <span class="n">pulse_acquire</span><span class="p">(</span><span class="n">system</span><span class="p">,</span> <span class="o">**</span><span class="p">(</span><span class="n">protocol</span><span class="o">.</span><span class="n">arguments</span> <span class="o">|</span> <span class="p">{</span><span class="s2">"averages"</span><span class="p">:</span> <span class="mi">1</span><span class="p">}))</span>
+<span class="gp">... </span>        <span class="n">layout</span> <span class="o">=</span> <span class="n">RfLayout</span><span class="o">.</span><span class="n">of</span><span class="p">(</span><span class="n">one_tr</span><span class="p">,</span> <span class="n">UIParam</span><span class="o">.</span><span class="n">FLIP</span><span class="p">)</span>
+<span class="gp">... </span>        <span class="n">scan_time</span> <span class="o">=</span> <span class="n">protocol</span><span class="p">[</span><span class="n">UIParam</span><span class="o">.</span><span class="n">NEX</span><span class="p">]</span> <span class="o">*</span> <span class="n">protocol</span><span class="p">[</span><span class="n">UIParam</span><span class="o">.</span><span class="n">TR</span><span class="p">]</span>
+<span class="gp">... </span>        <span class="k">return</span> <span class="n">Evaluation</span><span class="p">(</span><span class="n">protocol</span><span class="p">,</span> <span class="n">scan_time</span><span class="p">,</span> <span class="n">rf_layout</span><span class="o">=</span><span class="n">layout</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">reply</span> <span class="o">=</span> <span class="n">Costed</span><span class="p">()</span><span class="o">.</span><span class="n">validate</span><span class="p">(</span><span class="n">system</span><span class="p">,</span> <span class="p">{</span><span class="s2">"nex"</span><span class="p">:</span> <span class="mi">4</span><span class="p">})</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">format_rf_layout</span><span class="p">(</span><span class="n">reply</span><span class="o">.</span><span class="n">rf_layout</span><span class="p">),</span> <span class="n">end</span><span class="o">=</span><span class="s2">""</span><span class="p">)</span>
+<span class="go">[RfLayout]</span>
+<span class="go">period 0.1</span>
+<span class="go">run 0 1 flip 1</span>
+<span class="go">[RfLayout End]</span>
+
+</pre></div>
+</div>
+<p>A sequence shorter than the TR, such as one TR without its closing delay, is
+stated with the TR: <code class="docutils literal notranslate"><span class="pre">RfLayout.of(seq,</span> <span class="pre">UIParam.FLIP,</span> <span class="pre">period=tr)</span></code>.</p>
+<p>The layout is optional. An evaluation that states none is valid and states no
+estimate, and one whose control is not an entry of <code class="docutils literal notranslate"><span class="pre">protocol</span></code>, or has no
+positive value in the evaluated protocol, is invalid. What the scanner checks
+before the scan is the stored design, not the layout. The blocks that carry the
+layout are described in <a class="reference internal" href="../explanations/protocol.html"><span class="doc">Protocol resolution</span></a>.</p>
+</section>
+<section id="see-also">
+<h2>See also<a class="headerlink" href="#see-also" title="Link to this heading">#</a></h2>
+<ul class="simple">
+<li><p><a class="reference internal" href="../explanations/protocol.html"><span class="doc">Protocol resolution</span></a> — resolution, presets, units and precision.</p></li>
+<li><p><a class="reference internal" href="../api/design.html"><span class="doc">Scanner sequences</span></a> — the scanner-sequence interface and its UI entries.</p></li>
+</ul>
+</section>
+</section>
+
+
+                </article>
+              
+
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="running.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">Running the services</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="reconstruction-plugins.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">Reconstruction plugins</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <dialog id="pst-secondary-sidebar-modal"></dialog>
+                <div id="pst-secondary-sidebar" class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item"><div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> Contents
+  </div>
+  <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#binding-the-protocol">Binding the protocol</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#sequence-functions">Sequence functions</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#shipped-sequences">Shipped sequences</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#resolving-a-protocol">Resolving a protocol</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#evaluating-a-protocol">Evaluating a protocol</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#stating-the-rf-layout">Stating the RF layout</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#see-also">See also</a></li>
+</ul>
+  </nav></div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+<div class="bd-footer-content__inner container">
+  
+  <div class="footer-item">
+    
+<p class="component-author">
+By pulserver contributors
+</p>
+
+  </div>
+  
+  <div class="footer-item">
+    
+
+  <p class="copyright">
+    
+      © Copyright 2024-2026, pulserver contributors.
+      <br/>
+    
+  </p>
+
+  </div>
+  
+  <div class="footer-item">
+    
+  </div>
+  
+  <div class="footer-item">
+    
+  </div>
+  
+</div>
+          </footer>
+        
+
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script defer src="../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9"></script>
+<script defer src="../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9"></script>
+
+  <footer class="bd-footer">
+  </footer>
+  </body>
+</html>

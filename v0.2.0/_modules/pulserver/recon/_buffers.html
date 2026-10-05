@@ -1,0 +1,1318 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>pulserver.recon._buffers &#8212; pulserver documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  <!--
+    this give us a css class that will be invisible only if js is disabled
+  -->
+  <noscript>
+    <style>
+      .pst-js-only { display: none !important; }
+
+    </style>
+  </noscript>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../../_static/styles/theme.css?digest=90905a2f556bf617f1a9" rel="stylesheet" />
+<link href="../../../_static/styles/pydata-sphinx-theme.css?digest=90905a2f556bf617f1a9" rel="stylesheet" />
+
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=03e43079" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/styles/sphinx-book-theme.css?v=4418a689" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery.css?v=c83e6b79" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/pulserver.css?v=e08ae8f3" />
+  
+  <!-- So that users can add custom icons -->
+  <script defer src="../../../_static/scripts/fontawesome.js?digest=90905a2f556bf617f1a9"></script>
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
+<link rel="preload" as="script" href="../../../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
+
+    <script src="../../../_static/documentation_options.js?v=0a6a6ad3"></script>
+    <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../../../_static/copybutton.js?v=f281be69"></script>
+    <script src="../../../_static/sg-tags.js?v=d80f6fa4"></script>
+    <script src="../../../_static/scripts/sphinx-book-theme.js?v=fab101a9"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = '_modules/pulserver/recon/_buffers';</script>
+    <script>
+        DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
+        DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.2.0';
+        DOCUMENTATION_OPTIONS.show_version_warning_banner =
+            true;
+        </script>
+    <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
+    <link rel="canonical" href="https://pulserver.github.io/pulserver/stable/_modules/pulserver/recon/_buffers.html" />
+    <link rel="icon" href="../../../_static/pulserver-mark.svg"/>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  <meta name="docsearch:version" content="v0.2.0" />
+  
+    
+    <script src="../../../_static/searchtools.js"></script>
+    <script src="../../../_static/language_data.js"></script>
+    <script src="../../../searchindex.js"></script>
+  
+  </head>
+  <body data-default-mode="">
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+  
+  
+  
+  
+  <dialog id="pst-search-dialog">
+    
+<form class="bd-search d-flex align-items-center"
+      action="../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         placeholder="Search..."
+         aria-label="Search..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+  </dialog>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header id="pst-header" class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+  
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+        </div>
+      
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+    </div>
+  
+
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+        
+      
+      <dialog id="pst-primary-sidebar-modal"></dialog>
+      <div id="pst-primary-sidebar" class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+    
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../../../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../../../_static/pulserver-mark.svg" class="logo__image only-light" alt="pulserver"/>
+    <img src="../../../_static/pulserver-mark-dark.svg" class="logo__image only-dark pst-js-only" alt="pulserver"/>
+  
+  
+</a></div>
+        <div class="sidebar-primary-item">
+<div class="version-switcher__container dropdown pst-js-only">
+  <button id="pst-version-switcher-button-2"
+    type="button"
+    class="version-switcher__button btn btn-sm dropdown-toggle"
+    data-bs-toggle="dropdown"
+    aria-haspopup="listbox"
+    aria-controls="pst-version-switcher-list-2"
+    aria-label="Version switcher list"
+  >
+    Choose version  <!-- this text may get changed later by javascript -->
+    <span class="caret"></span>
+  </button>
+  <div id="pst-version-switcher-list-2"
+    class="version-switcher__menu dropdown-menu list-group-flush py-0"
+    role="listbox" aria-labelledby="pst-version-switcher-button-2">
+    <!-- dropdown will be populated by javascript on page load -->
+  </div>
+</div></div>
+        <div class="sidebar-primary-item">
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button></div>
+        <div class="sidebar-primary-item"><nav class="bd-links bd-docs-nav" aria-label="Main">
+    <div class="bd-toc-item navbar-nav active">
+        
+        <ul class="nav bd-sidenav bd-sidenav__home-link">
+            <li class="toctree-l1">
+                <a class="reference internal" href="../../../index.html">
+                    Homepage
+                </a>
+            </li>
+        </ul>
+        <ul class="nav bd-sidenav">
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../user-guide/index.html">User guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/running.html">Running the services</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/scanner-sequences.html">Scanner sequences</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/reconstruction-plugins.html">Reconstruction plugins</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/reconstruction-client.html">Reconstruction clients</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/virtual-scanner.html">Scanning a phantom without a scanner</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../developer-guide/index.html">Developer guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/prerequisites.html">Development prerequisites</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/installation.html">Editable installation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/workflow.html">Development workflow</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/style.html">Coding style</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/documentation.html">Documentation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/terminology.html">Terminology and conventions</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../../developer-guide/internals/index.html">Internals</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/ir-cache.html">IR cache</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/protocol-wire.html">Protocol text blocks</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/reconstruction-proxy.html">Reconstruction proxy</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/virtual-scanner.html">Virtual scanner</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/bloch-engine.html">Bloch engine</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/pre-commit.html">Pre-commit</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/pull-requests.html">Pull requests</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/releases.html">Releases</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/code-of-conduct.html">Code of conduct</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../explanations/index.html">Explanations</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/architecture.html">Architecture</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/protocol.html">Protocol resolution</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/designs.html">Designs and the design store</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/scanner-representation.html">Scanner representation (PulSeg)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/virtual-scanner.html">The virtual scanner</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/reconstruction.html">Raw-data enrichment and routing</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/calibration.html">Calibration, noise and coil compression</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../examples/index.html">Examples</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../../examples/course.html">Course</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/01_protocol_to_image.html">1. From protocol to image</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/02_sequence_plugin.html">2. A scanner sequence and its protocol</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/03_scanner_representation.html">3. Scanner representation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/04_reconstruction_plugin.html">4. A reconstruction plugin</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/05_testing_on_the_virtual_scanner.html">5. Testing on the virtual scanner</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../../examples/tours.html">Tours</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/02-tours/01_protocol_resolution.html">Protocol resolution for a 2D gradient echo</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/02-tours/02_segmentation.html">Segmentation of a sequence for the scanner</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/02-tours/03_fov_offset_enrichment.html">Field-of-view offset and the proxy phase</a></li>
+</ul>
+</details></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../api/index.html">API reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/protocol.html">Protocol</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/design.html">Scanner sequences</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/host.html">Design calls</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/ir.html">IR conversion</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/proxy.html">Reconstruction proxy</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/recon.html">Reconstruction plugins</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/mrd.html">MRD data</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/validate.html">Validation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/virtual.html">Virtual scanner</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../misc/index.html">Miscellaneous</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../misc/license.html">License and notices</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../misc/related.html">Related projects</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../misc/contributors.html">Contributors</a></li>
+</ul>
+</details></li>
+</ul>
+
+    </div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+      <div class="sidebar-primary-item">
+<div id="ethical-ad-placement"
+      class="flat"
+      data-ea-publisher="readthedocs"
+      data-ea-type="readthedocs-sidebar"
+      data-ea-manual="true">
+</div></div>
+  </div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+
+<div class="sbt-scroll-pixel-helper"></div>
+
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item"><button class="sidebar-toggle primary-toggle btn btn-sm" title="Toggle primary sidebar" data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <span class="fa-solid fa-bars"></span>
+</button></div>
+      
+    </div>
+  
+  
+    <div class="header-article-items__end">
+      
+        <div class="header-article-item">
+
+<div class="article-header-buttons">
+
+
+
+
+
+<div class="dropdown dropdown-source-buttons">
+  <button class="btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Source repositories">
+    <i class="fab fa-github"></i>
+  </button>
+  <ul class="dropdown-menu">
+      
+      
+      
+      <li><a href="https://github.com/pulserver/pulserver" target="_blank"
+   class="btn btn-sm btn-source-repository-button dropdown-item"
+   title="Source repository"
+   data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fab fa-github"></i>
+  </span>
+<span class="btn__text-container">Repository</span>
+</a>
+</li>
+      
+      
+      
+      
+      <li><a href="https://github.com/pulserver/pulserver/issues/new?title=Issue%20on%20page%20%2F_modules/pulserver/recon/_buffers.html&body=Your%20issue%20content%20here." target="_blank"
+   class="btn btn-sm btn-source-issues-button dropdown-item"
+   title="Open an issue"
+   data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-lightbulb"></i>
+  </span>
+<span class="btn__text-container">Open issue</span>
+</a>
+</li>
+      
+  </ul>
+</div>
+
+
+
+
+<button onclick="toggleFullScreen()"
+  class="btn btn-sm btn-fullscreen-button pst-navbar-icon"
+  title="Fullscreen mode"
+  data-bs-placement="bottom" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-expand"></i>
+  </span>
+
+</button>
+
+
+
+<div class="theme-switch-container dropdown pst-js-only" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Color mode">
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button dropdown-toggle" aria-label="Color mode" data-bs-toggle="dropdown">
+    <i class="theme-switch fa-solid fa-sun fa-lg fa-fw" data-mode="light" title="Light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg fa-fw" data-mode="dark" title="Dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg fa-fw" data-mode="auto" title="System Settings"></i>
+  </button>
+  <ul class="dropdown-menu dropdown-menu-end">
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg fa-fw me-1"></i>System Settings</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="light"><i class="fa-solid fa-sun fa-lg fa-fw me-1"></i>Light</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="dark"><i class="fa-solid fa-moon fa-lg fa-fw me-1"></i>Dark</button></li>
+  </ul>
+</div>
+
+
+<button class="btn btn-sm pst-navbar-icon search-button search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass fa-lg"></i>
+</button>
+
+</div></div>
+      
+    </div>
+  
+</div>
+</div>
+              
+              
+
+<div id="jb-print-docs-body" class="onlyprint">
+    <h1></h1>
+    <!-- Table of contents -->
+    <div id="print-main-content">
+        <div id="jb-print-toc">
+            
+        </div>
+    </div>
+</div>
+
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <h1>Source code for pulserver.recon._buffers</h1><div class="highlight"><pre>
+<span></span><span class="sd">"""K-space buffers of a reconstruction unit, laid out from the MRD header and filled one acquisition at a time.</span>
+
+<span class="sd">A unit holds one buffer for its imaging readouts and one for its</span>
+<span class="sd">parallel-imaging calibration readouts. Axes run coil first and readout last,</span>
+<span class="sd">with a placement axis only where the header says a counter varies. Readouts</span>
+<span class="sd">of a Cartesian space are placed by their echo along the readout and by the</span>
+<span class="sd">offset of their lines from the k-space centre along the encoded axes, as</span>
+<span class="sd">Gadgetron's acquisition bucket places them.</span>
+<span class="sd">"""</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"ReconBuffer"</span><span class="p">,</span> <span class="s2">"ReconData"</span><span class="p">]</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">math</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Iterable</span><span class="p">,</span> <span class="n">Mapping</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span><span class="p">,</span> <span class="n">field</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">..mrd._header</span><span class="w"> </span><span class="kn">import</span> <span class="n">LOOP_COUNTERS</span><span class="p">,</span> <span class="n">EncodingSpace</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">..mrd._metadata</span><span class="w"> </span><span class="kn">import</span> <span class="n">acquisition_label</span><span class="p">,</span> <span class="n">has_acquisition_flag</span>
+
+<span class="c1">#: Every name :meth:`ReconBuffer.select` accepts, whether or not a space varies it.</span>
+<span class="n">_AXIS_NAMES</span> <span class="o">=</span> <span class="nb">frozenset</span><span class="p">((</span><span class="o">*</span><span class="n">LOOP_COUNTERS</span><span class="p">,</span> <span class="s2">"segment"</span><span class="p">,</span> <span class="s2">"partition"</span><span class="p">,</span> <span class="s2">"phase_encode"</span><span class="p">))</span>
+
+<span class="c1">#: The MRD counter each placement axis is read from.</span>
+<span class="n">_COUNTERS</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">"partition"</span><span class="p">:</span> <span class="s2">"kspace_encode_step_2"</span><span class="p">,</span>
+    <span class="s2">"phase_encode"</span><span class="p">:</span> <span class="s2">"kspace_encode_step_1"</span><span class="p">,</span>
+<span class="p">}</span>
+
+<span class="c1">#: The placement axes a buffer can be cropped along.</span>
+<span class="n">_CROPPABLE</span> <span class="o">=</span> <span class="p">(</span><span class="s2">"partition"</span><span class="p">,</span> <span class="s2">"phase_encode"</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">echo_centre</span><span class="p">(</span><span class="n">acquisition</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">samples</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return the index of the echo in a readout of ``samples`` samples.</span>
+
+<span class="sd">    The acquisition's ``center_sample``; ``samples // 2`` when it states none,</span>
+<span class="sd">    which is the echo of a centred full echo.</span>
+<span class="sd">    """</span>
+    <span class="n">centre</span> <span class="o">=</span> <span class="n">acquisition_label</span><span class="p">(</span><span class="n">acquisition</span><span class="p">,</span> <span class="s2">"center_sample"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">samples</span> <span class="o">//</span> <span class="mi">2</span> <span class="k">if</span> <span class="n">centre</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="nb">int</span><span class="p">(</span><span class="n">centre</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">discards</span><span class="p">(</span><span class="n">acquisition</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Return the ``(discard_pre, discard_post)`` sample counts of an acquisition, 0 where it states none."""</span>
+    <span class="n">pre</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">acquisition_label</span><span class="p">(</span><span class="n">acquisition</span><span class="p">,</span> <span class="s2">"discard_pre"</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span> <span class="ow">or</span> <span class="mi">0</span><span class="p">)</span>
+    <span class="n">post</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">acquisition_label</span><span class="p">(</span><span class="n">acquisition</span><span class="p">,</span> <span class="s2">"discard_post"</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span> <span class="ow">or</span> <span class="mi">0</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">pre</span><span class="p">,</span> <span class="n">post</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_as_readout</span><span class="p">(</span><span class="n">data</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+    <span class="n">data</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">data</span><span class="o">.</span><span class="n">ndim</span> <span class="o">!=</span> <span class="mi">2</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"acquisition data must be (coils, samples), got shape </span><span class="si">{</span><span class="n">data</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">"</span>
+        <span class="p">)</span>
+    <span class="k">return</span> <span class="n">data</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_grid_position</span><span class="p">(</span><span class="n">space</span><span class="p">:</span> <span class="n">EncodingSpace</span><span class="p">,</span> <span class="n">acquisition</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Return the index of an acquisition on each varying placement axis of ``space``'s grid.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If a counter, shifted by the offset of its axis, lies outside the grid</span>
+<span class="sd">        the header laid this space out for.</span>
+<span class="sd">    """</span>
+    <span class="n">where</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">extent</span> <span class="ow">in</span> <span class="n">space</span><span class="o">.</span><span class="n">extents</span><span class="p">:</span>
+        <span class="n">counter</span> <span class="o">=</span> <span class="n">_COUNTERS</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span>
+        <span class="n">index</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">acquisition_label</span><span class="p">(</span><span class="n">acquisition</span><span class="p">,</span> <span class="n">counter</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span> <span class="ow">or</span> <span class="mi">0</span><span class="p">)</span>
+        <span class="n">shift</span> <span class="o">=</span> <span class="n">space</span><span class="o">.</span><span class="n">offset</span><span class="p">(</span><span class="n">name</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="mi">0</span> <span class="o">&lt;=</span> <span class="n">index</span> <span class="o">+</span> <span class="n">shift</span> <span class="o">&lt;</span> <span class="n">extent</span><span class="p">:</span>
+            <span class="n">moved</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="sa">f</span><span class="s2">" (</span><span class="si">{</span><span class="n">index</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">shift</span><span class="si">}</span><span class="s2"> once placed about the limits' centre)"</span>
+                <span class="k">if</span> <span class="n">shift</span>
+                <span class="k">else</span> <span class="s2">""</span>
+            <span class="p">)</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"acquisition has </span><span class="si">{</span><span class="n">counter</span><span class="si">}</span><span class="s2">=</span><span class="si">{</span><span class="n">index</span><span class="si">}{</span><span class="n">moved</span><span class="si">}</span><span class="s2">, outside the </span><span class="si">{</span><span class="n">extent</span><span class="si">}</span><span class="s2"> "</span>
+                <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2"> positions encoding space </span><span class="si">{</span><span class="n">space</span><span class="o">.</span><span class="n">index</span><span class="si">}</span><span class="s2"> was laid out for"</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="n">extent</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">where</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">index</span> <span class="o">+</span> <span class="n">shift</span><span class="p">)</span>
+    <span class="k">return</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">where</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_width</span><span class="p">(</span><span class="n">space</span><span class="p">:</span> <span class="n">EncodingSpace</span><span class="p">,</span> <span class="n">acquisition</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">samples</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return the readout samples of a buffer of ``space`` whose first readout is ``acquisition``.</span>
+
+<span class="sd">    The readout's own samples when it is a centred full echo, which is how a</span>
+<span class="sd">    readout completed by :class:`~pulserver.recon.AsymmetricEcho` arrives, or</span>
+<span class="sd">    when the space is not Cartesian; otherwise the encoded matrix, in which a</span>
+<span class="sd">    partial echo is placed by its echo.</span>
+<span class="sd">    """</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">space</span><span class="o">.</span><span class="n">cartesian</span><span class="p">:</span>
+        <span class="k">return</span> <span class="nb">max</span><span class="p">(</span><span class="n">space</span><span class="o">.</span><span class="n">readout</span><span class="p">,</span> <span class="n">samples</span><span class="p">)</span>
+    <span class="n">centred</span> <span class="o">=</span> <span class="n">echo_centre</span><span class="p">(</span><span class="n">acquisition</span><span class="p">,</span> <span class="n">samples</span><span class="p">)</span> <span class="o">==</span> <span class="n">samples</span> <span class="o">//</span> <span class="mi">2</span>
+    <span class="k">return</span> <span class="n">samples</span> <span class="k">if</span> <span class="n">centred</span> <span class="k">else</span> <span class="n">space</span><span class="o">.</span><span class="n">readout</span>
+
+
+<div class="viewcode-block" id="ReconBuffer">
+<a class="viewcode-back" href="../../../generated/pulserver.recon.ReconBuffer.html#pulserver.recon.ReconBuffer">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">ReconBuffer</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""K-space of one encoding space, filled one acquisition at a time.</span>
+
+<span class="sd">    Along the readout of a Cartesian space, the samples of an acquisition from</span>
+<span class="sd">    ``discard_pre`` to ``number_of_samples - discard_post`` are placed so that</span>
+<span class="sd">    its echo, ``center_sample``, lies at sample ``samples // 2`` of the buffer.</span>
+<span class="sd">    Along an encoded axis of a Cartesian space, a counter is placed at</span>
+<span class="sd">    ``counter - center + extent // 2``, ``center`` being the counter of the</span>
+<span class="sd">    k-space centre the header's limits state, so the centre line lies at</span>
+<span class="sd">    ``extent // 2`` whatever the counters start at. A non-Cartesian space</span>
+<span class="sd">    places a readout right-aligned and a counter as it is. The axes are those</span>
+<span class="sd">    of ``space``: its counters that vary and were asked for, then the encoded</span>
+<span class="sd">    axes.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    space</span>
+<span class="sd">        Encoding space to lay out.</span>
+<span class="sd">    coils</span>
+<span class="sd">        Channels to allocate; ``space.coils`` when not given. Fewer than the</span>
+<span class="sd">        header declares is valid, for data compressed before placement.</span>
+<span class="sd">    samples</span>
+<span class="sd">        Samples to allocate along the readout; ``space.readout`` when not given.</span>
+<span class="sd">    crop</span>
+<span class="sd">        ``{axis: (first, stop)}`` for the ``phase_encode`` and ``partition``</span>
+<span class="sd">        axes: the positions of the space's grid the buffer holds, the whole axis</span>
+<span class="sd">        where an axis is not named.</span>
+<span class="sd">    dtype</span>
+<span class="sd">        Complex dtype of :attr:`kspace`.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    kspace : ndarray</span>
+<span class="sd">        Shaped as :attr:`axes` names.</span>
+<span class="sd">    mask : ndarray</span>
+<span class="sd">        Boolean, :attr:`kspace` without the coil axis: samples that were placed.</span>
+<span class="sd">    origin : dict of str to int</span>
+<span class="sd">        Position on the space's grid of the first entry of each placement axis</span>
+<span class="sd">        of :attr:`axes`; 0 along an axis that is not cropped.</span>
+<span class="sd">    readout : tuple of int or None</span>
+<span class="sd">        First and last sample of the readout axis placed, inclusive; ``None``</span>
+<span class="sd">        until an acquisition is placed. The samples outside it are zero fill.</span>
+<span class="sd">    trajectory : ndarray or None</span>
+<span class="sd">        ``(dimensions, ...)`` over the axes of :attr:`mask`, in the units the</span>
+<span class="sd">        acquisitions carry. ``None`` until an acquisition carries a trajectory;</span>
+<span class="sd">        widened to the most dimensions any acquisition carried, missing trailing</span>
+<span class="sd">        dimensions reading 0.</span>
+<span class="sd">    center_sample : int or None</span>
+<span class="sd">        Echo index along the readout axis. ``samples // 2`` in a Cartesian</span>
+<span class="sd">        space, where every echo is placed there; in a non-Cartesian space that</span>
+<span class="sd">        of the first acquisition that states it, after alignment.</span>
+<span class="sd">    sample_time : float or None</span>
+<span class="sd">        Dwell time in seconds, from the first acquisition that states it.</span>
+<span class="sd">    headers : list</span>
+<span class="sd">        Placed acquisitions, in placement order.</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    &gt;&gt;&gt; import pulserver.recon as recon</span>
+<span class="sd">    &gt;&gt;&gt; import pulserver.mrd as mrd</span>
+<span class="sd">    &gt;&gt;&gt; space = mrd.EncodingSpace(</span>
+<span class="sd">    ...     index=0, coils=4, readout=64, phase_encodes=32, partitions=1,</span>
+<span class="sd">    ...     loops=("slice",), loop_sizes=(2,), recon_matrix=(32, 32),</span>
+<span class="sd">    ... )</span>
+<span class="sd">    &gt;&gt;&gt; buffer = recon.ReconBuffer(space)</span>
+<span class="sd">    &gt;&gt;&gt; buffer.kspace.shape</span>
+<span class="sd">    (4, 2, 32, 64)</span>
+<span class="sd">    &gt;&gt;&gt; buffer.extents</span>
+<span class="sd">    {'coil': 4, 'slice': 2, 'phase_encode': 32, 'readout': 64}</span>
+<span class="sd">    &gt;&gt;&gt; buffer.image_shape</span>
+<span class="sd">    (32, 32)</span>
+<span class="sd">    """</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">space</span><span class="p">:</span> <span class="n">EncodingSpace</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">coils</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">samples</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">crop</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">dtype</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">complex64</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">space</span> <span class="o">=</span> <span class="n">space</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">coils</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">coils</span><span class="p">)</span> <span class="k">if</span> <span class="n">coils</span> <span class="k">else</span> <span class="n">space</span><span class="o">.</span><span class="n">coils</span>
+        <span class="n">crop</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">crop</span> <span class="ow">or</span> <span class="p">{})</span>
+        <span class="n">unknown</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="n">crop</span><span class="p">)</span> <span class="o">-</span> <span class="nb">set</span><span class="p">(</span><span class="n">_CROPPABLE</span><span class="p">))</span>
+        <span class="k">if</span> <span class="n">unknown</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"only </span><span class="si">{</span><span class="nb">list</span><span class="p">(</span><span class="n">_CROPPABLE</span><span class="p">)</span><span class="si">}</span><span class="s2"> can be cropped, not </span><span class="si">{</span><span class="n">unknown</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">origin</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="n">extents</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">extent</span> <span class="ow">in</span> <span class="n">space</span><span class="o">.</span><span class="n">extents</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">extent</span> <span class="o">&lt;=</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="n">first</span><span class="p">,</span> <span class="n">stop</span> <span class="o">=</span> <span class="n">crop</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">extent</span><span class="p">))</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="mi">0</span> <span class="o">&lt;=</span> <span class="n">first</span> <span class="o">&lt;</span> <span class="n">stop</span> <span class="o">&lt;=</span> <span class="n">extent</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">"cannot crop the </span><span class="si">{</span><span class="n">extent</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2"> positions of encoding space "</span>
+                    <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">space</span><span class="o">.</span><span class="n">index</span><span class="si">}</span><span class="s2"> to </span><span class="si">{</span><span class="n">first</span><span class="si">}</span><span class="s2">..</span><span class="si">{</span><span class="n">stop</span><span class="si">}</span><span class="s2">"</span>
+                <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">origin</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">first</span>
+            <span class="n">extents</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">stop</span> <span class="o">-</span> <span class="n">first</span><span class="p">)</span>
+        <span class="n">shape</span> <span class="o">=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">coils</span><span class="p">,</span> <span class="o">*</span><span class="n">extents</span><span class="p">,</span> <span class="nb">int</span><span class="p">(</span><span class="n">samples</span><span class="p">)</span> <span class="k">if</span> <span class="n">samples</span> <span class="k">else</span> <span class="n">space</span><span class="o">.</span><span class="n">readout</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">kspace</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">shape</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">mask</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">:],</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">readout</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">trajectory</span><span class="p">:</span> <span class="n">Any</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">center_sample</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sample_time</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">headers</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_overwrote</span> <span class="o">=</span> <span class="kc">False</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">axes</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""Name of every axis of :attr:`kspace`, in order."""</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">space</span><span class="o">.</span><span class="n">axes</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">extents</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""Extent of each axis of :attr:`kspace`, by name.</span>
+
+<span class="sd">        Axes that do not vary are absent, so ``extents.get("slice", 1)`` answers for</span>
+<span class="sd">        any scan.</span>
+<span class="sd">        """</span>
+        <span class="k">return</span> <span class="nb">dict</span><span class="p">(</span><span class="nb">zip</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">axes</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">kspace</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">image_shape</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""Image matrix the header prescribes; see :attr:`EncodingSpace.recon_matrix`."""</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">space</span><span class="o">.</span><span class="n">recon_matrix</span>
+
+<div class="viewcode-block" id="ReconBuffer.position">
+<a class="viewcode-back" href="../../../generated/pulserver.recon.ReconBuffer.position.html#pulserver.recon.ReconBuffer.position">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">position</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">acquisition</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""Index along each placement axis of :attr:`kspace` this acquisition fills.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If a counter, placed about the limits' centre, lies outside what the</span>
+<span class="sd">            header laid this space out for, or outside the part of the grid a</span>
+<span class="sd">            cropped buffer holds.</span>
+<span class="sd">        """</span>
+        <span class="n">grid</span> <span class="o">=</span> <span class="n">_grid_position</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">space</span><span class="p">,</span> <span class="n">acquisition</span><span class="p">)</span>
+        <span class="n">where</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span>
+            <span class="n">index</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">origin</span><span class="p">[</span><span class="n">name</span><span class="p">]</span>
+            <span class="k">for</span> <span class="n">index</span><span class="p">,</span> <span class="n">name</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">grid</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">axes</span><span class="p">[</span><span class="mi">1</span><span class="p">:</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="n">strict</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="k">for</span> <span class="n">index</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">size</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span>
+            <span class="n">where</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">axes</span><span class="p">[</span><span class="mi">1</span><span class="p">:</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">kspace</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">:</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="n">strict</span><span class="o">=</span><span class="kc">True</span>
+        <span class="p">):</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="mi">0</span> <span class="o">&lt;=</span> <span class="n">index</span> <span class="o">&lt;</span> <span class="n">size</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">"acquisition lies at </span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2"> position </span><span class="si">{</span><span class="n">index</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="bp">self</span><span class="o">.</span><span class="n">origin</span><span class="p">[</span><span class="n">name</span><span class="p">]</span><span class="si">}</span><span class="s2">, "</span>
+                    <span class="sa">f</span><span class="s2">"outside the </span><span class="si">{</span><span class="n">size</span><span class="si">}</span><span class="s2"> from </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">origin</span><span class="p">[</span><span class="n">name</span><span class="p">]</span><span class="si">}</span><span class="s2"> that this buffer "</span>
+                    <span class="sa">f</span><span class="s2">"of encoding space </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">space</span><span class="o">.</span><span class="n">index</span><span class="si">}</span><span class="s2"> holds"</span>
+                <span class="p">)</span>
+        <span class="k">return</span> <span class="n">where</span></div>
+
+
+<div class="viewcode-block" id="ReconBuffer.add">
+<a class="viewcode-back" href="../../../generated/pulserver.recon.ReconBuffer.add.html#pulserver.recon.ReconBuffer.add">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">add</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">acquisition</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Place one acquisition where its counters and echo say it belongs.</span>
+
+<span class="sd">        Also records its trajectory, and ``center_sample`` and dwell when not yet</span>
+<span class="sd">        known. A readout placed where one already is replaces it, with a warning</span>
+<span class="sd">        the first time: the sequence labels neither apart.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        acquisition</span>
+<span class="sd">            The acquisition, for its counters, ``center_sample``, discards and</span>
+<span class="sd">            flags, and its data. An acquisition that states no ``center_sample``</span>
+<span class="sd">            is a centred full echo.</span>
+<span class="sd">        data</span>
+<span class="sd">            ``(coils, samples)`` to place instead of ``acquisition.data``: a</span>
+<span class="sd">            readout corrected before placement, whose ``center_sample`` and</span>
+<span class="sd">            discards the acquisition states.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If the data is not two-dimensional, the readout does not fit the</span>
+<span class="sd">            buffer along the readout, or a counter is outside the laid-out extent.</span>
+<span class="sd">        """</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="n">_as_readout</span><span class="p">(</span><span class="n">acquisition</span><span class="o">.</span><span class="n">data</span> <span class="k">if</span> <span class="n">data</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">data</span><span class="p">)</span>
+        <span class="n">coils</span><span class="p">,</span> <span class="n">samples</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">shape</span>
+        <span class="n">width</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">kspace</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">coils</span> <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">coils</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"acquisition has </span><span class="si">{</span><span class="n">coils</span><span class="si">}</span><span class="s2"> channels, more than the </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">coils</span><span class="si">}</span><span class="s2"> "</span>
+                <span class="sa">f</span><span class="s2">"encoding space </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">space</span><span class="o">.</span><span class="n">index</span><span class="si">}</span><span class="s2"> was laid out for"</span>
+            <span class="p">)</span>
+
+        <span class="n">where</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">position</span><span class="p">(</span><span class="n">acquisition</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">space</span><span class="o">.</span><span class="n">cartesian</span><span class="p">:</span>
+            <span class="n">centre</span> <span class="o">=</span> <span class="n">echo_centre</span><span class="p">(</span><span class="n">acquisition</span><span class="p">,</span> <span class="n">samples</span><span class="p">)</span>
+            <span class="n">skip</span><span class="p">,</span> <span class="n">after</span> <span class="o">=</span> <span class="n">discards</span><span class="p">(</span><span class="n">acquisition</span><span class="p">)</span>
+            <span class="n">count</span> <span class="o">=</span> <span class="n">samples</span> <span class="o">-</span> <span class="n">skip</span> <span class="o">-</span> <span class="n">after</span>
+            <span class="n">offset</span> <span class="o">=</span> <span class="n">width</span> <span class="o">//</span> <span class="mi">2</span> <span class="o">-</span> <span class="p">(</span><span class="n">centre</span> <span class="o">-</span> <span class="n">skip</span><span class="p">)</span>
+            <span class="n">detail</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"with its echo at </span><span class="si">{</span><span class="n">centre</span><span class="si">}</span><span class="s2"> and </span><span class="si">{</span><span class="n">skip</span><span class="si">}</span><span class="s2"> + </span><span class="si">{</span><span class="n">after</span><span class="si">}</span><span class="s2"> samples discarded"</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">skip</span><span class="p">,</span> <span class="n">count</span><span class="p">,</span> <span class="n">offset</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span> <span class="n">samples</span><span class="p">,</span> <span class="n">width</span> <span class="o">-</span> <span class="n">samples</span>
+            <span class="n">detail</span> <span class="o">=</span> <span class="s2">""</span>
+        <span class="k">if</span> <span class="n">count</span> <span class="o">&lt;</span> <span class="mi">1</span> <span class="ow">or</span> <span class="n">offset</span> <span class="o">&lt;</span> <span class="mi">0</span> <span class="ow">or</span> <span class="n">offset</span> <span class="o">+</span> <span class="n">count</span> <span class="o">&gt;</span> <span class="n">width</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"a readout of </span><span class="si">{</span><span class="n">samples</span><span class="si">}</span><span class="s2"> samples </span><span class="si">{</span><span class="n">detail</span><span class="si">}</span><span class="s2"> does not fit the </span><span class="si">{</span><span class="n">width</span><span class="si">}</span><span class="s2"> "</span>
+                <span class="sa">f</span><span class="s2">"samples of encoding space </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">space</span><span class="o">.</span><span class="n">index</span><span class="si">}</span><span class="s2">: its </span><span class="si">{</span><span class="n">count</span><span class="si">}</span><span class="s2"> placed "</span>
+                <span class="sa">f</span><span class="s2">"samples would occupy </span><span class="si">{</span><span class="n">offset</span><span class="si">}</span><span class="s2"> to </span><span class="si">{</span><span class="n">offset</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">count</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="mi">1</span><span class="si">}</span><span class="s2">"</span>
+            <span class="p">)</span>
+        <span class="n">region</span> <span class="o">=</span> <span class="nb">slice</span><span class="p">(</span><span class="n">offset</span><span class="p">,</span> <span class="n">offset</span> <span class="o">+</span> <span class="n">count</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_overwrote</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">mask</span><span class="p">[(</span><span class="o">*</span><span class="n">where</span><span class="p">,</span> <span class="n">region</span><span class="p">)]</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_overwrote</span> <span class="o">=</span> <span class="kc">True</span>
+            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"a readout replaced one already placed at </span><span class="si">{</span><span class="nb">dict</span><span class="p">(</span><span class="nb">zip</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">axes</span><span class="p">[</span><span class="mi">1</span><span class="p">:</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span><span class="w"> </span><span class="n">where</span><span class="p">,</span><span class="w"> </span><span class="n">strict</span><span class="o">=</span><span class="kc">False</span><span class="p">))</span><span class="si">}</span><span class="s2"> "</span>
+                <span class="sa">f</span><span class="s2">"of encoding space </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">space</span><span class="o">.</span><span class="n">index</span><span class="si">}</span><span class="s2">: readouts that share their "</span>
+                <span class="s2">"encoding counters overwrite each other; label each with its line, "</span>
+                <span class="s2">"partition, slice, average or repetition (pypulseqpp.make_label)"</span><span class="p">,</span>
+                <span class="n">stacklevel</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">kspace</span><span class="p">[(</span><span class="nb">slice</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">coils</span><span class="p">),</span> <span class="o">*</span><span class="n">where</span><span class="p">,</span> <span class="n">region</span><span class="p">)]</span> <span class="o">=</span> <span class="n">data</span><span class="p">[:,</span> <span class="n">skip</span> <span class="p">:</span> <span class="n">skip</span> <span class="o">+</span> <span class="n">count</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">mask</span><span class="p">[(</span><span class="o">*</span><span class="n">where</span><span class="p">,</span> <span class="n">region</span><span class="p">)]</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_place_trajectory</span><span class="p">(</span><span class="n">acquisition</span><span class="p">,</span> <span class="n">where</span><span class="p">,</span> <span class="n">region</span><span class="p">,</span> <span class="n">skip</span><span class="p">,</span> <span class="n">samples</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">readout</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="p">(</span><span class="n">region</span><span class="o">.</span><span class="n">start</span><span class="p">,</span> <span class="n">region</span><span class="o">.</span><span class="n">stop</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">readout</span> <span class="ow">is</span> <span class="kc">None</span>
+            <span class="k">else</span> <span class="p">(</span>
+                <span class="nb">min</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">readout</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">region</span><span class="o">.</span><span class="n">start</span><span class="p">),</span>
+                <span class="nb">max</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">readout</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">region</span><span class="o">.</span><span class="n">stop</span> <span class="o">-</span> <span class="mi">1</span><span class="p">),</span>
+            <span class="p">)</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">center_sample</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">space</span><span class="o">.</span><span class="n">cartesian</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">center_sample</span> <span class="o">=</span> <span class="n">width</span> <span class="o">//</span> <span class="mi">2</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">center</span> <span class="o">=</span> <span class="n">acquisition_label</span><span class="p">(</span><span class="n">acquisition</span><span class="p">,</span> <span class="s2">"center_sample"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">center</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">center_sample</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">center</span><span class="p">)</span> <span class="o">+</span> <span class="n">offset</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">sample_time</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">dwell</span> <span class="o">=</span> <span class="n">acquisition_label</span><span class="p">(</span><span class="n">acquisition</span><span class="p">,</span> <span class="s2">"sample_time_us"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">dwell</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">sample_time</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">dwell</span><span class="p">)</span> <span class="o">*</span> <span class="mf">1e-6</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">headers</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">acquisition</span><span class="p">)</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_place_trajectory</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">acquisition</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">where</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">,</span> <span class="n">region</span><span class="p">:</span> <span class="nb">slice</span><span class="p">,</span> <span class="n">skip</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">samples</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Store the acquisition's trajectory, if it carries one.</span>
+
+<span class="sd">        MRD trajectories are ``(samples, dimensions)`` and are stored transposed.</span>
+<span class="sd">        A trajectory with a row for each of the readout's ``samples`` is cut to</span>
+<span class="sd">        the samples placed; one with a row for each sample placed is stored as it</span>
+<span class="sd">        is. A trajectory with any other count, as after a gadget resampled the</span>
+<span class="sd">        readout, is not stored. An acquisition may carry fewer trailing</span>
+<span class="sd">        dimensions than its neighbours -- the centre partition of a slab</span>
+<span class="sd">        traverses no kz -- and the rows it omits stay 0.</span>
+<span class="sd">        """</span>
+        <span class="n">traj</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">acquisition</span><span class="p">,</span> <span class="s2">"traj"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">traj</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span>
+        <span class="n">traj</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">traj</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">traj</span><span class="o">.</span><span class="n">size</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">return</span>
+        <span class="n">count</span> <span class="o">=</span> <span class="n">region</span><span class="o">.</span><span class="n">stop</span> <span class="o">-</span> <span class="n">region</span><span class="o">.</span><span class="n">start</span>
+        <span class="k">if</span> <span class="n">traj</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="n">samples</span><span class="p">:</span>
+            <span class="n">traj</span> <span class="o">=</span> <span class="n">traj</span><span class="p">[</span><span class="n">skip</span> <span class="p">:</span> <span class="n">skip</span> <span class="o">+</span> <span class="n">count</span><span class="p">]</span>
+        <span class="k">elif</span> <span class="n">traj</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">!=</span> <span class="n">count</span><span class="p">:</span>
+            <span class="k">return</span>
+        <span class="n">dimensions</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">traj</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">trajectory</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">trajectory</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span>
+                <span class="p">(</span><span class="n">dimensions</span><span class="p">,</span> <span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">kspace</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">:]),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">traj</span><span class="o">.</span><span class="n">dtype</span>
+            <span class="p">)</span>
+        <span class="k">elif</span> <span class="n">dimensions</span> <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">trajectory</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span>
+            <span class="n">widened</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span>
+                <span class="p">(</span><span class="n">dimensions</span><span class="p">,</span> <span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">trajectory</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">:]),</span>
+                <span class="n">dtype</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">trajectory</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="n">widened</span><span class="p">[:</span> <span class="bp">self</span><span class="o">.</span><span class="n">trajectory</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">trajectory</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">trajectory</span> <span class="o">=</span> <span class="n">widened</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">trajectory</span><span class="p">[(</span><span class="nb">slice</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">dimensions</span><span class="p">),</span> <span class="o">*</span><span class="n">where</span><span class="p">,</span> <span class="n">region</span><span class="p">)]</span> <span class="o">=</span> <span class="n">traj</span><span class="o">.</span><span class="n">T</span>
+
+<div class="viewcode-block" id="ReconBuffer.select">
+<a class="viewcode-back" href="../../../generated/pulserver.recon.ReconBuffer.select.html#pulserver.recon.ReconBuffer.select">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">select</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">where</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""Return the ``(kspace, mask)`` at one position along named axes.</span>
+
+<span class="sd">        An axis this space does not vary is accepted at index 0, its only position,</span>
+<span class="sd">        so ``select(slice=i)`` works whether or not the scan has slices.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        **where</span>
+<span class="sd">            Index per axis, by the names in :attr:`axes`; unnamed axes are kept</span>
+<span class="sd">            whole.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        tuple</span>
+<span class="sd">            K-space and sampling mask without the fixed axes.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        KeyError</span>
+<span class="sd">            If a name is not an encoding axis.</span>
+<span class="sd">        IndexError</span>
+<span class="sd">            If an axis this space does not vary is asked for beyond index 0.</span>
+<span class="sd">        """</span>
+        <span class="n">picks</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_picks</span><span class="p">(</span><span class="n">where</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">kspace</span><span class="p">[(</span><span class="nb">slice</span><span class="p">(</span><span class="kc">None</span><span class="p">),</span> <span class="o">*</span><span class="n">picks</span><span class="p">)],</span> <span class="bp">self</span><span class="o">.</span><span class="n">mask</span><span class="p">[</span><span class="n">picks</span><span class="p">]</span></div>
+
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">reference</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The placed acquisition nearest the k-space centre, ``None`` while none is placed.</span>
+
+<span class="sd">        Nearness is the Euclidean distance, in positions on the grid of the</span>
+<span class="sd">        space, from ``extent // 2``, where the buffer places the k-space centre,</span>
+<span class="sd">        along ``phase_encode`` and, where the space has more than one partition,</span>
+<span class="sd">        ``partition``; the first placed of acquisitions at the same distance is</span>
+<span class="sd">        returned. A :class:`~pulserver.recon.ReconResult` takes the geometry of</span>
+<span class="sd">        the image from this acquisition unless it names another.</span>
+<span class="sd">        """</span>
+        <span class="k">return</span> <span class="n">nearest_to_centre</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">space</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">headers</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">readout_time</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Sample times relative to the echo, ``(readout,)`` in seconds.</span>
+
+<span class="sd">        ``None`` until the acquisitions state both a dwell and an echo position.</span>
+<span class="sd">        """</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">sample_time</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">center_sample</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">None</span>
+        <span class="n">samples</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">kspace</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+        <span class="k">return</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">samples</span><span class="p">)</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">center_sample</span><span class="p">)</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">sample_time</span>
+
+<div class="viewcode-block" id="ReconBuffer.grid_trajectory">
+<a class="viewcode-back" href="../../../generated/pulserver.recon.ReconBuffer.grid_trajectory.html#pulserver.recon.ReconBuffer.grid_trajectory">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">grid_trajectory</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Return the trajectory in grid units, laid out as ``bartorch.linop.NUFFT`` takes it.</span>
+
+<span class="sd">        ``(*placement, readout, 3)``: the placement axes of :attr:`mask`, the</span>
+<span class="sd">        samples, then kx, ky and kz, each k in 1/m, as the proxy's enrichment</span>
+<span class="sd">        writes it, times the reconstructed field of view along its axis, so</span>
+<span class="sd">        that an ``N``-point image matrix spans ``[-N/2, N/2)``. Axes the</span>
+<span class="sd">        acquisitions do not carry are 0. The phase-encoding axis is the last</span>
+<span class="sd">        placement axis, so this is ``(*encoding, shots, samples, 3)`` against</span>
+<span class="sd">        :attr:`kspace` as ``(coils, *encoding, shots, samples)``.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        ndarray or None</span>
+<span class="sd">            ``float32``; ``None`` when no acquisition carried a trajectory.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If the header states no field of view along an axis the trajectory</span>
+<span class="sd">            carries.</span>
+<span class="sd">        """</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">trajectory</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">None</span>
+        <span class="n">dimensions</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">trajectory</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">fov</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">space</span><span class="o">.</span><span class="n">recon_fov</span> <span class="ow">or</span> <span class="p">()</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">fov</span><span class="p">)</span> <span class="o">&lt;</span> <span class="n">dimensions</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"a trajectory of </span><span class="si">{</span><span class="n">dimensions</span><span class="si">}</span><span class="s2"> axes needs the field of view along "</span>
+                <span class="sa">f</span><span class="s2">"each, and encoding space </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">space</span><span class="o">.</span><span class="n">index</span><span class="si">}</span><span class="s2"> states "</span>
+                <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">fov</span><span class="p">)</span><span class="si">}</span><span class="s2">"</span>
+            <span class="p">)</span>
+        <span class="n">grid</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">trajectory</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">:],</span> <span class="mi">3</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+        <span class="n">grid</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="p">:</span><span class="n">dimensions</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">moveaxis</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">trajectory</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="o">*</span> <span class="n">fov</span><span class="p">[::</span><span class="o">-</span><span class="mi">1</span><span class="p">][:</span><span class="n">dimensions</span><span class="p">]</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">grid</span></div>
+
+
+<div class="viewcode-block" id="ReconBuffer.points">
+<a class="viewcode-back" href="../../../generated/pulserver.recon.ReconBuffer.points.html#pulserver.recon.ReconBuffer.points">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">points</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">where</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Return the trajectory at one position, indexed as :meth:`select` indexes.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        ndarray or None</span>
+<span class="sd">            ``(dimensions, ...)`` over the axes not fixed, or ``None`` when no</span>
+<span class="sd">            acquisition carried a trajectory.</span>
+<span class="sd">        """</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">trajectory</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">None</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">trajectory</span><span class="p">[(</span><span class="nb">slice</span><span class="p">(</span><span class="kc">None</span><span class="p">),</span> <span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">_picks</span><span class="p">(</span><span class="n">where</span><span class="p">))]</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_picks</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">where</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="o">...</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""Index the placement axes, accepting only index 0 for an axis this space does not vary."""</span>
+        <span class="n">placement</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">axes</span><span class="p">[</span><span class="mi">1</span><span class="p">:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+        <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">index</span> <span class="ow">in</span> <span class="n">where</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">if</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">placement</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="k">if</span> <span class="n">name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">_AXIS_NAMES</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">name</span><span class="si">!r}</span><span class="s2"> is not an encoding axis; encoding space "</span>
+                    <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">space</span><span class="o">.</span><span class="n">index</span><span class="si">}</span><span class="s2"> has </span><span class="si">{</span><span class="nb">list</span><span class="p">(</span><span class="n">placement</span><span class="p">)</span><span class="si">}</span><span class="s2">"</span>
+                <span class="p">)</span>
+            <span class="k">if</span> <span class="n">index</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">IndexError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">=</span><span class="si">{</span><span class="n">index</span><span class="si">}</span><span class="s2"> but encoding space </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">space</span><span class="o">.</span><span class="n">index</span><span class="si">}</span><span class="s2"> "</span>
+                    <span class="sa">f</span><span class="s2">"has only one </span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">"</span>
+                <span class="p">)</span>
+        <span class="k">return</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">where</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="nb">slice</span><span class="p">(</span><span class="kc">None</span><span class="p">))</span> <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">placement</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="n">named</span> <span class="o">=</span> <span class="s2">", "</span><span class="o">.</span><span class="n">join</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">n</span><span class="si">}</span><span class="s2">=</span><span class="si">{</span><span class="n">s</span><span class="si">}</span><span class="s2">"</span> <span class="k">for</span> <span class="n">n</span><span class="p">,</span> <span class="n">s</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">axes</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">kspace</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="sa">f</span><span class="s2">"ReconBuffer(encoding=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">space</span><span class="o">.</span><span class="n">index</span><span class="si">}</span><span class="s2">, </span><span class="si">{</span><span class="n">named</span><span class="si">}</span><span class="s2">)"</span></div>
+
+
+
+<div class="viewcode-block" id="ReconData">
+<a class="viewcode-back" href="../../../generated/pulserver.recon.ReconData.html#pulserver.recon.ReconData">[docs]</a>
+<span class="nd">@dataclass</span><span class="p">(</span><span class="n">eq</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">ReconData</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""The readouts of one reconstruction unit, as :meth:`ReconPlugin.recon` receives them.</span>
+
+<span class="sd">    A unit is the set of readouts of one branch and encoding space that share</span>
+<span class="sd">    every image counter not listed in the plugin's ``axes``; the plugin</span>
+<span class="sd">    documents how a unit is closed. A unit is allocated on its first readout</span>
+<span class="sd">    and released once :meth:`ReconPlugin.recon` has returned.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    branch : str</span>
+<span class="sd">        The branch the unit belongs to.</span>
+<span class="sd">    data : ReconBuffer or None</span>
+<span class="sd">        K-space of the imaging readouts, with the unit's ``axes`` along the</span>
+<span class="sd">        header's encoded axes. ``None`` when the unit placed none: the plugin</span>
+<span class="sd">        is not ``buffered``, the header describes no encoding space, or every</span>
+<span class="sd">        readout was calibration only.</span>
+<span class="sd">    ref : ReconBuffer or None</span>
+<span class="sd">        K-space of the parallel-imaging calibration readouts, laid out as</span>
+<span class="sd">        ``data`` but cropped along the phase-encode and partition axes to the</span>
+<span class="sd">        lines the readouts cover, whose position on the grid is its</span>
+<span class="sd">        :attr:`~ReconBuffer.origin`; ``None`` when the unit has none. A readout</span>
+<span class="sd">        flagged as calibration and imaging is in both buffers; one flagged as</span>
+<span class="sd">        calibration only is in ``ref`` alone; a phase-correction readout is in</span>
+<span class="sd">        neither.</span>
+<span class="sd">    counters : dict of str to int</span>
+<span class="sd">        The unit's image counters not listed in ``axes``, by MRD name.</span>
+<span class="sd">    waveforms : tuple</span>
+<span class="sd">        The waveforms received since the previous close; units that close</span>
+<span class="sd">        together share them.</span>
+<span class="sd">    acquisitions : list</span>
+<span class="sd">        Every readout the unit received, as received and in arrival order,</span>
+<span class="sd">        whichever buffer it was placed in. All a plugin that is not</span>
+<span class="sd">        ``buffered`` is given.</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    &gt;&gt;&gt; import pulserver.recon as recon</span>
+<span class="sd">    &gt;&gt;&gt; data = recon.ReconData("imaging", counters={"slice": 2})</span>
+<span class="sd">    &gt;&gt;&gt; data.counters["slice"], data.data is None</span>
+<span class="sd">    (2, True)</span>
+<span class="sd">    """</span>
+
+    <span class="n">branch</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">data</span><span class="p">:</span> <span class="n">ReconBuffer</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">ref</span><span class="p">:</span> <span class="n">ReconBuffer</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">counters</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">dict</span><span class="p">)</span>
+    <span class="n">waveforms</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">=</span> <span class="p">()</span>
+    <span class="n">acquisitions</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">list</span><span class="p">,</span> <span class="nb">repr</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span></div>
+
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">ReconUnit</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""The readouts of one unit as they arrive, placed into the buffers of :attr:`data`.</span>
+
+<span class="sd">    Imaging readouts are placed as they arrive, into a buffer allocated at the</span>
+<span class="sd">    first of them. Calibration readouts are held until :meth:`close`, which lays</span>
+<span class="sd">    them out over the lines they cover.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    key</span>
+<span class="sd">        ``(branch, encoding space, ((counter, value), ...))``, as</span>
+<span class="sd">        :func:`pulserver.recon._units.unit_key` states it.</span>
+<span class="sd">    spaces</span>
+<span class="sd">        The header's encoding spaces by index, laid out along the plugin's</span>
+<span class="sd">        ``axes``. Empty when the header describes none, so nothing is placed.</span>
+<span class="sd">    buffered</span>
+<span class="sd">        Place readouts. ``False`` only records them in :attr:`ReconData.acquisitions`.</span>
+<span class="sd">    dtype</span>
+<span class="sd">        Complex dtype of the k-space arrays.</span>
+<span class="sd">    merged</span>
+<span class="sd">        Positions of the plugin's ``merge`` counters by encoding space index:</span>
+<span class="sd">        the combinations of their values that the closing flag has to arrive</span>
+<span class="sd">        at, in addition to those along the axes. 1 where a space is absent.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    data : ReconData</span>
+<span class="sd">        What the unit has collected, which is what the plugin receives once</span>
+<span class="sd">        the unit is closed.</span>
+<span class="sd">    """</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">key</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">],</span> <span class="o">...</span><span class="p">]],</span>
+        <span class="n">spaces</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">EncodingSpace</span><span class="p">],</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">buffered</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">dtype</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">complex64</span><span class="p">,</span>
+        <span class="n">merged</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">branch</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">space_index</span><span class="p">,</span> <span class="n">counters</span> <span class="o">=</span> <span class="n">key</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">key</span> <span class="o">=</span> <span class="n">key</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">spaces</span> <span class="o">=</span> <span class="n">spaces</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">buffered</span> <span class="o">=</span> <span class="n">buffered</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dtype</span> <span class="o">=</span> <span class="n">dtype</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">merged</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">merged</span> <span class="ow">or</span> <span class="p">{})</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">data</span> <span class="o">=</span> <span class="n">ReconData</span><span class="p">(</span><span class="n">branch</span><span class="p">,</span> <span class="n">counters</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span><span class="n">counters</span><span class="p">))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_reference</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">]]]</span> <span class="o">=</span> <span class="p">[]</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">combinations</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Number of positions along the unit's axes and merged counters, 1 where its space is not described."""</span>
+        <span class="n">space</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">spaces</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">space_index</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">space</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="mi">1</span>
+        <span class="k">return</span> <span class="n">math</span><span class="o">.</span><span class="n">prod</span><span class="p">(</span><span class="n">space</span><span class="o">.</span><span class="n">loop_sizes</span><span class="p">)</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">merged</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">space_index</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">add_acquisition</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">acquisition</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">readout</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">placed</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Record one acquisition and place ``readout`` in the buffers its flags select.</span>
+
+<span class="sd">        The first readout the unit places in a buffer sizes it: its channels,</span>
+<span class="sd">        and along the readout its own samples when it is a centred full echo,</span>
+<span class="sd">        the encoded matrix's readout otherwise. A calibration readout is held</span>
+<span class="sd">        until :meth:`close`.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        acquisition</span>
+<span class="sd">            The acquisition as received, for its flags, which select the</span>
+<span class="sd">            buffers, and for :attr:`ReconData.acquisitions`.</span>
+<span class="sd">        readout</span>
+<span class="sd">            ``(coils, samples)`` to place: the acquisition's data as the</span>
+<span class="sd">            gadgets left it.</span>
+<span class="sd">        placed</span>
+<span class="sd">            The acquisition as the gadgets left it, whose ``center_sample`` and</span>
+<span class="sd">            discards describe ``readout`` and which the buffers keep as their</span>
+<span class="sd">            header; ``acquisition`` when not given.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        KeyError</span>
+<span class="sd">            If the header describes encoding spaces and not the one this unit</span>
+<span class="sd">            is in.</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            As :meth:`ReconBuffer.add`.</span>
+<span class="sd">        """</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">acquisitions</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">acquisition</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">buffered</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">spaces</span><span class="p">):</span>
+            <span class="k">return</span>
+        <span class="n">readout</span> <span class="o">=</span> <span class="n">_as_readout</span><span class="p">(</span><span class="n">readout</span><span class="p">)</span>
+        <span class="n">placed</span> <span class="o">=</span> <span class="n">acquisition</span> <span class="k">if</span> <span class="n">placed</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">placed</span>
+        <span class="n">in_data</span><span class="p">,</span> <span class="n">in_ref</span> <span class="o">=</span> <span class="n">readout_roles</span><span class="p">(</span><span class="n">acquisition</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">in_data</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_place</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">data</span><span class="p">,</span> <span class="n">placed</span><span class="p">,</span> <span class="n">readout</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">in_ref</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_reference</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                <span class="p">(</span><span class="n">placed</span><span class="p">,</span> <span class="n">readout</span><span class="p">,</span> <span class="n">_grid_position</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_space</span><span class="p">(),</span> <span class="n">placed</span><span class="p">))</span>
+            <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">close</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ReconData</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Lay out the calibration readouts and return what the unit collected.</span>
+
+<span class="sd">        The calibration buffer covers the lines its readouts do along the</span>
+<span class="sd">        phase-encode and partition axes, and every position of the other axes.</span>
+<span class="sd">        """</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_reference</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">ref</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_assemble</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_reference</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_reference</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_space</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">EncodingSpace</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">space_index</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">spaces</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"the header describes no encoding space </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">space_index</span><span class="si">}</span><span class="s2">; "</span>
+                <span class="sa">f</span><span class="s2">"it has </span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">spaces</span><span class="p">)</span><span class="si">}</span><span class="s2">"</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">spaces</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">space_index</span><span class="p">]</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_place</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">buffer</span><span class="p">:</span> <span class="n">ReconBuffer</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">placed</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">readout</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ReconBuffer</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">buffer</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">space</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_space</span><span class="p">()</span>
+            <span class="n">coils</span><span class="p">,</span> <span class="n">samples</span> <span class="o">=</span> <span class="n">readout</span><span class="o">.</span><span class="n">shape</span>
+            <span class="n">buffer</span> <span class="o">=</span> <span class="n">ReconBuffer</span><span class="p">(</span>
+                <span class="n">space</span><span class="p">,</span>
+                <span class="n">coils</span><span class="o">=</span><span class="n">coils</span><span class="p">,</span>
+                <span class="n">samples</span><span class="o">=</span><span class="n">_width</span><span class="p">(</span><span class="n">space</span><span class="p">,</span> <span class="n">placed</span><span class="p">,</span> <span class="n">samples</span><span class="p">),</span>
+                <span class="n">dtype</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="n">buffer</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">placed</span><span class="p">,</span> <span class="n">readout</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">buffer</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_assemble</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">readouts</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">]]]</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ReconBuffer</span><span class="p">:</span>
+        <span class="n">space</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_space</span><span class="p">()</span>
+        <span class="n">placed</span><span class="p">,</span> <span class="n">readout</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">readouts</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">coils</span><span class="p">,</span> <span class="n">samples</span> <span class="o">=</span> <span class="n">readout</span><span class="o">.</span><span class="n">shape</span>
+        <span class="n">varying</span> <span class="o">=</span> <span class="p">[</span><span class="n">name</span> <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">extent</span> <span class="ow">in</span> <span class="n">space</span><span class="o">.</span><span class="n">extents</span> <span class="k">if</span> <span class="n">extent</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">]</span>
+        <span class="n">grid</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">position</span> <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">position</span> <span class="ow">in</span> <span class="n">readouts</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
+        <span class="n">crop</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="n">name</span><span class="p">:</span> <span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">grid</span><span class="p">[:,</span> <span class="n">column</span><span class="p">]</span><span class="o">.</span><span class="n">min</span><span class="p">()),</span> <span class="nb">int</span><span class="p">(</span><span class="n">grid</span><span class="p">[:,</span> <span class="n">column</span><span class="p">]</span><span class="o">.</span><span class="n">max</span><span class="p">())</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">column</span><span class="p">,</span> <span class="n">name</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">varying</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">_CROPPABLE</span>
+        <span class="p">}</span>
+        <span class="n">buffer</span> <span class="o">=</span> <span class="n">ReconBuffer</span><span class="p">(</span>
+            <span class="n">space</span><span class="p">,</span>
+            <span class="n">coils</span><span class="o">=</span><span class="n">coils</span><span class="p">,</span>
+            <span class="n">samples</span><span class="o">=</span><span class="n">_width</span><span class="p">(</span><span class="n">space</span><span class="p">,</span> <span class="n">placed</span><span class="p">,</span> <span class="n">samples</span><span class="p">),</span>
+            <span class="n">crop</span><span class="o">=</span><span class="n">crop</span><span class="p">,</span>
+            <span class="n">dtype</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">for</span> <span class="n">placed</span><span class="p">,</span> <span class="n">readout</span><span class="p">,</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">readouts</span><span class="p">:</span>
+            <span class="n">buffer</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">placed</span><span class="p">,</span> <span class="n">readout</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">buffer</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">nearest_to_centre</span><span class="p">(</span><span class="n">space</span><span class="p">:</span> <span class="n">EncodingSpace</span><span class="p">,</span> <span class="n">acquisitions</span><span class="p">:</span> <span class="n">Iterable</span><span class="p">[</span><span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return the acquisition placed nearest the k-space centre of ``space``, ``None`` when there are none.</span>
+
+<span class="sd">    Distance is Euclidean over the positions on the grid along ``phase_encode``</span>
+<span class="sd">    and, where ``space`` has more than one partition, ``partition``, from</span>
+<span class="sd">    ``extent // 2``, where a buffer of ``space`` places the centre. The earliest</span>
+<span class="sd">    of equally near acquisitions is returned.</span>
+<span class="sd">    """</span>
+    <span class="n">axes</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">extent</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">extent</span> <span class="ow">in</span> <span class="n">space</span><span class="o">.</span><span class="n">extents</span>
+        <span class="k">if</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">_COUNTERS</span> <span class="ow">and</span> <span class="n">extent</span> <span class="o">&gt;</span> <span class="mi">1</span>
+    <span class="p">]</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">distance</span><span class="p">(</span><span class="n">acquisition</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+        <span class="k">return</span> <span class="nb">sum</span><span class="p">(</span>
+            <span class="p">(</span>
+                <span class="nb">int</span><span class="p">(</span><span class="n">acquisition_label</span><span class="p">(</span><span class="n">acquisition</span><span class="p">,</span> <span class="n">_COUNTERS</span><span class="p">[</span><span class="n">name</span><span class="p">],</span> <span class="mi">0</span><span class="p">)</span> <span class="ow">or</span> <span class="mi">0</span><span class="p">)</span>
+                <span class="o">+</span> <span class="n">space</span><span class="o">.</span><span class="n">offset</span><span class="p">(</span><span class="n">name</span><span class="p">)</span>
+                <span class="o">-</span> <span class="n">extent</span> <span class="o">//</span> <span class="mi">2</span>
+            <span class="p">)</span>
+            <span class="o">**</span> <span class="mi">2</span>
+            <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">extent</span> <span class="ow">in</span> <span class="n">axes</span>
+        <span class="p">)</span>
+
+    <span class="k">return</span> <span class="nb">min</span><span class="p">(</span><span class="n">acquisitions</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="n">distance</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">readout_roles</span><span class="p">(</span><span class="n">acquisition</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">bool</span><span class="p">,</span> <span class="nb">bool</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Return whether an acquisition belongs to a unit's imaging data and to its calibration data.</span>
+
+<span class="sd">    A readout flagged as calibration only is calibration; one flagged as</span>
+<span class="sd">    calibration and imaging is both; a phase-correction readout is neither</span>
+<span class="sd">    unless it is also calibration; any other readout is imaging.</span>
+<span class="sd">    """</span>
+    <span class="n">calibration</span> <span class="o">=</span> <span class="n">has_acquisition_flag</span><span class="p">(</span><span class="n">acquisition</span><span class="p">,</span> <span class="s2">"ACQ_IS_PARALLEL_CALIBRATION"</span><span class="p">)</span>
+    <span class="n">both</span> <span class="o">=</span> <span class="n">has_acquisition_flag</span><span class="p">(</span><span class="n">acquisition</span><span class="p">,</span> <span class="s2">"ACQ_IS_PARALLEL_CALIBRATION_AND_IMAGING"</span><span class="p">)</span>
+    <span class="n">phase_correction</span> <span class="o">=</span> <span class="n">has_acquisition_flag</span><span class="p">(</span><span class="n">acquisition</span><span class="p">,</span> <span class="s2">"ACQ_IS_PHASECORR_DATA"</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">both</span> <span class="ow">or</span> <span class="ow">not</span> <span class="p">(</span><span class="n">calibration</span> <span class="ow">or</span> <span class="n">phase_correction</span><span class="p">),</span> <span class="n">calibration</span> <span class="ow">or</span> <span class="n">both</span>
+</pre></div>
+
+                </article>
+              
+
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+<div class="bd-footer-content__inner container">
+  
+  <div class="footer-item">
+    
+<p class="component-author">
+By pulserver contributors
+</p>
+
+  </div>
+  
+  <div class="footer-item">
+    
+
+  <p class="copyright">
+    
+      © Copyright 2024-2026, pulserver contributors.
+      <br/>
+    
+  </p>
+
+  </div>
+  
+  <div class="footer-item">
+    
+  </div>
+  
+  <div class="footer-item">
+    
+  </div>
+  
+</div>
+          </footer>
+        
+
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script defer src="../../../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9"></script>
+<script defer src="../../../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9"></script>
+
+  <footer class="bd-footer">
+  </footer>
+  </body>
+</html>

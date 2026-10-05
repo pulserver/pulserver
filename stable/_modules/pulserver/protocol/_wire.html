@@ -1,0 +1,1159 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>pulserver.protocol._wire &#8212; pulserver documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  <!--
+    this give us a css class that will be invisible only if js is disabled
+  -->
+  <noscript>
+    <style>
+      .pst-js-only { display: none !important; }
+
+    </style>
+  </noscript>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../../_static/styles/theme.css?digest=90905a2f556bf617f1a9" rel="stylesheet" />
+<link href="../../../_static/styles/pydata-sphinx-theme.css?digest=90905a2f556bf617f1a9" rel="stylesheet" />
+
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=03e43079" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/styles/sphinx-book-theme.css?v=4418a689" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery.css?v=c83e6b79" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/pulserver.css?v=e08ae8f3" />
+  
+  <!-- So that users can add custom icons -->
+  <script defer src="../../../_static/scripts/fontawesome.js?digest=90905a2f556bf617f1a9"></script>
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
+<link rel="preload" as="script" href="../../../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
+
+    <script src="../../../_static/documentation_options.js?v=0a6a6ad3"></script>
+    <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../../../_static/copybutton.js?v=f281be69"></script>
+    <script src="../../../_static/sg-tags.js?v=d80f6fa4"></script>
+    <script src="../../../_static/scripts/sphinx-book-theme.js?v=fab101a9"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = '_modules/pulserver/protocol/_wire';</script>
+    <script>
+        DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
+        DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.2.0';
+        DOCUMENTATION_OPTIONS.show_version_warning_banner =
+            true;
+        </script>
+    <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
+    <link rel="canonical" href="https://pulserver.github.io/pulserver/stable/_modules/pulserver/protocol/_wire.html" />
+    <link rel="icon" href="../../../_static/pulserver-mark.svg"/>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  <meta name="docsearch:version" content="v0.2.0" />
+  
+    
+    <script src="../../../_static/searchtools.js"></script>
+    <script src="../../../_static/language_data.js"></script>
+    <script src="../../../searchindex.js"></script>
+  
+  </head>
+  <body data-default-mode="">
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+  
+  
+  
+  
+  <dialog id="pst-search-dialog">
+    
+<form class="bd-search d-flex align-items-center"
+      action="../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         placeholder="Search..."
+         aria-label="Search..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+  </dialog>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header id="pst-header" class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+  
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+        </div>
+      
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+    </div>
+  
+
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+        
+      
+      <dialog id="pst-primary-sidebar-modal"></dialog>
+      <div id="pst-primary-sidebar" class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+    
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../../../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../../../_static/pulserver-mark.svg" class="logo__image only-light" alt="pulserver"/>
+    <img src="../../../_static/pulserver-mark-dark.svg" class="logo__image only-dark pst-js-only" alt="pulserver"/>
+  
+  
+</a></div>
+        <div class="sidebar-primary-item">
+<div class="version-switcher__container dropdown pst-js-only">
+  <button id="pst-version-switcher-button-2"
+    type="button"
+    class="version-switcher__button btn btn-sm dropdown-toggle"
+    data-bs-toggle="dropdown"
+    aria-haspopup="listbox"
+    aria-controls="pst-version-switcher-list-2"
+    aria-label="Version switcher list"
+  >
+    Choose version  <!-- this text may get changed later by javascript -->
+    <span class="caret"></span>
+  </button>
+  <div id="pst-version-switcher-list-2"
+    class="version-switcher__menu dropdown-menu list-group-flush py-0"
+    role="listbox" aria-labelledby="pst-version-switcher-button-2">
+    <!-- dropdown will be populated by javascript on page load -->
+  </div>
+</div></div>
+        <div class="sidebar-primary-item">
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button></div>
+        <div class="sidebar-primary-item"><nav class="bd-links bd-docs-nav" aria-label="Main">
+    <div class="bd-toc-item navbar-nav active">
+        
+        <ul class="nav bd-sidenav bd-sidenav__home-link">
+            <li class="toctree-l1">
+                <a class="reference internal" href="../../../index.html">
+                    Homepage
+                </a>
+            </li>
+        </ul>
+        <ul class="nav bd-sidenav">
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../user-guide/index.html">User guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/running.html">Running the services</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/scanner-sequences.html">Scanner sequences</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/reconstruction-plugins.html">Reconstruction plugins</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/reconstruction-client.html">Reconstruction clients</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/virtual-scanner.html">Scanning a phantom without a scanner</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../developer-guide/index.html">Developer guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/prerequisites.html">Development prerequisites</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/installation.html">Editable installation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/workflow.html">Development workflow</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/style.html">Coding style</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/documentation.html">Documentation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/terminology.html">Terminology and conventions</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../../developer-guide/internals/index.html">Internals</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/ir-cache.html">IR cache</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/protocol-wire.html">Protocol text blocks</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/reconstruction-proxy.html">Reconstruction proxy</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/virtual-scanner.html">Virtual scanner</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/bloch-engine.html">Bloch engine</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/pre-commit.html">Pre-commit</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/pull-requests.html">Pull requests</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/releases.html">Releases</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/code-of-conduct.html">Code of conduct</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../explanations/index.html">Explanations</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/architecture.html">Architecture</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/protocol.html">Protocol resolution</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/designs.html">Designs and the design store</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/scanner-representation.html">Scanner representation (PulSeg)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/virtual-scanner.html">The virtual scanner</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/reconstruction.html">Raw-data enrichment and routing</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/calibration.html">Calibration, noise and coil compression</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../examples/index.html">Examples</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../../examples/course.html">Course</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/01_protocol_to_image.html">1. From protocol to image</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/02_sequence_plugin.html">2. A scanner sequence and its protocol</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/03_scanner_representation.html">3. Scanner representation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/04_reconstruction_plugin.html">4. A reconstruction plugin</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/05_testing_on_the_virtual_scanner.html">5. Testing on the virtual scanner</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../../examples/tours.html">Tours</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/02-tours/01_protocol_resolution.html">Protocol resolution for a 2D gradient echo</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/02-tours/02_segmentation.html">Segmentation of a sequence for the scanner</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/02-tours/03_fov_offset_enrichment.html">Field-of-view offset and the proxy phase</a></li>
+</ul>
+</details></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../api/index.html">API reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/protocol.html">Protocol</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/design.html">Scanner sequences</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/host.html">Design calls</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/ir.html">IR conversion</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/proxy.html">Reconstruction proxy</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/recon.html">Reconstruction plugins</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/mrd.html">MRD data</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/validate.html">Validation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/virtual.html">Virtual scanner</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../misc/index.html">Miscellaneous</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../misc/license.html">License and notices</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../misc/related.html">Related projects</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../misc/contributors.html">Contributors</a></li>
+</ul>
+</details></li>
+</ul>
+
+    </div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+      <div class="sidebar-primary-item">
+<div id="ethical-ad-placement"
+      class="flat"
+      data-ea-publisher="readthedocs"
+      data-ea-type="readthedocs-sidebar"
+      data-ea-manual="true">
+</div></div>
+  </div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+
+<div class="sbt-scroll-pixel-helper"></div>
+
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item"><button class="sidebar-toggle primary-toggle btn btn-sm" title="Toggle primary sidebar" data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <span class="fa-solid fa-bars"></span>
+</button></div>
+      
+    </div>
+  
+  
+    <div class="header-article-items__end">
+      
+        <div class="header-article-item">
+
+<div class="article-header-buttons">
+
+
+
+
+
+<div class="dropdown dropdown-source-buttons">
+  <button class="btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Source repositories">
+    <i class="fab fa-github"></i>
+  </button>
+  <ul class="dropdown-menu">
+      
+      
+      
+      <li><a href="https://github.com/pulserver/pulserver" target="_blank"
+   class="btn btn-sm btn-source-repository-button dropdown-item"
+   title="Source repository"
+   data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fab fa-github"></i>
+  </span>
+<span class="btn__text-container">Repository</span>
+</a>
+</li>
+      
+      
+      
+      
+      <li><a href="https://github.com/pulserver/pulserver/issues/new?title=Issue%20on%20page%20%2F_modules/pulserver/protocol/_wire.html&body=Your%20issue%20content%20here." target="_blank"
+   class="btn btn-sm btn-source-issues-button dropdown-item"
+   title="Open an issue"
+   data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-lightbulb"></i>
+  </span>
+<span class="btn__text-container">Open issue</span>
+</a>
+</li>
+      
+  </ul>
+</div>
+
+
+
+
+<button onclick="toggleFullScreen()"
+  class="btn btn-sm btn-fullscreen-button pst-navbar-icon"
+  title="Fullscreen mode"
+  data-bs-placement="bottom" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-expand"></i>
+  </span>
+
+</button>
+
+
+
+<div class="theme-switch-container dropdown pst-js-only" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Color mode">
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button dropdown-toggle" aria-label="Color mode" data-bs-toggle="dropdown">
+    <i class="theme-switch fa-solid fa-sun fa-lg fa-fw" data-mode="light" title="Light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg fa-fw" data-mode="dark" title="Dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg fa-fw" data-mode="auto" title="System Settings"></i>
+  </button>
+  <ul class="dropdown-menu dropdown-menu-end">
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg fa-fw me-1"></i>System Settings</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="light"><i class="fa-solid fa-sun fa-lg fa-fw me-1"></i>Light</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="dark"><i class="fa-solid fa-moon fa-lg fa-fw me-1"></i>Dark</button></li>
+  </ul>
+</div>
+
+
+<button class="btn btn-sm pst-navbar-icon search-button search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass fa-lg"></i>
+</button>
+
+</div></div>
+      
+    </div>
+  
+</div>
+</div>
+              
+              
+
+<div id="jb-print-docs-body" class="onlyprint">
+    <h1></h1>
+    <!-- Table of contents -->
+    <div id="print-main-content">
+        <div id="jb-print-toc">
+            
+        </div>
+    </div>
+</div>
+
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <h1>Source code for pulserver.protocol._wire</h1><div class="highlight"><pre>
+<span></span><span class="sd">"""Text form of a protocol on the interpreter wire.</span>
+
+<span class="sd">The block grammar is the one ``pulseg_protocol_parse`` reads: listings carry</span>
+<span class="sd">``name: kind|…`` schema lines, value blocks carry ``name: value`` lines. Keys</span>
+<span class="sd">and values are typed everywhere else: this module is where they become text,</span>
+<span class="sd">and where text becomes them.</span>
+
+<span class="sd">The RF blocks, ``[RfDefinitions]`` and ``[RfLayout]``, hold lists of numbers</span>
+<span class="sd">rather than entries. A number is ASCII decimal with nine significant digits,</span>
+<span class="sd">numbers are separated by single spaces, and each list is one line, so a reader</span>
+<span class="sd">takes tokens and not lines of a fixed size.</span>
+<span class="sd">"""</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">itertools</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">math</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Mapping</span><span class="p">,</span> <span class="n">Sequence</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span><span class="p">,</span> <span class="n">field</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">types</span><span class="w"> </span><span class="kn">import</span> <span class="n">SimpleNamespace</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">TYPE_CHECKING</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">._keys</span><span class="w"> </span><span class="kn">import</span> <span class="n">WIRE_NAMES</span><span class="p">,</span> <span class="n">ProtocolKey</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">._prescription</span><span class="w"> </span><span class="kn">import</span> <span class="n">PRESCRIPTION</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">._schema</span><span class="w"> </span><span class="kn">import</span> <span class="n">InputMode</span><span class="p">,</span> <span class="n">Kind</span><span class="p">,</span> <span class="n">Parameter</span>
+
+<span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>
+    <span class="kn">import</span><span class="w"> </span><span class="nn">pypulseqpp</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pp</span>
+
+    <span class="kn">from</span><span class="w"> </span><span class="nn">..design</span><span class="w"> </span><span class="kn">import</span> <span class="n">RfLayout</span>
+
+<span class="c1">#: First and last lines of every protocol block, listing or values.</span>
+<span class="n">PROTOCOL_BEGIN</span> <span class="o">=</span> <span class="s2">"[Protocol]"</span>
+<span class="n">PROTOCOL_END</span> <span class="o">=</span> <span class="s2">"[Protocol End]"</span>
+
+<span class="c1">#: The block was once delimited by the name of a tool that drove it. A server</span>
+<span class="c1">#: and an interpreter are deployed separately and may differ in age, so both</span>
+<span class="c1">#: spellings are read; only the one above is written.</span>
+<span class="n">_FORMER_BEGIN</span> <span class="o">=</span> <span class="s2">"[NimPulseqGUI Protocol]"</span>
+<span class="n">_FORMER_END</span> <span class="o">=</span> <span class="s2">"[NimPulseqGUI Protocol End]"</span>
+
+
+<div class="viewcode-block" id="Validation">
+<a class="viewcode-back" href="../../../generated/pulserver.protocol.Validation.html#pulserver.protocol.Validation">[docs]</a>
+<span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">Validation</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Reply of the ``validate`` design call.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    duration</span>
+<span class="sd">        Scan time in seconds; ``None`` when the plugin reports none.</span>
+<span class="sd">    values</span>
+<span class="sd">        The resolved protocol for a valid request, the request itself for an</span>
+<span class="sd">        invalid one, as wire values by key.</span>
+<span class="sd">    rf_layout</span>
+<span class="sd">        The RF layout of a valid evaluation; ``None`` where the plugin states</span>
+<span class="sd">        none or plays no RF, for an invalid request, and for a reply read from</span>
+<span class="sd">        text. Excluded from equality and from the representation.</span>
+<span class="sd">    """</span>
+
+    <span class="n">valid</span><span class="p">:</span> <span class="nb">bool</span>
+    <span class="n">duration</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span>
+    <span class="n">info</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">values</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="n">ProtocolKey</span><span class="p">,</span> <span class="nb">float</span> <span class="o">|</span> <span class="nb">int</span> <span class="o">|</span> <span class="nb">bool</span> <span class="o">|</span> <span class="nb">str</span><span class="p">]</span>
+    <span class="n">rf_layout</span><span class="p">:</span> <span class="n">RfLayout</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">compare</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="nb">repr</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span></div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_key</span><span class="p">(</span><span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ProtocolKey</span> <span class="o">|</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return the key a wire name stands for; a name the interpreter does not know stays text."""</span>
+    <span class="k">return</span> <span class="n">WIRE_NAMES</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_number</span><span class="p">(</span><span class="n">value</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="nb">int</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="nb">bool</span><span class="p">):</span>
+        <span class="k">return</span> <span class="nb">str</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+    <span class="n">value</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">math</span><span class="o">.</span><span class="n">isinf</span><span class="p">(</span><span class="n">value</span><span class="p">):</span>
+        <span class="k">return</span> <span class="s2">"inf"</span> <span class="k">if</span> <span class="n">value</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="k">else</span> <span class="s2">"-inf"</span>
+    <span class="k">return</span> <span class="nb">repr</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_listing_line</span><span class="p">(</span><span class="n">name</span><span class="p">:</span> <span class="n">ProtocolKey</span><span class="p">,</span> <span class="n">p</span><span class="p">:</span> <span class="n">Parameter</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+    <span class="k">if</span> <span class="n">p</span><span class="o">.</span><span class="n">kind</span> <span class="ow">in</span> <span class="p">(</span><span class="n">Kind</span><span class="o">.</span><span class="n">FLOAT</span><span class="p">,</span> <span class="n">Kind</span><span class="o">.</span><span class="n">INT</span><span class="p">):</span>
+        <span class="n">fields</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="n">p</span><span class="o">.</span><span class="n">kind</span><span class="o">.</span><span class="n">value</span><span class="p">,</span>
+            <span class="n">p</span><span class="o">.</span><span class="n">mode</span><span class="o">.</span><span class="n">value</span><span class="p">,</span>
+            <span class="n">_number</span><span class="p">(</span><span class="n">p</span><span class="o">.</span><span class="n">value</span><span class="p">),</span>
+            <span class="n">_number</span><span class="p">(</span><span class="n">p</span><span class="o">.</span><span class="n">range_min</span><span class="p">),</span>
+            <span class="n">_number</span><span class="p">(</span><span class="n">p</span><span class="o">.</span><span class="n">range_max</span><span class="p">),</span>
+            <span class="n">_number</span><span class="p">(</span><span class="n">p</span><span class="o">.</span><span class="n">range_incr</span><span class="p">),</span>
+            <span class="n">p</span><span class="o">.</span><span class="n">unit</span><span class="p">,</span>
+        <span class="p">]</span>
+        <span class="k">if</span> <span class="n">p</span><span class="o">.</span><span class="n">mode</span> <span class="ow">is</span> <span class="n">InputMode</span><span class="o">.</span><span class="n">DROPDOWN</span><span class="p">:</span>
+            <span class="n">fields</span> <span class="o">+=</span> <span class="p">[</span><span class="n">_number</span><span class="p">(</span><span class="n">o</span><span class="p">)</span> <span class="k">for</span> <span class="n">o</span> <span class="ow">in</span> <span class="n">p</span><span class="o">.</span><span class="n">options</span><span class="p">]</span>
+    <span class="k">elif</span> <span class="n">p</span><span class="o">.</span><span class="n">kind</span> <span class="ow">is</span> <span class="n">Kind</span><span class="o">.</span><span class="n">BOOL</span><span class="p">:</span>
+        <span class="n">fields</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"bool"</span><span class="p">,</span> <span class="s2">"true"</span> <span class="k">if</span> <span class="n">p</span><span class="o">.</span><span class="n">value</span> <span class="k">else</span> <span class="s2">"false"</span><span class="p">]</span>
+    <span class="k">elif</span> <span class="n">p</span><span class="o">.</span><span class="n">kind</span> <span class="ow">is</span> <span class="n">Kind</span><span class="o">.</span><span class="n">STRINGLIST</span><span class="p">:</span>
+        <span class="n">fields</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"stringlist"</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">p</span><span class="o">.</span><span class="n">options</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="n">p</span><span class="o">.</span><span class="n">value</span><span class="p">)),</span> <span class="o">*</span><span class="n">p</span><span class="o">.</span><span class="n">options</span><span class="p">]</span>
+    <span class="k">elif</span> <span class="n">p</span><span class="o">.</span><span class="n">kind</span> <span class="ow">is</span> <span class="n">Kind</span><span class="o">.</span><span class="n">CONFIG</span><span class="p">:</span>
+        <span class="n">fields</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"config"</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">p</span><span class="o">.</span><span class="n">value</span><span class="p">)]</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">fields</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"description"</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">p</span><span class="o">.</span><span class="n">value</span><span class="p">)</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">"</span><span class="se">\n</span><span class="s2">"</span><span class="p">,</span> <span class="s2">"</span><span class="se">\\</span><span class="s2">n"</span><span class="p">)]</span>
+    <span class="k">return</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="s1">'|'</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">fields</span><span class="p">)</span><span class="si">}</span><span class="s2">"</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_block_lines</span><span class="p">(</span><span class="n">text</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]]:</span>
+<span class="w">    </span><span class="sd">"""Return the name and value of each line in a protocol block.</span>
+
+<span class="sd">    Lines may be commented out with ``#``, as in a ``.seq`` file header.</span>
+<span class="sd">    """</span>
+    <span class="n">entries</span><span class="p">,</span> <span class="n">inside</span> <span class="o">=</span> <span class="p">[],</span> <span class="kc">False</span>
+    <span class="k">for</span> <span class="n">raw</span> <span class="ow">in</span> <span class="n">text</span><span class="o">.</span><span class="n">splitlines</span><span class="p">():</span>
+        <span class="n">line</span> <span class="o">=</span> <span class="n">raw</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span><span class="o">.</span><span class="n">lstrip</span><span class="p">(</span><span class="s2">"#"</span><span class="p">)</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">PROTOCOL_END</span> <span class="ow">in</span> <span class="n">line</span> <span class="ow">or</span> <span class="n">_FORMER_END</span> <span class="ow">in</span> <span class="n">line</span><span class="p">:</span>
+            <span class="k">break</span>
+        <span class="k">if</span> <span class="n">PROTOCOL_BEGIN</span> <span class="ow">in</span> <span class="n">line</span> <span class="ow">or</span> <span class="n">_FORMER_BEGIN</span> <span class="ow">in</span> <span class="n">line</span><span class="p">:</span>
+            <span class="n">inside</span> <span class="o">=</span> <span class="kc">True</span>
+            <span class="k">continue</span>
+        <span class="k">if</span> <span class="n">inside</span> <span class="ow">and</span> <span class="s2">": "</span> <span class="ow">in</span> <span class="n">line</span><span class="p">:</span>
+            <span class="n">name</span><span class="p">,</span> <span class="n">value</span> <span class="o">=</span> <span class="n">line</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">": "</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+            <span class="n">entries</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">name</span><span class="o">.</span><span class="n">strip</span><span class="p">(),</span> <span class="n">value</span><span class="o">.</span><span class="n">strip</span><span class="p">()))</span>
+    <span class="k">return</span> <span class="n">entries</span>
+
+
+<div class="viewcode-block" id="format_listing">
+<a class="viewcode-back" href="../../../generated/pulserver.protocol.format_listing.html#pulserver.protocol.format_listing">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">format_listing</span><span class="p">(</span><span class="n">parameters</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="n">ProtocolKey</span><span class="p">,</span> <span class="n">Parameter</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Format a protocol with its schema, as the ``list`` design call replies it."""</span>
+    <span class="n">lines</span> <span class="o">=</span> <span class="p">[</span><span class="n">_listing_line</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">p</span><span class="p">)</span> <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">parameters</span><span class="o">.</span><span class="n">items</span><span class="p">()]</span>
+    <span class="k">return</span> <span class="s2">"</span><span class="se">\n</span><span class="s2">"</span><span class="o">.</span><span class="n">join</span><span class="p">([</span><span class="n">PROTOCOL_BEGIN</span><span class="p">,</span> <span class="o">*</span><span class="n">lines</span><span class="p">,</span> <span class="n">PROTOCOL_END</span><span class="p">])</span> <span class="o">+</span> <span class="s2">"</span><span class="se">\n</span><span class="s2">"</span></div>
+
+
+
+<div class="viewcode-block" id="parse_listing">
+<a class="viewcode-back" href="../../../generated/pulserver.protocol.parse_listing.html#pulserver.protocol.parse_listing">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">parse_listing</span><span class="p">(</span><span class="n">text</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="n">ProtocolKey</span><span class="p">,</span> <span class="n">Parameter</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Read a protocol with its schema from a listing block."""</span>
+    <span class="n">parameters</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">wire_name</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">_block_lines</span><span class="p">(</span><span class="n">text</span><span class="p">):</span>
+        <span class="n">name</span> <span class="o">=</span> <span class="n">_key</span><span class="p">(</span><span class="n">wire_name</span><span class="p">)</span>
+        <span class="n">kind</span><span class="p">,</span> <span class="o">*</span><span class="n">fields</span> <span class="o">=</span> <span class="n">value</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">"|"</span><span class="p">)</span>
+        <span class="n">kind</span> <span class="o">=</span> <span class="n">Kind</span><span class="p">(</span><span class="n">kind</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">kind</span> <span class="ow">in</span> <span class="p">(</span><span class="n">Kind</span><span class="o">.</span><span class="n">FLOAT</span><span class="p">,</span> <span class="n">Kind</span><span class="o">.</span><span class="n">INT</span><span class="p">):</span>
+            <span class="n">cast</span> <span class="o">=</span> <span class="nb">float</span> <span class="k">if</span> <span class="n">kind</span> <span class="ow">is</span> <span class="n">Kind</span><span class="o">.</span><span class="n">FLOAT</span> <span class="k">else</span> <span class="nb">int</span>
+            <span class="n">mode</span><span class="p">,</span> <span class="n">number</span><span class="p">,</span> <span class="n">low</span><span class="p">,</span> <span class="n">high</span><span class="p">,</span> <span class="n">incr</span><span class="p">,</span> <span class="n">unit</span><span class="p">,</span> <span class="o">*</span><span class="n">options</span> <span class="o">=</span> <span class="n">fields</span>
+            <span class="n">parameters</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">Parameter</span><span class="p">(</span>
+                <span class="n">kind</span><span class="p">,</span>
+                <span class="n">cast</span><span class="p">(</span><span class="n">number</span><span class="p">),</span>
+                <span class="n">InputMode</span><span class="p">(</span><span class="n">mode</span><span class="p">),</span>
+                <span class="n">cast</span><span class="p">(</span><span class="n">low</span><span class="p">),</span>
+                <span class="n">cast</span><span class="p">(</span><span class="n">high</span><span class="p">),</span>
+                <span class="n">cast</span><span class="p">(</span><span class="n">incr</span><span class="p">),</span>
+                <span class="n">unit</span><span class="p">,</span>
+                <span class="nb">tuple</span><span class="p">(</span><span class="n">cast</span><span class="p">(</span><span class="n">o</span><span class="p">)</span> <span class="k">for</span> <span class="n">o</span> <span class="ow">in</span> <span class="n">options</span> <span class="k">if</span> <span class="n">o</span><span class="p">),</span>
+            <span class="p">)</span>
+        <span class="k">elif</span> <span class="n">kind</span> <span class="ow">is</span> <span class="n">Kind</span><span class="o">.</span><span class="n">BOOL</span><span class="p">:</span>
+            <span class="n">parameters</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">Parameter</span><span class="p">(</span><span class="n">kind</span><span class="p">,</span> <span class="n">fields</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="s2">"true"</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">kind</span> <span class="ow">is</span> <span class="n">Kind</span><span class="o">.</span><span class="n">STRINGLIST</span><span class="p">:</span>
+            <span class="n">index</span><span class="p">,</span> <span class="o">*</span><span class="n">options</span> <span class="o">=</span> <span class="n">fields</span>
+            <span class="n">parameters</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">Parameter</span><span class="p">(</span>
+                <span class="n">kind</span><span class="p">,</span> <span class="n">options</span><span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">index</span><span class="p">)],</span> <span class="n">InputMode</span><span class="o">.</span><span class="n">DROPDOWN</span><span class="p">,</span> <span class="n">options</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(</span><span class="n">options</span><span class="p">)</span>
+            <span class="p">)</span>
+        <span class="k">elif</span> <span class="n">kind</span> <span class="ow">is</span> <span class="n">Kind</span><span class="o">.</span><span class="n">CONFIG</span><span class="p">:</span>
+            <span class="n">parameters</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">Parameter</span><span class="p">(</span><span class="n">kind</span><span class="p">,</span> <span class="nb">int</span><span class="p">(</span><span class="n">fields</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span> <span class="n">InputMode</span><span class="o">.</span><span class="n">OFF</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">text_value</span> <span class="o">=</span> <span class="s2">"|"</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">fields</span><span class="p">)</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">"</span><span class="se">\\</span><span class="s2">n"</span><span class="p">,</span> <span class="s2">"</span><span class="se">\n</span><span class="s2">"</span><span class="p">)</span>
+            <span class="n">parameters</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">Parameter</span><span class="p">(</span><span class="n">kind</span><span class="p">,</span> <span class="n">text_value</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">parameters</span></div>
+
+
+
+<div class="viewcode-block" id="format_values">
+<a class="viewcode-back" href="../../../generated/pulserver.protocol.format_values.html#pulserver.protocol.format_values">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">format_values</span><span class="p">(</span>
+    <span class="n">values</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="n">ProtocolKey</span><span class="p">,</span> <span class="nb">float</span> <span class="o">|</span> <span class="nb">int</span> <span class="o">|</span> <span class="nb">bool</span> <span class="o">|</span> <span class="nb">str</span><span class="p">],</span>
+    <span class="n">listing</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="n">ProtocolKey</span><span class="p">,</span> <span class="n">Parameter</span><span class="p">],</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Format a value block, as requests and replies carry it.</span>
+
+<span class="sd">    A stringlist travels as its option index, as the interpreter sends it.</span>
+<span class="sd">    Read-only entries are left out.</span>
+<span class="sd">    """</span>
+    <span class="n">lines</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">values</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+        <span class="n">p</span> <span class="o">=</span> <span class="n">listing</span><span class="p">[</span><span class="n">name</span><span class="p">]</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">p</span><span class="o">.</span><span class="n">editable</span><span class="p">:</span>
+            <span class="k">continue</span>
+        <span class="k">if</span> <span class="n">p</span><span class="o">.</span><span class="n">kind</span> <span class="ow">is</span> <span class="n">Kind</span><span class="o">.</span><span class="n">BOOL</span><span class="p">:</span>
+            <span class="n">text</span> <span class="o">=</span> <span class="s2">"true"</span> <span class="k">if</span> <span class="n">value</span> <span class="k">else</span> <span class="s2">"false"</span>
+        <span class="k">elif</span> <span class="n">p</span><span class="o">.</span><span class="n">kind</span> <span class="ow">is</span> <span class="n">Kind</span><span class="o">.</span><span class="n">STRINGLIST</span><span class="p">:</span>
+            <span class="n">text</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">p</span><span class="o">.</span><span class="n">options</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="n">value</span><span class="p">))</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">text</span> <span class="o">=</span> <span class="n">_number</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">value</span><span class="p">)</span> <span class="k">if</span> <span class="n">p</span><span class="o">.</span><span class="n">kind</span> <span class="ow">is</span> <span class="n">Kind</span><span class="o">.</span><span class="n">INT</span> <span class="k">else</span> <span class="nb">float</span><span class="p">(</span><span class="n">value</span><span class="p">))</span>
+        <span class="n">lines</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">text</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+    <span class="k">return</span> <span class="s2">"</span><span class="se">\n</span><span class="s2">"</span><span class="o">.</span><span class="n">join</span><span class="p">([</span><span class="n">PROTOCOL_BEGIN</span><span class="p">,</span> <span class="o">*</span><span class="n">lines</span><span class="p">,</span> <span class="n">PROTOCOL_END</span><span class="p">])</span> <span class="o">+</span> <span class="s2">"</span><span class="se">\n</span><span class="s2">"</span></div>
+
+
+
+<div class="viewcode-block" id="parse_values">
+<a class="viewcode-back" href="../../../generated/pulserver.protocol.parse_values.html#pulserver.protocol.parse_values">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">parse_values</span><span class="p">(</span>
+    <span class="n">text</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">listing</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="n">ProtocolKey</span><span class="p">,</span> <span class="n">Parameter</span><span class="p">]</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="n">ProtocolKey</span><span class="p">,</span> <span class="nb">float</span> <span class="o">|</span> <span class="nb">int</span> <span class="o">|</span> <span class="nb">bool</span> <span class="o">|</span> <span class="nb">str</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Read a value block against the listing it was edited from.</span>
+
+<span class="sd">    Lines for read-only entries are ignored. A stringlist's value is the</span>
+<span class="sd">    option object the listing holds, which is a member of the choices' enum</span>
+<span class="sd">    where the listing comes from a scanner sequence.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If a line names a parameter the listing does not declare, or carries a</span>
+<span class="sd">        value that parameter cannot take.</span>
+<span class="sd">    """</span>
+    <span class="n">values</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">_block_lines</span><span class="p">(</span><span class="n">text</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">listing</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">name</span><span class="si">!r}</span><span class="s2"> is not a parameter of this protocol"</span><span class="p">)</span>
+        <span class="n">p</span> <span class="o">=</span> <span class="n">listing</span><span class="p">[</span><span class="n">name</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">p</span><span class="o">.</span><span class="n">editable</span><span class="p">:</span>
+            <span class="n">values</span><span class="p">[</span><span class="n">_key</span><span class="p">(</span><span class="n">name</span><span class="p">)]</span> <span class="o">=</span> <span class="n">p</span><span class="o">.</span><span class="n">coerce</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">values</span></div>
+
+
+
+<div class="viewcode-block" id="format_prescription">
+<a class="viewcode-back" href="../../../generated/pulserver.protocol.format_prescription.html#pulserver.protocol.format_prescription">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">format_prescription</span><span class="p">(</span><span class="n">values</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="n">ProtocolKey</span><span class="p">,</span> <span class="nb">float</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Format prescription entries as the ``name: value`` lines of a block.</span>
+
+<span class="sd">    The offset is in mm and the rotation unitless, as the entries of a</span>
+<span class="sd">    protocol carry them.</span>
+<span class="sd">    """</span>
+    <span class="k">return</span> <span class="p">[</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">_number</span><span class="p">(</span><span class="n">value</span><span class="p">)</span><span class="si">}</span><span class="s2">"</span> <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">values</span><span class="o">.</span><span class="n">items</span><span class="p">()]</span></div>
+
+
+
+<div class="viewcode-block" id="parse_prescription">
+<a class="viewcode-back" href="../../../generated/pulserver.protocol.parse_prescription.html#pulserver.protocol.parse_prescription">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">parse_prescription</span><span class="p">(</span><span class="n">text</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="n">ProtocolKey</span><span class="p">,</span> <span class="nb">float</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Read the prescription entries out of the ``name: value`` lines of a block.</span>
+
+<span class="sd">    Other lines are left out.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If a prescription line is not a number.</span>
+<span class="sd">    """</span>
+    <span class="n">found</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="n">text</span><span class="o">.</span><span class="n">splitlines</span><span class="p">():</span>
+        <span class="n">name</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">value</span> <span class="o">=</span> <span class="n">line</span><span class="o">.</span><span class="n">partition</span><span class="p">(</span><span class="s2">": "</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">PRESCRIPTION</span><span class="p">:</span>
+            <span class="n">found</span><span class="p">[</span><span class="n">_key</span><span class="p">(</span><span class="n">name</span><span class="p">)]</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">found</span></div>
+
+
+
+<div class="viewcode-block" id="format_validation">
+<a class="viewcode-back" href="../../../generated/pulserver.protocol.format_validation.html#pulserver.protocol.format_validation">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">format_validation</span><span class="p">(</span>
+    <span class="n">validation</span><span class="p">:</span> <span class="n">Validation</span><span class="p">,</span>
+    <span class="n">listing</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="n">ProtocolKey</span><span class="p">,</span> <span class="n">Parameter</span><span class="p">],</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">rf_layout</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="n">listed_peak_hz</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="p">(),</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Format a ``validate`` reply: status line, info line, value block.</span>
+
+<span class="sd">    Whitespace in the info text, newlines included, is folded to single spaces.</span>
+<span class="sd">    With ``rf_layout``, a valid reply that holds an RF layout ends with its</span>
+<span class="sd">    ``[RfLayout]`` block, as :func:`format_rf_layout` formats it over</span>
+<span class="sd">    ``listed_peak_hz``.</span>
+<span class="sd">    """</span>
+    <span class="k">if</span> <span class="n">validation</span><span class="o">.</span><span class="n">valid</span><span class="p">:</span>
+        <span class="n">duration</span> <span class="o">=</span> <span class="s2">"?"</span> <span class="k">if</span> <span class="n">validation</span><span class="o">.</span><span class="n">duration</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="nb">repr</span><span class="p">(</span><span class="n">validation</span><span class="o">.</span><span class="n">duration</span><span class="p">)</span>
+        <span class="n">status</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"VALID </span><span class="si">{</span><span class="n">duration</span><span class="si">}</span><span class="s2">"</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">status</span> <span class="o">=</span> <span class="s2">"INVALID"</span>
+    <span class="n">info</span> <span class="o">=</span> <span class="s2">" "</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">validation</span><span class="o">.</span><span class="n">info</span><span class="o">.</span><span class="n">split</span><span class="p">())</span>
+    <span class="n">text</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">status</span><span class="si">}</span><span class="se">\n</span><span class="s2">INFO </span><span class="si">{</span><span class="n">info</span><span class="si">}</span><span class="se">\n</span><span class="s2">"</span> <span class="o">+</span> <span class="n">format_values</span><span class="p">(</span><span class="n">validation</span><span class="o">.</span><span class="n">values</span><span class="p">,</span> <span class="n">listing</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">rf_layout</span> <span class="ow">and</span> <span class="n">validation</span><span class="o">.</span><span class="n">valid</span> <span class="ow">and</span> <span class="n">validation</span><span class="o">.</span><span class="n">rf_layout</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">text</span> <span class="o">+=</span> <span class="n">format_rf_layout</span><span class="p">(</span><span class="n">validation</span><span class="o">.</span><span class="n">rf_layout</span><span class="p">,</span> <span class="n">listed_peak_hz</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">text</span></div>
+
+
+
+<div class="viewcode-block" id="parse_validation">
+<a class="viewcode-back" href="../../../generated/pulserver.protocol.parse_validation.html#pulserver.protocol.parse_validation">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">parse_validation</span><span class="p">(</span><span class="n">text</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">listing</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="n">ProtocolKey</span><span class="p">,</span> <span class="n">Parameter</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">Validation</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Read a ``validate`` reply.</span>
+
+<span class="sd">    Blocks after the value block are left to :func:`parse_rf_layout`.</span>
+<span class="sd">    """</span>
+    <span class="n">status</span><span class="p">,</span> <span class="n">info</span><span class="p">,</span> <span class="n">block</span> <span class="o">=</span> <span class="n">text</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">"</span><span class="se">\n</span><span class="s2">"</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
+    <span class="n">word</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">duration</span> <span class="o">=</span> <span class="n">status</span><span class="o">.</span><span class="n">partition</span><span class="p">(</span><span class="s2">" "</span><span class="p">)</span>
+    <span class="n">valid</span> <span class="o">=</span> <span class="n">word</span> <span class="o">==</span> <span class="s2">"VALID"</span>
+    <span class="k">return</span> <span class="n">Validation</span><span class="p">(</span>
+        <span class="n">valid</span><span class="o">=</span><span class="n">valid</span><span class="p">,</span>
+        <span class="n">duration</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">duration</span><span class="p">)</span> <span class="k">if</span> <span class="n">valid</span> <span class="ow">and</span> <span class="n">duration</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">""</span><span class="p">,</span> <span class="s2">"?"</span><span class="p">)</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">info</span><span class="o">=</span><span class="n">info</span><span class="o">.</span><span class="n">removeprefix</span><span class="p">(</span><span class="s2">"INFO"</span><span class="p">)</span><span class="o">.</span><span class="n">strip</span><span class="p">(),</span>
+        <span class="n">values</span><span class="o">=</span><span class="n">parse_values</span><span class="p">(</span><span class="n">block</span><span class="p">,</span> <span class="n">listing</span><span class="p">),</span>
+    <span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="RfDefinitionRecord">
+<a class="viewcode-back" href="../../../generated/pulserver.protocol.RfDefinitionRecord.html#pulserver.protocol.RfDefinitionRecord">[docs]</a>
+<span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">eq</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">RfDefinitionRecord</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""One RF definition of an ``[RfDefinitions]`` block.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    index</span>
+<span class="sd">        The number of the definition, from 0, that the runs of an RF layout</span>
+<span class="sd">        name it by.</span>
+<span class="sd">    use</span>
+<span class="sd">        The RF use word of pypulseqpp.</span>
+<span class="sd">    flip_deg</span>
+<span class="sd">        The flip angle of the base instance, in degrees.</span>
+<span class="sd">    peak_hz</span>
+<span class="sd">        The peak RF amplitude of the base instance, in Hz.</span>
+<span class="sd">    bandwidth_hz</span>
+<span class="sd">        The bandwidth :func:`pypulseqpp.calc_rf_bandwidth` measures on the sum</span>
+<span class="sd">        of the channels, in Hz; ``0.0`` where the sum is zero.</span>
+<span class="sd">    delay</span>
+<span class="sd">        The delay of the RF event in its block, in seconds.</span>
+<span class="sd">    center</span>
+<span class="sd">        The pulse centre, in seconds from the start of the event.</span>
+<span class="sd">    duration</span>
+<span class="sd">        The shape duration, in seconds from the start of the event.</span>
+<span class="sd">    time</span>
+<span class="sd">        ``(samples,)``: the sample times, in seconds from the start of the event.</span>
+<span class="sd">    waveform</span>
+<span class="sd">        ``(channels, samples)``: the complex waveform of each channel at unit</span>
+<span class="sd">        peak magnitude.</span>
+<span class="sd">    """</span>
+
+    <span class="n">index</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">use</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">flip_deg</span><span class="p">:</span> <span class="nb">float</span>
+    <span class="n">peak_hz</span><span class="p">:</span> <span class="nb">float</span>
+    <span class="n">bandwidth_hz</span><span class="p">:</span> <span class="nb">float</span>
+    <span class="n">delay</span><span class="p">:</span> <span class="nb">float</span>
+    <span class="n">center</span><span class="p">:</span> <span class="nb">float</span>
+    <span class="n">duration</span><span class="p">:</span> <span class="nb">float</span>
+    <span class="n">time</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+    <span class="n">waveform</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span></div>
+
+
+
+<div class="viewcode-block" id="RfLayoutRecord">
+<a class="viewcode-back" href="../../../generated/pulserver.protocol.RfLayoutRecord.html#pulserver.protocol.RfLayoutRecord">[docs]</a>
+<span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">RfLayoutRecord</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""The contents of an ``[RfLayout]`` block, one entry per instance of one TR in play order.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    period</span>
+<span class="sd">        The TR in seconds.</span>
+<span class="sd">    definition</span>
+<span class="sd">        The number of the definition each instance plays.</span>
+<span class="sd">    amplitude</span>
+<span class="sd">        The peak RF amplitude of each instance over the ``peak_hz`` the listing</span>
+<span class="sd">        states for its definition.</span>
+<span class="sd">    control</span>
+<span class="sd">        The control each amplitude is proportional to, or ``None``.</span>
+<span class="sd">    """</span>
+
+    <span class="n">period</span><span class="p">:</span> <span class="nb">float</span>
+    <span class="n">definition</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span>
+    <span class="n">amplitude</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span>
+    <span class="n">control</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">ProtocolKey</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span></div>
+
+
+
+<span class="n">_RF_DEFINITIONS</span> <span class="o">=</span> <span class="p">(</span><span class="s2">"[RfDefinitions]"</span><span class="p">,</span> <span class="s2">"[RfDefinitions End]"</span><span class="p">)</span>
+<span class="n">_RF_LAYOUT</span> <span class="o">=</span> <span class="p">(</span><span class="s2">"[RfLayout]"</span><span class="p">,</span> <span class="s2">"[RfLayout End]"</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_g</span><span class="p">(</span><span class="n">value</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return a number as the RF blocks write it: nine significant digits, no negative zero."""</span>
+    <span class="k">return</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="nb">float</span><span class="p">(</span><span class="n">value</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mf">0.0</span><span class="si">:</span><span class="s2">.9g</span><span class="si">}</span><span class="s2">"</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_numbers</span><span class="p">(</span><span class="n">values</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+    <span class="k">return</span> <span class="s2">" "</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">_g</span><span class="p">(</span><span class="n">value</span><span class="p">)</span> <span class="k">for</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">values</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_duration</span><span class="p">(</span><span class="n">time</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return the shape duration of an RF event from its sample times.</span>
+
+<span class="sd">    A time base starting at zero ends with the shape. Samples centred on the</span>
+<span class="sd">    raster extend half a step beyond the last.</span>
+<span class="sd">    """</span>
+    <span class="k">if</span> <span class="n">time</span><span class="o">.</span><span class="n">size</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="k">return</span> <span class="mf">2.0</span> <span class="o">*</span> <span class="nb">float</span><span class="p">(</span><span class="n">time</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+    <span class="k">if</span> <span class="n">time</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="mf">0.0</span><span class="p">:</span>
+        <span class="k">return</span> <span class="nb">float</span><span class="p">(</span><span class="n">time</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
+    <span class="k">return</span> <span class="nb">float</span><span class="p">(</span><span class="n">time</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="p">(</span><span class="n">time</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="n">time</span><span class="p">[</span><span class="o">-</span><span class="mi">2</span><span class="p">])</span> <span class="o">/</span> <span class="mi">2</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_bandwidth</span><span class="p">(</span><span class="n">definition</span><span class="p">:</span> <span class="n">pp</span><span class="o">.</span><span class="n">RfDefinition</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return the bandwidth of the sum of the channels of a definition about its stated centre, ``0.0`` for a zero sum."""</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">pypulseqpp</span><span class="w"> </span><span class="kn">import</span> <span class="n">calc_rf_bandwidth</span>
+
+    <span class="n">signal</span> <span class="o">=</span> <span class="n">definition</span><span class="o">.</span><span class="n">waveform</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">signal</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
+        <span class="k">return</span> <span class="mf">0.0</span>
+    <span class="n">event</span> <span class="o">=</span> <span class="n">SimpleNamespace</span><span class="p">(</span>
+        <span class="n">t</span><span class="o">=</span><span class="n">definition</span><span class="o">.</span><span class="n">time</span><span class="p">,</span>
+        <span class="n">signal</span><span class="o">=</span><span class="n">signal</span><span class="p">,</span>
+        <span class="n">center</span><span class="o">=</span><span class="n">definition</span><span class="o">.</span><span class="n">center</span><span class="p">,</span>
+        <span class="n">freq_offset</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
+        <span class="n">freq_ppm</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
+        <span class="n">phase_offset</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="nb">float</span><span class="p">(</span><span class="n">calc_rf_bandwidth</span><span class="p">(</span><span class="n">event</span><span class="p">))</span>
+
+
+<div class="viewcode-block" id="format_rf_definitions">
+<a class="viewcode-back" href="../../../generated/pulserver.protocol.format_rf_definitions.html#pulserver.protocol.format_rf_definitions">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">format_rf_definitions</span><span class="p">(</span><span class="n">instances</span><span class="p">:</span> <span class="n">pp</span><span class="o">.</span><span class="n">RfInstances</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Format the RF definitions of an evaluation, as the ``list`` design call replies them.</span>
+
+<span class="sd">    One ``definition`` line per definition gives its number, use, flip angle,</span>
+<span class="sd">    peak amplitude, bandwidth, delay, centre, duration, channel count and</span>
+<span class="sd">    sample count. The lines after it list the sample times, then the real and</span>
+<span class="sd">    the imaginary parts of each channel, one line each. Returns an empty string</span>
+<span class="sd">    for no definitions.</span>
+<span class="sd">    """</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">instances</span><span class="o">.</span><span class="n">definitions</span><span class="p">:</span>
+        <span class="k">return</span> <span class="s2">""</span>
+    <span class="n">begin</span><span class="p">,</span> <span class="n">end</span> <span class="o">=</span> <span class="n">_RF_DEFINITIONS</span>
+    <span class="n">lines</span> <span class="o">=</span> <span class="p">[</span><span class="n">begin</span><span class="p">]</span>
+    <span class="k">for</span> <span class="n">index</span><span class="p">,</span> <span class="n">definition</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">instances</span><span class="o">.</span><span class="n">definitions</span><span class="p">):</span>
+        <span class="n">channels</span><span class="p">,</span> <span class="n">samples</span> <span class="o">=</span> <span class="n">definition</span><span class="o">.</span><span class="n">waveform</span><span class="o">.</span><span class="n">shape</span>
+        <span class="n">fields</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="nb">str</span><span class="p">(</span><span class="n">index</span><span class="p">),</span>
+            <span class="n">definition</span><span class="o">.</span><span class="n">use</span><span class="p">,</span>
+            <span class="n">_g</span><span class="p">(</span><span class="n">definition</span><span class="o">.</span><span class="n">flip_deg</span><span class="p">),</span>
+            <span class="n">_g</span><span class="p">(</span><span class="n">definition</span><span class="o">.</span><span class="n">peak_hz</span><span class="p">),</span>
+            <span class="n">_g</span><span class="p">(</span><span class="n">_bandwidth</span><span class="p">(</span><span class="n">definition</span><span class="p">)),</span>
+            <span class="n">_g</span><span class="p">(</span><span class="n">definition</span><span class="o">.</span><span class="n">delay</span><span class="p">),</span>
+            <span class="n">_g</span><span class="p">(</span><span class="n">definition</span><span class="o">.</span><span class="n">center</span><span class="p">),</span>
+            <span class="n">_g</span><span class="p">(</span><span class="n">_duration</span><span class="p">(</span><span class="n">definition</span><span class="o">.</span><span class="n">time</span><span class="p">)),</span>
+            <span class="nb">str</span><span class="p">(</span><span class="n">channels</span><span class="p">),</span>
+            <span class="nb">str</span><span class="p">(</span><span class="n">samples</span><span class="p">),</span>
+        <span class="p">]</span>
+        <span class="n">lines</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">"definition "</span> <span class="o">+</span> <span class="s2">" "</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">fields</span><span class="p">))</span>
+        <span class="n">lines</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">_numbers</span><span class="p">(</span><span class="n">definition</span><span class="o">.</span><span class="n">time</span><span class="p">))</span>
+        <span class="k">for</span> <span class="n">channel</span> <span class="ow">in</span> <span class="n">definition</span><span class="o">.</span><span class="n">waveform</span><span class="p">:</span>
+            <span class="n">lines</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">_numbers</span><span class="p">(</span><span class="n">channel</span><span class="o">.</span><span class="n">real</span><span class="p">))</span>
+            <span class="n">lines</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">_numbers</span><span class="p">(</span><span class="n">channel</span><span class="o">.</span><span class="n">imag</span><span class="p">))</span>
+    <span class="n">lines</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">end</span><span class="p">)</span>
+    <span class="k">return</span> <span class="s2">"</span><span class="se">\n</span><span class="s2">"</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">lines</span><span class="p">)</span> <span class="o">+</span> <span class="s2">"</span><span class="se">\n</span><span class="s2">"</span></div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_over_listed_peaks</span><span class="p">(</span>
+    <span class="n">layout</span><span class="p">:</span> <span class="n">RfLayout</span><span class="p">,</span> <span class="n">listed_peak_hz</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Return per definition the ratio of the layout's ``peak_hz`` to the listed one.</span>
+
+<span class="sd">    The ratio is 1.0 where no peak is listed for the definition, or the listed</span>
+<span class="sd">    peak is zero.</span>
+<span class="sd">    """</span>
+    <span class="n">factors</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">index</span><span class="p">,</span> <span class="n">definition</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">layout</span><span class="o">.</span><span class="n">instances</span><span class="o">.</span><span class="n">definitions</span><span class="p">):</span>
+        <span class="n">listed</span> <span class="o">=</span> <span class="n">listed_peak_hz</span><span class="p">[</span><span class="n">index</span><span class="p">]</span> <span class="k">if</span> <span class="n">index</span> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="n">listed_peak_hz</span><span class="p">)</span> <span class="k">else</span> <span class="mf">0.0</span>
+        <span class="n">factors</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">definition</span><span class="o">.</span><span class="n">peak_hz</span> <span class="o">/</span> <span class="n">listed</span> <span class="k">if</span> <span class="n">listed</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="k">else</span> <span class="mf">1.0</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">factors</span>
+
+
+<div class="viewcode-block" id="format_rf_layout">
+<a class="viewcode-back" href="../../../generated/pulserver.protocol.format_rf_layout.html#pulserver.protocol.format_rf_layout">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">format_rf_layout</span><span class="p">(</span><span class="n">layout</span><span class="p">:</span> <span class="n">RfLayout</span><span class="p">,</span> <span class="n">listed_peak_hz</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="p">())</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Format the RF layout of a validation, as the ``validate`` design call replies it.</span>
+
+<span class="sd">    The instances are run-length encoded in play order: consecutive instances</span>
+<span class="sd">    of one definition and control, with amplitudes that print alike, are one</span>
+<span class="sd">    ``run`` line holding their count, so a train of equal pulses is one line.</span>
+<span class="sd">    No samples are carried; a run names its definition by the number the</span>
+<span class="sd">    ``[RfDefinitions]`` block of the listing gives it.</span>
+
+<span class="sd">    The amplitude of a run is the peak RF amplitude of its instances over</span>
+<span class="sd">    ``listed_peak_hz[definition]``, the ``peak_hz`` in Hz the listing states for</span>
+<span class="sd">    the definition, so ``amplitude * peak_hz * waveform`` is what the instance</span>
+<span class="sd">    plays. A definition that ``listed_peak_hz`` does not reach, or lists as zero,</span>
+<span class="sd">    keeps the amplitude of the layout, which is over the ``peak_hz`` of the</span>
+<span class="sd">    layout's own definition. Returns an empty string for a layout without</span>
+<span class="sd">    instances.</span>
+<span class="sd">    """</span>
+    <span class="n">instances</span> <span class="o">=</span> <span class="n">layout</span><span class="o">.</span><span class="n">instances</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">len</span><span class="p">(</span><span class="n">instances</span><span class="o">.</span><span class="n">definition</span><span class="p">):</span>
+        <span class="k">return</span> <span class="s2">""</span>
+    <span class="n">numbers</span> <span class="o">=</span> <span class="n">instances</span><span class="o">.</span><span class="n">definition</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+    <span class="n">factors</span> <span class="o">=</span> <span class="n">_over_listed_peaks</span><span class="p">(</span><span class="n">layout</span><span class="p">,</span> <span class="n">listed_peak_hz</span><span class="p">)</span>
+    <span class="n">rows</span> <span class="o">=</span> <span class="nb">zip</span><span class="p">(</span>
+        <span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">number</span><span class="p">)</span> <span class="k">for</span> <span class="n">number</span> <span class="ow">in</span> <span class="n">numbers</span><span class="p">),</span>
+        <span class="p">(</span>
+            <span class="n">_g</span><span class="p">(</span><span class="n">amplitude</span> <span class="o">*</span> <span class="n">factors</span><span class="p">[</span><span class="n">number</span><span class="p">])</span>
+            <span class="k">for</span> <span class="n">amplitude</span><span class="p">,</span> <span class="n">number</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">instances</span><span class="o">.</span><span class="n">amplitude</span><span class="p">,</span> <span class="n">numbers</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="p">),</span>
+        <span class="p">(</span><span class="s2">"-"</span> <span class="k">if</span> <span class="n">control</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">control</span><span class="o">.</span><span class="n">value</span> <span class="k">for</span> <span class="n">control</span> <span class="ow">in</span> <span class="n">layout</span><span class="o">.</span><span class="n">control</span><span class="p">),</span>
+        <span class="n">strict</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">begin</span><span class="p">,</span> <span class="n">end</span> <span class="o">=</span> <span class="n">_RF_LAYOUT</span>
+    <span class="n">lines</span> <span class="o">=</span> <span class="p">[</span><span class="n">begin</span><span class="p">,</span> <span class="sa">f</span><span class="s2">"period </span><span class="si">{</span><span class="n">_g</span><span class="p">(</span><span class="n">layout</span><span class="o">.</span><span class="n">period</span><span class="p">)</span><span class="si">}</span><span class="s2">"</span><span class="p">]</span>
+    <span class="k">for</span> <span class="n">row</span><span class="p">,</span> <span class="n">group</span> <span class="ow">in</span> <span class="n">itertools</span><span class="o">.</span><span class="n">groupby</span><span class="p">(</span><span class="n">rows</span><span class="p">):</span>
+        <span class="n">lines</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">"run "</span> <span class="o">+</span> <span class="s2">" "</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">row</span><span class="p">)</span> <span class="o">+</span> <span class="sa">f</span><span class="s2">" </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="n">group</span><span class="p">))</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+    <span class="n">lines</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">end</span><span class="p">)</span>
+    <span class="k">return</span> <span class="s2">"</span><span class="se">\n</span><span class="s2">"</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">lines</span><span class="p">)</span> <span class="o">+</span> <span class="s2">"</span><span class="se">\n</span><span class="s2">"</span></div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_block</span><span class="p">(</span><span class="n">text</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">begin</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">end</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return the stripped lines between the first ``begin`` line and ``end``, ``None`` where there is no such block."""</span>
+    <span class="n">lines</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">inside</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="k">for</span> <span class="n">raw</span> <span class="ow">in</span> <span class="n">text</span><span class="o">.</span><span class="n">splitlines</span><span class="p">():</span>
+        <span class="n">line</span> <span class="o">=</span> <span class="n">raw</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">inside</span><span class="p">:</span>
+            <span class="n">inside</span> <span class="o">=</span> <span class="n">line</span> <span class="o">==</span> <span class="n">begin</span>
+        <span class="k">elif</span> <span class="n">line</span> <span class="o">==</span> <span class="n">end</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">lines</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">lines</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">line</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">inside</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">begin</span><span class="si">}</span><span class="s2"> is not closed by </span><span class="si">{</span><span class="n">end</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+    <span class="k">return</span> <span class="kc">None</span>
+
+
+<div class="viewcode-block" id="parse_rf_definitions">
+<a class="viewcode-back" href="../../../generated/pulserver.protocol.parse_rf_definitions.html#pulserver.protocol.parse_rf_definitions">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">parse_rf_definitions</span><span class="p">(</span><span class="n">text</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">RfDefinitionRecord</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Read the ``[RfDefinitions]`` block of a ``list`` reply.</span>
+
+<span class="sd">    Blocks other than the one it reads are ignored. Returns an empty list where</span>
+<span class="sd">    the text holds none.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If the block is not closed, a definition line is not ten values, or</span>
+<span class="sd">        the lines of a definition are not the ones its channel and sample</span>
+<span class="sd">        counts state.</span>
+<span class="sd">    """</span>
+    <span class="n">lines</span> <span class="o">=</span> <span class="n">_block</span><span class="p">(</span><span class="n">text</span><span class="p">,</span> <span class="o">*</span><span class="n">_RF_DEFINITIONS</span><span class="p">)</span>
+    <span class="n">found</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">at</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="k">while</span> <span class="n">lines</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">at</span> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="n">lines</span><span class="p">):</span>
+        <span class="n">head</span> <span class="o">=</span> <span class="n">lines</span><span class="p">[</span><span class="n">at</span><span class="p">]</span><span class="o">.</span><span class="n">split</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">head</span><span class="p">[:</span><span class="mi">1</span><span class="p">]</span> <span class="o">!=</span> <span class="p">[</span><span class="s2">"definition"</span><span class="p">]</span> <span class="ow">or</span> <span class="nb">len</span><span class="p">(</span><span class="n">head</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">11</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"not a definition line of an RF block: </span><span class="si">{</span><span class="n">lines</span><span class="p">[</span><span class="n">at</span><span class="p">]</span><span class="si">!r}</span><span class="s2">"</span><span class="p">)</span>
+        <span class="n">channels</span><span class="p">,</span> <span class="n">samples</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">head</span><span class="p">[</span><span class="mi">9</span><span class="p">]),</span> <span class="nb">int</span><span class="p">(</span><span class="n">head</span><span class="p">[</span><span class="mi">10</span><span class="p">])</span>
+        <span class="n">rows</span> <span class="o">=</span> <span class="n">lines</span><span class="p">[</span><span class="n">at</span> <span class="o">+</span> <span class="mi">1</span> <span class="p">:</span> <span class="n">at</span> <span class="o">+</span> <span class="mi">2</span> <span class="o">+</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">channels</span><span class="p">]</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">rows</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">1</span> <span class="o">+</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">channels</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"definition </span><span class="si">{</span><span class="n">head</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="si">}</span><span class="s2"> is cut short"</span><span class="p">)</span>
+        <span class="n">values</span> <span class="o">=</span> <span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">row</span><span class="o">.</span><span class="n">split</span><span class="p">(),</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span> <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">rows</span><span class="p">]</span>
+        <span class="k">if</span> <span class="nb">any</span><span class="p">(</span><span class="n">row</span><span class="o">.</span><span class="n">size</span> <span class="o">!=</span> <span class="n">samples</span> <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">values</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"definition </span><span class="si">{</span><span class="n">head</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="si">}</span><span class="s2"> does not hold </span><span class="si">{</span><span class="n">samples</span><span class="si">}</span><span class="s2"> samples"</span><span class="p">)</span>
+        <span class="n">flip</span><span class="p">,</span> <span class="n">peak</span><span class="p">,</span> <span class="n">bandwidth</span><span class="p">,</span> <span class="n">delay</span><span class="p">,</span> <span class="n">center</span><span class="p">,</span> <span class="n">duration</span> <span class="o">=</span> <span class="p">(</span><span class="nb">float</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">head</span><span class="p">[</span><span class="mi">3</span><span class="p">:</span><span class="mi">9</span><span class="p">])</span>
+        <span class="n">found</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+            <span class="n">RfDefinitionRecord</span><span class="p">(</span>
+                <span class="n">index</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">head</span><span class="p">[</span><span class="mi">1</span><span class="p">]),</span>
+                <span class="n">use</span><span class="o">=</span><span class="n">head</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span>
+                <span class="n">flip_deg</span><span class="o">=</span><span class="n">flip</span><span class="p">,</span>
+                <span class="n">peak_hz</span><span class="o">=</span><span class="n">peak</span><span class="p">,</span>
+                <span class="n">bandwidth_hz</span><span class="o">=</span><span class="n">bandwidth</span><span class="p">,</span>
+                <span class="n">delay</span><span class="o">=</span><span class="n">delay</span><span class="p">,</span>
+                <span class="n">center</span><span class="o">=</span><span class="n">center</span><span class="p">,</span>
+                <span class="n">duration</span><span class="o">=</span><span class="n">duration</span><span class="p">,</span>
+                <span class="n">time</span><span class="o">=</span><span class="n">values</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
+                <span class="n">waveform</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">values</span><span class="p">[</span><span class="mi">1</span><span class="p">::</span><span class="mi">2</span><span class="p">])</span> <span class="o">+</span> <span class="mi">1</span><span class="n">j</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">values</span><span class="p">[</span><span class="mi">2</span><span class="p">::</span><span class="mi">2</span><span class="p">]),</span>
+            <span class="p">)</span>
+        <span class="p">)</span>
+        <span class="n">at</span> <span class="o">+=</span> <span class="mi">2</span> <span class="o">+</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">channels</span>
+    <span class="k">return</span> <span class="n">found</span></div>
+
+
+
+<div class="viewcode-block" id="parse_rf_layout">
+<a class="viewcode-back" href="../../../generated/pulserver.protocol.parse_rf_layout.html#pulserver.protocol.parse_rf_layout">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">parse_rf_layout</span><span class="p">(</span><span class="n">text</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">RfLayoutRecord</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Read the ``[RfLayout]`` block of a ``validate`` reply.</span>
+
+<span class="sd">    The runs are decoded to one entry per instance. Blocks other than the one</span>
+<span class="sd">    it reads are ignored. Returns ``None`` where the text holds none.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If the block is not closed, states no period, or holds a line that is</span>
+<span class="sd">        neither the period nor a run of four values with a positive count.</span>
+<span class="sd">    """</span>
+    <span class="n">lines</span> <span class="o">=</span> <span class="n">_block</span><span class="p">(</span><span class="n">text</span><span class="p">,</span> <span class="o">*</span><span class="n">_RF_LAYOUT</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">lines</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="n">period</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">definition</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">amplitude</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">control</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">ProtocolKey</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="nb">filter</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="n">lines</span><span class="p">):</span>
+        <span class="n">word</span><span class="p">,</span> <span class="o">*</span><span class="n">fields</span> <span class="o">=</span> <span class="n">line</span><span class="o">.</span><span class="n">split</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">word</span> <span class="o">==</span> <span class="s2">"period"</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">fields</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">period</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">fields</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+        <span class="k">elif</span> <span class="n">word</span> <span class="o">==</span> <span class="s2">"run"</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">fields</span><span class="p">)</span> <span class="o">==</span> <span class="mi">4</span> <span class="ow">and</span> <span class="nb">int</span><span class="p">(</span><span class="n">fields</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">count</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">fields</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span>
+            <span class="n">definition</span> <span class="o">+=</span> <span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">fields</span><span class="p">[</span><span class="mi">0</span><span class="p">])]</span> <span class="o">*</span> <span class="n">count</span>
+            <span class="n">amplitude</span> <span class="o">+=</span> <span class="p">[</span><span class="nb">float</span><span class="p">(</span><span class="n">fields</span><span class="p">[</span><span class="mi">1</span><span class="p">])]</span> <span class="o">*</span> <span class="n">count</span>
+            <span class="n">control</span> <span class="o">+=</span> <span class="p">[</span><span class="kc">None</span> <span class="k">if</span> <span class="n">fields</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">==</span> <span class="s2">"-"</span> <span class="k">else</span> <span class="n">_key</span><span class="p">(</span><span class="n">fields</span><span class="p">[</span><span class="mi">2</span><span class="p">])]</span> <span class="o">*</span> <span class="n">count</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"not a line of an RF layout: </span><span class="si">{</span><span class="n">line</span><span class="si">!r}</span><span class="s2">"</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">period</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"an RF layout states its period"</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">RfLayoutRecord</span><span class="p">(</span><span class="n">period</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">definition</span><span class="p">),</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">amplitude</span><span class="p">),</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">control</span><span class="p">))</span></div>
+
+</pre></div>
+
+                </article>
+              
+
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+<div class="bd-footer-content__inner container">
+  
+  <div class="footer-item">
+    
+<p class="component-author">
+By pulserver contributors
+</p>
+
+  </div>
+  
+  <div class="footer-item">
+    
+
+  <p class="copyright">
+    
+      © Copyright 2024-2026, pulserver contributors.
+      <br/>
+    
+  </p>
+
+  </div>
+  
+  <div class="footer-item">
+    
+  </div>
+  
+  <div class="footer-item">
+    
+  </div>
+  
+</div>
+          </footer>
+        
+
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script defer src="../../../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9"></script>
+<script defer src="../../../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9"></script>
+
+  <footer class="bd-footer">
+  </footer>
+  </body>
+</html>

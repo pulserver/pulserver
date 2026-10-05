@@ -1,0 +1,1316 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>pulserver.virtual._console &#8212; pulserver documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  <!--
+    this give us a css class that will be invisible only if js is disabled
+  -->
+  <noscript>
+    <style>
+      .pst-js-only { display: none !important; }
+
+    </style>
+  </noscript>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../../_static/styles/theme.css?digest=90905a2f556bf617f1a9" rel="stylesheet" />
+<link href="../../../_static/styles/pydata-sphinx-theme.css?digest=90905a2f556bf617f1a9" rel="stylesheet" />
+
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=03e43079" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/styles/sphinx-book-theme.css?v=4418a689" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery.css?v=c83e6b79" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/pulserver.css?v=e08ae8f3" />
+  
+  <!-- So that users can add custom icons -->
+  <script defer src="../../../_static/scripts/fontawesome.js?digest=90905a2f556bf617f1a9"></script>
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
+<link rel="preload" as="script" href="../../../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
+
+    <script src="../../../_static/documentation_options.js?v=0a6a6ad3"></script>
+    <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../../../_static/copybutton.js?v=f281be69"></script>
+    <script src="../../../_static/sg-tags.js?v=d80f6fa4"></script>
+    <script src="../../../_static/scripts/sphinx-book-theme.js?v=fab101a9"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = '_modules/pulserver/virtual/_console';</script>
+    <script>
+        DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
+        DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.2.0';
+        DOCUMENTATION_OPTIONS.show_version_warning_banner =
+            true;
+        </script>
+    <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
+    <link rel="canonical" href="https://pulserver.github.io/pulserver/stable/_modules/pulserver/virtual/_console.html" />
+    <link rel="icon" href="../../../_static/pulserver-mark.svg"/>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  <meta name="docsearch:version" content="v0.2.0" />
+  
+    
+    <script src="../../../_static/searchtools.js"></script>
+    <script src="../../../_static/language_data.js"></script>
+    <script src="../../../searchindex.js"></script>
+  
+  </head>
+  <body data-default-mode="">
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+  
+  
+  
+  
+  <dialog id="pst-search-dialog">
+    
+<form class="bd-search d-flex align-items-center"
+      action="../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         placeholder="Search..."
+         aria-label="Search..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+  </dialog>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header id="pst-header" class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+  
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+        </div>
+      
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+    </div>
+  
+
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+        
+      
+      <dialog id="pst-primary-sidebar-modal"></dialog>
+      <div id="pst-primary-sidebar" class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+    
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../../../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../../../_static/pulserver-mark.svg" class="logo__image only-light" alt="pulserver"/>
+    <img src="../../../_static/pulserver-mark-dark.svg" class="logo__image only-dark pst-js-only" alt="pulserver"/>
+  
+  
+</a></div>
+        <div class="sidebar-primary-item">
+<div class="version-switcher__container dropdown pst-js-only">
+  <button id="pst-version-switcher-button-2"
+    type="button"
+    class="version-switcher__button btn btn-sm dropdown-toggle"
+    data-bs-toggle="dropdown"
+    aria-haspopup="listbox"
+    aria-controls="pst-version-switcher-list-2"
+    aria-label="Version switcher list"
+  >
+    Choose version  <!-- this text may get changed later by javascript -->
+    <span class="caret"></span>
+  </button>
+  <div id="pst-version-switcher-list-2"
+    class="version-switcher__menu dropdown-menu list-group-flush py-0"
+    role="listbox" aria-labelledby="pst-version-switcher-button-2">
+    <!-- dropdown will be populated by javascript on page load -->
+  </div>
+</div></div>
+        <div class="sidebar-primary-item">
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button></div>
+        <div class="sidebar-primary-item"><nav class="bd-links bd-docs-nav" aria-label="Main">
+    <div class="bd-toc-item navbar-nav active">
+        
+        <ul class="nav bd-sidenav bd-sidenav__home-link">
+            <li class="toctree-l1">
+                <a class="reference internal" href="../../../index.html">
+                    Homepage
+                </a>
+            </li>
+        </ul>
+        <ul class="nav bd-sidenav">
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../user-guide/index.html">User guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/running.html">Running the services</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/scanner-sequences.html">Scanner sequences</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/reconstruction-plugins.html">Reconstruction plugins</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/reconstruction-client.html">Reconstruction clients</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/virtual-scanner.html">Scanning a phantom without a scanner</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../developer-guide/index.html">Developer guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/prerequisites.html">Development prerequisites</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/installation.html">Editable installation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/workflow.html">Development workflow</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/style.html">Coding style</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/documentation.html">Documentation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/terminology.html">Terminology and conventions</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../../developer-guide/internals/index.html">Internals</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/ir-cache.html">IR cache</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/protocol-wire.html">Protocol text blocks</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/reconstruction-proxy.html">Reconstruction proxy</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/virtual-scanner.html">Virtual scanner</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/bloch-engine.html">Bloch engine</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/pre-commit.html">Pre-commit</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/pull-requests.html">Pull requests</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/releases.html">Releases</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/code-of-conduct.html">Code of conduct</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../explanations/index.html">Explanations</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/architecture.html">Architecture</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/protocol.html">Protocol resolution</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/designs.html">Designs and the design store</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/scanner-representation.html">Scanner representation (PulSeg)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/virtual-scanner.html">The virtual scanner</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/reconstruction.html">Raw-data enrichment and routing</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/calibration.html">Calibration, noise and coil compression</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../examples/index.html">Examples</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../../examples/course.html">Course</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/01_protocol_to_image.html">1. From protocol to image</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/02_sequence_plugin.html">2. A scanner sequence and its protocol</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/03_scanner_representation.html">3. Scanner representation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/04_reconstruction_plugin.html">4. A reconstruction plugin</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/05_testing_on_the_virtual_scanner.html">5. Testing on the virtual scanner</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../../examples/tours.html">Tours</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/02-tours/01_protocol_resolution.html">Protocol resolution for a 2D gradient echo</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/02-tours/02_segmentation.html">Segmentation of a sequence for the scanner</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/02-tours/03_fov_offset_enrichment.html">Field-of-view offset and the proxy phase</a></li>
+</ul>
+</details></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../api/index.html">API reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/protocol.html">Protocol</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/design.html">Scanner sequences</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/host.html">Design calls</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/ir.html">IR conversion</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/proxy.html">Reconstruction proxy</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/recon.html">Reconstruction plugins</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/mrd.html">MRD data</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/validate.html">Validation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/virtual.html">Virtual scanner</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../misc/index.html">Miscellaneous</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../misc/license.html">License and notices</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../misc/related.html">Related projects</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../misc/contributors.html">Contributors</a></li>
+</ul>
+</details></li>
+</ul>
+
+    </div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+      <div class="sidebar-primary-item">
+<div id="ethical-ad-placement"
+      class="flat"
+      data-ea-publisher="readthedocs"
+      data-ea-type="readthedocs-sidebar"
+      data-ea-manual="true">
+</div></div>
+  </div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+
+<div class="sbt-scroll-pixel-helper"></div>
+
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item"><button class="sidebar-toggle primary-toggle btn btn-sm" title="Toggle primary sidebar" data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <span class="fa-solid fa-bars"></span>
+</button></div>
+      
+    </div>
+  
+  
+    <div class="header-article-items__end">
+      
+        <div class="header-article-item">
+
+<div class="article-header-buttons">
+
+
+
+
+
+<div class="dropdown dropdown-source-buttons">
+  <button class="btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Source repositories">
+    <i class="fab fa-github"></i>
+  </button>
+  <ul class="dropdown-menu">
+      
+      
+      
+      <li><a href="https://github.com/pulserver/pulserver" target="_blank"
+   class="btn btn-sm btn-source-repository-button dropdown-item"
+   title="Source repository"
+   data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fab fa-github"></i>
+  </span>
+<span class="btn__text-container">Repository</span>
+</a>
+</li>
+      
+      
+      
+      
+      <li><a href="https://github.com/pulserver/pulserver/issues/new?title=Issue%20on%20page%20%2F_modules/pulserver/virtual/_console.html&body=Your%20issue%20content%20here." target="_blank"
+   class="btn btn-sm btn-source-issues-button dropdown-item"
+   title="Open an issue"
+   data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-lightbulb"></i>
+  </span>
+<span class="btn__text-container">Open issue</span>
+</a>
+</li>
+      
+  </ul>
+</div>
+
+
+
+
+<button onclick="toggleFullScreen()"
+  class="btn btn-sm btn-fullscreen-button pst-navbar-icon"
+  title="Fullscreen mode"
+  data-bs-placement="bottom" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-expand"></i>
+  </span>
+
+</button>
+
+
+
+<div class="theme-switch-container dropdown pst-js-only" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Color mode">
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button dropdown-toggle" aria-label="Color mode" data-bs-toggle="dropdown">
+    <i class="theme-switch fa-solid fa-sun fa-lg fa-fw" data-mode="light" title="Light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg fa-fw" data-mode="dark" title="Dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg fa-fw" data-mode="auto" title="System Settings"></i>
+  </button>
+  <ul class="dropdown-menu dropdown-menu-end">
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg fa-fw me-1"></i>System Settings</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="light"><i class="fa-solid fa-sun fa-lg fa-fw me-1"></i>Light</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="dark"><i class="fa-solid fa-moon fa-lg fa-fw me-1"></i>Dark</button></li>
+  </ul>
+</div>
+
+
+<button class="btn btn-sm pst-navbar-icon search-button search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass fa-lg"></i>
+</button>
+
+</div></div>
+      
+    </div>
+  
+</div>
+</div>
+              
+              
+
+<div id="jb-print-docs-body" class="onlyprint">
+    <h1></h1>
+    <!-- Table of contents -->
+    <div id="print-main-content">
+        <div id="jb-print-toc">
+            
+        </div>
+    </div>
+</div>
+
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <h1>Source code for pulserver.virtual._console</h1><div class="highlight"><pre>
+<span></span><span class="sd">"""A scanner console's gateway to pulserver: the design calls, the exam's localizer and the virtual scanner, in process or over a WebSocket."""</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">argparse</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">asyncio</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">base64</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">contextlib</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">io</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">json</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">threading</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Iterator</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">,</span> <span class="n">Sequence</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">.._plugins</span><span class="w"> </span><span class="kn">import</span> <span class="n">PluginPath</span><span class="p">,</span> <span class="n">directories</span><span class="p">,</span> <span class="n">names</span><span class="p">,</span> <span class="n">recon_names</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">._command</span><span class="w"> </span><span class="kn">import</span> <span class="n">motion_arguments</span><span class="p">,</span> <span class="n">reconstruction_plugin</span><span class="p">,</span> <span class="n">subject_motion</span>
+
+<span class="c1">#: The design calls a console forwards, answered as ``pulserver design`` answers them.</span>
+<span class="n">DESIGN_CALLS</span> <span class="o">=</span> <span class="p">(</span><span class="s2">"list"</span><span class="p">,</span> <span class="s2">"validate"</span><span class="p">,</span> <span class="s2">"generate"</span><span class="p">,</span> <span class="s2">"import"</span><span class="p">)</span>
+
+<span class="c1"># Spacings, 1 mm apart, a console tries in keeping a scan within its isochromats.</span>
+<span class="n">_COARSER</span> <span class="o">=</span> <span class="mi">100</span>
+
+<span class="c1">#: What each design call takes, as ``pulserver design`` passes it.</span>
+<span class="n">_CALL_INPUTS</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">"list"</span><span class="p">:</span> <span class="p">(</span><span class="s2">"plugins"</span><span class="p">,</span> <span class="s2">"plugin"</span><span class="p">),</span>
+    <span class="s2">"validate"</span><span class="p">:</span> <span class="p">(</span><span class="s2">"plugins"</span><span class="p">,</span> <span class="s2">"plugin"</span><span class="p">,</span> <span class="s2">"limits"</span><span class="p">,</span> <span class="s2">"input"</span><span class="p">),</span>
+    <span class="s2">"generate"</span><span class="p">:</span> <span class="p">(</span><span class="s2">"plugins"</span><span class="p">,</span> <span class="s2">"plugin"</span><span class="p">,</span> <span class="s2">"limits"</span><span class="p">,</span> <span class="s2">"input"</span><span class="p">,</span> <span class="s2">"store"</span><span class="p">,</span> <span class="s2">"push"</span><span class="p">),</span>
+    <span class="s2">"import"</span><span class="p">:</span> <span class="p">(</span><span class="s2">"limits"</span><span class="p">,</span> <span class="s2">"input"</span><span class="p">,</span> <span class="s2">"store"</span><span class="p">,</span> <span class="s2">"push"</span><span class="p">),</span>
+<span class="p">}</span>
+
+
+<div class="viewcode-block" id="Console">
+<a class="viewcode-back" href="../../../generated/pulserver.virtual.Console.html#pulserver.virtual.Console">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">Console</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""What a scanner console asks of pulserver, answered in this process.</span>
+
+<span class="sd">    A console lists a plugin's protocol, validates and generates designs with</span>
+<span class="sd">    the text blocks the interpreter sends, starts an exam on a subject with</span>
+<span class="sd">    one of the virtual scanner's coils, and scans a stored design on it.</span>
+<span class="sd">    Images return as DICOM from the reconstruction proxy at ``recon``, or from</span>
+<span class="sd">    the plugins of ``recon_plugins`` run in this process as the proxy runs</span>
+<span class="sd">    them; with neither, a scan returns no images. A scan names its</span>
+<span class="sd">    reconstruction plugin; without one, the design's shipped scanner sequence</span>
+<span class="sd">    is reconstructed with the shipped reconstruction paired with it.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    plugins</span>
+<span class="sd">        Directories of the scanner-sequence plugins, in search order: a name</span>
+<span class="sd">        is the plugin of the first directory holding ``&lt;name&gt;.py``.</span>
+<span class="sd">    limits</span>
+<span class="sd">        Text of the ``[Limits]`` block every design is made under; its ``B0``</span>
+<span class="sd">        is the virtual magnet's field.</span>
+<span class="sd">    store</span>
+<span class="sd">        Design store.</span>
+<span class="sd">    recon</span>
+<span class="sd">        ``(host, port)`` of the reconstruction proxy.</span>
+<span class="sd">    recon_plugins</span>
+<span class="sd">        Directories of reconstruction plugin files, ``&lt;plugin&gt;.py``, in search</span>
+<span class="sd">        order, which reconstruct each scan in this process</span>
+<span class="sd">        (:class:`~pulserver.proxy.LocalReconstruction`).</span>
+<span class="sd">    push</span>
+<span class="sd">        Recon-side intake each design is pushed to.</span>
+<span class="sd">    spacing</span>
+<span class="sd">        Finest isochromat spacing of the phantom, in metres.</span>
+<span class="sd">    max_isochromats</span>
+<span class="sd">        Most isochromats a scan is simulated on. A scan is simulated on the</span>
+<span class="sd">        isochromats in the slabs its excitation pulses excite</span>
+<span class="sd">        (:func:`~pulserver.virtual.excited`), at the finest spacing, from</span>
+<span class="sd">        ``spacing`` up in steps of 1 mm, that keeps no more of them than this;</span>
+<span class="sd">        at ``spacing`` without it.</span>
+<span class="sd">    coil</span>
+<span class="sd">        Name of the coil an exam is started with unless it names another.</span>
+<span class="sd">    fields</span>
+<span class="sd">        Directory of the coils' field maps, ``&lt;coil&gt;.npz``, and of the VOPs of</span>
+<span class="sd">        those that transmit, ``&lt;coil&gt;_vops.npz``, as mariepy writes them for</span>
+<span class="sd">        BrainWeb's head. Every exam is then on BrainWeb, and every design is</span>
+<span class="sd">        made under the VOPs of the exam's transmit coil. Without it, the coils</span>
+<span class="sd">        are :data:`~pulserver.virtual.COILS`.</span>
+<span class="sd">    speed</span>
+<span class="sd">        Scan time elapsed per wall-clock second once the scan's simulation is</span>
+<span class="sd">        far enough ahead of its clock; as fast as it is simulated without it.</span>
+<span class="sd">    device</span>
+<span class="sd">        Device a scan's ADC windows are read and its runs of repetitions</span>
+<span class="sd">        carried on, as :class:`~pulserver.virtual.Isochromats` takes it; the</span>
+<span class="sd">        engine does both itself without one.</span>
+<span class="sd">    spins</span>
+<span class="sd">        Isochromats per voxel, spread over the T2' line of its tissue.</span>
+<span class="sd">    voxel</span>
+<span class="sd">        Where a voxel's isochromats lie: ``"point"``, at its centre, or</span>
+<span class="sd">        ``"box"``, over it, as the phantom's ``isochromats`` places them.</span>
+<span class="sd">    diffusion</span>
+<span class="sd">        Whether BrainWeb's tissue classes diffuse, as</span>
+<span class="sd">        :attr:`~pulserver.virtual.BrainWeb.DIFFUSION` gives them.</span>
+<span class="sd">    motion</span>
+<span class="sd">        The subject's motion, as :class:`~pulserver.virtual.Isochromats`</span>
+<span class="sd">        takes it, on the clock of each scan; at rest without one. Moving</span>
+<span class="sd">        isochromats play every block alone.</span>
+<span class="sd">    """</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">plugins</span><span class="p">:</span> <span class="n">PluginPath</span><span class="p">,</span>
+        <span class="n">limits</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">store</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">recon</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">recon_plugins</span><span class="p">:</span> <span class="n">PluginPath</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">push</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">spacing</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1e-3</span><span class="p">,</span>
+        <span class="n">max_isochromats</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">coil</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"body"</span><span class="p">,</span>
+        <span class="n">fields</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">speed</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">device</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">spins</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
+        <span class="n">voxel</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"point"</span><span class="p">,</span>
+        <span class="n">diffusion</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">motion</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">..host._blocks</span><span class="w"> </span><span class="kn">import</span> <span class="n">parse_limits</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">..proxy</span><span class="w"> </span><span class="kn">import</span> <span class="n">LocalReconstruction</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">._coils</span><span class="w"> </span><span class="kn">import</span> <span class="n">coils</span>
+
+        <span class="k">if</span> <span class="n">recon</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">recon_plugins</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">"a console reconstructs through a proxy or in this process, not both"</span>
+            <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">plugins</span> <span class="o">=</span> <span class="n">directories</span><span class="p">(</span><span class="n">plugins</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">limits</span> <span class="o">=</span> <span class="n">limits</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">store</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">store</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">recon</span> <span class="o">=</span> <span class="n">recon</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">local</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="kc">None</span>
+            <span class="k">if</span> <span class="n">recon_plugins</span> <span class="ow">is</span> <span class="kc">None</span>
+            <span class="k">else</span> <span class="n">LocalReconstruction</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">store</span><span class="p">,</span> <span class="n">recon_plugins</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">push</span> <span class="o">=</span> <span class="n">push</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">spacing</span> <span class="o">=</span> <span class="n">spacing</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">max_isochromats</span> <span class="o">=</span> <span class="n">max_isochromats</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">speed</span> <span class="o">=</span> <span class="n">speed</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">device</span> <span class="o">=</span> <span class="n">device</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">spins</span> <span class="o">=</span> <span class="n">spins</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">voxel</span> <span class="o">=</span> <span class="n">voxel</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">diffusion</span> <span class="o">=</span> <span class="n">diffusion</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">motion</span> <span class="o">=</span> <span class="n">motion</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">field_t</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">parse_limits</span><span class="p">(</span><span class="n">limits</span><span class="p">)[</span><span class="s2">"B0"</span><span class="p">])</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">fields</span> <span class="o">=</span> <span class="kc">None</span> <span class="k">if</span> <span class="n">fields</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">Path</span><span class="p">(</span><span class="n">fields</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_coils</span> <span class="o">=</span> <span class="n">coils</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">fields</span><span class="p">,</span> <span class="n">field_t</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">field_t</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">coil</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_coil</span><span class="p">(</span><span class="n">coil</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">subject</span> <span class="o">=</span> <span class="s2">""</span>
+        <span class="c1"># BrainWeb, kept from one exam to the next with what it has loaded, and</span>
+        <span class="c1"># the thread its field map is computed in after an exam's localizer.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_brainweb</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_warming</span><span class="p">:</span> <span class="n">threading</span><span class="o">.</span><span class="n">Thread</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">phantom</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_phantom</span><span class="p">(</span><span class="s2">""</span><span class="p">)</span>
+        <span class="c1"># The exam's isochromats between its scans, beside the slabs they were</span>
+        <span class="c1"># kept in, and how many exams have started, so that a scan hands back</span>
+        <span class="c1"># only those of the exam in progress.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_held</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Lock</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_isochromats</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_exams</span> <span class="o">=</span> <span class="mi">0</span>
+
+<div class="viewcode-block" id="Console.design">
+<a class="viewcode-back" href="../../../generated/pulserver.virtual.Console.design.html#pulserver.virtual.Console.design">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">design</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">call</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">plugin</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">block</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">""</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Answer a design call; a generated or imported design's id is ``design``."""</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">..host._server</span><span class="w"> </span><span class="kn">import</span> <span class="n">answer</span>
+
+        <span class="k">if</span> <span class="n">call</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">DESIGN_CALLS</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"a console makes the design calls </span><span class="si">{</span><span class="n">DESIGN_CALLS</span><span class="si">}</span><span class="s2">, not </span><span class="si">{</span><span class="n">call</span><span class="si">!r}</span><span class="s2">"</span>
+            <span class="p">)</span>
+        <span class="n">request</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">"call"</span><span class="p">:</span> <span class="n">call</span><span class="p">,</span>
+            <span class="s2">"plugins"</span><span class="p">:</span> <span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">directory</span><span class="p">)</span> <span class="k">for</span> <span class="n">directory</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">plugins</span><span class="p">],</span>
+            <span class="s2">"plugin"</span><span class="p">:</span> <span class="n">plugin</span><span class="p">,</span>
+            <span class="s2">"limits"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_limits</span><span class="p">(),</span>
+            <span class="s2">"store"</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">store</span><span class="p">),</span>
+            <span class="s2">"push"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">push</span><span class="p">,</span>
+            <span class="s2">"input"</span><span class="p">:</span> <span class="n">block</span><span class="p">,</span>
+        <span class="p">}</span>
+        <span class="n">status</span><span class="p">,</span> <span class="n">reply</span> <span class="o">=</span> <span class="n">answer</span><span class="p">(</span>
+            <span class="p">{</span><span class="n">key</span><span class="p">:</span> <span class="n">request</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"call"</span><span class="p">,</span> <span class="o">*</span><span class="n">_CALL_INPUTS</span><span class="p">[</span><span class="n">call</span><span class="p">])}</span>
+        <span class="p">)</span>
+        <span class="n">answered</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"status"</span><span class="p">:</span> <span class="n">status</span><span class="p">,</span> <span class="s2">"reply"</span><span class="p">:</span> <span class="n">reply</span><span class="p">}</span>
+        <span class="k">if</span> <span class="n">status</span> <span class="o">==</span> <span class="mi">0</span> <span class="ow">and</span> <span class="n">call</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"generate"</span><span class="p">,</span> <span class="s2">"import"</span><span class="p">):</span>
+            <span class="n">answered</span><span class="p">[</span><span class="s2">"design"</span><span class="p">]</span> <span class="o">=</span> <span class="n">reply</span><span class="o">.</span><span class="n">split</span><span class="p">()[</span><span class="mi">1</span><span class="p">]</span>
+        <span class="k">return</span> <span class="n">answered</span></div>
+
+
+<div class="viewcode-block" id="Console.plugin_names">
+<a class="viewcode-back" href="../../../generated/pulserver.virtual.Console.plugin_names.html#pulserver.virtual.Console.plugin_names">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">plugin_names</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""Return the names of the plugins a console can list."""</span>
+        <span class="k">return</span> <span class="n">names</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">plugins</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="Console.recon_names">
+<a class="viewcode-back" href="../../../generated/pulserver.virtual.Console.recon_names.html#pulserver.virtual.Console.recon_names">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">recon_names</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""Return the names of the reconstruction plugins a scan can name.</span>
+
+<span class="sd">        The shipped ones and those of ``recon_plugins``. A console that</span>
+<span class="sd">        reconstructs through a proxy lists the shipped ones only; a name the</span>
+<span class="sd">        proxy holds is used all the same.</span>
+<span class="sd">        """</span>
+        <span class="k">return</span> <span class="n">recon_names</span><span class="p">(()</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">local</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">local</span><span class="o">.</span><span class="n">plugins</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="Console.coils">
+<a class="viewcode-back" href="../../../generated/pulserver.virtual.Console.coils.html#pulserver.virtual.Console.coils">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">coils</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">"""Return each coil an exam can be started with: its ``name`` and its ``transmit`` and ``receive`` channels."""</span>
+        <span class="k">return</span> <span class="p">[</span>
+            <span class="p">{</span>
+                <span class="s2">"name"</span><span class="p">:</span> <span class="n">coil</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
+                <span class="s2">"transmit"</span><span class="p">:</span> <span class="n">coil</span><span class="o">.</span><span class="n">transmit_channels</span><span class="p">,</span>
+                <span class="s2">"receive"</span><span class="p">:</span> <span class="n">coil</span><span class="o">.</span><span class="n">receive_channels</span><span class="p">,</span>
+            <span class="p">}</span>
+            <span class="k">for</span> <span class="n">coil</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_coils</span><span class="o">.</span><span class="n">values</span><span class="p">()</span>
+        <span class="p">]</span></div>
+
+
+<div class="viewcode-block" id="Console.exam">
+<a class="viewcode-back" href="../../../generated/pulserver.virtual.Console.exam.html#pulserver.virtual.Console.exam">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">exam</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">subject</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">coil</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">bytes</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""Start an exam on the phantom ``subject`` names, in the coil ``coil`` names; return its three-plane localizer as DICOM files.</span>
+
+<span class="sd">        ``brainweb`` names BrainWeb's normal brain, and so does every subject</span>
+<span class="sd">        of a console with field maps; any other subject, the vials. Without</span>
+<span class="sd">        ``coil``, the exam keeps the coil it had.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If ``coil`` names none of the virtual scanner's coils.</span>
+<span class="sd">        """</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">._localizer</span><span class="w"> </span><span class="kn">import</span> <span class="n">localizer</span>
+
+        <span class="k">if</span> <span class="n">coil</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">coil</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_coil</span><span class="p">(</span><span class="n">coil</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">subject</span> <span class="o">=</span> <span class="n">subject</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">phantom</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_phantom</span><span class="p">(</span><span class="n">subject</span><span class="p">)</span>
+        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_held</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_exams</span> <span class="o">+=</span> <span class="mi">1</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_isochromats</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="n">files</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="n">_dicom_bytes</span><span class="p">(</span><span class="n">dataset</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">dataset</span> <span class="ow">in</span> <span class="n">localizer</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">phantom</span><span class="p">,</span> <span class="n">field_t</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">field_t</span><span class="p">,</span> <span class="n">subject</span><span class="o">=</span><span class="n">subject</span>
+            <span class="p">)</span>
+        <span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_warm</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">files</span></div>
+
+
+<div class="viewcode-block" id="Console.scan">
+<a class="viewcode-back" href="../../../generated/pulserver.virtual.Console.scan.html#pulserver.virtual.Console.scan">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">scan</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">design</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">rotation</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+        <span class="n">centre_mm</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">float</span><span class="p">],</span>
+        <span class="n">emit</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="nb">dict</span><span class="p">],</span> <span class="kc">None</span><span class="p">],</span>
+        <span class="n">cancelled</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="nb">bool</span><span class="p">]</span> <span class="o">=</span> <span class="k">lambda</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">sound</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">recon</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Scan a stored design on the exam's phantom; return the reconstruction's status.</span>
+
+<span class="sd">        ``emit`` receives the scan clock after each span played, as</span>
+<span class="sd">        ``{"clock": s, "duration": s}``, then the reconstruction's images as</span>
+<span class="sd">        DICOM, ``{"dicom": base64, "name": file name}``, converting those it</span>
+<span class="sd">        returns as MRD, and its texts as ``{"text": ...}``. With</span>
+<span class="sd">        ``sound``, each clock also carries the span's sound as ``sound``,</span>
+<span class="sd">        base64 of 16-bit little-endian stereo samples at ``rate`` Hz. At a</span>
+<span class="sd">        speed, the scan is simulated ahead of its clock, and until the clock</span>
+<span class="sd">        starts ``emit`` receives ``{"preparing": s}`` about twice a second,</span>
+<span class="sd">        with the wall-clock time left before it does, or ``null`` before there</span>
+<span class="sd">        is an estimate. The status is 1 when a text reports a refused or</span>
+<span class="sd">        failed series, or when the scan is cancelled.</span>
+
+<span class="sd">        A scan plays on the phantom's isochromats in the slabs its excitation</span>
+<span class="sd">        pulses excite, at the spacing ``max_isochromats`` allows. Scans of an exam</span>
+<span class="sd">        that excite the same slabs play on the same isochromats, each from</span>
+<span class="sd">        equilibrium, which keeps the pulses the engine has computed; a scan</span>
+<span class="sd">        started while another plays has isochromats of its own.</span>
+
+<span class="sd">        ``recon`` names the reconstruction plugin. Without it, a design of a</span>
+<span class="sd">        shipped scanner sequence is reconstructed with the shipped</span>
+<span class="sd">        reconstruction paired with it in ``pulserver._zoo.ZOO_PAIRS``. A</span>
+<span class="sd">        console that reconstructs nothing ignores it.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If the console reconstructs, ``recon`` is ``None`` and the design</span>
+<span class="sd">            is not of a shipped scanner sequence, as an imported design is</span>
+<span class="sd">            not.</span>
+<span class="sd">        """</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">..host</span><span class="w"> </span><span class="kn">import</span> <span class="n">DesignStore</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">._region</span><span class="w"> </span><span class="kn">import</span> <span class="n">excited</span>
+
+        <span class="n">plugin</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">recon</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">local</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">plugin</span> <span class="o">=</span> <span class="n">reconstruction_plugin</span><span class="p">(</span>
+                <span class="n">DesignStore</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">store</span><span class="p">)</span><span class="o">.</span><span class="n">manifest</span><span class="p">(</span><span class="n">design</span><span class="p">)</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"plugin"</span><span class="p">,</span> <span class="s2">""</span><span class="p">),</span> <span class="n">recon</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">speed</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">emit</span><span class="p">({</span><span class="s2">"preparing"</span><span class="p">:</span> <span class="kc">None</span><span class="p">})</span>
+        <span class="n">rotation</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">rotation</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
+        <span class="n">region</span> <span class="o">=</span> <span class="n">excited</span><span class="p">(</span>
+            <span class="n">DesignStore</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">store</span><span class="p">)</span><span class="o">.</span><span class="n">directory</span><span class="p">(</span><span class="n">design</span><span class="p">)</span> <span class="o">/</span> <span class="s2">"sequence.seq"</span><span class="p">,</span> <span class="n">rotation</span>
+        <span class="p">)</span>
+        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_held</span><span class="p">:</span>
+            <span class="n">held</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_isochromats</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_isochromats</span><span class="p">,</span> <span class="kc">None</span>
+            <span class="n">exam</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_exams</span>
+        <span class="k">if</span> <span class="n">held</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">held</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="n">region</span><span class="p">:</span>
+            <span class="n">isochromats</span> <span class="o">=</span> <span class="n">held</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+            <span class="n">isochromats</span><span class="o">.</span><span class="n">reset</span><span class="p">()</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_warming</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_warming</span><span class="o">.</span><span class="n">join</span><span class="p">()</span>
+            <span class="n">isochromats</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">phantom</span><span class="o">.</span><span class="n">isochromats</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_spacing</span><span class="p">(</span><span class="n">region</span><span class="p">),</span>
+                <span class="n">field_t</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">field_t</span><span class="p">,</span>
+                <span class="n">region</span><span class="o">=</span><span class="n">region</span><span class="p">,</span>
+                <span class="n">coil</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">coil</span><span class="p">,</span>
+                <span class="n">spins</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">spins</span><span class="p">,</span>
+                <span class="n">voxel</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">voxel</span><span class="p">,</span>
+                <span class="n">motion</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">motion</span><span class="p">,</span>
+                <span class="n">seed</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+                <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_scan</span><span class="p">(</span>
+                <span class="n">design</span><span class="p">,</span> <span class="n">isochromats</span><span class="p">,</span> <span class="n">rotation</span><span class="p">,</span> <span class="n">centre_mm</span><span class="p">,</span> <span class="n">emit</span><span class="p">,</span> <span class="n">cancelled</span><span class="p">,</span> <span class="n">sound</span><span class="p">,</span> <span class="n">plugin</span>
+            <span class="p">)</span>
+        <span class="k">finally</span><span class="p">:</span>
+            <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_held</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">exam</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">_exams</span><span class="p">:</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_isochromats</span> <span class="o">=</span> <span class="p">(</span><span class="n">region</span><span class="p">,</span> <span class="n">isochromats</span><span class="p">)</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_spacing</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">region</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Return the finest spacing, from ``spacing`` up in steps of 1 mm, that keeps at most ``max_isochromats`` of the phantom's isochromats in ``region``.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If none within 10 cm of it does.</span>
+<span class="sd">        """</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_isochromats</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">spacing</span>
+        <span class="k">for</span> <span class="n">step</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">_COARSER</span><span class="p">):</span>
+            <span class="n">spacing</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">spacing</span> <span class="o">+</span> <span class="mf">1e-3</span> <span class="o">*</span> <span class="n">step</span>
+            <span class="n">kept</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">phantom</span><span class="o">.</span><span class="n">count</span><span class="p">(</span>
+                <span class="n">spacing</span><span class="p">,</span> <span class="n">field_t</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">field_t</span><span class="p">,</span> <span class="n">region</span><span class="o">=</span><span class="n">region</span><span class="p">,</span> <span class="n">spins</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">spins</span>
+            <span class="p">)</span>
+            <span class="k">if</span> <span class="n">kept</span> <span class="o">&lt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_isochromats</span><span class="p">:</span>
+                <span class="k">return</span> <span class="n">spacing</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"the phantom holds more than </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">max_isochromats</span><span class="si">}</span><span class="s2"> isochromats at "</span>
+            <span class="sa">f</span><span class="s2">"every spacing from </span><span class="si">{</span><span class="mf">1e3</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="bp">self</span><span class="o">.</span><span class="n">spacing</span><span class="si">:</span><span class="s2">g</span><span class="si">}</span><span class="s2"> mm to </span><span class="si">{</span><span class="mf">1e3</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">spacing</span><span class="si">:</span><span class="s2">g</span><span class="si">}</span><span class="s2"> mm"</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_limits</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Return the limits block of a design: the console's, with the VOP entries of the exam's coil."""</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">..host._blocks</span><span class="w"> </span><span class="kn">import</span> <span class="n">format_limits</span><span class="p">,</span> <span class="n">parse_limits</span>
+
+        <span class="n">entries</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">coil</span><span class="o">.</span><span class="n">limits</span><span class="p">()</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">entries</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">limits</span>
+        <span class="k">return</span> <span class="n">format_limits</span><span class="p">({</span><span class="o">**</span><span class="n">parse_limits</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">limits</span><span class="p">),</span> <span class="o">**</span><span class="n">entries</span><span class="p">})</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_coil</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_coils</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"the virtual scanner's coils are </span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_coils</span><span class="p">)</span><span class="si">}</span><span class="s2">, not </span><span class="si">{</span><span class="n">name</span><span class="si">!r}</span><span class="s2">"</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_coils</span><span class="p">[</span><span class="n">name</span><span class="p">]</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_phantom</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">subject</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">.</span><span class="w"> </span><span class="kn">import</span> <span class="n">BrainWeb</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">._command</span><span class="w"> </span><span class="kn">import</span> <span class="n">default_phantom</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">fields</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">subject</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="o">==</span> <span class="s2">"brainweb"</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_brainweb</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_brainweb</span> <span class="o">=</span> <span class="n">BrainWeb</span><span class="p">(</span>
+                    <span class="n">diffusion</span><span class="o">=</span><span class="n">BrainWeb</span><span class="o">.</span><span class="n">DIFFUSION</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">diffusion</span> <span class="k">else</span> <span class="kc">None</span>
+                <span class="p">)</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_brainweb</span>
+        <span class="k">return</span> <span class="n">default_phantom</span><span class="p">()</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_warm</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Compute the field map of the exam's BrainWeb in a thread of its own, unless it has one or is computing it."""</span>
+        <span class="n">brain</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">phantom</span>
+        <span class="k">if</span> <span class="n">brain</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_brainweb</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">brain</span><span class="o">.</span><span class="n">susceptibility</span><span class="p">:</span>
+            <span class="k">return</span>
+        <span class="k">if</span> <span class="s2">"field_ppm"</span> <span class="ow">in</span> <span class="nb">vars</span><span class="p">(</span><span class="n">brain</span><span class="p">)</span> <span class="ow">or</span> <span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_warming</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_warming</span><span class="o">.</span><span class="n">is_alive</span><span class="p">()</span>
+        <span class="p">):</span>
+            <span class="k">return</span>
+
+        <span class="k">def</span><span class="w"> </span><span class="nf">compute</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># A failure here is raised again by the scan that needs the map.</span>
+            <span class="k">with</span> <span class="n">contextlib</span><span class="o">.</span><span class="n">suppress</span><span class="p">(</span><span class="ne">Exception</span><span class="p">):</span>
+                <span class="n">brain</span><span class="o">.</span><span class="n">field_ppm</span>  <span class="c1"># noqa: B018</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_warming</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Thread</span><span class="p">(</span>
+            <span class="n">target</span><span class="o">=</span><span class="n">compute</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">"pulserver-field"</span><span class="p">,</span> <span class="n">daemon</span><span class="o">=</span><span class="kc">True</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_warming</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_scan</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">design</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">isochromats</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+        <span class="n">rotation</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+        <span class="n">centre_mm</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">float</span><span class="p">],</span>
+        <span class="n">emit</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="nb">dict</span><span class="p">],</span> <span class="kc">None</span><span class="p">],</span>
+        <span class="n">cancelled</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="nb">bool</span><span class="p">],</span>
+        <span class="n">sound</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
+        <span class="n">plugin</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">..host</span><span class="w"> </span><span class="kn">import</span> <span class="n">DesignStore</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">.</span><span class="w"> </span><span class="kn">import</span> <span class="n">SAMPLE_RATE</span><span class="p">,</span> <span class="n">Scan</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">._bloch</span><span class="w"> </span><span class="kn">import</span> <span class="n">TOLERANCE</span>
+
+        <span class="n">rotation</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">rotation</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
+        <span class="n">scan</span> <span class="o">=</span> <span class="n">Scan</span><span class="p">(</span>
+            <span class="n">DesignStore</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">store</span><span class="p">)</span><span class="o">.</span><span class="n">directory</span><span class="p">(</span><span class="n">design</span><span class="p">)</span> <span class="o">/</span> <span class="s2">"sequence.seq"</span><span class="p">,</span>
+            <span class="n">isochromats</span><span class="p">,</span>
+            <span class="n">rotation</span><span class="o">=</span><span class="n">rotation</span><span class="p">,</span>
+            <span class="n">default_shim</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">coil</span><span class="o">.</span><span class="n">default_shim</span><span class="p">,</span>
+            <span class="n">tolerance</span><span class="o">=</span><span class="n">TOLERANCE</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">stopped</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Event</span><span class="p">()</span>
+
+        <span class="k">def</span><span class="w"> </span><span class="nf">preparing</span><span class="p">(</span><span class="n">left</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">cancelled</span><span class="p">():</span>
+                <span class="k">raise</span> <span class="n">_Cancelled</span>
+            <span class="n">emit</span><span class="p">({</span><span class="s2">"preparing"</span><span class="p">:</span> <span class="n">left</span><span class="p">})</span>
+
+        <span class="k">def</span><span class="w"> </span><span class="nf">played</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]:</span>
+            <span class="n">chunks</span> <span class="o">=</span> <span class="n">scan</span><span class="o">.</span><span class="n">chunks</span><span class="p">(</span>
+                <span class="mf">0.1</span><span class="p">,</span> <span class="n">speed</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">speed</span><span class="p">,</span> <span class="n">sound</span><span class="o">=</span><span class="n">sound</span><span class="p">,</span> <span class="n">preparing</span><span class="o">=</span><span class="n">preparing</span>
+            <span class="p">)</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="k">with</span> <span class="n">contextlib</span><span class="o">.</span><span class="n">closing</span><span class="p">(</span><span class="n">chunks</span><span class="p">):</span>
+                    <span class="k">yield from</span> <span class="n">spans</span><span class="p">(</span><span class="n">chunks</span><span class="p">)</span>
+            <span class="k">except</span> <span class="n">_Cancelled</span><span class="p">:</span>
+                <span class="n">stopped</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
+
+        <span class="k">def</span><span class="w"> </span><span class="nf">spans</span><span class="p">(</span><span class="n">chunks</span><span class="p">:</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]:</span>
+            <span class="k">for</span> <span class="n">chunk</span> <span class="ow">in</span> <span class="n">chunks</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">cancelled</span><span class="p">():</span>
+                    <span class="k">raise</span> <span class="n">_Cancelled</span>
+                <span class="n">clock</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"clock"</span><span class="p">:</span> <span class="n">chunk</span><span class="o">.</span><span class="n">stop</span><span class="p">,</span> <span class="s2">"duration"</span><span class="p">:</span> <span class="n">scan</span><span class="o">.</span><span class="n">duration</span><span class="p">}</span>
+                <span class="k">if</span> <span class="n">sound</span><span class="p">:</span>
+                    <span class="n">samples</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">round</span><span class="p">(</span><span class="mi">32767</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">clip</span><span class="p">(</span><span class="n">chunk</span><span class="o">.</span><span class="n">sound</span><span class="o">.</span><span class="n">T</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">))</span>
+                    <span class="n">clock</span><span class="p">[</span><span class="s2">"sound"</span><span class="p">]</span> <span class="o">=</span> <span class="n">base64</span><span class="o">.</span><span class="n">b64encode</span><span class="p">(</span>
+                        <span class="n">samples</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="s2">"&lt;i2"</span><span class="p">)</span><span class="o">.</span><span class="n">tobytes</span><span class="p">()</span>
+                    <span class="p">)</span><span class="o">.</span><span class="n">decode</span><span class="p">()</span>
+                    <span class="n">clock</span><span class="p">[</span><span class="s2">"rate"</span><span class="p">]</span> <span class="o">=</span> <span class="n">SAMPLE_RATE</span>
+                <span class="n">emit</span><span class="p">(</span><span class="n">clock</span><span class="p">)</span>
+                <span class="k">yield from</span> <span class="n">chunk</span><span class="o">.</span><span class="n">readouts</span>
+
+        <span class="c1"># Closed however the scan ends, which stops its simulation before the</span>
+        <span class="c1"># isochromats are handed on.</span>
+        <span class="k">with</span> <span class="n">contextlib</span><span class="o">.</span><span class="n">closing</span><span class="p">(</span><span class="n">played</span><span class="p">())</span> <span class="k">as</span> <span class="n">readouts</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_acquire</span><span class="p">(</span>
+                <span class="n">design</span><span class="p">,</span> <span class="n">readouts</span><span class="p">,</span> <span class="n">rotation</span><span class="p">,</span> <span class="n">centre_mm</span><span class="p">,</span> <span class="n">emit</span><span class="p">,</span> <span class="n">stopped</span><span class="p">,</span> <span class="n">plugin</span>
+            <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_acquire</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">design</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">readouts</span><span class="p">:</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">],</span>
+        <span class="n">rotation</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+        <span class="n">centre_mm</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">float</span><span class="p">],</span>
+        <span class="n">emit</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="nb">dict</span><span class="p">],</span> <span class="kc">None</span><span class="p">],</span>
+        <span class="n">stopped</span><span class="p">:</span> <span class="n">threading</span><span class="o">.</span><span class="n">Event</span><span class="p">,</span>
+        <span class="n">plugin</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Send the readouts to the reconstruction ``plugin`` names, emitting what it returns; return its status."""</span>
+        <span class="kn">import</span><span class="w"> </span><span class="nn">ismrmrd</span>
+        <span class="kn">import</span><span class="w"> </span><span class="nn">pypulseqpp</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pp</span>
+
+        <span class="kn">from</span><span class="w"> </span><span class="nn">..recon._runtime.mrd2dicom</span><span class="w"> </span><span class="kn">import</span> <span class="n">DicomWithName</span><span class="p">,</span> <span class="n">MrdDicomBuilder</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">.</span><span class="w"> </span><span class="kn">import</span> <span class="n">send</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">._client</span><span class="w"> </span><span class="kn">import</span> <span class="n">_header</span><span class="p">,</span> <span class="n">_series</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">recon</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">local</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">readouts</span><span class="p">:</span>
+                <span class="k">pass</span>
+            <span class="k">return</span> <span class="mi">1</span> <span class="k">if</span> <span class="n">stopped</span><span class="o">.</span><span class="n">is_set</span><span class="p">()</span> <span class="k">else</span> <span class="mi">0</span>
+        <span class="n">config</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">({</span><span class="s2">"parameters"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"config"</span><span class="p">:</span> <span class="n">plugin</span><span class="p">}})</span>
+        <span class="n">status</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="n">series</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">"frequency_hz"</span><span class="p">:</span> <span class="n">pp</span><span class="o">.</span><span class="n">Opts</span><span class="p">()</span><span class="o">.</span><span class="n">gamma</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">field_t</span><span class="p">,</span>
+            <span class="s2">"position_mm"</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">(</span><span class="nb">float</span><span class="p">(</span><span class="n">c</span><span class="p">)</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">centre_mm</span><span class="p">),</span>
+            <span class="s2">"rotation"</span><span class="p">:</span> <span class="n">rotation</span><span class="p">,</span>
+        <span class="p">}</span>
+        <span class="n">convert</span> <span class="o">=</span> <span class="kc">None</span>
+
+        <span class="k">def</span><span class="w"> </span><span class="nf">returned</span><span class="p">(</span><span class="n">item</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">nonlocal</span> <span class="n">convert</span><span class="p">,</span> <span class="n">status</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">item</span><span class="p">,</span> <span class="n">ismrmrd</span><span class="o">.</span><span class="n">Image</span><span class="p">):</span>
+                <span class="k">if</span> <span class="n">convert</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="n">header</span> <span class="o">=</span> <span class="n">_header</span><span class="p">(</span>
+                        <span class="n">design</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">coil</span><span class="o">.</span><span class="n">receive_channels</span><span class="p">,</span> <span class="n">series</span><span class="p">[</span><span class="s2">"frequency_hz"</span><span class="p">],</span> <span class="kc">None</span>
+                    <span class="p">)</span>
+                    <span class="n">convert</span> <span class="o">=</span> <span class="n">MrdDicomBuilder</span><span class="p">(</span><span class="n">ismrmrd</span><span class="o">.</span><span class="n">xsd</span><span class="o">.</span><span class="n">CreateFromDocument</span><span class="p">(</span><span class="n">header</span><span class="p">))</span>
+                <span class="n">item</span> <span class="o">=</span> <span class="n">convert</span><span class="p">(</span><span class="n">item</span><span class="p">)</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">item</span><span class="p">,</span> <span class="n">DicomWithName</span><span class="p">)</span> <span class="ow">and</span> <span class="n">item</span><span class="o">.</span><span class="n">dset</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">emit</span><span class="p">({</span><span class="s2">"dicom"</span><span class="p">:</span> <span class="n">_dicom_base64</span><span class="p">(</span><span class="n">item</span><span class="o">.</span><span class="n">dset</span><span class="p">),</span> <span class="s2">"name"</span><span class="p">:</span> <span class="n">item</span><span class="o">.</span><span class="n">filename</span><span class="p">})</span>
+            <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">item</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+                <span class="n">emit</span><span class="p">({</span><span class="s2">"text"</span><span class="p">:</span> <span class="n">item</span><span class="p">})</span>
+                <span class="n">status</span> <span class="o">=</span> <span class="mi">1</span> <span class="k">if</span> <span class="n">item</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">"pulserver:"</span><span class="p">)</span> <span class="k">else</span> <span class="n">status</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">local</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">send</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">recon</span><span class="p">,</span> <span class="n">design</span><span class="p">,</span> <span class="n">readouts</span><span class="p">,</span> <span class="n">config</span><span class="o">=</span><span class="n">config</span><span class="p">,</span> <span class="o">**</span><span class="n">series</span><span class="p">):</span>
+                <span class="n">returned</span><span class="p">(</span><span class="n">item</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">header</span><span class="p">,</span> <span class="n">acquisitions</span> <span class="o">=</span> <span class="n">_series</span><span class="p">(</span>
+                <span class="n">design</span><span class="p">,</span>
+                <span class="n">readouts</span><span class="p">,</span>
+                <span class="n">series</span><span class="p">[</span><span class="s2">"frequency_hz"</span><span class="p">],</span>
+                <span class="n">series</span><span class="p">[</span><span class="s2">"position_mm"</span><span class="p">],</span>
+                <span class="n">rotation</span><span class="p">,</span>
+                <span class="kc">None</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">local</span><span class="o">.</span><span class="n">run</span><span class="p">(</span>
+                <span class="n">ismrmrd</span><span class="o">.</span><span class="n">xsd</span><span class="o">.</span><span class="n">CreateFromDocument</span><span class="p">(</span><span class="n">header</span><span class="p">),</span>
+                <span class="n">acquisitions</span><span class="p">,</span>
+                <span class="n">returned</span><span class="p">,</span>
+                <span class="n">config</span><span class="o">=</span><span class="n">config</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="mi">1</span> <span class="k">if</span> <span class="n">stopped</span><span class="o">.</span><span class="n">is_set</span><span class="p">()</span> <span class="k">else</span> <span class="n">status</span>
+
+<div class="viewcode-block" id="Console.answer">
+<a class="viewcode-back" href="../../../generated/pulserver.virtual.Console.answer.html#pulserver.virtual.Console.answer">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">answer</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">request</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
+        <span class="n">reply</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="nb">dict</span><span class="p">],</span> <span class="kc">None</span><span class="p">],</span>
+        <span class="n">cancelled</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="nb">bool</span><span class="p">]</span> <span class="o">=</span> <span class="k">lambda</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Answer one request of a console, handing ``reply`` each message of the answer.</span>
+
+<span class="sd">        ``request`` carries its ``call`` and that call's fields, and the</span>
+<span class="sd">        messages are those ``pulserver console`` sends over its WebSocket,</span>
+<span class="sd">        without the request's ``id``: one for each call, except that a scan</span>
+<span class="sd">        sends its clock, images and texts before ``{"done": status}``. A call</span>
+<span class="sd">        that fails, or is not one of the console's, is answered with</span>
+<span class="sd">        ``{"error": text}``. A scan stops once ``cancelled`` returns true.</span>
+<span class="sd">        """</span>
+        <span class="n">call</span> <span class="o">=</span> <span class="n">request</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"call"</span><span class="p">)</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">call</span> <span class="o">==</span> <span class="s2">"plugins"</span><span class="p">:</span>
+                <span class="n">reply</span><span class="p">({</span><span class="s2">"plugins"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">plugin_names</span><span class="p">()})</span>
+            <span class="k">elif</span> <span class="n">call</span> <span class="o">==</span> <span class="s2">"recons"</span><span class="p">:</span>
+                <span class="n">reply</span><span class="p">({</span><span class="s2">"recons"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">recon_names</span><span class="p">()})</span>
+            <span class="k">elif</span> <span class="n">call</span> <span class="o">==</span> <span class="s2">"coils"</span><span class="p">:</span>
+                <span class="n">reply</span><span class="p">({</span><span class="s2">"coils"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">coils</span><span class="p">()})</span>
+            <span class="k">elif</span> <span class="n">call</span> <span class="ow">in</span> <span class="n">DESIGN_CALLS</span><span class="p">:</span>
+                <span class="n">reply</span><span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">design</span><span class="p">(</span><span class="n">call</span><span class="p">,</span> <span class="n">request</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"plugin"</span><span class="p">),</span> <span class="n">request</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"block"</span><span class="p">,</span> <span class="s2">""</span><span class="p">))</span>
+                <span class="p">)</span>
+            <span class="k">elif</span> <span class="n">call</span> <span class="o">==</span> <span class="s2">"exam"</span><span class="p">:</span>
+                <span class="n">coil</span> <span class="o">=</span> <span class="n">request</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"coil"</span><span class="p">)</span>
+                <span class="n">files</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">exam</span><span class="p">(</span>
+                    <span class="nb">str</span><span class="p">(</span><span class="n">request</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"subject"</span><span class="p">,</span> <span class="s2">""</span><span class="p">)),</span> <span class="kc">None</span> <span class="k">if</span> <span class="n">coil</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="nb">str</span><span class="p">(</span><span class="n">coil</span><span class="p">)</span>
+                <span class="p">)</span>
+                <span class="n">reply</span><span class="p">(</span>
+                    <span class="p">{</span><span class="s2">"localizer"</span><span class="p">:</span> <span class="p">[</span><span class="n">base64</span><span class="o">.</span><span class="n">b64encode</span><span class="p">(</span><span class="n">f</span><span class="p">)</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="s2">"ascii"</span><span class="p">)</span> <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">files</span><span class="p">]}</span>
+                <span class="p">)</span>
+            <span class="k">elif</span> <span class="n">call</span> <span class="o">==</span> <span class="s2">"scan"</span><span class="p">:</span>
+                <span class="n">recon</span> <span class="o">=</span> <span class="n">request</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"recon"</span><span class="p">)</span>
+                <span class="n">status</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">scan</span><span class="p">(</span>
+                    <span class="nb">str</span><span class="p">(</span><span class="n">request</span><span class="p">[</span><span class="s2">"design"</span><span class="p">]),</span>
+                    <span class="n">rotation</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">request</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"rotation"</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span><span class="o">.</span><span class="n">ravel</span><span class="p">())),</span>
+                    <span class="n">centre_mm</span><span class="o">=</span><span class="n">request</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"centre_mm"</span><span class="p">,</span> <span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)),</span>
+                    <span class="n">emit</span><span class="o">=</span><span class="n">reply</span><span class="p">,</span>
+                    <span class="n">cancelled</span><span class="o">=</span><span class="n">cancelled</span><span class="p">,</span>
+                    <span class="n">sound</span><span class="o">=</span><span class="nb">bool</span><span class="p">(</span><span class="n">request</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"sound"</span><span class="p">,</span> <span class="kc">False</span><span class="p">)),</span>
+                    <span class="n">recon</span><span class="o">=</span><span class="kc">None</span> <span class="k">if</span> <span class="n">recon</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="nb">str</span><span class="p">(</span><span class="n">recon</span><span class="p">),</span>
+                <span class="p">)</span>
+                <span class="n">reply</span><span class="p">({</span><span class="s2">"done"</span><span class="p">:</span> <span class="n">status</span><span class="p">})</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">reply</span><span class="p">({</span><span class="s2">"error"</span><span class="p">:</span> <span class="sa">f</span><span class="s2">"unknown call </span><span class="si">{</span><span class="n">call</span><span class="si">!r}</span><span class="s2">"</span><span class="p">})</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">error</span><span class="p">:</span>
+            <span class="n">reply</span><span class="p">({</span><span class="s2">"error"</span><span class="p">:</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">error</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">error</span><span class="si">}</span><span class="s2">"</span><span class="p">})</span></div>
+</div>
+
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">_Cancelled</span><span class="p">(</span><span class="ne">Exception</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""A scan cancelled while its simulation is under way."""</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_dicom_bytes</span><span class="p">(</span><span class="n">dataset</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bytes</span><span class="p">:</span>
+    <span class="n">buffer</span> <span class="o">=</span> <span class="n">io</span><span class="o">.</span><span class="n">BytesIO</span><span class="p">()</span>
+    <span class="n">dataset</span><span class="o">.</span><span class="n">save_as</span><span class="p">(</span><span class="n">buffer</span><span class="p">,</span> <span class="n">enforce_file_format</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">buffer</span><span class="o">.</span><span class="n">getvalue</span><span class="p">()</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_dicom_base64</span><span class="p">(</span><span class="n">dataset</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+    <span class="k">return</span> <span class="n">base64</span><span class="o">.</span><span class="n">b64encode</span><span class="p">(</span><span class="n">_dicom_bytes</span><span class="p">(</span><span class="n">dataset</span><span class="p">))</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="s2">"ascii"</span><span class="p">)</span>
+
+
+<span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">_connection</span><span class="p">(</span><span class="n">console</span><span class="p">:</span> <span class="n">Console</span><span class="p">,</span> <span class="n">websocket</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Answer one console's requests, each a JSON object carrying ``call`` and an ``id`` its replies repeat."""</span>
+    <span class="n">loop</span> <span class="o">=</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">get_running_loop</span><span class="p">()</span>
+    <span class="n">cancel</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Event</span><span class="p">()</span>
+    <span class="n">running</span><span class="p">:</span> <span class="nb">set</span><span class="p">[</span><span class="n">asyncio</span><span class="o">.</span><span class="n">Future</span><span class="p">]</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">reply</span><span class="p">(</span><span class="n">ident</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">message</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">text</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">({</span><span class="s2">"id"</span><span class="p">:</span> <span class="n">ident</span><span class="p">,</span> <span class="o">**</span><span class="n">message</span><span class="p">})</span>
+        <span class="n">asyncio</span><span class="o">.</span><span class="n">run_coroutine_threadsafe</span><span class="p">(</span><span class="n">websocket</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">text</span><span class="p">),</span> <span class="n">loop</span><span class="p">)</span><span class="o">.</span><span class="n">result</span><span class="p">()</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">work</span><span class="p">(</span><span class="n">request</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">ident</span> <span class="o">=</span> <span class="n">request</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"id"</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">request</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"call"</span><span class="p">)</span> <span class="o">==</span> <span class="s2">"scan"</span><span class="p">:</span>
+            <span class="n">cancel</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
+        <span class="n">console</span><span class="o">.</span><span class="n">answer</span><span class="p">(</span><span class="n">request</span><span class="p">,</span> <span class="k">lambda</span> <span class="n">message</span><span class="p">:</span> <span class="n">reply</span><span class="p">(</span><span class="n">ident</span><span class="p">,</span> <span class="n">message</span><span class="p">),</span> <span class="n">cancel</span><span class="o">.</span><span class="n">is_set</span><span class="p">)</span>
+
+    <span class="k">async</span> <span class="k">for</span> <span class="n">message</span> <span class="ow">in</span> <span class="n">websocket</span><span class="p">:</span>
+        <span class="n">request</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">message</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">request</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"call"</span><span class="p">)</span> <span class="o">==</span> <span class="s2">"cancel"</span><span class="p">:</span>
+            <span class="n">cancel</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
+            <span class="k">continue</span>
+        <span class="n">future</span> <span class="o">=</span> <span class="n">loop</span><span class="o">.</span><span class="n">run_in_executor</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="n">work</span><span class="p">,</span> <span class="n">request</span><span class="p">)</span>
+        <span class="n">running</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">future</span><span class="p">)</span>
+        <span class="n">future</span><span class="o">.</span><span class="n">add_done_callback</span><span class="p">(</span><span class="n">running</span><span class="o">.</span><span class="n">discard</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">future</span> <span class="ow">in</span> <span class="nb">list</span><span class="p">(</span><span class="n">running</span><span class="p">):</span>
+        <span class="k">with</span> <span class="n">contextlib</span><span class="o">.</span><span class="n">suppress</span><span class="p">(</span><span class="ne">Exception</span><span class="p">):</span>
+            <span class="k">await</span> <span class="n">future</span>
+
+
+<span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">serve</span><span class="p">(</span>
+    <span class="n">console</span><span class="p">:</span> <span class="n">Console</span><span class="p">,</span> <span class="n">host</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">port</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">origins</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Serve ``console`` on a WebSocket at ``host``:``port`` until cancelled.</span>
+
+<span class="sd">    With ``origins``, a browser page is served only from one of those origins,</span>
+<span class="sd">    such as ``https://pulserver.github.io``; a client that sends no</span>
+<span class="sd">    ``Origin``, which a browser always sends, is served whatever they are.</span>
+<span class="sd">    """</span>
+    <span class="kn">import</span><span class="w"> </span><span class="nn">websockets</span>
+
+    <span class="k">async</span> <span class="k">with</span> <span class="n">websockets</span><span class="o">.</span><span class="n">serve</span><span class="p">(</span>
+        <span class="k">lambda</span> <span class="n">websocket</span><span class="p">:</span> <span class="n">_connection</span><span class="p">(</span><span class="n">console</span><span class="p">,</span> <span class="n">websocket</span><span class="p">),</span>
+        <span class="n">host</span><span class="p">,</span>
+        <span class="n">port</span><span class="p">,</span>
+        <span class="n">max_size</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">origins</span><span class="o">=</span><span class="kc">None</span> <span class="k">if</span> <span class="n">origins</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="p">[</span><span class="o">*</span><span class="n">origins</span><span class="p">,</span> <span class="kc">None</span><span class="p">],</span>
+    <span class="p">):</span>
+        <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">Future</span><span class="p">()</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_parser</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">argparse</span><span class="o">.</span><span class="n">ArgumentParser</span><span class="p">:</span>
+    <span class="n">parser</span> <span class="o">=</span> <span class="n">argparse</span><span class="o">.</span><span class="n">ArgumentParser</span><span class="p">(</span>
+        <span class="n">prog</span><span class="o">=</span><span class="s2">"pulserver console"</span><span class="p">,</span>
+        <span class="n">description</span><span class="o">=</span><span class="s2">"Serve a scanner console's calls to pulserver over a WebSocket."</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span>
+        <span class="s2">"--plugins"</span><span class="p">,</span>
+        <span class="nb">type</span><span class="o">=</span><span class="n">Path</span><span class="p">,</span>
+        <span class="n">action</span><span class="o">=</span><span class="s2">"append"</span><span class="p">,</span>
+        <span class="n">required</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="n">help</span><span class="o">=</span><span class="s2">"plugin directory, repeatable; the first holding a plugin is used"</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span>
+        <span class="s2">"--limits"</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="n">Path</span><span class="p">,</span> <span class="n">required</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s2">"file holding a [Limits] block"</span>
+    <span class="p">)</span>
+    <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s2">"--store"</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="n">Path</span><span class="p">,</span> <span class="n">required</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s2">"design store"</span><span class="p">)</span>
+    <span class="n">recon</span> <span class="o">=</span> <span class="n">parser</span><span class="o">.</span><span class="n">add_mutually_exclusive_group</span><span class="p">()</span>
+    <span class="n">recon</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s2">"--recon"</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s2">"reconstruction proxy, HOST:PORT"</span><span class="p">)</span>
+    <span class="n">recon</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span>
+        <span class="s2">"--recon-plugins"</span><span class="p">,</span>
+        <span class="nb">type</span><span class="o">=</span><span class="n">Path</span><span class="p">,</span>
+        <span class="n">action</span><span class="o">=</span><span class="s2">"append"</span><span class="p">,</span>
+        <span class="n">help</span><span class="o">=</span><span class="s2">"reconstruction plugin directory, repeatable, run in this process "</span>
+        <span class="s2">"instead of a proxy"</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s2">"--push"</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s2">"recon-side intake each design is pushed to"</span><span class="p">)</span>
+    <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s2">"--host"</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="s2">"127.0.0.1"</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s2">"address to listen on"</span><span class="p">)</span>
+    <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s2">"--port"</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="nb">int</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="mi">8765</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s2">"port to listen on"</span><span class="p">)</span>
+    <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span>
+        <span class="s2">"--origin"</span><span class="p">,</span>
+        <span class="n">action</span><span class="o">=</span><span class="s2">"append"</span><span class="p">,</span>
+        <span class="n">dest</span><span class="o">=</span><span class="s2">"origins"</span><span class="p">,</span>
+        <span class="n">help</span><span class="o">=</span><span class="s2">"origin of the browser pages served, repeatable; every origin without it"</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span>
+        <span class="s2">"--spacing"</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="nb">float</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s2">"finest isochromat spacing, in mm"</span>
+    <span class="p">)</span>
+    <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span>
+        <span class="s2">"--max-isochromats"</span><span class="p">,</span>
+        <span class="nb">type</span><span class="o">=</span><span class="nb">int</span><span class="p">,</span>
+        <span class="n">default</span><span class="o">=</span><span class="mi">2_000_000</span><span class="p">,</span>
+        <span class="n">help</span><span class="o">=</span><span class="s2">"most isochromats a scan is simulated on; the spacing is coarsened "</span>
+        <span class="s2">"by 1 mm until the slabs a scan excites hold no more"</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span>
+        <span class="s2">"--coil"</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="s2">"body"</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s2">"coil an exam starts with unless it names one"</span>
+    <span class="p">)</span>
+    <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span>
+        <span class="s2">"--fields"</span><span class="p">,</span>
+        <span class="nb">type</span><span class="o">=</span><span class="n">Path</span><span class="p">,</span>
+        <span class="n">help</span><span class="o">=</span><span class="s2">"directory of the coils' field maps and VOPs, solved in BrainWeb's "</span>
+        <span class="s2">"head, on which every exam then is; BART's coil models without it"</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span>
+        <span class="s2">"--speed"</span><span class="p">,</span>
+        <span class="nb">type</span><span class="o">=</span><span class="nb">float</span><span class="p">,</span>
+        <span class="n">help</span><span class="o">=</span><span class="s2">"scan time per second, once the simulation is far enough ahead; "</span>
+        <span class="s2">"as fast as it is simulated without it"</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span>
+        <span class="s2">"--device"</span><span class="p">,</span>
+        <span class="n">help</span><span class="o">=</span><span class="s2">"torch device the ADC windows are read and the runs of repetitions "</span>
+        <span class="s2">"carried on, such as cuda (the gpu extra); the engine does both without it"</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span>
+        <span class="s2">"--spins"</span><span class="p">,</span>
+        <span class="nb">type</span><span class="o">=</span><span class="nb">int</span><span class="p">,</span>
+        <span class="n">default</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+        <span class="n">help</span><span class="o">=</span><span class="s2">"isochromats per voxel, spread over the T2' line of its tissue"</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span>
+        <span class="s2">"--voxel"</span><span class="p">,</span>
+        <span class="n">choices</span><span class="o">=</span><span class="p">(</span><span class="s2">"point"</span><span class="p">,</span> <span class="s2">"box"</span><span class="p">),</span>
+        <span class="n">default</span><span class="o">=</span><span class="s2">"point"</span><span class="p">,</span>
+        <span class="n">help</span><span class="o">=</span><span class="s2">"where a voxel's isochromats lie: at its centre, or over it, "</span>
+        <span class="s2">"--spins a square number for the vials and a cube for BrainWeb"</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span>
+        <span class="s2">"--diffusion"</span><span class="p">,</span>
+        <span class="n">action</span><span class="o">=</span><span class="s2">"store_true"</span><span class="p">,</span>
+        <span class="n">help</span><span class="o">=</span><span class="s2">"BrainWeb's tissue classes diffuse, as BrainWeb.DIFFUSION gives them"</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">motion_arguments</span><span class="p">(</span><span class="n">parser</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">parser</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">main</span><span class="p">(</span><span class="n">argv</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Run ``pulserver console`` with ``argv`` until interrupted."""</span>
+    <span class="n">args</span> <span class="o">=</span> <span class="n">_parser</span><span class="p">()</span><span class="o">.</span><span class="n">parse_args</span><span class="p">(</span><span class="n">argv</span><span class="p">)</span>
+    <span class="n">recon</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="k">if</span> <span class="n">args</span><span class="o">.</span><span class="n">recon</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">host</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">port</span> <span class="o">=</span> <span class="n">args</span><span class="o">.</span><span class="n">recon</span><span class="o">.</span><span class="n">rpartition</span><span class="p">(</span><span class="s2">":"</span><span class="p">)</span>
+        <span class="n">recon</span> <span class="o">=</span> <span class="p">(</span><span class="n">host</span><span class="p">,</span> <span class="nb">int</span><span class="p">(</span><span class="n">port</span><span class="p">))</span>
+    <span class="n">console</span> <span class="o">=</span> <span class="n">Console</span><span class="p">(</span>
+        <span class="n">plugins</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">plugins</span><span class="p">,</span>
+        <span class="n">limits</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">limits</span><span class="o">.</span><span class="n">read_text</span><span class="p">(),</span>
+        <span class="n">store</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">store</span><span class="p">,</span>
+        <span class="n">recon</span><span class="o">=</span><span class="n">recon</span><span class="p">,</span>
+        <span class="n">recon_plugins</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">recon_plugins</span><span class="p">,</span>
+        <span class="n">push</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">push</span><span class="p">,</span>
+        <span class="n">spacing</span><span class="o">=</span><span class="mf">1e-3</span> <span class="o">*</span> <span class="n">args</span><span class="o">.</span><span class="n">spacing</span><span class="p">,</span>
+        <span class="n">max_isochromats</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">max_isochromats</span><span class="p">,</span>
+        <span class="n">coil</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">coil</span><span class="p">,</span>
+        <span class="n">fields</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">fields</span><span class="p">,</span>
+        <span class="n">speed</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">speed</span><span class="p">,</span>
+        <span class="n">device</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+        <span class="n">spins</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">spins</span><span class="p">,</span>
+        <span class="n">voxel</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">voxel</span><span class="p">,</span>
+        <span class="n">diffusion</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">diffusion</span><span class="p">,</span>
+        <span class="n">motion</span><span class="o">=</span><span class="n">subject_motion</span><span class="p">(</span><span class="n">args</span><span class="p">),</span>
+    <span class="p">)</span>
+    <span class="k">with</span> <span class="n">contextlib</span><span class="o">.</span><span class="n">suppress</span><span class="p">(</span><span class="ne">KeyboardInterrupt</span><span class="p">):</span>
+        <span class="n">asyncio</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">serve</span><span class="p">(</span><span class="n">console</span><span class="p">,</span> <span class="n">args</span><span class="o">.</span><span class="n">host</span><span class="p">,</span> <span class="n">args</span><span class="o">.</span><span class="n">port</span><span class="p">,</span> <span class="n">args</span><span class="o">.</span><span class="n">origins</span><span class="p">))</span>
+    <span class="k">return</span> <span class="mi">0</span>
+</pre></div>
+
+                </article>
+              
+
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+<div class="bd-footer-content__inner container">
+  
+  <div class="footer-item">
+    
+<p class="component-author">
+By pulserver contributors
+</p>
+
+  </div>
+  
+  <div class="footer-item">
+    
+
+  <p class="copyright">
+    
+      © Copyright 2024-2026, pulserver contributors.
+      <br/>
+    
+  </p>
+
+  </div>
+  
+  <div class="footer-item">
+    
+  </div>
+  
+  <div class="footer-item">
+    
+  </div>
+  
+</div>
+          </footer>
+        
+
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script defer src="../../../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9"></script>
+<script defer src="../../../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9"></script>
+
+  <footer class="bd-footer">
+  </footer>
+  </body>
+</html>

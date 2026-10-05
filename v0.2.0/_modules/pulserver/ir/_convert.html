@@ -1,0 +1,1149 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>pulserver.ir._convert &#8212; pulserver documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  <!--
+    this give us a css class that will be invisible only if js is disabled
+  -->
+  <noscript>
+    <style>
+      .pst-js-only { display: none !important; }
+
+    </style>
+  </noscript>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../../_static/styles/theme.css?digest=90905a2f556bf617f1a9" rel="stylesheet" />
+<link href="../../../_static/styles/pydata-sphinx-theme.css?digest=90905a2f556bf617f1a9" rel="stylesheet" />
+
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=03e43079" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/styles/sphinx-book-theme.css?v=4418a689" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery.css?v=c83e6b79" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/pulserver.css?v=e08ae8f3" />
+  
+  <!-- So that users can add custom icons -->
+  <script defer src="../../../_static/scripts/fontawesome.js?digest=90905a2f556bf617f1a9"></script>
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
+<link rel="preload" as="script" href="../../../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
+
+    <script src="../../../_static/documentation_options.js?v=0a6a6ad3"></script>
+    <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../../../_static/copybutton.js?v=f281be69"></script>
+    <script src="../../../_static/sg-tags.js?v=d80f6fa4"></script>
+    <script src="../../../_static/scripts/sphinx-book-theme.js?v=fab101a9"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = '_modules/pulserver/ir/_convert';</script>
+    <script>
+        DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
+        DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.2.0';
+        DOCUMENTATION_OPTIONS.show_version_warning_banner =
+            true;
+        </script>
+    <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
+    <link rel="canonical" href="https://pulserver.github.io/pulserver/stable/_modules/pulserver/ir/_convert.html" />
+    <link rel="icon" href="../../../_static/pulserver-mark.svg"/>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  <meta name="docsearch:version" content="v0.2.0" />
+  
+    
+    <script src="../../../_static/searchtools.js"></script>
+    <script src="../../../_static/language_data.js"></script>
+    <script src="../../../searchindex.js"></script>
+  
+  </head>
+  <body data-default-mode="">
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+  
+  
+  
+  
+  <dialog id="pst-search-dialog">
+    
+<form class="bd-search d-flex align-items-center"
+      action="../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         placeholder="Search..."
+         aria-label="Search..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+  </dialog>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header id="pst-header" class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+  
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+        </div>
+      
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+    </div>
+  
+
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+        
+      
+      <dialog id="pst-primary-sidebar-modal"></dialog>
+      <div id="pst-primary-sidebar" class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+    
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../../../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../../../_static/pulserver-mark.svg" class="logo__image only-light" alt="pulserver"/>
+    <img src="../../../_static/pulserver-mark-dark.svg" class="logo__image only-dark pst-js-only" alt="pulserver"/>
+  
+  
+</a></div>
+        <div class="sidebar-primary-item">
+<div class="version-switcher__container dropdown pst-js-only">
+  <button id="pst-version-switcher-button-2"
+    type="button"
+    class="version-switcher__button btn btn-sm dropdown-toggle"
+    data-bs-toggle="dropdown"
+    aria-haspopup="listbox"
+    aria-controls="pst-version-switcher-list-2"
+    aria-label="Version switcher list"
+  >
+    Choose version  <!-- this text may get changed later by javascript -->
+    <span class="caret"></span>
+  </button>
+  <div id="pst-version-switcher-list-2"
+    class="version-switcher__menu dropdown-menu list-group-flush py-0"
+    role="listbox" aria-labelledby="pst-version-switcher-button-2">
+    <!-- dropdown will be populated by javascript on page load -->
+  </div>
+</div></div>
+        <div class="sidebar-primary-item">
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button></div>
+        <div class="sidebar-primary-item"><nav class="bd-links bd-docs-nav" aria-label="Main">
+    <div class="bd-toc-item navbar-nav active">
+        
+        <ul class="nav bd-sidenav bd-sidenav__home-link">
+            <li class="toctree-l1">
+                <a class="reference internal" href="../../../index.html">
+                    Homepage
+                </a>
+            </li>
+        </ul>
+        <ul class="nav bd-sidenav">
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../user-guide/index.html">User guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/running.html">Running the services</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/scanner-sequences.html">Scanner sequences</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/reconstruction-plugins.html">Reconstruction plugins</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/reconstruction-client.html">Reconstruction clients</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/virtual-scanner.html">Scanning a phantom without a scanner</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../developer-guide/index.html">Developer guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/prerequisites.html">Development prerequisites</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/installation.html">Editable installation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/workflow.html">Development workflow</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/style.html">Coding style</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/documentation.html">Documentation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/terminology.html">Terminology and conventions</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../../developer-guide/internals/index.html">Internals</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/ir-cache.html">IR cache</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/protocol-wire.html">Protocol text blocks</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/reconstruction-proxy.html">Reconstruction proxy</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/virtual-scanner.html">Virtual scanner</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/bloch-engine.html">Bloch engine</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/pre-commit.html">Pre-commit</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/pull-requests.html">Pull requests</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/releases.html">Releases</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/code-of-conduct.html">Code of conduct</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../explanations/index.html">Explanations</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/architecture.html">Architecture</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/protocol.html">Protocol resolution</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/designs.html">Designs and the design store</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/scanner-representation.html">Scanner representation (PulSeg)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/virtual-scanner.html">The virtual scanner</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/reconstruction.html">Raw-data enrichment and routing</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/calibration.html">Calibration, noise and coil compression</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../examples/index.html">Examples</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../../examples/course.html">Course</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/01_protocol_to_image.html">1. From protocol to image</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/02_sequence_plugin.html">2. A scanner sequence and its protocol</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/03_scanner_representation.html">3. Scanner representation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/04_reconstruction_plugin.html">4. A reconstruction plugin</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/05_testing_on_the_virtual_scanner.html">5. Testing on the virtual scanner</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../../examples/tours.html">Tours</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/02-tours/01_protocol_resolution.html">Protocol resolution for a 2D gradient echo</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/02-tours/02_segmentation.html">Segmentation of a sequence for the scanner</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/02-tours/03_fov_offset_enrichment.html">Field-of-view offset and the proxy phase</a></li>
+</ul>
+</details></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../api/index.html">API reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/protocol.html">Protocol</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/design.html">Scanner sequences</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/host.html">Design calls</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/ir.html">IR conversion</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/proxy.html">Reconstruction proxy</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/recon.html">Reconstruction plugins</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/mrd.html">MRD data</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/validate.html">Validation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/virtual.html">Virtual scanner</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../misc/index.html">Miscellaneous</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../misc/license.html">License and notices</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../misc/related.html">Related projects</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../misc/contributors.html">Contributors</a></li>
+</ul>
+</details></li>
+</ul>
+
+    </div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+      <div class="sidebar-primary-item">
+<div id="ethical-ad-placement"
+      class="flat"
+      data-ea-publisher="readthedocs"
+      data-ea-type="readthedocs-sidebar"
+      data-ea-manual="true">
+</div></div>
+  </div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+
+<div class="sbt-scroll-pixel-helper"></div>
+
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item"><button class="sidebar-toggle primary-toggle btn btn-sm" title="Toggle primary sidebar" data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <span class="fa-solid fa-bars"></span>
+</button></div>
+      
+    </div>
+  
+  
+    <div class="header-article-items__end">
+      
+        <div class="header-article-item">
+
+<div class="article-header-buttons">
+
+
+
+
+
+<div class="dropdown dropdown-source-buttons">
+  <button class="btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Source repositories">
+    <i class="fab fa-github"></i>
+  </button>
+  <ul class="dropdown-menu">
+      
+      
+      
+      <li><a href="https://github.com/pulserver/pulserver" target="_blank"
+   class="btn btn-sm btn-source-repository-button dropdown-item"
+   title="Source repository"
+   data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fab fa-github"></i>
+  </span>
+<span class="btn__text-container">Repository</span>
+</a>
+</li>
+      
+      
+      
+      
+      <li><a href="https://github.com/pulserver/pulserver/issues/new?title=Issue%20on%20page%20%2F_modules/pulserver/ir/_convert.html&body=Your%20issue%20content%20here." target="_blank"
+   class="btn btn-sm btn-source-issues-button dropdown-item"
+   title="Open an issue"
+   data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-lightbulb"></i>
+  </span>
+<span class="btn__text-container">Open issue</span>
+</a>
+</li>
+      
+  </ul>
+</div>
+
+
+
+
+<button onclick="toggleFullScreen()"
+  class="btn btn-sm btn-fullscreen-button pst-navbar-icon"
+  title="Fullscreen mode"
+  data-bs-placement="bottom" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-expand"></i>
+  </span>
+
+</button>
+
+
+
+<div class="theme-switch-container dropdown pst-js-only" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Color mode">
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button dropdown-toggle" aria-label="Color mode" data-bs-toggle="dropdown">
+    <i class="theme-switch fa-solid fa-sun fa-lg fa-fw" data-mode="light" title="Light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg fa-fw" data-mode="dark" title="Dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg fa-fw" data-mode="auto" title="System Settings"></i>
+  </button>
+  <ul class="dropdown-menu dropdown-menu-end">
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg fa-fw me-1"></i>System Settings</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="light"><i class="fa-solid fa-sun fa-lg fa-fw me-1"></i>Light</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="dark"><i class="fa-solid fa-moon fa-lg fa-fw me-1"></i>Dark</button></li>
+  </ul>
+</div>
+
+
+<button class="btn btn-sm pst-navbar-icon search-button search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass fa-lg"></i>
+</button>
+
+</div></div>
+      
+    </div>
+  
+</div>
+</div>
+              
+              
+
+<div id="jb-print-docs-body" class="onlyprint">
+    <h1></h1>
+    <!-- Table of contents -->
+    <div id="print-main-content">
+        <div id="jb-print-toc">
+            
+        </div>
+    </div>
+</div>
+
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <h1>Source code for pulserver.ir._convert</h1><div class="highlight"><pre>
+<span></span><span class="sd">"""Conversion of a Pulseq sequence into the scanner's segmented binary IR."""</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Sequence</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span><span class="p">,</span> <span class="n">field</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">enum</span><span class="w"> </span><span class="kn">import</span> <span class="n">IntEnum</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">pypulseqpp</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pp</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">.._accelerators</span><span class="w"> </span><span class="kn">import</span> <span class="n">require</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">..mrd._sequence</span><span class="w"> </span><span class="kn">import</span> <span class="n">read_chain</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">._checks</span><span class="w"> </span><span class="kn">import</span> <span class="n">SarRatio</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">._source</span><span class="w"> </span><span class="kn">import</span> <span class="n">conversion_payload</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_rasters</span><span class="p">(</span><span class="n">system</span><span class="p">:</span> <span class="n">pp</span><span class="o">.</span><span class="n">Opts</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="o">...</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Return the RF, gradient, ADC and block rasters, in us."""</span>
+    <span class="k">return</span> <span class="p">(</span>
+        <span class="n">system</span><span class="o">.</span><span class="n">rf_raster_time</span> <span class="o">*</span> <span class="mf">1e6</span><span class="p">,</span>
+        <span class="n">system</span><span class="o">.</span><span class="n">grad_raster_time</span> <span class="o">*</span> <span class="mf">1e6</span><span class="p">,</span>
+        <span class="n">system</span><span class="o">.</span><span class="n">adc_raster_time</span> <span class="o">*</span> <span class="mf">1e6</span><span class="p">,</span>
+        <span class="n">system</span><span class="o">.</span><span class="n">block_duration_raster</span> <span class="o">*</span> <span class="mf">1e6</span><span class="p">,</span>
+    <span class="p">)</span>
+
+
+<div class="viewcode-block" id="Format">
+<a class="viewcode-back" href="../../../generated/pulserver.ir.Format.html#pulserver.ir.Format">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">Format</span><span class="p">(</span><span class="n">IntEnum</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""What a quantity is stored as."""</span>
+
+    <span class="n">FLOAT32</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">INT16</span> <span class="o">=</span> <span class="mi">1</span>
+    <span class="n">INT32</span> <span class="o">=</span> <span class="mi">2</span></div>
+
+
+
+<div class="viewcode-block" id="Quantity">
+<a class="viewcode-back" href="../../../generated/pulserver.ir.Quantity.html#pulserver.ir.Quantity">[docs]</a>
+<span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">Quantity</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""The format one quantity is stored in, and what one integer step means.</span>
+
+<span class="sd">    ``step`` is the quantity's SI value of one integer step, so a stored value</span>
+<span class="sd">    ``v`` means ``v * step``. It is 0 for a float, which is stored in its SI</span>
+<span class="sd">    unit.</span>
+<span class="sd">    """</span>
+
+    <span class="nb">format</span><span class="p">:</span> <span class="n">Format</span> <span class="o">=</span> <span class="n">Format</span><span class="o">.</span><span class="n">FLOAT32</span>
+    <span class="n">step</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span></div>
+
+
+
+<div class="viewcode-block" id="VendorProfile">
+<a class="viewcode-back" href="../../../generated/pulserver.ir.VendorProfile.html#pulserver.ir.VendorProfile">[docs]</a>
+<span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">VendorProfile</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""What a cache holds its numbers as, for the machine that reads it.</span>
+
+<span class="sd">    A sequencer that plays integers is given integers, already scaled, so it</span>
+<span class="sd">    converts nothing while it plays; a reader that works in SI is given floats.</span>
+<span class="sd">    Every quantity defaults to a float in its SI unit.</span>
+
+<span class="sd">    The steps belong to the machine and arrive with its other limits. Nothing</span>
+<span class="sd">    here supplies one.</span>
+<span class="sd">    """</span>
+
+    <span class="n">grad_sample</span><span class="p">:</span> <span class="n">Quantity</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="n">Quantity</span><span class="p">)</span>
+    <span class="n">grad_amplitude</span><span class="p">:</span> <span class="n">Quantity</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="n">Quantity</span><span class="p">)</span>
+    <span class="n">rf_sample</span><span class="p">:</span> <span class="n">Quantity</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="n">Quantity</span><span class="p">)</span>
+    <span class="n">rf_amplitude</span><span class="p">:</span> <span class="n">Quantity</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="n">Quantity</span><span class="p">)</span>
+    <span class="n">rf_phase</span><span class="p">:</span> <span class="n">Quantity</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="n">Quantity</span><span class="p">)</span>
+    <span class="n">rf_frequency</span><span class="p">:</span> <span class="n">Quantity</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="n">Quantity</span><span class="p">)</span>
+
+<div class="viewcode-block" id="VendorProfile.as_pairs">
+<a class="viewcode-back" href="../../../generated/pulserver.ir.VendorProfile.as_pairs.html#pulserver.ir.VendorProfile.as_pairs">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">as_pairs</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="o">...</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""Return a format and a step per quantity, as the extension takes them."""</span>
+        <span class="k">return</span> <span class="nb">tuple</span><span class="p">(</span>
+            <span class="n">value</span>
+            <span class="k">for</span> <span class="n">quantity</span> <span class="ow">in</span> <span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">grad_sample</span><span class="p">,</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">grad_amplitude</span><span class="p">,</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">rf_sample</span><span class="p">,</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">rf_amplitude</span><span class="p">,</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">rf_phase</span><span class="p">,</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">rf_frequency</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="k">for</span> <span class="n">value</span> <span class="ow">in</span> <span class="p">(</span><span class="nb">float</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">quantity</span><span class="o">.</span><span class="n">format</span><span class="p">)),</span> <span class="nb">float</span><span class="p">(</span><span class="n">quantity</span><span class="o">.</span><span class="n">step</span><span class="p">))</span>
+        <span class="p">)</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="Grouping">
+<a class="viewcode-back" href="../../../generated/pulserver.ir.Grouping.html#pulserver.ir.Grouping">[docs]</a>
+<span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">Grouping</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Rule by which the blocks of a repetition are grouped into virtual segments.</span>
+
+<span class="sd">    The repetition is cut into contiguous runs of blocks, each a virtual</span>
+<span class="sd">    segment the interpreter prepares once and plays as segment instances. A</span>
+<span class="sd">    boundary may fall between two blocks only where every gradient is within</span>
+<span class="sd">    :attr:`boundary_gradient_hz_per_m` of zero at the join. A boundary must</span>
+<span class="sd">    fall where the ``NOROT`` or ``PMC`` label changes, since the interpreter</span>
+<span class="sd">    sets one prescription rotation per segment instance; conversion fails when</span>
+<span class="sd">    such a change falls under a gradient. The ``split_*`` attributes add</span>
+<span class="sd">    boundaries.</span>
+
+<span class="sd">    The default suits an interpreter that begins a segment by setting its</span>
+<span class="sd">    gradients, so that a boundary falls only where they are at rest.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    boundary_gradient_hz_per_m</span>
+<span class="sd">        Largest gradient amplitude at a join, in Hz/m, at which a boundary may</span>
+<span class="sd">        fall. An interpreter that can begin a segment under a gradient states</span>
+<span class="sd">        a large value.</span>
+<span class="sd">    split_by_pulses, split_by_readouts</span>
+<span class="sd">        Whether runs that play different RF events, or different ADC events,</span>
+<span class="sd">        are different virtual segments.</span>
+<span class="sd">    split_navigators</span>
+<span class="sd">        Whether a navigator readout is a virtual segment of its own.</span>
+<span class="sd">    split_edge_delays</span>
+<span class="sd">        Whether a pure-delay block at the edge of a virtual segment is a</span>
+<span class="sd">        virtual segment of its own. An interpreter that inserts</span>
+<span class="sd">        transmit-to-receive switching time at every segment boundary needs as</span>
+<span class="sd">        few segments as possible, and sets this False.</span>
+<span class="sd">    """</span>
+
+    <span class="n">boundary_gradient_hz_per_m</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">100.0</span>
+    <span class="n">split_by_pulses</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
+    <span class="n">split_by_readouts</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
+    <span class="n">split_navigators</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
+    <span class="n">split_edge_delays</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
+
+<div class="viewcode-block" id="Grouping.as_values">
+<a class="viewcode-back" href="../../../generated/pulserver.ir.Grouping.as_values.html#pulserver.ir.Grouping.as_values">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">as_values</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="o">...</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""Return the rule as the extension takes it, in the order C declares it."""</span>
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="nb">float</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">boundary_gradient_hz_per_m</span><span class="p">),</span>
+            <span class="nb">float</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">split_by_pulses</span><span class="p">),</span>
+            <span class="nb">float</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">split_by_readouts</span><span class="p">),</span>
+            <span class="nb">float</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">split_navigators</span><span class="p">),</span>
+            <span class="nb">float</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">split_edge_delays</span><span class="p">),</span>
+        <span class="p">)</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="WaveBudget">
+<a class="viewcode-back" href="../../../generated/pulserver.ir.WaveBudget.html#pulserver.ir.WaveBudget">[docs]</a>
+<span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">WaveBudget</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""What a playout's waveform memory affords the waves.</span>
+
+<span class="sd">    A property of the playout, not of the sequence: the C library's</span>
+<span class="sd">    ``pulseg_wave_budget``. :func:`convert` lays the waves out for it, and a</span>
+<span class="sd">    playout refuses a cache laid out for another budget.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    max_samples</span>
+<span class="sd">        Samples each gradient axis holds for waves.</span>
+<span class="sd">    raster_us</span>
+<span class="sd">        The playout's gradient raster, in µs per sample.</span>
+<span class="sd">    load_us_per_sample</span>
+<span class="sd">        Time to sample and load one sample on one axis, in µs; 0 leaves the</span>
+<span class="sd">        loading unchecked.</span>
+<span class="sd">    headroom</span>
+<span class="sd">        Share of the playout's time its loading may take.</span>
+<span class="sd">    slots</span>
+<span class="sd">        Slots per segment position a streamed layout rings through, at least</span>
+<span class="sd">        2: one more than the segment instances the loading may run ahead of</span>
+<span class="sd">        the playout.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If the raster or the headroom is not positive, the memory or the load</span>
+<span class="sd">        rate is negative, or there are fewer than two slots.</span>
+<span class="sd">    """</span>
+
+    <span class="n">max_samples</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">raster_us</span><span class="p">:</span> <span class="nb">float</span>
+    <span class="n">load_us_per_sample</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span>
+    <span class="n">headroom</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.5</span>
+    <span class="n">slots</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">2</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">__post_init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">raster_us</span> <span class="o">&lt;=</span> <span class="mf">0.0</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">headroom</span> <span class="o">&lt;=</span> <span class="mf">0.0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"the raster and the headroom must be positive"</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_samples</span> <span class="o">&lt;</span> <span class="mi">0</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">load_us_per_sample</span> <span class="o">&lt;</span> <span class="mf">0.0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"the memory and the load rate cannot be negative"</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">slots</span> <span class="o">&lt;</span> <span class="mi">2</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"a streamed layout rings through at least two slots"</span><span class="p">)</span></div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_held</span><span class="p">(</span><span class="n">budget</span><span class="p">:</span> <span class="n">WaveBudget</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return the budget as the extension takes it."""</span>
+    <span class="k">if</span> <span class="n">budget</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="k">return</span> <span class="p">(</span>
+        <span class="n">budget</span><span class="o">.</span><span class="n">max_samples</span><span class="p">,</span>
+        <span class="n">budget</span><span class="o">.</span><span class="n">raster_us</span><span class="p">,</span>
+        <span class="n">budget</span><span class="o">.</span><span class="n">load_us_per_sample</span><span class="p">,</span>
+        <span class="n">budget</span><span class="o">.</span><span class="n">headroom</span><span class="p">,</span>
+        <span class="n">budget</span><span class="o">.</span><span class="n">slots</span><span class="p">,</span>
+    <span class="p">)</span>
+
+
+<div class="viewcode-block" id="cache_path">
+<a class="viewcode-back" href="../../../generated/pulserver.ir.cache_path.html#pulserver.ir.cache_path">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">cache_path</span><span class="p">(</span><span class="n">seq_path</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span><span class="p">,</span> <span class="n">cache_ext</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">".pseg"</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Path</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return the cache file of a sequence: its last suffix replaced by ``cache_ext``."""</span>
+    <span class="k">return</span> <span class="n">Path</span><span class="p">(</span><span class="n">seq_path</span><span class="p">)</span><span class="o">.</span><span class="n">with_suffix</span><span class="p">(</span><span class="n">cache_ext</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="chain">
+<a class="viewcode-back" href="../../../generated/pulserver.ir.chain.html#pulserver.ir.chain">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">chain</span><span class="p">(</span><span class="n">seq_path</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">Path</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Return the files of the ``NextSequence`` chain starting at a sequence file, in play order.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    FileNotFoundError</span>
+<span class="sd">        If a file of the chain does not exist.</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If the chain names a file it has already played.</span>
+<span class="sd">    """</span>
+    <span class="k">return</span> <span class="p">[</span><span class="n">path</span> <span class="k">for</span> <span class="n">path</span><span class="p">,</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">read_chain</span><span class="p">(</span><span class="n">seq_path</span><span class="p">)]</span></div>
+
+
+
+<div class="viewcode-block" id="convert">
+<a class="viewcode-back" href="../../../generated/pulserver.ir.convert.html#pulserver.ir.convert">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">convert</span><span class="p">(</span>
+    <span class="n">seq_path</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">system</span><span class="p">:</span> <span class="n">pp</span><span class="o">.</span><span class="n">Opts</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">fov_offset</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">vendor</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span>
+    <span class="n">label_column_map</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">),</span>
+    <span class="n">cache_ext</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">".pseg"</span><span class="p">,</span>
+    <span class="n">verify_signature</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="n">sar_ratios</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">SarRatio</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">wave_budget</span><span class="p">:</span> <span class="n">WaveBudget</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">profile</span><span class="p">:</span> <span class="n">VendorProfile</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">grouping</span><span class="p">:</span> <span class="n">Grouping</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">designed</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="n">Path</span><span class="p">,</span> <span class="n">pp</span><span class="o">.</span><span class="n">Sequence</span><span class="p">]]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Path</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Segment a sequence file and write its IR cache beside it.</span>
+
+<span class="sd">    The ``NextSequence`` chain starting at the file is read as the</span>
+<span class="sd">    subsequences of one scan. An existing cache at the destination is</span>
+<span class="sd">    replaced. RF vendor statistics are left at zero: ``vendor`` only tags the</span>
+<span class="sd">    cache for the reader that loads it, which must be built for that vendor.</span>
+
+<span class="sd">    The files are expected in the logical frame, and each is moved to</span>
+<span class="sd">    ``fov_offset`` with :func:`prescribe` before it is segmented. The</span>
+<span class="sd">    prescription's rotation is not applied here: the scanner plays the cache</span>
+<span class="sd">    through its rotation matrix, composed after each block's own rotation.</span>
+
+<span class="sd">    ADC phase modulation is not stored in the cache: the reconstruction proxy</span>
+<span class="sd">    applies it to the received samples from the sequence</span>
+<span class="sd">    (:class:`~pulserver.proxy.SequenceTable`).</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    seq_path</span>
+<span class="sd">        Text or binary Pulseq file.</span>
+<span class="sd">    system</span>
+<span class="sd">        Limits and rasters the scan is segmented under.</span>
+<span class="sd">    fov_offset</span>
+<span class="sd">        Translation of the field-of-view centre along the logical readout,</span>
+<span class="sd">        phase and slice axes, in metres. None or zero leaves the files as</span>
+<span class="sd">        designed.</span>
+<span class="sd">    vendor</span>
+<span class="sd">        ``PULSEG_VENDOR_*`` code; 0 is vendor-neutral.</span>
+<span class="sd">    label_column_map</span>
+<span class="sd">        Pulseq label state indices filling the three ADC label columns:</span>
+<span class="sd">        0 SLC, 1 PHS, 2 REP, 3 AVG, 4 SEG, 5 SET, 6 ECO, 7 PAR, 8 LIN, 9 ACQ.</span>
+<span class="sd">    cache_ext</span>
+<span class="sd">        Extension of the cache file, dot included.</span>
+<span class="sd">    verify_signature</span>
+<span class="sd">        Refuse a file whose contents do not match the signature it carries. A</span>
+<span class="sd">        file carrying none is read either way.</span>
+<span class="sd">    sar_ratios</span>
+<span class="sd">        One per file of the chain, as :func:`sar_ratios` returns them, written</span>
+<span class="sd">        into each subsequence of the cache; zero when None.</span>
+<span class="sd">    profile</span>
+<span class="sd">        What the cache holds its numbers as; every quantity a float in its SI</span>
+<span class="sd">        unit when left out.</span>
+<span class="sd">    grouping</span>
+<span class="sd">        How the blocks of a repetition are grouped into virtual segments.</span>
+<span class="sd">        Left out, ``Grouping()``: a boundary falls only where every gradient</span>
+<span class="sd">        is within 100 Hz/m of zero, and must fall where the ``NOROT`` or</span>
+<span class="sd">        ``PMC`` label changes.</span>
+<span class="sd">    wave_budget</span>
+<span class="sd">        The waveform memory of the playout the cache is for, which the cache</span>
+<span class="sd">        lays the waves out in (:func:`plan_waves`); None holds every wave at</span>
+<span class="sd">        once on the gradient raster of the chain's first file.</span>
+<span class="sd">    designed</span>
+<span class="sd">        The chain as :func:`pulserver.mrd.designed_chain` returns it,</span>
+<span class="sd">        segmented in place of reading and verifying the files, and moved to</span>
+<span class="sd">        ``fov_offset`` in place.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    Path</span>
+<span class="sd">        The cache file.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If a file of the chain cannot be read, verified or segmented,</span>
+<span class="sd">        ``sar_ratios`` does not give one per file, or the waves fit neither</span>
+<span class="sd">        layout of ``wave_budget`` or cannot be loaded in time.</span>
+<span class="sd">    OSError</span>
+<span class="sd">        If no cache was written.</span>
+<span class="sd">    """</span>
+    <span class="n">cache_path</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="n">seq_path</span><span class="p">),</span> <span class="n">cache_ext</span><span class="p">)</span><span class="o">.</span><span class="n">unlink</span><span class="p">(</span><span class="n">missing_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">payload</span> <span class="o">=</span> <span class="n">_payload</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="n">seq_path</span><span class="p">),</span> <span class="n">system</span><span class="p">,</span> <span class="n">verify_signature</span><span class="p">,</span> <span class="n">fov_offset</span><span class="p">,</span> <span class="n">designed</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">_write_cache</span><span class="p">(</span>
+        <span class="n">seq_path</span><span class="p">,</span>
+        <span class="n">system</span><span class="p">,</span>
+        <span class="n">payload</span><span class="p">,</span>
+        <span class="n">vendor</span><span class="o">=</span><span class="n">vendor</span><span class="p">,</span>
+        <span class="n">label_column_map</span><span class="o">=</span><span class="n">label_column_map</span><span class="p">,</span>
+        <span class="n">cache_ext</span><span class="o">=</span><span class="n">cache_ext</span><span class="p">,</span>
+        <span class="n">sar_ratios</span><span class="o">=</span><span class="n">sar_ratios</span><span class="p">,</span>
+        <span class="n">wave_budget</span><span class="o">=</span><span class="n">wave_budget</span><span class="p">,</span>
+        <span class="n">profile</span><span class="o">=</span><span class="n">profile</span><span class="p">,</span>
+        <span class="n">grouping</span><span class="o">=</span><span class="n">grouping</span><span class="p">,</span>
+    <span class="p">)</span></div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_write_cache</span><span class="p">(</span>
+    <span class="n">seq_path</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">system</span><span class="p">:</span> <span class="n">pp</span><span class="o">.</span><span class="n">Opts</span><span class="p">,</span>
+    <span class="n">payload</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]],</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">vendor</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span>
+    <span class="n">label_column_map</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">),</span>
+    <span class="n">cache_ext</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">".pseg"</span><span class="p">,</span>
+    <span class="n">sar_ratios</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">SarRatio</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">wave_budget</span><span class="p">:</span> <span class="n">WaveBudget</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">profile</span><span class="p">:</span> <span class="n">VendorProfile</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">grouping</span><span class="p">:</span> <span class="n">Grouping</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Path</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Segment the libraries :func:`_payload` returned and write the cache, as :func:`convert`.</span>
+
+<span class="sd">    The libraries are copies, so the sequences they were taken from may</span>
+<span class="sd">    change while this runs; the segmentation releases the GIL.</span>
+<span class="sd">    """</span>
+    <span class="n">seq_path</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">seq_path</span><span class="p">)</span>
+    <span class="n">target</span> <span class="o">=</span> <span class="n">cache_path</span><span class="p">(</span><span class="n">seq_path</span><span class="p">,</span> <span class="n">cache_ext</span><span class="p">)</span>
+    <span class="n">target</span><span class="o">.</span><span class="n">unlink</span><span class="p">(</span><span class="n">missing_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">sar_ratios</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">sar_ratios</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="n">payload</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"expected one SAR ratio per file of the chain, </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">payload</span><span class="p">)</span><span class="si">}</span><span class="s2">; "</span>
+                <span class="sa">f</span><span class="s2">"got </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">sar_ratios</span><span class="p">)</span><span class="si">}</span><span class="s2">"</span>
+            <span class="p">)</span>
+        <span class="k">for</span> <span class="n">libraries</span><span class="p">,</span> <span class="n">ratio</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">payload</span><span class="p">,</span> <span class="n">sar_ratios</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+            <span class="n">libraries</span><span class="p">[</span><span class="s2">"reserved"</span><span class="p">][</span><span class="s2">"vop_sar_ratio"</span><span class="p">]</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">ratio</span><span class="o">.</span><span class="n">local_sar</span><span class="p">)</span>
+            <span class="n">libraries</span><span class="p">[</span><span class="s2">"reserved"</span><span class="p">][</span><span class="s2">"vop_global_sar_ratio"</span><span class="p">]</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">ratio</span><span class="o">.</span><span class="n">global_sar</span><span class="p">)</span>
+    <span class="n">require</span><span class="p">(</span><span class="s2">"convert_libraries"</span><span class="p">)(</span>
+        <span class="n">payload</span><span class="p">,</span>
+        <span class="nb">str</span><span class="p">(</span><span class="n">seq_path</span><span class="p">),</span>
+        <span class="o">*</span><span class="n">_rasters</span><span class="p">(</span><span class="n">system</span><span class="p">),</span>
+        <span class="nb">int</span><span class="p">(</span><span class="n">vendor</span><span class="p">),</span>
+        <span class="nb">list</span><span class="p">(</span><span class="n">label_column_map</span><span class="p">),</span>
+        <span class="n">cache_ext</span><span class="p">,</span>
+        <span class="n">_held</span><span class="p">(</span><span class="n">wave_budget</span><span class="p">),</span>
+        <span class="kc">None</span> <span class="k">if</span> <span class="n">profile</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">profile</span><span class="o">.</span><span class="n">as_pairs</span><span class="p">(),</span>
+        <span class="kc">None</span> <span class="k">if</span> <span class="n">grouping</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">grouping</span><span class="o">.</span><span class="n">as_values</span><span class="p">(),</span>
+    <span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">target</span><span class="o">.</span><span class="n">is_file</span><span class="p">():</span>
+        <span class="k">raise</span> <span class="ne">OSError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"no cache was written for </span><span class="si">{</span><span class="n">seq_path</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">target</span>
+
+
+<div class="viewcode-block" id="summary">
+<a class="viewcode-back" href="../../../generated/pulserver.ir.summary.html#pulserver.ir.summary">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">summary</span><span class="p">(</span>
+    <span class="n">seq_path</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">system</span><span class="p">:</span> <span class="n">pp</span><span class="o">.</span><span class="n">Opts</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">cache_ext</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">label_column_map</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">),</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Return the segmentation of a sequence: subsequences, segments and readouts.</span>
+
+<span class="sd">    Each subsequence lists its unique RF definitions under ``rf``: the flip</span>
+<span class="sd">    angle in degrees at the largest amplitude the definition plays, as</span>
+<span class="sd">    ``pypulseqpp.Sequence.rf_flip_angles`` gives it; and the bandwidth at half</span>
+<span class="sd">    the spectral peak, the number of bands, each band's offset from the</span>
+<span class="sd">    carrier and the widest band's bandwidth, all in Hz, as</span>
+<span class="sd">    ``pypulseqpp.calc_rf_bandwidth`` measures them; and ``b1sq_integral_s``,</span>
+<span class="sd">    the integral of the squared envelope scaled to unit peak, in s:</span>
+<span class="sd">    ``pypulseqpp.calc_rf_power``'s energy over its peak power, both summed</span>
+<span class="sd">    over a dynamic pTx pulse's channels.</span>
+<span class="sd">    ``vop_sar_ratio`` and ``vop_global_sar_ratio`` are those the cache was</span>
+<span class="sd">    written with, zero when the chain is read and segmented again.</span>
+<span class="sd">    ``readout_labels`` lists, per readout in play order, the values of the</span>
+<span class="sd">    three labels ``label_column_map`` selects, as in force at that readout.</span>
+<span class="sd">    ``waves`` lists the subsequence's waves, as :func:`play` indexes</span>
+<span class="sd">    them: each one's point count, and its largest magnitude along x, y and z</span>
+<span class="sd">    over that of the largest gradient event it combines. ``grad_raster_us``</span>
+<span class="sd">    is the raster the file's gradient shapes are sampled on, in µs.</span>
+
+<span class="sd">    With ``cache_ext``, the cache beside the file is loaded instead of the</span>
+<span class="sd">    chain being read and segmented again; this build loads only vendor-neutral</span>
+<span class="sd">    caches, and only when the size recorded in the cache matches the file.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If the file cannot be read or the cache cannot be loaded.</span>
+<span class="sd">    """</span>
+    <span class="n">seq_path</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">seq_path</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">cache_ext</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">require</span><span class="p">(</span><span class="s2">"summary_from_libraries"</span><span class="p">)(</span>
+            <span class="n">_payload</span><span class="p">(</span><span class="n">seq_path</span><span class="p">,</span> <span class="n">system</span><span class="p">,</span> <span class="n">verify_signature</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span>
+            <span class="o">*</span><span class="n">_rasters</span><span class="p">(</span><span class="n">system</span><span class="p">),</span>
+            <span class="nb">list</span><span class="p">(</span><span class="n">label_column_map</span><span class="p">),</span>
+        <span class="p">)</span>
+    <span class="k">return</span> <span class="n">require</span><span class="p">(</span><span class="s2">"summary_from_cache"</span><span class="p">)(</span>
+        <span class="nb">str</span><span class="p">(</span><span class="n">cache_path</span><span class="p">(</span><span class="n">seq_path</span><span class="p">,</span> <span class="n">cache_ext</span><span class="p">)),</span> <span class="n">seq_path</span><span class="o">.</span><span class="n">stat</span><span class="p">()</span><span class="o">.</span><span class="n">st_size</span>
+    <span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="prescribe">
+<a class="viewcode-back" href="../../../generated/pulserver.ir.prescribe.html#pulserver.ir.prescribe">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">prescribe</span><span class="p">(</span><span class="n">sequence</span><span class="p">:</span> <span class="n">pp</span><span class="o">.</span><span class="n">Sequence</span><span class="p">,</span> <span class="n">fov_offset</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">float</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">pp</span><span class="o">.</span><span class="n">Sequence</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Move a logical-frame sequence to a prescribed field-of-view centre, in place.</span>
+
+<span class="sd">    An offset along the slice axis becomes an RF frequency, an in-plane offset</span>
+<span class="sd">    an RF and ADC phase, each referenced to the excitation it follows; blocks</span>
+<span class="sd">    labelled ``NOPOS`` are exempt. The gradient area is counted from the</span>
+<span class="sd">    sequence's first block. A block that carries a rotation extension is moved</span>
+<span class="sd">    by the gradients it plays: those it draws, turned by that rotation.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    sequence</span>
+<span class="sd">        One file of a chain, as designed.</span>
+<span class="sd">    fov_offset</span>
+<span class="sd">        Translation along the logical readout, phase and slice axes, in metres.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    pypulseqpp.Sequence</span>
+<span class="sd">        ``sequence`` itself.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If ``fov_offset`` is not three values.</span>
+<span class="sd">    """</span>
+    <span class="n">shift</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="nb">float</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">fov_offset</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">shift</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">3</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"fov_offset takes three values, got </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">shift</span><span class="p">)</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">any</span><span class="p">(</span><span class="n">shift</span><span class="p">):</span>
+        <span class="n">pp</span><span class="o">.</span><span class="n">TransformFOV</span><span class="p">(</span><span class="n">translation</span><span class="o">=</span><span class="n">shift</span><span class="p">,</span> <span class="n">through_rotation</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">apply_to_sequence</span><span class="p">(</span>
+            <span class="n">sequence</span><span class="p">,</span> <span class="n">in_place</span><span class="o">=</span><span class="kc">True</span>
+        <span class="p">)</span>
+    <span class="k">return</span> <span class="n">sequence</span></div>
+
+
+
+<div class="viewcode-block" id="play">
+<a class="viewcode-back" href="../../../generated/pulserver.ir.play.html#pulserver.ir.play">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">play</span><span class="p">(</span>
+    <span class="n">seq_path</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span><span class="p">,</span> <span class="n">cache_ext</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">".pseg"</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">waveforms</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Walk the cache beside a sequence file as the scanner's playout does.</span>
+
+<span class="sd">    The cache is loaded by the C library a scanner links, and its execution</span>
+<span class="sd">    stream is walked with that library's cursor: one entry per played block,</span>
+<span class="sd">    in play order, across the subsequences of the chain. This build loads only</span>
+<span class="sd">    vendor-neutral caches, and only when the size recorded in the cache</span>
+<span class="sd">    matches the file.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    dict of str to ndarray</span>
+<span class="sd">        One entry per played block in each:</span>
+
+<span class="sd">        - ``subsequence``, ``segment``: chain file and cache segment indices;</span>
+<span class="sd">        - ``duration_us``: block duration, in µs;</span>
+<span class="sd">        - ``rf_amp_hz``, ``rf_freq_hz``, ``rf_phase_rad``: RF amplitude</span>
+<span class="sd">          (gamma B1) and frequency and phase offsets, with ppm offsets</span>
+<span class="sd">          resolved at the field strength the cache was converted under; 0</span>
+<span class="sd">          without RF;</span>
+<span class="sd">        - ``rf_use``: the ``PULSEG_RF_USE_*`` code of the RF event, 1 for an</span>
+<span class="sd">          excitation and 2 for a refocusing pulse; a pulse the file leaves</span>
+<span class="sd">          unlabelled takes the use pypulseqpp detects when the chain is read,</span>
+<span class="sd">          and an event a cache carries without one is a refocusing pulse at a</span>
+<span class="sd">          flip angle of 162 to 198 degrees and an excitation otherwise; 0</span>
+<span class="sd">          without RF;</span>
+<span class="sd">        - ``rf_delay_us``: RF delay from the block's start, in µs;</span>
+<span class="sd">        - ``rf_channels``: the transmit channels the RF waveform holds, one</span>
+<span class="sd">          after another over one time base for a dynamic pTx pulse; 0 without</span>
+<span class="sd">          RF;</span>
+<span class="sd">        - ``rf_grad_constant``, ``rf_grad_level``: 1 where every instance of</span>
+<span class="sd">          the block's position plays its RF pulse under one gradient,</span>
+<span class="sd">          steady from the pulse's first sample to its last as</span>
+<span class="sd">          ``pypulseqpp.Sequence.rf_gradients`` finds it, and the block</span>
+<span class="sd">          carries no rotation, so the scanner may move the excitation by a</span>
+<span class="sd">          carrier offset; and ``(blocks, 3)``, that gradient along x, y and z</span>
+<span class="sd">          over the amplitude of the event playing it there;</span>
+<span class="sd">        - ``gradient_hz_per_m``: ``(blocks, 3)``, the amplitude along the</span>
+<span class="sd">          logical x, y and z axes: the factor on the shape of the gradient</span>
+<span class="sd">          event, or on the wave, the block plays there, each normalised to a</span>
+<span class="sd">          largest magnitude of one;</span>
+<span class="sd">        - ``wave``: the wave the block plays, as indexed by the</span>
+<span class="sd">          subsequence's ``waves`` in :func:`summary`, or -1 for a block that</span>
+<span class="sd">          plays its gradient events as they are. A block plays one at every</span>
+<span class="sd">          segment position where an instance carries a rotation other than</span>
+<span class="sd">          the identity, or plays a gradient definition or shape other than</span>
+<span class="sd">          the one the position's events are prepared with: its gradient</span>
+<span class="sd">          events combined and turned by its rotation, so that the</span>
+<span class="sd">          prescription's rotation is the only one the scanner applies;</span>
+<span class="sd">        - ``norot``, ``nopos``: the block's NOROT and NOPOS flags;</span>
+<span class="sd">        - ``adc``, ``adc_freq_hz``, ``adc_phase_rad``: whether the block</span>
+<span class="sd">          acquires, and its frequency and phase offsets;</span>
+<span class="sd">        - ``adc_delay_us``, ``adc_dwell_ns``, ``adc_samples``: the ADC delay</span>
+<span class="sd">          from the block's start, dwell time and sample count; 0 without ADC;</span>
+<span class="sd">        - ``trid``: the TRID group in force, 0 when ungrouped.</span>
+
+<span class="sd">        With ``waveforms``, also:</span>
+
+<span class="sd">        - ``rf_center_us``: the time of the RF centre the design records, from</span>
+<span class="sd">          the block's start, in µs; NaN without RF;</span>
+<span class="sd">        - ``rf_time_us``, ``rf_waveform_hz``: the samples of every played RF</span>
+<span class="sd">          pulse, concatenated in play order: their times from the block's</span>
+<span class="sd">          start, in µs, and the instance's amplitude times the magnitude</span>
+<span class="sd">          shape and ``exp(i phase)`` of the phase shape its definition</span>
+<span class="sd">          carries, complex, in Hz. The pulse plays each sample turned by the</span>
+<span class="sd">          phase offset and advancing at the frequency offset from its start.</span>
+<span class="sd">          The channels of a pTx pulse follow one another, each over the one</span>
+<span class="sd">          time base;</span>
+<span class="sd">        - ``rf_span``: ``(blocks, 2)``, the start and stop of each block's</span>
+<span class="sd">          RF in those arrays; empty without RF;</span>
+<span class="sd">        - ``gradient_time_us``, ``gradient_waveform_hz_per_m``: the corners of</span>
+<span class="sd">          every played gradient, concatenated in play order: their times from</span>
+<span class="sd">          the block's start, in µs, and the gradient there, the amplitude</span>
+<span class="sd">          times the shape or wave the instance plays. A waveform on the</span>
+<span class="sd">          gradient raster holds its end values over the half raster</span>
+<span class="sd">          intervals before its first sample and after its last. A rotated</span>
+<span class="sd">          wave takes the corners of every gradient event it combines, or the</span>
+<span class="sd">          raster centres across them when one is an arbitrary gradient on</span>
+<span class="sd">          the raster;</span>
+<span class="sd">        - ``gradient_span``: ``(blocks, 3, 2)``, the start and stop of each</span>
+<span class="sd">          block's gradient along x, y and z in those arrays; empty without</span>
+<span class="sd">          one;</span>
+<span class="sd">        - ``adc_phase_modulation_rad``: the phase modulation of every played</span>
+<span class="sd">          readout, one phase per sample in radians, concatenated in play</span>
+<span class="sd">          order; the receiver phase of a sample is the ADC phase offset, plus</span>
+<span class="sd">          its frequency offset times the time since the ADC's start, plus</span>
+<span class="sd">          this. Empty for a cache converted here, which leaves the</span>
+<span class="sd">          modulation to the reconstruction proxy;</span>
+<span class="sd">        - ``adc_modulation_span``: ``(blocks, 2)``, the start and stop of each</span>
+<span class="sd">          block's modulation in that array; empty without one.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If the cache cannot be loaded.</span>
+<span class="sd">    RuntimeError</span>
+<span class="sd">        With ``waveforms``, if a block's gradient holds another number of</span>
+<span class="sd">        samples than the segment position it plays at is prepared with, or</span>
+<span class="sd">        its wave more points than that position reserves.</span>
+<span class="sd">    """</span>
+    <span class="n">seq_path</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">seq_path</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">require</span><span class="p">(</span><span class="s2">"play_cache"</span><span class="p">)(</span>
+        <span class="nb">str</span><span class="p">(</span><span class="n">cache_path</span><span class="p">(</span><span class="n">seq_path</span><span class="p">,</span> <span class="n">cache_ext</span><span class="p">)),</span> <span class="n">seq_path</span><span class="o">.</span><span class="n">stat</span><span class="p">()</span><span class="o">.</span><span class="n">st_size</span><span class="p">,</span> <span class="n">waveforms</span>
+    <span class="p">)</span></div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_payload</span><span class="p">(</span>
+    <span class="n">seq_path</span><span class="p">:</span> <span class="n">Path</span><span class="p">,</span>
+    <span class="n">system</span><span class="p">:</span> <span class="n">pp</span><span class="o">.</span><span class="n">Opts</span><span class="p">,</span>
+    <span class="n">verify_signature</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
+    <span class="n">fov_offset</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">designed</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="n">Path</span><span class="p">,</span> <span class="n">pp</span><span class="o">.</span><span class="n">Sequence</span><span class="p">]]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]:</span>
+<span class="w">    </span><span class="sd">"""Read the chain and return each file's libraries, in play order, prescribed to ``fov_offset``.</span>
+
+<span class="sd">    A file the reader refuses raises ``ValueError``, whatever the reader</span>
+<span class="sd">    itself raised.</span>
+<span class="sd">    """</span>
+    <span class="k">if</span> <span class="n">designed</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">chain_read</span> <span class="o">=</span> <span class="n">designed</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">chain_read</span> <span class="o">=</span> <span class="n">read_chain</span><span class="p">(</span><span class="n">seq_path</span><span class="p">,</span> <span class="n">verify</span><span class="o">=</span><span class="n">verify_signature</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">RuntimeError</span> <span class="k">as</span> <span class="n">failure</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"cannot read </span><span class="si">{</span><span class="n">seq_path</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">failure</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">failure</span>
+    <span class="n">payload</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">sequence</span> <span class="ow">in</span> <span class="n">chain_read</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">fov_offset</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">prescribe</span><span class="p">(</span><span class="n">sequence</span><span class="p">,</span> <span class="n">fov_offset</span><span class="p">)</span>
+        <span class="n">payload</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">conversion_payload</span><span class="p">(</span><span class="n">sequence</span><span class="p">,</span> <span class="n">system</span><span class="p">))</span>
+    <span class="k">return</span> <span class="n">payload</span>
+</pre></div>
+
+                </article>
+              
+
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+<div class="bd-footer-content__inner container">
+  
+  <div class="footer-item">
+    
+<p class="component-author">
+By pulserver contributors
+</p>
+
+  </div>
+  
+  <div class="footer-item">
+    
+
+  <p class="copyright">
+    
+      © Copyright 2024-2026, pulserver contributors.
+      <br/>
+    
+  </p>
+
+  </div>
+  
+  <div class="footer-item">
+    
+  </div>
+  
+  <div class="footer-item">
+    
+  </div>
+  
+</div>
+          </footer>
+        
+
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script defer src="../../../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9"></script>
+<script defer src="../../../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9"></script>
+
+  <footer class="bd-footer">
+  </footer>
+  </body>
+</html>

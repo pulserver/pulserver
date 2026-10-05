@@ -1,0 +1,34 @@
+# API reference
+
+Conceptual background is in {doc}`../explanations/index` and procedures in the
+{doc}`user guide <../user-guide/index>`.
+
+| Page | Module | What it documents |
+| --- | --- | --- |
+| {doc}`protocol` | `pulserver.protocol` | The entries of a scanner protocol, their presets, and the text blocks that carry them between the design calls and the interpreter. |
+| {doc}`design` | `pulserver.design` | {class}`~pulserver.design.SequencePlugin`, which binds a function returning sequences to the scanner protocol, and the UI entries it is declared with. |
+| {doc}`host` | `pulserver.host` | The design calls of the interpreter host processes and the store of the designs they generate. |
+| {doc}`ir` | `pulserver.ir` | The segmentation of a sequence chain into the IR cache the interpreter loads. |
+| {doc}`proxy` | `pulserver.proxy` | The reconstruction proxy, the designs it resolves a series to, and the enrichment it applies. |
+| {doc}`recon` | `pulserver.recon` | {class}`~pulserver.recon.ReconPlugin`, the context and buffers its hooks receive, and the results they return. |
+| {doc}`mrd` | `pulserver.mrd` | MRD acquisitions, header entries and images, and the definitions and readouts a sequence states. |
+| {doc}`validate` | `pulserver.validate` | Checking that a sequence plays as it was written, against a recording of a machine playing it or against its own cache. |
+| {doc}`virtual` | `pulserver.virtual` | The virtual scanner: the trajectory a cache plays, a phantom acquired along it, and the virtual reconstruction client. |
+
+The C library a scanner interpreter links is documented in its public headers,
+[`src/c/include/pulseg/`](https://github.com/pulserver/pulserver/tree/main/src/c/include/pulseg),
+starting from `pulseg.h`.
+
+```{toctree}
+:hidden:
+
+protocol
+design
+host
+ir
+proxy
+recon
+mrd
+validate
+virtual
+```
