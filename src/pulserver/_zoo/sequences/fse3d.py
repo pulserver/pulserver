@@ -4,7 +4,9 @@ import pypulseqpp as pp
 from pypulseqpp.sequences.sequence.fse3D_sequence import fse3d, shot_parameters
 
 from pulserver._zoo._evaluation import achieved, arguments, rf_layout
+from pulserver._zoo._pmc import navigated
 from pulserver.design import (
+    Description,
     Evaluation,
     FloatParam,
     IntParam,
@@ -13,9 +15,17 @@ from pulserver.design import (
 )
 from pulserver.protocol import TEPreset, TRPreset, UIParam
 
+#: Three-plane navigators after each train, whose pose the ``pmc``
+#: reconstruction states to the scan.
+NAVIGATOR = False
+
+#: Individually parameterized trains: adds the TR and the echo train length
+#: at the periphery of k-space as user entries; TR and ETL are the centre's.
+PERIPHERY = False
+
 
 class Fse3D(SequencePlugin):
-    app = fse3d
+    app = navigated(fse3d) if NAVIGATOR else fse3d
     protocol = {
         UIParam.TE: TimeParam(
             "te", range_min=2000, range_max=500000, presets={TEPreset.MINIMUM: None}
@@ -42,10 +52,26 @@ class Fse3D(SequencePlugin):
         UIParam.RY: IntParam("ry", range_min=1, range_max=4),
         UIParam.RZ: IntParam("rz", range_min=1, range_max=4),
     }
+    if PERIPHERY:
+        protocol |= {
+            UIParam.user_name(0): Description("TR at the periphery"),
+            UIParam.user_value(0): FloatParam(
+                "tr_periphery",
+                unit="ms",
+                scale=1e-3,
+                range_min=10.0,
+                range_max=10_000.0,
+                default=1800.0,
+            ),
+            UIParam.user_name(1): Description("ETL at the periphery"),
+            UIParam.user_value(1): IntParam(
+                "etl_periphery", range_min=1, range_max=256, default=45
+            ),
+        }
 
     def evaluate(self, system, protocol):
-        # A TR is one echo train, every train as long as the first. The design
-        # of the centre view plays one train of the full length.
+        # A TR is one echo train. The design of the centre view plays one
+        # train of the full length at the centre's TR.
         a = arguments(self, protocol)
         one = {"n_dummy": 0, "ry": a["n_y"], "rz": a["n_z"], "n_acs_y": 0, "n_acs_z": 0}
         train = self.app(system, **(protocol.arguments | one))
@@ -58,12 +84,22 @@ class Fse3D(SequencePlugin):
             elliptical=True,
             elliptical_acs=a["elliptical_acs"],
         )
-        # The repetition times do not enter the number of trains.
-        lengths, _, _ = shot_parameters(
-            len(calibrating) + len(imaging), a["etl"], a["etl"], 0.0, 0.0
+        # Each train lasts its own TR, a cubic step from the centre's to the
+        # periphery's; dummies play the first.
+        tr = train.duration()[0]
+        tr_periphery = a["tr_periphery"]
+        etl_periphery = a["etl_periphery"]
+        _, times, _ = shot_parameters(
+            len(calibrating) + len(imaging),
+            a["etl"],
+            a["etl"] if etl_periphery is None else etl_periphery,
+            tr,
+            tr if tr_periphery is None else tr_periphery,
         )
+        raster = system.block_duration_raster
+        times = [pp.round_to_raster(time, raster) for time in times]
         return Evaluation(
             protocol.replace(achieved(self, train)),
-            (a["n_dummy"] + len(lengths)) * train.duration()[0],
+            a["n_dummy"] * times[0] + sum(times),
             rf_layout=rf_layout(train, scaled=False),
         )

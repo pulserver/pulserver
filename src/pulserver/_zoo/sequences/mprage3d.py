@@ -6,6 +6,7 @@ import pypulseqpp as pp
 from pypulseqpp.sequences.sequence.mprage3D_sequence import mprage3d
 
 from pulserver._zoo._evaluation import achieved, arguments, rf_layout
+from pulserver._zoo._pmc import navigated
 from pulserver.design import (
     Evaluation,
     FloatParam,
@@ -15,9 +16,13 @@ from pulserver.design import (
 )
 from pulserver.protocol import TEPreset, TRPreset, UIParam
 
+#: Three-plane navigators after each train, whose pose the ``pmc``
+#: reconstruction states to the scan.
+NAVIGATOR = False
+
 
 class Mprage3D(SequencePlugin):
-    app = mprage3d
+    app = navigated(mprage3d) if NAVIGATOR else mprage3d
     protocol = {
         UIParam.FLIP: FloatParam(
             "flip_angle_deg", unit="deg", range_min=1.0, range_max=90.0

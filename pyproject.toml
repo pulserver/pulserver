@@ -32,7 +32,7 @@ dependencies = [
 
 [project.optional-dependencies]
 brainweb = ["brainweb-dl>=0.4.6"]
-coils = ["bartorch[motion]>=0.0.6"]
+coils = ["bartorch[motion]>=0.0.7"]
 console = ["websockets>=13"]
 # Windows read on the isochromats' lattice on a CUDA device: the sums by a
 # Triton kernel, the transforms by cuFINUFFT.

@@ -7,14 +7,28 @@ from pypulseqpp.sequences.sequence.mprage_stack_of_spirals3D_sequence import (
 )
 
 from pulserver._zoo._inversion import inversion_train, shots_of_spirals
-from pulserver.design import FloatParam, IntParam, SequencePlugin, TimeParam
+from pulserver.design import (
+    Description,
+    FloatParam,
+    IntParam,
+    SequencePlugin,
+    TimeParam,
+)
 from pulserver.protocol import TEPreset, TRPreset, UIParam
+
+#: Variable-density spirals: adds how much sparser the periphery is sampled
+#: than the centre as a user entry.
+VARIABLE_DENSITY = False
 
 
 class MprageStackOfSpirals3D(SequencePlugin):
     # Every partition plays the same in-plane readouts, so that the
     # reconstruction can Fourier transform along the partitions first.
-    app = functools.partial(mprage_stack_of_spirals3d, partition_angle_shift="none")
+    app = functools.partial(
+        mprage_stack_of_spirals3d,
+        partition_angle_shift="none",
+        density="variable" if VARIABLE_DENSITY else "constant",
+    )
     protocol = {
         UIParam.FLIP: FloatParam(
             "flip_angle_deg", unit="deg", range_min=1.0, range_max=90.0
@@ -39,6 +53,13 @@ class MprageStackOfSpirals3D(SequencePlugin):
         UIParam.NUM_SHOTS: IntParam("n_shots", range_min=1, range_max=128),
         UIParam.NSLICES: IntParam("n_z", range_min=4, range_max=256),
     }
+    if VARIABLE_DENSITY:
+        protocol |= {
+            UIParam.user_name(0): Description("Periphery undersampling"),
+            UIParam.user_value(0): FloatParam(
+                "periphery_undersampling", range_min=1.0, range_max=8.0, range_incr=0.1
+            ),
+        }
 
     def evaluate(self, system, protocol):
         return inversion_train(self, system, protocol, shots_of_spirals)

@@ -275,7 +275,7 @@ print(
 # --------------
 #
 # The enriched stream is written to an ISMRMRD file and reconstructed in this
-# process by the shipped two-dimensional Cartesian FFT plugin,
+# process by a two-dimensional Cartesian FFT plugin,
 # :meth:`~pulserver.recon.ReconPlugin.run` driving the same hooks the proxy's
 # workers drive. The plugin makes one image per slice when an acquisition
 # carries ``LAST_IN_SLICE``, a flag enrichment supplies, and crops the
@@ -284,7 +284,27 @@ print(
 # The phantom is acquired twice: with the design played as written, and played
 # at the prescribed offset.
 
-from pulserver.recon.handlers.simplefft import SimpleFftRecon
+from pulserver.mrd import AcquisitionFlag, center_crop, coil_combine
+from pulserver.recon import ReconPlugin, ReconResult
+
+
+class Fft(ReconPlugin):
+    def __init__(self):
+        super().__init__(
+            triggers={"imaging": AcquisitionFlag.LAST_IN_SLICE},
+            reject_flags=AcquisitionFlag.IS_NOISE_MEASUREMENT,
+            buffered=False,
+        )
+
+    def recon(self, context, branch, data):
+        del branch
+        kspace = np.stack([line.data for line in data.acquisitions], axis=-1)
+        image = np.fft.fftshift(
+            np.fft.ifft2(np.fft.ifftshift(kspace, axes=(1, 2))), axes=(1, 2)
+        )
+        matrix = context.header.encoding[0].reconSpace.matrixSize
+        image = center_crop(coil_combine(image, coil_axis=0), (matrix.x, matrix.y))
+        return ReconResult(np.asarray(image).transpose())
 
 
 def reconstruct(sequence, name):
@@ -298,9 +318,7 @@ def reconstruct(sequence, name):
     for acquisition in acquisitions:
         dataset.append_acquisition(acquisition)
     dataset.close()
-    images = [
-        out for out in SimpleFftRecon().run(str(path)) if isinstance(out, ismrmrd.Image)
-    ]
+    images = [out for out in Fft().run(str(path)) if isinstance(out, ismrmrd.Image)]
     return np.squeeze(images[0].data)
 
 

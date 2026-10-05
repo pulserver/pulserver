@@ -123,7 +123,7 @@ every `--plugins` directory, so a file of the same name there replaces it:
 | Plugin | Paired reconstruction |
 | --- | --- |
 | `gre2d`, `se2d`, `bssfp2d`, `gre_multiecho2d`, `gre3d`, `se3d`, `bssfp3d`, `gre_multiecho3d` | `pics` |
-| `fse3d`, `mprage3d` | `pics_train` |
+| `fse3d`, `mprage3d` | `pmc` |
 | `gre_radial2d`, `gre_spiral2d`, `se_radial2d`, `se_spiral2d`, `gre_propeller2d`, `se_propeller2d`, `se_epi_propeller2d`, `zte3d` | `nufft` |
 | `gre_stack_of_stars3d`, `gre_stack_of_spirals3d`, `gre_stack_of_blades3d`, `se_stack_of_stars3d`, `se_stack_of_spirals3d`, `se_stack_of_blades3d` | `nufft` |
 | `mprage_stack_of_stars3d`, `mprage_stack_of_spirals3d` | `nufft_train` |
@@ -133,6 +133,18 @@ The pair is what a console reconstructs a shipped sequence with when the scan
 names no reconstruction ({doc}`virtual-scanner`); a scan can name another, and
 the reconstruction client of a scanner names one in its config
 ({doc}`reconstruction-client`).
+
+Optional features are switched by a module constant of the plugin, off in
+the shipped files; a copy of the file in a `--plugins` directory with the
+constant set replaces the shipped plugin. A switch adds the entries the
+feature needs, a scanner entry where there is one and a user entry otherwise:
+
+| Plugin | Constant | Feature | Entries added |
+| --- | --- | --- | --- |
+| `epi2d` | `MULTIBAND` | Simultaneous multislice | `multiband` |
+| `fse3d` | `PERIPHERY` | Individually parameterized echo trains; `TR` and `ETL` are the centre's | User entries 0 and 1: TR and ETL at the periphery |
+| `fse3d`, `mprage3d` | `NAVIGATOR` | Three-plane navigators; the design sets `EnablePmc` and `pmc` states each pose to the scan | None |
+| `gre_spiral2d`, `se_spiral2d`, `gre_stack_of_spirals3d`, `se_stack_of_spirals3d`, `mprage_stack_of_spirals3d` | `VARIABLE_DENSITY` | Variable-density spirals | User entry 0: periphery undersampling |
 
 A 3D sequence takes its number of partitions from the number of slices. `Ry`
 undersamples the phase encode of the Cartesian sequences, the blades of

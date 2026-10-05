@@ -9,6 +9,7 @@ from pypulseqpp.sequences.sequence.epi2D_sequence import epi2d
 
 from pulserver._zoo._evaluation import achieved, arguments, packets, rf_layout
 from pulserver.design import (
+    BoolParam,
     Evaluation,
     FloatParam,
     IntParam,
@@ -16,6 +17,9 @@ from pulserver.design import (
     TimeParam,
 )
 from pulserver.protocol import TEPreset, TRPreset, UIParam
+
+#: Simultaneous multislice: adds the multiband factor to the protocol.
+MULTIBAND = False
 
 
 class Epi2D(SequencePlugin):
@@ -57,18 +61,39 @@ class Epi2D(SequencePlugin):
         UIParam.NUM_FRAMES: IntParam("n_frames", range_min=1, range_max=1000),
         UIParam.NUM_SHOTS: IntParam("n_shots", range_min=1, range_max=16),
         UIParam.RY: IntParam("ry", range_min=1, range_max=4),
+        UIParam.FAT_SAT: BoolParam("fat_saturation"),
     }
+    if MULTIBAND:
+        protocol[UIParam.MULTIBAND] = IntParam("multiband", range_min=1, range_max=8)
 
     def evaluate(self, system, protocol):
-        # A cycle plays one shot of every slice of a packet, and a TR the
-        # shots of a volume. The design of one slice at the shortest TR plays
-        # one cycle of that slice per shot, after its calibration.
+        # A cycle plays one shot of every slice group of a packet, and a TR
+        # the shots of a volume. The design of one group at the shortest TR
+        # plays one cycle of that group per shot, after its calibration.
         a = arguments(self, protocol)
-        one = {"n_slices": 1, "tr": None, "n_frames": 1, "n_dummy": 0}
+        multiband = a["multiband"]
+        if a["n_slices"] % multiband:
+            raise ValueError(
+                f"the slice count {a['n_slices']} is not a multiple of the "
+                f"multiband factor {multiband}"
+            )
+        groups = a["n_slices"] // multiband
+        # The bands of a group lie `groups` slices apart, which the one group
+        # designed alone keeps by spacing its slices that far apart.
+        step = groups * (a["slice_thickness"] + a["slice_spacing"])
+        one = {
+            "n_slices": multiband,
+            "slice_spacing": step - a["slice_thickness"],
+            "tr": None,
+            "n_frames": 1,
+            "n_dummy": 0,
+        }
         *calibration, _, volume = self.app(system, **(protocol.arguments | one))
         n_shots, n_frames = a["n_shots"], a["n_frames"]
         shot = volume.definitions["TR"][0] / n_shots
-        sizes, cycles = _cycles(a, shot, system.block_duration_raster)
+        sizes, cycles = _cycles(
+            a | {"n_slices": groups}, shot, system.block_duration_raster
+        )
         # The reference volume and the time series each play their dummy
         # cycles first, packet by packet.
         dummies = a["n_dummy"] * (n_shots if n_frames > 1 else 1)
@@ -76,7 +101,7 @@ class Epi2D(SequencePlugin):
         tr = n_shots * max(cycles)
         return Evaluation(
             protocol.replace(achieved(self, volume) | {UIParam.TR: tr}),
-            played * sum(cycles) + a["n_slices"] * sequences.duration(calibration),
+            played * sum(cycles) + groups * sequences.duration(calibration),
             rf_layout=rf_layout(volume, scaled=True, copies=max(sizes), period=tr),
         )
 

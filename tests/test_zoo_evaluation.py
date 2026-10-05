@@ -9,6 +9,7 @@ import pytest
 from _host import LIMITS, value_block
 
 from pulserver import _plugins
+from pulserver._zoo import ZOO_PAIRS
 from pulserver._zoo._evaluation import achieved, rf_layout
 from pulserver.design import Protocol, load_plugin
 from pulserver.host import call
@@ -93,6 +94,37 @@ SCANS = [pytest.param(name, {}, id=name) for name in SHIPPED] + [
         ("bssfp3d", "longer-tr", {"TR": 9000, "nslices": 8, "ny": 32}),
         ("bssfp3d", "undersampled", {"nslices": 12, "ny": 48, "Ry": 2, "Rz": 2}),
         ("epi2d", "undersampled", {"Ry": 2}),
+        ("epi2d+MULTIBAND", "multiband", {"nslices": 6, "multiband": 2}),
+        (
+            "epi2d+MULTIBAND",
+            "multiband-packets",
+            {"nslices": 8, "multiband": 2, "TR": 900000, "num_shots": 2},
+        ),
+        (
+            "fse3d+PERIPHERY",
+            "periphery",
+            {
+                "nslices": 16,
+                "etl": 10,
+                "nx": 64,
+                "ny": 32,
+                "TR": 1000000,
+                "user0_value": 1500.0,
+                "user1_value": 14,
+            },
+        ),
+        (
+            "fse3d+NAVIGATOR",
+            "navigator",
+            {"nslices": 16, "etl": 16, "nx": 64, "ny": 32},
+        ),
+        ("mprage3d+NAVIGATOR", "navigator", {"nslices": 16, "nx": 64, "ny": 32}),
+        ("gre_spiral2d+VARIABLE_DENSITY", "variable", {"user0_value": 3.0}),
+        (
+            "mprage_stack_of_spirals3d+VARIABLE_DENSITY",
+            "variable",
+            {"nslices": 16, "user0_value": 1.5},
+        ),
         ("epi2d", "packets", {"nslices": 7, "TR": 900000, "Ry": 2, "num_shots": 2}),
         ("epi2d", "frames", {"nslices": 12, "TR": 5000000, "num_frames": 3}),
         ("epi2d", "shortest", {"nslices": 6, "TR": TRPreset.MINIMUM}),
@@ -283,10 +315,34 @@ TRAINS: dict[str, list[str]] = {
 LAST_TR_BLOCKS = {"zte3d": 2}
 
 
+#: Shipped sequences with a module constant switched on, by the name the scans
+#: below use.
+TOGGLED = {
+    "epi2d+MULTIBAND": ("epi2d", "MULTIBAND"),
+    "fse3d+PERIPHERY": ("fse3d", "PERIPHERY"),
+    "fse3d+NAVIGATOR": ("fse3d", "NAVIGATOR"),
+    "mprage3d+NAVIGATOR": ("mprage3d", "NAVIGATOR"),
+    "gre_spiral2d+VARIABLE_DENSITY": ("gre_spiral2d", "VARIABLE_DENSITY"),
+    "mprage_stack_of_spirals3d+VARIABLE_DENSITY": (
+        "mprage_stack_of_spirals3d",
+        "VARIABLE_DENSITY",
+    ),
+}
+
+
 @pytest.fixture(scope="module")
-def zoo():
-    """The shipped scanner sequences by name."""
-    return {name: load_plugin(_plugins.SEQUENCES / f"{name}.py") for name in SHIPPED}
+def zoo(tmp_path_factory):
+    """The shipped scanner sequences by name, and those of ``TOGGLED`` as a copy of the file with the constant set."""
+    plugins = {name: load_plugin(_plugins.SEQUENCES / f"{name}.py") for name in SHIPPED}
+    for key, (name, constant) in TOGGLED.items():
+        source = (_plugins.SEQUENCES / f"{name}.py").read_text()
+        assert f"\n{constant} = False\n" in source
+        path = tmp_path_factory.mktemp(key.replace("+", "-")) / f"{name}.py"
+        path.write_text(
+            source.replace(f"\n{constant} = False\n", f"\n{constant} = True\n")
+        )
+        plugins[key] = load_plugin(path)
+    return plugins
 
 
 def _protocol(plugin, changes=None):
@@ -664,3 +720,14 @@ def test_the_listed_definitions_and_the_validated_layout_play_the_rf_power_of_th
     assert _wire_power(listed, layout) == pytest.approx(
         _last_tr_power(main, LAST_TR_BLOCKS.get(name)), rel=POWER_RTOL
     )
+
+
+@pytest.mark.parametrize("name", ["fse3d+NAVIGATOR", "mprage3d+NAVIGATOR"])
+def test_a_sequence_with_navigators_asks_for_motion_correction(zoo, name):
+    plugin = zoo[name]
+    protocol = _protocol(plugin, {"nslices": 16, "nx": 64, "ny": 32})
+
+    main = _main(plugin, protocol)
+
+    assert main.definitions["EnablePmc"][0] == 1
+    assert ZOO_PAIRS[TOGGLED[name][0]] == "pmc"

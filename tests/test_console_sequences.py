@@ -133,8 +133,7 @@ def test_a_console_sequence_designs_its_default_protocol_under_the_console_limit
 def test_a_console_sequence_images_the_vials_where_the_cartesian_gradient_echo_does(
     tmp_path, name, reference
 ):
-    if ZOO_PAIRS[name] != "cartesian":
-        pytest.importorskip("bartorch")
+    pytest.importorskip("bartorch")
     console = _console(tmp_path)
 
     prescribed = {**SMALL, **SMALLER.get(name, {})}
@@ -153,19 +152,6 @@ def test_a_console_sequence_images_the_vials_where_the_cartesian_gradient_echo_d
         )
 
 
-def test_the_cartesian_reconstruction_of_a_gradient_echo_is_the_simple_fft(tmp_path):
-    """Lines placed by their counters are the lines in arrival order when they arrive in order, to within one stored integer."""
-    placed = _images(_console(tmp_path), "gre2d", SMALL, recon="cartesian")
-    arrived = _images(
-        _console(tmp_path, [PLUGINS], [RECON_PLUGINS]), "gre2d", SMALL, recon="gre2d"
-    )
-
-    assert len(placed) == len(arrived) == 1
-    np.testing.assert_allclose(
-        placed[0].astype(float), arrived[0].astype(float), rtol=0, atol=1
-    )
-
-
 def test_every_shipped_sequence_is_paired_with_a_shipped_reconstruction():
     shipped = {path.stem for path in RECONSTRUCTIONS.glob("*.py")}
 
@@ -179,14 +165,14 @@ def test_one_design_reconstructs_under_two_reconstructions(tmp_path, monkeypatch
     monkeypatch.setattr(
         _local, "load_plugin", lambda path: loaded.append(path.stem) or load(path)
     )
-    console = _console(tmp_path)
+    console = _console(tmp_path, recon=[RECON_PLUGINS])
 
-    cartesian = _images(console, "gre2d", SMALL, recon="cartesian")
-    simple = _images(console, "gre2d", SMALL, recon="simplefft")
+    traced = _images(console, "gre2d", SMALL, recon="gre2d")
+    counted = _images(console, "gre2d", SMALL, recon="exam")
 
-    assert loaded == ["cartesian", "simplefft"]
+    assert loaded == ["gre2d", "exam"]
     assert len(list(DesignStore(tmp_path / "designs"))) == 1
-    assert len(cartesian) == len(simple) == 1
+    assert len(traced) == len(counted) == 1
 
 
 def test_no_shipped_reconstruction_shares_a_name_with_a_shipped_sequence():

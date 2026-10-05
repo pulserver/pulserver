@@ -13,7 +13,7 @@ from ...mrd._images import center_crop
 from .._buffers import ReconBuffer, ReconData
 from ..gadgets import Prewhiten
 from ..plugin import ReconContext, ReconPlugin, ReconResult
-from .cartesian import averaged
+from .pics import averaged
 
 
 class NufftRecon(ReconPlugin):
@@ -27,10 +27,12 @@ class NufftRecon(ReconPlugin):
     ``bart nlinv -m 1 -t``), whatever calibration the stream or the exam
     holds: :func:`~pulserver.recon.coil_maps` estimates from Cartesian
     calibration k-space only. The image minimises
-    ``|P F S x - y|^2 + lambda |W x|_1`` over them (``bart pics -t -R W``),
-    ``F`` bartorch's NUFFT and ``W`` the wavelet transform over the spatial
-    axes the trajectory encodes, so no density compensation is assumed of the
-    trajectory; the step is the reciprocal of the largest eigenvalue of the
+    ``|D (F S x - y)|^2 + lambda |W x|_1`` over them (``bart pics -t -p D
+    -R W``), ``F`` bartorch's NUFFT, ``W`` the wavelet transform over the
+    spatial axes the trajectory encodes and ``D`` the square root of the
+    trajectory's Pipe-Menon density compensation
+    (:func:`bartorch.estimate_density`), which preconditions the solve
+    (Baron et al., Magn Reson Med 2018); the step is the reciprocal of the largest eigenvalue of the
     normal operator (``bart pics -e``). The trajectory is the one the proxy's
     enrichment writes, which
     :meth:`~pulserver.recon.ReconBuffer.grid_trajectory` scales to the image
@@ -41,7 +43,7 @@ class NufftRecon(ReconPlugin):
     partition. A trajectory that encodes kz, with no partitions, is one
     three-dimensional solve, its maps fitted as ``bart nlinv -m 1 -t`` fits
     them over three spatial axes. A unit closes as that of
-    :class:`~pulserver.recon.handlers.cartesian.CartesianRecon` does, and also
+    :class:`~pulserver.recon.handlers.pics.PicsRecon` does, and also
     once the last readout of each of its segments has arrived; an image is its
     averages summed, and its values are those of the solve, unscaled. bartorch
     is imported when the first image is made, which the ``coils`` extra
@@ -151,6 +153,7 @@ class NufftRecon(ReconPlugin):
         The image is a plane on the grid the trajectory spans, or the
         ``(z, y, x)`` matrix ``volume`` when it is given.
         """
+        import bartorch
         import torch
         from bartorch import apps, priors
 
@@ -164,10 +167,15 @@ class NufftRecon(ReconPlugin):
             if volume is None
             else _volume_maps(samples, points, volume)
         )
+        grid = tuple(maps.shape[-axes:])
+        density = bartorch.estimate_density(
+            points[..., :axes].reshape(-1, axes), grid
+        ).reshape(points.shape[:-1])
         image = apps.pics(
             samples,
             maps,
             traj=points,
+            pattern=density.sqrt(),
             regularizers=priors.Wavelet(tuple(range(-1, -axes - 1, -1)), self.wavelet),
             maxiter=self.iterations,
             eigen_step=True,

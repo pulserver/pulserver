@@ -1,14 +1,28 @@
 """pypulseqpp's 2D spiral spin echo bound to the scanner UI."""
 
+import functools
+
 from pypulseqpp.sequences.sequence.se_spiral2D_sequence import se_spiral2d
 
 from pulserver._zoo._evaluation import evaluation, spiral_2d
-from pulserver.design import FloatParam, IntParam, SequencePlugin, TimeParam
+from pulserver.design import (
+    Description,
+    FloatParam,
+    IntParam,
+    SequencePlugin,
+    TimeParam,
+)
 from pulserver.protocol import TEPreset, TRPreset, UIParam
+
+#: Variable-density spirals: adds how much sparser the periphery is sampled
+#: than the centre as a user entry.
+VARIABLE_DENSITY = False
 
 
 class SeSpiral2D(SequencePlugin):
-    app = se_spiral2d
+    app = functools.partial(
+        se_spiral2d, density="variable" if VARIABLE_DENSITY else "constant"
+    )
     protocol = {
         UIParam.TE: TimeParam(
             "te",
@@ -36,6 +50,13 @@ class SeSpiral2D(SequencePlugin):
             "slice_thickness", unit="mm", scale=1e-3, range_min=1.0, range_max=20.0
         ),
     }
+    if VARIABLE_DENSITY:
+        protocol |= {
+            UIParam.user_name(0): Description("Periphery undersampling"),
+            UIParam.user_value(0): FloatParam(
+                "periphery_undersampling", range_min=1.0, range_max=8.0, range_incr=0.1
+            ),
+        }
 
     def evaluate(self, system, protocol):
         return evaluation(self, system, protocol, spiral_2d)
