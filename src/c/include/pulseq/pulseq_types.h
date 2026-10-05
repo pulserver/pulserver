@@ -264,12 +264,9 @@ typedef struct pulseq_reserved_definitions
     int enable_pmc;
     int num_gain_cal_readouts; /**< calibration readouts for receive gain */
     int enable_sar_burst_mode; /**< sequence asks to be costed under SAR burst limits */
-    /** Computed by the host, not declared by the file: the largest ratio of
-     *  a repetition's peak local RF energy, through the VOPs and times the
-     *  VOP file's safety factor, to the same repetition's with each pulse
-     *  replaced by the reference pulse, through the cores the VOPs were
-     *  compressed from; and the same through each body model's global SAR
-     *  matrix, body by body. 0 when no VOPs were given. */
+    /** Computed by the host, not declared by the file: the local and head
+     *  SAR terms of pulseg_subseq_info.vop_sar_ratio and
+     *  vop_global_sar_ratio. 0 when no VOPs were given. */
     PULSEQ_REAL vop_sar_ratio;
     PULSEQ_REAL vop_global_sar_ratio;
     /** Computed by the host, not declared by the file: blocks per repetition,

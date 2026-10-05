@@ -26,6 +26,11 @@ _SAMPLES = 32
 #: were solved at and the Larmor frequency of the magnet they are used in.
 _FREQUENCY_TOLERANCE = 0.01
 
+#: Head SAR and local SAR limits of a transmit coil, W/kg: the IEC 60601-2-33
+#: normal operating mode's for head SAR and for local SAR in head and trunk.
+HEAD_SAR_LIMIT = 3.2
+LOCAL_SAR_LIMIT = 10.0
+
 
 class _Grid(NamedTuple):
     """Sensitivities ``(channels, z, y, x)``; sample ``i`` along an axis lies ``(i - centre) * step`` m from the isocentre."""
@@ -102,8 +107,10 @@ class Coil:
         the unit of the maps and the VOPs, per Hz of a pulse's amplitude,
         with which the channels' rotating fields, half their ``minus``, add
         up to the pulse's nominal amplitude at the isocentre through the
-        :attr:`default_shim`; and ``vop_default_shim`` that shim, a magnitude
-        and a phase per channel.
+        :attr:`default_shim`; ``vop_default_shim`` that shim, a magnitude
+        and a phase per channel; and ``vop_head_limit`` and
+        ``vop_local_limit``, :data:`HEAD_SAR_LIMIT` and
+        :data:`LOCAL_SAR_LIMIT`.
         """
         maps = self.transmit_model
         if not isinstance(maps, Path):
@@ -116,6 +123,8 @@ class Coil:
             "vop_file": str(vops),
             "vop_drive_per_hz": repr(_drive_per_hz(maps)),
             "vop_default_shim": " ".join(f"1.0 {phase!r}" for phase in phases),
+            "vop_head_limit": repr(HEAD_SAR_LIMIT),
+            "vop_local_limit": repr(LOCAL_SAR_LIMIT),
         }
 
 

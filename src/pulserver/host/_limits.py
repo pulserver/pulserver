@@ -35,7 +35,14 @@ _CHRONAXIE = {
 _SHARED = ("chronaxie",)
 _SAFE = re.compile(r"pns_([xyz])_(a[123]|tau[123]|stim_limit|g_scale)")
 _BAND = re.compile(r"forbidden_band_\d+")
-_VOP = ("vop_file", "vop_drive_per_hz", "vop_default_shim", "vop_coil")
+_VOP = (
+    "vop_file",
+    "vop_drive_per_hz",
+    "vop_default_shim",
+    "vop_coil",
+    "vop_head_limit",
+    "vop_local_limit",
+)
 
 
 def split_limits(
@@ -185,6 +192,8 @@ def check_limits(limits: Mapping[str, Any]) -> ir.CheckLimits:
       played without an RF shim, equal weights by default. Values are
       separated by spaces. ``vop_coil`` is the transmit configuration the
       scanner reports, which the VOP file's ``transmit`` metadata must name.
+      ``vop_head_limit`` and ``vop_local_limit`` are the scanner's head and
+      local SAR limits in W/kg in its current operating mode.
 
     Raises
     ------
@@ -218,6 +227,9 @@ def check_limits(limits: Mapping[str, Any]) -> ir.CheckLimits:
             arguments["default_shim"] = _shim(str(limits["vop_default_shim"]))
         if "vop_coil" in limits:
             arguments["vop_coil"] = str(limits["vop_coil"])
+        for key in ("vop_head_limit", "vop_local_limit"):
+            if key in limits:
+                arguments[key] = float(limits[key])
     elif any(k.startswith("vop_") for k in keys):
         raise ValueError("the vop_ limits need a vop_file")
     return ir.CheckLimits(**arguments)

@@ -185,7 +185,6 @@ def write_fields(directory, field_t=3.0):
             np.savez_compressed(
                 directory / f"{name}_vops.npz",
                 vops=vops,
-                cores=vops,
                 global_matrix=vops.mean(axis=0, keepdims=True),
             )
     return directory
