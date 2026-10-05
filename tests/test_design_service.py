@@ -545,11 +545,12 @@ def test_a_design_is_one_of_the_vop_file_contents_its_sar_ratios_came_from(
     tmp_path, store
 ):
     vops = tmp_path / "vops.npz"
-    np.savez(vops, vops=np.ones((1, 1, 1), dtype=complex))
+    one = np.ones((1, 1, 1), dtype=complex)
+    np.savez(vops, vops=one, cores=one)
     checked = vops.read_bytes()
     limits = {**LIMITS, "vop_file": str(vops)}
     first = generated(generate(store, "tiny", {}, limits=limits))
-    np.savez(vops, vops=2 * np.ones((1, 1, 1), dtype=complex))
+    np.savez(vops, vops=2 * one, cores=2 * one)
     assert generated(generate(store, "tiny", {}, limits=limits)) != first
     vops.write_bytes(checked)
     assert generated(generate(store, "tiny", {}, limits=limits)) == first

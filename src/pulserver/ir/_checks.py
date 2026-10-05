@@ -55,6 +55,9 @@ class CheckLimits:
     default_shim
         Complex channel weights of a pulse played without an RF shim, and of
         the reference pulse; equal weights when None.
+    vop_coil
+        The transmit configuration the scanner reports. When given, the VOP
+        file's ``metadata["transmit"]`` must name the same one.
 
     Raises
     ------
@@ -68,6 +71,7 @@ class CheckLimits:
     vops: safety.VopModel | Path | str | None = None
     drive_per_hz: float | tuple[float, ...] = 1.0
     default_shim: tuple[complex, ...] | None = None
+    vop_coil: str | None = None
 
     def __post_init__(self) -> None:
         if self.pns_limit <= 0.0:
@@ -76,15 +80,17 @@ class CheckLimits:
 
 @dataclass(frozen=True)
 class SarRatio:
-    """A subsequence's RF energy at the VOPs, against the reference pulse.
+    """A subsequence's RF energy, against the reference pulse.
 
-    ``local_sar`` is the largest, over the subsequence's repetitions and the
-    VOPs, of the energy a repetition deposits at a VOP over the energy there
-    of the same repetition with each of its pulses replaced by the reference
-    pulse; ``global_sar`` is that ratio through the global SAR matrix. A
-    scanner's SAR for the subsequence is the ratio times its SAR for that
-    reference repetition. Both are 0 without RF, and ``global_sar`` is 0
-    without a global matrix.
+    ``local_sar`` is the largest, over the subsequence's repetitions, of the
+    peak local energy a repetition deposits over the peak local energy of the
+    same repetition with each of its pulses replaced by the reference pulse:
+    the repetition's through the VOPs, times the VOP file's safety factor, and
+    the reference's through the cores the VOPs were compressed from, so that
+    the ratio is never below the true one. ``global_sar`` is the ratio through
+    the global SAR matrix of each body model. A scanner's SAR for the
+    subsequence is the ratio times its SAR for that reference repetition. Both
+    are 0 without RF, and ``global_sar`` is 0 without a global matrix.
     """
 
     local_sar: float
@@ -265,7 +271,8 @@ def sar_ratios(
     system
         The rasters and RF dead times the reference pulse is made with.
     limits
-        The VOPs, channel drive and default shim.
+        The VOPs, channel drive, default shim and, when given, the transmit
+        configuration the VOP file must name.
     designed
         The chain as :func:`pulserver.mrd.designed_chain` returns it, weighed
         in place of reading the files.
@@ -278,14 +285,23 @@ def sar_ratios(
     Raises
     ------
     ValueError
-        If ``limits`` carries no VOPs, a file of the chain cannot be read, or a
-        pulse or shim weighs another number of channels than the VOPs.
+        If ``limits`` carries no VOPs, the VOPs carry no cores, the VOP file
+        names another transmit configuration than ``limits.vop_coil``, a file
+        of the chain cannot be read, or a pulse or shim weighs another number
+        of channels than the VOPs.
     """
     if limits.vops is None:
         raise ValueError("SAR ratios need VOPs")
     vops = limits.vops
     if not isinstance(vops, safety.VopModel):
         vops = safety.read_vops(vops)
+    if limits.vop_coil is not None:
+        written_for = (vops.metadata or {}).get("transmit")
+        if written_for != limits.vop_coil:
+            raise ValueError(
+                f"the VOPs are for the transmit configuration {written_for!r}, "
+                f"and the scanner reports {limits.vop_coil!r}"
+            )
     drive = {"drive_per_hz": limits.drive_per_hz, "default_shim": limits.default_shim}
     reference = pp.Sequence(system)
     reference.add_block(
@@ -293,11 +309,11 @@ def sar_ratios(
             flip_angle=REFERENCE_FLIP, duration=REFERENCE_DURATION, system=system
         )
     )
-    _, pulse = safety.check_sar(reference, vops, **drive)
+    _, pulse = safety.check_sar(reference, vops, safety_factor=1.0, **drive)
     chain_read = designed if designed is not None else _read(seq_path)
     ratios = []
     for _, sequence in chain_read:
-        _, found = safety.check_sar(sequence, vops, reference=pulse, **drive)
+        _, found = safety.check_sar(sequence, vops, reference=reference, **drive)
         ratios.append(_ratio(sequence, found, pulse))
     return ratios
 

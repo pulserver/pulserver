@@ -56,6 +56,7 @@ def test_the_check_limits_are_read_apart_from_the_scanner_limits():
         "vop_file": "/data/vops.mat",
         "vop_drive_per_hz": "0.01 0.02",
         "vop_default_shim": "1 0 0.5 1.5",
+        "vop_coil": "Head8Tx/8/0x1a2b3c4d",
     }
     system, _, checked = split_limits(limits)
     assert system.max_grad == pytest.approx(40e-3 * system.gamma)
@@ -69,6 +70,7 @@ def test_the_check_limits_are_read_apart_from_the_scanner_limits():
         vops=Path("/data/vops.mat"),
         drive_per_hz=(0.01, 0.02),
         default_shim=(1 + 0j, cmath.rect(0.5, 1.5)),
+        vop_coil="Head8Tx/8/0x1a2b3c4d",
     )
 
 
@@ -99,7 +101,7 @@ def test_a_vop_file_alone_is_read_with_a_unit_drive_and_equal_weights():
 
 def test_a_design_under_a_vop_file_carries_its_sar_ratios_in_the_cache(tmp_path):
     vops = tmp_path / "vops.npz"
-    np.savez(vops, vops=np.ones((1, 1, 1)))
+    np.savez(vops, vops=np.ones((1, 1, 1)), cores=np.ones((1, 1, 1)))
     system = pp.Opts(**SCANNER)
     seq = pp.Sequence(system)
     rf = pp.make_block_pulse(flip_angle=np.pi / 2, duration=1e-3, system=system)

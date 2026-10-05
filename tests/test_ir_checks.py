@@ -1,5 +1,6 @@
 """The checks a chain passes before its IR is built, and its SAR against a reference."""
 
+import json
 import re
 
 import numpy as np
@@ -125,7 +126,12 @@ def _pulse(degrees, duration=1e-3):
 def one_channel(tmp_path):
     """One channel's VOP and global matrix: every ratio is a ratio of RF energy."""
     path = tmp_path / "vops.npz"
-    np.savez(path, vops=np.ones((1, 1, 1)), global_matrix=np.full((1, 1), 0.5))
+    np.savez(
+        path,
+        vops=np.ones((1, 1, 1)),
+        cores=np.ones((1, 1, 1)),
+        global_matrix=np.full((1, 1), 0.5),
+    )
     return ir.CheckLimits(vops=path)
 
 
@@ -169,7 +175,7 @@ def test_the_reference_pulse_is_played_in_the_default_shim(
     # Two uncoupled channels: a pulse on the first alone deposits half of one
     # on both.
     vops = tmp_path / "vops.npz"
-    np.savez(vops, vops=np.eye(2)[None])
+    np.savez(vops, vops=np.eye(2)[None], cores=np.eye(2)[None])
     on_first = pp.make_rf_shim([1.0, 0.0])
     path = _written(tmp_path, [(_pulse(180), on_first), (pp.make_delay(9e-3),)] * 20)
     limits = ir.CheckLimits(vops=vops, default_shim=default_shim)
@@ -185,6 +191,55 @@ def test_vops_given_as_a_model_or_as_their_file_give_the_same_ratios(
     assert ir.sar_ratios(path, SYSTEM, model) == ir.sar_ratios(
         path, SYSTEM, one_channel
     )
+
+
+def _one_channel_file(tmp_path, cores, metadata):
+    path = tmp_path / "vops.npz"
+    np.savez(
+        path,
+        vops=np.ones((1, 1, 1)),
+        cores=cores,
+        global_matrix=np.full((1, 1), 0.5),
+        metadata=np.array(json.dumps(metadata)),
+    )
+    return path
+
+
+def test_the_file_s_safety_factor_raises_the_local_ratio_and_not_the_global(
+    tmp_path,
+):
+    vops = _one_channel_file(tmp_path, np.ones((1, 1, 1)), {"safety_factor": 1.5})
+    path = _written(tmp_path, [(_pulse(180),), (pp.make_delay(9e-3),)] * 20)
+    (found,) = ir.sar_ratios(path, SYSTEM, ir.CheckLimits(vops=vops))
+    assert (found.local_sar, found.global_sar) == pytest.approx((1.5, 1.0))
+
+
+def test_the_reference_s_local_sar_is_read_through_the_cores(tmp_path):
+    # A core of half the point: the reference may deposit as little as half
+    # of what the point says, and the ratio doubles.
+    vops = _one_channel_file(tmp_path, np.full((1, 1, 1), 0.5), {})
+    path = _written(tmp_path, [(_pulse(180),), (pp.make_delay(9e-3),)] * 20)
+    (found,) = ir.sar_ratios(path, SYSTEM, ir.CheckLimits(vops=vops))
+    assert found.local_sar == pytest.approx(2.0)
+
+
+@pytest.mark.parametrize(
+    ("written_for", "refused"),
+    [("Head8Tx/8/0x1a2b3c4d", False), ("Head8Tx/8/0x00000000", True), (None, True)],
+)
+def test_the_vop_file_must_name_the_transmit_configuration_the_scanner_reports(
+    tmp_path, written_for, refused
+):
+    metadata = {} if written_for is None else {"transmit": written_for}
+    vops = _one_channel_file(tmp_path, np.ones((1, 1, 1)), metadata)
+    path = _written(tmp_path, [(_pulse(180),), (pp.make_delay(9e-3),)] * 20)
+    limits = ir.CheckLimits(vops=vops, vop_coil="Head8Tx/8/0x1a2b3c4d")
+    if refused:
+        with pytest.raises(ValueError, match="transmit configuration"):
+            ir.sar_ratios(path, SYSTEM, limits)
+    else:
+        (found,) = ir.sar_ratios(path, SYSTEM, limits)
+        assert found.local_sar == pytest.approx(1.0)
 
 
 def test_a_file_that_cannot_be_parsed_is_refused_by_the_checks_and_the_ratios(
