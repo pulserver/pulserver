@@ -156,6 +156,11 @@ def test_a_chain_readout_carries_the_k_of_its_own_file():
         )
 
 
+def test_a_table_whose_readouts_all_have_a_path_holds_no_sequence():
+    table = fixture("dedup_gre_pair.seq")
+    assert all(file._runs.sequence is None for file in table._files)
+
+
 def test_navigator_readouts_form_their_own_encoding_space(tmp_path):
     seq = pp.Sequence(pp.Opts())
     seq.set_definition("Matrix", [32, 3, 1])
