@@ -1,4 +1,4 @@
-"""Scanner-sequence plugins: a sequence app bound to the scanner protocol."""
+"""Scanner-sequence plugins: a sequence function bound to the scanner protocol."""
 
 from __future__ import annotations
 
@@ -76,12 +76,12 @@ class Evaluation:
 
 
 class SequencePlugin:
-    """A sequence app bound to the entries of the scanner protocol.
+    """A sequence function bound to the entries of the scanner protocol.
 
     A subclass sets :attr:`app` and, for the arguments the operator edits,
-    :attr:`protocol`; without ``protocol`` the app plays its defaults. Entries
+    :attr:`protocol`; without ``protocol`` the sequence function plays its defaults. Entries
     a request omits keep their initial values, the entry's ``default`` or else
-    the app's. Times travel as integer microseconds and other floats to six
+    the sequence function's. Times travel as integer microseconds and other floats to six
     significant digits, the precision of a float32 parameter, so a reply stored
     in scanner parameters and sent back evaluates to itself.
 
@@ -93,13 +93,13 @@ class SequencePlugin:
     Attributes
     ----------
     app : callable
-        A function ``app(system, **arguments)`` that designs the sequence. It
+        The sequence function, ``app(system, **arguments)``. It
         takes the scanner limits, a :class:`pypulseqpp.Opts`, and the keyword
         arguments the entries of :attr:`protocol` bind, and returns a
         :class:`pypulseqpp.Sequence` or a list of them, which is a chain: the
         prescans first and the main sequence last. The defaults the listing
-        shows are those of its signature, so a :func:`functools.partial` is an
-        app. :meth:`generate` calls it, and so does an :meth:`evaluate` that
+        shows are those of its signature, so a :func:`functools.partial` is a
+        sequence function too. :meth:`generate` calls it, and so does an :meth:`evaluate` that
         designs the sequence; the default :meth:`evaluate` does not.
     protocol : mapping
         The entries the operator edits, by key: the interpreter's parameter
@@ -209,7 +209,7 @@ class SequencePlugin:
             cls.ui = keyed
 
     def listing(self) -> dict[ProtocolKey, Parameter]:
-        """Return the protocol with its schema, valued at the app's defaults.
+        """Return the protocol with its schema, valued at the sequence function's defaults.
 
         An argument defaulting to ``None`` shows the preset that requests ``None``.
         The ``PRESCRIPTION`` entries of :mod:`pulserver.protocol` follow the
@@ -246,14 +246,14 @@ class SequencePlugin:
         :meth:`validate` describes.
 
         The default accepts the protocol unchanged with no scan time estimate,
-        and does not call the app.
+        and does not call the sequence function.
 
         Parameters
         ----------
         system
             The scanner limits the sequence is designed under.
         protocol
-            The requested protocol, in the units of the app's arguments.
+            The requested protocol, in the units of the sequence function's arguments.
 
         Returns
         -------
@@ -275,7 +275,7 @@ class SequencePlugin:
         system
             The scanner limits the sequence is designed under.
         protocol
-            The requested protocol, in the units of the app's arguments.
+            The requested protocol, in the units of the sequence function's arguments.
 
         Returns
         -------
@@ -311,7 +311,7 @@ class SequencePlugin:
         Raises
         ------
         ValueError
-            If the declared entries are inconsistent with the app, as
+            If the declared entries are inconsistent with the sequence function, as
             :meth:`listing` reports; this is a defect of the plugin and not of
             the request.
         """
@@ -369,7 +369,7 @@ class SequencePlugin:
         return validation, paths, list(zip(map(Path, paths), chain, strict=True))
 
     def _defaults(self) -> dict[str, Any]:
-        """Return the default of each argument of the app, ``inspect.Parameter.empty`` for none."""
+        """Return the default of each argument of the sequence function, ``inspect.Parameter.empty`` for none."""
         # The first parameter is the scanner limits.
         arguments = list(inspect.signature(self.app).parameters.values())[1:]
         return {

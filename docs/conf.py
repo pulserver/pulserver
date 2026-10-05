@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -71,9 +72,8 @@ intersphinx_mapping = {
 #: directory per landing page under ``docs/examples``; sphinx-gallery nests one
 #: level only, so the hierarchy a reader navigates is built by those pages.
 GALLERY_SECTIONS = [
-    "../gallery/01-protocol",
-    "../gallery/02-scanner-ir",
-    "../gallery/03-reconstruction",
+    "../gallery/01-course",
+    "../gallery/02-tours",
 ]
 
 sphinx_gallery_conf = {
@@ -140,10 +140,31 @@ README_ASSETS = (
 )
 
 
+#: A README figure in two variants, chosen by the reader's colour scheme.
+_PICTURE = re.compile(
+    r"<picture>\s*<source[^>]*srcset=\"(?P<dark>[^\"]+)\"[^>]*>\s*"
+    r"<img (?P<attributes>[^>]*)src=\"(?P<light>[^\"]+)\"(?P<rest>[^>]*)>\s*</picture>"
+)
+
+
+def _readme_for_docs(text: str) -> str:
+    """The README with its figures read from this build.
+
+    A ``<picture>`` becomes the two images the theme shows one of, since the
+    theme's light and dark switch does not reach a media query.
+    """
+    text = text.replace(*README_ASSETS)
+    return _PICTURE.sub(
+        r'<img class="only-light" \g<attributes>src="\g<light>"\g<rest>>'
+        r'<img class="only-dark" \g<attributes>src="\g<dark>"\g<rest>>',
+        text,
+    )
+
+
 def _local_readme_assets(_app, docname, source):
     """Use built static assets when the repository README is the index page."""
     if docname == "index":
-        source[0] = source[0].replace(*README_ASSETS)
+        source[0] = _readme_for_docs(source[0])
 
 
 def _included_readme_assets(_app, _relative_path, parent_docname, content):
@@ -153,7 +174,7 @@ def _included_readme_assets(_app, _relative_path, parent_docname, content):
     the README's own text is never in the source that handler sees.
     """
     if parent_docname == "index":
-        content[0] = content[0].replace(*README_ASSETS)
+        content[0] = _readme_for_docs(content[0])
 
 
 def _public_bases(_app, _name, _obj, _options, bases):
@@ -303,6 +324,11 @@ html_theme_options = {
     # tree.
     "max_navbar_depth": 3,
     "show_navbar_depth": 1,
+    "logo": {
+        "image_light": "_static/pulserver-mark.svg",
+        "image_dark": "_static/pulserver-mark-dark.svg",
+        "alt_text": "pulserver",
+    },
 }
 
 #: The theme's own sidebar, with the version switcher under the title.
@@ -321,4 +347,4 @@ html_title = "pulserver documentation"
 # these copies by the handlers above.
 html_static_path = ["_static"]
 html_css_files = ["pulserver.css"]
-html_logo = "_static/pulserver-mark.svg"
+html_favicon = "_static/pulserver-mark.svg"

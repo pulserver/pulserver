@@ -1,21 +1,13 @@
-# The scanner IR
+# IR cache
 
-A Pulseq file lists every block of a scan in play order, with each event stored
-once in a library and referenced by id. A scanner's pulse generator is
-programmed differently: waveform memory is allocated once per distinct
-waveform, and a scan is played as repetitions of a small number of instruction
-sequences, with amplitudes, phases and rotations updated between repetitions.
-Pulserver computes this intermediate representation (IR) of a sequence on the
-host and writes it into a binary cache beside the sequence file. The
-interpreter loads the cache rather than parsing the Pulseq file.
-
-## Subsequences
-
-{func}`~pulserver.ir.convert` reads the `NextSequence` chain starting at a
-sequence file, text or binary, with `pypulseqpp.Sequence`. Each file of the
-chain is a subsequence of one scan, played in order; a prescan and the imaging
-sequence are typically two subsequences. Each subsequence is analysed on its
-own and the results are chained into one collection.
+The implementation of the scanner representation
+({doc}`../../explanations/scanner-representation`): how the prescription is
+applied, the passes that compute it and the statistics they record, how gradients that a
+prepared segment cannot play are carried as waves, how a playout loads the
+cache in two stages, the gradients kept for the scanner's heating and acoustic
+models, and the layout of the cache file. The C headers an interpreter
+includes are in
+[`src/c/include/pulseg/`](https://github.com/pulserver/pulserver/tree/main/src/c/include/pulseg).
 
 ## Prescription
 
@@ -52,94 +44,33 @@ the stated position at the centre of its field of view. A chain whose stored
 modulation does not hold one phase per ADC sample is refused. The rotation of the prescription is not applied
 to the cache: the scanner plays it through its rotation matrix, composed after
 each block's own rotation. Two offsets make two caches of one design, and two
-designs ({doc}`designs`).
+designs ({doc}`../../explanations/designs`).
 
-## Checks
-
-The gradient coils are limited per physical axis, and the peak a gradient
-reaches on one axis depends on the orientation it is played in: two logical
-axes at 0.8 of the amplitude limit each put $0.8\sqrt{2}$ of it on one physical
-axis at 45°. So the checks are made in the physical frame. The prescription's
-rotation $R$, from logical to physical axes, reaches the host in the nine
-`fov_rotation_ij` entries of the protocol, element $(i, j)$ of $R$, and each
-file is rotated by it as the scanner plays it: composed after each block's own
-rotation, with blocks labelled `NOROT` left unrotated. A prescription with a
-reflection in it is checked as it plays, reflection included. A design is held
-under limits per logical axis that the scanner derates for the rotation, the
-`design_max_grad` and `design_max_slew` of the call's limits, and its physical
-axes are checked against the gradient coils' own, `max_grad` and `max_slew`
-({doc}`../user-guide/running`).
-
-Before a chain is converted, {func}`~pulserver.ir.check` runs pypulseqpp's
-timing check, gradient continuity included, and its gradient amplitude and
-slew-rate checks on every file, against the gradient limits, dead times and
-ringdown time of the scanner. Where the call's limits carry them
-({class}`~pulserver.ir.CheckLimits`), it also runs pypulseqpp's PNS check
-under the scanner's nerve model and its mechanical-resonance check against the
-scanner's forbidden gradient bands. The waveforms are timed by the rasters the
-file declares. The interpreter passes these limits with every design call
-({doc}`../user-guide/running`); it computes the SAR and the gradient heating.
-
-No design is stored for a generated design or an imported chain that fails a
-check: `generate` and `import` reply with the problems, as they do with a
-design error. The checks compute estimates; passing them does not
-establish scanner or patient safety.
-
-## SAR against a reference pulse
-
-The interpreter computes SAR under its own calibration of the transmit chain. Where
-local SAR is computed from virtual observation points (VOPs), the energy a
-pulse deposits at VOP $v$ is $\int \mathbf{b}(t)^H Q_v\, \mathbf{b}(t)\,dt$,
-with $\mathbf{b}$ the drive of each transmit channel and $Q_v$ the VOP's
-matrix, and it depends on the shape of the pulse and its channel weights. The
-host evaluates it against a reference: the hard pulse of 180° and 1 ms, played
-in the default channel weights. For each repetition $w$ of a subsequence, the
-blocks before the first repetition and after the last included, as
-pypulseqpp's SAR check averages over them, {func}`~pulserver.ir.sar_ratios`
-computes
-
-$$
-r = \max_w \max_v \frac{E_{v,w}}{N_w\, E_v^{\mathrm{ref}}},
-$$
-
-with $E_{v,w}$ the energy of the repetition at VOP $v$, $N_w$ the number of
-pulses it plays and $E_v^{\mathrm{ref}}$ the energy of the reference pulse
-there: the energy of the repetition over that of the same repetition with each
-of its pulses replaced by the reference. A 1 ms hard pulse of 90° counts a
-quarter of the reference, and the ratio is 1 for a repetition of reference
-pulses. The global SAR matrix of the VOP file gives the same ratio for global
-SAR. A scale common to every channel's drive and to the VOPs cancels in both.
-
-The cache carries the two ratios of each subsequence in its
-`pulseg_subseq_info`, zero without VOPs or without RF, and the interpreter
-computes the SAR of the subsequence as the ratio times its SAR for the reference
-repetition.
-
-## Passes
+## Conversion passes
 
 | Pass | Result |
 | --- | --- |
 | Event deduplication | A library of distinct RF, gradient and ADC definitions, and a per-block instance table recording the definition each block plays and its amplitude |
-| Repetition | The repeating unit of each subsequence and its repetition time (TR): the unit pypulseqpp's `Sequence.repetition` finds, from the first block; a subsequence that does not repeat is one repetition, refused when it is longer than 15 s |
-| Segmentation | The repeating unit divided into segments at block boundaries where every gradient waveform is zero |
-| Execution stream | The order in which segments are played over the whole scan |
+| Repetition | The repetition of each subsequence and its repetition time (TR): the period pypulseqpp's `Sequence.repetition` finds, from the first block; a subsequence that does not repeat is one repetition, refused when it is longer than 15 s |
+| Segmentation | The repetition divided into virtual segments at block boundaries the {class}`~pulserver.ir.Grouping` admits |
+| Execution stream | The segment instances of the whole scan, in play order |
 | Label table | The Pulseq labels in force at every readout, three of which fill the ADC label columns |
 | RF statistics | For each RF definition: its transmit channels, flip angle and energy, as pypulseqpp counts them; its duration from the envelope; and the bandwidth and bands of a multiband pulse from its spectrum |
 | Gradient statistics | For each gradient definition: the range of amplitudes its instances play; and for each shape it plays, the steepest slew rate and the integrals of the squared waveform and of its squared slew rate, pypulseqpp's `Sequence.gradient_statistics` over the amplitude that plays the shape |
 
 The limits and rasters of the scanner (`pypulseqpp.Opts`) are those under which
-the scan is segmented. A segment boundary falls where every gradient is zero,
-judged by the first and last values each arbitrary gradient's library row
-stores for the event's edges; a trapezoid starts and ends at zero. A segment
-is prepared from the RF and gradient definitions of the blocks of one
+the scan is segmented. A segment boundary falls where every gradient is
+within the grouping's tolerance of zero, judged by the first and last values
+each arbitrary gradient's library row stores for the event's edges; a
+trapezoid starts and ends at zero. A virtual segment is prepared from the RF and gradient definitions of the blocks of one
 repetition; a block instance sets only their amplitudes, frequency and phase
 offsets and gradient shape, or, where the blocks carry a rotation, the rotated
-wave it plays. Every repetition that plays a segment
+wave it plays. Every repetition that plays a virtual segment
 therefore plays the same RF and gradient definitions at each position, and the
 same ADC definition wherever it acquires. A repetition that plays other
 definitions, such as a pulse of its own per shot in a repetition pypulseqpp
 finds by block duration and the channels played, or that digitises with other
-ADC events, plays a segment of its own; a segment with more than 64 such
+ADC events, plays a virtual segment of its own; one with more than 64 such
 variants of either kind is refused. The
 spectral statistics are measured by pypulseqpp's
 `calc_rf_bandwidth` when the chain is read, with the Pulseq recipe of the width
@@ -253,7 +184,7 @@ layout holds.
 The second stage walks the execution stream one segment instance at a time.
 It sets the instance's rotation, the prescription's or none under `NOROT`, and
 whether it waits for a physiological trigger. Both follow the instance's own
-blocks: a segment definition is shared by instances that differ in either, a
+blocks: a virtual segment is shared by instances that differ in either, a
 trigger delay and a plain delay for one, so the definition cannot say. For
 each block it loads the
 block's wave into the slot the instance plays where the waves are streamed,
@@ -358,10 +289,3 @@ C. They are therefore C89, in `src/c/`, and call nothing in `src/cpp/`. The test
 compiles `src/c/` as a scanner build does, 32-bit and vendor-tagged, and reads
 back a cache written on the host.
 
-## See also
-
-* {doc}`../api/ir` — the conversion interface.
-* {doc}`protocol` — the protocol entries the offset arrives in.
-* [`src/c/include/pulseg/`](https://github.com/pulserver/pulserver/tree/main/src/c/include/pulseg)
-  — the public C headers the interpreter includes.
-* {doc}`/generated/gallery/02-scanner-ir/01_segmentation` — the segmentation of shipped sequences, executed.

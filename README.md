@@ -3,6 +3,7 @@
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 [![Docs: stable](https://img.shields.io/badge/docs-stable-2b76ad)](https://pulserver.github.io/pulserver/stable/)
 [![Docs: latest](https://img.shields.io/badge/docs-latest-6b7684)](https://pulserver.github.io/pulserver/latest/)
+[![Virtual scanner: try it](https://img.shields.io/badge/virtual%20scanner-try%20it-ffbd28)](https://pulserver.github.io/MaRGE/)
 
 [![PyPI](https://img.shields.io/pypi/v/pulserver.svg)](https://pypi.org/project/pulserver/)
 [![Python](https://img.shields.io/pypi/pyversions/pulserver.svg)](https://pypi.org/project/pulserver/)
@@ -10,7 +11,10 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-ffbd28.svg)](https://github.com/pulserver/pulserver/blob/main/LICENSE)
 [![Source](https://img.shields.io/badge/source-GitHub-181717?logo=github)](https://github.com/pulserver/pulserver)
 
-<p align="center"><img src="https://raw.githubusercontent.com/pulserver/pulserver/main/docs/_static/pulserver-logo.svg" alt="pulserver" width="580"></p>
+<p align="center"><picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/pulserver/pulserver/main/docs/_static/pulserver-logo-dark.svg">
+  <img src="https://raw.githubusercontent.com/pulserver/pulserver/main/docs/_static/pulserver-logo.svg" alt="pulserver" width="580">
+</picture></p>
 
 pulserver orchestrates MR acquisitions with Pulseq sequences on clinical
 scanners: sequence design, scanner preparation and reconstruction. It
@@ -22,6 +26,8 @@ acquired it, to a reconstruction, normally
 [bartorch](https://github.com/mcencini/bartorch). Vendor-specific playout
 belongs to the scanner interpreters, which call pulserver's services. Passing
 the checks pypulseqpp provides does not establish scanner or patient safety.
+
+Try the virtual scanner in your browser: <https://pulserver.github.io/MaRGE/>.
 
 ## Features
 
@@ -38,7 +44,10 @@ the checks pypulseqpp provides does not establish scanner or patient safety.
 - Reconstruction plugins run in isolated worker processes, over a live MRD
   stream, an ISMRMRD file or an assembled acquisition bucket.
 
-<p align="center"><img src="https://raw.githubusercontent.com/pulserver/pulserver/main/docs/_static/architecture.svg" alt="pulserver architecture" width="900"></p>
+<p align="center"><picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/pulserver/pulserver/main/docs/_static/architecture-dark.svg">
+  <img src="https://raw.githubusercontent.com/pulserver/pulserver/main/docs/_static/architecture.svg" alt="pulserver architecture" width="900">
+</picture></p>
 
 ## Quick start
 
@@ -110,10 +119,11 @@ The [user guide](https://pulserver.github.io/pulserver/latest/user-guide/index.h
 covers installation and support, running the two services, and writing
 scanner-sequence and reconstruction plugins. The
 [explanations](https://pulserver.github.io/pulserver/latest/explanations/index.html)
-describe the architecture, protocol resolution, the design store, the scanner IR
-and raw-data enrichment, and the
+describe the architecture, protocol resolution, the design store, the scanner
+representation, the virtual scanner and raw-data enrichment, and the
 [examples](https://pulserver.github.io/pulserver/latest/examples/index.html)
-execute each of them on a shipped pypulseqpp sequence. Every version of the documentation is published at
+are a course from a protocol to a reconstructed image, followed by Tours of
+specialised workflows, each executed when the documentation is built. Every version of the documentation is published at
 <https://pulserver.github.io/pulserver/>.
 
 ## Citation
