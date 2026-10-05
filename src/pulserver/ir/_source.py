@@ -494,7 +494,11 @@ def _rf_library(
 ]:
     rows = np.array(tables.rf, dtype=np.float64).reshape(-1, 10)
     rows[:, 4:6] = _micro(rows[:, 4:6])
-    uses = np.array([_RF_USE[use] for use in tables.rf_use], dtype=np.int32)
+    uses = np.fromiter(
+        map(_RF_USE.__getitem__, tables.rf_use),
+        dtype=np.int32,
+        count=len(tables.rf_use),
+    )
     spectra = np.zeros((rows.shape[0], 3 + MAX_BANDS), dtype=np.float64)
     integrals = np.zeros(rows.shape[0], dtype=np.float64)
     raster = sequence.rf_raster_time
@@ -503,26 +507,29 @@ def _rf_library(
     # frequency offset only moves the spectrum. Both are measured once per set
     # of shapes, on a row that plays something: a pulse of zero amplitude has
     # no spectrum, and its row keeps none.
-    measured: dict[tuple[float, float, float], tuple[NDArray[np.float64], float]] = {}
+    # The magnitude, phase and time shape ids of each played row, as one integer.
+    shapes = rows[played, 1:4].astype(np.int64)
+    shapes -= shapes.min(initial=0)
+    base = int(shapes.max(initial=0)) + 1
+    keys, which = np.unique(
+        (shapes[:, 0] * base + shapes[:, 1]) * base + shapes[:, 2], return_inverse=True
+    )
+    # The first played row of each set of shapes that plays something.
+    first = np.full(keys.shape[0], -1, dtype=np.int64)
+    live = np.flatnonzero(rows[played, 0] != 0.0)[::-1]
+    first[which[live]] = played[live]
+    measured = np.flatnonzero(first >= 0)
+    key_spectra = np.zeros((keys.shape[0], 3 + MAX_BANDS), dtype=np.float64)
+    key_integrals = np.zeros(keys.shape[0], dtype=np.float64)
     column = tables.blocks[:, 0]
-    identifiers = played + 1
-    for identifier in identifiers:
-        row = rows[identifier - 1]
-        key = (row[1], row[2], row[3])
-        if row[0] != 0.0 and key not in measured:
-            block = int(np.argmax(column == identifier)) + 1
-            event = sequence.get_block(block).rf
-            energy, peak, _ = pp.calc_rf_power(event, dt=raster)
-            measured[key] = (
-                _spectrum_row(event, raster),
-                energy / peak if peak else 0.0,
-            )
-    for identifier in identifiers:
-        row = rows[identifier - 1]
-        found = measured.get((row[1], row[2], row[3]))
-        if found is not None:
-            spectra[identifier - 1] = found[0]
-            integrals[identifier - 1] = found[1]
+    for key in measured:
+        block = int(np.argmax(column == first[key] + 1)) + 1
+        event = sequence.get_block(block).rf
+        energy, peak, _ = pp.calc_rf_power(event, dt=raster)
+        key_spectra[key] = _spectrum_row(event, raster)
+        key_integrals[key] = energy / peak if peak else 0.0
+    spectra[played] = key_spectra[which]
+    integrals[played] = key_integrals[which]
     return rows, uses, spectra, integrals
 
 
