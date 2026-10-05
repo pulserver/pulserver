@@ -15,13 +15,13 @@ designs with it, the scanner limits and the resolved protocol. Its identity is
 the SHA-256 hash of these ({func}`~pulserver.host.design_identity`):
 
 - the plugin name;
-- a digest of the plugin file, the source file of the app it binds,
+- a digest of the plugin file, the source file of the sequence function it binds,
   and the installed versions of pypulseqpp and pulserver;
 - the scanner limits, design limits, conversion options and check limits,
   with the contents of the VOP file they name;
 - the resolved protocol, prescription included.
 
-A changed plugin, app or package gives a new design for an unchanged
+A changed plugin, sequence function or package gives a new design for an unchanged
 protocol, and so does a VOP file rewritten at the same path. Because the hash
 is computed over the resolved protocol, two requests that differ only in a
 value the design replaces, such as a preset and the time it resolves to,
@@ -54,8 +54,10 @@ designs/
     sequence_main.seq     the remaining files, when there are prescans
     sequence.pseg         IR cache
     resolved.protocol
-    manifest.json         identity, plugin, limits, package versions,
-                          SHA-256 of every file
+    manifest.json         identity and identifier, limits, package
+                          versions, creation time, plugin and source,
+                          scan time, field-of-view offset (and rotation,
+                          for an imported chain), SHA-256 of every file
 ```
 
 A design is written into a staging directory in the store and renamed into

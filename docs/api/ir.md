@@ -12,7 +12,9 @@ deduplication, segmentation of the repetition pypulseqpp finds, and the
 execution stream are computed in the compiled extension, and the cache is
 written by the C library
 the interpreter reads it back with. The files are read in the logical frame and
-moved to the prescribed field-of-view offset before they are segmented. The
+moved to the prescribed field-of-view offset before they are segmented. ADC
+phase modulation is not stored in the cache; the reconstruction proxy applies
+it from the sequence. The
 representation is described in {doc}`../explanations/scanner-representation`, and
 the cache layout in {doc}`../developer-guide/internals/ir-cache`.
 
@@ -29,7 +31,7 @@ the cache layout in {doc}`../developer-guide/internals/ir-cache`.
 | {obj}`~pulserver.ir.play` | Every block a cache plays, resolved as the scanner's playout resolves it, with its gradient waveforms on request. |
 | {obj}`~pulserver.ir.plan_waves` | Where a playout holds a cache's waves in its waveform memory, all at once or a ring of slots per position, and whether it loads them in time: the layout the cache carries, or one for another budget. |
 | {obj}`~pulserver.ir.WaveBudget` | The waveform memory, gradient raster, load rate and slots per position a playout affords the waves, which a cache is converted for. |
-| {obj}`~pulserver.ir.Grouping` | How a repetition's blocks become the units a machine plays: where a boundary may fall, where it must, and whether few are preferred. |
+| {obj}`~pulserver.ir.Grouping` | The rule by which a repetition's blocks are grouped into virtual segments: where a boundary may fall, where it must, and which runs are split. |
 | {obj}`~pulserver.ir.VendorProfile` | What a cache holds its numbers as, for the machine that reads it: a sequencer that plays integers is given integers, already scaled, so it converts nothing while it plays. |
 | {obj}`~pulserver.ir.read_vendor` | The profile and grouping a vendor file states, refusing a file that states anything else or leaves a field out. |
 | {obj}`~pulserver.ir.Quantity` | The format one quantity is stored in, and the SI value of one integer step. |

@@ -9,10 +9,23 @@ location of each sample are defined by the sequence. The reconstruction proxy
 therefore replaces them with the values the sequence states, before any
 reconstruction code reads the stream.
 
-The readouts arrive demodulated to the prescribed field-of-view centre, which
-is applied to the sequence when its IR is built ({doc}`scanner-representation`). The proxy
-leaves the samples as received, and the trajectory it attaches is that of the
-sequence as designed, in the logical frame.
+The prescribed field-of-view offset is applied to the sequence when its IR is
+built ({doc}`scanner-representation`), as the frequency and phase offsets the
+scanner plays at the middle of each sampling window. Under a readout gradient
+that holds one value across the window, these are the whole phase of the
+offset. Under one that does not, as on a ramp-sampled or non-Cartesian
+readout, the phase is not linear in time, and the proxy applies the remainder,
+
+$$
+\phi(t) = 2\pi\, \mathbf{c} \cdot \bigl(\mathbf{k}(t) - \mathbf{k}(t_c)
+- \dot{\mathbf{k}}(t_c)\,(t - t_c)\bigr),
+$$
+
+for the offset $\mathbf{c}$ along the logical axes and the window centre
+$t_c$, together with any phase modulation the sequence's ADC events store,
+which the IR cache does not carry. The samples are otherwise left as received,
+and the trajectory the proxy attaches is that of the sequence as designed, in
+the logical frame.
 
 ## Enrichment
 
@@ -39,14 +52,16 @@ is applied to the stream as follows.
   none, and for every other counter, the centre is the minimum plus half the
   number of positions between the minimum and the maximum, rounded down.
 - The header's sequence parameters are the TR, TE, TI and flip angles the
-  sequence defines. The TR, TE and flip angles it does not define are
-  measured by pypulseqpp's `Sequence.test_report_dict`: TE from the excitation
-  before the closest approach to the k-space centre, TR between the
-  excitations around it, and every distinct flip angle the sequence plays.
+  sequence defines. The TR and TE it does not define are measured by
+  pypulseqpp's `Sequence.test_report_dict`: TE from the excitation before the
+  closest approach to the k-space centre, and TR between the excitations
+  around it. The flip angles it does not define are the distinct values of
+  `Sequence.rf_flip_angles`.
 - Each acquisition is matched to a table row by its position in the stream and
   receives the encoding counters, the MRD flags, the dwell time and the
   encoding space reference, and the k-space trajectory when the k-space
-  location changes across the readout. When the client numbers its
+  location changes across the readout, except on a Cartesian readout sampled
+  on the flat top of its readout gradient alone. When the client numbers its
   acquisitions, each `scan_counter` must follow the previous one by one; a gap
   or a repeat stops the series before it is reconstructed, since every later
   row would be shifted.
@@ -76,6 +91,11 @@ their `kspace_encode_step_2` counter, so their kz is not part of the
 trajectory. A reconstruction takes the trajectory in grid units, k times the
 reconstructed field of view, through
 {meth}`~pulserver.recon.ReconBuffer.grid_trajectory`.
+
+A Cartesian readout carries a trajectory only when it samples the ramps of its
+readout gradient. Sampled on the flat top alone, its samples are equally
+spaced in k and placed by the encoding counters and `center_sample`, and an
+encoding space whose readouts are all of that kind carries no trajectory.
 
 Tabulating a design integrates every range once, for the echo sample of each
 readout and the k-space axes its trajectory spans, which decide the header's

@@ -70,7 +70,8 @@ def acquire(
     :func:`trajectory` the cache plays under the prescription's ``rotation``
     and multiplied by ``exp(i theta)``, where the receiver phase ``theta`` is
     the ADC phase offset at the ADC's start, advancing at its frequency
-    offset, plus its phase modulation, as the playout demodulates.
+    offset, as the playout demodulates. The cache carries no ADC phase
+    modulation; the reconstruction proxy applies it.
 
     Each chemical shift of the phantom precesses at its frequency from the
     scanner's centre frequency: the shift resolved at the field ``field_t``,

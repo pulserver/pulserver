@@ -80,7 +80,7 @@ One acquisition proceeds as follows.
 
 | Representation | Written by | Read by |
 | --- | --- | --- |
-| Protocol block (`[NimPulseqGUI Protocol]`) | Design calls and interpreter | Both; the grammar is in {mod}`pulserver.protocol` and `pulseg_protocol.h` |
+| Protocol block (`[Protocol]` … `[Protocol End]`) | Design calls and interpreter | Both; the grammar is in {mod}`pulserver.protocol` and `pulseg_protocol.h` |
 | Pulseq files, binary form | pypulseqpp, in a design call | The IR conversion and the reconstruction proxy |
 | IR cache (`.pseg`) | {func}`pulserver.ir.convert` | The interpreter, through the C library in `src/c/` |
 | MRD stream | Reconstruction client; the proxy, forwarding | Reconstruction proxy and its workers; a reconstruction server |

@@ -72,9 +72,9 @@ def export(
     list of ndarray
         The receiver phase of every readout, in play order, in radians, one
         per sample: the ADC phase offset at the ADC's start, advancing at its
-        frequency offset, plus its phase modulation. The playout demodulates by
-        it, as :func:`~pulserver.virtual.acquire` does, and ``target`` leaves
-        it out.
+        frequency offset; the cache carries no phase modulation. The playout
+        demodulates by it, as :func:`~pulserver.virtual.acquire` does, and
+        ``target`` leaves it out.
     """
     played = ir.playout(seq_path, waveforms=True, cache_ext=cache_ext)["blocks"]
     turn = np.eye(3) if rotation is None else np.asarray(rotation, dtype=float)

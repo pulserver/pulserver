@@ -384,11 +384,14 @@ def enrich_header(header: Any, table: SequenceTable) -> None:
 
 
 def header_fov_offset_m(header: Any) -> tuple[float, float, float] | None:
-    """Return the field-of-view shift an MRD header carries, in m, or None.
+    """Return the field-of-view offset an MRD header states, in m, or None.
 
     Read from the ``fov_offset_mm`` user parameter string, three millimetres
-    along the logical readout, phase and slice axes, as the scanner client
-    writes the prescription centre.
+    along the logical readout, phase and slice axes. It is the position the
+    object is at: where it differs from the offset the design was converted
+    at, as after a motion update, the difference is applied to the samples in
+    full (:meth:`SequenceTable.readout_phase_modulation`). None when the header
+    states none, for which the converted offset is taken.
     """
     stated = user_parameter(header, "fov_offset_mm")
     if stated in (None, ""):

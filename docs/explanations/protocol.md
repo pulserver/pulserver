@@ -11,25 +11,25 @@ an edit is therefore the value the design achieves, not the value requested.
 ## Resolution
 
 A scanner sequence ({class}`~pulserver.design.SequencePlugin`) maps each
-interpreter parameter name to a keyword argument of its app, a function that
+interpreter parameter name to a keyword argument of its sequence function, a function that
 returns sequences. Resolving a request proceeds in three steps.
 
-1. Every entry the request omits takes its initial value, the app's default
+1. Every entry the request omits takes its initial value, the sequence function's default
    unless the entry declares another, so a request is always a complete
    prescription.
-2. The wire values are converted to the app's arguments, held as a
+2. The wire values are converted to the sequence function's arguments, held as a
    {class}`~pulserver.design.Protocol`, and the plugin evaluates the protocol
    under the scanner limits, capped by the design limits the scanner derates
    for the prescription ({doc}`../user-guide/running`). An evaluation that
-   calls the app designs the events and their timing against those limits
-   without playing the scan, and the app raises an error for a prescription it
+   calls the sequence function designs the events and their timing against those limits
+   without playing the scan, and the sequence function raises an error for a prescription it
    cannot realize. The shipped plugins evaluate this way. The default
-   evaluation of a function app accepts the protocol unchanged and builds
+   evaluation of a sequence function accepts the protocol unchanged and builds
    nothing, and a plugin overrides
    {meth}`~pulserver.design.SequencePlugin.evaluate` to check or complete it.
 3. The evaluation returns the protocol the design achieves, converted back to
    wire values, with the scan time, a note and, optionally, the RF layout
-   ({ref}`rf-layout`). An evaluation that calls the app reads the values from
+   ({ref}`rf-layout`). An evaluation that calls the sequence function reads the values from
    the sequences it designed: the shipped plugins return the values the main
    sequence states for the prescription, the echo time and the repetition time
    in its `TE` and `TR` definitions, the receiver bandwidth as the inverse of the
@@ -120,7 +120,7 @@ The keys of a protocol are members of the key enums of
 the union. A key is a `str` that equals and hashes as its wire name, so a plain
 string indexes a mapping of keys, and a scanner sequence stores a plain string
 in `protocol` as the member it names. A {class}`~pulserver.design.Protocol`
-maps each key to its value in the units of the app's argument: seconds for a
+maps each key to its value in the units of the sequence function's argument: seconds for a
 time, the argument's unit for a float, a member of the enum for a
 {class}`~pulserver.design.ChoiceParam`. The prescription entries bind no
 argument and keep the units of the wire.
@@ -142,7 +142,7 @@ strings, is deprecated: declare the enum and use `ChoiceParam`.
 A preset is a negative value of a time entry that the UI shows as a word, such
 as *Minimum* for the echo time ({class}`~pulserver.protocol.TEPreset`,
 {class}`~pulserver.protocol.TRPreset`). A scanner sequence maps each preset it
-offers to the argument value it requests: `None`, which asks the app for its
+offers to the argument value it requests: `None`, which asks the sequence function for its
 shortest achievable time; a time in seconds; or a function of the
 scanner limits. A preset is resolved like any other request: where the
 evaluation records the time the design achieved, the reply carries it in place
@@ -153,11 +153,11 @@ protocol, and {meth}`~pulserver.design.Protocol.preset` returns the preset.
 
 The interpreter stores protocol values in scanner parameters. Time parameters
 hold integer microseconds, so time entries are exchanged in integer
-microseconds and converted to seconds for the app, rounding to the nearest
+microseconds and converted to seconds for the sequence function, rounding to the nearest
 microsecond. Other float entries are held in float32 parameters, whose
 round trip preserves six significant decimal digits, so they
 are exchanged at that precision. A float entry carries a scale between its UI
-unit and the app's SI argument, such as `1e-3` for a field of view
+unit and the sequence function's SI argument, such as `1e-3` for a field of view
 shown in mm and designed in m.
 
 Resolved values are reported at the precision in which they are stored.

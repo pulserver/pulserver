@@ -7,6 +7,9 @@ scanner's reconstruction client does ({doc}`../explanations/virtual-scanner`). A
 reconstruction plugin are exercised together, through the production design
 calls and proxy.
 
+A browser build of the virtual scanner's console runs without an installation
+at <https://pulserver.github.io/MaRGE/>.
+
 ## Generate a design
 
 Generate the design as the interpreter host process does, with the prescribed
@@ -53,7 +56,10 @@ proxy refuses a series whose config names none.
 
 The phantom lies in the physical frame, whose axes are the logical ones under
 a prescription without a rotation; the object above is centred on the
-prescribed field of view, so it appears at the centre of the image. `received`
+prescribed field of view, so it appears at the centre of the image.
+`position_mm` is written as each acquisition's `position`; `send` writes no
+`fov_offset_mm` user parameter, so the proxy corrects the samples for the
+offset the design was converted at and for no further displacement. `received`
 holds the images, DICOM datasets and texts the reconstruction returned; a text
 beginning `pulserver:` reports a refused or failed series.
 
@@ -392,7 +398,8 @@ here: its sequences are then the plugins, its subject names the phantom, its RF
 coil names the coil, and it opens each exam on the localizer. The
 browser build of MaRGE in [pulserver/MaRGE](https://github.com/pulserver/MaRGE)
 runs it in a browser tab, opened with `?console=ws://127.0.0.1:8765`, and plays
-each scan's sound as it streams.
+each scan's sound as it streams; it is published at
+<https://pulserver.github.io/MaRGE/>.
 
 ## See also
 

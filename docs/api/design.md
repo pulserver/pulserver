@@ -1,6 +1,6 @@
 # Scanner sequences
 
-A sequence app bound to the entries of the scanner protocol.
+A sequence function bound to the entries of the scanner protocol.
 
 ```{eval-rst}
 .. currentmodule:: pulserver.design
@@ -10,8 +10,8 @@ A plugin file in the design calls' plugin directory defines one
 {class}`SequencePlugin` subclass. Its `app` is a function returning sequences,
 and its `protocol` maps each key of the interpreter's parameter table, a
 {data}`~pulserver.protocol.ProtocolKey`, to an entry naming the argument of the
-app it sets. Its methods evaluate a request into the protocol the design plays
-and write the design. Conversion between the UI's units and the app's SI
+sequence function it sets. Its methods evaluate a request into the protocol the design plays
+and write the design. Conversion between the UI's units and the sequence function's SI
 arguments, and the rounding of resolved values to the precision of a float32
 control variable, are described in {doc}`../explanations/protocol`.
 
@@ -19,9 +19,9 @@ control variable, are described in {doc}`../explanations/protocol`.
 
 | Object | Description |
 | --- | --- |
-| {obj}`~pulserver.design.SequencePlugin` | A sequence app bound to the scanner protocol. |
+| {obj}`~pulserver.design.SequencePlugin` | A sequence function bound to the scanner protocol. |
 | {obj}`~pulserver.design.Evaluation` | The outcome of evaluating a valid protocol: the protocol the design achieves, its scan time, a note and optionally its RF layout. |
-| {obj}`~pulserver.design.Protocol` | The values of a protocol in the units of the app's arguments, convertible from and to the wire values. |
+| {obj}`~pulserver.design.Protocol` | The values of a protocol in the units of the sequence function's arguments, convertible from and to the wire values. |
 | {obj}`~pulserver.design.ScannerSequence` | Deprecated name of {class}`~pulserver.design.SequencePlugin`. |
 | {obj}`~pulserver.design.load_plugin` | Import a plugin file and instantiate the sequence plugin it defines. |
 

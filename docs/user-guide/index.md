@@ -15,7 +15,7 @@ exchange are described in {doc}`../explanations/index`.
 | {doc}`reconstruction-client` | The MRD stream a scanner's reconstruction client sends the proxy. |
 | {doc}`virtual-scanner` | Scanning an analytic phantom through a stored design, the proxy and a reconstruction plugin, without a scanner. |
 | {doc}`../explanations/index` | Architecture, protocol resolution, the design store, the scanner IR and raw-data enrichment. |
-| {doc}`../examples/index` | Executable examples: protocol resolution, segmentation for the scanner, and enrichment and reconstruction of a simulated series. |
+| {doc}`../examples/index` | Executable examples: a course from a protocol to a reconstructed image, and Tours of specialised workflows. |
 | {doc}`../api/index` | Exact interfaces, units and defaults. |
 | {doc}`../developer-guide/index` | Development setup and contribution workflow. |
 | {doc}`../misc/index` | Licensing, related projects and contributors. |

@@ -8,7 +8,8 @@ and nothing else: the design calls, the IR, the reconstruction proxy and the
 reconstruction plugins it drives are the production code. Its data are
 acquired along the trajectory the cache plays, from an analytic phantom or by a
 Bloch simulation of the blocks the cache plays, and sent as the scanner's
-reconstruction client sends them.
+reconstruction client sends them. A browser build of its console is published
+at <https://pulserver.github.io/MaRGE/>.
 
 ## Stand-ins
 
@@ -97,8 +98,9 @@ magnetization is at equilibrium again after it. A saturation pulse played
 under a gradient saturates a band in space, which a species of the phantom
 does not hold, and is refused. The playout demodulates $S_c$ by
 $\exp(i\theta(t))$, where the receiver phase $\theta$ is the ADC phase
-offset at the ADC's start, advancing at its frequency offset, plus its phase
-modulation.
+offset at the ADC's start, advancing at its frequency offset. The cache
+carries no ADC phase modulation: the reconstruction proxy applies it to the
+received samples ({doc}`reconstruction`).
 
 These are the conventions under which the field-of-view translation applied
 when the IR is built ({doc}`scanner-representation`) recentres an object. Where every block
@@ -106,7 +108,9 @@ is turned by $R$, $\mathbf{k}$ is $R\mathbf{k}_L$, with $\mathbf{k}_L$ its
 value along the logical axes. An object displaced to the prescribed centre
 $R\mathbf{d}$, for the offset $\mathbf{d}$ along the logical axes, gains the
 phase $-2\pi\,(R\mathbf{d})\cdot(R\mathbf{k}_L) = -2\pi\,\mathbf{d}\cdot\mathbf{k}_L$,
-which the demodulation removes, and an object turned by $R$ presents at
+which the demodulation removes where the readout gradient holds one value
+across the sampling window; under one that varies, the demodulation removes
+the line through the window centre and the proxy the rest. An object turned by $R$ presents at
 $R\mathbf{k}_L$ its own transform at $\mathbf{k}_L$. An object posed at the
 prescribed centre, its axes turned by $R$, is therefore acquired as the same
 object at the isocentre under the identity, a reflection in $R$ included. The

@@ -163,8 +163,10 @@ A plugin file is imported again when its modification time changes.
 
 The store holds one directory per design, `<store>/<id>/`: the Pulseq files of
 the chain, the IR cache, the resolved protocol and `manifest.json`, which
-records the plugin, the reconstruction plugin, the limits, the package versions
-and the SHA-256 of every file. The identifier is three 24-bit integers, each
+records the identity and identifier, the limits, the package versions, the
+creation time, the plugin and the source it was designed from, the scan time,
+the field-of-view offset (and the rotation, for an imported chain) and the
+SHA-256 of every file. The identifier is three 24-bit integers, each
 held exactly by a float32 scanner parameter. `prune` removes designs least recently used
 first: those unused for longer than `--max-age-days`, then others until the
 store holds at most `--max-bytes`. A design used within the last day is kept
