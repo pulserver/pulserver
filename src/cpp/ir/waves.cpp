@@ -9,6 +9,7 @@
 #include <array>
 #include <cmath>
 #include <cstring>
+#include <thread>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -68,36 +69,29 @@ bool wave_of_block(
     return true;
 }
 
-/* Fill the peak of each axis, the point count and the span of @p wave. */
-int measure_wave(const pulseg_sequence_descriptor *desc, pulseg_wave &wave)
+/* Fill the peak of each axis, the point count and the span of every wave in
+ * @p waves, split over the hardware threads. */
+int measure_waves(const pulseg_sequence_descriptor *desc, std::vector<pulseg_wave> &waves)
 {
-    wave.num_points = 0;
-    for (int axis = 0; axis < 3; ++axis)
-    {
-        int points = 0;
-        float peak = 0.0f;
-        const int rc = pulseg__wave_materialize(
-            desc, &wave, axis, nullptr, nullptr, 0, &points, &peak);
-        if (PULSEG_FAILED(rc))
-            return rc;
-        wave.peak[axis] = peak;
-        if (points > wave.num_points)
-            wave.num_points = points;
-    }
-    wave.start_us = 0.0f;
-    wave.end_us = 0.0f;
-    if (wave.num_points < 1)
-        return PULSEG_SUCCESS;
-    /* Every axis shares one grid, so one axis gives the span. */
-    std::vector<float> time_us(static_cast<size_t>(wave.num_points));
-    std::vector<float> amplitude(static_cast<size_t>(wave.num_points));
-    int points = 0;
-    const int rc = pulseg__wave_materialize(
-        desc, &wave, 0, time_us.data(), amplitude.data(), wave.num_points, &points, nullptr);
-    if (PULSEG_FAILED(rc))
-        return rc;
-    wave.start_us = time_us.front();
-    wave.end_us = time_us[static_cast<size_t>(points - 1)];
+    const size_t count = waves.size();
+    const size_t threads = std::min<size_t>(
+        std::max(1u, std::thread::hardware_concurrency()), (count + 1023) / 1024);
+    std::vector<int> rc(std::max<size_t>(threads, 1), PULSEG_SUCCESS);
+    auto measure = [&](size_t t) {
+        for (size_t w = t; w < count && PULSEG_SUCCEEDED(rc[t]); w += rc.size())
+            rc[t] = pulseg__wave_measure(
+                desc, &waves[w], waves[w].peak, &waves[w].num_points,
+                &waves[w].start_us, &waves[w].end_us);
+    };
+    std::vector<std::thread> pool;
+    for (size_t t = 1; t < rc.size(); ++t)
+        pool.emplace_back(measure, t);
+    measure(0);
+    for (auto &thread : pool)
+        thread.join();
+    for (const int code : rc)
+        if (PULSEG_FAILED(code))
+            return code;
     return PULSEG_SUCCESS;
 }
 
@@ -155,26 +149,22 @@ class WaveTable
     explicit WaveTable(const pulseg_sequence_descriptor *desc) : desc_(desc) {}
 
     /* The index of the wave block-table entry @p block plays, -1 when it
-     * drives no gradient; @p rc says whether measuring a new one failed. */
-    int intern(int block, int &rc)
+     * drives no gradient.  A new wave is measured by measure(). */
+    int intern(int block)
     {
         pulseg_wave wave;
         WaveKey key;
         if (!wave_of_block(desc_, &desc_->block_table[block], wave, key))
             return -1;
-        const auto found = index_.find(key);
-        if (found != index_.end())
-            return found->second;
-        if (!desc_->structure_only)
-        {
-            rc = measure_wave(desc_, wave);
-            if (PULSEG_FAILED(rc))
-                return -1;
-        }
-        const int added = static_cast<int>(waves_.size());
-        index_.emplace(key, added);
-        waves_.push_back(wave);
-        return added;
+        const auto found = index_.emplace(key, static_cast<int>(waves_.size()));
+        if (found.second)
+            waves_.push_back(wave);
+        return found.first->second;
+    }
+
+    int measure()
+    {
+        return desc_->structure_only ? PULSEG_SUCCESS : measure_waves(desc_, waves_);
     }
 
     const pulseg_wave &operator[](int w) const { return waves_[static_cast<size_t>(w)]; }
@@ -431,7 +421,7 @@ int assign_waves(
     WaveTable &waves,
     SpanGroups &groups)
 {
-    int rc = PULSEG_SUCCESS;
+    std::vector<std::pair<Position, int>> played;
     PositionWalk walk;
     for (int n = 0; n < desc->exec_stream_len; ++n)
     {
@@ -440,18 +430,21 @@ int assign_waves(
         if (block < 0)
             continue;
         if (desc->block_wave[block] < 0)
-            desc->block_wave[block] = waves.intern(block, rc);
-        if (PULSEG_FAILED(rc))
-            return rc;
-        const int w = desc->block_wave[block];
-        if (w < 0)
-            continue;
+            desc->block_wave[block] = waves.intern(block);
+        if (desc->block_wave[block] >= 0)
+            played.emplace_back(at, desc->block_wave[block]);
+    }
+    const int rc = waves.measure();
+    if (PULSEG_FAILED(rc))
+        return rc;
+    for (const auto &[at, w] : played)
+    {
         pulseg_virtual_segment &seg = desc->segment_definitions[at.segment];
         if (seg.initial_states)
             reserve(seg.initial_states[at.index], waves[w]);
         groups.played(at, w);
     }
-    return rc;
+    return PULSEG_SUCCESS;
 }
 
 } // namespace
