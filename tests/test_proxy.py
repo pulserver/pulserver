@@ -1,6 +1,7 @@
 """The reconstruction proxy: a series streamed in, images streamed back."""
 
 import json
+import logging
 import os
 import runpy
 import shutil
@@ -1024,12 +1025,23 @@ def test_the_sequence_description_is_not_sent_back_to_the_client(start_proxy, bu
     assert not any(is_message(item) for item in received)
 
 
+def test_images_come_back_as_dicom_when_asked(start_proxy, bucket):
+    """A client that reads DICOM alone, such as a scanner's, gets DICOM."""
+    _, series = bucket
+    proxy = start_proxy(slots=1, dicom=True)
+    received = stream(proxy.port, series["gre2d"])
+
+    assert not images(received)
+    assert sum(isinstance(item, DicomWithName) for item in received) == 1
+    assert closed(received)
+
+
 def test_forwarded_images_come_back_as_dicom_when_asked(
     start_proxy, start_server, bucket
 ):
     _, series = bucket
     server = start_server(slots=1)
-    proxy = start_proxy(forward=("127.0.0.1", server.port), forward_dicom=True)
+    proxy = start_proxy(forward=("127.0.0.1", server.port), dicom=True)
     received = stream(proxy.port, series["gre2d"])
 
     assert not images(received)
@@ -1134,3 +1146,168 @@ def test_a_recorded_series_run_offline_against_its_store_gives_the_proxys_image(
     _, received = _in_process(root, played, data=kspace)
 
     np.testing.assert_array_equal(images(offline)[0].data, images(received)[0].data)
+
+
+def test_a_kept_series_runs_offline_and_gives_the_image_the_proxy_returned(
+    start_proxy, bucket, tmp_path
+):
+    """What is kept is a scan a plugin can be run on again, against the store."""
+    root, series = bucket
+    played = series["gre2d"]
+
+    def kspace(table, index):
+        return point(table, index, (0.004, -0.002, 0.0))
+
+    kept = tmp_path / "kept"
+    proxy = start_proxy(slots=1, save_to=kept)
+    received = stream(proxy.port, played, data=kspace)
+
+    written = sorted(kept.glob("*.h5"))
+    assert len(written) == 1, f"kept {written}"
+    offline = load_plugin(RECON_PLUGINS / "gre2d.py").run(str(written[0]), store=root)
+    np.testing.assert_array_equal(images(offline)[0].data, images(received)[0].data)
+
+
+def test_what_a_proxy_keeps_is_the_header_the_scanner_sent(
+    start_proxy, bucket, tmp_path
+):
+    """The proxy enriches what it passes on, and keeps what it was given."""
+    _, series = bucket
+    kept = tmp_path / "kept"
+    proxy = start_proxy(slots=1, save_to=kept)
+
+    received = stream(proxy.port, series["gre2d"])
+
+    assert [np.squeeze(image.data).shape for image in images(received)] == [
+        (MATRIX["ny"], MATRIX["nx"])
+    ]
+    written = sorted(kept.glob("*.h5"))
+    held = ismrmrd.Dataset(str(written[0]), "dataset", create_if_needed=False)
+    try:
+        header = ismrmrd.xsd.CreateFromDocument(held.read_xml_header())
+    finally:
+        held.close()
+    assert header.encoding[0].encodedSpace.matrixSize.x == 1
+    assert header.sequenceParameters is None
+
+
+def test_two_series_at_once_are_kept_in_files_of_their_own(
+    start_proxy, bucket, tmp_path
+):
+    """Two series start within one second, and one file cannot hold both."""
+    _, series = bucket
+    kept = tmp_path / "kept"
+    proxy = start_proxy(slots=2, save_to=kept)
+    played = [series["gre2d"], series["gre2d_raw"]]
+    received = {}
+
+    def play(index):
+        received[index] = stream(proxy.port, played[index], config="gre2d")
+
+    threads = [threading.Thread(target=play, args=(index,)) for index in (0, 1)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=DEADLINE)
+
+    assert all(closed(items) for items in received.values())
+    written = sorted(kept.glob("*.h5"))
+    assert len(written) == 2, f"kept {written}"
+    counts = []
+    for path in written:
+        held = ismrmrd.Dataset(str(path), "dataset", create_if_needed=False)
+        try:
+            counts.append(int(held.number_of_acquisitions()))
+        finally:
+            held.close()
+    assert counts == [len(played[0].table), len(played[1].table)] or counts == [
+        len(played[1].table),
+        len(played[0].table),
+    ], counts
+
+
+def test_a_forwarded_series_is_kept_by_the_server_it_reaches(
+    start_proxy, start_server, bucket, tmp_path
+):
+    """A server keeps the series a proxy forwards, enriched as it arrives."""
+    _, series = bucket
+    kept = tmp_path / "kept"
+    server = start_server(slots=1, save_to=kept)
+    forwarding = start_proxy(forward=("127.0.0.1", server.port))
+
+    received = stream(forwarding.port, series["gre2d"])
+
+    assert closed(received)
+    written = sorted(kept.glob("*.h5"))
+    assert len(written) == 1, f"kept {written}"
+    held = ismrmrd.Dataset(str(written[0]), "dataset", create_if_needed=False)
+    try:
+        assert int(held.number_of_acquisitions()) == len(series["gre2d"].table)
+        header = ismrmrd.xsd.CreateFromDocument(held.read_xml_header())
+    finally:
+        held.close()
+    # The readout is widened to the oversampling of the full echo, the phase
+    # encodes are not.
+    assert header.encoding[0].encodedSpace.matrixSize.y == MATRIX["ny"]
+    assert pytest.approx([MATRIX["TE"] / 1e3]) == header.sequenceParameters.TE
+
+
+def test_a_series_is_kept_nowhere_where_nowhere_is_asked_for(
+    start_proxy, bucket, tmp_path
+):
+    _, series = bucket
+    proxy = start_proxy(slots=1)
+    stream(proxy.port, series["gre2d"])
+    assert not list(tmp_path.rglob("*.h5"))
+
+
+@pytest.mark.parametrize("service", ("proxy", "server"))
+def test_a_service_nothing_connects_to_closes_on_its_own(service, bucket):
+    """One started for a scan outlives whoever started it; this is how it ends."""
+    root, _ = bucket
+    running = (
+        ReconProxy(root, RECON_PLUGINS, slots=1, spares=0, idle_timeout=0.5)
+        if service == "proxy"
+        else ReconServer(RECON_PLUGINS, slots=1, spares=0, idle_timeout=0.5)
+    )
+    running.bind(0)
+    thread = threading.Thread(target=running.serve, daemon=True)
+    thread.start()
+    try:
+        thread.join(timeout=20)
+        assert not thread.is_alive(), f"the {service} was still waiting"
+    finally:
+        running.close()
+
+
+def test_a_connection_that_sends_nothing_is_not_a_failed_series(
+    start_proxy, bucket, caplog
+):
+    """A readiness probe opens the port and leaves; nothing is refused to it."""
+    _, series = bucket
+    proxy = start_proxy(slots=1)
+    with caplog.at_level(logging.ERROR, logger="pulserver.proxy"):
+        socket.create_connection(("127.0.0.1", proxy.port), timeout=DEADLINE).close()
+        received = stream(proxy.port, series["gre2d"])
+    assert len(images(received)) == 1
+    assert not [record for record in caplog.records if record.levelno >= logging.ERROR]
+
+
+def test_the_idle_timeout_counts_from_the_last_client_leaving(bucket):
+    """A series longer than the timeout must not close the proxy under its client."""
+    root, _ = bucket
+    proxy = ReconProxy(root, RECON_PLUGINS, slots=1, spares=0, idle_timeout=1.0)
+    port = proxy.bind(0)
+    thread = threading.Thread(target=proxy.serve, daemon=True)
+    thread.start()
+    try:
+        held = socket.create_connection(("127.0.0.1", port), timeout=DEADLINE)
+        try:
+            thread.join(timeout=4.0)
+            assert thread.is_alive(), "the proxy closed while a client was connected"
+        finally:
+            held.close()
+        thread.join(timeout=20)
+        assert not thread.is_alive(), "the proxy was still waiting"
+    finally:
+        proxy.close()

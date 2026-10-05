@@ -19,7 +19,7 @@ services:
       - --port=9020
       - --forward=gadgetron:9002
       - --forward-config=default.xml
-      - --forward-dicom
+      - --dicom
     volumes:
       - designs:/designs
     depends_on:

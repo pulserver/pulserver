@@ -17,10 +17,8 @@ _GROUP = "dataset"
 
 
 class QueueFile:
-    """An ISMRMRD file holding one series as the worker will receive it.
+    """An ISMRMRD file holding one series, written as it arrives and replayed in order.
 
-    The header and every acquisition are the enriched ones, so replaying the
-    file gives a worker the stream the live path would have given it.
     Acquisitions and waveforms are stored in separate tables, so replay yields
     the waveforms first, which is how every emitted unit carries all of them.
     """

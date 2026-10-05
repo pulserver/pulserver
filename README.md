@@ -101,7 +101,7 @@ Scan a phantom on the virtual scanner and reconstruct it:
 
 ```bash
 printf '[Limits]\nB0: 3.0\n[Limits End]\n' > limits.txt
-python -m pulserver.proxy --store designs --port 9002 --plugins recon &
+pulserver proxy --store designs --port 9002 --plugins recon &
 pulserver scan --plugins sequences --plugin gre --reconstruction gre \
   --limits limits.txt --store designs --recon 127.0.0.1:9002 --output images
 ```
