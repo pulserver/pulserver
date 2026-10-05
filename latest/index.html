@@ -636,7 +636,7 @@ prescription the design cannot realize:</p>
 </div>
 <p>Scan a phantom on the virtual scanner and reconstruct it:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">printf</span><span class="w"> </span><span class="s1">'[Limits]\nB0: 3.0\n[Limits End]\n'</span><span class="w"> </span>&gt;<span class="w"> </span>limits.txt
-python<span class="w"> </span>-m<span class="w"> </span>pulserver.proxy<span class="w"> </span>--store<span class="w"> </span>designs<span class="w"> </span>--port<span class="w"> </span><span class="m">9002</span><span class="w"> </span>--plugins<span class="w"> </span>recon<span class="w"> </span><span class="p">&amp;</span>
+pulserver<span class="w"> </span>proxy<span class="w"> </span>--store<span class="w"> </span>designs<span class="w"> </span>--port<span class="w"> </span><span class="m">9002</span><span class="w"> </span>--plugins<span class="w"> </span>recon<span class="w"> </span><span class="p">&amp;</span>
 pulserver<span class="w"> </span>scan<span class="w"> </span>--plugins<span class="w"> </span>sequences<span class="w"> </span>--plugin<span class="w"> </span>gre<span class="w"> </span>--reconstruction<span class="w"> </span>gre<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>--limits<span class="w"> </span>limits.txt<span class="w"> </span>--store<span class="w"> </span>designs<span class="w"> </span>--recon<span class="w"> </span><span class="m">127</span>.0.0.1:9002<span class="w"> </span>--output<span class="w"> </span>images
 </pre></div>

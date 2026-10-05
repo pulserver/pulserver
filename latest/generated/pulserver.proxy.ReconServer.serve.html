@@ -545,7 +545,12 @@
 <dl class="py method">
 <dt class="sig sig-object py" id="pulserver.proxy.ReconServer.serve">
 <span class="sig-prename descclassname"><span class="pre">ReconServer.</span></span><span class="sig-name descname"><span class="pre">serve</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#pulserver.proxy.ReconServer.serve" title="Link to this definition">#</a></dt>
-<dd><p>Accept clients until <a class="reference internal" href="pulserver.proxy.ReconServer.stop.html#pulserver.proxy.ReconServer.stop" title="pulserver.proxy.ReconServer.stop"><code class="xref py py-meth docutils literal notranslate"><span class="pre">stop()</span></code></a> or <a class="reference internal" href="pulserver.proxy.ReconServer.close.html#pulserver.proxy.ReconServer.close" title="pulserver.proxy.ReconServer.close"><code class="xref py py-meth docutils literal notranslate"><span class="pre">close()</span></code></a>, one thread each.</p>
+<dd><p>Accept clients until <a class="reference internal" href="pulserver.proxy.ReconServer.stop.html#pulserver.proxy.ReconServer.stop" title="pulserver.proxy.ReconServer.stop"><code class="xref py py-meth docutils literal notranslate"><span class="pre">stop()</span></code></a>, <a class="reference internal" href="pulserver.proxy.ReconServer.close.html#pulserver.proxy.ReconServer.close" title="pulserver.proxy.ReconServer.close"><code class="xref py py-meth docutils literal notranslate"><span class="pre">close()</span></code></a>, or nothing comes.</p>
+<p>A server started for one scan outlives it: whoever started it has gone
+by the time the last series is reconstructed, and nothing is left to
+stop it. An idle timeout is how it ends on its own, counted from the
+last client to leave rather than from when it started, so a long
+reconstruction never trips it.</p>
 </dd></dl>
 
 </section>

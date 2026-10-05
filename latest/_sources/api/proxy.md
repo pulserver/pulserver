@@ -11,15 +11,15 @@ and runs it on a reconstruction worker.
 The proxy listens on a TCP port and is started with
 
 ```bash
-python -m pulserver.proxy --store DIR --port N --plugins DIR [--intake-port N] [--slots N] [--spares 1]
-python -m pulserver.proxy --store DIR --port N --forward HOST:PORT [--forward-config NAME] [--forward-dicom]
+pulserver proxy --store DIR --port N --plugins DIR [--intake-port N] [--slots N] [--spares 1] [--save-data DIR] [--idle-timeout S]
+pulserver proxy --store DIR --port N --forward HOST:PORT [--forward-config NAME] [--dicom]
 ```
 
 the second forwarding every enriched series to the reconstruction server at
 `HOST:PORT`, which is started with
 
 ```bash
-python -m pulserver.recon --plugins DIR --port N [--slots N] [--spares 1]
+pulserver recon --plugins DIR --port N [--slots N] [--spares 1] [--save-data DIR] [--idle-timeout S]
 ```
 
 The MRD header of a series names the design it was played from; the proxy

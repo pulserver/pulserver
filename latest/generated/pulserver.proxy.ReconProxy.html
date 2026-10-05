@@ -625,8 +625,9 @@ exam lets go of it.</p></li>
 <li><p><strong>forward</strong> – <code class="docutils literal notranslate"><span class="pre">(host,</span> <span class="pre">port)</span></code> of the MRD server that reconstructs every series;
 local workers when <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
 <li><p><strong>forward_config</strong> – Config name sent to that server instead of the reconstruction plugin.</p></li>
-<li><p><strong>forward_dicom</strong> – Convert each image the server sends back to DICOM, from the enriched
-header.</p></li>
+<li><p><strong>dicom</strong> – Convert each image to DICOM, from the enriched header, before it is
+relayed. Whatever reconstructed it: a client that reads DICOM alone,
+such as a scanner’s, needs this of a plugin that emits images.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Attributes<span class="colon">:</span></dt>
@@ -652,7 +653,7 @@ header.</p></li>
 <td><p>Stop accepting clients, wait for running series and release the spares.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="pulserver.proxy.ReconProxy.serve.html#pulserver.proxy.ReconProxy.serve" title="pulserver.proxy.ReconProxy.serve"><code class="xref py py-obj docutils literal notranslate"><span class="pre">serve</span></code></a></p></td>
-<td><p>Accept clients until <code class="xref py py-meth docutils literal notranslate"><span class="pre">stop()</span></code> or <code class="xref py py-meth docutils literal notranslate"><span class="pre">close()</span></code>, one thread each.</p></td>
+<td><p>Accept clients until <code class="xref py py-meth docutils literal notranslate"><span class="pre">stop()</span></code>, <code class="xref py py-meth docutils literal notranslate"><span class="pre">close()</span></code>, or nothing comes.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="pulserver.proxy.ReconProxy.stop.html#pulserver.proxy.ReconProxy.stop" title="pulserver.proxy.ReconProxy.stop"><code class="xref py py-obj docutils literal notranslate"><span class="pre">stop</span></code></a></p></td>
 <td><p>Make <code class="xref py py-meth docutils literal notranslate"><span class="pre">serve()</span></code> return within one accept poll.</p></td>
