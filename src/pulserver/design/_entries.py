@@ -31,11 +31,11 @@ _MICROSECOND = Decimal("1e-6")
 
 @dataclass(frozen=True)
 class FloatParam:
-    """A float UI entry bound to an argument of the app.
+    """A float UI entry bound to an argument of the sequence function.
 
     The UI value is the argument divided by ``scale``, in ``unit``; a dropdown
     when it has options. ``default`` is the UI value the protocol starts at;
-    ``None`` starts it at the app's default.
+    ``None`` starts it at the sequence function's default.
     """
 
     argument: str
@@ -50,16 +50,16 @@ class FloatParam:
 
 @dataclass(frozen=True)
 class TimeParam:
-    """A time UI entry bound to an argument of the app, in seconds.
+    """A time UI entry bound to an argument of the sequence function, in seconds.
 
     Values, ranges and options are integer microseconds, the unit of the
     scanner's time parameters, so the value a parameter holds is the value the design
     reported. Each key of ``presets`` is a dropdown preset; its value is the
-    time it requests: seconds, ``None`` for the app's own shortest
+    time it requests: seconds, ``None`` for the sequence function's own shortest
     choice, or a function of the scanner limits. The entry is a dropdown when
     it has options or presets. ``default``, microseconds or a key of
     ``presets``, is the value the protocol starts at; ``None`` starts it at the
-    app's default.
+    sequence function's default.
     """
 
     argument: str
@@ -73,10 +73,10 @@ class TimeParam:
 
 @dataclass(frozen=True)
 class IntParam:
-    """An integer UI entry bound to an argument of the app; a dropdown when it has options.
+    """An integer UI entry bound to an argument of the sequence function; a dropdown when it has options.
 
     ``default`` is the value the protocol starts at; ``None`` starts it at the
-    app's default.
+    sequence function's default.
     """
 
     argument: str
@@ -90,10 +90,10 @@ class IntParam:
 
 @dataclass(frozen=True)
 class BoolParam:
-    """A checkbox UI entry bound to an argument of the app.
+    """A checkbox UI entry bound to an argument of the sequence function.
 
     ``default`` is the value the protocol starts at; ``None`` starts it at the
-    app's default.
+    sequence function's default.
     """
 
     argument: str
@@ -102,12 +102,12 @@ class BoolParam:
 
 @dataclass(frozen=True)
 class ChoiceParam:
-    """A choice among the members of a ``StrEnum``, bound to an argument of the app.
+    """A choice among the members of a ``StrEnum``, bound to an argument of the sequence function.
 
     The argument receives the chosen member, a ``str`` equal to its option. The
     options are the members in definition order, and the wire carries the index
     of the chosen one. ``default`` is the member the protocol starts at;
-    ``None`` starts it at the app's default, which has to be a member
+    ``None`` starts it at the sequence function's default, which has to be a member
     or the value of one.
     """
 
@@ -149,7 +149,7 @@ def StringListParam(
     Deprecated: declare the enum and use :class:`ChoiceParam`. The argument
     receives the member of the chosen option, a ``str`` equal to it.
     ``default`` is the option the protocol starts at; ``None`` starts it at the
-    app's default.
+    sequence function's default.
 
     Warns
     -----
@@ -277,13 +277,13 @@ def _parameter(
 
 
 class Protocol(Mapping[ProtocolKey, Any]):
-    """The values of a plugin's protocol, in the units of the app's arguments.
+    """The values of a plugin's protocol, in the units of the sequence function's arguments.
 
     An immutable mapping from :data:`~pulserver.protocol.ProtocolKey` to value.
     A time is in seconds and a float in the unit of the argument it binds,
     metres for a length; an integer is an ``int``, a checkbox a ``bool`` and a
     choice a member of its enum. A time entry showing a preset holds what the
-    preset requests, a number of seconds or ``None`` for the app's own
+    preset requests, a number of seconds or ``None`` for the sequence function's own
     shortest choice, and :meth:`preset` names the preset. The prescription
     entries bind no argument and keep the units of the wire: mm for the
     offset, unitless for the rotation.
@@ -410,7 +410,7 @@ class Protocol(Mapping[ProtocolKey, Any]):
 
     @property
     def arguments(self) -> dict[str, Any]:
-        """The values by the name of the app argument each binds.
+        """The values by the name of the sequence function argument each binds.
 
         The prescription entries bind no argument and are left out.
         """

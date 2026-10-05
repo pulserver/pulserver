@@ -35,8 +35,10 @@ Use the established term. Do not explain around it.
 | the scanner program | the interpreter |
 | the host process for one sequence | the interpreter host process |
 | the compiled form of a sequence | the IR, the IR cache |
-| the part that repeats | the repeating unit, the TR |
-| pieces of a TR | segments |
+| a distinct block, amplitudes aside | a base block |
+| the part that repeats, the repeating unit | the repetition, the TR |
+| pieces of a TR, a segment definition | a virtual segment |
+| one occurrence of such a piece | a segment instance |
 | the order the pieces are played in | the execution stream |
 | filling in the raw data | MRD enrichment |
 | what the reconstruction runs on | the reconstruction worker |
@@ -54,8 +56,9 @@ design choice, not a time.
 **Design.** A *sequence function* is a function of the scanner limits and the
 protocol arguments that returns the designed sequences, a chain with the
 prescans first and the main sequence last. A *scanner sequence* is the
-pulserver `SequencePlugin` that binds an *app*, a sequence function, to protocol
-entries. A *plugin* is the file a scanner sequence or a reconstruction is loaded
+pulserver `SequencePlugin` that binds a sequence function, its `app`
+attribute, to protocol entries. "App" names that attribute only; in prose the
+bound function is the *sequence function*. A *plugin* is the file a scanner sequence or a reconstruction is loaded
 from; say which kind. The *evaluation* of a prescription is what the scanner
 sequence's `evaluate` returns: the resolved protocol, the scan time, a note and,
 optionally, the *RF layout*. An RF layout is the RF *definitions* of a sequence,
@@ -73,12 +76,23 @@ keeps state beyond the designs it stores. A design is *pushed* to the *design in
 proxy's HTTP endpoint writing its store, as a *bundle* of the files of its
 directory.
 
-**IR.** A *subsequence* is one file of a `NextSequence` chain. A *definition*
-is a distinct event after deduplication; an *instance* is its occurrence in a
-block, with its own amplitude. The *repeating unit* is the TR of a
-subsequence; a *segment* is part of it bounded by zero gradient amplitude; the
-*execution stream* is the order of segments over the scan. The *IR cache* is
-the file; the *collection* is what a reader loads from it.
+**IR.** The IR follows the model of PulSeg, whose terms are used for its
+concepts. A *subsequence* is one file of a `NextSequence` chain. An event
+*definition* is a distinct RF, gradient or ADC event after deduplication; an
+event *instance* is its occurrence in a block, with its own amplitude. A *base
+block* is a block with its waveform amplitudes normalised; blocks that differ
+only in amplitudes, offsets, rotation or, for a pure delay, duration share one.
+A *virtual segment* is an ordered list of base blocks, a reusable structural
+unit that need not be periodic; a *segment instance* is one occurrence of it,
+with the amplitudes, offsets, rotations and durations it plays; the *execution
+stream* is the order of segment instances over the scan, which accounts for
+every block. The *repetition* of a subsequence is the period
+`pypulseqpp.Sequence.repetition()` reports, the whole subsequence where it
+does not repeat; the conversion finds virtual segments within it. Do not write
+"repeating unit", which implies that every sequence is periodic, nor "segment
+definition" for a virtual segment. A `TRID` label marks a *safety group* here,
+not a segment boundary. The *IR cache* is the file; the *collection* is what a
+reader loads from it.
 
 **Virtual scanner.** The stand-ins for the scanner in tests: the *virtual
 interpreter*, which plays a cache with the C library's cursor, the *phantom*
@@ -153,7 +167,7 @@ Every documented quantity carries its unit.
 | Quantity | Unit |
 |---|---|
 | Time entry of a protocol, on the wire and in a scanner parameter | integer µs |
-| Time argument of an app | s |
+| Time argument of a sequence function | s |
 | Float protocol entry | the entry's `unit`; the argument is the value times `scale` |
 | Scan time in a `VALIDATE` reply | s; `?` where the evaluation states none |
 | Times, frequencies and flip angles of an RF block | s, Hz and degrees; the amplitude of an instance in an `[RfLayout]` block is unitless, the peak RF amplitude over the `peak_hz` the listing states for its definition |

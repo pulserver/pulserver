@@ -8,10 +8,11 @@ from __future__ import annotations
 
 __all__ = ["ReadoutTable", "SequenceDefinitions", "read_chain"]
 
+import functools
 import math
 import threading
 from collections import OrderedDict
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -197,14 +198,20 @@ class ReadoutTable:
     _runs: _Runs = field(repr=False)
     #: One entry per distinct phase modulation shape: the modulation in rad, or None.
     _phase_modulation: tuple[np.ndarray | None, ...] = field(default=(), repr=False)
-    #: Which entry of _phase_modulation each readout plays.
+    #: Which entry of _phase_modulation each readout plays, as _shared stores it.
     _modulated_by: np.ndarray = field(
         default_factory=lambda: np.zeros(0, dtype=np.int64), repr=False
     )
-    #: Per readout, k at the start of its block, in 1/m; None where not walked.
-    _origin: np.ndarray | None = field(default=None, repr=False)
-    _sweep: np.ndarray | None = field(default=None, repr=False)
-    _sweeps: tuple[np.ndarray, ...] = field(default=(), repr=False)
+    #: Per readout, float32 k at its first sample, in 1/m; None where not walked.
+    _start: np.ndarray | None = field(default=None, repr=False)
+    #: Per readout, its entry of _paths (k from the first sample, before the
+    #: rotation), as _shared stores it.
+    _path: np.ndarray | None = field(default=None, repr=False)
+    _paths: tuple[np.ndarray, ...] = field(default=(), repr=False)
+    #: Per readout, its entry of _rotations, -1 for none, as _shared stores it;
+    #: None where no readout turns.
+    _rotation: np.ndarray | None = field(default=None, repr=False)
+    _rotations: np.ndarray | None = field(default=None, repr=False)
 
     def __len__(self) -> int:
         return int(self.num_samples.size)
@@ -216,7 +223,7 @@ class ReadoutTable:
         echoes = seq.adc_echoes()
         block = echoes.block.astype(np.int64)
         count = block.size
-        num_samples = echoes.num_samples.astype(np.int32)
+        num_samples = echoes.num_samples.astype(np.int32, copy=False)
         adc_rows = np.asarray(tables.adc, dtype=np.float64).reshape(-1, 8)
         adc_row = np.asarray(tables.blocks)[block - 1, _ADC].astype(np.int64) - 1
         dwell = adc_rows[adc_row, 1]
@@ -244,10 +251,24 @@ class ReadoutTable:
             trajectory_dimensions=dimensions,
             _runs=_Runs(seq, num_samples),
             _phase_modulation=tuple(_phase_modulation_of(adc) for adc in adcs),
-            _modulated_by=which,
-            _origin=getattr(echoes, "origin", None),
-            _sweep=getattr(echoes, "sweep", None),
-            _sweeps=getattr(echoes, "sweeps", None) or (),
+            _modulated_by=_shared(which),
+            **_paths_of(echoes),
+        )
+
+    def _for_k(self) -> ReadoutTable:
+        """Return the table cut to what readout_k and readout_phase_modulation read.
+
+        The sequence is kept only where k is integrated from it.
+        """
+        empty = np.zeros(0, dtype=np.int8)
+        return replace(
+            self,
+            block=empty,
+            dwell=empty,
+            labels={},
+            center_sample=empty,
+            trajectory_dimensions=empty,
+            _runs=self._runs if self._start is None else _Runs(None, empty),
         )
 
     def readout_phase_modulation(self, index: int) -> np.ndarray | None:
@@ -257,7 +278,7 @@ class ReadoutTable:
         value throughout carries none: its share of a shifted field of view is
         a phase and a frequency offset, which the receiver applies itself.
         """
-        return self._phase_modulation[int(self._modulated_by[index])]
+        return self._phase_modulation[_entry(self._modulated_by, index)]
 
     def readout_block(self, index: int) -> Any:
         """Return the decoded block holding one readout, as ``Sequence.get_block`` does."""
@@ -269,8 +290,12 @@ class ReadoutTable:
         ``(3, num_samples)``, absolute, with block rotations applied, as
         ``Sequence.adc_kspace`` returns it.
         """
-        if self._origin is not None:
-            return self._origin[index][:, None] + self._sweeps[self._sweep[index]]
+        if self._start is not None:
+            path = self._paths[_entry(self._path, index)]
+            turn = -1 if self._rotation is None else _entry(self._rotation, index)
+            if turn >= 0:
+                path = self._rotations[turn] @ path
+            return self._start[index][:, None] + path
         runs = self._runs
         run = int(np.searchsorted(runs.first, index, side="right")) - 1
         start = int(runs.before[index] - runs.before[runs.first[run]])
@@ -286,15 +311,25 @@ class _Runs:
 
     def __init__(self, seq: Any, num_samples: np.ndarray) -> None:
         self.sequence = seq
-        #: Samples before each readout, and after the last.
-        self.before = np.concatenate(([0], np.cumsum(num_samples, dtype=np.int64)))
-        #: First readout of each run.
-        last = int(self.before[-2]) if num_samples.size else -1
-        starts = np.arange(0, last + 1, _RUN_SAMPLES)
-        self.first = np.unique(np.searchsorted(self.before[:-1], starts))
-        self._stop = np.append(self.first[1:], num_samples.size)
+        self._num_samples = num_samples
         self._kept: OrderedDict[int, np.ndarray] = OrderedDict()
         self._lock = threading.Lock()
+
+    @functools.cached_property
+    def before(self) -> np.ndarray:
+        """Samples before each readout, and after the last."""
+        return np.concatenate(([0], np.cumsum(self._num_samples, dtype=np.int64)))
+
+    @functools.cached_property
+    def first(self) -> np.ndarray:
+        """First readout of each run."""
+        last = int(self.before[-2]) if self._num_samples.size else -1
+        starts = np.arange(0, last + 1, _RUN_SAMPLES)
+        return np.unique(np.searchsorted(self.before[:-1], starts))
+
+    @functools.cached_property
+    def _stop(self) -> np.ndarray:
+        return np.append(self.first[1:], self._num_samples.size)
 
     def k(self, run: int) -> np.ndarray:
         """Return the ``(3, samples)`` k of every ADC sample of a run, in 1/m."""
@@ -313,6 +348,40 @@ class _Runs:
 
 
 # %% private module subroutines
+
+
+def _paths_of(echoes: Any) -> dict[str, Any]:
+    """Return the ReadoutTable fields for each readout's start and path, as ``adc_echoes`` gives them.
+
+    pypulseqpp 0.0.27 and earlier give ``origin``, ``sweep`` and ``sweeps``,
+    each sweep already turned by the block's rotation.
+    """
+    if hasattr(echoes, "start"):
+        start, path, paths = echoes.start, echoes.path, echoes.paths
+        rotation, rotations = echoes.rotation, echoes.rotations
+    else:
+        start = getattr(echoes, "origin", None)
+        path = getattr(echoes, "sweep", None)
+        paths = getattr(echoes, "sweeps", None)
+        rotation = rotations = None
+    return {
+        "_start": None if start is None else start.astype(np.float32),
+        "_path": None if path is None else _shared(path),
+        "_paths": paths or (),
+        "_rotation": None if rotation is None else _shared(rotation),
+        "_rotations": rotations,
+    }
+
+
+def _shared(values: np.ndarray) -> np.ndarray:
+    """Return a per-readout column, or its one value when every readout shares it; read with :func:`_entry`."""
+    if values.size > 1 and not (values != values[0]).any():
+        return values[:1].copy()
+    return values
+
+
+def _entry(values: np.ndarray, index: int) -> int:
+    return int(values[index if values.size > 1 else 0])
 
 
 def _phase_modulation_of(adc: Any) -> np.ndarray | None:

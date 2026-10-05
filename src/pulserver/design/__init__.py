@@ -1,4 +1,4 @@
-"""Binding of sequence apps to the scanner protocol."""
+"""Binding of sequence functions to the scanner protocol."""
 
 # The protocol names a plugin's ``protocol`` is written with, so that a plugin
 # imports from one module. Documented with :mod:`pulserver.protocol`.

@@ -105,7 +105,7 @@ def test_counters_are_the_labels_each_readout_sees(name):
     labels = reference(name).evaluate_labels(evolution="adc")
     for label in ("LIN", "PAR", "SLC", "SEG", "REP"):
         expected = np.broadcast_to(labels.get(label, 0), (len(table),))
-        np.testing.assert_array_equal(table.counters[label], expected)
+        np.testing.assert_array_equal(table.counters.get(label, 0), expected)
 
 
 def test_a_slice_closes_once_per_echo(tmp_path):
@@ -154,6 +154,11 @@ def test_a_chain_readout_carries_the_k_of_its_own_file():
             atol=1e-6 * np.abs(k).max(),
             err_msg=f"row {index}, readout {local} of file {file}",
         )
+
+
+def test_a_table_whose_readouts_all_have_a_path_holds_no_sequence():
+    table = fixture("dedup_gre_pair.seq")
+    assert all(file._runs.sequence is None for file in table._files)
 
 
 def test_navigator_readouts_form_their_own_encoding_space(tmp_path):

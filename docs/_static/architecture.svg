@@ -10,33 +10,34 @@
 .label{font:16px Arial,sans-serif;fill:#657786}
 .arrow{stroke:#657786;stroke-width:3;marker-end:url(#m)}
 .head{fill:#657786}
-@media (prefers-color-scheme:dark){
-.box{fill:#13293a;stroke:#5b9bd0}
-.core{fill:#2b76ad;stroke:#8fc3e8}
-.a{fill:#2a2415;stroke:#ffbe2e}
-.txt,.small{fill:#dce7f0}
-.label{fill:#93a7b5}
-.arrow{stroke:#93a7b5}
-.head{fill:#93a7b5}
-}
+.ink{fill:none;stroke:#12212b;stroke-width:5;stroke-linejoin:miter;stroke-linecap:butt}
+.blue{fill:#3a77a8}
+.amber{fill:#ffbe2e}
+.word{fill:#2b76ad}
+.title{font:bold 20px Arial,sans-serif;fill:#173042}
+.wave{fill:none;stroke:#3a77a8;stroke-width:3;stroke-linejoin:round}
+.rf{fill:none;stroke:#ffbe2e;stroke-width:3;stroke-linejoin:round}
+.adc{fill:#ffbe2e}
+.base{fill:none;stroke:#657786;stroke-width:1.5}
+.bracket{fill:none;stroke:#657786;stroke-width:2}
 </style>
 <defs><marker id="m" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><path class="head" d="M0,0 L0,6 L9,3 z"/></marker></defs>
-<rect class="core" x="120" y="20" rx="12" width="760" height="70"/><text class="white" x="500" y="63" text-anchor="middle">Scanner interpreter and reconstruction client</text>
-<line class="arrow" x1="190" y1="90" x2="190" y2="147"/><text class="label" x="180" y="124" text-anchor="end">protocol</text>
-<line class="arrow" x1="250" y1="150" x2="250" y2="93"/><text class="label" x="260" y="124">resolved protocol, design id</text>
-<line class="arrow" x1="750" y1="90" x2="750" y2="147"/><text class="label" x="740" y="124" text-anchor="end">MRD raw data</text>
-<line class="arrow" x1="810" y1="150" x2="810" y2="93"/><text class="label" x="820" y="124">images</text>
-<rect class="box" x="40" y="150" rx="12" width="420" height="65"/><text class="txt" x="250" y="190" text-anchor="middle">Design calls · pulserver.host</text>
-<rect class="box" x="540" y="150" rx="12" width="420" height="65"/><text class="txt" x="750" y="190" text-anchor="middle">Reconstruction proxy · pulserver.proxy</text>
+<rect class="core" x="120" y="20" rx="12" width="760" height="70"/><text class="white" x="500" y="62" text-anchor="middle">Scanner interpreter and reconstruction client</text>
+<line class="arrow" x1="190" y1="90" x2="190" y2="147"/><text class="label" x="180" y="123.5" text-anchor="end">protocol</text>
+<line class="arrow" x1="250" y1="150" x2="250" y2="93"/><text class="label" x="260" y="126.5">resolved protocol, design id</text>
+<line class="arrow" x1="750" y1="90" x2="750" y2="147"/><text class="label" x="740" y="123.5" text-anchor="end">MRD raw data</text>
+<line class="arrow" x1="810" y1="150" x2="810" y2="93"/><text class="label" x="820" y="126.5">images</text>
+<rect class="box" x="40" y="150" rx="12" width="420" height="65"/><text class="txt" x="250" y="189.5" text-anchor="middle">Design calls · pulserver.host</text>
+<rect class="box" x="540" y="150" rx="12" width="420" height="65"/><text class="txt" x="750" y="189.5" text-anchor="middle">Reconstruction proxy · pulserver.proxy</text>
 <line class="arrow" x1="140" y1="215" x2="140" y2="252"/>
 <line class="arrow" x1="355" y1="215" x2="355" y2="252"/>
 <line class="arrow" x1="645" y1="215" x2="645" y2="252"/>
 <line class="arrow" x1="860" y1="215" x2="860" y2="252"/>
-<rect class="a" x="40" y="255" rx="10" width="200" height="85"/><text class="small" x="140" y="291" text-anchor="middle">Scanner-sequence</text><text class="small" x="140" y="316" text-anchor="middle">plugins</text>
-<rect class="a" x="260" y="255" rx="10" width="200" height="85"/><text class="small" x="360" y="291" text-anchor="middle">pypulseqpp design,</text><text class="small" x="360" y="316" text-anchor="middle">IR conversion</text>
-<rect class="a" x="540" y="255" rx="10" width="200" height="85"/><text class="small" x="640" y="291" text-anchor="middle">Enrichment from</text><text class="small" x="640" y="316" text-anchor="middle">the sequence</text>
-<rect class="a" x="760" y="255" rx="10" width="200" height="85"/><text class="small" x="860" y="291" text-anchor="middle">ReconPlugin workers,</text><text class="small" x="860" y="316" text-anchor="middle">bartorch</text>
-<line class="arrow" x1="360" y1="340" x2="360" y2="387"/><text class="label" x="370" y="370">writes or pushes</text>
-<line class="arrow" x1="640" y1="390" x2="640" y2="343"/><text class="label" x="630" y="370" text-anchor="end">reads</text>
-<rect class="box" x="150" y="390" rx="10" width="700" height="60"/><text class="txt" x="500" y="427" text-anchor="middle">design store · one directory per design: .seq files, IR cache</text>
+<rect class="a" x="40" y="255" rx="12" width="200" height="85"/><text class="small" x="140" y="292" text-anchor="middle">Scanner-sequence</text><text class="small" x="140" y="317" text-anchor="middle">plugins</text>
+<rect class="a" x="260" y="255" rx="12" width="200" height="85"/><text class="small" x="360" y="292" text-anchor="middle">pypulseqpp design,</text><text class="small" x="360" y="317" text-anchor="middle">IR conversion</text>
+<rect class="a" x="540" y="255" rx="12" width="200" height="85"/><text class="small" x="640" y="292" text-anchor="middle">Enrichment from</text><text class="small" x="640" y="317" text-anchor="middle">the sequence</text>
+<rect class="a" x="760" y="255" rx="12" width="200" height="85"/><text class="small" x="860" y="292" text-anchor="middle">ReconPlugin workers,</text><text class="small" x="860" y="317" text-anchor="middle">bartorch</text>
+<line class="arrow" x1="360" y1="340" x2="360" y2="387"/><text class="label" x="370" y="368.5">writes or pushes</text>
+<line class="arrow" x1="640" y1="390" x2="640" y2="343"/><text class="label" x="630" y="371.5" text-anchor="end">reads</text>
+<rect class="box" x="150" y="390" rx="12" width="700" height="60"/><text class="txt" x="500" y="427" text-anchor="middle">design store · one directory per design: .seq files, IR cache</text>
 </svg>

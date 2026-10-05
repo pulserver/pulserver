@@ -84,32 +84,36 @@ class VendorProfile:
 
 @dataclass(frozen=True)
 class Grouping:
-    """How a repetition's blocks become the units a machine plays.
+    """Rule by which the blocks of a repetition are grouped into virtual segments.
 
-    Every machine plays units, and grouping is how they are made: a
-    repetition's blocks cut into contiguous runs, each run one unit the
-    hardware builds and replays. One machine calls a unit a segment and builds
-    it with its pulse generator; another calls it a block and merges several of
-    these into one. Neither can decline to group; what differs is where the
-    boundaries fall.
+    The repetition is cut into contiguous runs of blocks, each a virtual
+    segment the interpreter prepares once and plays as segment instances. A
+    boundary may fall between two blocks only where every gradient is within
+    :attr:`boundary_gradient_hz_per_m` of zero at the join. A boundary must
+    fall where the ``NOROT`` or ``PMC`` label changes, since the interpreter
+    sets one prescription rotation per segment instance; conversion fails when
+    such a change falls under a gradient. The ``split_*`` attributes add
+    boundaries.
 
-    The default is a machine that begins a unit by setting its gradients, so a
-    boundary falls only where they rest.
+    The default suits an interpreter that begins a segment by setting its
+    gradients, so that a boundary falls only where they are at rest.
 
     Attributes
     ----------
     boundary_gradient_hz_per_m
-        How near rest the gradients must be where a boundary falls. A machine
-        that can begin a unit under a gradient states a large value.
+        Largest gradient amplitude at a join, in Hz/m, at which a boundary may
+        fall. An interpreter that can begin a segment under a gradient states
+        a large value.
     split_by_pulses, split_by_readouts
-        Whether runs that play different pulses, or digitise with different
-        readouts, are different units.
+        Whether runs that play different RF events, or different ADC events,
+        are different virtual segments.
     split_navigators
-        Whether a navigator readout is a unit of its own.
+        Whether a navigator readout is a virtual segment of its own.
     split_edge_delays
-        Whether a block at the edge of a unit that does nothing but wait is a
-        unit of its own. A machine that inserts transmit-to-receive switching
-        time at every unit wants as few as it can have, and sets this False.
+        Whether a pure-delay block at the edge of a virtual segment is a
+        virtual segment of its own. An interpreter that inserts
+        transmit-to-receive switching time at every segment boundary needs as
+        few segments as possible, and sets this False.
     """
 
     boundary_gradient_hz_per_m: float = 100.0
@@ -233,6 +237,10 @@ def convert(
     prescription's rotation is not applied here: the scanner plays the cache
     through its rotation matrix, composed after each block's own rotation.
 
+    ADC phase modulation is not stored in the cache: the reconstruction proxy
+    applies it to the received samples from the sequence
+    (:class:`~pulserver.proxy.SequenceTable`).
+
     Parameters
     ----------
     seq_path
@@ -260,9 +268,10 @@ def convert(
         What the cache holds its numbers as; every quantity a float in its SI
         unit when left out.
     grouping
-        How the blocks of a repetition become the units played. Left out, a
-        boundary falls only where the gradients rest, which is what a machine
-        that begins a unit by setting them permits.
+        How the blocks of a repetition are grouped into virtual segments.
+        Left out, ``Grouping()``: a boundary falls only where every gradient
+        is within 100 Hz/m of zero, and must fall where the ``NOROT`` or
+        ``PMC`` label changes.
     wave_budget
         The waveform memory of the playout the cache is for, which the cache
         lays the waves out in (:func:`plan_waves`); None holds every wave at

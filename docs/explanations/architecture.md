@@ -1,5 +1,20 @@
 # Architecture
 
+```{admonition} TL;DR
+:class: tldr
+
+- An acquisition through pulserver has four tasks: design for the prescribed
+  protocol, conversion into the scanner representation, playout and
+  reconstruction. pulserver performs the first, second and fourth; the
+  scanner's interpreter plays the sequence.
+- The Pulseq representation, the engines (pypulseqpp and the reconstruction a
+  plugin imports), pulserver's orchestration and scanner execution are kept
+  distinct.
+- The design calls run on the scanner host and the reconstruction proxy on
+  the reconstruction computer; they share the design store, and exchange a
+  protocol block, Pulseq files, the IR cache and an MRD stream.
+```
+
 A Pulseq sequence is a vendor-independent description of an acquisition. To
 acquire data with one on a clinical scanner, four tasks have to be performed:
 the sequence is designed for the protocol the operator prescribes, converted
@@ -35,6 +50,16 @@ Scanner execution
 ## Services and data flow
 
 ```{figure} ../_static/architecture.svg
+:figclass: only-light
+
+The two pulserver services between the scanner and the engines, and the
+design store: one directory both reach, or the proxy's own, to which the design
+calls push each design.
+```
+
+```{figure} ../_static/architecture-dark.svg
+:figclass: only-dark
+
 The two pulserver services between the scanner and the engines, and the
 design store: one directory both reach, or the proxy's own, to which the design
 calls push each design.
@@ -56,7 +81,7 @@ One acquisition proceeds as follows.
    the sequence, checks it, and stores the Pulseq files and the IR cache as a
    design of the design store, pushes the design to the proxy when the proxy
    keeps a store of its own, and replies its identifier ({doc}`designs`,
-   {doc}`ir-cache`). The interpreter loads the IR cache and plays the sequence.
+   {doc}`scanner-representation`). The interpreter loads the IR cache and plays the sequence.
 3. The reconstruction client streams the raw data of the series as MRD. The
    header names the design the series was played from, and the client's config
    names the reconstruction plugin.
@@ -70,7 +95,7 @@ One acquisition proceeds as follows.
 
 | Representation | Written by | Read by |
 | --- | --- | --- |
-| Protocol block (`[NimPulseqGUI Protocol]`) | Design calls and interpreter | Both; the grammar is in {mod}`pulserver.protocol` and `pulseg_protocol.h` |
+| Protocol block (`[Protocol]` … `[Protocol End]`) | Design calls and interpreter | Both; the grammar is in {mod}`pulserver.protocol` and `pulseg_protocol.h` |
 | Pulseq files, binary form | pypulseqpp, in a design call | The IR conversion and the reconstruction proxy |
 | IR cache (`.pseg`) | {func}`pulserver.ir.convert` | The interpreter, through the C library in `src/c/` |
 | MRD stream | Reconstruction client; the proxy, forwarding | Reconstruction proxy and its workers; a reconstruction server |

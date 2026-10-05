@@ -9,6 +9,7 @@ import socket
 import subprocess
 import sys
 import tarfile
+import threading
 
 import pytest
 from _host import FIXTURE_LIMITS, FIXTURES, LIMITS, PLUGINS, generate
@@ -278,6 +279,28 @@ def test_the_push_call_sends_each_design_its_intake_lacks(host, intake):
     again = subprocess.run(command, capture_output=True, text=True, check=False)
     assert (first.returncode, first.stdout) == (0, "PUSHED 1\n")
     assert (again.returncode, again.stdout) == (0, "PUSHED 0\n")
+
+
+def test_the_intake_hands_each_design_pushed_or_asked_after_to_be_prepared(
+    host, tmp_path
+):
+    design = generate(host, "tiny", {"TE": 8000})
+    prepared = []
+    done = threading.Semaphore(0)
+
+    def received(directory):
+        prepared.append(directory)
+        done.release()
+
+    intake = DesignIntake(tmp_path / "recon", received=received)
+    intake.start()
+    try:
+        assert push(host, design, url(intake))
+        assert not push(host, design, url(intake))
+        assert done.acquire(timeout=10) and done.acquire(timeout=10)
+    finally:
+        intake.close()
+    assert prepared == [intake.store.directory(design)] * 2
 
 
 def test_a_design_is_pushed_only_to_an_http_intake(host):

@@ -1,4 +1,4 @@
-# Bloch simulation on isochromats
+# Bloch engine
 
 A Bloch simulation computes the magnetisation that a sequence leaves in an
 object and the signal it induces in the receive coils. The object is
@@ -6,39 +6,51 @@ represented by isochromats: spin packets that share one position, one
 precession frequency and one pair of relaxation times. The virtual scanner
 plays the blocks of an IR cache on isochromats
 ({class}`~pulserver.virtual.Isochromats`, {func}`~pulserver.virtual.simulate`).
-This page states the equation the engine integrates, how each Pulseq event
-enters it, how the resulting signal relates to the k-space trajectory, and how
-repeated blocks are played without integrating each of them.
+The equation the engine integrates and how each Pulseq event enters it are
+stated in {doc}`../../explanations/virtual-scanner`; this page states how the
+engine integrates free precession and RF pulses, how repeated blocks are
+played without integrating each of them, and how voxels, motion and diffusion
+are represented.
 
-## The Bloch equation in the rotating frame
+## Isochromats of a phantom
 
-In the frame rotating at the scanner's reference frequency, an isochromat at
-position $\mathbf{r}$ sees the field
+{meth}`~pulserver.virtual.Phantom.isochromats` samples the phantom on a square
+grid aligned with its axes. Each ellipse contributes the points of the grid
+inside it, each an isochromat of proton density the ellipse's intensity times
+the area of a grid cell, relaxing with the ellipse's $T_1$ and $T_2$ and
+precessing at its $f_\sigma$; the coil sensitivities are sampled at the same
+points. The sum over the isochromats approximates each ellipse's transform
+below the grid's Nyquist frequency, $1/(2\Delta)$ for a spacing $\Delta$, and
+converges to it as the grid is refined, so a grid several times finer than the
+image's pixel acquires the analytic phantom wherever the signal model holds.
 
-$$
-\mathbf{b}(t) = \bigl(\operatorname{Re} b_1(t),\ \operatorname{Im} b_1(t),\
-\mathbf{G}(t)\cdot\mathbf{r} + \Delta f\bigr),
-$$
+An isochromat that no excitation pulse tips from rest adds nothing to the
+readouts, so a scan is simulated on the isochromats its excitation pulses
+excite. {func}`~pulserver.virtual.excited` finds their slabs: each pulse the
+cache labels an excitation is played, at its nominal amplitude and at twice
+it, on a line of isochromats along its gradient, turned as the scan turns it,
+and its slab holds the fields at which it changes the magnetization at rest by
+at least a hundredth of the most it changes it, sidelobes included. An
+isochromat at $\mathbf{r}$ precessing at $f$ sees the field
+$\mathbf{g} \cdot \mathbf{r} + f$ during a pulse played under the gradient
+$\mathbf{g}$, so a chemical shift or the subject's field moves an isochromat's
+slab as it moves the slice, and each slice of a multislice scan is a slab of
+its own. A pulse played without a gradient, or under one that changes during
+it, excites the whole phantom, as a volumetric excitation does. So do pulses
+played under more than 16 gradients, as a ZTE scan plays one under each
+spoke's: between them, their slabs leave out next to none of the object. What other
+pulses tip into the transverse plane outside the slabs, such as the free
+induction decay of an imperfect refocusing pulse, is left out. The phantoms'
+`isochromats` keep those a region, such as {class}`~pulserver.virtual.Slabs`,
+answers for.
 
-in Hz: $b_1$ is the transverse RF field, $\mathbf{G}$ the gradient in Hz/m and
-$\Delta f$ the isochromat's off-resonance, field inhomogeneity and chemical
-shift together. The magnetisation obeys
-
-$$
-\frac{d\mathbf{M}}{dt} = 2\pi\,\mathbf{M}\times\mathbf{b}
-- \frac{M_x\hat{\mathbf{x}} + M_y\hat{\mathbf{y}}}{T_2}
-- \frac{(M_z - M_0)\,\hat{\mathbf{z}}}{T_1},
-$$
-
-with $M_0$ the proton density. The cross product in this order is the
-precession of a nucleus of positive gyromagnetic ratio: the magnetisation
-turns about $\mathbf{b}$ clockwise, seen from the tip of $\mathbf{b}$. A 90°
-pulse along $+x$ takes $+z$ to $+y$, and free precession gives the transverse
-magnetisation $M_{xy} = M_x + iM_y$ the factor $e^{-2\pi i\,b_z t}$.
-
-pypulseqpp's relaxation-free {func}`~pypulseqpp.sim_bloch` turns the
-magnetisation the other way, right-handedly about $\mathbf{b}$. The two are mirror images under $y \to -y$: the engine's
-result for a field $b_1$ is `sim_bloch`'s for $b_1^*$ with $M_y$ negated.
+Played on isochromats, the cache samples what the design samples when its
+blocks, turned as the checks turn it, are played one by one on the same
+isochromats with the gradients `pypulseqpp.Sequence.waveforms` reports, to the
+single precision of the cache's waveforms. A gradient turned by a block's
+rotation is stored as the rotation leaves it, in single precision, and in a
+sequence that leaves its transverse magnetization unspoiled from one repetition
+to the next, the phase that rounding accrues is what separates the two.
 
 ## Free precession
 
@@ -249,61 +261,6 @@ played from the grid isochromat by isochromat: each map is interpolated at the
 isochromat's own $\nu$ and $|d_j|$ and applied at once, with no grouping along
 the new direction and no maps kept for a later pulse. A pulse the grid cannot
 serve with fewer new points than there are isochromats is grouped instead.
-
-## Pulseq events as fields
-
-{meth}`~pulserver.virtual.Isochromats.play` plays one block's events as
-follows, with the ppm offsets resolved at the system it is given.
-{func}`~pulserver.virtual.simulate` gives it the events of each block the cache
-plays, with the offsets the playout sets.
-
-Gradients
-: The corners of each axis's gradient, turned by the rotation the block is
-  given, on the axes the isochromats' positions are given along: in the
-  virtual scanner, the physical axes. Each turned axis is the sum on the union
-  of the corners, where it is exact.
-
-RF pulses
-: Pulseq defines a pulse's complex waveform as its amplitude times its
-  magnitude and phase shapes, times a carrier of the phase offset advancing at
-  the frequency offset from the pulse's start,
-  $w(t) = a\,m(t)\,e^{2\pi i\,p(t)}\,e^{i(\phi + 2\pi f t)}$, with the ppm
-  offsets resolved at the system's `gamma` and `B0`. The engine plays
-  $b_1 = w^*$. A phase ramp in $p(t)$ and an equal frequency offset are then
-  one pulse, as the format defines them, and a positive $f$ excites
-  isochromats at a positive $\Delta f$: under a positive slice-selection
-  gradient, a slice at a positive position. Samples on the RF raster are held
-  over their raster intervals. A pulse with a time shape is joined linearly
-  between its samples and held over steps of the RF raster, or of its shortest
-  interval where that is shorter.
-
-Parallel transmission
-: With transmit sensitivities $S_c(\mathbf{r})$, a pTx pulse's channels add as
-  $b_1 = \sum_c S_c\,b_{1,c}$, one channel per sensitivity. Without them, the
-  channels are summed: every channel has unit, in-phase sensitivity, and a
-  pulse turns by the flip angle {meth}`~pypulseqpp.Sequence.rf_flip_angles`
-  reports. {func}`~pulserver.virtual.simulate` plays a single-channel pulse on
-  every channel of a coil, weighted by the block's RF shim or, without one, by
-  the coil's default shim.
-
-ADC samples
-: Coil $c$ receives
-  $s_c(t) = \sum_j R_{jc}\,M_{xy,j}(t)$, with $R_{jc}$ the receive sensitivity
-  of isochromat $j$. Each sample is multiplied by $e^{i\theta}$, where $\theta$
-  is the ADC phase offset plus its phase modulation, advancing at its frequency
-  offset from the start of the window.
-
-With these conventions, an ADC phase offset equal to the phase offset of the
-excitation cancels it, which RF spoiling relies on. Isochromats excited by a
-90° pulse along $+x$, without relaxation, give
-
-$$
-s(t) = i \sum_j \rho_j\, e^{-2\pi i\,\mathbf{k}(t)\cdot\mathbf{r}_j},
-$$
-
-with $\mathbf{k}$ the trajectory {meth}`~pypulseqpp.Sequence.calculate_kspace`
-reports, and the inverse discrete Fourier transform of Cartesian samples places
-each isochromat at its own position.
 
 ## Repeated blocks
 
@@ -578,8 +535,8 @@ isochromats.
 
 ## See also
 
-* {doc}`virtual-scanner` — the cache played on isochromats, the phantoms and
+* {doc}`../../explanations/virtual-scanner` — the cache played on isochromats, the phantoms and
   the coils they are sampled with, and what a run establishes.
-* {doc}`../api/virtual` — the isochromats, their repetitions and the
+* {doc}`../../api/virtual` — the isochromats, their repetitions and the
   simulation of the blocks a cache plays.
 * {func}`pypulseqpp.sim_rf` — the off-resonance profile of one RF pulse.

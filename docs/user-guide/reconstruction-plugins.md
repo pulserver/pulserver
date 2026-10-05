@@ -285,6 +285,43 @@ first field that differs with both values. The failure text the client
 receives carries the message. `required=False` returns `None` instead of
 raising.
 
+## DICOM pixel values
+
+A DICOM dataset stores integer pixels, and the integers are made when a result
+with `dicom=True` is converted, from the image the plugin returned. The
+dataset's rescale maps them to the values of the image,
+`value = stored × RescaleSlope + RescaleIntercept`, with one mapping for each
+DICOM series, a series being the images that share `image_series_index`.
+
+- An integer image is stored as it is. Its dataset carries a rescale only when
+  the attributes of the result state one.
+- The first floating-point image of a series fixes the mapping of the series.
+  The intercept is 0, so that zero is stored as zero, and the slope stores the
+  peak magnitude of the image at half the stored range, which leaves headroom
+  for later images of the series up to twice as large. The stored type is
+  16-bit, signed when that image has a negative value and unsigned when it has
+  none. An image that states `ArrayMinimum` and `ArrayMaximum` is mapped as the
+  array of images it belongs to, so the mapping of a series that begins with a
+  volume does not depend on which partition arrives first. A complex image is
+  stored as its magnitude. An image with no nonzero finite value fixes no
+  mapping.
+- Every later image of the series is stored under the mapping of the series, so
+  the ratios between the values of its images are the ratios between their
+  stored integers.
+- A mapping stated in the attributes of a result, `RescaleSlope` or
+  `RescaleIntercept`, is the mapping of that image:
+  `stored = round((value - intercept) / slope)`, a slope left out being 1 and an
+  intercept left out 0. It is also the mapping of the series when the image is
+  the first floating-point image of the series, and the images that follow it
+  and state none are stored under it. The slope is nonzero and both are finite.
+- A value outside the range of the stored type is clipped to the nearest end of
+  the range, never wrapped, and NaN is stored as 0. The clipped pixels are
+  counted for each series, and the first clipping of a series is logged with its
+  count. An image whose peak exceeds twice the peak its series was mapped from
+  clips under the mapping of the series, unless the plugin states a mapping.
+
+`RescaleType` is `US`, unspecified: the units are those of the reconstruction.
+
 ## Running a plugin offline
 
 {meth}`~pulserver.recon.ReconPlugin.run` reconstructs an ISMRMRD HDF5 file in
