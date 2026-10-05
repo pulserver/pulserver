@@ -243,7 +243,7 @@ delay at the edge of a segment, the repetition is one virtual segment.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.168 seconds)
+   **Total running time of the script:** (0 minutes 0.161 seconds)
 
 
 .. _sphx_glr_download_generated_gallery_01-course_03_scanner_representation.py:

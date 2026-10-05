@@ -906,7 +906,10 @@
         <span class="k">except</span> <span class="n">_INFEASIBLE</span> <span class="k">as</span> <span class="n">error</span><span class="p">:</span>
             <span class="n">message</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">error</span><span class="p">)</span> <span class="ow">or</span> <span class="nb">type</span><span class="p">(</span><span class="n">error</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span>
             <span class="n">_log</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
-                <span class="s2">"infeasible protocol in </span><span class="si">%s</span><span class="s2">.evaluate: </span><span class="si">%s</span><span class="s2">"</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">message</span><span class="p">,</span> <span class="n">exc_info</span><span class="o">=</span><span class="kc">True</span>
+                <span class="s2">"infeasible protocol in </span><span class="si">%s</span><span class="s2">.evaluate: </span><span class="si">%s</span><span class="s2">"</span><span class="p">,</span>
+                <span class="n">name</span><span class="p">,</span>
+                <span class="n">message</span><span class="p">,</span>
+                <span class="n">exc_info</span><span class="o">=</span><span class="n">_log</span><span class="o">.</span><span class="n">isEnabledFor</span><span class="p">(</span><span class="n">logging</span><span class="o">.</span><span class="n">DEBUG</span><span class="p">),</span>
             <span class="p">)</span>
         <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">error</span><span class="p">:</span>
             <span class="n">message</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">error</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> in </span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">.evaluate"</span>

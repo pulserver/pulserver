@@ -826,6 +826,11 @@ same either way. The command imports neither NumPy nor pypulseqpp to forward a
 call. The server stops on <code class="docutils literal notranslate"><span class="pre">SIGINT</span></code> or <code class="docutils literal notranslate"><span class="pre">SIGTERM</span></code> and ends the calls it is
 running. The socket is neither authenticated nor encrypted: its file
 permissions decide who may call.</p>
+<p>The server logs to standard error one line per call, naming the call, its
+plugin, its exit status and its duration. A request whose JSON carries <code class="docutils literal notranslate"><span class="pre">log</span></code>,
+a file path, has its child append everything else it logs and prints to that
+file, so a scanner’s interpreter can keep the design calls of one scan beside
+the rest of that scan’s log.</p>
 </section>
 </section>
 <section id="reconstruction-proxy">
@@ -890,7 +895,7 @@ pulserver<span class="w"> </span>proxy<span class="w"> </span>--store<span class
 <td><p>Seconds without a client after which the proxy closes; it waits for whatever is running. Unlimited when unset</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--logfile</span></code></p></td>
-<td><p>File the log is written to; the standard error when unset</p></td>
+<td><p>File the log is appended to, with the standard output and error of the proxy and of its workers, so what a reconstruction plugin logs, prints or warns lands there too; the standard error when unset</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--log-level</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">DEBUG</span></code>, <code class="docutils literal notranslate"><span class="pre">INFO</span></code>, <code class="docutils literal notranslate"><span class="pre">WARNING</span></code> or <code class="docutils literal notranslate"><span class="pre">ERROR</span></code>; <code class="docutils literal notranslate"><span class="pre">INFO</span></code> when unset</p></td>
