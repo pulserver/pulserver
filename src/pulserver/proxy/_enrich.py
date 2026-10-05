@@ -235,7 +235,7 @@ class SequenceTable:
             part, part_spaces = _map_readouts(
                 readouts, definitions, subsequence, len(spaces)
             )
-            files.append(readouts)
+            files.append(readouts._for_k())
             parts.append(part)
             spaces.extend(part_spaces)
             tr.extend(definitions.tr)

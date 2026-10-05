@@ -146,9 +146,11 @@ def test_runs_split_the_readouts_where_their_samples_pass_a_multiple_of_the_run(
     monkeypatch.setattr(_sequence, "_RUN_SAMPLES", 3 * int(table.num_samples[0]))
     table = ReadoutTable.from_sequence(seq)
     assert table._runs.first.tolist() == list(range(0, len(table), 3))
+    # The float32 resolution of the largest k, which an MRD trajectory carries.
+    tolerance = 1e-6 * np.abs(seq.calculate_kspace()[0]).max()
     for index in (0, 2, 3, len(table) - 1):
         np.testing.assert_allclose(
-            table.readout_k(index), whole_scan_k(seq, table, index), atol=1e-6
+            table.readout_k(index), whole_scan_k(seq, table, index), atol=tolerance
         )
 
 
