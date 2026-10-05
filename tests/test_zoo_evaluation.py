@@ -1,6 +1,7 @@
 """The shipped scanner sequences' evaluations: their scan time, the values they read back and the RF they state."""
 
 import functools
+import importlib.util
 import inspect
 
 import numpy as np
@@ -9,6 +10,7 @@ import pytest
 from _host import LIMITS, value_block
 
 from pulserver import _plugins
+from pulserver._zoo import ZOO_PAIRS
 from pulserver._zoo._evaluation import achieved, rf_layout
 from pulserver.design import Protocol, load_plugin
 from pulserver.host import call
@@ -82,17 +84,64 @@ REQUESTS = [pytest.param(name, {}, id=f"{name}-default") for name in SHIPPED] + 
     pytest.param(name, CHANGED[name], id=f"{name}-changed") for name in SHIPPED
 ]
 
+#: The toggled sequences whose refocusing trains torchsim designs.
+OPTIMIZED = ("fse3d+OPTIMIZED", "fse3d+DUAL_REGION")
+WITH_TORCHSIM = pytest.mark.skipif(
+    importlib.util.find_spec("torchsim") is None, reason="needs torchsim"
+)
+
 # The defaults, and prescriptions that change what the repetitions of a scan
 # are counted from: slices in packets of unequal size at a requested TR or in
 # one packet at the shortest, undersampling, partitions, shots, frames, blades,
 # echo trains and inversion shots; by wire name.
 SCANS = [pytest.param(name, {}, id=name) for name in SHIPPED] + [
-    pytest.param(name, changes, id=f"{name}-{label}")
+    pytest.param(
+        name,
+        changes,
+        id=f"{name}-{label}",
+        marks=WITH_TORCHSIM if name in OPTIMIZED else (),
+    )
     for name, label, changes in (
         ("bssfp2d", "slices", {"nslices": 3, "TR": 6000, "ny": 64}),
         ("bssfp3d", "longer-tr", {"TR": 9000, "nslices": 8, "ny": 32}),
         ("bssfp3d", "undersampled", {"nslices": 12, "ny": 48, "Ry": 2, "Rz": 2}),
         ("epi2d", "undersampled", {"Ry": 2}),
+        ("epi2d+MULTIBAND", "multiband", {"nslices": 6, "multiband": 2}),
+        (
+            "epi2d+MULTIBAND",
+            "multiband-packets",
+            {"nslices": 8, "multiband": 2, "TR": 900000, "num_shots": 2},
+        ),
+        (
+            "fse3d+DUAL_REGION",
+            "periphery",
+            {
+                "nslices": 16,
+                "etl": 10,
+                "nx": 64,
+                "ny": 32,
+                "TR": 1000000,
+                "user0_value": 1500.0,
+                "user1_value": 14,
+            },
+        ),
+        (
+            "fse3d+OPTIMIZED",
+            "optimized",
+            {"nslices": 16, "etl": 10, "nx": 64, "ny": 32, "flip": 120.0},
+        ),
+        (
+            "fse3d+NAVIGATOR",
+            "navigator",
+            {"nslices": 16, "etl": 16, "nx": 64, "ny": 32},
+        ),
+        ("mprage3d+NAVIGATOR", "navigator", {"nslices": 16, "nx": 64, "ny": 32}),
+        ("gre_spiral2d+VARIABLE_DENSITY", "variable", {"user0_value": 3.0}),
+        (
+            "mprage_stack_of_spirals3d+VARIABLE_DENSITY",
+            "variable",
+            {"nslices": 16, "user0_value": 1.5},
+        ),
         ("epi2d", "packets", {"nslices": 7, "TR": 900000, "Ry": 2, "num_shots": 2}),
         ("epi2d", "frames", {"nslices": 12, "TR": 5000000, "num_frames": 3}),
         ("epi2d", "shortest", {"nslices": 6, "TR": TRPreset.MINIMUM}),
@@ -283,10 +332,37 @@ TRAINS: dict[str, list[str]] = {
 LAST_TR_BLOCKS = {"zte3d": 2}
 
 
+#: Shipped sequences with a module constant switched on, by the name the scans
+#: below use.
+TOGGLED = {
+    "epi2d+MULTIBAND": ("epi2d", "MULTIBAND"),
+    "fse3d+OPTIMIZED": ("fse3d", "OPTIMIZED"),
+    "fse3d+DUAL_REGION": ("fse3d", "DUAL_REGION"),
+    "fse3d+NAVIGATOR": ("fse3d", "NAVIGATOR"),
+    "mprage3d+NAVIGATOR": ("mprage3d", "NAVIGATOR"),
+    "gre_spiral2d+VARIABLE_DENSITY": ("gre_spiral2d", "VARIABLE_DENSITY"),
+    "mprage_stack_of_spirals3d+VARIABLE_DENSITY": (
+        "mprage_stack_of_spirals3d",
+        "VARIABLE_DENSITY",
+    ),
+}
+
+
 @pytest.fixture(scope="module")
-def zoo():
-    """The shipped scanner sequences by name."""
-    return {name: load_plugin(_plugins.SEQUENCES / f"{name}.py") for name in SHIPPED}
+def zoo(tmp_path_factory):
+    """The shipped scanner sequences by name, and those of ``TOGGLED`` as a copy of the file with the constant set."""
+    plugins = {name: load_plugin(_plugins.SEQUENCES / f"{name}.py") for name in SHIPPED}
+    for key, (name, constant) in TOGGLED.items():
+        if key in OPTIMIZED and importlib.util.find_spec("torchsim") is None:
+            continue
+        source = (_plugins.SEQUENCES / f"{name}.py").read_text()
+        assert f"\n{constant} = False\n" in source
+        path = tmp_path_factory.mktemp(key.replace("+", "-")) / f"{name}.py"
+        path.write_text(
+            source.replace(f"\n{constant} = False\n", f"\n{constant} = True\n")
+        )
+        plugins[key] = load_plugin(path)
+    return plugins
 
 
 def _protocol(plugin, changes=None):
@@ -431,12 +507,21 @@ def test_an_evaluation_states_as_its_layout_a_regular_tr_of_the_design(
 
     layout = plugin.evaluate(SYSTEM, protocol).rf_layout
 
-    main = _main(plugin, protocol)
+    if name in OPTIMIZED:
+        # The layout plays the train at a constant refocusing angle.
+        main = _chain(
+            plugin.app(SYSTEM, **(protocol.arguments | {"flip_modulation": "constant"}))
+        )[-1]
+    else:
+        main = _main(plugin, protocol)
     # The first TR holds the largest packet of slices; a balanced steady state
     # opens with its half-angle pulse, so its last TR is the regular one.
     balanced = name.startswith("bssfp")
     start = main.duration()[0] - main.definitions["TR"][0] if balanced else 0
-    expected = rf_layout(main, UIParam.FLIP in plugin.protocol, start=start)
+    # An optimized refocusing train is designed around its flip angle rather
+    # than scaled by it.
+    scaled = UIParam.FLIP in plugin.protocol and not name.startswith("fse3d")
+    expected = rf_layout(main, scaled, start=start)
     assert layout.period == pytest.approx(expected.period, rel=1e-12)
     assert layout.instances.definition.tolist() == (
         expected.instances.definition.tolist()
@@ -664,3 +749,14 @@ def test_the_listed_definitions_and_the_validated_layout_play_the_rf_power_of_th
     assert _wire_power(listed, layout) == pytest.approx(
         _last_tr_power(main, LAST_TR_BLOCKS.get(name)), rel=POWER_RTOL
     )
+
+
+@pytest.mark.parametrize("name", ["fse3d+NAVIGATOR", "mprage3d+NAVIGATOR"])
+def test_a_sequence_with_navigators_asks_for_motion_correction(zoo, name):
+    plugin = zoo[name]
+    protocol = _protocol(plugin, {"nslices": 16, "nx": 64, "ny": 32})
+
+    main = _main(plugin, protocol)
+
+    assert main.definitions["EnablePmc"][0] == 1
+    assert ZOO_PAIRS[TOGGLED[name][0]] == "pmc"

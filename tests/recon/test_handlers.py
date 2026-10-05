@@ -1,4 +1,4 @@
-"""The shipped reconstructions: their gadgets and rejected flags, and the Cartesian one driven readout by readout as the proxy drives it."""
+"""The shipped reconstructions: their gadgets and rejected flags, and a unit of averages closed readout by readout as the proxy drives it."""
 
 from types import SimpleNamespace
 
@@ -7,15 +7,26 @@ import numpy as np
 import pytest
 
 from pulserver import mrd, recon
-from pulserver.recon.handlers.cartesian import PLUGIN, CartesianRecon
 from pulserver.recon.handlers.epi import EpiRecon
 from pulserver.recon.handlers.nufft import NufftRecon
 from pulserver.recon.handlers.nufft_train import NufftTrainRecon
-from pulserver.recon.handlers.pics import PicsRecon
+from pulserver.recon.handlers.pics import PicsRecon, averaged
 from pulserver.recon.handlers.pmc import PmcRecon
-from pulserver.recon.handlers.simplefft import SimpleFftRecon
 
 LINES, COILS, SAMPLES = 4, 2, 8
+
+
+class _Summed(recon.ReconPlugin):
+    """The k-space of each closed unit, its averages summed, as PicsRecon buffers it."""
+
+    def __init__(self):
+        super().__init__(
+            triggers={"imaging": mrd.AcquisitionFlag.LAST_IN_SLICE},
+            axes=("average",),
+        )
+
+    def recon(self, context, branch, data):
+        return recon.ReconResult(np.abs(averaged(data.data)).astype(np.float32))
 
 
 def _header(averages):
@@ -48,7 +59,7 @@ def _average_closes(kspace):
         if index % LINES == LINES - 1:
             acquisition.flags |= mrd.AcquisitionFlag.LAST_IN_SLICE.value
     context = recon.ReconContext.offline(_header(averages))
-    plugin = PLUGIN.spawn()
+    plugin = _Summed().spawn()
     plugin.startup(context)
     closes = []
     for index, acquisition in enumerate(bucket.acquisitions):
@@ -69,72 +80,9 @@ def test_an_image_is_made_once_its_last_average_is_in_and_sums_them_all():
     np.testing.assert_allclose(last.data, alone.data, rtol=1e-5)
 
 
-def _transformed(kspace):
-    """The root-sum-of-squares image of ``(coils, y, x)`` k-space, from numpy's own transform."""
-    axes = (1, 2)
-    image = np.fft.fftshift(
-        np.fft.ifft2(np.fft.ifftshift(kspace, axes=axes), axes=axes), axes=axes
-    )
-    return np.sqrt((np.abs(image) ** 2).sum(axis=0))
-
-
-def test_the_cartesian_image_is_the_transform_of_its_kspace_and_nothing_else():
-    generator = np.random.default_rng(1)
-    kspace = 1e-3 * (generator.standard_normal((1, LINES, COILS, SAMPLES)) + 0j) + 0j
-
-    (image,) = _average_closes(kspace)[-1:]
-
-    expected = _transformed(kspace[0].transpose(1, 0, 2))
-    assert image.data.dtype.kind == "f"
-    np.testing.assert_allclose(image.data, expected, rtol=1e-4)
-    assert float(image.data.max()) < 1.0
-
-
-def test_the_simple_fft_crops_to_the_matrix_of_the_space_its_lines_are_in_and_scales_nothing():
-    lines = 8
-
-    def space(x, y):
-        matrix = SimpleNamespace(
-            matrixSize=SimpleNamespace(x=x, y=y, z=1), fieldOfView_mm=None
-        )
-        return SimpleNamespace(encodedSpace=matrix, reconSpace=matrix)
-
-    context = recon.ReconContext.offline(
-        SimpleNamespace(encoding=[space(SAMPLES, lines), space(4, 6)])
-    )
-    generator = np.random.default_rng(2)
-    kspace = 1e-3 * (
-        generator.standard_normal((COILS, lines, SAMPLES))
-        + 1j * generator.standard_normal((COILS, lines, SAMPLES))
-    ).astype(np.complex64)
-    plugin = SimpleFftRecon().spawn()
-    plugin.startup(context)
-    emitted = []
-    for line in range(lines):
-        acquisition = ismrmrd.Acquisition()
-        acquisition.resize(SAMPLES, COILS)
-        acquisition.data[:] = kspace[:, line]
-        acquisition.encoding_space_ref = 1
-        acquisition.idx.kspace_encode_step_1 = line
-        if line == lines - 1:
-            acquisition.setFlag(ismrmrd.ACQ_LAST_IN_SLICE)
-        emitted += plugin.receive(acquisition, context)
-
-    ((_, image),) = emitted
-
-    assert image.data.shape == (6, 4)
-    assert image.data.dtype.kind == "f"
-    # The image about its centre, cropped to 4 samples by 6 lines.
-    np.testing.assert_allclose(
-        image.data, _transformed(kspace)[1:7, 2:6], rtol=1e-4, atol=1e-9
-    )
-
-
 @pytest.mark.parametrize(
     "handler",
     [
-        CartesianRecon,
-        SimpleFftRecon,
         PicsRecon,
         EpiRecon,
         NufftRecon,
@@ -157,16 +105,6 @@ def test_a_reconstruction_through_bartorch_whitens_first_and_takes_noise_readout
     assert isinstance(plugin.gadgets[0], recon.Prewhiten)
     assert mrd.AcquisitionFlag.IS_NOISE_MEASUREMENT not in plugin.reject_flags
     assert mrd.AcquisitionFlag.IS_PHASECORR_DATA in plugin.reject_flags
-
-
-@pytest.mark.parametrize("handler", [CartesianRecon, SimpleFftRecon])
-def test_a_reference_reconstruction_whitens_nothing_and_rejects_noise_readouts(
-    handler,
-):
-    plugin = handler()
-
-    assert not any(isinstance(gadget, recon.Prewhiten) for gadget in plugin.gadgets)
-    assert mrd.AcquisitionFlag.IS_NOISE_MEASUREMENT in plugin.reject_flags
 
 
 SHOTS = 6

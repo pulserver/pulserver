@@ -46,11 +46,11 @@ received = virtual.send(
     design,
     readouts,
     position_mm=(20.0, 0.0, 0.0),
-    config="cartesian",
+    config="pics",
 )
 ```
 
-`config` names the reconstruction plugin, here the shipped `cartesian`, as the
+`config` names the reconstruction plugin, here the shipped `pics`, as the
 config text of a reconstruction client does ({doc}`reconstruction-client`); the
 proxy refuses a series whose config names none.
 
@@ -136,7 +136,7 @@ with wave.open("scan.wav", "wb") as audio:
             audio.writeframes(np.round(32767 * chunk.sound.T).astype("<i2").tobytes())
             yield from chunk.readouts
 
-    received = virtual.send(("127.0.0.1", 9002), design, acquired(), config="cartesian")
+    received = virtual.send(("127.0.0.1", 9002), design, acquired(), config="pics")
 ```
 
 The spans are simulated in a thread of their own, ahead of the clock. At
@@ -271,7 +271,7 @@ received = virtual.send(
     readouts,
     position_mm=1e3 * centre,
     rotation=rotation,
-    config="cartesian",
+    config="pics",
 )
 ```
 

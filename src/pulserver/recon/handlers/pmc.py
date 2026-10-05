@@ -13,14 +13,14 @@ from .._buffers import ReconData
 from .._units import carries
 from ..gadgets import NAVIGATOR
 from ..plugin import ReconContext
-from .pics import PicsRecon
+from .pics_train import PicsTrainRecon
 
 #: Planes of one navigator, as pypulseqpp's ``SpiralNavigator`` plays them.
 PLANES = 3
 
 
-class PmcRecon(PicsRecon):
-    """Rigid pose from each navigator, stated to the scan; every other readout reconstructed as :class:`~pulserver.recon.handlers.pics.PicsRecon`.
+class PmcRecon(PicsTrainRecon):
+    """Rigid pose from each navigator, stated to the scan; every other readout reconstructed as :class:`~pulserver.recon.handlers.pics_train.PicsTrainRecon`.
 
     Navigator readouts (``NAV`` or ``RTFEEDBACK``) belong to the ``navigator``
     branch, whose units are one readout each, and are collected a navigator at
@@ -44,7 +44,7 @@ class PmcRecon(PicsRecon):
     matrix
         In-plane matrix each plane is reconstructed on.
     wavelet, iterations
-        As :class:`~pulserver.recon.handlers.pics.PicsRecon`.
+        As :class:`~pulserver.recon.handlers.pics_train.PicsTrainRecon`.
     """
 
     def __init__(

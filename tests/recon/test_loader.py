@@ -3,19 +3,19 @@
 import pytest
 
 from pulserver.recon import load_plugin
-from pulserver.recon.handlers.simplefft import SimpleFftRecon
+from pulserver.recon.handlers.pics import PicsRecon
 
 PLUGIN_SOURCE = """
-from pulserver.recon.handlers.simplefft import SimpleFftRecon
+from pulserver.recon.handlers.pics import PicsRecon
 
-PLUGIN = SimpleFftRecon()
+PLUGIN = PicsRecon()
 """
 
 
 def test_a_plugin_file_loads_as_the_instance_it_names(tmp_path):
     path = tmp_path / "demo.py"
     path.write_text(PLUGIN_SOURCE)
-    assert isinstance(load_plugin(path), SimpleFftRecon)
+    assert isinstance(load_plugin(path), PicsRecon)
 
 
 def test_a_file_without_a_plugin_is_refused(tmp_path):

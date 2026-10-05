@@ -4,7 +4,7 @@ import ismrmrd
 import pytest
 
 from pulserver.mrd import AcquisitionFlag, has_acquisition_flag
-from pulserver.recon.handlers.simplefft import SimpleFftRecon
+from pulserver.recon import ReconPlugin
 
 
 @pytest.mark.parametrize(
@@ -44,7 +44,16 @@ def test_an_unknown_flag_name_is_refused():
 
 
 def test_a_combined_flag_is_rejected_member_by_member():
-    assert set(SimpleFftRecon().reject_flags) == {
+    class Rejecting(ReconPlugin):
+        def recon(self, context, branch, data):
+            return None
+
+    plugin = Rejecting(
+        reject_flags=AcquisitionFlag.IS_NOISE_MEASUREMENT
+        | AcquisitionFlag.IS_PHASECORR_DATA
+    )
+
+    assert set(plugin.reject_flags) == {
         AcquisitionFlag.IS_NOISE_MEASUREMENT,
         AcquisitionFlag.IS_PHASECORR_DATA,
     }

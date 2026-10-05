@@ -8,15 +8,20 @@ import numpy as np
 
 from ...mrd._acquisitions import AcquisitionFlag
 from ...mrd._images import center_crop
-from .._buffers import ReconData
+from .._buffers import ReconBuffer, ReconData
 from .._calibration import coil_maps
 from ..gadgets import AsymmetricEcho, Prewhiten, RemoveReadoutOversampling
-from ..plugin import ReconContext, ReconResult
-from .cartesian import CartesianRecon
+from ..plugin import ReconContext, ReconPlugin, ReconResult
 
 
-class PicsRecon(CartesianRecon):
-    """Images of :class:`~pulserver.recon.handlers.cartesian.CartesianRecon`, each a ``pics`` solve over coil sensitivities.
+class PicsRecon(ReconPlugin):
+    """Image of each slice, contrast, cardiac phase, set and repetition of a Cartesian scan, a ``pics`` solve made as each closes.
+
+    Readouts are placed by their encoding counters, so phase encodes,
+    partitions and averages may arrive in any order. An image is made once
+    ``LAST_IN_SLICE`` has arrived for each average of a slice, contrast,
+    cardiac phase, set and repetition, its averages summed, and at the end of a
+    measurement for any that never closed.
 
     Each readout is whitened with the noise measurement of the stream
     (:class:`~pulserver.recon.Prewhiten`), completed to a full echo
@@ -51,20 +56,31 @@ class PicsRecon(CartesianRecon):
     """
 
     def __init__(self, wavelet: float = 0.005, iterations: int = 30) -> None:
-        super().__init__()
+        super().__init__(
+            triggers={"imaging": AcquisitionFlag.LAST_IN_SLICE},
+            axes=("average",),
+            reject_flags=AcquisitionFlag.IS_PHASECORR_DATA,
+        )
         self.gadgets = (Prewhiten(), AsymmetricEcho(), RemoveReadoutOversampling())
-        self.reject_flags = (AcquisitionFlag.IS_PHASECORR_DATA,)
         self.wavelet = wavelet
         self.iterations = iterations
 
     def recon(
         self, context: ReconContext, branch: str, data: ReconData
     ) -> ReconResult | None:
+        del branch
         if data.data is None and data.ref is not None:
             from bartorch import apps
 
             coil_maps(context, data, estimate=apps.nlinv_maps)
-        return super().recon(context, branch, data)
+        buffer = data.data
+        if buffer is None:
+            return None
+        image = self.image(averaged(buffer), buffer.image_shape, context, data)
+        return ReconResult(
+            image,
+            attributes={"ImageProcessingHistory": ["PULSERVER", "PYTHON", "PICS"]},
+        )
 
     def image(
         self,
@@ -73,6 +89,7 @@ class PicsRecon(CartesianRecon):
         context: ReconContext,
         data: ReconData,
     ) -> np.ndarray:
+        """Return the magnitude image of ``(coils, [partitions,] phase encodes, readout)`` k-space, cropped to ``shape``."""
         import torch
         from bartorch import apps, priors
 
@@ -97,3 +114,11 @@ class PicsRecon(CartesianRecon):
 
 
 PLUGIN = PicsRecon()
+
+
+def averaged(buffer: ReconBuffer) -> np.ndarray:
+    """Return the k-space of ``buffer``, ``(coils, *encoded, readout)``, its averages summed."""
+    kspace = buffer.kspace
+    if "average" in buffer.axes:
+        kspace = kspace.sum(axis=buffer.axes.index("average"))
+    return kspace

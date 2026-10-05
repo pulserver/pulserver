@@ -18,11 +18,15 @@ from ..protocol import ProtocolKey, UIParam
 Repetition = Callable[[dict[str, Any]], tuple[dict[str, Any], int]]
 
 
-def _first_adc_bandwidth(main: pp.Sequence) -> float:
-    """Return the receiver bandwidth in Hz of the first ADC event: the inverse of its dwell time."""
+def _readout_bandwidth(main: pp.Sequence) -> float:
+    """Return the receiver bandwidth in Hz of the first ADC event outside a navigator: the inverse of its dwell time."""
     tables = main.libraries()
     played = tables.blocks[:, 4]
-    return 1.0 / float(tables.adc[played[played > 0][0] - 1, 1])
+    adcs = played[played > 0]
+    navigator = main.evaluate_labels(evolution="adc").get("NAV")
+    if navigator is not None:
+        adcs = adcs[np.asarray(navigator) == 0]
+    return 1.0 / float(tables.adc[adcs[0] - 1, 1])
 
 
 #: The entries that hold the value the design achieved, and where the main
@@ -31,7 +35,7 @@ def _first_adc_bandwidth(main: pp.Sequence) -> float:
 _ACHIEVED: dict[ProtocolKey, Callable[[pp.Sequence], float]] = {
     UIParam.TE: lambda main: main.definitions["TE"][0],
     UIParam.TR: lambda main: main.definitions["TR"][0],
-    UIParam.BANDWIDTH: _first_adc_bandwidth,
+    UIParam.BANDWIDTH: _readout_bandwidth,
     UIParam.SLICE_THICKNESS: lambda main: main.definitions["SliceThickness"][0],
 }
 
@@ -48,7 +52,7 @@ def achieved(plugin: SequencePlugin, main: pp.Sequence) -> dict[ProtocolKey, flo
 
     The echo time and the repetition time are the ``TE`` and ``TR``
     definitions of ``main``, the receiver bandwidth the inverse of the dwell
-    time of its first ADC event and the slice thickness its ``SliceThickness``
+    time of its first ADC event outside a navigator and the slice thickness its ``SliceThickness``
     definition.
     """
     return {
