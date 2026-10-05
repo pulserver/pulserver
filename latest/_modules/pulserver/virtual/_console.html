@@ -473,7 +473,9 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">contextlib</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">io</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">json</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">threading</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">urllib.request</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Iterator</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">,</span> <span class="n">Sequence</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span>
@@ -496,6 +498,57 @@
     <span class="s2">"generate"</span><span class="p">:</span> <span class="p">(</span><span class="s2">"plugins"</span><span class="p">,</span> <span class="s2">"plugin"</span><span class="p">,</span> <span class="s2">"limits"</span><span class="p">,</span> <span class="s2">"input"</span><span class="p">,</span> <span class="s2">"store"</span><span class="p">,</span> <span class="s2">"push"</span><span class="p">),</span>
     <span class="s2">"import"</span><span class="p">:</span> <span class="p">(</span><span class="s2">"limits"</span><span class="p">,</span> <span class="s2">"input"</span><span class="p">,</span> <span class="s2">"store"</span><span class="p">,</span> <span class="s2">"push"</span><span class="p">),</span>
 <span class="p">}</span>
+
+
+<span class="c1">#: The environment variable naming the image a console runs in, as</span>
+<span class="c1">#: ``&lt;repository&gt;@&lt;digest&gt;``; pulserver's launchers set it.</span>
+<span class="n">IMAGE_VARIABLE</span> <span class="o">=</span> <span class="s2">"PULSERVER_IMAGE"</span>
+
+<span class="n">_MANIFESTS</span> <span class="o">=</span> <span class="s2">", "</span><span class="o">.</span><span class="n">join</span><span class="p">(</span>
+    <span class="p">(</span>
+        <span class="s2">"application/vnd.oci.image.index.v1+json"</span><span class="p">,</span>
+        <span class="s2">"application/vnd.docker.distribution.manifest.list.v2+json"</span><span class="p">,</span>
+        <span class="s2">"application/vnd.oci.image.manifest.v1+json"</span><span class="p">,</span>
+        <span class="s2">"application/vnd.docker.distribution.manifest.v2+json"</span><span class="p">,</span>
+    <span class="p">)</span>
+<span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">published_digest</span><span class="p">(</span><span class="n">repository</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">tag</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"latest"</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return the digest a registry publishes for ``repository:tag``, pulled anonymously.</span>
+
+<span class="sd">    ``repository`` names its registry, as ``ghcr.io/pulserver/pulserver``.</span>
+<span class="sd">    """</span>
+    <span class="n">host</span><span class="p">,</span> <span class="n">name</span> <span class="o">=</span> <span class="n">repository</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">"/"</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+    <span class="n">scope</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"https://</span><span class="si">{</span><span class="n">host</span><span class="si">}</span><span class="s2">/token?scope=repository:</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">:pull"</span>
+    <span class="k">with</span> <span class="n">urllib</span><span class="o">.</span><span class="n">request</span><span class="o">.</span><span class="n">urlopen</span><span class="p">(</span><span class="n">scope</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">10</span><span class="p">)</span> <span class="k">as</span> <span class="n">answer</span><span class="p">:</span>  <span class="c1"># nosec B310</span>
+        <span class="n">token</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">answer</span><span class="p">)[</span><span class="s2">"token"</span><span class="p">]</span>
+    <span class="n">request</span> <span class="o">=</span> <span class="n">urllib</span><span class="o">.</span><span class="n">request</span><span class="o">.</span><span class="n">Request</span><span class="p">(</span>
+        <span class="sa">f</span><span class="s2">"https://</span><span class="si">{</span><span class="n">host</span><span class="si">}</span><span class="s2">/v2/</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">/manifests/</span><span class="si">{</span><span class="n">tag</span><span class="si">}</span><span class="s2">"</span><span class="p">,</span>
+        <span class="n">method</span><span class="o">=</span><span class="s2">"HEAD"</span><span class="p">,</span>
+        <span class="n">headers</span><span class="o">=</span><span class="p">{</span><span class="s2">"Authorization"</span><span class="p">:</span> <span class="sa">f</span><span class="s2">"Bearer </span><span class="si">{</span><span class="n">token</span><span class="si">}</span><span class="s2">"</span><span class="p">,</span> <span class="s2">"Accept"</span><span class="p">:</span> <span class="n">_MANIFESTS</span><span class="p">},</span>
+    <span class="p">)</span>
+    <span class="k">with</span> <span class="n">urllib</span><span class="o">.</span><span class="n">request</span><span class="o">.</span><span class="n">urlopen</span><span class="p">(</span><span class="n">request</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">10</span><span class="p">)</span> <span class="k">as</span> <span class="n">answer</span><span class="p">:</span>  <span class="c1"># noqa: S310 # nosec B310</span>
+        <span class="k">return</span> <span class="n">answer</span><span class="o">.</span><span class="n">headers</span><span class="p">[</span><span class="s2">"Docker-Content-Digest"</span><span class="p">]</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">image_version</span><span class="p">(</span>
+    <span class="n">environment</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">,</span>
+    <span class="n">latest</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="nb">str</span><span class="p">],</span> <span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">published_digest</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return ``{"image": digest, "latest": digest}`` of the image a console runs in.</span>
+
+<span class="sd">    Each is None where it is not known: ``image`` when the console was not</span>
+<span class="sd">    started by a launcher, ``latest`` when the registry does not answer.</span>
+<span class="sd">    """</span>
+    <span class="n">repository</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">digest</span> <span class="o">=</span> <span class="n">environment</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">IMAGE_VARIABLE</span><span class="p">,</span> <span class="s2">""</span><span class="p">)</span><span class="o">.</span><span class="n">partition</span><span class="p">(</span><span class="s2">"@"</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">digest</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">{</span><span class="s2">"image"</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span> <span class="s2">"latest"</span><span class="p">:</span> <span class="kc">None</span><span class="p">}</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">newest</span> <span class="o">=</span> <span class="n">latest</span><span class="p">(</span><span class="n">repository</span><span class="p">)</span>
+    <span class="k">except</span> <span class="p">(</span><span class="ne">OSError</span><span class="p">,</span> <span class="ne">ValueError</span><span class="p">,</span> <span class="ne">KeyError</span><span class="p">):</span>
+        <span class="n">newest</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="k">return</span> <span class="p">{</span><span class="s2">"image"</span><span class="p">:</span> <span class="n">digest</span><span class="p">,</span> <span class="s2">"latest"</span><span class="p">:</span> <span class="n">newest</span><span class="p">}</span>
 
 
 <div class="viewcode-block" id="Console">
@@ -1033,6 +1086,8 @@
                 <span class="n">reply</span><span class="p">({</span><span class="s2">"plugins"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">plugin_names</span><span class="p">()})</span>
             <span class="k">elif</span> <span class="n">call</span> <span class="o">==</span> <span class="s2">"recons"</span><span class="p">:</span>
                 <span class="n">reply</span><span class="p">({</span><span class="s2">"recons"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">recon_names</span><span class="p">()})</span>
+            <span class="k">elif</span> <span class="n">call</span> <span class="o">==</span> <span class="s2">"version"</span><span class="p">:</span>
+                <span class="n">reply</span><span class="p">(</span><span class="n">image_version</span><span class="p">())</span>
             <span class="k">elif</span> <span class="n">call</span> <span class="o">==</span> <span class="s2">"coils"</span><span class="p">:</span>
                 <span class="n">reply</span><span class="p">({</span><span class="s2">"coils"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">coils</span><span class="p">()})</span>
             <span class="k">elif</span> <span class="n">call</span> <span class="ow">in</span> <span class="n">DESIGN_CALLS</span><span class="p">:</span>

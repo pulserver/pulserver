@@ -209,7 +209,7 @@ conversion kept the sequence; it does not establish that a scanner plays it.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.193 seconds)
+   **Total running time of the script:** (0 minutes 0.148 seconds)
 
 
 .. _sphx_glr_download_generated_gallery_01-course_05_testing_on_the_virtual_scanner.py:

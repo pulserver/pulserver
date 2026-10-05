@@ -928,19 +928,23 @@ it repeats:</p>
 <td><p></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">coils</span></code>: each coil’s <code class="docutils literal notranslate"><span class="pre">name</span></code> and its <code class="docutils literal notranslate"><span class="pre">transmit</span></code> and <code class="docutils literal notranslate"><span class="pre">receive</span></code> channels</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">list</span></code>, <code class="docutils literal notranslate"><span class="pre">validate</span></code>, <code class="docutils literal notranslate"><span class="pre">generate</span></code>, <code class="docutils literal notranslate"><span class="pre">import</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">version</span></code></p></td>
+<td><p></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">image</span></code>: the digest of the image the console runs in, named by <code class="docutils literal notranslate"><span class="pre">PULSERVER_IMAGE</span></code> as <code class="docutils literal notranslate"><span class="pre">&lt;repository&gt;&#64;&lt;digest&gt;</span></code>; <code class="docutils literal notranslate"><span class="pre">latest</span></code>: the digest the registry publishes for that repository’s <code class="docutils literal notranslate"><span class="pre">latest</span></code> tag; each <code class="docutils literal notranslate"><span class="pre">null</span></code> where it is not known</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">list</span></code>, <code class="docutils literal notranslate"><span class="pre">validate</span></code>, <code class="docutils literal notranslate"><span class="pre">generate</span></code>, <code class="docutils literal notranslate"><span class="pre">import</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">plugin</span></code>, <code class="docutils literal notranslate"><span class="pre">block</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">status</span></code> and <code class="docutils literal notranslate"><span class="pre">reply</span></code>, as <code class="docutils literal notranslate"><span class="pre">pulserver</span> <span class="pre">design</span></code> answers; <code class="docutils literal notranslate"><span class="pre">design</span></code> for a generated or imported design</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">exam</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">exam</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">subject</span></code>, <code class="docutils literal notranslate"><span class="pre">coil</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">localizer</span></code>: the axial, coronal and sagittal images of the subject’s phantom, as base64 DICOM files</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">scan</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">scan</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">design</span></code>, <code class="docutils literal notranslate"><span class="pre">rotation</span></code> (nine elements), <code class="docutils literal notranslate"><span class="pre">centre_mm</span></code>, <code class="docutils literal notranslate"><span class="pre">sound</span></code>, <code class="docutils literal notranslate"><span class="pre">recon</span></code></p></td>
 <td><p>at a speed, <code class="docutils literal notranslate"><span class="pre">preparing</span></code> about twice a second until the clock starts, the wall-clock time left in s or <code class="docutils literal notranslate"><span class="pre">null</span></code> before there is an estimate; <code class="docutils literal notranslate"><span class="pre">clock</span></code> and <code class="docutils literal notranslate"><span class="pre">duration</span></code> after each span played, with the span’s <code class="docutils literal notranslate"><span class="pre">sound</span></code> when asked, as base64 of 16-bit little-endian stereo samples at <code class="docutils literal notranslate"><span class="pre">rate</span></code> Hz; <code class="docutils literal notranslate"><span class="pre">dicom</span></code> and <code class="docutils literal notranslate"><span class="pre">name</span></code> for each image the reconstruction returns, <code class="docutils literal notranslate"><span class="pre">text</span></code>, then <code class="docutils literal notranslate"><span class="pre">done</span></code> with the status</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">cancel</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">cancel</span></code></p></td>
 <td><p></p></td>
 <td><p>stops the scan in progress</p></td>
 </tr>
