@@ -90,9 +90,10 @@ def main(argv: list[str] | None = None) -> None:
         "plugin when unset",
     )
     parser.add_argument(
-        "--forward-dicom",
+        "--dicom",
         action="store_true",
-        help="convert the images the --forward server sends back to DICOM",
+        help="convert each image to DICOM before it is relayed, whatever "
+        "reconstructed it; for a client that reads DICOM alone",
     )
     parser.add_argument(
         "--save-data",
@@ -141,7 +142,7 @@ def main(argv: list[str] | None = None) -> None:
         exam_directory=args.exams,
         forward=args.forward,
         forward_config=args.forward_config,
-        forward_dicom=args.forward_dicom,
+        dicom=args.dicom,
         save_to=args.save_data,
         idle_timeout=args.idle_timeout,
     )

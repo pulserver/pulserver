@@ -1024,12 +1024,23 @@ def test_the_sequence_description_is_not_sent_back_to_the_client(start_proxy, bu
     assert not any(is_message(item) for item in received)
 
 
+def test_images_come_back_as_dicom_when_asked(start_proxy, bucket):
+    """A client that reads DICOM alone, such as a scanner's, gets DICOM."""
+    _, series = bucket
+    proxy = start_proxy(slots=1, dicom=True)
+    received = stream(proxy.port, series["gre2d"])
+
+    assert not images(received)
+    assert sum(isinstance(item, DicomWithName) for item in received) == 1
+    assert closed(received)
+
+
 def test_forwarded_images_come_back_as_dicom_when_asked(
     start_proxy, start_server, bucket
 ):
     _, series = bucket
     server = start_server(slots=1)
-    proxy = start_proxy(forward=("127.0.0.1", server.port), forward_dicom=True)
+    proxy = start_proxy(forward=("127.0.0.1", server.port), dicom=True)
     received = stream(proxy.port, series["gre2d"])
 
     assert not images(received)

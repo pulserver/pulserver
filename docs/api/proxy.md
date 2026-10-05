@@ -12,7 +12,7 @@ The proxy listens on a TCP port and is started with
 
 ```bash
 pulserver proxy --store DIR --port N --plugins DIR [--intake-port N] [--slots N] [--spares 1] [--save-data DIR] [--idle-timeout S]
-pulserver proxy --store DIR --port N --forward HOST:PORT [--forward-config NAME] [--forward-dicom]
+pulserver proxy --store DIR --port N --forward HOST:PORT [--forward-config NAME] [--dicom]
 ```
 
 the second forwarding every enriched series to the reconstruction server at

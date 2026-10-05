@@ -219,8 +219,8 @@ permissions decide who may call.
 ## Reconstruction proxy
 
 ```bash
-pulserver proxy --store DIR --port N --plugins DIR [--host ADDR] [--intake-port N] [--queue DIR] [--exams DIR] [--slots N] [--gpu-slots 1] [--spares 1] [--recon-timeout S] [--save-data DIR] [--idle-timeout S] [--logfile FILE] [--log-level LEVEL]
-pulserver proxy --store DIR --port N --forward HOST:PORT [--forward-config NAME] [--forward-dicom] [--host ADDR] [--intake-port N] [--recon-timeout S] [--save-data DIR] [--idle-timeout S] [--logfile FILE] [--log-level LEVEL]
+pulserver proxy --store DIR --port N --plugins DIR [--host ADDR] [--intake-port N] [--queue DIR] [--exams DIR] [--slots N] [--gpu-slots 1] [--spares 1] [--recon-timeout S] [--dicom] [--save-data DIR] [--idle-timeout S] [--logfile FILE] [--log-level LEVEL]
+pulserver proxy --store DIR --port N --forward HOST:PORT [--forward-config NAME] [--host ADDR] [--intake-port N] [--recon-timeout S] [--dicom] [--save-data DIR] [--idle-timeout S] [--logfile FILE] [--log-level LEVEL]
 ```
 
 | Option | Meaning |
@@ -238,7 +238,7 @@ pulserver proxy --store DIR --port N --forward HOST:PORT [--forward-config NAME]
 | `--recon-timeout` | Seconds a reconstruction may run after its series ends; the worker is then terminated, or the connection to the server closed, and the client told. Unlimited when unset |
 | `--forward` | `HOST:PORT` of the MRD server that reconstructs every series, instead of local workers |
 | `--forward-config` | Config name sent to the `--forward` server; the series' reconstruction plugin when unset |
-| `--forward-dicom` | Convert each image the `--forward` server returns to DICOM before it is relayed |
+| `--dicom` | Convert each image to DICOM before it is relayed, whatever reconstructed it |
 | `--save-data` | Directory each series is kept in as the scanner sends it; kept nowhere when unset |
 | `--idle-timeout` | Seconds without a client after which the proxy closes; it waits for whatever is running. Unlimited when unset |
 | `--logfile` | File the log is written to; the standard error when unset |

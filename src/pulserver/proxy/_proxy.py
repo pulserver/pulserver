@@ -289,9 +289,10 @@ class ReconProxy(_Listener):
         local workers when ``None``.
     forward_config
         Config name sent to that server instead of the reconstruction plugin.
-    forward_dicom
-        Convert each image the server sends back to DICOM, from the enriched
-        header.
+    dicom
+        Convert each image to DICOM, from the enriched header, before it is
+        relayed. Whatever reconstructed it: a client that reads DICOM alone,
+        such as a scanner's, needs this of a plugin that emits images.
 
     Attributes
     ----------
@@ -322,7 +323,7 @@ class ReconProxy(_Listener):
         exam_directory: Path | str | None = None,
         forward: tuple[str, int] | None = None,
         forward_config: str | None = None,
-        forward_dicom: bool = False,
+        dicom: bool = False,
         save_to: Path | str | None = None,
         idle_timeout: float | None = None,
     ) -> None:
@@ -332,7 +333,7 @@ class ReconProxy(_Listener):
         self.workers = self.exams = self.queue = None
         if forward is not None:
             self._reconstruction: _Workers | _Remote = _Remote(
-                forward, forward_config, forward_dicom, recon_timeout
+                forward, forward_config, dicom, recon_timeout
             )
             return
         if plugins is None:
@@ -346,6 +347,7 @@ class ReconProxy(_Listener):
             queue,
             slot_directory,
             exam_directory,
+            dicom,
         )
         self.workers, self.exams, self.queue = local.workers, local.exams, local.queue
 
@@ -499,7 +501,9 @@ class _Workers:
         queue: Path | str | None,
         slot_directory: Path | str | None = None,
         exam_directory: Path | str | None = None,
+        dicom: bool = False,
     ) -> None:
+        self.dicom = dicom
         self._owns_queue = queue is None
         self.queue = (
             Path(tempfile.mkdtemp(prefix="pulserver-queue-"))
@@ -639,6 +643,7 @@ class _Workers:
         poses: Callable[[Pose], None] | None = None,
     ) -> None:
         """Give a worker the config, the header and whatever ``feed`` sends it."""
+        convert = MrdDicomBuilder(header) if self.dicom else None
         with self.exams.lease(header) as exam:
             channel = _WorkerChannel(self.workers, plugin, exam.directory, slot.device)
             with channel as worker:
@@ -651,7 +656,8 @@ class _Workers:
                     feed,
                     self.recon_timeout,
                     f"{plugin.stem} did not finish",
-                    poses=poses,
+                    convert,
+                    poses,
                 )
 
     def _plugin_path(self, plugin: str) -> Path:
