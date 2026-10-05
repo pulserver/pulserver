@@ -137,6 +137,18 @@ SCANS = [pytest.param(name, {}, id=name) for name in SHIPPED] + [
             {"nslices": 16, "etl": 16, "nx": 64, "ny": 32},
         ),
         ("mprage3d+NAVIGATOR", "navigator", {"nslices": 16, "nx": 64, "ny": 32}),
+        ("gre3d+WAVE", "wave", {"nslices": 24, "ny": 32, "Ry": 2, "Rz": 2}),
+        (
+            "gre_multiecho3d+WAVE",
+            "wave",
+            {"nslices": 24, "ny": 32, "Ry": 2, "Rz": 2, "num_echoes": 2},
+        ),
+        ("mprage3d+WAVE", "wave", {"nslices": 24, "nx": 64, "ny": 32, "Ry": 2}),
+        (
+            "fse3d+WAVE",
+            "wave",
+            {"nslices": 24, "nx": 64, "ny": 32, "etl": 16, "Ry": 2, "Rz": 2},
+        ),
         ("gre_spiral2d+VARIABLE_DENSITY", "variable", {"user0_value": 3.0}),
         (
             "mprage_stack_of_spirals3d+VARIABLE_DENSITY",
@@ -343,6 +355,10 @@ TOGGLED = {
     "fse3d+DUAL_REGION": ("fse3d", "DUAL_REGION"),
     "fse3d+NAVIGATOR": ("fse3d", "NAVIGATOR"),
     "mprage3d+NAVIGATOR": ("mprage3d", "NAVIGATOR"),
+    "gre3d+WAVE": ("gre3d", "WAVE"),
+    "gre_multiecho3d+WAVE": ("gre_multiecho3d", "WAVE"),
+    "mprage3d+WAVE": ("mprage3d", "WAVE"),
+    "fse3d+WAVE": ("fse3d", "WAVE"),
     "gre_spiral2d+VARIABLE_DENSITY": ("gre_spiral2d", "VARIABLE_DENSITY"),
     "mprage_stack_of_spirals3d+VARIABLE_DENSITY": (
         "mprage_stack_of_spirals3d",

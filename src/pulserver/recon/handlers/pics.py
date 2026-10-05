@@ -47,6 +47,11 @@ class PicsRecon(ReconPlugin):
     (``bart homodyne -I -C``). bartorch is imported when the first unit is
     reconstructed, which the ``coils`` extra installs.
 
+    A unit of a non-Cartesian encoding space is a wave-CAIPI volume, which the
+    proxy makes of readouts whose k-space moves along the phase encodes:
+    reconstructed by :meth:`wave_image`, with the readout oversampling the
+    wave spreads the image into.
+
     Parameters
     ----------
     wavelet
@@ -76,7 +81,10 @@ class PicsRecon(ReconPlugin):
         buffer = data.data
         if buffer is None:
             return None
-        image = self.image(averaged(buffer), buffer.image_shape, context, data)
+        if buffer.space.cartesian:
+            image = self.image(averaged(buffer), buffer.image_shape, context, data)
+        else:
+            image = self.wave_image(context, data)
         return ReconResult(
             image,
             attributes={"ImageProcessingHistory": ["PULSERVER", "PYTHON", "PICS"]},
@@ -112,6 +120,78 @@ class PicsRecon(ReconPlugin):
             image = image[0]
         return np.array(center_crop(image, shape[-image.ndim :]))
 
+    def wave_image(self, context: ReconContext, data: ReconData) -> np.ndarray:
+        """Return the magnitude image ``(partitions, phase encodes, readout)`` of a wave-CAIPI volume.
+
+        The wave-encoded readouts are ``data.data`` and the wave-free
+        readouts of the calibration region ``data.ref``, both of one
+        non-Cartesian encoding space whose ``LIN`` and ``PAR`` counters are
+        their lines on the grid of the reconstruction matrix, the k-space
+        centre at ``n // 2``, and whose readouts keep their samples and
+        oversampling in acquisition order.
+
+        The wave is the k-space trajectory along the phase encodes, in 1/m as
+        the proxy stamps it, of a wave-encoded readout less that of the
+        wave-free readout of its line. Its gradient scale and delay are fitted
+        to the calibration region (:func:`bartorch.linop.wave_calibrate`), the
+        point-spread function made from it with them
+        (:func:`bartorch.linop.wave_psf`), and the image minimises
+        ``|P F_yz Psi F_x S x - y|^2 + lambda |W x|_1``, ``Psi`` the
+        point-spread function (:func:`bartorch.linop.WaveSense`), over the maps
+        :func:`bartorch.apps.nlinv_maps` estimates from the calibration
+        region, cropped to the readout field of view.
+
+        Raises
+        ------
+        ValueError
+            If the unit is not one volume of wave-encoded and wave-free
+            readouts, or no line was acquired both with and without the wave.
+        """
+        import torch
+        from bartorch import apps, linop, optim, priors
+
+        buffer, ref = data.data, data.ref
+        volume = ("coil", "partition", "phase_encode", "readout")
+        if (
+            ref is None
+            or buffer.trajectory is None
+            or {buffer.axes, ref.axes} != {volume}
+        ):
+            raise ValueError(
+                f"pics reconstructs a non-Cartesian encoding space as one wave-CAIPI "
+                f"volume {volume} of wave-encoded readouts with their trajectory and "
+                f"wave-free calibration readouts; encoding space {buffer.space.index} "
+                f"holds {buffer.axes}"
+                + ("" if ref is not None else " and no calibration readouts")
+            )
+        shape = buffer.image_shape
+        fov = buffer.space.recon_fov[:2]
+        wave, reference = _volume(buffer, shape), _volume(ref, shape)
+        k = _wave_trajectory(buffer, ref)
+        scale, delay = linop.wave_calibrate(reference, wave, k, fov)
+        psf = linop.wave_psf(k, shape, fov, scale=scale, delay=delay, centred=True)
+
+        def tensor(array: np.ndarray) -> torch.Tensor:
+            return torch.from_numpy(np.ascontiguousarray(array)).to(
+                device=context.device, dtype=torch.complex64
+            )
+
+        maps = center_crop(apps.nlinv_maps(tensor(reference)), shape[-1:])
+        encoding = linop.WaveSense(
+            maps.contiguous(),
+            shape,
+            wave.shape[-1],
+            tensor(np.abs(wave).sum(axis=0) > 0),
+            centred=True,
+            psf=tensor(psf.numpy()),
+        )
+        measured = tensor(wave)
+        scaling = optim.data_scaling(measured, A=encoding)
+        solve = optim.FISTA(
+            priors.Wavelet((-1, -2, -3), self.wavelet), maxiter=self.iterations
+        )
+        return solve(measured * (1.0 / scaling), encoding).abs().cpu().numpy()
+
 
 PLUGIN = PicsRecon()
 
@@ -122,3 +202,42 @@ def averaged(buffer: ReconBuffer) -> np.ndarray:
     if "average" in buffer.axes:
         kspace = kspace.sum(axis=buffer.axes.index("average"))
     return kspace
+
+
+def _volume(buffer: ReconBuffer, shape: tuple[int, ...]) -> np.ndarray:
+    """Return the k-space of a wave-CAIPI buffer on the ``(partitions, lines)`` grid of ``shape``, zero where nothing was placed."""
+    kspace = buffer.kspace
+    grid = np.zeros((kspace.shape[0], *shape[:2], kspace.shape[-1]), kspace.dtype)
+    window = tuple(
+        slice(buffer.origin.get(name, 0), buffer.origin.get(name, 0) + extent)
+        for name, extent in zip(
+            ("partition", "phase_encode"), kspace.shape[1:3], strict=True
+        )
+    )
+    grid[(slice(None), *window)] = kspace
+    return grid
+
+
+def _wave_trajectory(buffer: ReconBuffer, ref: ReconBuffer) -> np.ndarray:
+    """Return the wave's k-space ``(readout, 2)`` along the partition and phase encodes, in 1/m.
+
+    A wave-encoded readout's trajectory less that of the wave-free readout of
+    the same line; the readouts' trajectories are ``(x, y, z)``.
+
+    Raises
+    ------
+    ValueError
+        If no line was acquired both with and without the wave.
+    """
+    origin = (ref.origin.get("partition", 0), ref.origin.get("phase_encode", 0))
+    calibrated = ref.mask.any(axis=-1)
+    for z, y in np.argwhere(buffer.mask.any(axis=-1)):
+        rz, ry = z - origin[0], y - origin[1]
+        inside = 0 <= rz < calibrated.shape[0] and 0 <= ry < calibrated.shape[1]
+        if inside and calibrated[rz, ry]:
+            moved = buffer.trajectory[:, z, y] - ref.trajectory[:, rz, ry]
+            return np.stack([moved[2], moved[1]], axis=-1)
+    raise ValueError(
+        "no line was acquired both with and without the wave, so the wave's "
+        "trajectory cannot be told from its line's"
+    )

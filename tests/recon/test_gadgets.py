@@ -181,6 +181,15 @@ def test_navigator_and_noise_readouts_are_not_completed(flag):
     assert acquisition.center_sample == 1
 
 
+def test_a_readout_whose_trajectory_moves_along_more_than_one_axis_is_not_completed():
+    acquisition = _readout(5, 1)
+    acquisition.resize(5, COILS, 3)
+    data = _complex((COILS, 5))
+
+    assert recon.AsymmetricEcho()(acquisition, data) is data
+    assert acquisition.center_sample == 1
+
+
 # --------------------------------------------------------------------------
 # RemoveReadoutOversampling
 # --------------------------------------------------------------------------
