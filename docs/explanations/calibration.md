@@ -1,5 +1,17 @@
 # Calibration, noise and coil compression
 
+```{admonition} TL;DR
+:class: tldr
+
+- Sensitivity maps estimated from whitened and compressed data describe only
+  data with the same channels, whitening, compression and voxel grid.
+- Prewhitening and coil compression are linear transforms of the channels;
+  bartorch computes them and the estimate, and `pulserver.recon` holds,
+  compares and routes the results.
+- Stored maps are reused only where every recorded field matches the unit;
+  nothing is resampled, and a mismatch is reported.
+```
+
 A reconstruction from a receive-coil array needs the sensitivity of each
 channel, estimated from calibration data, and combines the channels with equal
 weight, which is the maximum-likelihood combination only where their noise is
@@ -13,16 +25,12 @@ reconstruction plugin passes the estimate to {func}`~pulserver.recon.coil_maps`.
 
 ## Signal model
 
-The k-space signal of channel $c$ of $N_c$ is
-
-$$
-y_c(\mathbf{k}) = \sum_{\mathbf{r}} S_c(\mathbf{r})\,x(\mathbf{r})\,
-e^{-2\pi i\,\mathbf{k}\cdot\mathbf{r}} + n_c(\mathbf{k}),
-$$
-
-with $x$ the image, $S_c$ the sensitivity of channel $c$ on the voxel grid, and
-$\mathbf{n}$ complex Gaussian noise of channel covariance
-$\Psi = \mathrm{E}[\mathbf{n}\mathbf{n}^H]$. A linear transform $B$ of the
+The signal of each channel $c$ of $N_c$ is the image $x$ weighted by the
+channel's sensitivity $S_c$ on the voxel grid, Fourier encoded, plus complex
+Gaussian noise $\mathbf{n}$ of channel covariance
+$\Psi = \mathrm{E}[\mathbf{n}\mathbf{n}^H]$: the encoding model bartorch's
+[encoding](https://pulserver.github.io/bartorch/latest/explanation/encoding.html)
+page states. A linear transform $B$ of the
 channels, $\tilde{\mathbf{y}} = B\mathbf{y}$, follows the same model with the
 sensitivities $B\mathbf{S}(\mathbf{r})$, $\mathbf{S} = (S_1, \dots, S_{N_c})$,
 and the noise covariance $B\Psi B^H$. Two transforms are used:

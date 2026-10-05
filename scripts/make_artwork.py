@@ -11,6 +11,7 @@ SVG text in the reader's sans-serif font; no font is embedded.
 
 from __future__ import annotations
 
+import math
 from pathlib import Path
 
 OUT = Path(__file__).resolve().parent.parent / "docs" / "_static"
@@ -62,6 +63,12 @@ STYLE = """
 .blue{{fill:{blue}}}
 .amber{{fill:{amber}}}
 .word{{fill:{word}}}
+.title{{font:bold 20px Arial,sans-serif;fill:{text}}}
+.wave{{fill:none;stroke:{blue};stroke-width:3;stroke-linejoin:round}}
+.rf{{fill:none;stroke:{amber};stroke-width:3;stroke-linejoin:round}}
+.adc{{fill:{amber}}}
+.base{{fill:none;stroke:{muted};stroke-width:1.5}}
+.bracket{{fill:none;stroke:{muted};stroke-width:2}}
 """
 
 ARROW_HEAD = (
@@ -202,11 +209,148 @@ def architecture(theme: str) -> str:
     )
 
 
+def _sinc(x0: float, y0: float, width: float, height: float) -> str:
+    """Return the path of a three-lobe sinc of the given width, peaking up at ``height``."""
+    points = []
+    for i in range(61):
+        u = -3 + 6 * i / 60
+        value = 1.0 if u == 0 else math.sin(math.pi * u) / (math.pi * u)
+        points.append(f"{x0 + width * i / 60:.1f},{y0 - height * value:.1f}")
+    return f'<polyline class="rf" points="{" ".join(points)}"/>'
+
+
+def _trapezoid(
+    x0: float, y0: float, width: float, height: float, css: str = "wave"
+) -> str:
+    ramp = width / 5
+    return (
+        f'<polyline class="{css}" points="{x0:g},{y0:g} {x0 + ramp:g},{y0 - height:g} '
+        f'{x0 + width - ramp:g},{y0 - height:g} {x0 + width:g},{y0:g}"/>'
+    )
+
+
+def _base_block(y: float, name: str, body: str) -> str:
+    """Draw one base block: its name and its normalised waveforms over a baseline."""
+    return (
+        f'<rect class="box" x="40" y="{y}" rx="10" width="230" height="62"/>'
+        f'<text class="txt" x="58" y="{y + 39}">{name}</text>'
+        f'<line class="base" x1="105" y1="{y + 48}" x2="255" y2="{y + 48}"/>' + body
+    )
+
+
+def pulseg(theme: str) -> str:
+    """Draw base blocks, the virtual segments that list them, and the execution stream."""
+    stream = "".join(
+        _box("core" if seg == "S1" else "a", 640 + 58 * i, 105, 52, 46, seg)
+        for i, seg in enumerate(("S1", "S1", "S1", "S2", "S1"))
+    )
+    body = "\n".join(
+        (
+            ARROW_HEAD,
+            '<text class="title" x="155" y="36" text-anchor="middle">Base blocks</text>',
+            '<text class="title" x="475" y="36" text-anchor="middle">Virtual segments</text>',
+            '<text class="title" x="805" y="36" text-anchor="middle">Execution stream</text>',
+            _base_block(
+                60,
+                "B1",
+                _sinc(130, 98, 70, 26) + _trapezoid(112, 108, 106, 12),
+            ),
+            _base_block(
+                135,
+                "B2",
+                _trapezoid(110, 183, 140, 26)
+                + '<rect class="adc" x="140" y="187" width="80" height="6"/>',
+            ),
+            _base_block(210, "B3", _trapezoid(140, 258, 80, 30)),
+            _base_block(285, "B4", '<text class="label" x="150" y="327">delay</text>'),
+            '<text class="label" x="155" y="372" text-anchor="middle">'
+            "normalised waveforms, deduplicated</text>",
+            _arrow(275, 180, 370, 180),
+            _box("box", 375, 80, 200, 90, "S1", "B1 · B2 · B3"),
+            _box("box", 375, 215, 200, 70, "S2  ·  B4"),
+            '<text class="label" x="475" y="320" text-anchor="middle">'
+            "ordered lists of base-block IDs</text>",
+            _arrow(580, 150, 632, 130),
+            stream,
+            '<text class="label" x="930" y="135">…</text>',
+            '<line class="bracket" x1="666" y1="155" x2="700" y2="195"/>',
+            _box(
+                "a",
+                640,
+                195,
+                330,
+                130,
+                "one segment instance:",
+                "amplitude scales s,",
+                "RF and ADC phase and frequency,",
+                "rotation R, block durations",
+            ),
+            '<text class="txt" x="500" y="400" text-anchor="middle">'
+            "physical gradient  g(t) = R · s · ĝ(t)</text>",
+        )
+    )
+    return _svg(
+        "0 0 1000 420",
+        "Scanner representation",
+        "Deduplicated base blocks with normalised waveforms; virtual segments as "
+        "ordered lists of base-block IDs; the execution stream as a row of "
+        "segment instances, each holding its amplitude scales, RF and ADC phase "
+        "and frequency, rotation and block durations",
+        body,
+        theme,
+    )
+
+
+def repetition(theme: str) -> str:
+    """Draw one repetition of three segments tiled over the execution stream."""
+    kinds = {"S1": "core", "S2": "box", "S3": "a"}
+    boxes, brackets = [], []
+    for r in range(4):
+        x0 = 40 + r * 214 + (40 if r == 3 else 0)
+        for i, seg in enumerate(("S1", "S2", "S3")):
+            boxes.append(_box(kinds[seg], x0 + 68 * i, 40, 62, 46, seg))
+        label = f"repetition {r + 1}" if r < 3 else "repetition N"
+        brackets.append(
+            f'<polyline class="bracket" points="{x0},{96} {x0},{104} '
+            f'{x0 + 198},{104} {x0 + 198},{96}"/>'
+            f'<text class="label" x="{x0 + 99}" y="{126}" text-anchor="middle">{label}</text>'
+        )
+    body = "\n".join(
+        (
+            ARROW_HEAD,
+            *boxes,
+            '<text class="txt" x="694" y="70" text-anchor="middle">…</text>',
+            *brackets,
+            _arrow(500, 140, 500, 178),
+            _box(
+                "box",
+                160,
+                182,
+                680,
+                86,
+                "segment IDs, run-length encoded over one period: (S1 S2 S3) &#215; N",
+                "each instance keeps its own parameters",
+            ),
+        )
+    )
+    return _svg(
+        "0 0 1000 290",
+        "A repetition tiled over the execution stream",
+        "Three virtual segments S1, S2 and S3 form one repetition, which is "
+        "played N times; the segment IDs of the stream are stored once per "
+        "period as (S1 S2 S3) times N, and each instance keeps its own parameters",
+        body,
+        theme,
+    )
+
+
 #: Every image written, by the stem of its file.
 ARTWORK = {
     "pulserver-logo": logo,
     "pulserver-mark": mark,
     "architecture": architecture,
+    "pulseg": pulseg,
+    "repetition": repetition,
 }
 
 
@@ -214,7 +358,7 @@ def main() -> None:
     for stem, draw in ARTWORK.items():
         for theme, suffix in (("light", ""), ("dark", "-dark")):
             path = OUT / f"{stem}{suffix}.svg"
-            path.write_text(draw(theme))
+            path.write_text(draw(theme), encoding="utf-8")
             print(f"wrote {path.relative_to(OUT.parent.parent)}")
 
 

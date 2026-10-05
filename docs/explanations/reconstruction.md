@@ -1,5 +1,19 @@
 # Raw-data enrichment and routing
 
+```{admonition} TL;DR
+:class: tldr
+
+- The proxy replaces the encoding counters, flags, encoding spaces and
+  trajectory a client records with those the sequence states, before any
+  reconstruction code reads the stream.
+- The field-of-view offset is played as frequency and phase offsets; where the
+  readout gradient varies across the sampling window, the proxy applies the
+  remaining phase.
+- A reconstruction unit is the readouts of one branch and encoding space that
+  share their image-selecting counters; it closes on the flag its branch
+  declares, and its images carry the values the plugin returned.
+```
+
 The scanner's reconstruction client streams each series as MRD: a configuration
 text, the XML header and the acquisitions. The encoding counters, flags,
 encoding spaces and trajectory a vendor client records describe the

@@ -1,5 +1,20 @@
 # Designs and the design store
 
+```{admonition} TL;DR
+:class: tldr
+
+- A design is identified by the SHA-256 of the plugin, the code it designs
+  with, the limits and the resolved protocol, and a request that resolves to a
+  stored design returns it.
+- The design store holds one directory per design, written whole and never
+  modified, and pruned least recently used first.
+- A design is checked under the scanner limits in the physical frame of the
+  prescription before it is stored, and the cache records each subsequence's
+  SAR against a reference pulse.
+- The reconstruction side finds a design by the identifier the raw-data
+  header carries.
+```
+
 A scanner sequence is validated on every protocol edit and generated when the
 scan is prepared, often many times for one protocol, and a generated design
 has to remain available, unchanged, for as long as data acquired with it may

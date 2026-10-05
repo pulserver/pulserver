@@ -14,6 +14,12 @@
 .blue{fill:#3a77a8}
 .amber{fill:#ffbe2e}
 .word{fill:#2b76ad}
+.title{font:bold 20px Arial,sans-serif;fill:#173042}
+.wave{fill:none;stroke:#3a77a8;stroke-width:3;stroke-linejoin:round}
+.rf{fill:none;stroke:#ffbe2e;stroke-width:3;stroke-linejoin:round}
+.adc{fill:#ffbe2e}
+.base{fill:none;stroke:#657786;stroke-width:1.5}
+.bracket{fill:none;stroke:#657786;stroke-width:2}
 </style>
 <g transform="translate(6 38)">
 <g transform="translate(26 0)">

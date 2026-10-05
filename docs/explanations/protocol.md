@@ -1,5 +1,17 @@
 # Protocol resolution
 
+```{admonition} TL;DR
+:class: tldr
+
+- The value the scanner shows after an edit is the value the design achieves,
+  not the value requested: a request is completed with initial values,
+  evaluated under the scanner limits and returned as resolved.
+- An evaluation may state an RF layout of one TR, from which a scanner
+  estimates the RF of a prescription without designing it.
+- Times travel as integer microseconds and other floats at six significant
+  digits, so a resolved protocol sent back resolves to itself.
+```
+
 An operator prescribes an acquisition by editing protocol entries in the
 scanner UI: echo time, repetition time, field of view, matrix size, receiver
 bandwidth. A requested value is not always achievable exactly. An echo time

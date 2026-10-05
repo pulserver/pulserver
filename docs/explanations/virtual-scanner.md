@@ -1,5 +1,20 @@
 # The virtual scanner
 
+```{admonition} TL;DR
+:class: tldr
+
+- The virtual scanner replaces the scanner and nothing else: the design calls,
+  the IR, the proxy and the reconstruction plugins it drives are the
+  production code.
+- It plays the IR cache through the C library's playout stages, integrates
+  the played gradients into the k-space trajectory under the prescription's
+  rotation, and acquires an analytic phantom along it or simulates the blocks
+  on isochromats with the Bloch equation.
+- The playout demodulates by the ADC frequency and phase offsets; the cache
+  carries no phase modulation, and the reconstruction proxy applies the rest of
+  the field-of-view phase.
+```
+
 The IR, the raw-data header contract and the reconstruction path are tested
 against data a scanner acquires. Data sampled at the k-space locations the
 enrichment computes cannot test the enrichment, and a design compared only
@@ -24,24 +39,10 @@ at <https://pulserver.github.io/MaRGE/>.
 ## Played trajectory
 
 {func}`~pulserver.ir.playout` plays the cache through the two stages of a
-playout: the first prepares the events of each segment position, and the
-scan loop sets the registers of each block of each segment instance
-({doc}`../developer-guide/internals/ir-cache`). With `waveforms`, it returns what each block plays, timed
-from the block's start. Its gradients are the events its position is prepared
-with, through the position's representative instance, the one of largest
-energy (`pulseg_get_grad_amplitude` and `pulseg_get_grad_time_us`), at the
-amplitudes the scan loop sets. At a position that plays waves, one whose
-blocks carry a rotation or play a shape the prepared events do not hold, as
-the interleaves of a spiral drawn as distinct shapes do, they are the wave
-the scan loop selects, which `pulseg_materialize_wave` returns, at the wave's
-amplitudes. Its RF pulse is the magnitude and phase shapes its position is
-prepared with, which `pulseg_get_rf_magnitude` and `pulseg_get_rf_phase`
-return, the phase in cycles as Pulseq stores it, at the block's amplitude.
-A wave plays as the IR defines it, linear between its points; how a
-playout's hardware plays the samples it loads on its own raster is not
-modelled. {func}`~pulserver.ir.play` walks the same cache with the cursor and
-resolves each block by its own instance, and the test suite holds the two to
-the same waveforms, bit for bit.
+playout ({doc}`../developer-guide/internals/ir-cache`) and, with `waveforms`,
+returns the gradients and the RF pulse each block plays, as the scan loop sets
+them; {doc}`../developer-guide/internals/virtual-scanner` states which
+prepared events and waves they are taken from.
 
 {func}`~pulserver.virtual.trajectory` integrates those gradients into the
 k-space location $\mathbf{k}$ of every ADC sample, in 1/m along the physical
@@ -140,44 +141,6 @@ Pulseq block, with the frequency and phase offsets the playout sets, and each
 sample is demodulated by $\exp(i\theta(t))$ as above. A 90°
 excitation of phase $\phi_e$ leaves the magnetization at the phase
 $\pi/2 - \phi_e$ of the signal model.
-
-{meth}`~pulserver.virtual.Phantom.isochromats` samples the phantom on a square
-grid aligned with its axes. Each ellipse contributes the points of the grid
-inside it, each an isochromat of proton density the ellipse's intensity times
-the area of a grid cell, relaxing with the ellipse's $T_1$ and $T_2$ and
-precessing at its $f_\sigma$; the coil sensitivities are sampled at the same
-points. The sum over the isochromats approximates each ellipse's transform
-below the grid's Nyquist frequency, $1/(2\Delta)$ for a spacing $\Delta$, and
-converges to it as the grid is refined, so a grid several times finer than the
-image's pixel acquires the analytic phantom wherever the signal model holds.
-
-An isochromat that no excitation pulse tips from rest adds nothing to the
-readouts, so a scan is simulated on the isochromats its excitation pulses
-excite. {func}`~pulserver.virtual.excited` finds their slabs: each pulse the
-cache labels an excitation is played, at its nominal amplitude and at twice
-it, on a line of isochromats along its gradient, turned as the scan turns it,
-and its slab holds the fields at which it changes the magnetization at rest by
-at least a hundredth of the most it changes it, sidelobes included. An
-isochromat at $\mathbf{r}$ precessing at $f$ sees the field
-$\mathbf{g} \cdot \mathbf{r} + f$ during a pulse played under the gradient
-$\mathbf{g}$, so a chemical shift or the subject's field moves an isochromat's
-slab as it moves the slice, and each slice of a multislice scan is a slab of
-its own. A pulse played without a gradient, or under one that changes during
-it, excites the whole phantom, as a volumetric excitation does. So do pulses
-played under more than 16 gradients, as a ZTE scan plays one under each
-spoke's: between them, their slabs leave out next to none of the object. What other
-pulses tip into the transverse plane outside the slabs, such as the free
-induction decay of an imperfect refocusing pulse, is left out. The phantoms'
-`isochromats` keep those a region, such as {class}`~pulserver.virtual.Slabs`,
-answers for.
-
-Played on isochromats, the cache samples what the design samples when its
-blocks, turned as the checks turn it, are played one by one on the same
-isochromats with the gradients `pypulseqpp.Sequence.waveforms` reports, to the
-single precision of the cache's waveforms. A gradient turned by a block's
-rotation is stored as the rotation leaves it, in single precision, and in a
-sequence that leaves its transverse magnetization unspoiled from one repetition
-to the next, the phase that rounding accrues is what separates the two.
 
 ### The Bloch equation in the rotating frame
 
@@ -283,21 +246,6 @@ isocentre. The transmit sensitivities $s^+_c$ are the complex conjugates of the
 the models show none of the dielectric effects of a wavelength comparable to
 the head.
 
-A console given field maps takes the same coils from electromagnetic
-simulations of BrainWeb's head instead. mariepy, a port of MARIE 3.0, solves
-the head in a quadrature birdcage, whose two linear modes are the body coil's
-two channels, in the 8-channel coil and in the two arrays, and writes each
-channel's circular components $B^\pm_c = \mu_0 (H_x \pm j H_y)$ over the head,
-for the time dependence $e^{+j\omega t}$. With $B_0$ along $+z$, the part of a
-channel's field that rotates with the magnetization is half the complex
-conjugate of its $B^-_c$, and what it receives is weighted by the complex
-conjugate of its $B^+_c$: $s^+_c \propto \overline{B^-_c}$ and
-$s_c \propto \overline{B^+_c}$, scaled as the models' are. Outside the head
-each map takes the value of the nearest voxel inside it, and between voxels it
-is interpolated linearly. The maps show the dielectric effects the models do
-not; they are solved in BrainWeb's head alone, so such a console examines
-BrainWeb whatever the subject is called.
-
 Each transmit channel plays the pulse the cache holds for it, scaled at each
 isochromat by $s^+_c(\mathbf{r})$, and the channels' fields add. A pTx pulse
 holds one waveform per channel. A single-channel pulse plays on every channel,
@@ -306,62 +254,14 @@ the unit weights that bring the channels into phase at the isocentre, where the
 pulse then has its nominal amplitude. A shim of another number of channels is
 refused.
 
-The maps' transmit coils come with the VOPs mariepy compresses from the same
-fields, and every design is made under those of the exam's transmit coil: its
-limits name the VOP file, the default shim, and the drive of every channel per
-hertz of a pulse's amplitude with which the channels' fields reach that
-amplitude at the isocentre, $2 / (\gamma \sum_c |B^-_c(\mathbf{0})|)$ in the
-maps' unit of drive. The IR cache then reports each subsequence's SAR against
-the reference pulse in that coil ({doc}`designs`).
-
-{class}`~pulserver.virtual.BrainWeb` carries the field its own susceptibility
-adds to $B_0$. Its head is water, of volume susceptibility $-9.05$ ppm, in air
-of $0.36$ ppm (Schenck, Med Phys 23:815, 1996), and the field along $B_0$ is
-the susceptibility difference convolved with the dipole kernel
-$1/3 - k_z^2/|\mathbf{k}|^2$, whose $1/3$ is the Lorentz sphere's (Marques and
-Bowtell, Concepts Magn Reson B 25:65, 2005). The constant and linear terms over
-the head are removed, as a first-order shim removes them. The field is in ppm
-of $B_0$, so an isochromat precesses $\gamma B_0$ times it faster, whatever
-the magnet's field.
-
-## Scan clock and sound
-
-A scanner acquires in real time: each readout reaches the reconstruction once
-the scanner has played it, and the gradients sound as they play.
-{class}`~pulserver.virtual.Scan` plays the cache on isochromats against a scan
-clock, the sum of the durations of the blocks played, in spans of whole blocks
-that end where a repetition of a run starts. Each span carries the readouts of
-its blocks, as
-{func}`~pulserver.virtual.simulate` returns them, and the sound of the gradients
-it plays. At a speed, a span is released once the wall clock, running that many
-times as fast as the scan, has passed its end, so that a reconstruction
-receives the readouts at the rate a scanner acquires them;
-{func}`~pulserver.virtual.send` sends each readout as it is released.
-
-The spans are simulated in a thread of their own, ahead of their release, and
-the clock starts once the simulation will stay ahead of it to the end of the
-scan. A span's simulation time is estimated from the spans simulated before it:
-per ADC sample for a span that acquires, since the readouts' coil sums dominate
-it, and per second of scan time for one that does not, such as a train of
-dummy excitations. Where the simulation runs faster than the scan, the clock
-starts once a span of each kind has been simulated; where it runs slower, as
-for a short-TR balanced SSFP on a head of many isochromats and coils, most of
-the scan is simulated before the clock starts and the rest while it runs. A
-span simulated after its end on the clock, where the estimate fell short,
-holds the clock until it is, and the spans after it keep the scanner's pace.
-
-The sound is MATLAB Pulseq's, from `pypulseqpp.gradient_sound`: the gradients
-along the physical axes, the x axis on the left channel, the y axis on the
-right and half of the z axis on both, smoothed by MATLAB's Gaussian window of
-$2\,\mathrm{round}(f_s/6000) + 1$ samples at the sample rate $f_s$, and scaled
-so that the loudest sample of the scan is 0.95. The window reaches past the
-ends of each span into the gradients on either side, so the spans' sounds,
-joined, are the sound of the whole scan: that of `Sequence.sound` of the design
-under the same prescription, to the single precision of the cache.
+A console given field maps takes the coils, and the subject's field, from
+electromagnetic and susceptibility models of BrainWeb's head instead
+({doc}`../developer-guide/internals/virtual-scanner`).
 
 ## See also
 
 * {doc}`scanner-representation` — the IR and its prescription.
 * {doc}`../user-guide/reconstruction-client` — the stream the virtual reconstruction client sends.
 * {doc}`../api/virtual` — the phantom, the acquisition, the Bloch simulation, the scan clock, the client and the export.
-* {doc}`../developer-guide/internals/bloch-engine` — how the Bloch engine integrates free precession and RF pulses, and plays repeated blocks.
+* {doc}`../developer-guide/internals/virtual-scanner` — the played waveforms, runs of repetitions, external simulators, coils from field maps, the scan clock and the sound.
+* {doc}`../developer-guide/internals/bloch-engine` — how the Bloch engine samples a phantom, integrates free precession and RF pulses, and plays repeated blocks.

@@ -1,5 +1,20 @@
 # Architecture
 
+```{admonition} TL;DR
+:class: tldr
+
+- An acquisition through pulserver has four tasks: design for the prescribed
+  protocol, conversion into the scanner representation, playout and
+  reconstruction. pulserver performs the first, second and fourth; the
+  scanner's interpreter plays the sequence.
+- The Pulseq representation, the engines (pypulseqpp and the reconstruction a
+  plugin imports), pulserver's orchestration and scanner execution are kept
+  distinct.
+- The design calls run on the scanner host and the reconstruction proxy on
+  the reconstruction computer; they share the design store, and exchange a
+  protocol block, Pulseq files, the IR cache and an MRD stream.
+```
+
 A Pulseq sequence is a vendor-independent description of an acquisition. To
 acquire data with one on a clinical scanner, four tasks have to be performed:
 the sequence is designed for the protocol the operator prescribes, converted

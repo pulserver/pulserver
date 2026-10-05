@@ -14,6 +14,12 @@
 .blue{fill:#3a77a8}
 .amber{fill:#ffbe2e}
 .word{fill:#2b76ad}
+.title{font:bold 20px Arial,sans-serif;fill:#173042}
+.wave{fill:none;stroke:#3a77a8;stroke-width:3;stroke-linejoin:round}
+.rf{fill:none;stroke:#ffbe2e;stroke-width:3;stroke-linejoin:round}
+.adc{fill:#ffbe2e}
+.base{fill:none;stroke:#657786;stroke-width:1.5}
+.bracket{fill:none;stroke:#657786;stroke-width:2}
 </style>
 <defs><marker id="m" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><path class="head" d="M0,0 L0,6 L9,3 z"/></marker></defs>
 <rect class="core" x="120" y="20" rx="12" width="760" height="70"/><text class="white" x="500" y="62" text-anchor="middle">Scanner interpreter and reconstruction client</text>
