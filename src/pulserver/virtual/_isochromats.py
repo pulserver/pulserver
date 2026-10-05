@@ -388,7 +388,7 @@ class Isochromats:
         """Play one block's events and return what each coil receives at each ADC sample.
 
         Times are in s from the block's start. An RF or ADC event plays as
-        :doc:`/explanations/bloch-simulation` describes; the field and sample
+        :doc:`/explanations/virtual-scanner` describes; the field and sample
         times the events amount to can be given instead.
 
         Parameters

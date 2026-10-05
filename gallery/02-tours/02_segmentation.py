@@ -12,7 +12,7 @@ A Pulseq file lists every block a scan plays. A scanner interpreter is
 programmed with each distinct segment once and plays the scan as a stream of
 segment instances, so the quantity that determines its memory use is the
 number of segment definitions, not the number of blocks. The passes are
-described in :doc:`/explanations/ir-cache`.
+described in :doc:`/explanations/scanner-representation`.
 
 Outline:
 

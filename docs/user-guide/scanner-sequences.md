@@ -196,7 +196,7 @@ fov_rotation_33: float|off|1.0|-1.0|1.0|1e-06|
 The last twelve entries are the prescription, which the interpreter fills from
 the scanner's: the field-of-view offset, which the host applies when it builds
 the IR, and the rotation from the logical to the physical axes, in whose frame
-the host checks the design ({doc}`../explanations/ir-cache`).
+the host checks the design ({doc}`../explanations/designs`).
 
 {meth}`~pulserver.design.SequencePlugin.validate` evaluates a request under the
 scanner limits and returns the protocol the design plays. Entries the request

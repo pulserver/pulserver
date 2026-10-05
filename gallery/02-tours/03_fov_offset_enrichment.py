@@ -12,7 +12,7 @@ is built places an object away from the isocentre at the centre of the image.
 The series is simulated rather than acquired: a phantom of three disks, whose
 k-space is known analytically, sampled at the k-space locations of a
 pypulseqpp 2D gradient echo and placed away from the isocentre. The
-prescription is described in :doc:`/explanations/ir-cache` and the enrichment
+prescription is described in :doc:`/explanations/scanner-representation` and the enrichment
 in :doc:`/explanations/reconstruction`.
 
 Outline:

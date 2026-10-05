@@ -249,7 +249,7 @@ class BrainWeb:
         volume in m³, precessing at the cube's mean :attr:`field_ppm`: at the
         cube's centre, or over the cube for a ``"box"`` ``voxel``, and at the
         quantiles of the Lorentzian line of the tissue's T2'
-        (:doc:`/explanations/bloch-simulation`).
+        (:doc:`/developer-guide/internals/bloch-engine`).
 
         Parameters
         ----------

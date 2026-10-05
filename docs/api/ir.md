@@ -13,7 +13,8 @@ execution stream are computed in the compiled extension, and the cache is
 written by the C library
 the interpreter reads it back with. The files are read in the logical frame and
 moved to the prescribed field-of-view offset before they are segmented. The
-passes and the cache layout are described in {doc}`../explanations/ir-cache`.
+representation is described in {doc}`../explanations/scanner-representation`, and
+the cache layout in {doc}`../developer-guide/internals/ir-cache`.
 
 | Object | Description |
 | --- | --- |

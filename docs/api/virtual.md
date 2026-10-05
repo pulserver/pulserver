@@ -31,7 +31,7 @@ scanner's centre frequency.
 ## Bloch simulation
 
 The Bloch equation with relaxation, integrated on isochromats in the frame
-rotating at the reference frequency, as {doc}`../explanations/bloch-simulation`
+rotating at the reference frequency, as {doc}`../explanations/virtual-scanner`
 states it. Times are in seconds, gradients in Hz/m and RF fields in Hz.
 
 | Object | Description |

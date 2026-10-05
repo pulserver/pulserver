@@ -81,7 +81,7 @@ offsets of the design's RF pulses at it when it builds the IR
 
 The analytic acquisition acts on the phantom's density alone. For relaxation,
 flip angles and slice profiles, sample the phantom as isochromats and play the
-cache on them ({doc}`../explanations/bloch-simulation`); the readouts are sent
+cache on them ({doc}`../explanations/virtual-scanner`); the readouts are sent
 as before:
 
 ```python
@@ -202,7 +202,7 @@ line, is written to standard output, and the scan clock to standard error.
 - `--spins` spreads each voxel over that many isochromats, at the quantiles of
   the Lorentzian line of its tissue's T2′, at its centre or, with
   `--voxel box`, over it; `--diffusion` lets BrainWeb's tissue classes diffuse
-  ({doc}`../explanations/bloch-simulation`). A phantom file gives each ellipse
+  ({doc}`../developer-guide/internals/bloch-engine`). A phantom file gives each ellipse
   its `t2_prime`, in s, and `diffusion`, in m²/s. Isochromats that diffuse are
   played block by block, and a voxel's diffusion attenuation needs many spins
   to be resolved.

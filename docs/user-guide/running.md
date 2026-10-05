@@ -97,7 +97,7 @@ wave is held at once on the gradient raster of the chain's first file, and a
 playout that holds them otherwise refuses the cache.
 
 A generated design and an imported chain are checked against the limits before
-their IR cache is written ({doc}`../explanations/ir-cache`), so the limits
+their IR cache is written ({doc}`../explanations/designs`), so the limits
 include the RF and ADC dead times, the RF ringdown time and the ADC sample
 divisor of the scanner; `pypulseqpp.Opts` sets the dead times to zero and the
 divisor to four when they are left out.
@@ -124,7 +124,7 @@ rasters, the scanner's nerve model and its forbidden gradient bands, and, where
 SAR is computed from virtual observation points, the VOPs. A check whose limits
 are left out is not run. No SAR limit is checked on the host: it writes into
 the cache each subsequence's SAR at the VOPs relative to a reference pulse
-({doc}`../explanations/ir-cache`), and the interpreter computes the SAR and
+({doc}`../explanations/designs`), and the interpreter computes the SAR and
 the gradient heating.
 
 | Limit | Meaning |

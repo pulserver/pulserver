@@ -134,7 +134,7 @@ class Phantom:
         grid's Nyquist frequency. A voxel's isochromats lie at its centre, or
         over a square ``spacing`` wide in the ellipse's plane for a ``"box"``
         ``voxel``, and precess at the quantiles of the Lorentzian line of the
-        ellipse's ``t2_prime`` (:doc:`/explanations/bloch-simulation`).
+        ellipse's ``t2_prime`` (:doc:`/developer-guide/internals/bloch-engine`).
         Overlapping ellipses are separate isochromats. The positions are placed
         in the physical frame as the phantom is, and the receive sensitivities
         are the phantom's coils', or ``coil``'s transmit and receive
