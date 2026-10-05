@@ -14,7 +14,13 @@ from ._entries import (
     StringListParam,
     TimeParam,
 )
-from ._plugin import Evaluation, ScannerSequence, SequencePlugin, load_plugin
+from ._plugin import (
+    Evaluation,
+    ScannerSequence,
+    SequencePlugin,
+    load_exam,
+    load_plugin,
+)
 from ._rf import RfControl, RfLayout
 
 __all__ = [
@@ -32,5 +38,6 @@ __all__ = [
     "SequencePlugin",
     "StringListParam",
     "TimeParam",
+    "load_exam",
     "load_plugin",
 ]

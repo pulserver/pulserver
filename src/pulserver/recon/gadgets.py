@@ -133,14 +133,15 @@ class AsymmetricEcho(Gadget):
     ``discard_post`` grow by the zeros added at each end, and ``center_sample``
     becomes the centre of the full echo, so that the buffers place the acquired
     samples only. A readout already centred passes unchanged, as do navigator
-    and noise readouts. An acquisition that states no ``center_sample`` is
-    centred.
+    and noise readouts and a readout carrying a trajectory over more than one
+    axis, which is not an echo along one line. An acquisition that states no
+    ``center_sample`` is centred.
 
     This is Gadgetron's ``AsymmetricEchoAdjustROGadget``.
     """
 
     def __call__(self, acquisition: Any, data: np.ndarray) -> np.ndarray:
-        if carries(acquisition, _OFF_GRID):
+        if carries(acquisition, _OFF_GRID) or _off_line(acquisition):
             return data
         samples = data.shape[-1]
         centre = echo_centre(acquisition, samples)
@@ -222,6 +223,10 @@ def _oversampling(encoding: Any) -> float:
     encoded = readout_fov(getattr(encoding, "encodedSpace", None))
     recon = readout_fov(getattr(encoding, "reconSpace", None))
     return encoded / recon if encoded > 0 and recon > 0 else 1.0
+
+
+def _off_line(acquisition: Any) -> bool:
+    return int(acquisition_label(acquisition, "trajectory_dimensions", 0) or 0) > 1
 
 
 def _dwell(acquisition: Any) -> float | None:

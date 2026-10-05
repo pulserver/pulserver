@@ -111,6 +111,7 @@ def validate(
     limits: Mapping[str, Any],
     block: str,
     rf_layout: bool = False,
+    exam: str | None = None,
 ) -> str:
     """Reply ``VALID <seconds>`` or ``INVALID``, an ``INFO`` line and the value block.
 
@@ -120,13 +121,14 @@ def validate(
     evaluation where the plugin states one, with amplitudes over the peaks the
     listing states, read by evaluating the plugin again at its default
     protocol. Where that evaluation is invalid, a warning is logged and the
-    amplitudes are the layout's own.
+    amplitudes are the layout's own. ``exam`` is the directory of the current
+    exam's cache, which the plugin's hooks read where they take it.
     """
     path = str(plugin_path(plugins, plugin))
     listing = _listing(path)
     request = _request(block, listing)
     limits = _read(limits)
-    validation = _validated(path, limits, request)
+    validation = _validated(path, limits, request, exam)
     listed: list[float] = []
     if rf_layout and validation.valid and validation.rf_layout is not None:
         default = _default_rf_layout(
@@ -150,6 +152,7 @@ def generate(
     block: str,
     store: DesignStore,
     push: str | None = None,
+    exam: str | None = None,
 ) -> str:
     """Reply ``GENERATED <id>`` for the design a request resolves to.
 
@@ -163,7 +166,9 @@ def generate(
     field-of-view offset, and stored. A request that resolves to other values
     is designed from the resolved values, so a design is a function of its
     identifier. With ``push``, the URL of a design intake, the design is sent
-    there unless the intake holds it already.
+    there unless the intake holds it already. ``exam`` is passed as
+    :func:`validate` passes it; for a plugin whose hooks take it, the files of
+    the exam's cache are part of the design's identity.
 
     Raises
     ------
@@ -180,21 +185,26 @@ def generate(
     scanner = _plugin(path)
     requested = {key: p.value for key, p in listing.items() if p.editable}
     requested.update(request)
-    validation = scanner.validate(design, requested)
+    if not scanner.reads_exam:
+        exam = None
+    validation = scanner.validate(design, requested, exam)
     if validation.valid and validation.values != requested:
-        validation = scanner.validate(design, validation.values)
+        validation = scanner.validate(design, validation.values, exam)
     if not validation.valid:
         raise CallError(validation.info)
     source = _source(path)
-    identity = design_identity(
-        plugin, identified_limits(limits), validation.values, source
-    )
+    identified = dict(validation.values)
+    if exam is not None:
+        identified["exam"] = _exam_digest(exam)
+    identity = design_identity(plugin, identified_limits(limits), identified, source)
     found = store.find(identity)
     if found is not None:
         return f"GENERATED {_pushed(store, found, push)}\n"
     staged = store.stage()
     try:
-        accepted, paths, written = scanner._design(design, validation.values, staged)
+        accepted, paths, written = scanner._design(
+            design, validation.values, staged, exam
+        )
         if not accepted.valid:
             raise CallError(accepted.info)
         # The sequences as written stand for the files. The conversion moves
@@ -415,9 +425,22 @@ def _source(path: str) -> str:
 
 
 def _validated(
-    path: str, limits: Mapping[str, Any], request: Mapping[ProtocolKey, Any]
+    path: str,
+    limits: Mapping[str, Any],
+    request: Mapping[ProtocolKey, Any],
+    exam: str | None = None,
 ) -> Validation:
-    return _plugin(path).validate(design_system(limits), request)
+    return _plugin(path).validate(design_system(limits), request, exam)
+
+
+def _exam_digest(exam: str) -> str:
+    """Return a digest of the name, size and modification time of each file of an exam's cache."""
+    digest = hashlib.sha256()
+    for entry in sorted(Path(exam).glob("*")):
+        if entry.is_file():
+            stat = entry.stat()
+            digest.update(f"{entry.name} {stat.st_size} {stat.st_mtime_ns}\n".encode())
+    return digest.hexdigest()
 
 
 def _default_rf_layout(

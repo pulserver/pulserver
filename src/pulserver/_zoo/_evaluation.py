@@ -41,8 +41,17 @@ _ACHIEVED: dict[ProtocolKey, Callable[[pp.Sequence], float]] = {
 
 
 def arguments(plugin: SequencePlugin, protocol: Protocol) -> dict[str, Any]:
-    """Return the arguments the app designs ``protocol`` with, its defaults included."""
-    bound = inspect.signature(plugin.app).bind_partial(**protocol.arguments)
+    """Return the arguments the app designs ``protocol`` with, its defaults included.
+
+    An entry binding a name the app does not take is left out.
+    """
+    signature = inspect.signature(plugin.app)
+    taken = {
+        name: value
+        for name, value in protocol.arguments.items()
+        if name in signature.parameters
+    }
+    bound = signature.bind_partial(**taken)
     bound.apply_defaults()
     return bound.arguments
 
@@ -176,6 +185,11 @@ def evaluation(
     )
 
 
+def waved(a: dict[str, Any]) -> bool:
+    """Whether the arguments play wave-encoding gradients, under which the calibration region is acquired again without them first."""
+    return a.get("wave_amplitude", 0.0) > 0 and a.get("wave_cycles", 0) > 0
+
+
 def _views(n: int, acceleration: int, n_acs: int, partial_fourier: float) -> int:
     calibrating, imaging = pp.make_cartesian_axis_sampling(
         n, acceleration, n_acs, partial_fourier=partial_fourier
@@ -190,7 +204,10 @@ def cartesian_2d(a: dict[str, Any]) -> tuple[dict[str, Any], int]:
 
 
 def cartesian_3d(a: dict[str, Any]) -> tuple[dict[str, Any], int]:
-    """One view of a 3D Cartesian scan, and its dummies and views."""
+    """One view of a 3D Cartesian scan, and its dummies and views.
+
+    Under the wave the views include the wave-free calibration region.
+    """
     calibrating, imaging = pp.make_cartesian_plane_sampling(
         (a["n_y"], a["n_z"]),
         (a["ry"], a["rz"]),
@@ -201,7 +218,8 @@ def cartesian_3d(a: dict[str, Any]) -> tuple[dict[str, Any], int]:
         elliptical_acs=a["elliptical_acs"],
     )
     one = {"n_dummy": 0, "ry": a["n_y"], "rz": a["n_z"], "n_acs_y": 0, "n_acs_z": 0}
-    return one, a["n_dummy"] + len(calibrating) + len(imaging)
+    references = len(calibrating) if waved(a) else 0
+    return one, a["n_dummy"] + references + len(calibrating) + len(imaging)
 
 
 def _nyquist_spokes(n: int) -> int:

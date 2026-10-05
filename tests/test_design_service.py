@@ -149,6 +149,37 @@ class Partial(SequencePlugin):
 '''
 
 
+EXAM_READING = '''"""A function app whose evaluation and design read the B0 map of the exam."""
+
+import pypulseqpp as pp
+
+from pulserver.design import Evaluation, IntParam, SequencePlugin, load_exam
+from pulserver.protocol import UIParam
+
+
+def delays(system, nx=8):
+    seq = pp.Sequence(system)
+    for _ in range(nx):
+        seq.add_block(pp.make_delay(1e-3))
+    return seq
+
+
+class ExamReading(SequencePlugin):
+    app = delays
+    protocol = {UIParam.NX: IntParam("nx", range_max=100)}
+
+    def evaluate(self, system, protocol, exam=None):
+        note = "no exam" if exam is None else f"b0 {load_exam(exam)['b0_map']}"
+        return Evaluation(protocol, 0.0, note)
+
+    def generate(self, system, protocol, exam=None):
+        nx = protocol.arguments["nx"]
+        if exam is not None:
+            nx += load_exam(exam)["b0_map"]
+        return delays(system, nx)
+'''
+
+
 def block(values):
     lines = [f"{name}: {value}" for name, value in values.items()]
     return "\n".join([PROTOCOL_BEGIN, *lines, PROTOCOL_END]) + "\n"
@@ -845,3 +876,78 @@ def test_the_top_level_command_names_its_commands():
     )
     assert bare.returncode == 2
     assert "pulserver design" in bare.stderr
+
+
+@pytest.fixture
+def exam(tmp_path):
+    """The directory of an exam whose cache holds a B0 map of 3."""
+    from pulserver.recon import ExamCache
+
+    directory = tmp_path / "exam"
+    ExamCache("exam", directory)["b0_map"] = 3
+    return directory
+
+
+def test_a_hook_taking_exam_reads_the_exam_cache_it_is_given(tmp_path, exam):
+    (tmp_path / "exam_reading.py").write_text(EXAM_READING)
+    plain = service.call(
+        "validate",
+        plugins=tmp_path,
+        plugin="exam_reading",
+        limits=LIMITS,
+        block=block({"nx": 4}),
+    )
+    read = service.call(
+        "validate",
+        plugins=tmp_path,
+        plugin="exam_reading",
+        limits=LIMITS,
+        block=block({"nx": 4}),
+        exam=str(exam),
+    )
+    assert "no exam" in plain[1]
+    assert "b0 3" in read[1]
+
+
+def test_a_hook_not_taking_exam_is_called_as_without_one(function_plugins, exam):
+    plain = validate(function_plugins, "evaluating", {"nx": 20})
+    given = service.call(
+        "validate",
+        plugins=function_plugins,
+        plugin="evaluating",
+        limits=LIMITS,
+        block=block({"nx": 20}),
+        exam=str(exam),
+    )
+    assert given == plain
+
+
+def test_an_exam_is_part_of_a_design_only_for_a_plugin_reading_it(
+    tmp_path, store, exam, function_plugins
+):
+    from pulserver.recon import ExamCache
+
+    (tmp_path / "exam_reading.py").write_text(EXAM_READING)
+
+    def designed(plugins, plugin, values, exam):
+        return generated(
+            service.call(
+                "generate",
+                plugins=plugins,
+                plugin=plugin,
+                limits=LIMITS,
+                block=block(values),
+                store=store,
+                exam=exam,
+            )
+        )
+
+    without = designed(tmp_path, "exam_reading", {"nx": 4}, None)
+    first = designed(tmp_path, "exam_reading", {"nx": 4}, str(exam))
+    assert first != without
+    assert designed(tmp_path, "exam_reading", {"nx": 4}, str(exam)) == first
+    ExamCache("exam", exam)["b0_map"] = 5
+    assert designed(tmp_path, "exam_reading", {"nx": 4}, str(exam)) != first
+
+    ignored = designed(function_plugins, "chained", {"nx": 4}, None)
+    assert designed(function_plugins, "chained", {"nx": 4}, str(exam)) == ignored

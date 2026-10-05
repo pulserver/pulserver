@@ -55,6 +55,13 @@ def _parser() -> argparse.ArgumentParser:
             sub.add_argument(
                 "--store", type=Path, required=True, help="directory of designs"
             )
+        if name in ("validate", "generate"):
+            sub.add_argument(
+                "--exam",
+                type=Path,
+                help="directory of the current exam's cache, passed to the plugin "
+                "hooks that take ``exam``",
+            )
         if name in ("generate", "import"):
             sub.add_argument(
                 "--push", help="URL of the design intake to push the design to"
@@ -170,6 +177,8 @@ def request(args: argparse.Namespace, block: str) -> dict[str, Any]:
         found["limits"] = args.limits.read_text()
     if getattr(args, "store", None) is not None:
         found["store"] = str(args.store.absolute())
+    if getattr(args, "exam", None) is not None:
+        found["exam"] = str(args.exam.absolute())
     if getattr(args, "rf_definitions", False):
         found["rf_definitions"] = True
     if getattr(args, "rf_layout", False):

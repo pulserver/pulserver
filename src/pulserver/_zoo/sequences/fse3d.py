@@ -5,7 +5,7 @@ import functools
 import pypulseqpp as pp
 from pypulseqpp.sequences.sequence.fse3D_sequence import fse3d, shot_parameters
 
-from pulserver._zoo._evaluation import achieved, arguments, rf_layout
+from pulserver._zoo._evaluation import achieved, arguments, rf_layout, waved
 from pulserver._zoo._pmc import navigated
 from pulserver.design import (
     Description,
@@ -31,6 +31,14 @@ OPTIMIZED = False
 #: is a cubic step between the two designs.
 DUAL_REGION = False
 
+#: Wave-CAIPI: sinusoidal gradients on the phase- and partition-encoding axes
+#: during each readout, the calibration region acquired first without them.
+WAVE = False
+#: Peak wave-encoding gradient amplitude requested, in T/m.
+WAVE_AMPLITUDE = 6e-3
+#: Wave periods across the sampling window.
+WAVE_CYCLES = 8
+
 if OPTIMIZED or DUAL_REGION:
     import torchsim  # noqa: F401  the trains are designed with it
 
@@ -39,6 +47,10 @@ class Fse3D(SequencePlugin):
     app = navigated(fse3d) if NAVIGATOR else fse3d
     if OPTIMIZED or DUAL_REGION:
         app = functools.partial(app, flip_modulation="optimized")
+    if WAVE:
+        app = functools.partial(
+            app, wave_amplitude=WAVE_AMPLITUDE, wave_cycles=WAVE_CYCLES
+        )
     protocol = {
         UIParam.TE: TimeParam(
             "te", range_min=2000, range_max=500000, presets={TEPreset.MINIMUM: None}
@@ -114,11 +126,12 @@ class Fse3D(SequencePlugin):
             elliptical_acs=a["elliptical_acs"],
         )
         # Each train lasts its own TR, a cubic step from the centre's to the
-        # periphery's; dummies play the first.
+        # periphery's; dummies and, under the wave, the wave-free trains of
+        # the calibration region, each as long as the first, play the first.
         tr = train.duration()[0]
         tr_periphery = a["tr_periphery"]
         etl_periphery = a["etl_periphery"]
-        _, times, _ = shot_parameters(
+        lengths, times, _ = shot_parameters(
             len(calibrating) + len(imaging),
             a["etl"],
             a["etl"] if etl_periphery is None else etl_periphery,
@@ -127,8 +140,9 @@ class Fse3D(SequencePlugin):
         )
         raster = system.block_duration_raster
         times = [pp.round_to_raster(time, raster) for time in times]
+        references = -(-len(calibrating) // lengths[0]) if waved(a) else 0
         return Evaluation(
             protocol.replace(achieved(self, train)),
-            a["n_dummy"] * times[0] + sum(times),
+            (a["n_dummy"] + references) * times[0] + sum(times),
             rf_layout=rf_layout(train, scaled=False),
         )

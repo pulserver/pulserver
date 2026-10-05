@@ -181,6 +181,19 @@ def test_a_validation_request_carries_the_rf_layout_only_when_it_asks(tmp_path):
     assert parse_rf_layout(asked).definition == (0, 1, 1, 1, 1)
 
 
+def test_the_exam_directory_of_a_command_is_forwarded_to_the_call(tmp_path):
+    from pulserver.host._command import _parser, request
+
+    limits = tmp_path / "limits"
+    limits.write_text(format_limits(LIMITS))
+    argv = ["--plugins", str(PLUGINS), "--plugin", "rf_train", "--limits", str(limits)]
+    args = _parser().parse_args(["validate", *argv, "--exam", str(tmp_path)])
+    forwarded = request(args, block({"etl": 4}))
+
+    assert forwarded["exam"] == str(tmp_path.absolute())
+    assert answer(forwarded) == answer({**forwarded, "exam": None})
+
+
 def test_a_crashing_plugin_fails_only_its_call(server, limits_file):
     forwarded = ["--limits", str(limits_file), "--socket", str(server.socket)]
     crashed = command(

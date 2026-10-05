@@ -1,11 +1,12 @@
 """pypulseqpp's 3D MPRAGE bound to the scanner UI, its partitions counted by the number of slices."""
 
+import functools
 import itertools
 
 import pypulseqpp as pp
 from pypulseqpp.sequences.sequence.mprage3D_sequence import mprage3d
 
-from pulserver._zoo._evaluation import achieved, arguments, rf_layout
+from pulserver._zoo._evaluation import achieved, arguments, rf_layout, waved
 from pulserver._zoo._pmc import navigated
 from pulserver.design import (
     Evaluation,
@@ -20,9 +21,21 @@ from pulserver.protocol import TEPreset, TRPreset, UIParam
 #: reconstruction states to the scan.
 NAVIGATOR = False
 
+#: Wave-CAIPI: sinusoidal gradients on the phase- and partition-encoding axes
+#: during each readout, the calibration region acquired first without them.
+WAVE = False
+#: Peak wave-encoding gradient amplitude requested, in T/m.
+WAVE_AMPLITUDE = 6e-3
+#: Wave periods across the sampling window.
+WAVE_CYCLES = 8
+
 
 class Mprage3D(SequencePlugin):
     app = navigated(mprage3d) if NAVIGATOR else mprage3d
+    if WAVE:
+        app = functools.partial(
+            app, wave_amplitude=WAVE_AMPLITUDE, wave_cycles=WAVE_CYCLES
+        )
     protocol = {
         UIParam.FLIP: FloatParam(
             "flip_angle_deg", unit="deg", range_min=1.0, range_max=90.0
@@ -56,8 +69,10 @@ class Mprage3D(SequencePlugin):
     def evaluate(self, system, protocol):
         # A TR is one inversion shot: the inversion, then one excitation per
         # line of the fullest partition, which is the centre one. The scan
-        # plays a shot per partition, after the dummy shots. The design of
-        # the centre partition alone plays one shot of the full length.
+        # plays a shot per partition, after the dummy shots and, under the
+        # wave, a wave-free shot per partition of the calibration region. The
+        # design of the centre partition alone plays one shot of the full
+        # length, after its wave-free shot under the wave.
         a = arguments(self, protocol)
         calibrating, imaging = pp.make_cartesian_plane_sampling(
             (a["n_y"], a["n_z"]),
@@ -69,10 +84,14 @@ class Mprage3D(SequencePlugin):
             elliptical_acs=a["elliptical_acs"],
         )
         partitions = {z for _, z in itertools.chain(calibrating, imaging)}
+        references = len({z for _, z in calibrating}) if waved(a) else 0
         one = {"n_dummy": 0, "rz": a["n_z"], "n_acs_z": 1}
         shot = self.app(system, **(protocol.arguments | one))
+        designed = 2 if waved(a) and a["n_acs_y"] > 0 else 1
         return Evaluation(
             protocol.replace(achieved(self, shot)),
-            (a["n_dummy"] + len(partitions)) * shot.duration()[0],
+            (a["n_dummy"] + references + len(partitions))
+            * shot.duration()[0]
+            / designed,
             rf_layout=rf_layout(shot, scaled=True),
         )

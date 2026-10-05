@@ -204,11 +204,13 @@ def _parameter(
         return Parameter(Kind.CONFIG, entry.value, InputMode.OFF)
     if isinstance(entry, Description):
         return Parameter(Kind.DESCRIPTION, entry.text)
-    if entry.argument not in defaults:
+    # An entry that states its default may bind a name the app does not take,
+    # for the plugin's own hooks to read.
+    if entry.argument not in defaults and getattr(entry, "default", None) is None:
         raise ValueError(
             f"{name} binds {entry.argument!r}, which the app does not take"
         )
-    default = defaults[entry.argument]
+    default = defaults.get(entry.argument)
     if isinstance(entry, TimeParam):
         options = (*entry.presets, *entry.options)
         if entry.default is not None:

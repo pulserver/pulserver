@@ -33,8 +33,10 @@ def answer(request: Mapping[str, Any]) -> tuple[int, str]:
     text of a ``[Limits]`` block), ``store``, ``push`` and ``input`` (the
     block the command reads from standard input). ``store`` is passed to
     ``generate`` and ``import`` only, and ignored by the other calls.
-    ``rf_definitions``, for ``list``, and ``rf_layout``, for ``validate``, ask
-    when true for the RF block of the reply.
+    ``exam``, for ``validate`` and ``generate``, is the directory of the
+    current exam's cache. ``rf_definitions``, for ``list``, and
+    ``rf_layout``, for ``validate``, ask when true for the RF block of the
+    reply.
     """
     from . import _service
     from ._blocks import parse_limits
@@ -53,6 +55,8 @@ def answer(request: Mapping[str, Any]) -> tuple[int, str]:
         inputs["block"] = str(request.get("input", ""))
     if request.get("push"):
         inputs["push"] = str(request["push"])
+    if request.get("exam") and call in ("validate", "generate"):
+        inputs["exam"] = str(request["exam"])
     if call == "list" and request.get("rf_definitions"):
         inputs["rf_definitions"] = True
     if call == "validate" and request.get("rf_layout"):
