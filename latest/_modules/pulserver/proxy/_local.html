@@ -479,7 +479,7 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">..recon._runtime.exam</span><span class="w"> </span><span class="kn">import</span> <span class="n">ExamCacheManager</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..recon._runtime.readers</span><span class="w"> </span><span class="kn">import</span> <span class="n">deserialize_config</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">._designs</span><span class="w"> </span><span class="kn">import</span> <span class="n">DesignCache</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">._enrich</span><span class="w"> </span><span class="kn">import</span> <span class="n">enrich_header</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">._enrich</span><span class="w"> </span><span class="kn">import</span> <span class="n">enrich_header</span><span class="p">,</span> <span class="n">header_fov_offset_m</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">._proxy</span><span class="w"> </span><span class="kn">import</span> <span class="n">_config_plugin</span><span class="p">,</span> <span class="n">_enriched</span><span class="p">,</span> <span class="n">_plugin_path</span>
 
 
@@ -540,7 +540,7 @@
 
         <span class="k">def</span><span class="w"> </span><span class="nf">enriched</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">Any</span><span class="p">]:</span>
             <span class="k">try</span><span class="p">:</span>
-                <span class="k">yield from</span> <span class="n">_enriched</span><span class="p">(</span><span class="n">items</span><span class="p">,</span> <span class="n">design</span><span class="p">)</span>
+                <span class="k">yield from</span> <span class="n">_enriched</span><span class="p">(</span><span class="n">items</span><span class="p">,</span> <span class="n">design</span><span class="p">,</span> <span class="n">header_fov_offset_m</span><span class="p">(</span><span class="n">header</span><span class="p">))</span>
             <span class="k">except</span> <span class="ne">ValueError</span> <span class="k">as</span> <span class="n">error</span><span class="p">:</span>
                 <span class="n">refused</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">error</span><span class="p">)</span>
                 <span class="k">raise</span>
