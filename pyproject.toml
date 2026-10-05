@@ -38,7 +38,7 @@ console = ["websockets>=13"]
 design = ["pypulseqpp[design]>=0.0.28"]
 # Windows read on the isochromats' lattice on a CUDA device: the sums by a
 # Triton kernel, the transforms by cuFINUFFT.
-gpu = ["torch>=2.4", "triton>=3.0", "cufinufft>=2.3"]
+gpu = ["torch>=2.14.1", "triton>=3.0", "cufinufft>=2.3"]
 dev = [
   "pytest>=9.1.1",
   "pytest-cov>=7.1.0",
