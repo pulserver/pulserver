@@ -9,10 +9,12 @@ import os
 import signal
 import socket
 import tempfile
+import time
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
+from .._logs import configure, redirect
 from .._plugins import PluginPath, directories, names
 
 _log = logging.getLogger("pulserver.host")
@@ -64,6 +66,29 @@ def answer(request: Mapping[str, Any]) -> tuple[int, str]:
     return _service.call(str(call), **inputs)
 
 
+def _logged(request: Mapping[str, Any]) -> tuple[int, str]:
+    """Answer ``request``, logging the call, its outcome and its duration.
+
+    A request naming a file under ``log`` has the rest of its child's output
+    appended there, so the calls one scan makes can be logged beside it.
+    """
+    started = time.monotonic()
+    call = f"{request.get('call')} {request.get('plugin') or ''}".rstrip()
+    if request.get("log"):
+        _log.info("%s: logged to %s", call, request["log"])
+        try:
+            redirect(request["log"])
+        except OSError as error:
+            _log.warning("%s: cannot log there: %s", call, error)
+    try:
+        code, output = answer(request)
+    except Exception:
+        _log.exception("%s: failed after %.2f s", call, time.monotonic() - started)
+        raise
+    _log.info("%s: status %d in %.2f s", call, code, time.monotonic() - started)
+    return code, output
+
+
 class DesignServer:
     """Answers design calls on a Unix socket, each in a child forked from a warm parent.
 
@@ -77,7 +102,8 @@ class DesignServer:
 
     A request is one line of JSON, as :func:`answer` takes it; the reply is
     one line of JSON, ``{"status": <exit status>, "output": <reply text>}``.
-    The socket is neither authenticated nor encrypted; its file permissions
+    A request may also carry ``log``, a file the child appends its log and
+    output to rather than the server's. The socket is neither authenticated nor encrypted; its file permissions
     decide who may call.
     """
 
@@ -148,7 +174,7 @@ class DesignServer:
             if len(line) > _REQUEST_LIMIT:
                 code, output = 1, "ERROR the request exceeds the size a call takes\n"
             else:
-                code, output = answer(json.loads(line))
+                code, output = _logged(json.loads(line))
             reply = json.dumps({"status": code, "output": output}) + "\n"
             connection.sendall(reply.encode())
             status = 0
@@ -222,9 +248,7 @@ def serve(plugins: PluginPath, socket_path: Path | str) -> int:
     """Warm a server, then answer calls on ``socket_path`` until SIGTERM or SIGINT."""
     for name in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"):
         os.environ.setdefault(name, "1")
-    logging.basicConfig(
-        level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s"
-    )
+    configure()
     server = DesignServer(plugins, socket_path)
     signal.signal(signal.SIGTERM, lambda *_: server.stop())
     signal.signal(signal.SIGINT, lambda *_: server.stop())

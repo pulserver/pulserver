@@ -216,6 +216,12 @@ call. The server stops on `SIGINT` or `SIGTERM` and ends the calls it is
 running. The socket is neither authenticated nor encrypted: its file
 permissions decide who may call.
 
+The server logs to standard error one line per call, naming the call, its
+plugin, its exit status and its duration. A request whose JSON carries `log`,
+a file path, has its child append everything else it logs and prints to that
+file, so a scanner's interpreter can keep the design calls of one scan beside
+the rest of that scan's log.
+
 ## Reconstruction proxy
 
 ```bash
@@ -241,7 +247,7 @@ pulserver proxy --store DIR --port N --forward HOST:PORT [--forward-config NAME]
 | `--dicom` | Convert each image to DICOM before it is relayed, whatever reconstructed it |
 | `--save-data` | Directory each series is kept in as the scanner sends it; kept nowhere when unset |
 | `--idle-timeout` | Seconds without a client after which the proxy closes; it waits for whatever is running. Unlimited when unset |
-| `--logfile` | File the log is written to; the standard error when unset |
+| `--logfile` | File the log is appended to, with the standard output and error of the proxy and of its workers, so what a reconstruction plugin logs, prints or warns lands there too; the standard error when unset |
 | `--log-level` | `DEBUG`, `INFO`, `WARNING` or `ERROR`; `INFO` when unset |
 
 The MRD header of each series names the design it was played from in the

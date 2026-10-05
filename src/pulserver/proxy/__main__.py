@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import argparse
-import logging
 import signal
 from pathlib import Path
 
+from .._logs import configure
 from .._memory import without_huge_page_advice
 from ._intake import DesignIntake
 from ._proxy import ReconProxy
@@ -126,11 +126,7 @@ def main(argv: list[str] | None = None) -> None:
     if args.forward is None and args.plugins is None:
         parser.error("--plugins is required unless --forward is given")
 
-    logging.basicConfig(
-        level=getattr(logging, str(args.log_level).upper(), logging.INFO),
-        format="%(asctime)s %(levelname)s %(message)s",
-        **({"filename": str(args.logfile)} if args.logfile else {}),
-    )
+    configure(args.log_level, args.logfile)
     proxy = ReconProxy(
         args.store,
         args.plugins,

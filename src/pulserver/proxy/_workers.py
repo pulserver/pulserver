@@ -20,6 +20,7 @@ from multiprocessing.connection import Connection as Pipe
 from multiprocessing.context import SpawnProcess
 from pathlib import Path
 
+from .._logs import configure
 from ..recon import ExamCache, ReconContext, load_plugin
 from ..recon._runtime.application import run_application
 from ..recon._runtime.connection import Connection
@@ -122,7 +123,9 @@ class WorkerPool:
                 process for process in self._assigned if process.is_alive()
             ]
         parent, child = self._context.Pipe()
-        process = self._context.Process(target=_warm, args=(child,), daemon=False)
+        process = self._context.Process(
+            target=_warm, args=(child, logging.getLogger().level), daemon=False
+        )
         process.start()
         child.close()
         with self._condition:
@@ -134,14 +137,12 @@ class WorkerPool:
             self._condition.notify()
 
 
-def _warm(pipe: Pipe) -> None:
+def _warm(pipe: Pipe, level: int) -> None:
     """Import the reconstruction engine, wait for an assignment, serve that one series, and exit.
 
     A host without bartorch reconstructs with whatever its plugins import.
     """
-    logging.basicConfig(
-        level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s"
-    )
+    configure(level)
     with contextlib.suppress(ImportError):
         import bartorch  # noqa: F401
     try:
