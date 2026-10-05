@@ -8,6 +8,7 @@ import logging
 import os
 import re
 import threading
+from collections.abc import Callable
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -39,10 +40,18 @@ class DesignIntake:
         Address to listen on; the loopback interface by default.
     port
         TCP port; 0 takes a free one.
+    received
+        Called with the directory of each design stored or found stored, in
+        a thread of its own once the request is answered: a proxy tabulates
+        the design there, ahead of the scan that plays it.
     """
 
     def __init__(
-        self, store: Path | str, host: str = "127.0.0.1", port: int = 0
+        self,
+        store: Path | str,
+        host: str = "127.0.0.1",
+        port: int = 0,
+        received: Callable[[Path], object] | None = None,
     ) -> None:
         self.store = DesignStore(store)
         intake = self
@@ -60,6 +69,7 @@ class DesignIntake:
                     self._answer(HTTPStatus.NOT_FOUND)
                     return
                 self._answer(HTTPStatus.OK)
+                self._prepare(design)
 
             def do_PUT(self) -> None:
                 design = self._design()
@@ -87,6 +97,16 @@ class DesignIntake:
                     return
                 _log.info("received design %s", design)
                 self._answer(HTTPStatus.OK if held else HTTPStatus.CREATED)
+                self._prepare(design)
+
+            def _prepare(self, design: str) -> None:
+                if received is not None:
+                    threading.Thread(
+                        target=_prepare,
+                        args=(received, intake.store.directory(design)),
+                        daemon=True,
+                        name=f"prepare-{design}",
+                    ).start()
 
             def _design(self) -> str | None:
                 match = _PATH.fullmatch(self.path)
@@ -130,3 +150,10 @@ class DesignIntake:
             self._server.shutdown()
             self._thread.join()
         self._server.server_close()
+
+
+def _prepare(received: Callable[[Path], object], directory: Path) -> None:
+    try:
+        received(directory)
+    except Exception:
+        _log.exception("preparing design %s failed", directory.name)
