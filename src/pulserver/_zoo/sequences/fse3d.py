@@ -92,13 +92,17 @@ class Fse3D(SequencePlugin):
 
     def evaluate(self, system, protocol):
         # A TR is one echo train. The design of the centre view plays one
-        # train of the full length at the centre's TR; a dual-region layout is
-        # the centre's train designed alone, the transition's ends being
-        # optimized against shots a single view does not make.
+        # train of the full length at the centre's TR, at a constant
+        # refocusing angle standing in for an optimized train.
         a = arguments(self, protocol)
-        one = {"n_dummy": 0, "ry": a["n_y"], "rz": a["n_z"], "n_acs_y": 0, "n_acs_z": 0}
-        if DUAL_REGION:
-            one |= {"tr_periphery": None, "etl_periphery": None}
+        one = {
+            "n_dummy": 0,
+            "ry": a["n_y"],
+            "rz": a["n_z"],
+            "n_acs_y": 0,
+            "n_acs_z": 0,
+            "flip_modulation": "constant",
+        }
         train = self.app(system, **(protocol.arguments | one))
         calibrating, imaging = pp.make_cartesian_plane_sampling(
             (a["n_y"], a["n_z"]),

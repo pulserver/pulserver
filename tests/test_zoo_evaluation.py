@@ -507,19 +507,19 @@ def test_an_evaluation_states_as_its_layout_a_regular_tr_of_the_design(
 
     layout = plugin.evaluate(SYSTEM, protocol).rf_layout
 
-    if name == "fse3d+DUAL_REGION":
-        # Each shot's train is its own; the layout is the centre's, designed
-        # as every shot's.
-        plugin = zoo["fse3d+OPTIMIZED"]
-        changes = {k: v for k, v in changes.items() if not k.startswith("user")}
-        protocol = _protocol(plugin, changes)
-    main = _main(plugin, protocol)
+    if name in OPTIMIZED:
+        # The layout plays the train at a constant refocusing angle.
+        main = _chain(
+            plugin.app(SYSTEM, **(protocol.arguments | {"flip_modulation": "constant"}))
+        )[-1]
+    else:
+        main = _main(plugin, protocol)
     # The first TR holds the largest packet of slices; a balanced steady state
     # opens with its half-angle pulse, so its last TR is the regular one.
     balanced = name.startswith("bssfp")
     start = main.duration()[0] - main.definitions["TR"][0] if balanced else 0
     # An optimized refocusing train is designed around its flip angle rather
-    # than scaled by it, by an optimization converged to float32 round-off.
+    # than scaled by it.
     scaled = UIParam.FLIP in plugin.protocol and not name.startswith("fse3d")
     expected = rf_layout(main, scaled, start=start)
     assert layout.period == pytest.approx(expected.period, rel=1e-12)
@@ -528,7 +528,7 @@ def test_an_evaluation_states_as_its_layout_a_regular_tr_of_the_design(
     )
     assert layout.control == expected.control
     assert layout.instances.amplitude == pytest.approx(
-        expected.instances.amplitude, rel=1e-6 if name in OPTIMIZED else 1e-9
+        expected.instances.amplitude, rel=1e-9
     )
     definitions = layout.instances.definitions
     assert [d.use for d in definitions] == [
