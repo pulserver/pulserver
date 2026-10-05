@@ -1,5 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 196 114" role="img" aria-labelledby="t d">
-<title id="t">pulserver</title><desc id="d">Two bipolar trapezoidal gradient waveforms in blue and amber</desc>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 116" role="img" aria-labelledby="t d">
+<title id="t">pulserver</title><desc id="d">A stack of three server rack units whose panel lines are trapezoidal gradient lobes</desc>
 <style>
 .box{fill:#eef4fa;stroke:#2b76ad;stroke-width:2}
 .core{fill:#2b76ad;stroke:#174b70;stroke-width:2}
@@ -13,7 +13,10 @@
 .ink{fill:none;stroke:#12212b;stroke-width:5;stroke-linejoin:miter;stroke-linecap:butt}
 .blue{fill:#3a77a8}
 .amber{fill:#ffbe2e}
-.word{fill:#2b76ad}
+.word{fill:#356a57}
+.orange{fill:#ffa00f}
+.unit{stroke:#2a2a2a;stroke-width:4}
+.trace{fill:none;stroke:#2a2a2a;stroke-width:4;stroke-linejoin:round;stroke-linecap:round}
 .title{font:bold 20px Arial,sans-serif;fill:#173042}
 .wave{fill:none;stroke:#3a77a8;stroke-width:3;stroke-linejoin:round}
 .rf{fill:none;stroke:#ffbe2e;stroke-width:3;stroke-linejoin:round}
@@ -21,16 +24,15 @@
 .base{fill:none;stroke:#657786;stroke-width:1.5}
 .bracket{fill:none;stroke:#657786;stroke-width:2}
 </style>
-<g transform="translate(6 38)">
-<g transform="translate(26 0)">
-<path class="blue" d="M24 0 38-28 81-28 93.1 0Z"/>
-<path class="amber" d="M93.1 0 104 25 118 25 130 0Z"/>
-<path class="ink" d="M0 0H24L38-28H81L104 25H118L130 0H158"/>
-</g>
-<g transform="translate(0 39)">
-<path class="amber" d="M24 0 38-28 81-28 93.1 0Z"/>
-<path class="blue" d="M93.1 0 104 25 118 25 130 0Z"/>
-<path class="ink" d="M0 0H24L38-28H81L104 25H118L130 0H158"/>
-</g>
+<g transform="translate(5 5)">
+<rect class="unit" x="0" y="0" width="150" height="30" rx="7" fill="#79bba4"/>
+<path class="trace" d="M14 15H30L38 8H62L70 15H100"/>
+<circle class="unit orange" cx="126" cy="15" r="7" stroke-width="3"/>
+<rect class="unit" x="0" y="38" width="150" height="30" rx="7" fill="#356a57"/>
+<path class="trace" d="M14 53H30L38 60H62L70 53H100"/>
+<circle class="unit orange" cx="126" cy="53" r="7" stroke-width="3"/>
+<rect class="unit" x="0" y="76" width="150" height="30" rx="7" fill="#79bba4"/>
+<path class="trace" d="M14 91H30L38 84H62L70 91H100"/>
+<circle class="unit orange" cx="126" cy="91" r="7" stroke-width="3"/>
 </g>
 </svg>
