@@ -477,7 +477,7 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">math</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">threading</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">collections</span><span class="w"> </span><span class="kn">import</span> <span class="n">OrderedDict</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span><span class="p">,</span> <span class="n">field</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span><span class="p">,</span> <span class="n">field</span><span class="p">,</span> <span class="n">replace</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span>
 
@@ -674,16 +674,18 @@
     <span class="n">_runs</span><span class="p">:</span> <span class="n">_Runs</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="nb">repr</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
     <span class="c1">#: One entry per distinct phase modulation shape: the modulation in rad, or None.</span>
     <span class="n">_phase_modulation</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="p">(),</span> <span class="nb">repr</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-    <span class="c1">#: Which entry of _phase_modulation each readout plays.</span>
+    <span class="c1">#: Which entry of _phase_modulation each readout plays, as _shared stores it.</span>
     <span class="n">_modulated_by</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span>
         <span class="n">default_factory</span><span class="o">=</span><span class="k">lambda</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">),</span> <span class="nb">repr</span><span class="o">=</span><span class="kc">False</span>
     <span class="p">)</span>
-    <span class="c1">#: Per readout, k at its first sample, in 1/m; None where not walked.</span>
+    <span class="c1">#: Per readout, float32 k at its first sample, in 1/m; None where not walked.</span>
     <span class="n">_start</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="nb">repr</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-    <span class="c1">#: Per readout, its entry of _paths: k from the first sample, before the rotation.</span>
+    <span class="c1">#: Per readout, its entry of _paths (k from the first sample, before the</span>
+    <span class="c1">#: rotation), as _shared stores it.</span>
     <span class="n">_path</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="nb">repr</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
     <span class="n">_paths</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="p">(),</span> <span class="nb">repr</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-    <span class="c1">#: Per readout, its entry of _rotations, -1 for none; None where no readout turns.</span>
+    <span class="c1">#: Per readout, its entry of _rotations, -1 for none, as _shared stores it;</span>
+    <span class="c1">#: None where no readout turns.</span>
     <span class="n">_rotation</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="nb">repr</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
     <span class="n">_rotations</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="nb">repr</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
 
@@ -727,10 +729,26 @@
             <span class="n">trajectory_dimensions</span><span class="o">=</span><span class="n">dimensions</span><span class="p">,</span>
             <span class="n">_runs</span><span class="o">=</span><span class="n">_Runs</span><span class="p">(</span><span class="n">seq</span><span class="p">,</span> <span class="n">num_samples</span><span class="p">),</span>
             <span class="n">_phase_modulation</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(</span><span class="n">_phase_modulation_of</span><span class="p">(</span><span class="n">adc</span><span class="p">)</span> <span class="k">for</span> <span class="n">adc</span> <span class="ow">in</span> <span class="n">adcs</span><span class="p">),</span>
-            <span class="n">_modulated_by</span><span class="o">=</span><span class="n">which</span><span class="p">,</span>
+            <span class="n">_modulated_by</span><span class="o">=</span><span class="n">_shared</span><span class="p">(</span><span class="n">which</span><span class="p">),</span>
             <span class="o">**</span><span class="n">_paths_of</span><span class="p">(</span><span class="n">echoes</span><span class="p">),</span>
         <span class="p">)</span></div>
 
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_for_k</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ReadoutTable</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Return the table cut to what readout_k and readout_phase_modulation read.</span>
+
+<span class="sd">        The sequence is kept only where k is integrated from it.</span>
+<span class="sd">        """</span>
+        <span class="n">empty</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int8</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">replace</span><span class="p">(</span>
+            <span class="bp">self</span><span class="p">,</span>
+            <span class="n">block</span><span class="o">=</span><span class="n">empty</span><span class="p">,</span>
+            <span class="n">dwell</span><span class="o">=</span><span class="n">empty</span><span class="p">,</span>
+            <span class="n">labels</span><span class="o">=</span><span class="p">{},</span>
+            <span class="n">center_sample</span><span class="o">=</span><span class="n">empty</span><span class="p">,</span>
+            <span class="n">trajectory_dimensions</span><span class="o">=</span><span class="n">empty</span><span class="p">,</span>
+            <span class="n">_runs</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_runs</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_start</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">_Runs</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="n">empty</span><span class="p">),</span>
+        <span class="p">)</span>
 
 <div class="viewcode-block" id="ReadoutTable.readout_phase_modulation">
 <a class="viewcode-back" href="../../../generated/pulserver.mrd.ReadoutTable.readout_phase_modulation.html#pulserver.mrd.ReadoutTable.readout_phase_modulation">[docs]</a>
@@ -741,7 +759,7 @@
 <span class="sd">        value throughout carries none: its share of a shifted field of view is</span>
 <span class="sd">        a phase and a frequency offset, which the receiver applies itself.</span>
 <span class="sd">        """</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_phase_modulation</span><span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_modulated_by</span><span class="p">[</span><span class="n">index</span><span class="p">])]</span></div>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_phase_modulation</span><span class="p">[</span><span class="n">_entry</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_modulated_by</span><span class="p">,</span> <span class="n">index</span><span class="p">)]</span></div>
 
 
 <div class="viewcode-block" id="ReadoutTable.readout_block">
@@ -760,8 +778,8 @@
 <span class="sd">        ``Sequence.adc_kspace`` returns it.</span>
 <span class="sd">        """</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_start</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">path</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_paths</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_path</span><span class="p">[</span><span class="n">index</span><span class="p">]]</span>
-            <span class="n">turn</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_rotation</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_rotation</span><span class="p">[</span><span class="n">index</span><span class="p">])</span>
+            <span class="n">path</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_paths</span><span class="p">[</span><span class="n">_entry</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_path</span><span class="p">,</span> <span class="n">index</span><span class="p">)]</span>
+            <span class="n">turn</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_rotation</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">_entry</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_rotation</span><span class="p">,</span> <span class="n">index</span><span class="p">)</span>
             <span class="k">if</span> <span class="n">turn</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">:</span>
                 <span class="n">path</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_rotations</span><span class="p">[</span><span class="n">turn</span><span class="p">]</span> <span class="o">@</span> <span class="n">path</span>
             <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_start</span><span class="p">[</span><span class="n">index</span><span class="p">][:,</span> <span class="kc">None</span><span class="p">]</span> <span class="o">+</span> <span class="n">path</span>
@@ -828,18 +846,31 @@
 <span class="sd">    each sweep already turned by the block's rotation.</span>
 <span class="sd">    """</span>
     <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">echoes</span><span class="p">,</span> <span class="s2">"start"</span><span class="p">):</span>
-        <span class="k">return</span> <span class="p">{</span>
-            <span class="s2">"_start"</span><span class="p">:</span> <span class="n">echoes</span><span class="o">.</span><span class="n">start</span><span class="p">,</span>
-            <span class="s2">"_path"</span><span class="p">:</span> <span class="n">echoes</span><span class="o">.</span><span class="n">path</span><span class="p">,</span>
-            <span class="s2">"_paths"</span><span class="p">:</span> <span class="n">echoes</span><span class="o">.</span><span class="n">paths</span> <span class="ow">or</span> <span class="p">(),</span>
-            <span class="s2">"_rotation"</span><span class="p">:</span> <span class="n">echoes</span><span class="o">.</span><span class="n">rotation</span><span class="p">,</span>
-            <span class="s2">"_rotations"</span><span class="p">:</span> <span class="n">echoes</span><span class="o">.</span><span class="n">rotations</span><span class="p">,</span>
-        <span class="p">}</span>
+        <span class="n">start</span><span class="p">,</span> <span class="n">path</span><span class="p">,</span> <span class="n">paths</span> <span class="o">=</span> <span class="n">echoes</span><span class="o">.</span><span class="n">start</span><span class="p">,</span> <span class="n">echoes</span><span class="o">.</span><span class="n">path</span><span class="p">,</span> <span class="n">echoes</span><span class="o">.</span><span class="n">paths</span>
+        <span class="n">rotation</span><span class="p">,</span> <span class="n">rotations</span> <span class="o">=</span> <span class="n">echoes</span><span class="o">.</span><span class="n">rotation</span><span class="p">,</span> <span class="n">echoes</span><span class="o">.</span><span class="n">rotations</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">start</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">echoes</span><span class="p">,</span> <span class="s2">"origin"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="n">path</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">echoes</span><span class="p">,</span> <span class="s2">"sweep"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="n">paths</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">echoes</span><span class="p">,</span> <span class="s2">"sweeps"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="n">rotation</span> <span class="o">=</span> <span class="n">rotations</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="k">return</span> <span class="p">{</span>
-        <span class="s2">"_start"</span><span class="p">:</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">echoes</span><span class="p">,</span> <span class="s2">"origin"</span><span class="p">,</span> <span class="kc">None</span><span class="p">),</span>
-        <span class="s2">"_path"</span><span class="p">:</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">echoes</span><span class="p">,</span> <span class="s2">"sweep"</span><span class="p">,</span> <span class="kc">None</span><span class="p">),</span>
-        <span class="s2">"_paths"</span><span class="p">:</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">echoes</span><span class="p">,</span> <span class="s2">"sweeps"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">or</span> <span class="p">(),</span>
+        <span class="s2">"_start"</span><span class="p">:</span> <span class="kc">None</span> <span class="k">if</span> <span class="n">start</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">start</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">),</span>
+        <span class="s2">"_path"</span><span class="p">:</span> <span class="kc">None</span> <span class="k">if</span> <span class="n">path</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">_shared</span><span class="p">(</span><span class="n">path</span><span class="p">),</span>
+        <span class="s2">"_paths"</span><span class="p">:</span> <span class="n">paths</span> <span class="ow">or</span> <span class="p">(),</span>
+        <span class="s2">"_rotation"</span><span class="p">:</span> <span class="kc">None</span> <span class="k">if</span> <span class="n">rotation</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">_shared</span><span class="p">(</span><span class="n">rotation</span><span class="p">),</span>
+        <span class="s2">"_rotations"</span><span class="p">:</span> <span class="n">rotations</span><span class="p">,</span>
     <span class="p">}</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_shared</span><span class="p">(</span><span class="n">values</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return a per-readout column, or its one value when every readout shares it; read with :func:`_entry`."""</span>
+    <span class="k">if</span> <span class="n">values</span><span class="o">.</span><span class="n">size</span> <span class="o">&gt;</span> <span class="mi">1</span> <span class="ow">and</span> <span class="ow">not</span> <span class="p">(</span><span class="n">values</span> <span class="o">!=</span> <span class="n">values</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
+        <span class="k">return</span> <span class="n">values</span><span class="p">[:</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+    <span class="k">return</span> <span class="n">values</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_entry</span><span class="p">(</span><span class="n">values</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">index</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+    <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="n">values</span><span class="p">[</span><span class="n">index</span> <span class="k">if</span> <span class="n">values</span><span class="o">.</span><span class="n">size</span> <span class="o">&gt;</span> <span class="mi">1</span> <span class="k">else</span> <span class="mi">0</span><span class="p">])</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_phase_modulation_of</span><span class="p">(</span><span class="n">adc</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>

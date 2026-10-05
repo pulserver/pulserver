@@ -713,7 +713,7 @@
             <span class="n">part</span><span class="p">,</span> <span class="n">part_spaces</span> <span class="o">=</span> <span class="n">_map_readouts</span><span class="p">(</span>
                 <span class="n">readouts</span><span class="p">,</span> <span class="n">definitions</span><span class="p">,</span> <span class="n">subsequence</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">spaces</span><span class="p">)</span>
             <span class="p">)</span>
-            <span class="n">files</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">readouts</span><span class="p">)</span>
+            <span class="n">files</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">readouts</span><span class="o">.</span><span class="n">_for_k</span><span class="p">())</span>
             <span class="n">parts</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">part</span><span class="p">)</span>
             <span class="n">spaces</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">part_spaces</span><span class="p">)</span>
             <span class="n">tr</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">definitions</span><span class="o">.</span><span class="n">tr</span><span class="p">)</span>
