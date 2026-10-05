@@ -8,7 +8,9 @@ import base64
 import contextlib
 import io
 import json
+import os
 import threading
+import urllib.request
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from pathlib import Path
 from typing import Any
@@ -31,6 +33,57 @@ _CALL_INPUTS = {
     "generate": ("plugins", "plugin", "limits", "input", "store", "push"),
     "import": ("limits", "input", "store", "push"),
 }
+
+
+#: The environment variable naming the image a console runs in, as
+#: ``<repository>@<digest>``; pulserver's launchers set it.
+IMAGE_VARIABLE = "PULSERVER_IMAGE"
+
+_MANIFESTS = ", ".join(
+    (
+        "application/vnd.oci.image.index.v1+json",
+        "application/vnd.docker.distribution.manifest.list.v2+json",
+        "application/vnd.oci.image.manifest.v1+json",
+        "application/vnd.docker.distribution.manifest.v2+json",
+    )
+)
+
+
+def published_digest(repository: str, tag: str = "latest") -> str:
+    """Return the digest a registry publishes for ``repository:tag``, pulled anonymously.
+
+    ``repository`` names its registry, as ``ghcr.io/pulserver/pulserver``.
+    """
+    host, name = repository.split("/", 1)
+    scope = f"https://{host}/token?scope=repository:{name}:pull"
+    with urllib.request.urlopen(scope, timeout=10) as answer:  # nosec B310
+        token = json.load(answer)["token"]
+    request = urllib.request.Request(
+        f"https://{host}/v2/{name}/manifests/{tag}",
+        method="HEAD",
+        headers={"Authorization": f"Bearer {token}", "Accept": _MANIFESTS},
+    )
+    with urllib.request.urlopen(request, timeout=10) as answer:  # noqa: S310 # nosec B310
+        return answer.headers["Docker-Content-Digest"]
+
+
+def image_version(
+    environment: Mapping[str, str] = os.environ,
+    latest: Callable[[str], str] = published_digest,
+) -> dict:
+    """Return ``{"image": digest, "latest": digest}`` of the image a console runs in.
+
+    Each is None where it is not known: ``image`` when the console was not
+    started by a launcher, ``latest`` when the registry does not answer.
+    """
+    repository, _, digest = environment.get(IMAGE_VARIABLE, "").partition("@")
+    if not digest:
+        return {"image": None, "latest": None}
+    try:
+        newest = latest(repository)
+    except (OSError, ValueError, KeyError):
+        newest = None
+    return {"image": digest, "latest": newest}
 
 
 class Console:
@@ -546,6 +599,8 @@ class Console:
                 reply({"plugins": self.plugin_names()})
             elif call == "recons":
                 reply({"recons": self.recon_names()})
+            elif call == "version":
+                reply(image_version())
             elif call == "coils":
                 reply({"coils": self.coils()})
             elif call in DESIGN_CALLS:
