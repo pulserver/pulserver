@@ -32,9 +32,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-PAGE_WIDTH = 8.6  # inches, the width of the documentation column
 # sphinx_gallery_end_ignore
-
 # %%
 # Scanner sequence
 # ----------------
@@ -46,9 +44,9 @@ PAGE_WIDTH = 8.6  # inches, the width of the documentation column
 # time and the repetition time, which the sequence records as its ``TE`` and
 # ``TR`` definitions, and the receiver bandwidth, the inverse of the dwell time
 # of its ADC event. The reply carries those values and the scan time.
-
 import numpy as np
 import pypulseqpp as pp
+from figure_style import MUTED, PAGE_WIDTH
 from pypulseqpp import sequences
 from pypulseqpp.sequences.sequence.gre2D_sequence import gre2d
 
@@ -136,7 +134,7 @@ achieved = {
 }
 
 # sphinx_gallery_start_ignore
-fig, ax = plt.subplots(figsize=(PAGE_WIDTH * 0.62, 3.6), layout="constrained")
+fig, ax = plt.subplots(figsize=(PAGE_WIDTH * 0.62, 3.6))
 for nx, values in achieved.items():
     ax.step(
         requested / 1e3,
@@ -144,10 +142,10 @@ for nx, values in achieved.items():
         where="post",
         label=f"{2 * nx} samples (nx = {nx})",
     )
-ax.plot(requested / 1e3, requested / 1e3, ls=":", lw=1, color="#7d8996")
+ax.plot(requested / 1e3, requested / 1e3, ls=":", lw=1, color=MUTED)
 ax.set_xlabel("requested bandwidth (kHz)")
 ax.set_ylabel("achieved bandwidth (kHz)")
-fig.legend(loc="outside upper center", ncols=2, frameon=False)
+fig.legend(loc="outside upper center", ncols=2)
 plt.show()
 # sphinx_gallery_end_ignore
 
@@ -185,7 +183,7 @@ minimum_te = {
 }
 
 # sphinx_gallery_start_ignore
-fig, ax = plt.subplots(figsize=(PAGE_WIDTH * 0.62, 3.6), layout="constrained")
+fig, ax = plt.subplots(figsize=(PAGE_WIDTH * 0.62, 3.6))
 for bw, values in minimum_te.items():
     ax.plot(
         matrices,
@@ -196,9 +194,7 @@ for bw, values in minimum_te.items():
     )
 ax.set_xlabel("readout matrix size nx")
 ax.set_ylabel("minimum TE (ms)")
-fig.legend(
-    loc="outside upper center", ncols=3, frameon=False, title="requested bandwidth"
-)
+fig.legend(loc="outside upper center", ncols=3, title="requested bandwidth")
 plt.show()
 # sphinx_gallery_end_ignore
 

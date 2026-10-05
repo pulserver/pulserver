@@ -10,7 +10,10 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-ffbd28.svg)](https://github.com/pulserver/pulserver/blob/main/LICENSE)
 [![Source](https://img.shields.io/badge/source-GitHub-181717?logo=github)](https://github.com/pulserver/pulserver)
 
-<p align="center"><img src="https://raw.githubusercontent.com/pulserver/pulserver/main/docs/_static/pulserver-logo.svg" alt="pulserver" width="580"></p>
+<p align="center"><picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/pulserver/pulserver/main/docs/_static/pulserver-logo-dark.svg">
+  <img src="https://raw.githubusercontent.com/pulserver/pulserver/main/docs/_static/pulserver-logo.svg" alt="pulserver" width="580">
+</picture></p>
 
 pulserver orchestrates MR acquisitions with Pulseq sequences on clinical
 scanners: sequence design, scanner preparation and reconstruction. It
@@ -38,7 +41,10 @@ the checks pypulseqpp provides does not establish scanner or patient safety.
 - Reconstruction plugins run in isolated worker processes, over a live MRD
   stream, an ISMRMRD file or an assembled acquisition bucket.
 
-<p align="center"><img src="https://raw.githubusercontent.com/pulserver/pulserver/main/docs/_static/architecture.svg" alt="pulserver architecture" width="900"></p>
+<p align="center"><picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/pulserver/pulserver/main/docs/_static/architecture-dark.svg">
+  <img src="https://raw.githubusercontent.com/pulserver/pulserver/main/docs/_static/architecture.svg" alt="pulserver architecture" width="900">
+</picture></p>
 
 ## Quick start
 

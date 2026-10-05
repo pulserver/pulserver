@@ -1,19 +1,19 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 470" role="img" aria-labelledby="t d">
 <title id="t">pulserver architecture</title><desc id="d">The scanner interpreter exchanges protocols with the design calls and streams raw data to the reconstruction proxy; the design calls write designs to the design store, or push them to the proxy's own, and the proxy reads them</desc>
 <style>
-.box{fill:#eef4fa;stroke:#2b76ad;stroke-width:2}
-.core{fill:#2b76ad;stroke:#174b70;stroke-width:2}
-.a{fill:#fdf6e6;stroke:#ffb91f;stroke-width:2}
-.txt{font:22px Arial,sans-serif;fill:#173042}
+.box{fill:#13293a;stroke:#5b9bd0;stroke-width:2}
+.core{fill:#2b76ad;stroke:#8fc3e8;stroke-width:2}
+.a{fill:#2a2415;stroke:#ffbe2e;stroke-width:2}
+.txt{font:22px Arial,sans-serif;fill:#dce7f0}
 .white{font:23px Arial,sans-serif;fill:#ffffff;font-weight:bold}
-.small{font:18px Arial,sans-serif;fill:#173042}
-.label{font:16px Arial,sans-serif;fill:#657786}
-.arrow{stroke:#657786;stroke-width:3;marker-end:url(#m)}
-.head{fill:#657786}
-.ink{fill:none;stroke:#12212b;stroke-width:5;stroke-linejoin:miter;stroke-linecap:butt}
-.blue{fill:#3a77a8}
+.small{font:18px Arial,sans-serif;fill:#dce7f0}
+.label{font:16px Arial,sans-serif;fill:#93a7b5}
+.arrow{stroke:#93a7b5;stroke-width:3;marker-end:url(#m)}
+.head{fill:#93a7b5}
+.ink{fill:none;stroke:#e8eef3;stroke-width:5;stroke-linejoin:miter;stroke-linecap:butt}
+.blue{fill:#5b9bd0}
 .amber{fill:#ffbe2e}
-.word{fill:#2b76ad}
+.word{fill:#8fc3e8}
 </style>
 <defs><marker id="m" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><path class="head" d="M0,0 L0,6 L9,3 z"/></marker></defs>
 <rect class="core" x="120" y="20" rx="12" width="760" height="70"/><text class="white" x="500" y="62" text-anchor="middle">Scanner interpreter and reconstruction client</text>

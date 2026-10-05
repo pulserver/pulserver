@@ -35,6 +35,16 @@ Scanner execution
 ## Services and data flow
 
 ```{figure} ../_static/architecture.svg
+:figclass: only-light
+
+The two pulserver services between the scanner and the engines, and the
+design store: one directory both reach, or the proxy's own, to which the design
+calls push each design.
+```
+
+```{figure} ../_static/architecture-dark.svg
+:figclass: only-dark
+
 The two pulserver services between the scanner and the engines, and the
 design store: one directory both reach, or the proxy's own, to which the design
 calls push each design.

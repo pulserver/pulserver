@@ -33,11 +33,7 @@ Outline:
 import matplotlib
 
 matplotlib.use("Agg")
-import matplotlib.pyplot as plt
-
-PAGE_WIDTH = 8.6  # inches, the width of the documentation column
 # sphinx_gallery_end_ignore
-
 # %%
 # Sequence and readout table
 # --------------------------
@@ -49,14 +45,15 @@ PAGE_WIDTH = 8.6  # inches, the width of the documentation column
 # :meth:`~pulserver.proxy.SequenceTable.readout_k` returns the k-space location
 # of each sample of a readout, in 1/m, integrated when it is asked for. The
 # simulation below joins them over the scan.
-
 import tempfile
 from pathlib import Path
 
 import ismrmrd
 import ismrmrd.xsd as xsd
+import matplotlib.pyplot as plt
 import numpy as np
 import pypulseqpp as pp
+from figure_style import PAGE_WIDTH
 from pypulseqpp import sequences
 from pypulseqpp.sequences.sequence.gre2D_sequence import gre2d
 
@@ -142,7 +139,7 @@ deviation = np.abs(wrapped(receive_phase(moved) - shift_phase)).max()
 print(f"largest |receive phase - 2 pi d.k| over the scan: {deviation:.1e} rad")
 
 # sphinx_gallery_start_ignore
-fig, ax = plt.subplots(figsize=(PAGE_WIDTH * 0.7, 3.0), layout="constrained")
+fig, ax = plt.subplots(figsize=(PAGE_WIDTH * 0.7, 3.0))
 n_x = int(table.num_samples[0])
 for row in (0, 16, 32):
     span = slice(int(first_sample[row]), int(first_sample[row]) + n_x)
@@ -161,7 +158,7 @@ for row in (0, 16, 32):
 ax.set_xlabel("sample")
 ax.set_ylabel("receive phase (cycles)")
 ax.set_title(r"receive phase (lines) and $\mathbf{d}\cdot\mathbf{k}$ (markers)")
-ax.legend(frameon=False)
+ax.legend()
 plt.show()
 # sphinx_gallery_end_ignore
 
@@ -308,12 +305,12 @@ as_written = reconstruct(designed, "as_written.h5")
 centred = reconstruct(moved, "centred.h5")
 
 # sphinx_gallery_start_ignore
-fig, axes = plt.subplots(1, 2, figsize=(PAGE_WIDTH * 0.8, 3.8), layout="constrained")
+fig, axes = plt.subplots(1, 2, figsize=(PAGE_WIDTH * 0.8, 3.8))
 for ax, image, title in (
     (axes[0], as_written, "played as written"),
     (axes[1], centred, "played at d = (30, -90) mm"),
 ):
-    ax.imshow(image, cmap="gray", origin="lower")
+    ax.imshow(image, origin="lower")
     ax.set_title(title)
     ax.set_xticks([])
     ax.set_yticks([])

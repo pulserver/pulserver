@@ -28,12 +28,7 @@ Outline:
 import matplotlib
 
 matplotlib.use("Agg")
-import matplotlib.pyplot as plt
-
-PAGE_WIDTH = 8.6  # inches, the width of the documentation column
-SHADES = ("#2a78d6", "#169869", "#eb6834", "#b47900")
 # sphinx_gallery_end_ignore
-
 # %%
 # Repeating unit of a spin echo
 # -----------------------------
@@ -42,12 +37,13 @@ SHADES = ("#2a78d6", "#169869", "#eb6834", "#b47900")
 # written to a file and converted under the scanner limits. :func:`~pulserver.ir.convert` writes the
 # IR cache beside the sequence file; :func:`~pulserver.ir.summary` reports the
 # segmentation.
-
 import tempfile
 from pathlib import Path
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pypulseqpp as pp
+from figure_style import FAINT, INK, PAGE_WIDTH, SERIES
 from pypulseqpp.sequences import se2D_sequence
 
 from pulserver import ir
@@ -101,9 +97,7 @@ for index, segment in enumerate(report["segments"]):
 delay = next(i for i, s in enumerate(report["segments"]) if s["pure_delay"])
 owner[owner < 0] = delay
 
-fig, axes = plt.subplots(
-    4, 1, figsize=(PAGE_WIDTH, 5.2), sharex=True, layout="constrained"
-)
+fig, axes = plt.subplots(4, 1, figsize=(PAGE_WIDTH, 5.2), sharex=True)
 rows = (
     (waves[3], "RF (Hz)", True),
     (waves[2], "Gz (mT/m)", False),
@@ -113,19 +107,19 @@ rows = (
 for ax, (data, label, is_rf) in zip(axes, rows, strict=True):
     for block in range(tr_blocks):
         ax.axvspan(
-            edges[block], edges[block + 1], color=SHADES[owner[block]], alpha=0.12, lw=0
+            edges[block], edges[block + 1], color=SERIES[owner[block]], alpha=0.12, lw=0
         )
     time = np.real(data[0]) * 1e3
     value = np.abs(data[1]) if is_rf else np.real(data[1]) / gamma * 1e3
-    ax.plot(time, value, lw=1, color="#717c8b")
+    ax.plot(time, value, lw=1, color=INK)
     ax.set_ylabel(label)
     for edge in edges:
-        ax.axvline(edge, color="#7d899659", lw=0.6)
+        ax.axvline(edge, color=FAINT, lw=0.6)
 for index in range(len(report["segments"])):
-    axes[0].plot([], [], lw=6, alpha=0.3, color=SHADES[index], label=f"segment {index}")
+    axes[0].plot([], [], lw=6, alpha=0.3, color=SERIES[index], label=f"segment {index}")
 axes[-1].set_xlabel("time from the start of the TR (ms)")
 axes[-1].set_xlim(0, edges[-1])
-fig.legend(loc="outside upper center", ncols=len(report["segments"]), frameon=False)
+fig.legend(loc="outside upper center", ncols=len(report["segments"]))
 plt.show()
 # sphinx_gallery_end_ignore
 
