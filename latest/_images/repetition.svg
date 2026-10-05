@@ -13,7 +13,10 @@
 .ink{fill:none;stroke:#12212b;stroke-width:5;stroke-linejoin:miter;stroke-linecap:butt}
 .blue{fill:#3a77a8}
 .amber{fill:#ffbe2e}
-.word{fill:#2b76ad}
+.word{fill:#356a57}
+.orange{fill:#ffa00f}
+.unit{stroke:#2a2a2a;stroke-width:4}
+.trace{fill:none;stroke:#2a2a2a;stroke-width:4;stroke-linejoin:round;stroke-linecap:round}
 .title{font:bold 20px Arial,sans-serif;fill:#173042}
 .wave{fill:none;stroke:#3a77a8;stroke-width:3;stroke-linejoin:round}
 .rf{fill:none;stroke:#ffbe2e;stroke-width:3;stroke-linejoin:round}

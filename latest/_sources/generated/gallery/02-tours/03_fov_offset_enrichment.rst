@@ -312,7 +312,7 @@ which needs no new cache.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.499 seconds)
+   **Total running time of the script:** (0 minutes 0.559 seconds)
 
 
 .. _sphx_glr_download_generated_gallery_02-tours_03_fov_offset_enrichment.py:
