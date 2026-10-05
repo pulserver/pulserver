@@ -552,8 +552,9 @@ asked, through the <a class="reference internal" href="pulserver.mrd.ReadoutTabl
 <dl class="field-list simple">
 <dt class="field-odd">Attributes<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>counters</strong> (<em>dict of str to ndarray</em>) – Every label of <code class="docutils literal notranslate"><span class="pre">MRD_COUNTERS</span></code>, one <code class="docutils literal notranslate"><span class="pre">int32</span></code> value per readout; 0
-where the sequence never writes it.</p></li>
+<li><p><strong>counters</strong> (<em>dict of str to ndarray</em>) – Every label of <code class="docutils literal notranslate"><span class="pre">MRD_COUNTERS</span></code> some file of the chain writes, one
+<code class="docutils literal notranslate"><span class="pre">int32</span></code> value per readout, 0 in a file that never writes it. A
+counter no file writes is absent, and 0 on every readout.</p></li>
 <li><p><strong>flags</strong> (<em>ndarray</em>) – <code class="docutils literal notranslate"><span class="pre">uint64</span></code> ISMRMRD flag masks: the non-boundary flags the sequence
 sets, first/last flags of every counter the sequence writes, and
 <code class="docutils literal notranslate"><span class="pre">LAST_IN_MEASUREMENT</span></code> on the final readout of the chain. A boundary
