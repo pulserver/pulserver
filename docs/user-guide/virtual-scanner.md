@@ -366,6 +366,7 @@ it repeats:
 | `plugins` | | `plugins`: the scanner-sequence plugin names |
 | `recons` | | `recons`: the reconstruction plugin names, the shipped ones and those of `--recon-plugins` |
 | `coils` | | `coils`: each coil's `name` and its `transmit` and `receive` channels |
+| `version` | | `image`: the digest of the image the console runs in, named by `PULSERVER_IMAGE` as `<repository>@<digest>`; `latest`: the digest the registry publishes for that repository's `latest` tag; each `null` where it is not known |
 | `list`, `validate`, `generate`, `import` | `plugin`, `block` | `status` and `reply`, as `pulserver design` answers; `design` for a generated or imported design |
 | `exam` | `subject`, `coil` | `localizer`: the axial, coronal and sagittal images of the subject's phantom, as base64 DICOM files |
 | `scan` | `design`, `rotation` (nine elements), `centre_mm`, `sound`, `recon` | at a speed, `preparing` about twice a second until the clock starts, the wall-clock time left in s or `null` before there is an estimate; `clock` and `duration` after each span played, with the span's `sound` when asked, as base64 of 16-bit little-endian stereo samples at `rate` Hz; `dicom` and `name` for each image the reconstruction returns, `text`, then `done` with the status |

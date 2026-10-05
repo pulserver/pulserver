@@ -944,3 +944,26 @@ def test_a_console_lists_every_directorys_plugins_and_designs_from_the_first_hol
     assert console.plugin_names() == sorted({"alias", *shipped.plugin_names()})
     assert console.design("list", "gre2d") == shipped.design("list", "tiny")
     assert generated["status"] == 0
+
+
+def test_a_console_reports_its_image_and_the_published_one_by_digest():
+    from pulserver.virtual._console import image_version
+
+    asked = []
+
+    def latest(repository):
+        asked.append(repository)
+        return "sha256:new"
+
+    def silent(repository):
+        raise OSError("no network")
+
+    named = {"PULSERVER_IMAGE": "ghcr.io/pulserver/pulserver@sha256:old"}
+
+    assert image_version(named, latest) == {
+        "image": "sha256:old",
+        "latest": "sha256:new",
+    }
+    assert asked == ["ghcr.io/pulserver/pulserver"]
+    assert image_version(named, silent) == {"image": "sha256:old", "latest": None}
+    assert image_version({}, latest) == {"image": None, "latest": None}
