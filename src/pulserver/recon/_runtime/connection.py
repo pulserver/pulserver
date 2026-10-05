@@ -46,6 +46,8 @@ from .writers import (
     write_waveform,
 )
 
+_log = logging.getLogger(__name__)
+
 
 class MessageType(Enum):
     """Message types :class:`Connection` counts and logs.
@@ -468,7 +470,7 @@ class Connection:
                 return None
             return constants.GadgetMessageIdentifier.unpack(peeked_bytes)[0]
         except (OSError, ConnectionResetError):
-            logging.error("Failed to peek message identifier")
+            _log.debug("the stream ended where a message identifier was looked for")
             self.is_exhausted = True
             return None
 
@@ -476,7 +478,9 @@ class Connection:
         try:
             return read(self.socket, constants.GadgetMessageIdentifier)
         except ConnectionResetError as err:
-            logging.error("Connection closed unexpectedly")
+            # Where the next message would begin is where a stream ends, so
+            # the iteration ends here rather than failing.
+            _log.debug("the stream ended where a message identifier was read")
             self.is_exhausted = True
             raise StopIteration from err
 

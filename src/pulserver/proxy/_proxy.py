@@ -166,6 +166,19 @@ class _Listener:
         connection.add_reader(constants.GADGET_MESSAGE_CONFIG, read_text)
         try:
             config, header = _opening(connection)
+        except _NothingSent:
+            # Something opened the port and left: a readiness probe, or a
+            # client that gave up before sending. There is no series to refuse
+            # and nothing to say it to.
+            _log.debug("a client connected and sent nothing")
+            connection.shutdown_close()
+            return
+        except Exception as error:
+            _log.exception("a series could not be read")
+            _refuse(connection, error)
+            connection.shutdown_close()
+            return
+        try:
             self._series(connection, config, header)
         except Exception as error:
             _log.exception("series failed")
@@ -892,6 +905,10 @@ def _drain(connection: Connection) -> None:
             pass
 
 
+class _NothingSent(Exception):
+    """A connection that ended before it sent anything at all."""
+
+
 def _opening(connection: Connection) -> tuple[str, Any]:
     """Return the config text and the header a stream opens with.
 
@@ -900,10 +917,14 @@ def _opening(connection: Connection) -> tuple[str, Any]:
 
     Raises
     ------
+    _NothingSent
+        If the connection ended before anything arrived.
     ValueError
         If the stream carries no header after at most a config.
     """
     config = _first(connection)
+    if config is None:
+        raise _NothingSent
     if isinstance(config, xsd.ismrmrdHeader):
         return "", config
     header = _first(connection) if isinstance(config, str) else config

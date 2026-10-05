@@ -1,6 +1,7 @@
 """The reconstruction proxy: a series streamed in, images streamed back."""
 
 import json
+import logging
 import os
 import runpy
 import shutil
@@ -1277,6 +1278,19 @@ def test_a_service_nothing_connects_to_closes_on_its_own(service, bucket):
         assert not thread.is_alive(), f"the {service} was still waiting"
     finally:
         running.close()
+
+
+def test_a_connection_that_sends_nothing_is_not_a_failed_series(
+    start_proxy, bucket, caplog
+):
+    """A readiness probe opens the port and leaves; nothing is refused to it."""
+    _, series = bucket
+    proxy = start_proxy(slots=1)
+    with caplog.at_level(logging.ERROR, logger="pulserver.proxy"):
+        socket.create_connection(("127.0.0.1", proxy.port), timeout=DEADLINE).close()
+        received = stream(proxy.port, series["gre2d"])
+    assert len(images(received)) == 1
+    assert not [record for record in caplog.records if record.levelno >= logging.ERROR]
 
 
 def test_the_idle_timeout_counts_from_the_last_client_leaving(bucket):
