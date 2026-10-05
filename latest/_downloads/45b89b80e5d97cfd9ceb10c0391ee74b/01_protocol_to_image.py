@@ -108,7 +108,7 @@ print(sorted(path.name for path in (store / design).iterdir()))
 # An exam names its subject and coil: here the vials phantom, seven water vials
 # and one fat vial, in the body coil, which transmits and receives on one
 # channel. The scan plays the stored design on the phantom with a Bloch
-# simulation, sends the raw data to the reconstruction, here ``simplefft``,
+# simulation, sends the raw data to the reconstruction, here ``pics``,
 # and receives the images as DICOM.
 import base64
 import io
@@ -122,7 +122,7 @@ status = console.scan(
     rotation=np.eye(3),
     centre_mm=(0.0, 0.0, 0.0),
     emit=received.append,
-    recon="simplefft",
+    recon="pics",
 )
 images = [
     pydicom.dcmread(io.BytesIO(base64.b64decode(item["dicom"])))

@@ -199,7 +199,7 @@ IR cache and stores both as a design. The reply is the design's identifier.
 
  .. code-block:: none
 
-    GENERATED 491c2e8e5d0a42b638
+    GENERATED c1b1e635304316b358
 
     ['manifest.json', 'resolved.protocol', 'sequence.pseg', 'sequence.seq']
 
@@ -214,7 +214,7 @@ The scan
 An exam names its subject and coil: here the vials phantom, seven water vials
 and one fat vial, in the body coil, which transmits and receives on one
 channel. The scan plays the stored design on the phantom with a Bloch
-simulation, sends the raw data to the reconstruction, here ``simplefft``,
+simulation, sends the raw data to the reconstruction, here ``pics``,
 and receives the images as DICOM.
 
 .. GENERATED FROM PYTHON SOURCE LINES 113-144
@@ -233,7 +233,7 @@ and receives the images as DICOM.
         rotation=np.eye(3),
         centre_mm=(0.0, 0.0, 0.0),
         emit=received.append,
-        recon="simplefft",
+        recon="pics",
     )
     images = [
         pydicom.dcmread(io.BytesIO(base64.b64decode(item["dicom"])))
@@ -256,6 +256,7 @@ and receives the images as DICOM.
 
  .. code-block:: none
 
+    WARNING:pulserver.recon.gadgets:readouts are not prewhitened: the stream has no noise readouts before its first other readout, and the exam stores no noise covariance for its coil labels
     status 0, 1 image of (64, 64)
 
 
@@ -284,7 +285,7 @@ at a time.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.753 seconds)
+   **Total running time of the script:** (0 minutes 1.890 seconds)
 
 
 .. _sphx_glr_download_generated_gallery_01-course_01_protocol_to_image.py:

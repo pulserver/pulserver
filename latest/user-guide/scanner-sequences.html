@@ -700,7 +700,7 @@ every <code class="docutils literal notranslate"><span class="pre">--plugins</sp
 <td><p><code class="docutils literal notranslate"><span class="pre">pics</span></code></p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">fse3d</span></code>, <code class="docutils literal notranslate"><span class="pre">mprage3d</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">pics_train</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">pmc</span></code></p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">gre_radial2d</span></code>, <code class="docutils literal notranslate"><span class="pre">gre_spiral2d</span></code>, <code class="docutils literal notranslate"><span class="pre">se_radial2d</span></code>, <code class="docutils literal notranslate"><span class="pre">se_spiral2d</span></code>, <code class="docutils literal notranslate"><span class="pre">gre_propeller2d</span></code>, <code class="docutils literal notranslate"><span class="pre">se_propeller2d</span></code>, <code class="docutils literal notranslate"><span class="pre">se_epi_propeller2d</span></code>, <code class="docutils literal notranslate"><span class="pre">zte3d</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">nufft</span></code></p></td>
@@ -721,6 +721,47 @@ every <code class="docutils literal notranslate"><span class="pre">--plugins</sp
 names no reconstruction (<a class="reference internal" href="virtual-scanner.html"><span class="doc">Scanning a phantom without a scanner</span></a>); a scan can name another, and
 the reconstruction client of a scanner names one in its config
 (<a class="reference internal" href="reconstruction-client.html"><span class="doc">Reconstruction clients</span></a>).</p>
+<p>Optional features are switched by a module constant of the plugin, off in
+the shipped files; a copy of the file in a <code class="docutils literal notranslate"><span class="pre">--plugins</span></code> directory with the
+constant set replaces the shipped plugin. A switch adds the entries the
+feature needs, a scanner entry where there is one and a user entry otherwise:</p>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Plugin</p></th>
+<th class="head"><p>Constant</p></th>
+<th class="head"><p>Feature</p></th>
+<th class="head"><p>Entries added</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">epi2d</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">MULTIBAND</span></code></p></td>
+<td><p>Simultaneous multislice</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">multiband</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">fse3d</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">OPTIMIZED</span></code></p></td>
+<td><p>Refocusing train designed with torchsim, shared by every shot</p></td>
+<td><p>Flip angle: the refocusing angle at the TE echo</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">fse3d</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">DUAL_REGION</span></code></p></td>
+<td><p>Trains designed with torchsim for the centre and the periphery of k-space, each shot’s a cubic step between them; <code class="docutils literal notranslate"><span class="pre">TR</span></code> and <code class="docutils literal notranslate"><span class="pre">ETL</span></code> are the centre’s</p></td>
+<td><p>Flip angle, as <code class="docutils literal notranslate"><span class="pre">OPTIMIZED</span></code>; user entries 0 and 1: TR and ETL at the periphery</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">fse3d</span></code>, <code class="docutils literal notranslate"><span class="pre">mprage3d</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">NAVIGATOR</span></code></p></td>
+<td><p>Three-plane navigators; the design sets <code class="docutils literal notranslate"><span class="pre">EnablePmc</span></code> and <code class="docutils literal notranslate"><span class="pre">pmc</span></code> states each pose to the scan</p></td>
+<td><p>None</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">gre_spiral2d</span></code>, <code class="docutils literal notranslate"><span class="pre">se_spiral2d</span></code>, <code class="docutils literal notranslate"><span class="pre">gre_stack_of_spirals3d</span></code>, <code class="docutils literal notranslate"><span class="pre">se_stack_of_spirals3d</span></code>, <code class="docutils literal notranslate"><span class="pre">mprage_stack_of_spirals3d</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">VARIABLE_DENSITY</span></code></p></td>
+<td><p>Variable-density spirals</p></td>
+<td><p>User entry 0: periphery undersampling</p></td>
+</tr>
+</tbody>
+</table>
+</div>
 <p>A 3D sequence takes its number of partitions from the number of slices. <code class="docutils literal notranslate"><span class="pre">Ry</span></code>
 undersamples the phase encode of the Cartesian sequences, the blades of
 <code class="docutils literal notranslate"><span class="pre">gre_propeller2d</span></code> and <code class="docutils literal notranslate"><span class="pre">se_propeller2d</span></code> and the shells of <code class="docutils literal notranslate"><span class="pre">zte3d</span></code>, and <code class="docutils literal notranslate"><span class="pre">Rz</span></code> the

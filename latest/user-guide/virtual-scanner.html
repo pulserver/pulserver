@@ -595,11 +595,11 @@ field-of-view offset in the protocol block (<a class="reference internal" href="
     <span class="n">design</span><span class="p">,</span>
     <span class="n">readouts</span><span class="p">,</span>
     <span class="n">position_mm</span><span class="o">=</span><span class="p">(</span><span class="mf">20.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">),</span>
-    <span class="n">config</span><span class="o">=</span><span class="s2">"cartesian"</span><span class="p">,</span>
+    <span class="n">config</span><span class="o">=</span><span class="s2">"pics"</span><span class="p">,</span>
 <span class="p">)</span>
 </pre></div>
 </div>
-<p><code class="docutils literal notranslate"><span class="pre">config</span></code> names the reconstruction plugin, here the shipped <code class="docutils literal notranslate"><span class="pre">cartesian</span></code>, as the
+<p><code class="docutils literal notranslate"><span class="pre">config</span></code> names the reconstruction plugin, here the shipped <code class="docutils literal notranslate"><span class="pre">pics</span></code>, as the
 config text of a reconstruction client does (<a class="reference internal" href="reconstruction-client.html"><span class="doc">Reconstruction clients</span></a>); the
 proxy refuses a series whose config names none.</p>
 <p>The phantom lies in the physical frame, whose axes are the logical ones under
@@ -678,7 +678,7 @@ the client sends it on; the sound of its gradients can be written as it plays:</
             <span class="n">audio</span><span class="o">.</span><span class="n">writeframes</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">round</span><span class="p">(</span><span class="mi">32767</span> <span class="o">*</span> <span class="n">chunk</span><span class="o">.</span><span class="n">sound</span><span class="o">.</span><span class="n">T</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="s2">"&lt;i2"</span><span class="p">)</span><span class="o">.</span><span class="n">tobytes</span><span class="p">())</span>
             <span class="k">yield from</span> <span class="n">chunk</span><span class="o">.</span><span class="n">readouts</span>
 
-    <span class="n">received</span> <span class="o">=</span> <span class="n">virtual</span><span class="o">.</span><span class="n">send</span><span class="p">((</span><span class="s2">"127.0.0.1"</span><span class="p">,</span> <span class="mi">9002</span><span class="p">),</span> <span class="n">design</span><span class="p">,</span> <span class="n">acquired</span><span class="p">(),</span> <span class="n">config</span><span class="o">=</span><span class="s2">"cartesian"</span><span class="p">)</span>
+    <span class="n">received</span> <span class="o">=</span> <span class="n">virtual</span><span class="o">.</span><span class="n">send</span><span class="p">((</span><span class="s2">"127.0.0.1"</span><span class="p">,</span> <span class="mi">9002</span><span class="p">),</span> <span class="n">design</span><span class="p">,</span> <span class="n">acquired</span><span class="p">(),</span> <span class="n">config</span><span class="o">=</span><span class="s2">"pics"</span><span class="p">)</span>
 </pre></div>
 </div>
 <p>The spans are simulated in a thread of their own, ahead of the clock. At
@@ -830,7 +830,7 @@ the client sends <span class="math notranslate nohighlight">\(R\)</span> times t
     <span class="n">readouts</span><span class="p">,</span>
     <span class="n">position_mm</span><span class="o">=</span><span class="mf">1e3</span> <span class="o">*</span> <span class="n">centre</span><span class="p">,</span>
     <span class="n">rotation</span><span class="o">=</span><span class="n">rotation</span><span class="p">,</span>
-    <span class="n">config</span><span class="o">=</span><span class="s2">"cartesian"</span><span class="p">,</span>
+    <span class="n">config</span><span class="o">=</span><span class="s2">"pics"</span><span class="p">,</span>
 <span class="p">)</span>
 </pre></div>
 </div>
