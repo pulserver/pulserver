@@ -57,6 +57,12 @@ sensitivity maps, noise prewhitening and coil compression are the subject of
 | {obj}`~pulserver.recon.MissingCalibration` | No source holds coil sensitivities the unit can use. |
 | {obj}`~pulserver.recon.CoilCompression` | Reduce the receive channels of a unit's k-space to virtual channels. |
 
+## Image correction
+
+| Object | Description |
+| --- | --- |
+| {obj}`~pulserver.recon.gradient_unwarped` | Return an image resampled from where its voxels were acquired to where they belong. |
+
 ## Buffers and results
 
 | Object | Description |
