@@ -50,7 +50,7 @@ __all__ = [
 
 
 def __getattr__(name: str):
-    """Import the Fourier engine, which needs torch, the first time it is named."""
+    """Import the Fourier engine, and torch with it, the first time it is named."""
     if name == "FourierPlayer":
         from ._fourier import FourierPlayer
 
