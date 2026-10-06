@@ -184,6 +184,8 @@ class FourierPlayer:
         everything = _Entries.of(tissue, self.device)
         voxel = _voxel(timeline, everything, tissue.spacing)
         spanned = _spanned(everything, tissue.axes, timeline.rotation, voxel)
+        winds = np.linalg.norm((timeline.readouts.winding @ spanned) * voxel, axis=1)
+        timeline.read_free_induction(np.flatnonzero(winds < SHIFT_CYCLES))
         shifted = _shifted(timeline, events, voxel, spanned)
         selector_of, selectors = _selectors(pulses)
         profiles = _profiles(everything, selectors, pulses)
@@ -1403,7 +1405,7 @@ class _ReadoutBasis:
         self.device = device
         dwell = played["adc_dwell_ns"][readouts.block].astype(np.int64)
         counts = np.diff(readouts.first)
-        unrefocused = np.nan_to_num(timeline.unrefocused_us(readouts.echo_us))
+        unrefocused = np.nan_to_num(timeline.readout_unrefocused_us())
         shapes = np.column_stack(
             [dwell, counts, readouts.echo, np.round(unrefocused).astype(np.int64)]
         )

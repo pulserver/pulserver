@@ -232,7 +232,7 @@ class Timeline:
             else np.zeros((1, 3)),
             device=self.device,
         )
-        self._intervals = self._interval()
+        self._intervals, self._interval_us = self._interval()
         self._pulse_times = torch.as_tensor(self.pulses.time_us, device=self.device)
         self._pulse_files = torch.as_tensor(
             played["subsequence"][self.pulses.block].astype(np.int64),
@@ -470,14 +470,17 @@ class Timeline:
             winding,
         )
 
-    def _interval(self) -> torch.Tensor:
-        """Return the moment over each pulse's interval, from it to the next pulse, ``(pulses, 3)``."""
+    def _interval(self) -> tuple[torch.Tensor, np.ndarray]:
+        """Return the moment over each pulse's interval, from it to the next pulse, ``(pulses, 3)``, and the interval's duration in µs."""
         pulses = self.pulses
         count = pulses.block.size
         if not count:
-            return torch.zeros((1, 3), dtype=torch.float64, device=self.device)
+            return torch.zeros(
+                (1, 3), dtype=torch.float64, device=self.device
+            ), np.zeros(1)
         ahead = torch.cat([self._pulse_moments[1:], self._start_moment_t[-1:]])
         wound = torch.nan_to_num(ahead - self._origins_t[1:], nan=0.0)
+        lasting = np.diff(np.append(pulses.time_us, self.starts_us[-1]))
         place = (
             self.played["segment"][pulses.block],
             self.played["position"][pulses.block],
@@ -490,7 +493,26 @@ class Timeline:
             earlier = np.flatnonzero(alike)
         if earlier.size:
             wound[-1] = wound[int(earlier[-1])]
-        return wound
+            lasting[-1] = lasting[int(earlier[-1])]
+        return wound, lasting
+
+    def read_free_induction(self, readouts: np.ndarray) -> None:
+        """Read the free induction at ``readouts``, whose intervals wind too little across a voxel to part its pathways."""
+        self.readouts.pathway[readouts] = 0
+        self._offsets[torch.as_tensor(readouts, device=self.device)] = 0.0
+
+    def readout_unrefocused_us(self) -> np.ndarray:
+        """Return how long the pathway each readout reads has precessed unrefocused at its echo, in µs.
+
+        As :meth:`unrefocused_us` gives it at the echo, less an interval for
+        each order the pathway lies behind the free induction: the echo of an
+        earlier interval dephased through that interval before the pulse
+        turned it back.
+        """
+        echo = self.readouts.echo_us
+        last = self._last(echo)
+        behind = np.where(last >= 0, self._interval_us[np.maximum(last, 0)], 0.0)
+        return self.unrefocused_us(echo) - self.readouts.pathway * behind
 
     def kspace(
         self, first: int, last: int

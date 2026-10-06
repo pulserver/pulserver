@@ -289,17 +289,26 @@ def test_each_readout_reads_the_pathway_that_passes_the_centre_during_it(
 
 
 @pytest.mark.parametrize(
-    "kind, selective",
-    [("fid", False), ("echo", False), ("dess", False), ("echo", True)],
+    "kind, selective, offset_hz",
+    [
+        ("fid", False, 0.0),
+        ("echo", False, 0.0),
+        ("dess", False, 0.0),
+        ("echo", True, 0.0),
+        ("echo", False, 30.0),
+        ("dess", False, 30.0),
+    ],
 )
 def test_the_fourier_engine_acquires_what_the_bloch_engine_does_of_an_unspoiled_steady_state(
-    kind, selective, tmp_path, device
+    kind, selective, offset_hz, tmp_path, device
 ):
     sequence = _steady(kind, tmp_path / f"{kind}.seq", selective=selective)
     water = _slab(half_thickness=6e-3, radius=0.03, fat=False)
     region = virtual.excited(sequence)
     player = virtual.FourierPlayer(
-        sequence, water.tissue(2e-3, field_t=3.0, region=region), device=device
+        sequence,
+        water.tissue(2e-3, field_t=3.0, region=region, off_resonance_hz=offset_hz),
+        device=device,
     )
     fourier = np.concatenate(
         [readout.ravel() for readout in player.readouts(0, player.blocks)]
@@ -310,12 +319,74 @@ def test_the_fourier_engine_acquires_what_the_bloch_engine_does_of_an_unspoiled_
             for readout in virtual.simulate(
                 sequence,
                 water.isochromats(
-                    2e-3, field_t=3.0, region=region, spins=4, voxel="box"
+                    2e-3,
+                    field_t=3.0,
+                    region=region,
+                    spins=4,
+                    voxel="box",
+                    off_resonance_hz=offset_hz,
                 ),
             )
         ]
     )
 
+    assert np.linalg.norm(fourier - bloch) < 0.05 * np.linalg.norm(bloch)
+
+
+def _balanced(path, *, matrix=32, fov=0.12, lines=32, dummies=200):
+    """A 2D bSSFP: hard pulses alternating in phase, every gradient of a repetition balanced."""
+    system = pp.Opts(
+        max_grad=30, grad_unit="mT/m", max_slew=120, slew_unit="T/m/s", B0=3.0
+    )
+    seq = pp.Sequence(system)
+    rf = pp.make_block_pulse(np.radians(40.0), duration=2e-4, system=system)
+    read = pp.make_trapezoid(
+        "x", flat_area=matrix / fov, flat_time=1.6e-3, system=system
+    )
+    adc = pp.make_adc(
+        matrix, duration=read.flat_time, delay=read.rise_time, system=system
+    )
+    prephaser = pp.make_trapezoid("x", area=-read.area / 2, system=system)
+    span = pp.calc_duration(prephaser)
+    for at in range(dummies + lines):
+        rf.phase_offset = adc.phase_offset = np.pi * (at % 2)
+        area = (at - dummies - lines // 2) / fov if at >= dummies else 0.0
+        seq.add_block(rf)
+        seq.add_block(
+            prephaser, pp.make_trapezoid("y", area=area, duration=span, system=system)
+        )
+        seq.add_block(read, adc) if at >= dummies else seq.add_block(read)
+        seq.add_block(
+            prephaser, pp.make_trapezoid("y", area=-area, duration=span, system=system)
+        )
+    seq.write(str(path))
+    ir.convert(path, SYSTEM)
+    return path
+
+
+def test_a_balanced_steady_state_reads_the_free_induction_as_the_bloch_engine_does(
+    tmp_path, device
+):
+    sequence = _balanced(tmp_path / "bssfp.seq")
+    water = virtual.Phantom(
+        [virtual.Ellipse((0.0, 0.0, 0.0), (0.03, 0.03), t1=0.8, t2=0.08)]
+    )
+    player = virtual.FourierPlayer(
+        sequence, water.tissue(2e-3, field_t=3.0), device=device
+    )
+    fourier = np.concatenate(
+        [readout.ravel() for readout in player.readouts(0, player.blocks)]
+    )
+    bloch = np.concatenate(
+        [
+            readout.ravel()
+            for readout in virtual.simulate(
+                sequence, water.isochromats(2e-3, field_t=3.0, spins=4, voxel="box")
+            )
+        ]
+    )
+
+    assert not np.any(player._timeline.readouts.pathway)
     assert np.linalg.norm(fourier - bloch) < 0.05 * np.linalg.norm(bloch)
 
 
