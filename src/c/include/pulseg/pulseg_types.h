@@ -726,6 +726,14 @@ typedef struct pulseg_subseq_info
      *  reference pulse's, body model by body model, the largest over
      *  repetitions and models; 0 as vop_sar_ratio. */
     float vop_global_sar_ratio;
+    /** The peak sound pressure level, in dB re 20 uPa, of the repetition of
+     *  most gradient energy played without end, through the gradient coil's
+     *  acoustic response on the physical axes of the prescription; -1 when
+     *  the host was given no acoustic response. */
+    float spl_peak_db;
+    /** The A-weighted RMS sound pressure level of that repetition, in dB(A);
+     *  -1 when the host was given no acoustic response. */
+    float spl_average_dba;
     /** The raster the file's gradient shapes are sampled on, in us: its
      *  GradientRasterTime, or the conversion's where it declares none. */
     float grad_raster_us;
@@ -734,7 +742,7 @@ typedef struct pulseg_subseq_info
 /* clang-format off */
 #define PULSEG_SUBSEQ_INFO_INIT \
     { \
-    0.0f, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0.0f, 0.0f, 0.0f \
+    0.0f, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0.0f, 0.0f, -1.0f, -1.0f, 0.0f \
     }
 /* clang-format on */
 

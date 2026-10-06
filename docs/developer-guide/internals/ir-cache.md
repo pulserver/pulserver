@@ -4,8 +4,8 @@ The implementation of the scanner representation
 ({doc}`../../explanations/scanner-representation`): how the prescription is
 applied, the passes that compute it and the statistics they record, how gradients that a
 prepared segment cannot play are carried as waves, how a playout loads the
-cache in two stages, the gradients kept for the scanner's heating and acoustic
-models, and the layout of the cache file. The C headers an interpreter
+cache in two stages, the gradients kept for the scanner's heating model, and
+the layout of the cache file. The C headers an interpreter
 includes are in
 [`src/c/include/pulseg/`](https://github.com/pulserver/pulserver/tree/main/src/c/include/pulseg).
 
@@ -224,8 +224,9 @@ to that type.
 
 ## The heaviest repetition
 
-A scanner evaluates its gradient-heating and acoustic models on the gradients
-of a repetition. For each subsequence the conversion finds the repetition, of
+A scanner evaluates its gradient-heating model on the gradients of a
+repetition, and the host's sound pressure check
+(`pypulseqpp.safety.check_spl`) chooses the same one. For each subsequence the conversion finds the repetition, of
 those the execution stream holds from its first block, over which
 
 $$

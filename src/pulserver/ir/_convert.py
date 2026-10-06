@@ -12,7 +12,7 @@ import pypulseqpp as pp
 
 from .._accelerators import require
 from ..mrd._sequence import read_chain
-from ._checks import SarRatio
+from ._checks import SarRatio, SplLevels
 from ._source import conversion_payload
 
 
@@ -220,6 +220,7 @@ def convert(
     cache_ext: str = ".pseg",
     verify_signature: bool = True,
     sar_ratios: Sequence[SarRatio] | None = None,
+    spl_levels: Sequence[SplLevels] | None = None,
     wave_budget: WaveBudget | None = None,
     profile: VendorProfile | None = None,
     grouping: Grouping | None = None,
@@ -264,6 +265,10 @@ def convert(
     sar_ratios
         One per file of the chain, as :func:`sar_ratios` returns them, written
         into each subsequence of the cache; zero when None.
+    spl_levels
+        One per file of the chain, as :func:`spl_levels` returns them, written
+        into each subsequence of the cache, 0 dB for a file without
+        gradients; -1 when None.
     profile
         What the cache holds its numbers as; every quantity a float in its SI
         unit when left out.
@@ -290,7 +295,8 @@ def convert(
     ------
     ValueError
         If a file of the chain cannot be read, verified or segmented,
-        ``sar_ratios`` does not give one per file, or the waves fit neither
+        ``sar_ratios`` or ``spl_levels`` does not give one per file, or the
+        waves fit neither
         layout of ``wave_budget`` or cannot be loaded in time.
     OSError
         If no cache was written.
@@ -305,6 +311,7 @@ def convert(
         label_column_map=label_column_map,
         cache_ext=cache_ext,
         sar_ratios=sar_ratios,
+        spl_levels=spl_levels,
         wave_budget=wave_budget,
         profile=profile,
         grouping=grouping,
@@ -320,6 +327,7 @@ def _write_cache(
     label_column_map: Sequence[int] = (0, 1, 2),
     cache_ext: str = ".pseg",
     sar_ratios: Sequence[SarRatio] | None = None,
+    spl_levels: Sequence[SplLevels] | None = None,
     wave_budget: WaveBudget | None = None,
     profile: VendorProfile | None = None,
     grouping: Grouping | None = None,
@@ -341,6 +349,17 @@ def _write_cache(
         for libraries, ratio in zip(payload, sar_ratios, strict=True):
             libraries["reserved"]["vop_sar_ratio"] = float(ratio.local_sar)
             libraries["reserved"]["vop_global_sar_ratio"] = float(ratio.global_sar)
+    if spl_levels is not None:
+        if len(spl_levels) != len(payload):
+            raise ValueError(
+                f"expected one set of sound pressure levels per file of the chain, "
+                f"{len(payload)}; got {len(spl_levels)}"
+            )
+        for libraries, levels in zip(payload, spl_levels, strict=True):
+            libraries["reserved"]["spl_peak_db"] = max(float(levels.peak_db), 0.0)
+            libraries["reserved"]["spl_average_dba"] = max(
+                float(levels.average_dba), 0.0
+            )
     require("convert_libraries")(
         payload,
         str(seq_path),
@@ -376,7 +395,8 @@ def summary(
     ``pypulseqpp.calc_rf_power``'s energy over its peak power, both summed
     over a dynamic pTx pulse's channels.
     ``vop_sar_ratio`` and ``vop_global_sar_ratio`` are those the cache was
-    written with, zero when the chain is read and segmented again.
+    written with, zero when the chain is read and segmented again;
+    ``spl_peak_db`` and ``spl_average_dba`` likewise, -1 when it is.
     ``readout_labels`` lists, per readout in play order, the values of the
     three labels ``label_column_map`` selects, as in force at that readout.
     ``waves`` lists the subsequence's waves, as :func:`play` indexes
@@ -561,16 +581,22 @@ def _payload(
     A file the reader refuses raises ``ValueError``, whatever the reader
     itself raised.
     """
-    if designed is not None:
-        chain_read = designed
-    else:
-        try:
-            chain_read = read_chain(seq_path, verify=verify_signature)
-        except RuntimeError as failure:
-            raise ValueError(f"cannot read {seq_path}: {failure}") from failure
+    chain_read = (
+        designed if designed is not None else _read_chain(seq_path, verify_signature)
+    )
     payload = []
     for _, sequence in chain_read:
         if fov_offset is not None:
             prescribe(sequence, fov_offset)
         payload.append(conversion_payload(sequence, system))
     return payload
+
+
+def _read_chain(
+    seq_path: Path, verify_signature: bool
+) -> list[tuple[Path, pp.Sequence]]:
+    """Read the ``NextSequence`` chain; a file the reader refuses raises ``ValueError``."""
+    try:
+        return read_chain(seq_path, verify=verify_signature)
+    except RuntimeError as failure:
+        raise ValueError(f"cannot read {seq_path}: {failure}") from failure

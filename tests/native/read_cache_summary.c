@@ -24,9 +24,11 @@ static void print_subsequence(const pulseg_collection *coll, int i)
 
     pulseg_get_subseq_info(coll, &s, i);
     printf("subsequence %d num_trs %d tr_size %d num_unique_adcs %d num_unique_rf %d "
-           "vop_sar_ratio %g vop_global_sar_ratio %g\n",
+           "vop_sar_ratio %g vop_global_sar_ratio %g "
+           "spl_peak_db %g spl_average_dba %g\n",
            i, s.num_trs, s.tr_size, s.num_unique_adcs, s.num_unique_rf,
-           (double)s.vop_sar_ratio, (double)s.vop_global_sar_ratio);
+           (double)s.vop_sar_ratio, (double)s.vop_global_sar_ratio,
+           (double)s.spl_peak_db, (double)s.spl_average_dba);
     num_groups = pulseg_get_tr_groups(coll, &groups, i);
     for (n = 0; n < num_groups; ++n)
         printf("group %d %d trid %d num_instances %d one_instance_duration_us %d\n",
