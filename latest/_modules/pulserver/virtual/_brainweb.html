@@ -574,6 +574,9 @@
 <span class="sd">        :attr:`DIFFUSION` gives them; a class without one does not diffuse.</span>
 <span class="sd">    """</span>
 
+    <span class="c1">#: The axes a voxel spans: all three, physical.</span>
+    <span class="n">VOXEL_AXES</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span>
+
     <span class="c1">#: Isotropic diffusion coefficients, in m²/s, of the tissue classes whose</span>
     <span class="c1">#: water diffusion is measured: the apparent diffusion coefficients of</span>
     <span class="c1">#: cortical grey matter and of white matter in adults (Helenius et al.,</span>
@@ -722,7 +725,8 @@
 <span class="sd">        holds is ``spins`` isochromats of proton density, between them, the</span>
 <span class="sd">        tissue's times the fraction of the cube it fills times the cube's</span>
 <span class="sd">        volume in m³, precessing at the cube's mean :attr:`field_ppm`: at the</span>
-<span class="sd">        cube's centre, or over the cube for a ``"box"`` ``voxel``, and at the</span>
+<span class="sd">        cube's centre, or over the cube for a ``"box"`` or ``"jittered"``</span>
+<span class="sd">        ``voxel``, and at the</span>
 <span class="sd">        quantiles of the Lorentzian line of the tissue's T2'</span>
 <span class="sd">        (:doc:`/developer-guide/internals/bloch-engine`).</span>
 
@@ -745,9 +749,11 @@
 <span class="sd">            The scanner's coil the brain is scanned with, in place of the</span>
 <span class="sd">            phantom's coils.</span>
 <span class="sd">        spins</span>
-<span class="sd">            Isochromats per tissue of a cube: a cube number for a ``"box"``.</span>
+<span class="sd">            Isochromats per tissue of a cube: a cube number for a ``"box"`` or a</span>
+<span class="sd">            ``"jittered"`` voxel.</span>
 <span class="sd">        voxel</span>
-<span class="sd">            ``"point"`` or ``"box"``: where a cube's isochromats lie.</span>
+<span class="sd">            ``"point"``, ``"box"`` or ``"jittered"``: where a cube's</span>
+<span class="sd">            isochromats lie.</span>
 <span class="sd">        motion</span>
 <span class="sd">            The head's motion, as :class:`~pulserver.virtual.Isochromats`</span>
 <span class="sd">            takes it.</span>
@@ -776,9 +782,11 @@
         <span class="n">centres</span><span class="p">,</span> <span class="n">proton_density</span><span class="p">,</span> <span class="n">t1</span><span class="p">,</span> <span class="n">t2</span><span class="p">,</span> <span class="n">frequency</span><span class="p">,</span> <span class="n">t2_prime</span><span class="p">,</span> <span class="n">diffusion</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sampled</span><span class="p">(</span>
             <span class="n">spacing</span><span class="p">,</span> <span class="n">field_t</span><span class="p">,</span> <span class="n">off_resonance_hz</span><span class="p">,</span> <span class="n">region</span>
         <span class="p">)</span>
-        <span class="n">offsets</span><span class="p">,</span> <span class="n">order</span> <span class="o">=</span> <span class="n">_voxels</span><span class="o">.</span><span class="n">stencil</span><span class="p">(</span><span class="n">spins</span><span class="p">,</span> <span class="n">voxel</span><span class="p">,</span> <span class="n">spacing</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">3</span><span class="p">))</span>
+        <span class="n">offsets</span><span class="p">,</span> <span class="n">order</span> <span class="o">=</span> <span class="n">_voxels</span><span class="o">.</span><span class="n">stencil</span><span class="p">(</span><span class="n">spins</span><span class="p">,</span> <span class="n">voxel</span><span class="p">,</span> <span class="n">spacing</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">VOXEL_AXES</span><span class="p">)</span>
         <span class="n">rng</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">default_rng</span><span class="p">(</span><span class="n">seed</span><span class="p">)</span>
         <span class="n">own</span> <span class="o">=</span> <span class="n">_voxels</span><span class="o">.</span><span class="n">spread</span><span class="p">(</span><span class="n">centres</span><span class="p">,</span> <span class="n">spins</span><span class="p">)</span> <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">tile</span><span class="p">(</span><span class="n">offsets</span><span class="p">,</span> <span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">t1</span><span class="p">),</span> <span class="mi">1</span><span class="p">))</span>
+        <span class="k">if</span> <span class="n">voxel</span> <span class="o">==</span> <span class="s2">"jittered"</span><span class="p">:</span>
+            <span class="n">own</span> <span class="o">+=</span> <span class="n">_voxels</span><span class="o">.</span><span class="n">jitter</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">t1</span><span class="p">),</span> <span class="n">spins</span><span class="p">,</span> <span class="n">spacing</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">VOXEL_AXES</span><span class="p">,</span> <span class="n">rng</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">Isochromats</span><span class="p">(</span>
             <span class="n">own</span><span class="p">,</span>
             <span class="n">proton_density</span><span class="o">=</span><span class="n">_voxels</span><span class="o">.</span><span class="n">spread</span><span class="p">(</span><span class="n">proton_density</span><span class="p">,</span> <span class="n">spins</span><span class="p">)</span> <span class="o">/</span> <span class="n">spins</span><span class="p">,</span>

@@ -550,7 +550,8 @@
 holds is <code class="docutils literal notranslate"><span class="pre">spins</span></code> isochromats of proton density, between them, the
 tissue’s times the fraction of the cube it fills times the cube’s
 volume in m³, precessing at the cube’s mean <a class="reference internal" href="pulserver.virtual.BrainWeb.field_ppm.html#pulserver.virtual.BrainWeb.field_ppm" title="pulserver.virtual.BrainWeb.field_ppm"><code class="xref py py-attr docutils literal notranslate"><span class="pre">field_ppm</span></code></a>: at the
-cube’s centre, or over the cube for a <code class="docutils literal notranslate"><span class="pre">&quot;box&quot;</span></code> <code class="docutils literal notranslate"><span class="pre">voxel</span></code>, and at the
+cube’s centre, or over the cube for a <code class="docutils literal notranslate"><span class="pre">&quot;box&quot;</span></code> or <code class="docutils literal notranslate"><span class="pre">&quot;jittered&quot;</span></code>
+<code class="docutils literal notranslate"><span class="pre">voxel</span></code>, and at the
 quantiles of the Lorentzian line of the tissue’s T2’
 (<a class="reference internal" href="../developer-guide/internals/bloch-engine.html"><span class="doc">Bloch engine</span></a>).</p>
 <dl class="field-list simple">
@@ -567,8 +568,10 @@ and <code class="docutils literal notranslate"><span class="pre">(n,)</span></co
 one.</p></li>
 <li><p><strong>coil</strong> – The scanner’s coil the brain is scanned with, in place of the
 phantom’s coils.</p></li>
-<li><p><strong>spins</strong> – Isochromats per tissue of a cube: a cube number for a <code class="docutils literal notranslate"><span class="pre">&quot;box&quot;</span></code>.</p></li>
-<li><p><strong>voxel</strong> – <code class="docutils literal notranslate"><span class="pre">&quot;point&quot;</span></code> or <code class="docutils literal notranslate"><span class="pre">&quot;box&quot;</span></code>: where a cube’s isochromats lie.</p></li>
+<li><p><strong>spins</strong> – Isochromats per tissue of a cube: a cube number for a <code class="docutils literal notranslate"><span class="pre">&quot;box&quot;</span></code> or a
+<code class="docutils literal notranslate"><span class="pre">&quot;jittered&quot;</span></code> voxel.</p></li>
+<li><p><strong>voxel</strong> – <code class="docutils literal notranslate"><span class="pre">&quot;point&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;box&quot;</span></code> or <code class="docutils literal notranslate"><span class="pre">&quot;jittered&quot;</span></code>: where a cube’s
+isochromats lie.</p></li>
 <li><p><strong>motion</strong> – The head’s motion, as <a class="reference internal" href="pulserver.virtual.Isochromats.html#pulserver.virtual.Isochromats" title="pulserver.virtual.Isochromats"><code class="xref py py-class docutils literal notranslate"><span class="pre">Isochromats</span></code></a>
 takes it.</p></li>
 <li><p><strong>seed</strong> – Seed of the frequencies of each voxel’s isochromats and of their

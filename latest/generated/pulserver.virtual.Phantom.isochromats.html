@@ -572,8 +572,10 @@ in Hz, beside its chemical shift.</p></li>
 positions, in m, and <code class="docutils literal notranslate"><span class="pre">(n,)</span></code> frequencies, in Hz, as
 <a class="reference internal" href="pulserver.virtual.Slabs.html#pulserver.virtual.Slabs" title="pulserver.virtual.Slabs"><code class="xref py py-class docutils literal notranslate"><span class="pre">Slabs</span></code></a> answers; every one without one.</p></li>
 <li><p><strong>coil</strong> – The scanner’s coil the phantom is scanned with.</p></li>
-<li><p><strong>spins</strong> – Isochromats per voxel: a square number for a <code class="docutils literal notranslate"><span class="pre">&quot;box&quot;</span></code>.</p></li>
-<li><p><strong>voxel</strong> – <code class="docutils literal notranslate"><span class="pre">&quot;point&quot;</span></code> or <code class="docutils literal notranslate"><span class="pre">&quot;box&quot;</span></code>: where a voxel’s isochromats lie.</p></li>
+<li><p><strong>spins</strong> – Isochromats per voxel: a square number for a <code class="docutils literal notranslate"><span class="pre">&quot;box&quot;</span></code> or a
+<code class="docutils literal notranslate"><span class="pre">&quot;jittered&quot;</span></code> voxel.</p></li>
+<li><p><strong>voxel</strong> – <code class="docutils literal notranslate"><span class="pre">&quot;point&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;box&quot;</span></code> or <code class="docutils literal notranslate"><span class="pre">&quot;jittered&quot;</span></code>: where a voxel’s
+isochromats lie.</p></li>
 <li><p><strong>motion</strong> – The phantom’s motion, as <a class="reference internal" href="pulserver.virtual.Isochromats.html#pulserver.virtual.Isochromats" title="pulserver.virtual.Isochromats"><code class="xref py py-class docutils literal notranslate"><span class="pre">Isochromats</span></code></a>
 takes it.</p></li>
 <li><p><strong>seed</strong> – Seed of the frequencies of each voxel’s isochromats and of their

@@ -28,5 +28,6 @@
    :nosignatures:
 
    ~BrainWeb.DIFFUSION
+   ~BrainWeb.VOXEL_AXES
    ~BrainWeb.field_ppm
    ~BrainWeb.fractions

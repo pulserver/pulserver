@@ -560,6 +560,9 @@
 <span class="sd">        Physical location of the phantom's origin, in metres.</span>
 <span class="sd">    """</span>
 
+    <span class="c1">#: The axes a voxel spans, along the phantom's own: the ellipses' plane.</span>
+    <span class="n">VOXEL_AXES</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">3</span><span class="p">)[:</span><span class="mi">2</span><span class="p">]</span>
+
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">ellipses</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">Ellipse</span><span class="p">],</span>
@@ -633,9 +636,11 @@
 <span class="sd">        coil</span>
 <span class="sd">            The scanner's coil the phantom is scanned with.</span>
 <span class="sd">        spins</span>
-<span class="sd">            Isochromats per voxel: a square number for a ``"box"``.</span>
+<span class="sd">            Isochromats per voxel: a square number for a ``"box"`` or a</span>
+<span class="sd">            ``"jittered"`` voxel.</span>
 <span class="sd">        voxel</span>
-<span class="sd">            ``"point"`` or ``"box"``: where a voxel's isochromats lie.</span>
+<span class="sd">            ``"point"``, ``"box"`` or ``"jittered"``: where a voxel's</span>
+<span class="sd">            isochromats lie.</span>
 <span class="sd">        motion</span>
 <span class="sd">            The phantom's motion, as :class:`~pulserver.virtual.Isochromats`</span>
 <span class="sd">            takes it.</span>
@@ -663,9 +668,11 @@
         <span class="n">own</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">density</span><span class="p">,</span> <span class="n">t1</span><span class="p">,</span> <span class="n">t2</span><span class="p">,</span> <span class="n">frequency</span><span class="p">,</span> <span class="n">t2_prime</span><span class="p">,</span> <span class="n">diffusion</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sampled</span><span class="p">(</span>
             <span class="n">spacing</span><span class="p">,</span> <span class="n">field_t</span><span class="p">,</span> <span class="n">off_resonance_hz</span><span class="p">,</span> <span class="n">region</span>
         <span class="p">)</span>
-        <span class="n">offsets</span><span class="p">,</span> <span class="n">order</span> <span class="o">=</span> <span class="n">_voxels</span><span class="o">.</span><span class="n">stencil</span><span class="p">(</span><span class="n">spins</span><span class="p">,</span> <span class="n">voxel</span><span class="p">,</span> <span class="n">spacing</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">3</span><span class="p">)[:</span><span class="mi">2</span><span class="p">])</span>
+        <span class="n">offsets</span><span class="p">,</span> <span class="n">order</span> <span class="o">=</span> <span class="n">_voxels</span><span class="o">.</span><span class="n">stencil</span><span class="p">(</span><span class="n">spins</span><span class="p">,</span> <span class="n">voxel</span><span class="p">,</span> <span class="n">spacing</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">VOXEL_AXES</span><span class="p">)</span>
         <span class="n">rng</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">default_rng</span><span class="p">(</span><span class="n">seed</span><span class="p">)</span>
         <span class="n">own</span> <span class="o">=</span> <span class="n">_voxels</span><span class="o">.</span><span class="n">spread</span><span class="p">(</span><span class="n">own</span><span class="p">,</span> <span class="n">spins</span><span class="p">)</span> <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">tile</span><span class="p">(</span><span class="n">offsets</span><span class="p">,</span> <span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">t1</span><span class="p">),</span> <span class="mi">1</span><span class="p">))</span>
+        <span class="k">if</span> <span class="n">voxel</span> <span class="o">==</span> <span class="s2">"jittered"</span><span class="p">:</span>
+            <span class="n">own</span> <span class="o">+=</span> <span class="n">_voxels</span><span class="o">.</span><span class="n">jitter</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">t1</span><span class="p">),</span> <span class="n">spins</span><span class="p">,</span> <span class="n">spacing</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">VOXEL_AXES</span><span class="p">,</span> <span class="n">rng</span><span class="p">)</span>
         <span class="n">positions</span> <span class="o">=</span> <span class="n">own</span> <span class="o">@</span> <span class="bp">self</span><span class="o">.</span><span class="n">_rotation</span><span class="o">.</span><span class="n">T</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">_position</span>
         <span class="k">return</span> <span class="n">Isochromats</span><span class="p">(</span>
             <span class="n">positions</span><span class="p">,</span>

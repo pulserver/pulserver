@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>BrainWeb &#8212; pulserver documentation</title>
+    <title>Phantom.VOXEL_AXES &#8212; pulserver documentation</title>
   
   
   
@@ -52,7 +52,7 @@
     <script src="../_static/copybutton.js?v=f281be69"></script>
     <script src="../_static/sg-tags.js?v=d80f6fa4"></script>
     <script src="../_static/scripts/sphinx-book-theme.js?v=fab101a9"></script>
-    <script>DOCUMENTATION_OPTIONS.pagename = 'generated/pulserver.virtual.BrainWeb';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'generated/pulserver.virtual.Phantom.VOXEL_AXES';</script>
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
@@ -61,7 +61,7 @@
             true;
         </script>
     <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
-    <link rel="canonical" href="https://pulserver.github.io/pulserver/latest/generated/pulserver.virtual.BrainWeb.html" />
+    <link rel="canonical" href="https://pulserver.github.io/pulserver/latest/generated/pulserver.virtual.Phantom.VOXEL_AXES.html" />
     <link rel="icon" href="../_static/pulserver-mark.svg"/>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
@@ -388,7 +388,7 @@
       
       
       
-      <li><a href="https://github.com/pulserver/pulserver/edit/main/docs/generated/pulserver.virtual.BrainWeb.rst" target="_blank"
+      <li><a href="https://github.com/pulserver/pulserver/edit/main/docs/generated/pulserver.virtual.Phantom.VOXEL_AXES.rst" target="_blank"
    class="btn btn-sm btn-source-edit-button dropdown-item"
    title="Suggest edit"
    data-bs-placement="left" data-bs-toggle="tooltip"
@@ -405,7 +405,7 @@
       
       
       
-      <li><a href="https://github.com/pulserver/pulserver/issues/new?title=Issue%20on%20page%20%2Fgenerated/pulserver.virtual.BrainWeb.html&body=Your%20issue%20content%20here." target="_blank"
+      <li><a href="https://github.com/pulserver/pulserver/issues/new?title=Issue%20on%20page%20%2Fgenerated/pulserver.virtual.Phantom.VOXEL_AXES.html&body=Your%20issue%20content%20here." target="_blank"
    class="btn btn-sm btn-source-issues-button dropdown-item"
    title="Open an issue"
    data-bs-placement="left" data-bs-toggle="tooltip"
@@ -435,7 +435,7 @@
       
       
       
-      <li><a href="../_sources/generated/pulserver.virtual.BrainWeb.rst" target="_blank"
+      <li><a href="../_sources/generated/pulserver.virtual.Phantom.VOXEL_AXES.rst" target="_blank"
    class="btn btn-sm btn-download-source-button dropdown-item"
    title="Download source file"
    data-bs-placement="left" data-bs-toggle="tooltip"
@@ -518,7 +518,7 @@
               
 
 <div id="jb-print-docs-body" class="onlyprint">
-    <h1>BrainWeb</h1>
+    <h1>Phantom.VOXEL_AXES</h1>
     <!-- Table of contents -->
     <div id="print-main-content">
         <div id="jb-print-toc">
@@ -528,7 +528,7 @@
             </div>
             <nav aria-label="Page">
                 <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.virtual.BrainWeb"><code class="docutils literal notranslate"><span class="pre">BrainWeb</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.virtual.Phantom.VOXEL_AXES"><code class="docutils literal notranslate"><span class="pre">Phantom.VOXEL_AXES</span></code></a></li>
 </ul>
             </nav>
         </div>
@@ -540,81 +540,19 @@
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <section id="brainweb">
-<h1>BrainWeb<a class="headerlink" href="#brainweb" title="Link to this heading">#</a></h1>
-<dl class="py class">
-<dt class="sig sig-object py" id="pulserver.virtual.BrainWeb">
-<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">pulserver.virtual.</span></span><span class="sig-name descname"><span class="pre">BrainWeb</span></span><a class="reference internal" href="../_modules/pulserver/virtual/_brainweb.html#BrainWeb"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.virtual.BrainWeb" title="Link to this definition">#</a></dt>
-<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/builtins/functions.html#object" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
-<p>BrainWeb’s normal brain, received by one coil or several.</p>
-<p>The fuzzy tissue model of BrainWeb’s normal brain (Collins et al., IEEE
-Trans Med Imaging 17:463, 1998) gives each 1 mm voxel the fraction of it
-each tissue class fills. brainweb-dl downloads it on first use into its
-cache, which the <code class="docutils literal notranslate"><span class="pre">brainweb</span></code> extra installs. The brain lies as a subject
-lying head first and supine, with the origin of its MNI coordinates, the
-anterior commissure, at the isocentre: the physical x axis points to the
-subject’s left, y posterior and z superior. Each tissue class relaxes with
-the T1, T2 and T2’ <a class="reference internal" href="pulserver.virtual.BrainWeb.relaxation.html#pulserver.virtual.BrainWeb.relaxation" title="pulserver.virtual.BrainWeb.relaxation"><code class="xref py py-meth docutils literal notranslate"><span class="pre">relaxation()</span></code></a> derives at the field it is scanned
-at from the parameters BrainWeb’s simulator gives it at 1.5 T (Kwan et
-al., IEEE Trans Med Imaging 18:1085, 1999), and has the proton density
-the simulator gives it; T2’ acts where a voxel holds several isochromats.
-Fat precesses at pypulseqpp’s fat shift, and every isochromat at the field
-<a class="reference internal" href="pulserver.virtual.BrainWeb.field_ppm.html#pulserver.virtual.BrainWeb.field_ppm" title="pulserver.virtual.BrainWeb.field_ppm"><code class="xref py py-attr docutils literal notranslate"><span class="pre">field_ppm</span></code></a> its head adds. The coils are those of
-<a class="reference internal" href="pulserver.virtual.Phantom.html#pulserver.virtual.Phantom" title="pulserver.virtual.Phantom"><code class="xref py py-class docutils literal notranslate"><span class="pre">Phantom</span></code></a>, fixed in the physical frame.</p>
+  <section id="phantom-voxel-axes">
+<h1>Phantom.VOXEL_AXES<a class="headerlink" href="#phantom-voxel-axes" title="Link to this heading">#</a></h1>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="pulserver.virtual.Phantom.VOXEL_AXES">
+<span class="sig-prename descclassname"><span class="pre">Phantom.</span></span><span class="sig-name descname"><span class="pre">VOXEL_AXES</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">array([[1.,</span> <span class="pre">0.,</span> <span class="pre">0.],</span>&#160;&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">[0.,</span> <span class="pre">1.,</span> <span class="pre">0.]])</span></span><a class="headerlink" href="#pulserver.virtual.Phantom.VOXEL_AXES" title="Link to this definition">#</a></dt>
+<dd><p>the ellipses’ plane.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>coils</strong> – Receive channels.</p></li>
-<li><p><strong>period</strong> – Spatial period of the sensitivities, in metres.</p></li>
-<li><p><strong>depth</strong> – Their modulation depth.</p></li>
-<li><p><strong>directory</strong> – brainweb-dl’s cache; <code class="docutils literal notranslate"><span class="pre">BRAINWEB_DIR</span></code>, or <code class="docutils literal notranslate"><span class="pre">~/.cache/brainweb</span></code>,
-without one.</p></li>
-<li><p><strong>susceptibility</strong> – Whether the field the head’s susceptibility adds acts on it.</p></li>
-<li><p><strong>t2_prime</strong> – T2’, in s, by tissue class, in place of the one <a class="reference internal" href="pulserver.virtual.BrainWeb.relaxation.html#pulserver.virtual.BrainWeb.relaxation" title="pulserver.virtual.BrainWeb.relaxation"><code class="xref py py-meth docutils literal notranslate"><span class="pre">relaxation()</span></code></a>
-derives, at any field.</p></li>
-<li><p><strong>diffusion</strong> – Isotropic diffusion coefficient, in m²/s, by tissue class, as
-<a class="reference internal" href="pulserver.virtual.BrainWeb.DIFFUSION.html#pulserver.virtual.BrainWeb.DIFFUSION" title="pulserver.virtual.BrainWeb.DIFFUSION"><code class="xref py py-attr docutils literal notranslate"><span class="pre">DIFFUSION</span></code></a> gives them; a class without one does not diffuse.</p></li>
-</ul>
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>The axes a voxel spans, along the phantom’s own</p>
 </dd>
 </dl>
 </dd></dl>
 
-<p class="rubric">Methods</p>
-<div class="pst-scrollable-table-container"><table class="autosummary longtable table">
-<tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.virtual.BrainWeb.count.html#pulserver.virtual.BrainWeb.count" title="pulserver.virtual.BrainWeb.count"><code class="xref py py-obj docutils literal notranslate"><span class="pre">count</span></code></a></p></td>
-<td><p>Return how many isochromats <code class="xref py py-meth docutils literal notranslate"><span class="pre">isochromats()</span></code> samples the brain as, with the same arguments.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pulserver.virtual.BrainWeb.isochromats.html#pulserver.virtual.BrainWeb.isochromats" title="pulserver.virtual.BrainWeb.isochromats"><code class="xref py py-obj docutils literal notranslate"><span class="pre">isochromats</span></code></a></p></td>
-<td><p>Return the brain sampled as isochromats, for <a class="reference internal" href="pulserver.virtual.simulate.html#pulserver.virtual.simulate" title="pulserver.virtual.simulate"><code class="xref py py-func docutils literal notranslate"><span class="pre">simulate()</span></code></a>.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.virtual.BrainWeb.proton_density.html#pulserver.virtual.BrainWeb.proton_density" title="pulserver.virtual.BrainWeb.proton_density"><code class="xref py py-obj docutils literal notranslate"><span class="pre">proton_density</span></code></a></p></td>
-<td><p>Return the proton density of a slab <code class="docutils literal notranslate"><span class="pre">thickness</span></code> thick along <code class="docutils literal notranslate"><span class="pre">normal</span></code> at each of <code class="docutils literal notranslate"><span class="pre">(n,</span> <span class="pre">3)</span></code> physical points, in metres.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pulserver.virtual.BrainWeb.relaxation.html#pulserver.virtual.BrainWeb.relaxation" title="pulserver.virtual.BrainWeb.relaxation"><code class="xref py py-obj docutils literal notranslate"><span class="pre">relaxation</span></code></a></p></td>
-<td><p>Return the T1, T2 and T2', in s, of each tissue class at <code class="docutils literal notranslate"><span class="pre">field_t</span></code> T.</p></td>
-</tr>
-</tbody>
-</table>
-</div>
-<p class="rubric">Attributes</p>
-<div class="pst-scrollable-table-container"><table class="autosummary longtable table">
-<tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.virtual.BrainWeb.DIFFUSION.html#pulserver.virtual.BrainWeb.DIFFUSION" title="pulserver.virtual.BrainWeb.DIFFUSION"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DIFFUSION</span></code></a></p></td>
-<td><p>Isotropic diffusion coefficients, in m²/s, of the tissue classes whose water diffusion is measured: the apparent diffusion coefficients of cortical grey matter and of white matter in adults (Helenius et al., AJNR Am J Neuroradiol 23:194, 2002), which glial matter and connective tissue take as BrainWeb gives them those tissues' relaxation, and that of free water at 37 degrees C for CSF (Holz et al., Phys Chem Chem Phys 2:4740, 2000).</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pulserver.virtual.BrainWeb.VOXEL_AXES.html#pulserver.virtual.BrainWeb.VOXEL_AXES" title="pulserver.virtual.BrainWeb.VOXEL_AXES"><code class="xref py py-obj docutils literal notranslate"><span class="pre">VOXEL_AXES</span></code></a></p></td>
-<td><p>all three, physical.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.virtual.BrainWeb.field_ppm.html#pulserver.virtual.BrainWeb.field_ppm" title="pulserver.virtual.BrainWeb.field_ppm"><code class="xref py py-obj docutils literal notranslate"><span class="pre">field_ppm</span></code></a></p></td>
-<td><p>The field the head adds to B0 at each voxel, <code class="docutils literal notranslate"><span class="pre">(z,</span> <span class="pre">y,</span> <span class="pre">x)</span></code>, in ppm of B0, as a first-order shim leaves it.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pulserver.virtual.BrainWeb.fractions.html#pulserver.virtual.BrainWeb.fractions" title="pulserver.virtual.BrainWeb.fractions"><code class="xref py py-obj docutils literal notranslate"><span class="pre">fractions</span></code></a></p></td>
-<td><p>The fraction of each voxel each tissue fills, <code class="docutils literal notranslate"><span class="pre">(z,</span> <span class="pre">y,</span> <span class="pre">x,</span> <span class="pre">tissue)</span></code>, downloaded on first use.</p></td>
-</tr>
-</tbody>
-</table>
-</div>
 </section>
 
 
@@ -646,7 +584,7 @@ derives, at any field.</p></li>
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.virtual.BrainWeb"><code class="docutils literal notranslate"><span class="pre">BrainWeb</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.virtual.Phantom.VOXEL_AXES"><code class="docutils literal notranslate"><span class="pre">Phantom.VOXEL_AXES</span></code></a></li>
 </ul>
   </nav></div>
 

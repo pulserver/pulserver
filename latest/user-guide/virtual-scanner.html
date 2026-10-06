@@ -766,8 +766,12 @@ the temporary directory is a memory file system, set <code class="docutils liter
 disk.</p>
 </li>
 <li><p><code class="docutils literal notranslate"><span class="pre">--spins</span></code> spreads each voxel over that many isochromats, at the quantiles of
-the Lorentzian line of its tissue’s T2′, at its centre or, with
-<code class="docutils literal notranslate"><span class="pre">--voxel</span> <span class="pre">box</span></code>, over it; <code class="docutils literal notranslate"><span class="pre">--diffusion</span></code> lets BrainWeb’s tissue classes diffuse
+the Lorentzian line of its tissue’s T2′: two along each axis of the voxel
+without it, four for a phantom of ellipses, which lies in a plane, and
+eight for BrainWeb. <code class="docutils literal notranslate"><span class="pre">--voxel</span></code> places them anywhere in each of the cells
+filling the voxel, <code class="docutils literal notranslate"><span class="pre">jittered</span></code>, the default; at the cells’ centres, <code class="docutils literal notranslate"><span class="pre">box</span></code>; or
+at the voxel’s centre, <code class="docutils literal notranslate"><span class="pre">point</span></code>, which takes one isochromat without
+<code class="docutils literal notranslate"><span class="pre">--spins</span></code>. <code class="docutils literal notranslate"><span class="pre">--diffusion</span></code> lets BrainWeb’s tissue classes diffuse
 (<a class="reference internal" href="../developer-guide/internals/bloch-engine.html"><span class="doc">Bloch engine</span></a>). A phantom file gives each ellipse
 its <code class="docutils literal notranslate"><span class="pre">t2_prime</span></code>, in s, and <code class="docutils literal notranslate"><span class="pre">diffusion</span></code>, in m²/s. Isochromats that diffuse are
 played block by block, and a voxel’s diffusion attenuation needs many spins
@@ -883,11 +887,11 @@ computer, and plays each scan at the scanner’s speed, <code class="docutils li
 <p>Options after the image’s name are added to its console’s: an option of one
 value takes the value given last, and <code class="docutils literal notranslate"><span class="pre">--plugins</span></code>, <code class="docutils literal notranslate"><span class="pre">--recon-plugins</span></code> and
 <code class="docutils literal notranslate"><span class="pre">--origin</span></code> add to the image’s. A console whose scans spread each voxel over
-four isochromats, in tissue that diffuses, of a subject that nods through ±2°
-with a period of 8 s:</p>
+twenty-seven isochromats, in tissue that diffuses, of a subject that nods
+through ±2° with a period of 8 s:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>docker<span class="w"> </span>run<span class="w"> </span>-d<span class="w"> </span>--restart<span class="w"> </span>unless-stopped<span class="w"> </span>--name<span class="w"> </span>pulserver<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>-p<span class="w"> </span><span class="m">127</span>.0.0.1:8765:8765<span class="w"> </span>ghcr.io/pulserver/pulserver<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--spins<span class="w"> </span><span class="m">4</span><span class="w"> </span>--diffusion<span class="w"> </span>--nod<span class="w"> </span><span class="m">2</span><span class="w"> </span><span class="m">8</span>
+<span class="w">  </span>--spins<span class="w"> </span><span class="m">27</span><span class="w"> </span>--diffusion<span class="w"> </span>--nod<span class="w"> </span><span class="m">2</span><span class="w"> </span><span class="m">8</span>
 </pre></div>
 </div>
 <p>Its sequences are the ones listed under <a class="reference internal" href="scanner-sequences.html#shipped-sequences"><span class="std std-ref">Shipped sequences</span></a>,

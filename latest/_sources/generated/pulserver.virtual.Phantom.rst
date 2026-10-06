@@ -27,4 +27,5 @@
    :toctree:
    :nosignatures:
 
+   ~Phantom.VOXEL_AXES
    ~Phantom.shifts_ppm

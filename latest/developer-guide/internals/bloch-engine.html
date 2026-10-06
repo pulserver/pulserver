@@ -948,8 +948,13 @@ writes the magnetisation back to the engine at the end of each play and takes
 the engine’s where the run resumes.
 Transients are dropped as the engine drops them, and once more than a quarter
 have been dropped the device keeps only the rest. A run of fewer than
-<span class="math notranslate nohighlight">\(2^{18}\)</span> isochromats times coils, by default, and one whose arrays would take
-more than half the memory free on the device, are carried by the engine.</p>
+<span class="math notranslate nohighlight">\(2^{18}\)</span> isochromats times coils, by default, is carried by the engine. A run
+whose arrays would take more than its memory, half the memory free on the
+device by default, is held in parts of an eighth of it: as many parts as fit
+stay on the device, and the rest wait in pinned host memory and cross to the
+device for each tile, their magnetisation alone coming back; each grid is the
+sum of every part’s spreading, and a part keeps only its own slots once a
+quarter of them have been dropped.</p>
 </section>
 </section>
 <section id="voxels-motion-and-diffusion">
@@ -967,7 +972,14 @@ that winds the phase through a whole number of cycles across a box voxel along
 one of its axes, and not a multiple of <span class="math notranslate nohighlight">\(m\)</span>, leaves the voxel no signal, as it
 leaves a uniform voxel none; a point voxel, and a lattice of them, keeps its
 signal under any such winding. The cells of all voxels lie on one lattice,
-<span class="math notranslate nohighlight">\(m\)</span> times finer, on which windows under a changing gradient are still read.</p>
+<span class="math notranslate nohighlight">\(m\)</span> times finer, on which windows under a changing gradient are still read.
+A <code class="docutils literal notranslate"><span class="pre">&quot;jittered&quot;</span></code> voxel has the box’s cells and moves each isochromat anywhere in
+its own, drawn per isochromat from the seed. Every box voxel holds its
+isochromats at the same offsets, so a coherence the gradients leave
+undephased at those offsets survives in every voxel alike, at any <span class="math notranslate nohighlight">\(m\)</span>; in
+jittered voxels it survives at different offsets in each, and the voxels add
+it incoherently, as a spread that falls as <span class="math notranslate nohighlight">\(1/\sqrt{m^d}\)</span>. Off the lattice,
+a window under a changing gradient is summed sample by sample.</p>
 <p><em>Frequency.</em> T2′ is the decay of a voxel’s signal by a static distribution of
 frequencies within it, which a spin echo refocuses. A Lorentzian line of half
 width <span class="math notranslate nohighlight">\(1/(2\pi T_2')\)</span> gives the decay <span class="math notranslate nohighlight">\(e^{-|t|/T_2'}\)</span> of the free induction and
