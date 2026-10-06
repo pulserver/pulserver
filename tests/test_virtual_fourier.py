@@ -6,7 +6,9 @@ from pathlib import Path
 import numpy as np
 import pypulseqpp as pp
 import pytest
+import torch
 from _virtual import ORIENTATIONS
+from bartorch import linop
 from pypulseqpp.sequences.preparation.fatsat import FAT_SHIFT_PPM
 
 from pulserver import ir, virtual
@@ -352,3 +354,33 @@ def test_a_stream_plays_its_repetitions_until_they_settle_and_reads_the_rest_off
 
     assert counts["played"] < counts["events"] / 2
     assert np.linalg.norm(settled - whole) < 1e-3 * np.linalg.norm(whole)
+
+
+def test_finer_than_its_cubes_a_scan_reads_their_spectrum_off_the_lattice_they_lie_on(
+    tmp_path, device
+):
+    sequence = _steady("fid", tmp_path / "fid.seq", selective=False, matrix=96)
+    tissue = virtual.Phantom(
+        [virtual.Ellipse((0.01, -0.005, 0.0), (0.03, 0.02), t1=0.8, t2=0.08)],
+        coils=4,
+    ).tissue(2e-3, field_t=3.0)
+    player = virtual.FourierPlayer(sequence, tissue, device=device)
+    grid = player._grids[0]
+    k = player._timeline.kspace(0, len(player._timeline.readouts))[1]
+    k = k[np.isfinite(k).all(axis=1)][::7]
+
+    traj = torch.as_tensor(grid.trajectory(k), dtype=torch.float32, device=device)
+    held = grid.sensitivity(1, 2) * grid.images[:1]
+    read = linop.NUFFT(traj[None], (1, *grid.shape), toeplitz=False)(held)
+    read = read.reshape(-1).cpu().numpy() * np.sqrt(grid.points) * grid.spectrum(k)
+    read *= np.exp(-2j * np.pi * (k @ grid.centre))
+    cells = torch.nonzero(held[0] != 0)
+    position = np.tile(grid.centre, (cells.shape[0], 1))
+    for at, axis in enumerate(grid.axes):
+        index = cells[:, held.dim() - 2 - at].cpu().numpy()
+        position[:, axis] += (index - grid.size[at] // 2) * grid.delta[at]
+    values = held[0][tuple(cells.T)].cpu().numpy()
+    summed = np.exp(-2j * np.pi * k @ position.T) @ values * grid.spectrum(k)
+
+    assert grid.lattice == 2e-3
+    assert np.linalg.norm(read - summed) < 1e-2 * np.linalg.norm(summed)

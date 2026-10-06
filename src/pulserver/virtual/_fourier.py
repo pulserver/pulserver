@@ -321,7 +321,10 @@ class FourierPlayer:
         turn = torch.as_tensor(rotation, dtype=torch.float32, device=self.device)
         logical = self._entries.positions[basis.local] @ turn
         reach = timeline.readouts.reach[basis.readouts].max(axis=0)
-        grid = _Grid.around(logical, tissue.spacing, reach)
+        edges = tissue.axes @ rotation
+        grid = _Grid.of_lattice(logical, tissue.spacing, reach, edges) or _Grid.around(
+            logical, tissue.spacing, reach
+        )
         cells, shared = torch.unique(grid.cells(logical), dim=0, return_inverse=True)
         del logical
         count = basis.local.numel()
@@ -344,7 +347,21 @@ class FourierPlayer:
         del shared
         if self.device.type == "cuda":
             torch.cuda.empty_cache()
-        cube = grid.cube(tissue.axes @ rotation, tissue.spacing, self.device)
+        if grid.lattice is not None:
+            place = cells.round().long() + torch.as_tensor(
+                grid.size // 2, device=self.device
+            )
+            strides = torch.as_tensor(
+                np.concatenate([[1], np.cumprod(grid.size[:-1])]), device=self.device
+            )
+            images = torch.zeros(
+                (terms, grid.points), dtype=torch.complex64, device=self.device
+            )
+            images[:, (place * strides).sum(dim=1)] = weights.T
+            grid.images = images.reshape(terms, *grid.shape)
+            grid.sensitivities = grid.coils(tissue, rotation, self.device)
+            return grid
+        cube = grid.cube(edges, tissue.spacing, self.device)
         images = torch.empty(
             (terms, *grid.shape), dtype=torch.complex64, device=self.device
         )
@@ -413,7 +430,7 @@ class FourierPlayer:
                 receiver[chosen] - echo_phase[chosen]
             )
             factor = torch.as_tensor(
-                math.sqrt(grid.points) * np.exp(1j * phase),
+                math.sqrt(grid.points) * grid.spectrum(k[chosen]) * np.exp(1j * phase),
                 dtype=torch.complex64,
                 device=self.device,
             )
@@ -1403,19 +1420,77 @@ class _Grid:
     """A grid along the logical axes a station's trajectory encodes, its images and its coils' sensitivities.
 
     Point ``i`` along an axis lies ``(i - size // 2) * delta`` from the
-    grid's centre.
+    grid's centre. On a grid of the entries' own ``lattice``, the images hold
+    the entries' weights at their cubes' centres, and a cube's spectrum,
+    with ``edges`` its edges along the logical axes, weighs each sample.
     """
 
-    def __init__(self, axes, delta, size, centre) -> None:
+    def __init__(self, axes, delta, size, centre, lattice=None, edges=None) -> None:
         self.axes = axes
         self.delta = delta
         self.size = size
         self.centre = centre
+        self.lattice = lattice
+        self.edges = edges
         self.shape = tuple(int(n) for n in size[::-1])
         self.points = int(np.prod(size))
         self.images: torch.Tensor | None = None
         self.sensitivities: torch.Tensor | None = None
         self.mix: torch.Tensor | None = None
+
+    @classmethod
+    def of_lattice(
+        cls,
+        logical: torch.Tensor,
+        spacing: float,
+        reach: np.ndarray,
+        edges: np.ndarray,
+    ) -> _Grid | None:
+        """Return the grid of the lattice entries ``spacing`` apart lie on, where :meth:`around` would be finer along an axis; None where they do not lie on one along the logical axes.
+
+        The spectrum of cubes on a lattice repeats, but for the cube's own,
+        every ``1 / spacing`` in k: no k reads more of them than the
+        lattice holds, however far it reaches.
+        """
+        low = logical.amin(0).double().cpu().numpy()
+        high = logical.amax(0).double().cpu().numpy()
+        extent = high - low + spacing
+        axes = np.flatnonzero(reach * extent >= 0.5)
+        if not axes.size:
+            return None
+        finest = np.minimum(
+            0.5 / (_OVERSAMPLING * reach[axes]), extent[axes] / _FEWEST_POINTS
+        )
+        aligned = np.all((np.abs(edges) > 1e-6).sum(axis=1) == 1)
+        if not np.any(finest < spacing) or not aligned:
+            return None
+        cells = (
+            logical[:, axes].double()
+            - torch.as_tensor(low[axes], device=logical.device)
+        ) / spacing
+        if float((cells - cells.round()).abs().max()) > 1e-2:
+            return None
+        count = np.round(extent[axes] / spacing).astype(np.int64)
+        size = count + count % 2
+        centre = 0.5 * (low + high)
+        centre[axes] = low[axes] + (size // 2) * spacing
+        return cls(
+            axes,
+            np.full(axes.size, spacing),
+            size,
+            centre,
+            lattice=spacing,
+            edges=edges,
+        )
+
+    def spectrum(self, k: np.ndarray) -> np.ndarray:
+        """Return the spectrum of an entry's cube at k, ``(n, 3)`` logical in 1/m, one at zero; ones off a lattice."""
+        out = np.ones(k.shape[0])
+        if self.lattice is None:
+            return out
+        for edge in self.edges:
+            out *= np.sinc(self.lattice * (k @ edge))
+        return out
 
     @classmethod
     def around(cls, logical: torch.Tensor, spacing: float, reach: np.ndarray) -> _Grid:
@@ -1468,8 +1543,11 @@ class _Grid:
         return spectrum
 
     def trajectory(self, k: np.ndarray) -> np.ndarray:
-        """Return k-space locations in the grid's units, ``(n, axes)``, its first axis first."""
-        return k[:, self.axes] * (self.size * self.delta)
+        """Return k-space locations in the grid's units, ``(n, axes)``, its first axis first: on a lattice, within the period its spectrum repeats over."""
+        located = k[:, self.axes] * (self.size * self.delta)
+        if self.lattice is not None:
+            located = located - self.size * np.round(located / self.size)
+        return located
 
     def coils(self, tissue: Tissue, rotation: np.ndarray, device) -> torch.Tensor:
         """Return each coil's sensitivity on a coarser grid spanning this one, ``(coils, *coarse)``."""
