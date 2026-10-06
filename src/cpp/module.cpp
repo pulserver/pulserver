@@ -26,7 +26,6 @@
 #include <unordered_map>
 #include <vector>
 
-#include "bloch/bindings.hpp"
 #include "fourier/bindings.hpp"
 #include "ir/from_libraries.hpp"
 #include "native.hpp"
@@ -768,7 +767,7 @@ std::vector<const int32_t *> equal_columns(
 
 PYBIND11_MODULE(_ext, module)
 {
-    module.doc() = "Compiled scanner IR conversion and isochromat engine for pulserver";
+    module.doc() = "Compiled scanner IR conversion and the Fourier engine's timeline for pulserver";
 
     module.def(
         "convert_libraries",
@@ -990,8 +989,6 @@ PYBIND11_MODULE(_ext, module)
         },
         "One axis of a written cache's wave on a playout's raster.");
 
-    py::module_ bloch = module.def_submodule("bloch");
-    bind_bloch(bloch);
     py::module_ fourier = module.def_submodule("fourier");
     bind_fourier(fourier);
 }

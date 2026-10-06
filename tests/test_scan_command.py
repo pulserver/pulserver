@@ -20,14 +20,11 @@ from pulserver.host._blocks import format_limits
 from pulserver.protocol import PROTOCOL_BEGIN, PROTOCOL_END
 from pulserver.proxy import ReconProxy
 from pulserver.recon._runtime.readers import deserialize_config
-from pulserver.virtual._bloch import TOLERANCE
 from pulserver.virtual._command import (
     ORIENTATIONS,
-    _parser,
     default_phantom,
     main,
     read_phantom,
-    subject_motion,
 )
 
 RECON_PLUGINS = Path(__file__).parent / "recon_plugins"
@@ -67,10 +64,8 @@ def test_a_headless_scan_records_the_series_the_virtual_scanner_acquires(
             str(mrd),
             "--sound",
             str(sound),
-            "--voxel",
-            "point",
-            "--engine",
-            "bloch",
+            "--spacing",
+            "2",
         ]
     )
     assert status == 0
@@ -79,15 +74,7 @@ def test_a_headless_scan_records_the_series_the_virtual_scanner_acquires(
     tissue = default_phantom(4)
     field_t = FIXTURE_LIMITS["B0"]
     expected = virtual.simulate(
-        sequence,
-        tissue.isochromats(
-            1e-3, field_t=field_t, region=virtual.excited(sequence, rotation)
-        ),
-        rotation=rotation,
-        tolerance=TOLERANCE,
-    )
-    whole = virtual.simulate(
-        sequence, tissue.isochromats(1e-3, field_t=field_t), rotation=rotation
+        sequence, tissue.tissue(2e-3, field_t=field_t), rotation=rotation
     )
     dataset = ismrmrd.hdf5.Dataset(str(mrd), "dataset", create_if_needed=False)
     try:
@@ -100,16 +87,15 @@ def test_a_headless_scan_records_the_series_the_virtual_scanner_acquires(
     for index, (acquisition, readout) in enumerate(
         zip(acquisitions, expected, strict=True)
     ):
-        np.testing.assert_array_equal(acquisition.data, readout)
+        np.testing.assert_allclose(
+            acquisition.data, readout, atol=1e-5 * np.abs(readout).max()
+        )
         np.testing.assert_allclose(acquisition.position, (10.0, -5.0, 3.0))
         np.testing.assert_allclose(acquisition.slice_dir, rotation[:, 2])
         assert acquisition.scan_counter == index + 1
         assert acquisition.is_flag_set(ismrmrd.ACQ_LAST_IN_MEASUREMENT) == (
             index == len(expected) - 1
         )
-    recorded = np.concatenate([acquisition.data for acquisition in acquisitions], 1)
-    whole = np.concatenate(whole, axis=1)
-    assert np.linalg.norm(recorded - whole) < 5e-3 * np.linalg.norm(whole)
     rate, audio = wavfile.read(sound)
     designed = pp.Sequence()
     designed.read(str(sequence))
@@ -306,110 +292,3 @@ def test_a_phantom_file_lists_the_fields_of_its_ellipses(tmp_path):
 def test_the_command_without_a_known_subcommand_prints_its_usage(capsys):
     assert _cli.main(["simulate"]) == 2
     assert "pulserver scan" in capsys.readouterr().err
-
-
-def _motion(*options):
-    return subject_motion(
-        _parser().parse_args(["--seq", "x", "--limits", "l", *options])
-    )
-
-
-def test_a_nod_turns_the_subject_about_x_by_its_amplitude_at_a_quarter_period():
-    motion = _motion("--nod", "3", "8")
-    point = np.array([[0.0, 0.1, 0.0]])
-
-    angle = np.radians(3.0)
-    np.testing.assert_allclose(
-        motion(2.0, point), [[0.0, 0.1 * np.cos(angle), 0.1 * np.sin(angle)]]
-    )
-    np.testing.assert_allclose(motion(4.0, point), point, atol=1e-15)
-    np.testing.assert_allclose(motion(0.0, point), point)
-
-
-def test_a_drift_moves_the_subject_by_its_millimetres_per_minute():
-    motion = _motion("--drift", "1", "-2", "0.5")
-
-    np.testing.assert_allclose(
-        motion(30.0, np.zeros((1, 3))), [[0.5e-3, -1e-3, 0.25e-3]]
-    )
-
-
-def test_a_subject_without_a_nod_or_a_drift_is_at_rest():
-    assert _motion() is None
-    with pytest.raises(ValueError, match="period"):
-        _motion("--nod", "2", "0")
-
-
-def test_a_headless_scan_spreads_two_jittered_isochromats_along_each_axis_by_default(
-    tmp_path, capsys, monkeypatch
-):
-    shutil.copytree(FIXTURES, tmp_path, dirs_exist_ok=True)
-    built = {}
-    build = virtual.Phantom.isochromats
-
-    def isochromats(self, spacing, **options):
-        built.update(options)
-        return build(self, spacing, **options)
-
-    monkeypatch.setattr(virtual.Phantom, "isochromats", isochromats)
-    status = main(
-        [
-            "--seq",
-            str(tmp_path / "gre_2d_3sl.seq"),
-            "--limits",
-            str(_limits(tmp_path / "limits.txt", FIXTURE_LIMITS)),
-            "--store",
-            str(tmp_path / "designs"),
-            "--spacing",
-            "4",
-            "--coils",
-            "1",
-            "--engine",
-            "bloch",
-        ]
-    )
-
-    assert status == 0
-    assert (built["spins"], built["voxel"]) == (4, "jittered")
-
-
-def test_a_headless_scan_samples_moves_and_diffuses_the_subject_as_its_options_say(
-    tmp_path, capsys, monkeypatch
-):
-    shutil.copytree(FIXTURES, tmp_path, dirs_exist_ok=True)
-    built = {}
-    build = virtual.Phantom.isochromats
-
-    def isochromats(self, spacing, **options):
-        built.update(options)
-        return build(self, spacing, **options)
-
-    monkeypatch.setattr(virtual.Phantom, "isochromats", isochromats)
-    status = main(
-        [
-            "--seq",
-            str(tmp_path / "gre_2d_3sl.seq"),
-            "--limits",
-            str(_limits(tmp_path / "limits.txt", FIXTURE_LIMITS)),
-            "--store",
-            str(tmp_path / "designs"),
-            "--spacing",
-            "4",
-            "--coils",
-            "1",
-            "--spins",
-            "4",
-            "--voxel",
-            "box",
-            "--drift",
-            "0",
-            "0",
-            "1",
-        ]
-    )
-
-    assert status == 0
-    assert (built["spins"], built["voxel"], built["seed"]) == (4, "box", 0)
-    np.testing.assert_allclose(
-        built["motion"](60.0, np.zeros((1, 3))), [[0.0, 0.0, 1e-3]]
-    )

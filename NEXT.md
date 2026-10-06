@@ -98,6 +98,3 @@ repository and vendor tooling that is not available in this environment.
 - The compiled extension does not change with a branch. After switching to one
   that touches `src/cpp/` or `src/c/`, reinstall with `pip install -e .` or the
   tests run against the other branch's build.
-- Three `tests/test_virtual_device.py` CUDA cases fail with a Triton
-  compilation error on some machines, independently of any change. Confirm a
-  failure against a clean tree before chasing it.

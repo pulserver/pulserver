@@ -8,6 +8,7 @@ from pathlib import Path
 import numpy as np
 import pypulseqpp as pp
 import pytest
+from _analytic import trajectory
 from _virtual import ORIENTATIONS
 from _zoo import SMALL, designed
 from pypulseqpp import sequences
@@ -67,7 +68,7 @@ def test_every_shipped_sequence_exports_the_trajectory_its_cache_plays(
 ):
     back, _ = _exported(design, tmp_path / "exported.seq", rotation)
 
-    played = np.concatenate(virtual.trajectory(design, rotation=rotation), axis=1)
+    played = np.concatenate(trajectory(design, rotation=rotation), axis=1)
     _assert_same_trajectory(back.calculate_kspace()[0], played)
 
 
@@ -79,7 +80,7 @@ def test_every_fixture_exports_the_trajectory_its_cache_plays(name, rotation, tm
     path = _fixture(name, tmp_path)
     back, _ = _exported(path, tmp_path / "exported.seq", rotation)
 
-    played = np.concatenate(virtual.trajectory(path, rotation=rotation), axis=1)
+    played = np.concatenate(trajectory(path, rotation=rotation), axis=1)
     _assert_same_trajectory(back.calculate_kspace()[0], played)
 
 
@@ -194,7 +195,7 @@ def test_a_gradient_that_starts_and_ends_away_from_zero_inside_its_block_steps_t
 
     back, _ = _exported(path, tmp_path / "exported.seq")
 
-    played = np.concatenate(virtual.trajectory(path), axis=1)
+    played = np.concatenate(trajectory(path), axis=1)
     _assert_same_trajectory(back.calculate_kspace()[0], played)
 
 

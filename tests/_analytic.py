@@ -1,8 +1,6 @@
-"""The virtual interpreter: an IR cache played block by block, and a phantom acquired with it."""
+"""An IR cache played block by block, and a phantom of ellipses acquired analytically along it: the reference the virtual scanner and the reconstructions are tested against."""
 
 from __future__ import annotations
-
-__all__ = ["acquire", "trajectory"]
 
 import math
 from collections.abc import Iterator
@@ -12,8 +10,9 @@ from pathlib import Path
 import numpy as np
 import pypulseqpp as pp
 
-from .. import ir
-from ._phantom import Phantom
+from pulserver import ir
+from pulserver.virtual import Phantom
+from pulserver.virtual._timeline import _on_a_raster
 
 _EXCITATION = 1
 _REFOCUSING = 2
@@ -220,28 +219,6 @@ def _saturation(
     b1, step_us = _on_a_raster(times - float(played["rf_delay_us"][block]), b1)
     detuning = frequencies_hz - float(played["rf_freq_hz"][block])
     return pp.sim_bloch(b1, detuning[:, None], 1e-6 * step_us)[:, 2]
-
-
-def _on_a_raster(times_us: np.ndarray, b1: np.ndarray) -> tuple[np.ndarray, float]:
-    """Return an RF pulse's samples on a uniform raster, and the raster in µs.
-
-    ``times_us`` are from the pulse's start. Samples at the middles of equal
-    intervals from the start, as a pulse on the RF raster holds them, are
-    returned as they are. The points of a time shape, a block pulse's two
-    corners among them, are joined linearly and sampled at the middles of
-    1 µs intervals, or of the shape's shortest step where that is shorter.
-    """
-    steps = np.diff(times_us)
-    if not steps.size:
-        return b1, 2.0 * float(times_us[0])
-    if np.allclose(steps, steps[0]) and np.isclose(times_us[0], 0.5 * steps[0]):
-        return b1, float(steps[0])
-    step = min(1.0, float(steps[steps > 0].min()))
-    count = max(1, round((times_us[-1] - times_us[0]) / step))
-    grid = times_us[0] + step * (np.arange(count) + 0.5)
-    return np.interp(grid, times_us, b1.real) + 1j * np.interp(
-        grid, times_us, b1.imag
-    ), step
 
 
 def _k(

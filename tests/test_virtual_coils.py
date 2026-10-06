@@ -1,6 +1,5 @@
 """The virtual scanner's coils: their channels, their scaling at the isocentre, BART's models and field maps."""
 
-import math
 import sys
 
 import numpy as np
@@ -15,8 +14,9 @@ from _virtual import (
     write_fields,
 )
 
-from pulserver import ir, virtual
-from pulserver.virtual import _coils, _phantom
+from pulserver import virtual
+from pulserver.virtual import _coils
+from pulserver.virtual._tissue import transmitted
 
 ISOCENTRE = np.zeros((1, 3))
 SYSTEM = pp.Opts(B0=3.0)
@@ -129,42 +129,31 @@ def test_a_two_dimensional_model_is_constant_along_z(modelled):
     np.testing.assert_array_equal(low, high)
 
 
-def test_a_pulse_without_an_rf_shim_turns_the_isocentre_by_its_flip_angle_through_the_default_shim(
-    modelled, tmp_path
+def test_a_pulse_without_an_rf_shim_plays_its_amplitude_at_the_isocentre_through_the_default_shim(
+    modelled,
 ):
     head8 = virtual.COILS["head8/head32"]
-    seq = pp.Sequence(SYSTEM)
-    seq.add_block(pp.make_block_pulse(math.pi / 2, duration=1e-3, system=SYSTEM))
-    seq.add_block(pp.make_adc(4, duration=1e-3, system=SYSTEM))
-    path = tmp_path / "excite.seq"
-    seq.write(str(path))
-    ir.convert(path, SYSTEM)
-    spins = virtual.Isochromats(ISOCENTRE, transmit=head8.transmit(ISOCENTRE))
+    (field,) = transmitted(head8, ISOCENTRE)
 
-    (readout,) = virtual.simulate(path, spins, default_shim=head8.default_shim)
-
-    np.testing.assert_allclose(np.abs(readout), 1.0, rtol=1e-4)
+    assert abs(field) == pytest.approx(1.0, rel=1e-4)
 
 
 def test_a_phantom_scanned_with_a_coil_takes_its_sensitivities_where_it_lies(
-    modelled, monkeypatch
+    modelled,
 ):
     head8 = virtual.COILS["head8/head32"]
-    made = {}
 
-    def isochromats(positions, **fields):
-        made.update(fields, positions=positions)
+    tissue = phantom(position=(0.01, 0.02, 0.0), coils=1).tissue(2e-3, coil=head8)
 
-    monkeypatch.setattr(_phantom, "Isochromats", isochromats)
-    phantom(position=(0.01, 0.02, 0.0), coils=1).isochromats(2e-3, coil=head8)
-
-    np.testing.assert_array_equal(made["transmit"], head8.transmit(made["positions"]))
-    np.testing.assert_array_equal(made["receive"], head8.receive(made["positions"]))
+    np.testing.assert_array_equal(tissue.transmit, transmitted(head8, tissue.positions))
+    np.testing.assert_array_equal(
+        tissue.receive(tissue.positions), head8.receive(tissue.positions)
+    )
 
 
 def test_a_phantom_received_by_coils_of_its_own_is_not_scanned_with_a_coil():
     with pytest.raises(ValueError, match="coils of its own"):
-        phantom(coils=2).isochromats(2e-3, coil=virtual.COILS["body/head48"])
+        phantom(coils=2).tissue(2e-3, coil=virtual.COILS["body/head48"])
 
 
 def test_without_bartorch_a_head_coil_names_the_extra_that_samples_its_model(
@@ -255,17 +244,9 @@ def test_a_pulse_without_an_rf_shim_turns_the_isocentre_by_its_flip_angle_in_map
     fields, tmp_path
 ):
     head8 = _coils.coils(fields)["head8/head32"]
-    seq = pp.Sequence(SYSTEM)
-    seq.add_block(pp.make_block_pulse(math.pi / 2, duration=1e-3, system=SYSTEM))
-    seq.add_block(pp.make_adc(4, duration=1e-3, system=SYSTEM))
-    path = tmp_path / "excite.seq"
-    seq.write(str(path))
-    ir.convert(path, SYSTEM)
-    spins = virtual.Isochromats(ISOCENTRE, transmit=head8.transmit(ISOCENTRE))
+    (field,) = transmitted(head8, ISOCENTRE)
 
-    (readout,) = virtual.simulate(path, spins, default_shim=head8.default_shim)
-
-    np.testing.assert_allclose(np.abs(readout), 1.0, rtol=1e-4)
+    assert abs(field) == pytest.approx(1.0, rel=1e-4)
 
 
 @pytest.mark.parametrize(

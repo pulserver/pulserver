@@ -46,9 +46,8 @@ def test_the_image_serves_its_console_without_arguments(run):
 
 def test_options_after_the_image_s_name_follow_its_console_s_own(run):
     added = (
-        "--spins",
-        "4",
-        "--diffusion",
+        "--spacing",
+        "2",
         "--speed",
         "2",
         "--origin",
@@ -58,7 +57,7 @@ def test_options_after_the_image_s_name_follow_its_console_s_own(run):
 
     args = _parser().parse_args(options)
     assert [command, *options] == [*run(), *added]
-    assert (args.spins, args.diffusion, args.speed) == (4, True, 2.0)
+    assert (args.spacing, args.speed) == (2.0, 2.0)
     assert args.origins == [
         "https://pulserver.github.io",
         "http://localhost:8000",

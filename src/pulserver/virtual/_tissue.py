@@ -55,11 +55,12 @@ class Tissue:
 def transmitted(coil, positions: np.ndarray) -> np.ndarray | None:
     """Return the transmit field a coil's channels play a single-channel pulse with at ``(n, 3)`` physical points, ``(n,)`` relative to its nominal amplitude; None for one uniform channel.
 
-    Each channel plays the pulse times its weight in the coil's default shim.
+    Each channel plays the pulse times its weight in the coil's default shim,
+    which scales the waveform by the conjugate of the field it adds.
     """
     sensitivities = coil.transmit(positions)
     if sensitivities is None:
         return None
     sensitivities = np.asarray(sensitivities).reshape(len(positions), -1)
     shim = coil.default_shim
-    return sensitivities[:, 0] if shim is None else sensitivities @ shim
+    return sensitivities[:, 0] if shim is None else sensitivities @ np.conj(shim)

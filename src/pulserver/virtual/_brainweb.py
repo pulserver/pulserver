@@ -1,4 +1,4 @@
-"""BrainWeb's normal brain, sampled as isochromats of the virtual scanner."""
+"""BrainWeb's normal brain, sampled as the virtual scanner's tissue."""
 
 from __future__ import annotations
 
@@ -12,14 +12,11 @@ from typing import TYPE_CHECKING
 import numpy as np
 import pypulseqpp as pp
 
-from . import _voxels
 from ._coils import Coil
 
 if TYPE_CHECKING:
     from ._tissue import Tissue
-from ._isochromats import Isochromats
 from ._phantom import Phantom
-from ._region import Slabs
 
 #: The tissue classes of BrainWeb's normal brain, in the order of the fuzzy
 #: model brainweb-dl returns for its subject 0, each with the T1, T2 and T2*,
@@ -67,10 +64,6 @@ AIR_PPM, WATER_PPM = 0.36, -9.05
 #: run along z, y and x, x fastest.
 _FIRST_VOXEL_MM = {"x": -90.0, "y": -126.0, "z": -72.0}
 
-# Field, in Hz, by which the bounds of a slab are widened in finding the cubes
-# it may hold, against the rounding of a cube's field computed axis by axis.
-_REACH_MARGIN = 1.0
-
 
 class BrainWeb:
     """BrainWeb's normal brain, received by one coil or several.
@@ -85,8 +78,8 @@ class BrainWeb:
     the T1, T2 and T2' :meth:`relaxation` derives at the field it is scanned
     at from the parameters BrainWeb's simulator gives it at 1.5 T (Kwan et
     al., IEEE Trans Med Imaging 18:1085, 1999), and has the proton density
-    the simulator gives it; T2' acts where a voxel holds several isochromats.
-    Fat precesses at pypulseqpp's fat shift, and every isochromat at the field
+    the simulator gives it. Fat precesses at pypulseqpp's fat shift, and every
+    voxel at the field
     :attr:`field_ppm` its head adds. The coils are those of
     :class:`~pulserver.virtual.Phantom`, fixed in the physical frame.
 
@@ -110,9 +103,6 @@ class BrainWeb:
         Isotropic diffusion coefficient, in m²/s, by tissue class, as
         :attr:`DIFFUSION` gives them; a class without one does not diffuse.
     """
-
-    #: The axes a voxel spans: all three, physical.
-    VOXEL_AXES = np.eye(3)
 
     #: Isotropic diffusion coefficients, in m²/s, of the tissue classes whose
     #: water diffusion is measured: the apparent diffusion coefficients of
@@ -233,105 +223,6 @@ class BrainWeb:
             self.fractions, np.asarray(points, dtype=float), normal, thickness
         )
 
-    def isochromats(
-        self,
-        spacing: float = 1e-3,
-        *,
-        field_t: float | None = None,
-        off_resonance_hz: float = 0.0,
-        region: Callable[[np.ndarray, np.ndarray], np.ndarray] | None = None,
-        coil: Coil | None = None,
-        spins: int = 1,
-        voxel: str = "point",
-        motion=None,
-        seed: int | None = None,
-        threads: int = 0,
-        device=None,
-    ) -> Isochromats:
-        """Return the brain sampled as isochromats, for :func:`~pulserver.virtual.simulate`.
-
-        The voxels are averaged in cubes ``spacing`` wide. Each tissue a cube
-        holds is ``spins`` isochromats of proton density, between them, the
-        tissue's times the fraction of the cube it fills times the cube's
-        volume in m³, precessing at the cube's mean :attr:`field_ppm`: at the
-        cube's centre, or over the cube for a ``"box"`` or ``"jittered"``
-        ``voxel``, and at the
-        quantiles of the Lorentzian line of the tissue's T2'
-        (:doc:`/developer-guide/internals/bloch-engine`).
-
-        Parameters
-        ----------
-        spacing
-            Width of a cube, in metres: a whole number of millimetres.
-        field_t
-            The magnet's field, in T, at which fat's chemical shift is resolved
-            into a frequency, with pypulseqpp's default gamma.
-        off_resonance_hz
-            Frequency of every isochromat from the scanner's centre frequency,
-            in Hz, beside its chemical shift.
-        region
-            Which isochromats are kept, from their ``(n, 3)`` positions, in m,
-            and ``(n,)`` frequencies, in Hz, as
-            :class:`~pulserver.virtual.Slabs` answers; the whole head without
-            one.
-        coil
-            The scanner's coil the brain is scanned with, in place of the
-            phantom's coils.
-        spins
-            Isochromats per tissue of a cube: a cube number for a ``"box"`` or a
-            ``"jittered"`` voxel.
-        voxel
-            ``"point"``, ``"box"`` or ``"jittered"``: where a cube's
-            isochromats lie.
-        motion
-            The head's motion, as :class:`~pulserver.virtual.Isochromats`
-            takes it.
-        seed
-            Seed of the frequencies of each voxel's isochromats and of their
-            Brownian walks.
-        threads
-            Worker threads of the simulation; 0 for every core.
-        device
-            The device the ADC windows are read and the runs of repetitions
-            carried on, as :class:`~pulserver.virtual.Isochromats` takes it;
-            the engine does both itself without one.
-
-        Raises
-        ------
-        ValueError
-            If ``spacing`` is not a whole number of millimetres, ``field_t``
-            is not given, the brain has coils of its own and ``coil`` is
-            given, or ``spins`` do not fill a ``voxel``.
-        """
-        _whole_millimetres(spacing)
-        if coil is not None and self.coils > 1:
-            raise ValueError(
-                "a phantom received by coils of its own is not scanned with a coil"
-            )
-        centres, proton_density, t1, t2, frequency, t2_prime, diffusion = self._sampled(
-            spacing, field_t, off_resonance_hz, region
-        )
-        offsets, order = _voxels.stencil(spins, voxel, spacing, self.VOXEL_AXES)
-        rng = np.random.default_rng(seed)
-        own = _voxels.spread(centres, spins) + np.tile(offsets, (len(t1), 1))
-        if voxel == "jittered":
-            own += _voxels.jitter(len(t1), spins, spacing, self.VOXEL_AXES, rng)
-        return Isochromats(
-            own,
-            proton_density=_voxels.spread(proton_density, spins) / spins,
-            t1=_voxels.spread(t1, spins),
-            t2=_voxels.spread(t2, spins),
-            off_resonance=_voxels.spread(frequency, spins)
-            + _voxels.frequencies(t2_prime, order, rng),
-            transmit=None if coil is None else coil.transmit(own),
-            receive=self._coils._received(own) if coil is None else coil.receive(own),
-            diffusion=_voxels.spread(diffusion, spins),
-            motion=motion,
-            seed=rng,
-            threads=threads,
-            device=device,
-        )
-
     def tissue(
         self,
         spacing: float = 1e-3,
@@ -341,7 +232,7 @@ class BrainWeb:
         region: Callable[[np.ndarray, np.ndarray], np.ndarray] | None = None,
         coil: Coil | None = None,
     ) -> Tissue:
-        """Return the brain sampled for the Fourier engine: each tissue of each cube :meth:`isochromats` averages, at the cube's centre.
+        """Return the brain sampled for the Fourier engine: each tissue of each cube ``spacing`` wide, at the cube's centre.
 
         Raises
         ------
@@ -374,35 +265,6 @@ class BrainWeb:
             coils=self.coils if coil is None else coil.receive_channels,
         )
 
-    def count(
-        self,
-        spacing: float = 1e-3,
-        *,
-        field_t: float | None = None,
-        off_resonance_hz: float = 0.0,
-        region: Callable[[np.ndarray, np.ndarray], np.ndarray] | None = None,
-        spins: int = 1,
-    ) -> int:
-        """Return how many isochromats :meth:`isochromats` samples the brain as, with the same arguments.
-
-        Raises
-        ------
-        ValueError
-            If ``spacing`` is not a whole number of millimetres or ``field_t``
-            is not given.
-        """
-        _whole_millimetres(spacing)
-        if region is not None:
-            sampled = self._sampled(spacing, field_t, off_resonance_hz, region)
-            return spins * len(sampled[0])
-        if field_t is None:
-            raise ValueError(
-                "BrainWeb's fat has a chemical shift: scan it at a field_t"
-            )
-        cubes = _cubes(self.fractions, round(spacing / 1e-3))
-        dense = [density > 0.0 for *_, density in TISSUES.values()]
-        return spins * int(np.count_nonzero(cubes[..., dense] > 0.0))
-
     def _sampled(
         self,
         spacing: float,
@@ -410,7 +272,7 @@ class BrainWeb:
         off_resonance_hz: float,
         region: Callable[[np.ndarray, np.ndarray], np.ndarray] | None,
     ) -> tuple[np.ndarray, ...]:
-        """Return the centres, proton densities, T1, T2, frequencies, T2' and diffusion coefficients of the tissues of the cubes :meth:`isochromats` spreads into isochromats."""
+        """Return the centres, proton densities, T1, T2, frequencies, T2' and diffusion coefficients of the tissues of the cubes ``spacing`` wide."""
         from pypulseqpp.sequences.preparation.fatsat import FAT_SHIFT_PPM
 
         if field_t is None:
@@ -426,21 +288,7 @@ class BrainWeb:
         shifts = [per_ppm * FAT_SHIFT_PPM if name == "fat" else 0.0 for name in TISSUES]
         fractions = cubes.reshape(-1, len(TISSUES))
         inhomogeneity = per_ppm * field.reshape(-1)
-        voxels = None
-        if isinstance(region, Slabs):
-            voxels = _reached(
-                region,
-                cubes.shape[:3],
-                step,
-                off_resonance_hz + min(shifts) + per_ppm * float(field.min()),
-                off_resonance_hz + max(shifts) + per_ppm * float(field.max()),
-            )
-            fractions, inhomogeneity = fractions[voxels], inhomogeneity[voxels]
-        index = (
-            np.indices(cubes.shape[:3]).reshape(3, -1).T
-            if voxels is None
-            else np.column_stack(np.unravel_index(voxels, cubes.shape[:3]))
-        )
+        index = np.indices(cubes.shape[:3]).reshape(3, -1).T
         voxel = step * index + 0.5 * (step - 1)
         z, y, x = (
             voxel[:, axis] + _FIRST_VOXEL_MM[name] for axis, name in enumerate("zyx")
@@ -471,31 +319,6 @@ class BrainWeb:
                 )
             )
         return (np.concatenate(points), *np.concatenate(rows).T)
-
-
-def _reached(
-    region: Slabs, shape: tuple[int, ...], step: int, lowest: float, highest: float
-) -> np.ndarray:
-    """Return the flat indices of the cubes of ``shape`` whose centres lie in a slab of ``region`` at some frequency from ``lowest`` to ``highest`` Hz, in their order.
-
-    The slabs' bounds are widened by ``_REACH_MARGIN``, so that the cubes
-    returned hold every isochromat the slabs keep.
-    """
-    z, y, x = (
-        1e-3 * (step * np.arange(size) + 0.5 * (step - 1) + _FIRST_VOXEL_MM[name])
-        for size, name in zip(shape, "zyx", strict=True)
-    )
-    reached = np.zeros(shape, dtype=bool)
-    for gradient, (low, high) in zip(region.gradients, region.bounds, strict=True):
-        along = (
-            (gradient[2] * z)[:, None, None]
-            - (gradient[1] * y)[None, :, None]
-            - (gradient[0] * x)[None, None, :]
-        )
-        reached |= (along >= low - highest - _REACH_MARGIN) & (
-            along <= high - lowest + _REACH_MARGIN
-        )
-    return np.flatnonzero(reached)
 
 
 def _t2_prime(t2: float, t2_star: float) -> float:

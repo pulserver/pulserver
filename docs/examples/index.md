@@ -16,7 +16,7 @@ The shortest path from a protocol to a reconstructed image, read in order.
 | {doc}`/generated/gallery/01-course/02_sequence_plugin` | A scanner sequence and the protocol it resolves. |
 | {doc}`/generated/gallery/01-course/03_scanner_representation` | The repetition, virtual segments and execution stream of a design. |
 | {doc}`/generated/gallery/01-course/04_reconstruction_plugin` | Enrichment of a series and a reconstruction plugin. |
-| {doc}`/generated/gallery/01-course/05_testing_on_the_virtual_scanner` | Optional: the Bloch simulation and the conversion check. |
+| {doc}`/generated/gallery/01-course/05_testing_on_the_virtual_scanner` | Optional: the Fourier engine's contrast and the conversion check. |
 
 ## Tours
 

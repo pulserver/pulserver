@@ -35,8 +35,9 @@ matplotlib.use("Agg")
 # -------------------------
 #
 # The protocol of the first lesson resolves to the same design, so generating
-# it again returns the stored one. :func:`~pulserver.virtual.acquire` samples
-# an analytic phantom of four coils along the trajectory the cache plays, and
+# it again returns the stored one. :func:`~pulserver.virtual.simulate` acquires
+# a phantom of four coils, sampled as tissue on a 2 mm grid, by the virtual
+# scanner's Fourier engine, and
 # :func:`~pulserver.virtual.record` writes the series to an ISMRMRD file as the
 # scanner's client sends it: the design identifier in the header, and the
 # samples of each readout.
@@ -74,7 +75,8 @@ phantom = virtual.Phantom(
     coils=4,
 )
 series = store / "series.h5"
-print(virtual.record(series, design, virtual.acquire(sequence, phantom)), "readouts")
+readouts = virtual.simulate(sequence, phantom.tissue(2e-3))
+print(virtual.record(series, design, readouts), "readouts")
 
 # %%
 # As received, the header's encoding space holds placeholder sizes, and every

@@ -13,9 +13,7 @@ import numpy as np
 import pypulseqpp as pp
 from scipy.special import j1
 
-from . import _voxels
 from ._coils import Coil
-from ._isochromats import Isochromats
 
 if TYPE_CHECKING:
     from ._tissue import Tissue
@@ -30,8 +28,8 @@ class Ellipse:
     ellipse is infinitely thin, so its signal depends on the k-space location
     along z only through the phase of its plane. ``shift_ppm`` is the chemical
     shift of its spins from water, in ppm: -3.45 for the main fat resonance.
-    ``t1``, ``t2`` and ``t2_prime``, in s, and ``diffusion``, the isotropic
-    diffusion coefficient in m²/s, act in :meth:`Phantom.isochromats` alone.
+    ``t1``, ``t2`` and ``t2_prime``, in s, act in :meth:`Phantom.tissue`
+    alone; ``diffusion`` is the isotropic diffusion coefficient in m²/s.
     """
 
     centre: tuple[float, float, float]
@@ -91,9 +89,6 @@ class Phantom:
         Physical location of the phantom's origin, in metres.
     """
 
-    #: The axes a voxel spans, along the phantom's own: the ellipses' plane.
-    VOXEL_AXES = np.eye(3)[:2]
-
     def __init__(
         self,
         ellipses: Sequence[Ellipse],
@@ -116,109 +111,6 @@ class Phantom:
         self._rotation = np.eye(3) if rotation is None else np.asarray(rotation, float)
         self._position = np.asarray(position, dtype=float)
 
-    def isochromats(
-        self,
-        spacing: float,
-        *,
-        field_t: float | None = None,
-        off_resonance_hz: float = 0.0,
-        region: Callable[[np.ndarray, np.ndarray], np.ndarray] | None = None,
-        coil: Coil | None = None,
-        spins: int = 1,
-        voxel: str = "point",
-        motion=None,
-        seed: int | None = None,
-        threads: int = 0,
-        device=None,
-    ) -> Isochromats:
-        """Return the phantom sampled as isochromats, for :func:`~pulserver.virtual.simulate`.
-
-        Each ellipse is sampled at the points of a square grid, aligned with the
-        phantom's origin and axes, that lie inside it: each a voxel of
-        ``spins`` isochromats of proton density ``intensity * spacing**2``
-        between them, relaxing with the ellipse's ``t1`` and ``t2``, so that
-        the sum over them approximates the ellipse's transform below the
-        grid's Nyquist frequency. A voxel's isochromats lie at its centre, or
-        over a square ``spacing`` wide in the ellipse's plane for a ``"box"``
-        ``voxel``, and precess at the quantiles of the Lorentzian line of the
-        ellipse's ``t2_prime`` (:doc:`/developer-guide/internals/bloch-engine`).
-        Overlapping ellipses are separate isochromats. The positions are placed
-        in the physical frame as the phantom is, and the receive sensitivities
-        are the phantom's coils', or ``coil``'s transmit and receive
-        sensitivities there. The isochromats diffuse with the ellipses'
-        ``diffusion``.
-
-        Parameters
-        ----------
-        spacing
-            Grid spacing, in metres.
-        field_t
-            The magnet's field, in T, at which each ellipse's chemical shift is
-            resolved into a frequency, with pypulseqpp's default gamma.
-        off_resonance_hz
-            Frequency of every isochromat from the scanner's centre frequency,
-            in Hz, beside its chemical shift.
-        region
-            Which isochromats are kept, from their ``(n, 3)`` physical
-            positions, in m, and ``(n,)`` frequencies, in Hz, as
-            :class:`~pulserver.virtual.Slabs` answers; every one without one.
-        coil
-            The scanner's coil the phantom is scanned with.
-        spins
-            Isochromats per voxel: a square number for a ``"box"`` or a
-            ``"jittered"`` voxel.
-        voxel
-            ``"point"``, ``"box"`` or ``"jittered"``: where a voxel's
-            isochromats lie.
-        motion
-            The phantom's motion, as :class:`~pulserver.virtual.Isochromats`
-            takes it.
-        seed
-            Seed of the frequencies of each voxel's isochromats and of their
-            Brownian walks.
-        threads
-            Worker threads of the simulation; 0 for every core.
-        device
-            The device the ADC windows are read and the runs of repetitions
-            carried on, as :class:`~pulserver.virtual.Isochromats` takes it;
-            the engine does both itself without one.
-
-        Raises
-        ------
-        ValueError
-            If an ellipse has a complex intensity, the phantom has a chemical
-            shift and ``field_t`` is not given, it has coils of its own and
-            ``coil`` is given, or ``spins`` do not fill a ``voxel``.
-        """
-        if coil is not None and self.coils > 1:
-            raise ValueError(
-                "a phantom received by coils of its own is not scanned with a coil"
-            )
-        own, _, density, t1, t2, frequency, t2_prime, diffusion = self._sampled(
-            spacing, field_t, off_resonance_hz, region
-        )
-        offsets, order = _voxels.stencil(spins, voxel, spacing, self.VOXEL_AXES)
-        rng = np.random.default_rng(seed)
-        own = _voxels.spread(own, spins) + np.tile(offsets, (len(t1), 1))
-        if voxel == "jittered":
-            own += _voxels.jitter(len(t1), spins, spacing, self.VOXEL_AXES, rng)
-        positions = own @ self._rotation.T + self._position
-        return Isochromats(
-            positions,
-            proton_density=_voxels.spread(density, spins) / spins,
-            t1=_voxels.spread(t1, spins),
-            t2=_voxels.spread(t2, spins),
-            off_resonance=_voxels.spread(frequency, spins)
-            + _voxels.frequencies(t2_prime, order, rng),
-            transmit=None if coil is None else coil.transmit(positions),
-            receive=self._received(own) if coil is None else coil.receive(positions),
-            diffusion=_voxels.spread(diffusion, spins),
-            motion=motion,
-            seed=rng,
-            threads=threads,
-            device=device,
-        )
-
     def tissue(
         self,
         spacing: float,
@@ -228,9 +120,11 @@ class Phantom:
         region: Callable[[np.ndarray, np.ndarray], np.ndarray] | None = None,
         coil: Coil | None = None,
     ) -> Tissue:
-        """Return the phantom sampled for the Fourier engine, at the points :meth:`isochromats` samples it at.
+        """Return the phantom sampled for the Fourier engine.
 
         Each point spans a square ``spacing`` wide in the ellipse's plane.
+        ``region`` keeps the points it answers True for, from their ``(n, 3)``
+        physical positions, in m, and their frequencies, in Hz.
 
         Raises
         ------
@@ -267,25 +161,6 @@ class Phantom:
             receive=receive,
             coils=self.coils if coil is None else coil.receive_channels,
         )
-
-    def count(
-        self,
-        spacing: float,
-        *,
-        field_t: float | None = None,
-        off_resonance_hz: float = 0.0,
-        region: Callable[[np.ndarray, np.ndarray], np.ndarray] | None = None,
-        spins: int = 1,
-    ) -> int:
-        """Return how many isochromats :meth:`isochromats` samples the phantom as, with the same arguments.
-
-        Raises
-        ------
-        ValueError
-            If an ellipse has a complex intensity, or the phantom has a
-            chemical shift and ``field_t`` is not given.
-        """
-        return spins * len(self._sampled(spacing, field_t, off_resonance_hz, region)[0])
 
     def _sampled(
         self,
@@ -390,7 +265,7 @@ def _sampled(ellipse: Ellipse, spacing: float) -> np.ndarray:
     """Return the points of the grid of ``spacing`` inside ``ellipse``, ``(n, 3)`` along the phantom's axes."""
     if np.imag(ellipse.intensity) != 0.0:
         raise ValueError(
-            "isochromats carry a real proton density, not a complex intensity"
+            "a sampled phantom carries a real proton density, not a complex intensity"
         )
     reach = max(ellipse.semi_axes) + spacing
     lo = np.floor((np.asarray(ellipse.centre[:2]) - reach) / spacing)

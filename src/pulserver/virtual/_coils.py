@@ -279,14 +279,14 @@ def _isocentre(grid: _Grid) -> np.ndarray:
 def _interpolated(grid: _Grid, points: np.ndarray) -> np.ndarray:
     """Return ``grid`` interpolated trilinearly at ``(n, 3)`` physical points, as :func:`_trilinear` interpolates it; the edge value beyond it.
 
-    The result is complex128, as :class:`Isochromats` takes it,
+    The result is complex128,
     in a temporary file mapped into memory: its pages belong to the file,
     which the operating system writes back rather than holding in the
     process's memory. ``TMPDIR`` names where the file is made.
     """
     points = np.ascontiguousarray(np.asarray(points, dtype=float).reshape(-1, 3))
     out = _mapped((len(points), grid.values.shape[0]))
-    require("bloch").trilinear(
+    require("fourier").trilinear(
         grid.values,
         np.asarray(grid.centre, dtype=float),
         np.asarray(grid.step, dtype=float),
