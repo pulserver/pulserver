@@ -134,7 +134,9 @@ $$
 The lattice sums $S_{cl}(q)$ are exact. The sum over the lattice at each
 sample's $\mathbf{k}$ is a type-2 non-uniform FFT, which FINUFFT (Barnett,
 Magland and af Klinteberg, SIAM J Sci Comput 2019) computes for every coil and
-Chebyshev point. $L$ is the fewest points that interpolate $e^{-zt}$ to within
+Chebyshev point; on macOS, where the finufft wheel and torch each carry
+LLVM's OpenMP runtime, it is not loaded and these windows are read sample by
+sample. $L$ is the fewest points that interpolate $e^{-zt}$ to within
 $\varepsilon/4$ for every rate on the boundary of the rectangle the rates
 span, where the error of the interpolation is largest. FINUFFT is given
 $\varepsilon/4$ divided by the Lebesgue constant of the points and by the most
