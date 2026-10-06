@@ -24,6 +24,9 @@ CHUNK = 32
 #: Share of a run's slots dropped at which the rest are compacted.
 COMPACT_AT = 0.25
 
+#: Parts of its memory a run is cut into when its slots do not fit at once.
+PARTS = 8
+
 #: Grid points of a turned window each program of its spreading sums onto,
 #: and repetitions of a tile its slots are sorted for at once.
 POINTS = 32
@@ -451,8 +454,15 @@ if triton is not None:
             + ((d * coils + coil[:, None]) * (cells + taps) + g) * 32
             + rep[None, :]
         )
-        tl.store(grid_ptr + at, acc_re, mask=cmask[:, None])
-        tl.store(grid_ptr + at + 16, acc_im, mask=cmask[:, None])
+        # Each grid point is one program's alone, and the parts of a run add
+        # onto it one launch after another.
+        mask = cmask[:, None]
+        tl.store(grid_ptr + at, tl.load(grid_ptr + at, mask=mask) + acc_re, mask=mask)
+        tl.store(
+            grid_ptr + at + 16,
+            tl.load(grid_ptr + at + 16, mask=mask) + acc_im,
+            mask=mask,
+        )
 
     @triton.jit
     def _spread_turned(
@@ -554,8 +564,12 @@ if triton is not None:
             + coil[None, :] * 2
         )
         omask = (g[:, None] < points) & cmask[None, :]
-        tl.store(grid_ptr + at, acc_re, mask=omask)
-        tl.store(grid_ptr + at + 1, acc_im, mask=omask)
+        tl.store(grid_ptr + at, tl.load(grid_ptr + at, mask=omask) + acc_re, mask=omask)
+        tl.store(
+            grid_ptr + at + 1,
+            tl.load(grid_ptr + at + 1, mask=omask) + acc_im,
+            mask=omask,
+        )
 
 
 @functools.cache
@@ -568,7 +582,10 @@ def _tuned_spread():
         for k in (16, 32)
         for warps in (4, 8)
     ]
-    return triton.autotune(configs=configs, key=["coils", "taps", "ORDERED"])(_spread)
+    # A trial adds onto the grid as the launch it times would: restored after each.
+    return triton.autotune(
+        configs=configs, key=["coils", "taps", "ORDERED"], restore_value=["grid_ptr"]
+    )(_spread)
 
 
 @functools.cache
@@ -580,24 +597,25 @@ def _tuned_spread_turned():
         for k in (16, 32)
         for warps in (4, 8)
     ]
-    return triton.autotune(configs=configs, key=["coils", "TAPS", "POWERS"])(
-        _spread_turned
-    )
+    return triton.autotune(
+        configs=configs, key=["coils", "TAPS", "POWERS"], restore_value=["grid_ptr"]
+    )(_spread_turned)
 
 
 class Run:
     """The slots of one run of repetitions on a device, carried and spread as the engine carries them.
 
-    Each per-slot array is a row per value over the slots, in the engine's
-    order until the run is compacted; :attr:`ids` maps the slots held to the
-    engine's. Per window, the slots are ordered by T2 class and first grid
-    point, with where each class's slots of each first grid point start.
+    The slots are held in parts of consecutive engine slots. While the slots
+    and the scratch a tile takes fit in ``memory``, the run is one part on the
+    device. Otherwise each part takes 1/:data:`PARTS` of ``memory``: as many
+    as fit stay on the device, and the rest wait in host memory, pinned on a
+    CUDA device, and cross to the device for each tile, their magnetisation
+    alone coming back. A tile's grids are the sums of every part's spreading.
     """
 
-    def __init__(self, run: dict, device: torch.device):
+    def __init__(self, run: dict, device: torch.device, memory: int | None = None):
         self.device = device
         self.real = torch.float32 if run["single"] else torch.float64
-        n = int(run["slots"])
         self.offsets = bool(run["offsets"])
         self.limits = bool(run["limits"])
         self.cells = [int(c) for c in run["cells"]]
@@ -609,57 +627,64 @@ class Run:
         self.classes = int(run["classes"])
         pulse = run.get("pulse")
         self.pulsed = pulse is not None
-        self.rows = {
-            name: torch.tensor(np.ascontiguousarray(row)).to(device)
-            for name, row in _slot_rows(run).items()
-            if row.size
-        }
         self.tables, self.pulse_rows, self.timing = _pulse_reading(pulse, device)
         # What a kernel is handed for a row the run does not hold.
         self._none = torch.zeros(1, dtype=self.real, device=device)
-        # (windows, slots, coils, Re/Im), as the engine lays the factors out per slot.
-        self.factor = torch.tensor(
-            np.ascontiguousarray(np.asarray(run["factor"]).transpose(1, 0, 2, 3))
-        ).to(device)
         self.lattice = torch.tensor(np.asarray(run["lattice"], dtype=np.int64)).to(
             device
         )
-        self.ids = torch.arange(n, device=device)
-        self.slots = n
-        self.dropped = 0
-        self._counter = torch.zeros(1, dtype=torch.int32, device=device)
-        self._group()
-
-    def _group(self) -> None:
-        """Order each window's slots by T2 class and first grid point, and find where each group starts."""
-        n = self.slots
-        self.e = torch.zeros(
-            (max(self.windows, 1), TILE, 2, n), dtype=self.real, device=self.device
+        rows = {
+            name: torch.from_numpy(np.require(row, requirements="CW"))
+            for name, row in _slot_rows(run).items()
+            if row.size
+        }
+        # (windows, slots, coils, Re/Im), as the engine lays the factors out per slot.
+        factor = torch.from_numpy(
+            np.require(
+                np.asarray(run["factor"]).transpose(1, 0, 2, 3), requirements="CW"
+            )
         )
-        self.orders, self.firsts, self.ordered = [], [], []
-        decay = self.rows["decay"][0]
-        for w, cells in enumerate(self.cells):
-            if self.turned[w]:
-                # Ordered anew at each repetition.
-                self.orders.append(None)
-                self.firsts.append(None)
-                self.ordered.append(False)
-                continue
-            key = decay * max(cells, 1) + (self.rows["start"][w] if cells else 0)
-            order = torch.argsort(key, stable=True)
-            counts = torch.bincount(key, minlength=self.classes * max(cells, 1))
-            first = torch.zeros(
-                counts.numel() + 1, dtype=torch.int64, device=self.device
+        n = int(run["slots"])
+        held = _held_bytes(rows, factor, self.windows) // max(n, 1)
+        scratch = self._scratch_bytes()
+        if memory is None or n * (held + scratch) <= memory:
+            size, kept = max(n, 1), None
+        else:
+            size = max(1, memory // (PARTS * (held + scratch)))
+            kept = max(0, (memory - size * (held + scratch)) // (size * held))
+        self._e = torch.empty(
+            max(self.windows, 1) * TILE * 2 * min(size, max(n, 1)),
+            dtype=self.real,
+            device=device,
+        )
+        self.parts = [
+            _Part(
+                self,
+                {name: row[:, start : start + size] for name, row in rows.items()},
+                factor[:, start : start + size],
+                torch.arange(start, min(start + size, n)),
+                stays=kept is None or index < kept,
             )
-            first[1:] = torch.cumsum(counts, 0)
-            self.orders.append(order.to(torch.int32))
-            self.firsts.append(first)
-            self.ordered.append(
-                bool(torch.equal(order, torch.arange(n, device=self.device)))
-            )
+            for index, start in enumerate(range(0, max(n, 1), size))
+        ]
 
-    def row(self, name: str) -> torch.Tensor:
-        return self.rows.get(name, self._none)
+    def _scratch_bytes(self) -> int:
+        """Bytes a slot takes on the device while a tile is carried: its coefficients, and the sorting of a turned window."""
+        itemsize = 4 if self.real == torch.float32 else 8
+        scratch = max(self.windows, 1) * TILE * 2 * itemsize
+        if any(self.turned):
+            scratch += SORTED * (8 + 8 + 8 + itemsize + 4 + 4 + 8 + 4 + 24)
+        return scratch
+
+    @property
+    def slots(self) -> int:
+        """Slots the run holds: those not dropped."""
+        return sum(part.slots for part in self.parts)
+
+    def coefficients(self, slots: int) -> torch.Tensor:
+        """Return the scratch a part of ``slots`` writes its coefficients into: ``(windows, TILE, 2, slots)``."""
+        windows = max(self.windows, 1)
+        return self._e[: windows * TILE * 2 * slots].view(windows, TILE, 2, slots)
 
     def carry(self, tile: dict, clock, lap) -> int:
         """Carry the slots through ``tile`` and write the grids the engine reads into its ``grid``; return the transients dropped.
@@ -668,8 +693,6 @@ class Run:
         profiles them.
         """
         began = clock()
-        n = self.slots
-        count = int(tile["count"])
         turns = np.concatenate([tile["turn_cos"], tile["turn_sin"]])
         kinds = np.asarray(tile["encoding"], dtype=np.int32)
         at = np.zeros(kinds.shape, dtype=np.int64)
@@ -687,17 +710,167 @@ class Run:
                 self.device
             )
 
+        given = {
+            "turns": put(turns, self.real),
+            "kinds": put(kinds),
+            "at": put(at),
+            "tables": put(tables, self.real),
+            "angle": put(tile["angle"], torch.float64),
+            "pulse_delta": (
+                put(np.ravel(tile["pulse_delta"]), torch.float64)
+                if self.pulsed
+                else self._none
+            ),
+        }
         grid = torch.zeros(len(tile["grid"]), dtype=self.real, device=self.device)
-        pulse_delta = (
-            put(np.ravel(tile["pulse_delta"]), torch.float64)
-            if self.pulsed
-            else self._none
+        lap("upload", began)
+        dropped = 0
+        for part in self.parts:
+            dropped += part.carry(tile, given, grid, clock, lap)
+        began = clock()
+        _download(grid, tile["grid"])
+        lap("download", began)
+        return dropped
+
+    def write(self, state: dict) -> None:
+        """Write the magnetisation into the engine's ``state["m"]``, zero for the slots dropped."""
+        if self.device.type == "cuda":
+            torch.cuda.current_stream(self.device).synchronize()
+        m = torch.zeros((3, int(state["slots"])), dtype=self.real)
+        for part in self.parts:
+            m.index_copy_(1, part.ids, part.magnetization())
+        torch.from_numpy(state["m"]).copy_(m)
+
+    def load(self, state: dict) -> None:
+        """Take the magnetisation in the engine's ``state["m"]`` as the slots'."""
+        m = torch.from_numpy(state["m"])
+        for part in self.parts:
+            part.load(m[:, part.ids])
+
+    def nbytes(self) -> int:
+        """Most bytes the run holds on the device at once."""
+        staying = sum(part.nbytes() for part in self.parts if part.stays)
+        crossing = max(
+            (part.nbytes() for part in self.parts if not part.stays), default=0
         )
-        began = lap("upload", began)
+        return staying + crossing + self._e.numel() * self._e.element_size()
+
+
+class _Part:
+    """Consecutive slots of a run, carried together.
+
+    Each per-slot array is a row per value over the part's slots, in the
+    engine's order until the part is compacted; :attr:`ids`, on the host,
+    maps them to the engine's. Per window, the slots are ordered by T2 class
+    and first grid point, with where each class's slots of each first grid
+    point start. A part that does not stay is parked in host memory between
+    tiles.
+    """
+
+    def __init__(self, run: Run, rows: dict, factor, ids, stays: bool):
+        self.run = run
+        self.stays = stays
+        self.dropped = 0
+        self.ids = ids
+        # A part's rows are columns of the run's: contiguous, as the kernels
+        # index them by the part's own slot count.
+        self.rows = {
+            name: row.to(run.device).contiguous() for name, row in rows.items()
+        }
+        self.factor = factor.to(run.device).contiguous()
+        self._counter = torch.zeros(1, dtype=torch.int32, device=run.device)
+        self._group()
+        self._parked: dict | None = None
+        if not stays:
+            self._park()
+
+    @property
+    def slots(self) -> int:
+        return int(self.ids.numel())
+
+    def _held(self) -> dict:
+        """Return the part's arrays on the device, by name."""
+        held = {f"row:{name}": row for name, row in self.rows.items()}
+        held["factor"] = self.factor
+        for w, (order, first) in enumerate(zip(self.orders, self.firsts, strict=True)):
+            if order is not None:
+                held[f"order:{w}"], held[f"first:{w}"] = order, first
+        return held
+
+    def _hold(self, held: dict) -> None:
+        self.rows = {k[4:]: v for k, v in held.items() if k.startswith("row:")}
+        self.factor = held["factor"]
+        self.orders = [held.get(f"order:{w}") for w in range(self.run.windows)]
+        self.firsts = [held.get(f"first:{w}") for w in range(self.run.windows)]
+
+    def _park(self) -> None:
+        """Copy every array to host memory and hold those copies."""
+        pin = self.run.device.type == "cuda"
+        parked = {}
+        for name, value in self._held().items():
+            copy = torch.empty(value.shape, dtype=value.dtype, pin_memory=pin)
+            parked[name] = copy.copy_(value, non_blocking=pin)
+        self._parked = parked
+        self._hold(parked)
+
+    def _arrive(self) -> None:
+        self._hold(
+            {
+                name: value.to(self.run.device, non_blocking=True)
+                for name, value in self._parked.items()
+            }
+        )
+
+    def _leave(self, compacted: bool) -> None:
+        """Bring the magnetisation back, or everything after a compaction, and hold the host copies."""
+        if compacted:
+            self._park()
+            return
+        self._parked["row:m"].copy_(self.rows["m"], non_blocking=True)
+        self._hold(self._parked)
+
+    def _group(self) -> None:
+        """Order each window's slots by T2 class and first grid point, and find where each group starts."""
+        run, n = self.run, self.slots
+        self.orders, self.firsts, self.ordered = [], [], []
+        decay = self.rows["decay"][0]
+        for w, cells in enumerate(run.cells):
+            if run.turned[w]:
+                # Ordered anew at each repetition.
+                self.orders.append(None)
+                self.firsts.append(None)
+                self.ordered.append(False)
+                continue
+            key = decay * max(cells, 1) + (self.rows["start"][w] if cells else 0)
+            order = torch.argsort(key, stable=True)
+            counts = torch.bincount(key, minlength=run.classes * max(cells, 1))
+            first = torch.zeros(
+                counts.numel() + 1, dtype=torch.int64, device=run.device
+            )
+            first[1:] = torch.cumsum(counts, 0)
+            self.orders.append(order.to(torch.int32))
+            self.firsts.append(first)
+            self.ordered.append(
+                bool(torch.equal(order, torch.arange(n, device=run.device)))
+            )
+
+    def row(self, name: str) -> torch.Tensor:
+        return self.rows.get(name, self.run._none)
+
+    def carry(self, tile: dict, given: dict, grid: torch.Tensor, clock, lap) -> int:
+        """Carry the part's slots through ``tile`` and add their spreading onto ``grid``; return the transients dropped."""
+        run, n = self.run, self.slots
+        count = int(tile["count"])
+        began = clock()
+        if not self.stays:
+            self._arrive()
+            began = lap("upload", began)
+        dropped = 0
         if n:
+            e = run.coefficients(n)
             self._counter.zero_()
             row = self.row
-            table = self.tables.get
+            table = run.tables.get
             _carry[(triton.cdiv(n, SLOTS),)](
                 row("m"),
                 row("a"),
@@ -705,15 +878,15 @@ class Run:
                 row("u"),
                 row("v"),
                 row("limit"),
-                put(turns, self.real),
-                put(kinds),
-                put(at),
-                self.lattice,
-                put(tables, self.real),
+                given["turns"],
+                given["kinds"],
+                given["at"],
+                run.lattice,
+                given["tables"],
                 row("index"),
                 row("coordinate"),
-                put(tile["angle"], torch.float64),
-                self.e,
+                given["angle"],
+                e,
                 self._counter,
                 row("field"),
                 row("place"),
@@ -722,52 +895,55 @@ class Run:
                 row("row_weight"),
                 row("drive_turn"),
                 row("density"),
-                table("maps", self._none),
-                table("at", self._none),
-                table("first", self._none),
-                table("columns", self._none),
-                table("relax", self._none),
-                pulse_delta,
-                *self.timing,
+                table("maps", run._none),
+                table("at", run._none),
+                table("first", run._none),
+                table("columns", run._none),
+                table("relax", run._none),
+                given["pulse_delta"],
+                *run.timing,
                 n,
                 count,
-                WINDOWS=self.windows,
-                OFFSETS=self.offsets,
+                WINDOWS=run.windows,
+                OFFSETS=run.offsets,
                 NETTED=bool(tile["netted"]),
-                DROP=bool(tile["drop"]) and self.limits,
-                PULSED=self.pulsed,
-                ROWS=self.pulse_rows,
+                DROP=bool(tile["drop"]) and run.limits,
+                PULSED=run.pulsed,
+                ROWS=run.pulse_rows,
                 BLOCK=SLOTS,
             )
             began = lap("carry", began)
-            for w in range(self.windows):
-                if self.turned[w]:
-                    self._spread_turned(w, tile, grid)
+            for w in range(run.windows):
+                if run.turned[w]:
+                    self._spread_turned(w, tile, grid, e)
                 else:
-                    self._spread(w, count, grid)
+                    self._spread(w, count, grid, e)
             began = lap("spread", began)
-        _download(grid, tile["grid"])
-        lap("download", began)
-        dropped = int(self._counter.item()) if n else 0
+            dropped = int(self._counter.item())
         self.dropped += dropped
-        if self.dropped > COMPACT_AT * self.slots:
+        compacted = self.dropped > COMPACT_AT * self.slots
+        if compacted:
             self._compact()
+        if not self.stays:
+            self._leave(compacted)
+            lap("download", began)
         return dropped
 
-    def _spread(self, w: int, count: int, grid: torch.Tensor) -> None:
-        cells = self.cells[w]
+    def _spread(self, w: int, count: int, grid: torch.Tensor, e: torch.Tensor) -> None:
+        run = self.run
+        cells = run.cells[w]
         if cells == 0:
             # One sample: each coil's sum over the slots, without a kernel.
             f = torch.complex(self.factor[w, :, :, 0], self.factor[w, :, :, 1])
-            e = torch.complex(self.e[w, :count, 0], self.e[w, :count, 1])
-            sums = torch.zeros((self.coils, TILE), dtype=f.dtype, device=self.device)
-            sums[:, :count] = (e @ f).T
-            part = grid[self.region[w] : self.region[w + 1]].view(self.coils, 2, TILE)
-            part[:, 0] = sums.real
-            part[:, 1] = sums.imag
+            ew = torch.complex(e[w, :count, 0], e[w, :count, 1])
+            sums = torch.zeros((run.coils, TILE), dtype=f.dtype, device=run.device)
+            sums[:, :count] = (ew @ f).T
+            part = grid[run.region[w] : run.region[w + 1]].view(run.coils, 2, TILE)
+            part[:, 0] += sums.real
+            part[:, 1] += sums.imag
             return
         arguments = (
-            self.e,
+            e,
             self.orders[w],
             self.firsts[w],
             self.row("weight"),
@@ -775,47 +951,50 @@ class Run:
             grid,
             self.slots,
             count,
-            self.coils,
+            run.coils,
             cells,
-            self.taps,
+            run.taps,
             w,
-            self.region[w],
+            run.region[w],
         )
-        dot = self.coils >= 16
-        if self.device.type == "cuda" and dot:
+        dot = run.coils >= 16
+        if run.device.type == "cuda" and dot:
             _tuned_spread()[
                 lambda meta: (
-                    cells + self.taps,
-                    self.classes,
-                    triton.cdiv(self.coils, meta["COILS"]),
+                    cells + run.taps,
+                    run.classes,
+                    triton.cdiv(run.coils, meta["COILS"]),
                 )
             ](*arguments, ORDERED=self.ordered[w], DOT=True)
             return
-        coils = 16 if dot else triton.next_power_of_2(self.coils)
-        _spread[(cells + self.taps, self.classes, triton.cdiv(self.coils, coils))](
+        coils = 16 if dot else triton.next_power_of_2(run.coils)
+        _spread[(cells + run.taps, run.classes, triton.cdiv(run.coils, coils))](
             *arguments, ORDERED=self.ordered[w], DOT=dot, COILS=coils, K=CHUNK
         )
 
-    def _spread_turned(self, w: int, tile: dict, grid: torch.Tensor) -> None:
+    def _spread_turned(
+        self, w: int, tile: dict, grid: torch.Tensor, e: torch.Tensor
+    ) -> None:
         """Spread turned window ``w`` a repetition at a time, its slots in order of T2 class and the first grid point they reach."""
+        run = self.run
         n, count = self.slots, int(tile["count"])
-        cells, taps = self.cells[w], self.taps
+        cells, taps = run.cells[w], run.taps
         points = cells + taps
-        delta = torch.tensor(np.asarray(tile["delta"][w]), device=self.device)
+        delta = torch.tensor(np.asarray(tile["delta"][w]), device=run.device)
         place = self.rows["place"]
         decay = self.rows["decay"][0].to(torch.int32) * cells
         blocks = triton.cdiv(points, POINTS)
-        g0 = torch.arange(blocks, device=self.device, dtype=torch.int32) * POINTS
-        base = torch.arange(self.classes, device=self.device, dtype=torch.int32)
+        g0 = torch.arange(blocks, device=run.device, dtype=torch.int32) * POINTS
+        base = torch.arange(run.classes, device=run.device, dtype=torch.int32)
         bounds = [
             (base[:, None] * cells + edge.clamp(0, cells)[None, :]).reshape(1, -1)
             for edge in (g0 - taps + 1, g0 + POINTS)
         ]
         polynomial = torch.tensor(np.ascontiguousarray(tile["polynomials"][w])).to(
-            self.device
+            run.device
         )
         constants = {"TAPS": taps, "POWERS": polynomial.shape[0], "POINTS": POINTS}
-        dot = self.coils >= 16
+        dot = run.coils >= 16
         for r0 in range(0, count, SORTED):
             rows = min(SORTED, count - r0)
             step = delta[:, r0 : r0 + rows, None]
@@ -827,7 +1006,7 @@ class Run:
             y = cells * (u - torch.round(u)) - 0.5 * taps + 0.5
             del u
             first = torch.round(y)
-            offset = (y - first).to(self.real)
+            offset = (y - first).to(run.real)
             del y
             first = torch.where(first < 0, first + cells, first).to(torch.int32)
             keys, order = torch.sort(decay + first, dim=1)
@@ -839,7 +1018,7 @@ class Run:
             )
             del keys
             arguments = (
-                self.e,
+                e,
                 order.to(torch.int32),
                 first,
                 offset,
@@ -849,65 +1028,49 @@ class Run:
                 self.factor,
                 grid,
                 n,
-                self.coils,
+                run.coils,
                 points,
                 w,
                 r0,
-                self.region[w],
+                run.region[w],
                 blocks,
-                self.classes * blocks,
+                run.classes * blocks,
             )
             del order
-            if self.device.type == "cuda" and dot:
+            if run.device.type == "cuda" and dot:
                 _tuned_spread_turned()[
                     lambda meta, rows=rows: (
                         blocks,
-                        self.classes,
-                        rows * triton.cdiv(self.coils, meta["COILS"]),
+                        run.classes,
+                        rows * triton.cdiv(run.coils, meta["COILS"]),
                     )
                 ](*arguments, DOT=True, **constants)
                 continue
-            coils = 16 if dot else triton.next_power_of_2(self.coils)
-            _spread_turned[
-                (blocks, self.classes, rows * triton.cdiv(self.coils, coils))
-            ](*arguments, DOT=dot, COILS=coils, K=16, **constants)
+            coils = 16 if dot else triton.next_power_of_2(run.coils)
+            _spread_turned[(blocks, run.classes, rows * triton.cdiv(run.coils, coils))](
+                *arguments, DOT=dot, COILS=coils, K=16, **constants
+            )
 
     def _compact(self) -> None:
         """Keep only the slots whose magnetisation is not zero, in their order."""
         kept = torch.nonzero(self.rows["m"].abs().sum(0) > 0).ravel()
         self.rows = {name: row[:, kept].contiguous() for name, row in self.rows.items()}
         self.factor = self.factor[:, kept].contiguous()
-        self.ids = self.ids[kept]
-        self.slots = int(kept.numel())
+        self.ids = self.ids[kept.cpu()]
         self.dropped = 0
         self._group()
 
-    def write(self, state: dict) -> None:
-        """Write the magnetisation into the engine's ``state["m"]``, zero for the slots dropped."""
-        m = self.rows["m"]
-        n = int(state["slots"])
-        if self.slots != n:
-            m = torch.zeros((3, n), dtype=m.dtype, device=m.device).index_copy_(
-                1, self.ids, m
-            )
-        torch.from_numpy(state["m"]).copy_(m)
+    def magnetization(self) -> torch.Tensor:
+        """Return the slots' magnetisation, ``(3, slots)``, on the host."""
+        return self.rows["m"].cpu()
 
-    def load(self, state: dict) -> None:
-        """Take the magnetisation in the engine's ``state["m"]`` as the slots'."""
-        m = torch.from_numpy(state["m"]).to(self.device)
-        self.rows["m"].copy_(m if self.slots == int(state["slots"]) else m[:, self.ids])
+    def load(self, m: torch.Tensor) -> None:
+        """Take ``m``, ``(3, slots)`` on the host, as the slots' magnetisation."""
+        self.rows["m"].copy_(m)
 
     def nbytes(self) -> int:
-        """Bytes the run holds on the device."""
-        held = [
-            *self.rows.values(),
-            *self.tables.values(),
-            self.factor,
-            self.e,
-            *self.orders,
-            *self.firsts,
-        ]
-        return sum(t.numel() * t.element_size() for t in held)
+        """Bytes the part's arrays take on the device while it is there."""
+        return sum(t.numel() * t.element_size() for t in self._held().values())
 
 
 def _slot_rows(run: dict) -> dict:
@@ -1012,35 +1175,8 @@ def _download(grid: torch.Tensor, into: np.ndarray) -> None:
     into[:] = grid.cpu().numpy()
 
 
-def bytes_for(run: dict) -> int:
-    """Bytes a run takes on the device, from what the engine hands, and those a tile of a turned window takes."""
-    n = int(run["slots"])
-    windows = len(run["cells"])
-    itemsize = 4 if run["single"] else 8
-    per_slot = (
-        3
-        + 9
-        + 3
-        + windows * 8
-        + 1
-        + windows * int(run["taps"])
-        + windows * int(run["coils"]) * 2
-    ) * itemsize
-    per_slot += (
-        max(windows, 1) * TILE * 2 * itemsize + 3 * (4 + itemsize) + 8 * (2 + windows)
-    )
-    if np.any(np.asarray(run["turned"])):
-        # Places and origins, and per repetition sorted at once the
-        # positions, grid points, places, keys and orders of the slots, and
-        # what sorting them takes besides.
-        per_slot += 8 * (3 + windows) + SORTED * (
-            8 + 8 + 8 + itemsize + 4 + 4 + 8 + 4 + 24
-        )
-    pulse = run.get("pulse")
-    if pulse is None:
-        return n * per_slot
-    # Field and place, class and row, the rows' weights, the drive's turn and
-    # the density; and the tables.
-    rows = np.shape(pulse["row_weight"])[1]
-    per_slot += 8 * 4 + 4 * 2 + (rows + 3) * itemsize
-    return n * per_slot + np.size(pulse["maps"]) * itemsize
+def _held_bytes(rows: dict, factor: torch.Tensor, windows: int) -> int:
+    """Bytes a run's slots take on the device between tiles: their rows, factors and orders."""
+    slots = factor.shape[1] if factor.ndim > 1 else 0
+    held = sum(row.numel() * row.element_size() for row in rows.values())
+    return held + factor.numel() * factor.element_size() + 4 * windows * slots

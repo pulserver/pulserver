@@ -410,8 +410,13 @@ writes the magnetisation back to the engine at the end of each play and takes
 the engine's where the run resumes.
 Transients are dropped as the engine drops them, and once more than a quarter
 have been dropped the device keeps only the rest. A run of fewer than
-$2^{18}$ isochromats times coils, by default, and one whose arrays would take
-more than half the memory free on the device, are carried by the engine.
+$2^{18}$ isochromats times coils, by default, is carried by the engine. A run
+whose arrays would take more than its memory, half the memory free on the
+device by default, is held in parts of an eighth of it: as many parts as fit
+stay on the device, and the rest wait in pinned host memory and cross to the
+device for each tile, their magnetisation alone coming back; each grid is the
+sum of every part's spreading, and a part keeps only its own slots once a
+quarter of them have been dropped.
 
 ## Voxels, motion and diffusion
 
