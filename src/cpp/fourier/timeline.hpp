@@ -43,11 +43,17 @@ namespace fourier
 
         size_t blocks() const { return physical_.size(); }
 
+        /** When @p block starts, in µs from the start of the scan. */
+        double start_of(size_t block) const { return starts_[block]; }
+
         /** (blocks + 1, 3) the moment at each block's start, and the scan's end. */
         const std::vector<double>& start_moments() const { return start_moment_; }
 
         /** Write the moment at @p since_us into each @p block, (n, 3) in 1/m. */
         void moment(const int64_t* block, const double* since_us, size_t n, double* out) const;
+
+        /** Write the moment at @p since_us into @p block, in 1/m. */
+        void moment_at(size_t block, double since_us, double out[3]) const;
 
         /** Write the gradient at @p since_us into each @p block, (n, 3) in Hz/m, in the
          *  frame the block plays in. */
@@ -62,6 +68,56 @@ namespace fourier
         std::vector<uint8_t> physical_;
         std::array<double, 9> rotation_;
     };
+
+    /** What a timeline knows of its pulses when it reads its readouts. */
+    struct Pulses
+    {
+        const double* time_us;      /**< (p) in play order */
+        const int64_t* file;        /**< (p) the file of a chain each plays in */
+        const uint8_t* refocusing;  /**< (p) whether each refocuses */
+        const double* interval;     /**< (p, 3) the moment from each to the next */
+        const double* origins;      /**< (p + 1, 3) k's origin after each, NaN before any */
+        size_t count;
+    };
+
+    /** What a readout's samples are read for: its block and file, how many
+     *  samples it takes, their spacing and the first one's start, in µs. */
+    struct Readout
+    {
+        int64_t block;
+        int64_t file;
+        int64_t samples;
+        double dwell_us;
+        double delay_us;
+    };
+
+    /** What is read off a readout: the sample nearest the centre of k-space
+     *  and its time, the widest |k| along each axis, the pathway it reads and
+     *  the moment the interval it lies in winds. */
+    struct Reading
+    {
+        int64_t echo;
+        double echo_us;
+        double reach[3];
+        int64_t pathway;
+        double winding[3];
+    };
+
+    /**
+     * Read each readout off @p coarse of its samples, evenly spaced, and its
+     * last: the pathway is the one of @p pathways whose k, shifted by its
+     * multiple of the winding, passes nearest the centre, a later one only by
+     * half the winding; the echo is the nearest sample within a step of the
+     * nearest of those.
+     */
+    void read(
+        const GradientTable& table,
+        const Pulses& pulses,
+        const Readout* readouts,
+        size_t count,
+        int64_t coarse,
+        int64_t pathways,
+        Reading* out);
 
     /**
      * The moment k is measured from, and the time precession is measured from,

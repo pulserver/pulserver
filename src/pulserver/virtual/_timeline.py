@@ -33,9 +33,6 @@ _IN_BAND = 1.0 / 128.0
 _HELD = 1e-6
 _HELD_AT = (0.0, 0.25, 0.5, 0.75, 1.0)
 
-# Samples whose k-space locations are integrated at once.
-_CHUNK = 1 << 22
-
 # Pathways a readout may read: the free induction, and the echoes of the
 # intervals one and two before.
 _PATHWAYS = 3
@@ -233,10 +230,6 @@ class Timeline:
             self.moment(pulses.block, pulses.time_us - self.starts_us[pulses.block])
             if pulses.block.size
             else np.zeros((1, 3)),
-            device=self.device,
-        )
-        self._refocusing = torch.as_tensor(
-            pulses.use == _REFOCUSING if pulses.block.size else np.zeros(1, bool),
             device=self.device,
         )
         self._intervals = self._interval()
@@ -440,113 +433,42 @@ class Timeline:
         played = self.played
         blocks = np.flatnonzero(played["adc"] != 0)
         counts = played["adc_samples"][blocks].astype(np.int64)
-        first = np.concatenate([[0], np.cumsum(counts)])
-        self.readouts = Readouts(
+        pulses = self.pulses
+        count = pulses.block.size
+        files = played["subsequence"].astype(np.int64)
+        echo, echo_us, reach, pathway, winding = require("fourier").read(
+            self._gradients,
+            pulses.time_us,
+            files[pulses.block],
+            pulses.use == _REFOCUSING,
+            self._intervals[:count].cpu().numpy(),
+            self._origins,
             blocks,
-            first,
-            np.zeros(blocks.size, dtype=np.int64),
-            np.zeros(blocks.size),
-            np.zeros(blocks.size),
-            np.zeros((blocks.size, 3)),
-            np.zeros(blocks.size, dtype=np.int64),
-            np.zeros((blocks.size, 3)),
-        )
-        self._offsets = torch.zeros(
-            (blocks.size, 3), dtype=torch.float64, device=self.device
+            files[blocks],
+            counts,
+            1e-3 * played["adc_dwell_ns"][blocks].astype(np.float64),
+            played["adc_delay_us"][blocks].astype(np.float64),
+            _COARSE,
+            _PATHWAYS,
         )
         self._readout_blocks = torch.as_tensor(blocks, device=self.device)
-        steps = np.maximum(1, -(-counts // _COARSE))
-        coarse = (counts - 1) // steps + 2
-        read = coarse + 2 * steps + 1
-        bounds = np.concatenate([[0], np.cumsum(read)])
-        start = 0
-        while start < blocks.size:
-            stop = max(
-                start + 1, int(np.searchsorted(bounds, bounds[start] + _CHUNK)) - 1
-            )
-            device = self.device
-            readout = torch.arange(start, stop, device=device)
-            count = torch.as_tensor(counts[start:stop], device=device)
-            step = torch.as_tensor(steps[start:stop], device=device)
-            # Evenly spaced samples, and the last.
-            per = torch.as_tensor(coarse[start:stop], device=device)
-            owner = torch.repeat_interleave(
-                torch.arange(stop - start, device=device), per
-            )
-            place = torch.arange(
-                owner.numel(), device=device
-            ) - torch.repeat_interleave(torch.cumsum(per, 0) - per, per)
-            index = torch.minimum(place * step[owner], count[owner] - 1)
-            times, moment, _ = self._samples_at(readout[owner], index)
-            k = torch.nan_to_num(moment - self._origins_t[self._last_t(times) + 1])
-            winding = self._winding(times[torch.cumsum(per, 0) - per])
-            readouts = stop - start
-            nearest = torch.full(
-                (_PATHWAYS, readouts), math.inf, dtype=k.dtype, device=device
-            )
-            for n in range(_PATHWAYS):
-                norm = torch.linalg.vector_norm(k - n * winding[owner], dim=1)
-                nearest[n].scatter_reduce_(0, owner, norm, "amin")
-            # A later pathway is read only where it passes nearer the centre
-            # than the free induction does by half what an interval winds.
-            margin = 0.5 * torch.linalg.vector_norm(winding, dim=1)
-            nearest[1:] = torch.where(
-                nearest[1:] < nearest[0] - margin, nearest[1:], math.inf
-            )
-            pathway = torch.argmin(nearest, dim=0)
-            offset = pathway[:, None].to(k.dtype) * winding
-            k = k - offset[owner]
-            reach = torch.zeros((readouts, 3), dtype=k.dtype, device=device)
-            reach.scatter_reduce_(0, owner[:, None].expand(-1, 3), k.abs(), "amax")
-            centre = index[self._least(k, owner, readouts)]
-            # The samples within a step of the nearest of those.
-            width = 2 * step + 1
-            owner = torch.repeat_interleave(
-                torch.arange(readouts, device=device), width
-            )
-            place = torch.arange(
-                owner.numel(), device=device
-            ) - torch.repeat_interleave(torch.cumsum(width, 0) - width, width)
-            index = (centre[owner] - step[owner] + place).clamp(
-                torch.zeros_like(owner), count[owner] - 1
-            )
-            times, moment, phases = self._samples_at(readout[owner], index)
-            k = torch.nan_to_num(moment - self._origins_t[self._last_t(times) + 1])
-            k = k - offset[owner]
-            reach.scatter_reduce_(0, owner[:, None].expand(-1, 3), k.abs(), "amax")
-            nearest_sample = self._least(k, owner, readouts)
-            held = self.readouts
-            held.echo[start:stop] = index[nearest_sample].cpu().numpy()
-            held.echo_us[start:stop] = times[nearest_sample].cpu().numpy()
-            held.receiver[start:stop] = phases[nearest_sample].cpu().numpy()
-            held.reach[start:stop] = reach.cpu().numpy()
-            held.pathway[start:stop] = pathway.cpu().numpy()
-            held.winding[start:stop] = winding.cpu().numpy()
-            self._offsets[start:stop] = offset
-            start = stop
-        return self.readouts
-
-    @staticmethod
-    def _least(k: torch.Tensor, owner: torch.Tensor, count: int) -> torch.Tensor:
-        """Return, per owner, the first of its rows of ``k`` nearest the centre."""
-        norm = torch.linalg.vector_norm(k, dim=1)
-        least = torch.full((count,), math.inf, dtype=k.dtype, device=k.device)
-        least.scatter_reduce_(0, owner, norm, "amin")
-        place = torch.arange(norm.numel(), device=k.device)
-        hit = torch.where(norm <= least[owner], place, norm.numel())
-        first = torch.full((count,), norm.numel(), device=k.device)
-        return first.scatter_reduce_(0, owner, hit, "amin")
-
-    def _winding(self, times_us: torch.Tensor) -> torch.Tensor:
-        """Return the moment from the pulse before each time to the next one, ``(n, 3)``; zero after a refocusing pulse and before the first excitation.
-
-        After the last pulse, the moment over the interval of the last earlier
-        pulse of its use, at its place in the repetition where one is; to the
-        end of the scan without one.
-        """
-        last = self._last_t(times_us)
-        kept = (last >= 0) & ~self._refocusing[last.clamp_min(0)]
-        return torch.where(kept[:, None], self._intervals[last.clamp_min(0)], 0.0)
+        self._offsets = torch.as_tensor(
+            pathway[:, None] * winding, dtype=torch.float64, device=self.device
+        )
+        receiver = self._samples_at(
+            torch.arange(blocks.size, device=self.device),
+            torch.as_tensor(echo, device=self.device),
+        )[2]
+        return Readouts(
+            blocks,
+            np.concatenate([[0], np.cumsum(counts)]),
+            echo,
+            echo_us,
+            receiver.cpu().numpy(),
+            reach,
+            pathway,
+            winding,
+        )
 
     def _interval(self) -> torch.Tensor:
         """Return the moment over each pulse's interval, from it to the next pulse, ``(pulses, 3)``."""
