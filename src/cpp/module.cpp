@@ -27,6 +27,7 @@
 #include <vector>
 
 #include "bloch/bindings.hpp"
+#include "fourier/bindings.hpp"
 #include "ir/from_libraries.hpp"
 #include "native.hpp"
 #include "playout.hpp"
@@ -989,4 +990,6 @@ PYBIND11_MODULE(_ext, module)
 
     py::module_ bloch = module.def_submodule("bloch");
     bind_bloch(bloch);
+    py::module_ fourier = module.def_submodule("fourier");
+    bind_fourier(fourier);
 }

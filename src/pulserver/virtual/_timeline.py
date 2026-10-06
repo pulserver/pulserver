@@ -13,6 +13,7 @@ import pypulseqpp as pp
 import torch
 
 from .. import ir
+from .._accelerators import require
 from ._scanner import _on_a_raster
 
 _EXCITATION = 1
@@ -196,21 +197,21 @@ class Timeline:
         self.device = torch.device(device)
         durations = played["duration_us"].astype(np.float64)
         self.starts_us = np.concatenate([[0.0], np.cumsum(durations)])
-        self._corners = [self._axis(axis) for axis in range(3)]
-        blocks = durations.size
-        every = np.arange(blocks)
-        areas = self._areas(every, durations) - self._areas(every, np.zeros(blocks))
-        self._start_moment = np.concatenate(
-            [np.zeros((1, 3)), np.cumsum(self._logical(every, areas), axis=0)]
+        self._gradients = require("fourier").GradientTable(
+            played["gradient_time_us"],
+            played["gradient_waveform_hz_per_m"],
+            played["gradient_span"],
+            self.starts_us,
+            played["rotate"] == 0,
+            self.rotation,
         )
+        self._start_moment = self._gradients.start_moments()
 
         def put(values, dtype=torch.float64):
             return torch.as_tensor(np.asarray(values), dtype=dtype, device=self.device)
 
         self._starts = put(self.starts_us)
         self._start_moment_t = put(self._start_moment)
-        self._norot = put(played["rotate"] == 0, torch.bool)
-        self._rotation = put(self.rotation)
         self._adc = tuple(
             put(played[name])
             for name in ("adc_dwell_ns", "adc_delay_us", "adc_phase_rad", "adc_freq_hz")
@@ -264,20 +265,14 @@ class Timeline:
         since_us
             ``(n,)`` times from their starts, in µs.
         """
-        block = torch.as_tensor(np.asarray(block, dtype=np.int64), device=self.device)
-        since = torch.as_tensor(
-            np.asarray(since_us, dtype=np.float64), device=self.device
+        return self._gradients.moment(
+            np.asarray(block, dtype=np.int64), np.asarray(since_us, dtype=np.float64)
         )
-        return self._moment(block, since).cpu().numpy()
 
     def _moment(self, block: torch.Tensor, since_us: torch.Tensor) -> torch.Tensor:
         """Return :meth:`moment` on the device, from device tensors."""
-        starts = self._starts[block]
-        within = self._areas_at(starts + since_us) - self._areas_at(starts)
-        physical = self._norot[block]
-        if bool(physical.any()):
-            within[physical] = within[physical] @ self._rotation
-        return self._start_moment_t[block] + within
+        moment = self._gradients.moment(block.cpu().numpy(), since_us.cpu().numpy())
+        return torch.as_tensor(moment, device=self.device)
 
     def samples(
         self, first: int, last: int
@@ -336,85 +331,30 @@ class Timeline:
             receiver,
         )
 
-    def _axis(self, axis: int) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        """Return one axis's gradient over the scan: corner times in µs, values in Hz/m and the moment at each corner.
-
-        Each block's corners are bracketed by corners of zero at its first and
-        last, so that the waveform is zero between blocks.
-        """
-        played = self.played
-        span = played["gradient_span"][:, axis]
-        lengths = span[:, 1] - span[:, 0]
-        held = np.flatnonzero(lengths > 0)
-        lengths = lengths[held]
-        if not held.size:
-            empty = torch.zeros(1, dtype=torch.float64, device=self.device)
-            return empty, empty, empty
-        padded = lengths + 2
-        total = int(padded.sum())
-        owner = np.repeat(held, padded)
-        place = np.arange(total) - np.repeat(np.cumsum(padded) - padded, padded)
-        source = np.repeat(span[held, 0], padded) + np.clip(place - 1, 0, None)
-        source = np.minimum(source, np.repeat(span[held, 1] - 1, padded))
-        times = self.starts_us[owner] + played["gradient_time_us"][source].astype(
-            np.float64
-        )
-        values = played["gradient_waveform_hz_per_m"][source].astype(np.float64)
-        edge = (place == 0) | (place == np.repeat(padded - 1, padded))
-        values[edge] = 0.0
-        steps = np.diff(times)
-        moment = np.concatenate(
-            [[0.0], np.cumsum(0.5 * (values[1:] + values[:-1]) * steps * 1e-6)]
-        )
-        put = lambda a: torch.as_tensor(a, dtype=torch.float64, device=self.device)  # noqa: E731
-        return put(times), put(values), put(moment)
-
-    def _areas(self, block: np.ndarray, since_us: np.ndarray) -> np.ndarray:
-        """Return the moment of each axis's gradient from the start of the scan, in the frame each block plays in, ``(n, 3)``."""
-        at = torch.as_tensor(
-            self.starts_us[block] + since_us, dtype=torch.float64, device=self.device
-        )
-        return self._areas_at(at).cpu().numpy()
-
-    def _areas_at(self, at: torch.Tensor) -> torch.Tensor:
-        """Return :meth:`_areas` at times from the start of the scan, in µs, on the device."""
-        out = torch.zeros((at.numel(), 3), dtype=torch.float64, device=self.device)
-        for axis, (times, values, moment) in enumerate(self._corners):
-            if times.numel() < 2:
-                continue
-            j = torch.searchsorted(times, at, right=True) - 1
-            inside = (j >= 0) & (j < times.numel() - 1)
-            after = j >= times.numel() - 1
-            k = j.clamp(0, times.numel() - 2)
-            elapsed = at - times[k]
-            width = times[k + 1] - times[k]
-            slope = torch.where(
-                width > 0, (values[k + 1] - values[k]) / width.clamp_min(1e-30), 0.0
-            )
-            area = moment[k] + 1e-6 * (values[k] * elapsed + 0.5 * slope * elapsed**2)
-            out[:, axis] = torch.where(
-                inside, area, torch.where(after, moment[-1], torch.zeros_like(area))
-            )
-        return out
-
-    def _logical(self, block: np.ndarray, areas: np.ndarray) -> np.ndarray:
-        """Turn moments in the frame each block plays in to the logical axes."""
-        physical = self.played["rotate"][block] == 0
-        if not np.any(physical):
-            return areas
-        turned = areas.copy()
-        turned[physical] = areas[physical] @ self.rotation
-        return turned
-
     def _pulses(self) -> Pulses:
         played = self.played
         span = self._prepared["rf_span"][self._position]
         blocks = np.flatnonzero(
             (span[:, 1] > span[:, 0]) & (played["rf_amp_hz"] != 0.0)
         )
+        # Positions that prepare the same samples play the same pulse.
+        prepared = self._prepared
+        shapes: dict[bytes, int] = {}
+        shape_of = np.array(
+            [
+                shapes.setdefault(
+                    prepared["rf_time_us"][start:stop].tobytes()
+                    + prepared["rf_waveform_hz"][start:stop].tobytes(),
+                    len(shapes),
+                )
+                for start, stop in prepared["rf_span"]
+            ],
+            dtype=np.int64,
+        )
         keys = np.column_stack(
             [
-                self._position[blocks],
+                shape_of[self._position[blocks]],
+                played["rf_channels"][blocks],
                 played["rf_amp_hz"][blocks].astype(np.float64).view(np.int64),
             ]
         )
@@ -492,24 +432,9 @@ class Timeline:
 
     def _values(self, block: np.ndarray, since_us: np.ndarray) -> np.ndarray:
         """Return each axis's gradient at times from block starts, in the frame each block plays in, ``(n, 3)`` in Hz/m."""
-        at = torch.as_tensor(
-            self.starts_us[block] + since_us, dtype=torch.float64, device=self.device
+        return self._gradients.value(
+            np.asarray(block, dtype=np.int64), np.asarray(since_us, dtype=np.float64)
         )
-        out = torch.zeros((at.numel(), 3), dtype=torch.float64, device=self.device)
-        for axis, (times, values, _) in enumerate(self._corners):
-            if times.numel() < 2:
-                continue
-            j = (torch.searchsorted(times, at, right=True) - 1).clamp(
-                0, times.numel() - 2
-            )
-            width = times[j + 1] - times[j]
-            fraction = torch.where(
-                width > 0, (at - times[j]) / width.clamp_min(1e-30), 0.0
-            ).clamp(0.0, 1.0)
-            inside = (at >= times[0]) & (at <= times[-1])
-            value = values[j] + fraction * (values[j + 1] - values[j])
-            out[:, axis] = torch.where(inside, value, 0.0)
-        return out.cpu().numpy()
 
     def _readouts(self) -> Readouts:
         played = self.played
@@ -702,21 +627,14 @@ class Timeline:
         moment = self.moment(
             pulses.block, pulses.time_us - self.starts_us[pulses.block]
         )
-        files = self.played["subsequence"][pulses.block]
-        origins = np.full((pulses.block.size + 1, 3), np.nan)
-        precession = np.full(pulses.block.size + 1, np.nan)
-        origin, since = origins[0], np.nan
-        for at, use in enumerate(pulses.use):
-            if at and files[at] != files[at - 1]:
-                origin, since = origins[0], np.nan
-            if use == _EXCITATION:
-                origin, since = moment[at], pulses.time_us[at]
-            elif use == _REFOCUSING:
-                origin = 2.0 * moment[at] - origin
-                since = 2.0 * pulses.time_us[at] - since
-            origins[at + 1] = origin
-            precession[at + 1] = since
-        return origins, precession
+        return require("fourier").origins(
+            moment,
+            pulses.time_us,
+            pulses.use,
+            self.played["subsequence"][pulses.block].astype(np.int64),
+            _EXCITATION,
+            _REFOCUSING,
+        )
 
 
 def _turn(

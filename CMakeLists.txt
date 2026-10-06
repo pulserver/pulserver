@@ -35,6 +35,8 @@ pybind11_add_module(_ext
     ${CMAKE_SOURCE_DIR}/src/cpp/bloch/finufft.cpp
     ${CMAKE_SOURCE_DIR}/src/cpp/bloch/nufft.cpp
     ${CMAKE_SOURCE_DIR}/src/cpp/bloch/repetitions.cpp
+    ${CMAKE_SOURCE_DIR}/src/cpp/fourier/bindings.cpp
+    ${CMAKE_SOURCE_DIR}/src/cpp/fourier/timeline.cpp
 )
 # The isochromat engine partitions its work across standard C++ threads.
 target_link_libraries(_ext PRIVATE pulseg Threads::Threads)
