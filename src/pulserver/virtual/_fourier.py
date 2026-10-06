@@ -859,6 +859,17 @@ def _leading(
     return u[:, :rank] * s[:rank], vh[:rank]
 
 
+def _range(
+    blocks: Callable[[], Iterator[torch.Tensor]], guess: torch.Tensor
+) -> torch.Tensor:
+    """Return an orthonormal basis of ``guess`` after one power iteration of the columns ``blocks`` yields."""
+    found = torch.linalg.qr(guess).Q
+    powered = torch.zeros_like(guess)
+    for block in blocks():
+        powered += block @ (block.mH @ found)
+    return torch.linalg.qr(powered).Q
+
+
 def _span(
     blocks: Callable[[], Iterator[torch.Tensor]],
     rows: int,
@@ -877,19 +888,20 @@ def _span(
         guess = torch.zeros((rows, sketch), dtype=torch.complex64, device=device)
         total = 0.0
         for block in blocks():
-            probe = torch.randn(
-                (block.shape[1], sketch),
-                dtype=torch.complex64,
-                device=device,
-                generator=generator,
-            )
-            guess += block @ probe
             total += float(torch.linalg.vector_norm(block)) ** 2
-        found = torch.linalg.qr(guess).Q
-        powered = torch.zeros_like(guess)
-        for block in blocks():
-            powered += block @ (block.mH @ found)
-        found = torch.linalg.qr(powered).Q
+            if sketch < rows:
+                guess += block @ torch.randn(
+                    (block.shape[1], sketch),
+                    dtype=torch.complex64,
+                    device=device,
+                    generator=generator,
+                )
+        if sketch >= rows:
+            # The sketch spans every row; a QR of a rank-deficient square
+            # complex64 sketch returns NaN.
+            found = torch.eye(rows, dtype=torch.complex64, device=device)
+        else:
+            found = _range(blocks, guess)
         gram = torch.zeros((sketch, sketch), dtype=torch.complex64, device=device)
         for block in blocks():
             projected = found.mH @ block
