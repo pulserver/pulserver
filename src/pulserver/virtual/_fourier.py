@@ -720,8 +720,18 @@ def _leading(
         u, s, vh = torch.linalg.svd(values, full_matrices=False)
     else:
         q = min(MAX_TERMS + 8, min(values.shape))
-        u, s, v = torch.svd_lowrank(values, q=q, niter=2)
-        vh = v.mH
+        generator = torch.Generator(device=values.device).manual_seed(0)
+        probe = torch.randn(
+            (values.shape[1], q),
+            dtype=values.dtype,
+            device=values.device,
+            generator=generator,
+        )
+        found = torch.linalg.qr(values @ probe).Q
+        for _ in range(2):
+            found = torch.linalg.qr(values @ (values.mH @ found)).Q
+        small, s, vh = torch.linalg.svd(found.mH @ values, full_matrices=False)
+        u = found @ small
     total = torch.linalg.vector_norm(values).double() ** 2
     residual = 1.0 - torch.cumsum(s.double() ** 2, 0) / total.clamp_min(1e-300)
     rank = int(torch.count_nonzero(residual > tolerance**2)) + 1
@@ -1479,6 +1489,15 @@ class _ReadoutBasis:
         return self._basis[torch.as_tensor(rows, device=self.device)].T
 
 
+def _encoded(reach: np.ndarray, extent: np.ndarray) -> np.ndarray:
+    """Return the logical axes a grid spans: those the trajectory encodes across the positions, and as many of the widest others as make two, which a transform takes at the least."""
+    axes = np.flatnonzero(reach * extent >= 0.5)
+    others = [axis for axis in np.argsort(-extent, kind="stable") if axis not in axes]
+    return np.sort(np.concatenate([axes, others[: max(0, 2 - axes.size)]])).astype(
+        np.int64
+    )
+
+
 class _Grid:
     """A grid along the logical axes a station's trajectory encodes, its images and its coils' sensitivities.
 
@@ -1518,12 +1537,11 @@ class _Grid:
         low = logical.amin(0).double().cpu().numpy()
         high = logical.amax(0).double().cpu().numpy()
         extent = high - low + spacing
-        axes = np.flatnonzero(reach * extent >= 0.5)
-        if not axes.size:
-            return None
-        finest = np.minimum(
-            0.5 / (_OVERSAMPLING * reach[axes]), extent[axes] / _FEWEST_POINTS
-        )
+        axes = _encoded(reach, extent)
+        with np.errstate(divide="ignore"):
+            finest = np.minimum(
+                0.5 / (_OVERSAMPLING * reach[axes]), extent[axes] / _FEWEST_POINTS
+            )
         aligned = np.all((np.abs(edges) > 1e-6).sum(axis=1) == 1)
         if not np.any(finest < spacing) or not aligned:
             return None
@@ -1568,10 +1586,11 @@ class _Grid:
         low = logical.amin(0).double().cpu().numpy() - 0.5 * spacing
         high = logical.amax(0).double().cpu().numpy() + 0.5 * spacing
         extent = high - low
-        axes = np.flatnonzero(reach * extent >= 0.5)
-        delta = np.minimum(
-            0.5 / (_OVERSAMPLING * reach[axes]), extent[axes] / _FEWEST_POINTS
-        )
+        axes = _encoded(reach, extent)
+        with np.errstate(divide="ignore"):
+            delta = np.minimum(
+                0.5 / (_OVERSAMPLING * reach[axes]), extent[axes] / _FEWEST_POINTS
+            )
         size = 2 * np.ceil(0.5 * (extent[axes] / delta + 2.0)).astype(np.int64)
         centre = 0.5 * (low + high)
         centre[axes] = np.round(centre[axes] / delta) * delta

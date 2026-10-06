@@ -299,7 +299,14 @@ def test_a_scan_reconstructed_in_this_process_returns_the_images_a_proxy_returns
         returned[name] = _images(messages)
 
     assert len(returned["local"]) == len(returned["proxied"]) == 1
-    np.testing.assert_array_equal(returned["local"][0], returned["proxied"][0])
+    # Each scan simulates in its own order of floating-point sums.
+    proxied_image = returned["proxied"][0]
+    np.testing.assert_allclose(
+        returned["local"][0],
+        proxied_image,
+        rtol=0,
+        atol=1e-4 * np.abs(proxied_image).max(),
+    )
 
 
 def test_an_exams_scans_play_on_its_isochromats_each_from_equilibrium(tmp_path):

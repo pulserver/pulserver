@@ -67,6 +67,8 @@ def test_a_headless_scan_records_the_series_the_virtual_scanner_acquires(
             str(mrd),
             "--sound",
             str(sound),
+            "--engine",
+            "bloch",
         ]
     )
     assert status == 0
