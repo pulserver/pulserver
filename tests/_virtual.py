@@ -3,10 +3,19 @@
 from types import SimpleNamespace
 
 import numpy as np
+import pytest
 from pypulseqpp.sequences.preparation.fatsat import FAT_SHIFT_PPM
 from scipy.spatial.transform import Rotation
 
 from pulserver import virtual
+from pulserver.virtual import _isochromats
+
+#: A window under a changing gradient read on the lattice, which needs FINUFFT
+#: beside torch: not on macOS, where the two would load two OpenMP runtimes.
+on_the_lattice = pytest.mark.skipif(
+    not _isochromats.reads_lattice(),
+    reason="windows are read sample by sample where FINUFFT is not loaded",
+)
 
 #: A field-of-view offset along the logical axes, in metres.
 OFFSET = np.array([0.02, -0.012, 0.0])
