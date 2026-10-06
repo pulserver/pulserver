@@ -201,7 +201,7 @@ IR cache and stores both as a design. The reply is the design's identifier.
 
  .. code-block:: none
 
-    GENERATED 1c9aa7d68e19fdf318
+    GENERATED b50fb70f278fdedd12
 
     ['manifest.json', 'resolved.protocol', 'sequence.pseg', 'sequence.seq']
 
@@ -287,7 +287,7 @@ at a time.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.596 seconds)
+   **Total running time of the script:** (0 minutes 0.571 seconds)
 
 
 .. _sphx_glr_download_generated_gallery_01-course_01_protocol_to_image.py:

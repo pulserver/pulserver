@@ -33,7 +33,7 @@ virtual-scanner
 
 ## Prerequisites and supported platforms
 
-pulserver supports Python 3.10 through 3.13. CI tests the lower and upper
+pulserver supports Python 3.10 through 3.14. CI tests the lower and upper
 bounds on Linux and macOS. Windows is not supported: the warm design server
 forks one process per call and listens on a Unix socket.
 
