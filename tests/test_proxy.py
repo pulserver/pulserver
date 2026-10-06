@@ -84,12 +84,18 @@ def bucket(tmp_path_factory):
 
 
 @pytest.fixture
-def start_proxy(bucket):
-    """Start proxies serving the store; every one is closed when the test ends."""
+def start_proxy(bucket, tmp_path_factory):
+    """Start proxies serving the store; every one is closed when the test ends.
+
+    Their slots are the test's own, so a proxy another test runs at the same
+    time on this host takes none of them.
+    """
     root, _ = bucket
     running = []
+    slots = tmp_path_factory.mktemp("slots")
 
     def start(**options):
+        options.setdefault("slot_directory", slots)
         proxy = ReconProxy(root, RECON_PLUGINS, **options)
         proxy.bind(0)
         thread = threading.Thread(target=proxy.serve, daemon=True)
