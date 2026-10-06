@@ -3,9 +3,11 @@ name: Docs
 # Builds the documentation and publishes it to GitHub Pages, which serves the
 # gh-pages branch. The site holds one directory per version: main publishes
 # `latest`, a release tag publishes `vX.Y.Z` and copies it to `stable`, and the
-# root redirects to whichever of the two a reader should see. Pull requests
-# build without publishing, so a documentation warning fails review rather than
-# the site.
+# root redirects to whichever of the two a reader should see.
+#
+# A pull request builds only when a maintainer comments `/build-docs` on it,
+# and the build answers on the pull request with its result. That build
+# publishes nothing; main publishes after the merge.
 #
 # The branch is the site's archive. GitHub Pages can be deployed from an
 # artifact instead, but a deployment replaces the whole site, so publishing one
@@ -15,7 +17,8 @@ on:
   push:
     branches: [main]
     tags: ["v[0-9]+.[0-9]+.[0-9]+"]
-  pull_request:
+  issue_comment:
+    types: [created]
   workflow_dispatch:
 
 permissions:
@@ -25,17 +28,26 @@ permissions:
 # share one group and wait for each other rather than racing to push. A pull
 # request publishes nothing and gets a group of its own.
 concurrency:
-  group: docs-${{ github.event.pull_request.number || 'publish' }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: docs-${{ github.event.issue.number || 'publish' }}
+  cancel-in-progress: ${{ github.event_name == 'issue_comment' }}
 
 jobs:
   docs:
+    if: >-
+      github.event_name != 'issue_comment' ||
+      (github.event.issue.pull_request &&
+       startsWith(github.event.comment.body, '/build-docs') &&
+       contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association))
     runs-on: ubuntu-latest
     permissions:
       contents: write # the publish step pushes the built site to gh-pages
+      pull-requests: write # a requested build answers on its pull request
     steps:
       - uses: actions/checkout@v7
         with:
+          # A comment runs on the default branch; the build is of the pull
+          # request's head.
+          ref: ${{ github.event_name == 'issue_comment' && format('refs/pull/{0}/head', github.event.issue.number) || '' }}
           fetch-depth: 0 # setuptools_scm reads the tags
 
       - uses: actions/setup-python@v7
@@ -83,7 +95,9 @@ jobs:
           fi
 
       - name: Publish
-        if: github.event_name != 'pull_request'
+        if: >-
+          github.event_name != 'issue_comment' &&
+          (github.ref == 'refs/heads/main' || github.ref_type == 'tag')
         env:
           DIR: ${{ steps.version.outputs.dir }}
           GH_TOKEN: ${{ github.token }}
@@ -107,3 +121,13 @@ jobs:
             commit -m "Documentation for $DIR from $GITHUB_SHA" \
             || { echo "No documentation change to publish."; exit 0; }
           git -C "$site" push origin gh-pages
+
+      - name: Answer on the pull request
+        if: always() && github.event_name == 'issue_comment'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RESULT: ${{ job.status }}
+          RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh pr comment ${{ github.event.issue.number }} --repo "$GITHUB_REPOSITORY" \
+            --body "Documentation build: $RESULT ($RUN)"
