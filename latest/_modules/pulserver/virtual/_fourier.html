@@ -1335,6 +1335,17 @@
     <span class="k">return</span> <span class="n">u</span><span class="p">[:,</span> <span class="p">:</span><span class="n">rank</span><span class="p">]</span> <span class="o">*</span> <span class="n">s</span><span class="p">[:</span><span class="n">rank</span><span class="p">],</span> <span class="n">vh</span><span class="p">[:</span><span class="n">rank</span><span class="p">]</span>
 
 
+<span class="k">def</span><span class="w"> </span><span class="nf">_range</span><span class="p">(</span>
+    <span class="n">blocks</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]],</span> <span class="n">guess</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return an orthonormal basis of ``guess`` after one power iteration of the columns ``blocks`` yields."""</span>
+    <span class="n">found</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">qr</span><span class="p">(</span><span class="n">guess</span><span class="p">)</span><span class="o">.</span><span class="n">Q</span>
+    <span class="n">powered</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">guess</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">block</span> <span class="ow">in</span> <span class="n">blocks</span><span class="p">():</span>
+        <span class="n">powered</span> <span class="o">+=</span> <span class="n">block</span> <span class="o">@</span> <span class="p">(</span><span class="n">block</span><span class="o">.</span><span class="n">mH</span> <span class="o">@</span> <span class="n">found</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">qr</span><span class="p">(</span><span class="n">powered</span><span class="p">)</span><span class="o">.</span><span class="n">Q</span>
+
+
 <span class="k">def</span><span class="w"> </span><span class="nf">_span</span><span class="p">(</span>
     <span class="n">blocks</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]],</span>
     <span class="n">rows</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
@@ -1353,19 +1364,20 @@
         <span class="n">guess</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">rows</span><span class="p">,</span> <span class="n">sketch</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">complex64</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
         <span class="n">total</span> <span class="o">=</span> <span class="mf">0.0</span>
         <span class="k">for</span> <span class="n">block</span> <span class="ow">in</span> <span class="n">blocks</span><span class="p">():</span>
-            <span class="n">probe</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span>
-                <span class="p">(</span><span class="n">block</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">sketch</span><span class="p">),</span>
-                <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">complex64</span><span class="p">,</span>
-                <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
-                <span class="n">generator</span><span class="o">=</span><span class="n">generator</span><span class="p">,</span>
-            <span class="p">)</span>
-            <span class="n">guess</span> <span class="o">+=</span> <span class="n">block</span> <span class="o">@</span> <span class="n">probe</span>
             <span class="n">total</span> <span class="o">+=</span> <span class="nb">float</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">vector_norm</span><span class="p">(</span><span class="n">block</span><span class="p">))</span> <span class="o">**</span> <span class="mi">2</span>
-        <span class="n">found</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">qr</span><span class="p">(</span><span class="n">guess</span><span class="p">)</span><span class="o">.</span><span class="n">Q</span>
-        <span class="n">powered</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">guess</span><span class="p">)</span>
-        <span class="k">for</span> <span class="n">block</span> <span class="ow">in</span> <span class="n">blocks</span><span class="p">():</span>
-            <span class="n">powered</span> <span class="o">+=</span> <span class="n">block</span> <span class="o">@</span> <span class="p">(</span><span class="n">block</span><span class="o">.</span><span class="n">mH</span> <span class="o">@</span> <span class="n">found</span><span class="p">)</span>
-        <span class="n">found</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">qr</span><span class="p">(</span><span class="n">powered</span><span class="p">)</span><span class="o">.</span><span class="n">Q</span>
+            <span class="k">if</span> <span class="n">sketch</span> <span class="o">&lt;</span> <span class="n">rows</span><span class="p">:</span>
+                <span class="n">guess</span> <span class="o">+=</span> <span class="n">block</span> <span class="o">@</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span>
+                    <span class="p">(</span><span class="n">block</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">sketch</span><span class="p">),</span>
+                    <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">complex64</span><span class="p">,</span>
+                    <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
+                    <span class="n">generator</span><span class="o">=</span><span class="n">generator</span><span class="p">,</span>
+                <span class="p">)</span>
+        <span class="k">if</span> <span class="n">sketch</span> <span class="o">&gt;=</span> <span class="n">rows</span><span class="p">:</span>
+            <span class="c1"># The sketch spans every row; a QR of a rank-deficient square</span>
+            <span class="c1"># complex64 sketch returns NaN.</span>
+            <span class="n">found</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="n">rows</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">complex64</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">found</span> <span class="o">=</span> <span class="n">_range</span><span class="p">(</span><span class="n">blocks</span><span class="p">,</span> <span class="n">guess</span><span class="p">)</span>
         <span class="n">gram</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">sketch</span><span class="p">,</span> <span class="n">sketch</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">complex64</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
         <span class="k">for</span> <span class="n">block</span> <span class="ow">in</span> <span class="n">blocks</span><span class="p">():</span>
             <span class="n">projected</span> <span class="o">=</span> <span class="n">found</span><span class="o">.</span><span class="n">mH</span> <span class="o">@</span> <span class="n">block</span>
