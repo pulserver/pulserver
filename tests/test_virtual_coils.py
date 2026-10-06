@@ -280,6 +280,8 @@ def test_a_mapped_coils_vop_drive_plays_a_pulse_at_its_amplitude_at_the_isocentr
     limits = coil.limits()
 
     assert limits["vop_file"] == str(fields / f"{transmit}_vops.npz")
+    assert float(limits["vop_head_limit"]) == _coils.HEAD_SAR_LIMIT
+    assert float(limits["vop_local_limit"]) == _coils.LOCAL_SAR_LIMIT
     magnitudes, phases = np.reshape(
         [float(value) for value in limits["vop_default_shim"].split()], (-1, 2)
     ).T

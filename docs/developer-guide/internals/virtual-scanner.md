@@ -251,10 +251,11 @@ BrainWeb whatever the subject is called.
 
 The maps' transmit coils come with the VOPs mariepy compresses from the same
 fields, and every design is made under those of the exam's transmit coil: its
-limits name the VOP file, the default shim, and the drive of every channel per
+limits name the VOP file, the default shim, the drive of every channel per
 hertz of a pulse's amplitude with which the channels' fields reach that
 amplitude at the isocentre, $2 / (\gamma \sum_c |B^-_c(\mathbf{0})|)$ in the
-maps' unit of drive. The IR cache then reports each subsequence's SAR against
+maps' unit of drive, and the head and local SAR limits of IEC 60601-2-33's
+normal operating mode. The IR cache then reports each subsequence's SAR against
 the reference pulse in that coil ({doc}`../../explanations/designs`).
 
 {class}`~pulserver.virtual.BrainWeb` carries the field its own susceptibility
