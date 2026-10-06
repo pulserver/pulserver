@@ -421,7 +421,10 @@ class SequencePlugin:
         except _INFEASIBLE as error:
             message = str(error) or type(error).__name__
             _log.warning(
-                "infeasible protocol in %s.evaluate: %s", name, message, exc_info=True
+                "infeasible protocol in %s.evaluate: %s",
+                name,
+                message,
+                exc_info=_log.isEnabledFor(logging.DEBUG),
             )
         except Exception as error:
             message = f"{type(error).__name__} in {name}.evaluate"

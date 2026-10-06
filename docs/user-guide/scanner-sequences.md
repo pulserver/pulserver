@@ -369,6 +369,14 @@ positive value in the evaluated protocol, is invalid. What the scanner checks
 before the scan is the stored design, not the layout. The blocks that carry the
 layout are described in {doc}`../explanations/protocol`.
 
+## Logging
+
+A plugin logs with the standard `logging` module, under a logger of its own
+(`logging.getLogger(__name__)`). Under a warm design server, what a call logs,
+prints or warns, and why it refuses a protocol, are appended to the
+file the request names under `log`, or to the server's standard error
+({doc}`running`).
+
 ## See also
 
 * {doc}`../explanations/protocol` — resolution, presets, units and precision.

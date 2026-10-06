@@ -322,6 +322,13 @@ DICOM series, a series being the images that share `image_series_index`.
 
 `RescaleType` is `US`, unspecified: the units are those of the reconstruction.
 
+## Logging
+
+A plugin logs with the standard `logging` module, under a logger of its own
+(`logging.getLogger(__name__)`). Under the proxy, what a plugin logs, prints or
+warns is appended to the proxy's `--logfile`, each record stamped with its time,
+process ID, level and logger name.
+
 ## Running a plugin offline
 
 {meth}`~pulserver.recon.ReconPlugin.run` reconstructs an ISMRMRD HDF5 file in

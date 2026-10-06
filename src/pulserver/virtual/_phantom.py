@@ -87,6 +87,9 @@ class Phantom:
         Physical location of the phantom's origin, in metres.
     """
 
+    #: The axes a voxel spans, along the phantom's own: the ellipses' plane.
+    VOXEL_AXES = np.eye(3)[:2]
+
     def __init__(
         self,
         ellipses: Sequence[Ellipse],
@@ -158,9 +161,11 @@ class Phantom:
         coil
             The scanner's coil the phantom is scanned with.
         spins
-            Isochromats per voxel: a square number for a ``"box"``.
+            Isochromats per voxel: a square number for a ``"box"`` or a
+            ``"jittered"`` voxel.
         voxel
-            ``"point"`` or ``"box"``: where a voxel's isochromats lie.
+            ``"point"``, ``"box"`` or ``"jittered"``: where a voxel's
+            isochromats lie.
         motion
             The phantom's motion, as :class:`~pulserver.virtual.Isochromats`
             takes it.
@@ -188,9 +193,11 @@ class Phantom:
         own, _, density, t1, t2, frequency, t2_prime, diffusion = self._sampled(
             spacing, field_t, off_resonance_hz, region
         )
-        offsets, order = _voxels.stencil(spins, voxel, spacing, np.eye(3)[:2])
+        offsets, order = _voxels.stencil(spins, voxel, spacing, self.VOXEL_AXES)
         rng = np.random.default_rng(seed)
         own = _voxels.spread(own, spins) + np.tile(offsets, (len(t1), 1))
+        if voxel == "jittered":
+            own += _voxels.jitter(len(t1), spins, spacing, self.VOXEL_AXES, rng)
         positions = own @ self._rotation.T + self._position
         return Isochromats(
             positions,

@@ -3170,6 +3170,8 @@ int pulseg_get_subseq_info(const pulseg_collection *coll, pulseg_subseq_info *in
     info->vop_sar_ratio = coll->descriptors[subseq_idx].vop_sar_ratio;
     info->grad_raster_us = coll->descriptors[subseq_idx].grad_raster_us;
     info->vop_global_sar_ratio = coll->descriptors[subseq_idx].vop_global_sar_ratio;
+    info->spl_peak_db = coll->descriptors[subseq_idx].spl_peak_db;
+    info->spl_average_dba = coll->descriptors[subseq_idx].spl_average_dba;
 
     return PULSEG_SUCCESS;
 }

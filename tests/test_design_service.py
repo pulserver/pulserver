@@ -351,7 +351,7 @@ def test_an_invalid_protocol_is_an_error_and_stores_nothing(store):
             80,
             logging.WARNING,
             "80 lines do not fit the receiver buffer",
-            "ValueError: 80 lines do not fit the receiver buffer",
+            "Evaluating.evaluate: 80 lines do not fit the receiver buffer",
             id="expected-rejection",
         ),
         pytest.param(
@@ -375,6 +375,9 @@ def test_an_evaluate_error_is_an_invalid_protocol(
     [record] = caplog.records
     assert (record.name, record.levelno) == ("pulserver.design", level)
     assert logged in caplog.text
+    # An expected rejection is answered at every validation the operator
+    # makes, so it carries its traceback only at DEBUG.
+    assert ("Traceback" in caplog.text) == (level == logging.ERROR)
 
 
 def test_a_zero_duration_is_valid_and_sent_as_unknown(function_plugins, store):
@@ -545,11 +548,17 @@ def test_a_design_is_one_of_the_vop_file_contents_its_sar_ratios_came_from(
     tmp_path, store
 ):
     vops = tmp_path / "vops.npz"
-    np.savez(vops, vops=np.ones((1, 1, 1), dtype=complex))
+    one = np.ones((1, 1, 1), dtype=complex)
+    np.savez(vops, vops=one, global_matrix=one)
     checked = vops.read_bytes()
-    limits = {**LIMITS, "vop_file": str(vops)}
+    limits = {
+        **LIMITS,
+        "vop_file": str(vops),
+        "vop_head_limit": 3.2,
+        "vop_local_limit": 10.0,
+    }
     first = generated(generate(store, "tiny", {}, limits=limits))
-    np.savez(vops, vops=2 * np.ones((1, 1, 1), dtype=complex))
+    np.savez(vops, vops=2 * one, global_matrix=one)
     assert generated(generate(store, "tiny", {}, limits=limits)) != first
     vops.write_bytes(checked)
     assert generated(generate(store, "tiny", {}, limits=limits)) == first

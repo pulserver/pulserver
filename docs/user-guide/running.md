@@ -133,15 +133,20 @@ the gradient heating.
 | `pns_<axis>_<field>` | SAFE nerve model, for the axes `x`, `y` and `z` and the fields `a1` to `a3`, `tau1` to `tau3` in ms, `stim_limit` in T/m/s and `g_scale` |
 | `pns_limit` | Largest PNS response allowed, as a fraction of the model's threshold; 1 when left out |
 | `forbidden_band_<n>` | One forbidden band: its physical axis (`x`, `y`, `z` or `all`), its lowest and highest frequency in Hz and, optionally, the largest amplitude allowed in it in mT/m, separated by spaces |
-| `vop_file` | `.mat` or `.npz` file of VOPs and, optionally, a global SAR matrix, at a path the design calls can read |
+| `vop_file` | `.mat` or `.npz` file of VOPs and the head SAR matrix of each body model, at a path the design calls can read; its `safety_factor` multiplies local SAR |
+| `vop_head_limit`, `vop_local_limit` | The scanner's head and local SAR limits in W/kg in its current operating mode; both needed with a `vop_file` |
 | `vop_drive_per_hz` | Channel drive per Hz of RF amplitude, one per channel separated by spaces; a scale common to every channel cancels, and equal drives when left out |
 | `vop_default_shim` | Magnitude and phase in rad of each channel's weight for a pulse played without an RF shim, separated by spaces; equal weights when left out |
+| `vop_coil` | Transmit configuration the scanner reports; the VOP file's `transmit` metadata must name the same one |
+| `acoustic_file` | HDF5 file of the gradient coil's acoustic transfer function, at a path the design calls can read; the peak and A-weighted average sound pressure levels are held to those of IEC 60601-2-33 and written into the cache |
+| `acoustic_interval_us` | Sampling interval in µs the bins of `acoustic_file` refer to; given with it |
 
 A band given no amplitude is held to the `min_threshold` of
-`pypulseqpp.safety.check_mech_resonance`. The gradient, PNS and resonance
-checks are made in the physical frame of the prescription rotation each
-request carries. A call refuses limits it cannot read, and a design is
-identified with the contents of the VOP file as well as its path.
+`pypulseqpp.safety.check_mech_resonance`. The gradient, PNS, resonance and
+sound pressure checks are made in the physical frame of the prescription
+rotation each request carries. A call refuses limits it cannot read, and a
+design is identified with the contents of the VOP and acoustic files as well
+as their paths.
 
 A plugin can be exercised without a scanner through
 {func}`~pulserver.host.call`, which answers a call in the calling process:
@@ -216,6 +221,12 @@ call. The server stops on `SIGINT` or `SIGTERM` and ends the calls it is
 running. The socket is neither authenticated nor encrypted: its file
 permissions decide who may call.
 
+The server logs to standard error one line per call, naming the call, its
+plugin, its exit status and its duration. A request whose JSON carries `log`,
+a file path, has its child append everything else it logs and prints to that
+file, so a scanner's interpreter can keep the design calls of one scan beside
+the rest of that scan's log.
+
 ## Reconstruction proxy
 
 ```bash
@@ -241,7 +252,7 @@ pulserver proxy --store DIR --port N --forward HOST:PORT [--forward-config NAME]
 | `--dicom` | Convert each image to DICOM before it is relayed, whatever reconstructed it |
 | `--save-data` | Directory each series is kept in as the scanner sends it; kept nowhere when unset |
 | `--idle-timeout` | Seconds without a client after which the proxy closes; it waits for whatever is running. Unlimited when unset |
-| `--logfile` | File the log is written to; the standard error when unset |
+| `--logfile` | File the log is appended to, with the standard output and error of the proxy and of its workers, so what a reconstruction plugin logs, prints or warns lands there too; the standard error when unset |
 | `--log-level` | `DEBUG`, `INFO`, `WARNING` or `ERROR`; `INFO` when unset |
 
 The MRD header of each series names the design it was played from in the

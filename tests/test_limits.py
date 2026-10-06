@@ -56,6 +56,9 @@ def test_the_check_limits_are_read_apart_from_the_scanner_limits():
         "vop_file": "/data/vops.mat",
         "vop_drive_per_hz": "0.01 0.02",
         "vop_default_shim": "1 0 0.5 1.5",
+        "vop_coil": "Head8Tx/8/0x1a2b3c4d",
+        "vop_head_limit": "3.2",
+        "vop_local_limit": "10",
     }
     system, _, checked = split_limits(limits)
     assert system.max_grad == pytest.approx(40e-3 * system.gamma)
@@ -69,6 +72,9 @@ def test_the_check_limits_are_read_apart_from_the_scanner_limits():
         vops=Path("/data/vops.mat"),
         drive_per_hz=(0.01, 0.02),
         default_shim=(1 + 0j, cmath.rect(0.5, 1.5)),
+        vop_coil="Head8Tx/8/0x1a2b3c4d",
+        vop_head_limit=3.2,
+        vop_local_limit=10.0,
     )
 
 
@@ -99,7 +105,7 @@ def test_a_vop_file_alone_is_read_with_a_unit_drive_and_equal_weights():
 
 def test_a_design_under_a_vop_file_carries_its_sar_ratios_in_the_cache(tmp_path):
     vops = tmp_path / "vops.npz"
-    np.savez(vops, vops=np.ones((1, 1, 1)))
+    np.savez(vops, vops=np.ones((1, 1, 1)), global_matrix=np.full((1, 1), 0.5))
     system = pp.Opts(**SCANNER)
     seq = pp.Sequence(system)
     rf = pp.make_block_pulse(flip_angle=np.pi / 2, duration=1e-3, system=system)
@@ -111,16 +117,115 @@ def test_a_design_under_a_vop_file_carries_its_sar_ratios_in_the_cache(tmp_path)
     store = DesignStore(tmp_path / "designs")
     status, reply = call(
         "import",
-        limits={**SCANNER, "vop_file": str(vops)},
+        limits={
+            **SCANNER,
+            "vop_file": str(vops),
+            "vop_head_limit": 5.0,
+            "vop_local_limit": 10.0,
+        },
         block=format_import(path),
         store=store,
     )
     assert status == 0, reply
     stored = store.directory(reply.split()[1]) / "sequence.seq"
     (loaded,) = ir.summary(stored, system, cache_ext=".pseg")["subsequences"]
-    # A 90 degree, 1 ms hard pulse deposits a quarter of the reference's energy.
+    # A 90 degree, 1 ms hard pulse deposits a quarter of the reference's
+    # energy, whose local term the limits put at 1.
     assert loaded["vop_sar_ratio"] == pytest.approx(0.25)
-    assert loaded["vop_global_sar_ratio"] == 0.0
+    assert loaded["vop_global_sar_ratio"] == pytest.approx(0.25)
+
+
+def test_an_acoustic_file_is_read_with_its_interval_in_seconds():
+    limits = {"acoustic_file": "/data/coil.h5", "acoustic_interval_us": 30}
+    assert check_limits(limits) == ir.CheckLimits(
+        acoustic=Path("/data/coil.h5"), acoustic_interval=30e-6
+    )
+
+
+def _acoustic_file(path, gain_per_g_per_cm):
+    import h5py
+
+    with h5py.File(path, "w") as held:
+        for axis in "XYZ":
+            gain = gain_per_g_per_cm if axis == "Y" else 0.0
+            held[f"{axis}_AXIS_TRANSFER_FUNCTION"] = np.stack(
+                [np.full(8192, gain), np.zeros(8192)]
+            )
+    return path
+
+
+def _lobes(tmp_path):
+    system = pp.Opts(**SCANNER)
+    seq = pp.Sequence(system)
+    for sign in (1, -1) * 40:
+        seq.add_block(
+            pp.make_trapezoid(
+                "x",
+                amplitude=sign * 15e-3 * system.gamma,
+                flat_time=3e-4,
+                system=system,
+            )
+        )
+    path = tmp_path / "sequence.seq"
+    seq.write(path)
+    return path
+
+
+#: A quarter turn about z: logical x plays on physical y.
+QUARTER = np.array([[0.0, -1.0, 0.0], [1.0, 0.0, 0.0], [0.0, 0.0, 1.0]])
+
+
+def test_a_design_under_an_acoustic_file_carries_its_levels_in_the_prescription_frame(
+    tmp_path,
+):
+    response = _acoustic_file(tmp_path / "coil.h5", 0.01)
+    path = _lobes(tmp_path)
+    acoustic = {"acoustic_file": str(response), "acoustic_interval_us": 30}
+    store = DesignStore(tmp_path / "designs")
+    status, reply = call(
+        "import",
+        limits={**SCANNER, **acoustic},
+        block=format_import(path, fov_rotation=QUARTER),
+        store=store,
+    )
+    assert status == 0, reply
+    stored = store.directory(reply.split()[1]) / "sequence.seq"
+    system, _, checked = split_limits({**SCANNER, **acoustic})
+    (loaded,) = ir.summary(stored, system, cache_ext=".pseg")["subsequences"]
+    (expected,) = ir.spl_levels(path, system, checked, rotation=QUARTER)
+    assert loaded["spl_peak_db"] == pytest.approx(expected.peak_db, abs=1e-4)
+    assert loaded["spl_average_dba"] == pytest.approx(expected.average_dba, abs=1e-4)
+    assert expected.peak_db > 0.0
+
+
+def test_an_import_takes_the_sound_pressure_levels_once(tmp_path, monkeypatch):
+    calls = []
+    original = safety.check_spl
+    monkeypatch.setattr(
+        safety, "check_spl", lambda *a, **k: calls.append(1) or original(*a, **k)
+    )
+    response = _acoustic_file(tmp_path / "coil.h5", 0.01)
+    status, reply = call(
+        "import",
+        limits={**SCANNER, "acoustic_file": str(response), "acoustic_interval_us": 30},
+        block=format_import(_lobes(tmp_path), fov_rotation=QUARTER),
+        store=DesignStore(tmp_path / "designs"),
+    )
+    assert status == 0, reply
+    assert len(calls) == 1
+
+
+def test_a_design_too_loud_under_an_acoustic_file_is_refused(tmp_path):
+    response = _acoustic_file(tmp_path / "coil.h5", 100.0)
+    store = DesignStore(tmp_path / "designs")
+    status, reply = call(
+        "import",
+        limits={**SCANNER, "acoustic_file": str(response), "acoustic_interval_us": 30},
+        block=format_import(_lobes(tmp_path), fov_rotation=QUARTER),
+        store=store,
+    )
+    assert status != 0
+    assert "sound pressure level" in reply
 
 
 WAVE_MEMORY = {
@@ -270,9 +375,14 @@ def test_a_safe_model_is_read_for_every_axis_as_pypulseqpp_takes_it():
         ({"forbidden_band_1": "x 590"}, "forbidden band"),
         ({"forbidden_band_1": "x 590 high"}, "forbidden band"),
         ({"vop_drive_per_hz": 0.01}, "vop_file"),
-        ({"vop_file": "/data/vops.mat", "vop_local_limit": 20}, "not check limits"),
+        ({"vop_file": "/data/vops.mat", "vop_peak_limit": 20}, "not check limits"),
+        ({"vop_file": "/data/vops.mat", "vop_local_limit": 0}, "positive"),
+        ({"vop_head_limit": 3.2}, "vop_file"),
         ({"vop_file": "/data/vops.mat", "vop_default_shim": "1 0 1"}, "a phase"),
         ({"vop_file": "/data/vops.mat", "vop_default_shim": "1 zero"}, "a phase"),
+        ({"acoustic_file": "/data/coil.h5"}, "together"),
+        ({"acoustic_interval_us": 30}, "together"),
+        ({"acoustic_file": "/data/coil.h5", "acoustic_interval_us": 0}, "positive"),
     ],
 )
 def test_check_limits_that_cannot_be_read_are_refused(limits, message):

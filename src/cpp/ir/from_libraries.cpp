@@ -488,6 +488,9 @@ void build_pulseq_file(pulseq_file &seq, const py::dict &libraries, Held &held)
     reserved.vop_sar_ratio = static_cast<PULSEQ_REAL>(declared["vop_sar_ratio"].cast<double>());
     reserved.vop_global_sar_ratio =
         static_cast<PULSEQ_REAL>(declared["vop_global_sar_ratio"].cast<double>());
+    reserved.spl_peak_db = static_cast<PULSEQ_REAL>(declared["spl_peak_db"].cast<double>());
+    reserved.spl_average_dba =
+        static_cast<PULSEQ_REAL>(declared["spl_average_dba"].cast<double>());
     reserved.repetition_size = declared["repetition_size"].cast<int>();
     copy_name(reserved.name, sizeof(reserved.name), declared["name"].cast<std::string>());
     copy_name(

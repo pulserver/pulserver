@@ -15,6 +15,7 @@ from typing import Any
 import numpy as np
 
 from .._zoo import ZOO_PAIRS
+from . import _voxels
 from ._coils import COILS
 
 _DESCRIPTION = """\
@@ -98,15 +99,16 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--spins",
         type=int,
-        default=1,
-        help="isochromats per voxel, spread over the T2' line of its tissue",
+        help="isochromats per voxel, spread over the T2' line of its tissue; "
+        "two along each axis of the voxel without it, one for a point voxel",
     )
     parser.add_argument(
         "--voxel",
-        choices=("point", "box"),
-        default="point",
-        help="where a voxel's isochromats lie: at its centre, or over it, "
-        "--spins a square number for a phantom of ellipses and a cube for BrainWeb",
+        choices=("point", "box", "jittered"),
+        default="jittered",
+        help="where a voxel's isochromats lie: at its centre, at the centres of "
+        "cells filling it, or anywhere in each cell, --spins a square number for "
+        "a phantom of ellipses and a cube for BrainWeb",
     )
     parser.add_argument(
         "--diffusion",
@@ -440,7 +442,7 @@ def _scan(
             field_t=field,
             region=excited(sequence, rotation),
             coil=coil,
-            spins=args.spins,
+            spins=_voxels.spins_for(args.spins, args.voxel, tissue.VOXEL_AXES),
             voxel=args.voxel,
             motion=subject_motion(args),
             seed=0,

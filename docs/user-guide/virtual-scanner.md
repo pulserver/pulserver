@@ -206,8 +206,12 @@ line, is written to standard output, and the scan clock to standard error.
   the temporary directory is a memory file system, set `TMPDIR` to one on
   disk.
 - `--spins` spreads each voxel over that many isochromats, at the quantiles of
-  the Lorentzian line of its tissue's T2′, at its centre or, with
-  `--voxel box`, over it; `--diffusion` lets BrainWeb's tissue classes diffuse
+  the Lorentzian line of its tissue's T2′: two along each axis of the voxel
+  without it, four for a phantom of ellipses, which lies in a plane, and
+  eight for BrainWeb. `--voxel` places them anywhere in each of the cells
+  filling the voxel, `jittered`, the default; at the cells' centres, `box`; or
+  at the voxel's centre, `point`, which takes one isochromat without
+  `--spins`. `--diffusion` lets BrainWeb's tissue classes diffuse
   ({doc}`../developer-guide/internals/bloch-engine`). A phantom file gives each ellipse
   its `t2_prime`, in s, and `diffusion`, in m²/s. Isochromats that diffuse are
   played block by block, and a voxel's diffusion attenuation needs many spins
@@ -330,13 +334,13 @@ docker run -d --restart unless-stopped --name pulserver \
 Options after the image's name are added to its console's: an option of one
 value takes the value given last, and `--plugins`, `--recon-plugins` and
 `--origin` add to the image's. A console whose scans spread each voxel over
-four isochromats, in tissue that diffuses, of a subject that nods through ±2°
-with a period of 8 s:
+twenty-seven isochromats, in tissue that diffuses, of a subject that nods
+through ±2° with a period of 8 s:
 
 ```bash
 docker run -d --restart unless-stopped --name pulserver \
   -p 127.0.0.1:8765:8765 ghcr.io/pulserver/pulserver \
-  --spins 4 --diffusion --nod 2 8
+  --spins 27 --diffusion --nod 2 8
 ```
 
 Its sequences are the ones listed under {ref}`shipped-sequences`,

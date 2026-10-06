@@ -1,5 +1,6 @@
 """The checks a chain passes before its IR is built, and its SAR against a reference."""
 
+import json
 import re
 
 import numpy as np
@@ -121,12 +122,32 @@ def _pulse(degrees, duration=1e-3):
     )
 
 
+#: Head and local SAR limits that put the reference pulse's local term at 1
+#: in a VOP twice its head matrix.
+HEAD_LIMIT, LOCAL_LIMIT = 5.0, 10.0
+
+
+def _limits(vops, **more):
+    return ir.CheckLimits(
+        vops=vops, vop_head_limit=HEAD_LIMIT, vop_local_limit=LOCAL_LIMIT, **more
+    )
+
+
+def _one_channel_file(tmp_path, metadata=None, global_matrix=((0.5,),)):
+    path = tmp_path / "vops.npz"
+    np.savez(
+        path,
+        vops=np.ones((1, 1, 1)),
+        global_matrix=np.asarray(global_matrix),
+        metadata=np.array(json.dumps(metadata or {})),
+    )
+    return path
+
+
 @pytest.fixture
 def one_channel(tmp_path):
-    """One channel's VOP and global matrix: every ratio is a ratio of RF energy."""
-    path = tmp_path / "vops.npz"
-    np.savez(path, vops=np.ones((1, 1, 1)), global_matrix=np.full((1, 1), 0.5))
-    return ir.CheckLimits(vops=path)
+    """One channel's VOP and head matrix: every ratio is a ratio of RF energy."""
+    return _limits(_one_channel_file(tmp_path))
 
 
 @pytest.mark.parametrize(
@@ -169,22 +190,86 @@ def test_the_reference_pulse_is_played_in_the_default_shim(
     # Two uncoupled channels: a pulse on the first alone deposits half of one
     # on both.
     vops = tmp_path / "vops.npz"
-    np.savez(vops, vops=np.eye(2)[None])
+    np.savez(vops, vops=np.eye(2)[None], global_matrix=0.5 * np.eye(2))
     on_first = pp.make_rf_shim([1.0, 0.0])
     path = _written(tmp_path, [(_pulse(180), on_first), (pp.make_delay(9e-3),)] * 20)
-    limits = ir.CheckLimits(vops=vops, default_shim=default_shim)
-    (found,) = ir.sar_ratios(path, SYSTEM, limits)
-    assert (found.local_sar, found.global_sar) == pytest.approx((ratio, 0.0))
+    (found,) = ir.sar_ratios(path, SYSTEM, _limits(vops, default_shim=default_shim))
+    assert (found.local_sar, found.global_sar) == pytest.approx((ratio, ratio))
 
 
 def test_vops_given_as_a_model_or_as_their_file_give_the_same_ratios(
     tmp_path, one_channel
 ):
     path = _written(tmp_path, [(_pulse(90),), (pp.make_delay(9e-3),)] * 20)
-    model = ir.CheckLimits(vops=safety.read_vops(one_channel.vops))
+    model = _limits(safety.read_vops(one_channel.vops))
     assert ir.sar_ratios(path, SYSTEM, model) == ir.sar_ratios(
         path, SYSTEM, one_channel
     )
+
+
+def test_the_file_s_safety_factor_raises_the_local_ratio_and_not_the_global(
+    tmp_path,
+):
+    vops = _one_channel_file(tmp_path, {"safety_factor": 1.5})
+    path = _written(tmp_path, [(_pulse(180),), (pp.make_delay(9e-3),)] * 20)
+    (found,) = ir.sar_ratios(path, SYSTEM, _limits(vops))
+    assert (found.local_sar, found.global_sar) == pytest.approx((1.5, 1.0))
+
+
+@pytest.mark.parametrize("head_limit", [3.2, 6.4])
+def test_the_local_ratio_goes_with_the_head_limit_over_the_local_limit(
+    tmp_path, head_limit
+):
+    vops = _one_channel_file(tmp_path)
+    path = _written(tmp_path, [(_pulse(180),), (pp.make_delay(9e-3),)] * 20)
+    limits = ir.CheckLimits(vops=vops, vop_head_limit=head_limit, vop_local_limit=10.0)
+    (found,) = ir.sar_ratios(path, SYSTEM, limits)
+    assert (found.local_sar, found.global_sar) == pytest.approx(
+        (2.0 * head_limit / 10.0, 1.0)
+    )
+
+
+def test_the_local_ratio_is_over_the_body_model_the_reference_heats_least(tmp_path):
+    # Two body models, one heated half as much: the drive that puts the
+    # reference at the head limit there is twice as large.
+    vops = _one_channel_file(tmp_path, global_matrix=[[[0.5]], [[0.25]]])
+    path = _written(tmp_path, [(_pulse(180),), (pp.make_delay(9e-3),)] * 20)
+    (found,) = ir.sar_ratios(path, SYSTEM, _limits(vops))
+    assert (found.local_sar, found.global_sar) == pytest.approx((2.0, 1.0))
+
+
+@pytest.mark.parametrize(
+    ("written_for", "refused"),
+    [("Head8Tx/8/0x1a2b3c4d", False), ("Head8Tx/8/0x00000000", True), (None, True)],
+)
+def test_the_vop_file_must_name_the_transmit_configuration_the_scanner_reports(
+    tmp_path, written_for, refused
+):
+    metadata = {} if written_for is None else {"transmit": written_for}
+    vops = _one_channel_file(tmp_path, metadata)
+    path = _written(tmp_path, [(_pulse(180),), (pp.make_delay(9e-3),)] * 20)
+    limits = _limits(vops, vop_coil="Head8Tx/8/0x1a2b3c4d")
+    if refused:
+        with pytest.raises(ValueError, match="transmit configuration"):
+            ir.sar_ratios(path, SYSTEM, limits)
+    else:
+        (found,) = ir.sar_ratios(path, SYSTEM, limits)
+        assert found.local_sar == pytest.approx(1.0)
+
+
+def test_sar_ratios_need_the_head_and_local_limits(tmp_path):
+    path = _written(tmp_path, [(_pulse(180),), (pp.make_delay(9e-3),)] * 20)
+    limits = ir.CheckLimits(vops=_one_channel_file(tmp_path), vop_head_limit=3.2)
+    with pytest.raises(ValueError, match="head and local SAR limits"):
+        ir.sar_ratios(path, SYSTEM, limits)
+
+
+def test_sar_ratios_need_the_head_matrices(tmp_path):
+    vops = tmp_path / "vops.npz"
+    np.savez(vops, vops=np.ones((1, 1, 1)))
+    path = _written(tmp_path, [(_pulse(180),), (pp.make_delay(9e-3),)] * 20)
+    with pytest.raises(ValueError, match="global SAR matrices"):
+        ir.sar_ratios(path, SYSTEM, _limits(vops))
 
 
 def test_a_file_that_cannot_be_parsed_is_refused_by_the_checks_and_the_ratios(
@@ -212,3 +297,61 @@ def test_the_checks_apply_no_sar_limit(tmp_path, one_channel):
 def test_a_rotation_that_is_not_orthonormal_is_refused(diagonal):
     with pytest.raises(ValueError, match="not orthonormal"):
         ir.check(diagonal, SYSTEM, rotation=np.diag([1.0, 1.0, 1.01]))
+
+
+def _heard_on(axis, gain=1.0):
+    """An acoustic response of ``gain`` Pa per mT/m on one physical axis, to 20 kHz."""
+    transfer = np.zeros((3, 4001), complex)
+    transfer["xyz".index(axis)] = gain
+    return safety.AcousticResponse(transfer, 5.0)
+
+
+def test_a_repetition_too_loud_on_the_physical_axis_it_plays_on_is_refused(train):
+    limits = ir.CheckLimits(acoustic=_heard_on("y"))
+    assert ir.check(train, SYSTEM, limits=limits) == []
+    problems = ir.check(train, SYSTEM, rotation=QUARTER, limits=limits)
+    assert [p.split(" of ")[0] for p in problems] == [
+        "A-weighted average sound pressure level"
+    ]
+    assert "played without end exceeds 99 dB(A)" in problems[0]
+
+
+def test_the_levels_the_cache_carries_are_those_the_check_holds_to_its_limits(train):
+    limits = ir.CheckLimits(acoustic=_heard_on("y"))
+    (carried,) = ir.spl_levels(train, SYSTEM, limits, rotation=QUARTER)
+    (sequence,) = (s for _, s in ir._checks._read(train))
+    pp.TransformFOV(rotation=QUARTER).apply_to_sequence(sequence, in_place=True)
+    _, checked = safety.check_spl(sequence, limits.acoustic, system=SYSTEM)
+    assert carried.peak_db == pytest.approx(checked.peak, abs=1e-9)
+    assert carried.average_dba == pytest.approx(checked.average, abs=1e-9)
+
+
+def test_an_acoustic_file_is_read_once_per_check_at_its_interval(tmp_path, train):
+    import h5py
+
+    path = tmp_path / "response.h5"
+    with h5py.File(path, "w") as held:
+        for axis in "XYZ":
+            held[f"{axis}_AXIS_TRANSFER_FUNCTION"] = np.stack(
+                [np.full(4096, 10.0), np.zeros(4096)]
+            )
+    limits = ir.CheckLimits(acoustic=path, acoustic_interval=30e-6)
+    assert limits.acoustic_response().frequency_step == pytest.approx(
+        1 / (4096 * 30e-6)
+    )
+    assert ir.check(train, SYSTEM, limits=limits)
+
+
+def test_an_acoustic_file_without_its_interval_is_refused(tmp_path):
+    with pytest.raises(ValueError, match="acoustic_interval"):
+        ir.CheckLimits(acoustic=tmp_path / "response.h5")
+
+
+def test_levels_handed_to_the_check_are_held_to_its_limits_in_place_of_a_response(
+    train,
+):
+    levels = [ir.SplLevels(150.0, 80.0, (1, 2))]
+    assert ir.check(train, SYSTEM, spl_levels=levels) == [
+        "peak sound pressure level of 150.0 dB over blocks 1-2 played without end "
+        "exceeds 140 dB"
+    ]

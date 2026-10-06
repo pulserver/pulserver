@@ -30,7 +30,8 @@ PALETTE = {
         "ink": "#12212b",
         "blue": "#3a77a8",
         "amber": "#ffbe2e",
-        "word": "#2b76ad",
+        "word": "#356a57",
+        "rack": "#2a2a2a",
     },
     "dark": {
         "box": "#13293a",
@@ -44,7 +45,8 @@ PALETTE = {
         "ink": "#e8eef3",
         "blue": "#5b9bd0",
         "amber": "#ffbe2e",
-        "word": "#8fc3e8",
+        "word": "#79bba4",
+        "rack": "#e6ece9",
     },
 }
 
@@ -63,6 +65,9 @@ STYLE = """
 .blue{{fill:{blue}}}
 .amber{{fill:{amber}}}
 .word{{fill:{word}}}
+.orange{{fill:#ffa00f}}
+.unit{{stroke:{rack};stroke-width:4}}
+.trace{{fill:none;stroke:{rack};stroke-width:4;stroke-linejoin:round;stroke-linecap:round}}
 .title{{font:bold 20px Arial,sans-serif;fill:{text}}}
 .wave{{fill:none;stroke:{blue};stroke-width:3;stroke-linejoin:round}}
 .rf{{fill:none;stroke:{amber};stroke-width:3;stroke-linejoin:round}}
@@ -76,18 +81,26 @@ ARROW_HEAD = (
     'orient="auto"><path class="head" d="M0,0 L0,6 L9,3 z"/></marker></defs>'
 )
 
-#: One bipolar trapezoid pair: positive lobe and negative lobe, then the line.
-_GRADIENT = """<path class="{first}" d="M24 0 38-28 81-28 93.1 0Z"/>
-<path class="{second}" d="M93.1 0 104 25 118 25 130 0Z"/>
-<path class="ink" d="M0 0H24L38-28H81L104 25H118L130 0H158"/>"""
+#: The fills of the rack units, in the greens of the MATLAB Pulseq logo; its orange
+#: is the lamps and the second half of the wordmark.
+_GREENS = ("#79bba4", "#356a57", "#79bba4")
 
-_GRADIENTS = (
-    '<g transform="translate(26 0)">\n'
-    + _GRADIENT.format(first="blue", second="amber")
-    + '\n</g>\n<g transform="translate(0 39)">\n'
-    + _GRADIENT.format(first="amber", second="blue")
-    + "\n</g>"
-)
+
+def _rack() -> str:
+    """Draw three rack units, each panel line a trapezoid lobe, each with a lamp."""
+    units = []
+    for i, fill in enumerate(_GREENS):
+        y = 38 * i
+        lobe = 7 if i == 1 else -7
+        units.append(
+            f'<rect class="unit" x="0" y="{y}" width="150" height="30" rx="7" '
+            f'fill="{fill}"/>\n'
+            f'<path class="trace" d="M14 {y + 15}H30L38 {y + 15 + lobe}H62L70 '
+            f'{y + 15}H100"/>\n'
+            f'<circle class="unit orange" cx="126" cy="{y + 15}" r="7" '
+            'stroke-width="3"/>'
+        )
+    return "\n".join(units)
 
 
 def _svg(view_box: str, label: str, description: str, body: str, theme: str) -> str:
@@ -101,30 +114,31 @@ def _svg(view_box: str, label: str, description: str, body: str, theme: str) -> 
 
 
 def logo(theme: str) -> str:
-    """Draw the two bipolar gradients and the wordmark."""
+    """Draw the rack and the wordmark."""
     body = (
-        f'<g transform="translate(24 70)">\n{_GRADIENTS}\n</g>\n'
-        '<text x="238" y="116" font-family="Arial,Helvetica,sans-serif" '
+        f'<g transform="translate(24 28)">\n{_rack()}\n</g>\n'
+        '<text x="214" y="120" font-family="Arial,Helvetica,sans-serif" '
         'font-size="112" font-style="italic"><tspan class="word">pul</tspan>'
-        '<tspan class="amber" font-weight="700">server</tspan></text>'
+        '<tspan class="orange" font-weight="700">server</tspan></text>'
     )
     return _svg(
-        "0 0 800 176",
+        "0 0 760 166",
         "pulserver",
-        "Two bipolar trapezoidal gradient waveforms in blue and amber, followed "
-        "by the wordmark pulserver",
+        "A stack of three server rack units whose panel lines are trapezoidal "
+        "gradient lobes, followed by the wordmark pulserver",
         body,
         theme,
     )
 
 
 def mark(theme: str) -> str:
-    """Draw the two bipolar gradients alone, for the sidebar and the favicon."""
+    """Draw the rack alone, for the sidebar and the favicon."""
     return _svg(
-        "0 0 196 114",
+        "0 0 160 116",
         "pulserver",
-        "Two bipolar trapezoidal gradient waveforms in blue and amber",
-        f'<g transform="translate(6 38)">\n{_GRADIENTS}\n</g>',
+        "A stack of three server rack units whose panel lines are trapezoidal "
+        "gradient lobes",
+        f'<g transform="translate(5 5)">\n{_rack()}\n</g>',
         theme,
     )
 

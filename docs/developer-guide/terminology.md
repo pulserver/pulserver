@@ -178,8 +178,11 @@ Every documented quantity carries its unit.
 | Prescription rotation (`fov_rotation_ij`) | unitless, element (i, j) of an orthonormal matrix |
 | PNS limit (`pns_limit`) | fraction of the nerve model's threshold |
 | Forbidden band | Hz; amplitude allowed in it in mT/m |
-| SAR ratio (`vop_sar_ratio`, `vop_global_sar_ratio`) | unitless: energy over that of the reference repetition |
+| SAR ratio (`vop_sar_ratio`, `vop_global_sar_ratio`) | unitless: energy per pulse over that of the reference pulse, the local term scaled by the head limit over the local limit |
+| SAR limits (`vop_head_limit`, `vop_local_limit`) | W/kg |
 | Default channel weights (`vop_default_shim`) | unitless magnitude, phase in rad |
+| VOP safety factor (`safety_factor` of a VOP file) | unitless, at least 1, on local SAR |
+| Transmit configuration (`vop_coil`, `transmit` of a VOP file) | an opaque string the scanner reports |
 | Dwell time in an enriched acquisition (`sample_time_us`) | µs |
 | k-space trajectory | 1/m, as pypulseqpp reports it |
 | Grid trajectory (`ReconBuffer.grid_trajectory`) | k times the reconstructed field of view; an N-point matrix spans [-N/2, N/2) |
@@ -200,12 +203,13 @@ significant digits.
 
 ## 5. Safety language
 
-Pulserver performs no safety check of its own. The timing, gradient, PNS,
-mechanical-resonance and SAR checks belong to pypulseqpp and compute
-estimates. The host runs all but the SAR check, under the limits the
-interpreter passes, before it writes an IR cache; from the SAR check it writes
-each subsequence's SAR relative to a reference pulse into the cache, and the
-interpreter computes the SAR and the gradient heating. Passing these checks does not
+Pulserver runs the timing, gradient, PNS, mechanical-resonance and sound
+pressure checks, which pypulseqpp implements, under the limits the interpreter
+passes, before it writes an IR cache, and refuses a design that fails one. It
+writes each subsequence's sound pressure levels into the cache, and from
+pypulseqpp's SAR check each subsequence's SAR relative to a reference pulse.
+The interpreter computes the SAR and the gradient and RF heating with the
+scanner's own routines. The checks compute estimates; passing them does not
 establish scanner or patient safety.
 
 - Never write "safe", "validated", "compliant" or "approved" of a sequence, a

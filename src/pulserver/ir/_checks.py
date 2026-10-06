@@ -1,10 +1,11 @@
-"""The checks a sequence chain passes before its IR is built, and its SAR against a reference."""
+"""The checks a sequence chain passes before its IR is built, its SAR against a reference and its sound pressure levels."""
 
 from __future__ import annotations
 
 import contextlib
 import copy
 import io
+from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
@@ -33,7 +34,7 @@ REFERENCE_DURATION = 1e-3
 
 @dataclass(frozen=True)
 class CheckLimits:
-    """The nerve and resonance limits of a chain, and the VOPs of its SAR ratios, besides ``pypulseqpp.Opts``.
+    """The nerve, resonance and acoustic limits of a chain, and the VOPs of its SAR ratios, besides ``pypulseqpp.Opts``.
 
     Attributes
     ----------
@@ -46,8 +47,9 @@ class CheckLimits:
         Forbidden gradient bands of ``check_mech_resonance``, on the physical
         axes. Without any, the resonance check is left out.
     vops
-        VOPs, or the ``.mat`` or ``.npz`` file holding them, which
-        :func:`sar_ratios` reads; nothing is refused on SAR.
+        VOPs and the global SAR matrices of their body models, or the ``.mat``
+        or ``.npz`` file holding them, which :func:`sar_ratios` reads; nothing
+        is refused on SAR.
     drive_per_hz
         Channel drive per Hz of RF amplitude, in the VOPs' drive unit: one
         value, or one per channel. A scale common to every channel cancels in
@@ -55,11 +57,30 @@ class CheckLimits:
     default_shim
         Complex channel weights of a pulse played without an RF shim, and of
         the reference pulse; equal weights when None.
+    vop_coil
+        The transmit configuration the scanner reports. When given, the VOP
+        file's ``metadata["transmit"]`` must name the same one.
+    vop_head_limit, vop_local_limit
+        The scanner's head and local SAR limits, W/kg, in its current
+        operating mode; :func:`sar_ratios` needs both.
+    acoustic
+        The gradient coil's acoustic transfer function on the physical axes,
+        or the HDF5 file ``pypulseqpp.safety.read_acoustic_response`` reads
+        it from. ``None`` leaves out the sound pressure check.
+    acoustic_interval
+        Sampling interval in s the bins of an ``acoustic`` file refer to.
+    spl_peak_limit
+        Largest peak sound pressure level allowed, in dB re 20 µPa; that of
+        IEC 60601-2-33 by default.
+    spl_average_limit
+        Largest A-weighted average sound pressure level allowed, in dB(A);
+        that of IEC 60601-2-33 by default.
 
     Raises
     ------
     ValueError
-        If the PNS limit is not positive.
+        If the PNS limit or a SAR limit is not positive, or an acoustic
+        file comes without its interval.
     """
 
     pns: Any = None
@@ -68,23 +89,60 @@ class CheckLimits:
     vops: safety.VopModel | Path | str | None = None
     drive_per_hz: float | tuple[float, ...] = 1.0
     default_shim: tuple[complex, ...] | None = None
+    vop_coil: str | None = None
+    vop_head_limit: float | None = None
+    vop_local_limit: float | None = None
+    acoustic: safety.AcousticResponse | Path | str | None = None
+    acoustic_interval: float = 0.0
+    spl_peak_limit: float = 140.0
+    spl_average_limit: float = 99.0
 
     def __post_init__(self) -> None:
         if self.pns_limit <= 0.0:
             raise ValueError("the PNS limit must be positive")
+        for limit in (self.vop_head_limit, self.vop_local_limit):
+            if limit is not None and not limit > 0.0:
+                raise ValueError(f"a SAR limit must be positive, not {limit}")
+        if isinstance(self.acoustic, (Path, str)) and not self.acoustic_interval > 0.0:
+            raise ValueError("an acoustic file needs a positive acoustic_interval")
+
+    def acoustic_response(self) -> safety.AcousticResponse | None:
+        """Return the acoustic transfer function, read from its file where given as one."""
+        if self.acoustic is None or isinstance(self.acoustic, safety.AcousticResponse):
+            return self.acoustic
+        return safety.read_acoustic_response(self.acoustic, self.acoustic_interval)
+
+
+@dataclass(frozen=True)
+class SplLevels:
+    """A subsequence's sound pressure levels, its loudest repetition played without end.
+
+    ``peak_db`` is the peak level in dB and ``average_dba`` the A-weighted
+    average in dB(A), both re 20 µPa, through the gradient coil's acoustic
+    transfer function on the physical axes of the prescription; ``-inf``
+    without gradients. ``repetition`` is the 1-based first and last block of
+    the repetition. See ``pypulseqpp.safety.check_spl``.
+    """
+
+    peak_db: float
+    average_dba: float
+    repetition: tuple[int, int] = (0, 0)
 
 
 @dataclass(frozen=True)
 class SarRatio:
-    """A subsequence's RF energy at the VOPs, against the reference pulse.
+    """A subsequence's RF energy per pulse, against the reference pulse at the head SAR limit.
 
-    ``local_sar`` is the largest, over the subsequence's repetitions and the
-    VOPs, of the energy a repetition deposits at a VOP over the energy there
-    of the same repetition with each of its pulses replaced by the reference
-    pulse; ``global_sar`` is that ratio through the global SAR matrix. A
-    scanner's SAR for the subsequence is the ratio times its SAR for that
-    reference repetition. Both are 0 without RF, and ``global_sar`` is 0
-    without a global matrix.
+    Each is the largest over the subsequence's repetitions, per pulse the
+    repetition plays, at the drive scale where the reference pulse meets the
+    head SAR limit. ``local_sar`` is the repetition's peak local energy,
+    through the VOPs and times the VOP file's safety factor, over the
+    reference pulse's head energy in the body model where it is smallest,
+    times the head limit over the local limit. ``global_sar`` is the
+    repetition's head energy over the reference pulse's, body model by body
+    model. Given the time the scanner gives the reference pulse, times the
+    larger of the two, each pulse of the subsequence stays within both
+    limits. Both are 0 without RF.
     """
 
     local_sar: float
@@ -98,6 +156,7 @@ def check(
     rotation: np.ndarray | None = None,
     limits: CheckLimits | None = None,
     designed: list[tuple[Path, pp.Sequence]] | None = None,
+    spl_levels: Sequence[SplLevels] | None = None,
 ) -> list[str]:
     """Return the problems of a chain under a scanner's limits, in the physical frame.
 
@@ -107,9 +166,10 @@ def check(
     ``pypulseqpp.check_timing``, gradient continuity included, and with
     ``pypulseqpp.safety.check_max_grad`` and ``check_max_slew``, against the
     gradient limits, dead times and ringdown time of ``system``; and with
-    ``check_pns`` and ``check_mech_resonance`` where ``limits`` carries a
-    nerve model or forbidden bands. The waveforms are timed by the file's own
-    rasters. VOPs are not checked here: see :func:`sar_ratios`.
+    ``check_pns``, ``check_mech_resonance`` and ``check_spl`` where ``limits``
+    carries a nerve model, forbidden bands or an acoustic transfer function.
+    The waveforms are timed by the file's own rasters. VOPs are not checked
+    here: see :func:`sar_ratios`.
 
     Parameters
     ----------
@@ -125,6 +185,9 @@ def check(
     designed
         The chain as :func:`pulserver.mrd.designed_chain` returns it, checked
         in place of reading the files, and rotated in place.
+    spl_levels
+        One per file of the chain, as :func:`spl_levels` returns them for
+        ``rotation``, held to the limits in place of computing them.
 
     Returns
     -------
@@ -135,15 +198,18 @@ def check(
     Raises
     ------
     ValueError
-        If a file of the chain cannot be read, or ``rotation`` is not
-        orthonormal.
+        If a file of the chain or the acoustic file cannot be read, or
+        ``rotation`` is not orthonormal.
     """
     limits = CheckLimits() if limits is None else limits
+    response = None if spl_levels is not None else limits.acoustic_response()
     chain_read = designed if designed is not None else _read(seq_path)
     turn = None if rotation is None else _prescription(rotation)
     problems = []
-    for path, sequence in chain_read:
-        found = _problems(sequence, system, turn, limits)
+    for index, (path, sequence) in enumerate(chain_read):
+        found = _problems(sequence, system, turn, limits, response)
+        if spl_levels is not None:
+            found += _spl_problems(spl_levels[index], limits)
         if len(chain_read) > 1:
             found = [f"{path.name}: {problem}" for problem in found]
         problems += found
@@ -170,6 +236,7 @@ def _problems(
     system: pp.Opts,
     rotation: np.ndarray | None,
     limits: CheckLimits,
+    response: safety.AcousticResponse | None,
 ) -> list[str]:
     opts = copy.copy(system)
     for name in _RASTERS:
@@ -189,6 +256,8 @@ def _problems(
         checks.append((_pns, limits))
     if limits.bands:
         checks.append((_resonance, limits))
+    if response is not None:
+        checks.append((_spl, response, limits))
     # The native checks read the sequence and release the GIL; check_timing
     # records TotalDuration, so it runs before them.
     with ThreadPoolExecutor(len(checks)) as pool:
@@ -244,6 +313,90 @@ def _resonance(
     ]
 
 
+def _spl(
+    sequence: pp.Sequence,
+    system: pp.Opts,
+    response: safety.AcousticResponse,
+    limits: CheckLimits,
+) -> list[str]:
+    return _spl_problems(_levels(sequence, response, system, None), limits)
+
+
+def _levels(
+    sequence: pp.Sequence,
+    response: safety.AcousticResponse,
+    system: pp.Opts,
+    rotation: np.ndarray | None,
+) -> SplLevels:
+    _, found = safety.check_spl(sequence, response, rotation=rotation, system=system)
+    return SplLevels(found.peak, found.average, found.repetition)
+
+
+def _spl_problems(levels: SplLevels, limits: CheckLimits) -> list[str]:
+    first, last = levels.repetition
+    where = f"over blocks {first}-{last} played without end"
+    problems = []
+    if levels.peak_db > limits.spl_peak_limit:
+        problems.append(
+            f"peak sound pressure level of {levels.peak_db:.1f} dB {where} exceeds "
+            f"{limits.spl_peak_limit:.0f} dB"
+        )
+    if levels.average_dba > limits.spl_average_limit:
+        problems.append(
+            f"A-weighted average sound pressure level of {levels.average_dba:.1f} "
+            f"dB(A) {where} exceeds {limits.spl_average_limit:.0f} dB(A)"
+        )
+    return problems
+
+
+def spl_levels(
+    seq_path: Path | str,
+    system: pp.Opts,
+    limits: CheckLimits,
+    designed: list[tuple[Path, pp.Sequence]] | None = None,
+    rotation: np.ndarray | None = None,
+) -> list[SplLevels]:
+    """Return the sound pressure levels of each file of a chain, in the physical frame.
+
+    Each file's loudest repetition is rotated by ``rotation`` after each
+    block's own rotation and filtered by the acoustic transfer function of
+    ``limits``, as ``pypulseqpp.safety.check_spl`` does; the sequences are
+    not changed.
+
+    Parameters
+    ----------
+    seq_path
+        The first file of the chain.
+    system
+        Source of the gyromagnetic ratio.
+    limits
+        The acoustic transfer function.
+    designed
+        The chain as :func:`pulserver.mrd.designed_chain` returns it, read in
+        place of the files.
+    rotation
+        ``(3, 3)`` prescription rotation from logical to physical axes; the
+        identity by default.
+
+    Returns
+    -------
+    list of SplLevels
+        One per file, in play order.
+
+    Raises
+    ------
+    ValueError
+        If ``limits`` carries no acoustic transfer function, a file of the
+        chain cannot be read, or ``rotation`` is not orthonormal.
+    """
+    response = limits.acoustic_response()
+    if response is None:
+        raise ValueError("sound pressure levels need an acoustic transfer function")
+    chain_read = designed if designed is not None else _read(seq_path)
+    turn = None if rotation is None else _prescription(rotation)
+    return [_levels(sequence, response, system, turn) for _, sequence in chain_read]
+
+
 def sar_ratios(
     seq_path: Path | str,
     system: pp.Opts,
@@ -265,7 +418,9 @@ def sar_ratios(
     system
         The rasters and RF dead times the reference pulse is made with.
     limits
-        The VOPs, channel drive and default shim.
+        The VOPs, the head and local SAR limits, the channel drive, the
+        default shim and, when given, the transmit configuration the VOP file
+        must name.
     designed
         The chain as :func:`pulserver.mrd.designed_chain` returns it, weighed
         in place of reading the files.
@@ -278,14 +433,26 @@ def sar_ratios(
     Raises
     ------
     ValueError
-        If ``limits`` carries no VOPs, a file of the chain cannot be read, or a
-        pulse or shim weighs another number of channels than the VOPs.
+        If ``limits`` carries no VOPs or not both SAR limits, the VOPs carry
+        no global SAR matrices, the VOP file names another transmit
+        configuration than ``limits.vop_coil``, a file of the chain cannot be
+        read, or a pulse or shim weighs another number of channels than the
+        VOPs.
     """
     if limits.vops is None:
         raise ValueError("SAR ratios need VOPs")
+    if limits.vop_head_limit is None or limits.vop_local_limit is None:
+        raise ValueError("SAR ratios need the scanner's head and local SAR limits")
     vops = limits.vops
     if not isinstance(vops, safety.VopModel):
         vops = safety.read_vops(vops)
+    if limits.vop_coil is not None:
+        written_for = (vops.metadata or {}).get("transmit")
+        if written_for != limits.vop_coil:
+            raise ValueError(
+                f"the VOPs are for the transmit configuration {written_for!r}, "
+                f"and the scanner reports {limits.vop_coil!r}"
+            )
     drive = {"drive_per_hz": limits.drive_per_hz, "default_shim": limits.default_shim}
     reference = pp.Sequence(system)
     reference.add_block(
@@ -293,16 +460,16 @@ def sar_ratios(
             flip_angle=REFERENCE_FLIP, duration=REFERENCE_DURATION, system=system
         )
     )
-    _, pulse = safety.check_sar(reference, vops, **drive)
+    limit_ratio = limits.vop_head_limit / limits.vop_local_limit
     chain_read = designed if designed is not None else _read(seq_path)
     ratios = []
     for _, sequence in chain_read:
-        _, found = safety.check_sar(sequence, vops, reference=pulse, **drive)
-        ratios.append(_ratio(sequence, found, pulse))
+        _, found = safety.check_sar(sequence, vops, reference=reference, **drive)
+        ratios.append(_ratio(sequence, found, limit_ratio))
     return ratios
 
 
-def _ratio(sequence: pp.Sequence, found: Any, pulse: Any) -> SarRatio:
+def _ratio(sequence: pp.Sequence, found: Any, limit_ratio: float) -> SarRatio:
     """Divide each window's energy against one reference pulse by the pulses it plays."""
     windows = found.windows
     rf = np.array([row[1] for row in sequence.block_events.values()], dtype=int)
@@ -311,13 +478,9 @@ def _ratio(sequence: pp.Sequence, found: Any, pulse: Any) -> SarRatio:
     if not windows.first.size or not pulses.any():
         return SarRatio(0.0, 0.0)
     with_rf = pulses > 0
-    unit = float(pulse.windows.duration[0])
-    per_pulse = windows.duration / (unit * np.maximum(pulses, 1))
-    local = float((windows.reference_ratio * per_pulse)[with_rf].max())
-    whole = 0.0
-    if windows.global_sar is not None and pulse.windows.global_sar[0] > 0.0:
-        against = float(pulse.windows.global_sar[0])
-        whole = float((windows.global_sar / against * per_pulse)[with_rf].max())
+    per_pulse = windows.duration / (found.reference.duration * np.maximum(pulses, 1))
+    local = float((windows.local_to_head * per_pulse)[with_rf].max()) * limit_ratio
+    whole = float((windows.global_ratio * per_pulse)[with_rf].max())
     return SarRatio(local, whole)
 
 

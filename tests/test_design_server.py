@@ -347,3 +347,25 @@ def test_a_forwarded_rf_request_loads_no_design_engine(server, limits_file):
     )
     assert "[RfDefinitions]" in probe.stdout
     assert probe.stderr.strip().splitlines()[-1] == "0 []"
+
+
+def test_a_call_naming_a_log_file_appends_its_outcome_there(server, tmp_path):
+    from pulserver.host._command import forward
+
+    log = tmp_path / "scan" / "design.log"
+    log.parent.mkdir()
+    request = {"call": "list", "plugins": [str(PLUGINS)], "plugin": "gre2d"}
+    status, output = forward(server.socket, {**request, "log": str(log)})
+    assert status == 0
+    assert output == forward(server.socket, request)[1]
+    assert "list gre2d: status 0 in" in log.read_text()
+
+
+def test_a_call_whose_log_file_cannot_be_opened_is_answered_all_the_same(
+    server, tmp_path
+):
+    from pulserver.host._command import forward
+
+    request = {"call": "list", "plugins": [str(PLUGINS)], "plugin": "gre2d"}
+    missing = tmp_path / "absent" / "design.log"
+    assert forward(server.socket, {**request, "log": str(missing)})[0] == 0

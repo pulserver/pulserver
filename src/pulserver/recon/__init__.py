@@ -6,6 +6,7 @@ from ._calibration import (
     MissingCalibration,
     coil_maps,
 )
+from ._correct import gradient_unwarped
 from ._exam_image import ExamImage
 from ._loader import load_plugin
 from .gadgets import AsymmetricEcho, Prewhiten, RemoveReadoutOversampling
@@ -45,5 +46,6 @@ __all__ = [
     "ReconResult",
     "RemoveReadoutOversampling",
     "coil_maps",
+    "gradient_unwarped",
     "load_plugin",
 ]
