@@ -202,6 +202,7 @@ from.
    CoilSensitivities
    MissingCalibration
    CoilCompression
+   gradient_unwarped
    ReconData
    ReconBuffer
    ReconResult

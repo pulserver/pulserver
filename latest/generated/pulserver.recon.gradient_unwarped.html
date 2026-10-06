@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>Reconstruction plugins &#8212; pulserver documentation</title>
+    <title>gradient_unwarped &#8212; pulserver documentation</title>
   
   
   
@@ -52,7 +52,7 @@
     <script src="../_static/copybutton.js?v=f281be69"></script>
     <script src="../_static/sg-tags.js?v=d80f6fa4"></script>
     <script src="../_static/scripts/sphinx-book-theme.js?v=fab101a9"></script>
-    <script>DOCUMENTATION_OPTIONS.pagename = 'api/recon';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'generated/pulserver.recon.gradient_unwarped';</script>
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
@@ -61,12 +61,10 @@
             true;
         </script>
     <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
-    <link rel="canonical" href="https://pulserver.github.io/pulserver/latest/api/recon.html" />
+    <link rel="canonical" href="https://pulserver.github.io/pulserver/latest/generated/pulserver.recon.gradient_unwarped.html" />
     <link rel="icon" href="../_static/pulserver-mark.svg"/>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="MRD data" href="mrd.html" />
-    <link rel="prev" title="Reconstruction proxy" href="proxy.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   <meta name="docsearch:version" content="latest" />
@@ -239,7 +237,7 @@
                 </a>
             </li>
         </ul>
-        <ul class="current nav bd-sidenav">
+        <ul class="nav bd-sidenav">
 <li class="toctree-l1 has-children"><a class="reference internal" href="../user-guide/index.html">User guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="../user-guide/running.html">Running the services</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../user-guide/scanner-sequences.html">Scanner sequences</a></li>
@@ -281,31 +279,31 @@
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../examples/index.html">Examples</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../examples/course.html">Course</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/01_protocol_to_image.html">1. From protocol to image</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/02_sequence_plugin.html">2. A scanner sequence and its protocol</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/03_scanner_representation.html">3. Scanner representation</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/04_reconstruction_plugin.html">4. A reconstruction plugin</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/05_testing_on_the_virtual_scanner.html">5. Testing on the virtual scanner</a></li>
+<li class="toctree-l3"><a class="reference internal" href="gallery/01-course/01_protocol_to_image.html">1. From protocol to image</a></li>
+<li class="toctree-l3"><a class="reference internal" href="gallery/01-course/02_sequence_plugin.html">2. A scanner sequence and its protocol</a></li>
+<li class="toctree-l3"><a class="reference internal" href="gallery/01-course/03_scanner_representation.html">3. Scanner representation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="gallery/01-course/04_reconstruction_plugin.html">4. A reconstruction plugin</a></li>
+<li class="toctree-l3"><a class="reference internal" href="gallery/01-course/05_testing_on_the_virtual_scanner.html">5. Testing on the virtual scanner</a></li>
 </ul>
 </details></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../examples/tours.html">Tours</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/02-tours/01_protocol_resolution.html">Protocol resolution for a 2D gradient echo</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/02-tours/02_segmentation.html">Segmentation of a sequence for the scanner</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/02-tours/03_fov_offset_enrichment.html">Field-of-view offset and the proxy phase</a></li>
+<li class="toctree-l3"><a class="reference internal" href="gallery/02-tours/01_protocol_resolution.html">Protocol resolution for a 2D gradient echo</a></li>
+<li class="toctree-l3"><a class="reference internal" href="gallery/02-tours/02_segmentation.html">Segmentation of a sequence for the scanner</a></li>
+<li class="toctree-l3"><a class="reference internal" href="gallery/02-tours/03_fov_offset_enrichment.html">Field-of-view offset and the proxy phase</a></li>
 </ul>
 </details></li>
 </ul>
 </details></li>
-<li class="toctree-l1 current active has-children"><a class="reference internal" href="index.html">API reference</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
-<li class="toctree-l2"><a class="reference internal" href="protocol.html">Protocol</a></li>
-<li class="toctree-l2"><a class="reference internal" href="design.html">Scanner sequences</a></li>
-<li class="toctree-l2"><a class="reference internal" href="host.html">Design calls</a></li>
-<li class="toctree-l2"><a class="reference internal" href="ir.html">IR conversion</a></li>
-<li class="toctree-l2"><a class="reference internal" href="proxy.html">Reconstruction proxy</a></li>
-<li class="toctree-l2 current active"><a class="current reference internal" href="#">Reconstruction plugins</a></li>
-<li class="toctree-l2"><a class="reference internal" href="mrd.html">MRD data</a></li>
-<li class="toctree-l2"><a class="reference internal" href="validate.html">Validation</a></li>
-<li class="toctree-l2"><a class="reference internal" href="virtual.html">Virtual scanner</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../api/index.html">API reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../api/protocol.html">Protocol</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/design.html">Scanner sequences</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/host.html">Design calls</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/ir.html">IR conversion</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/proxy.html">Reconstruction proxy</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/recon.html">Reconstruction plugins</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/mrd.html">MRD data</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/validate.html">Validation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/virtual.html">Virtual scanner</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../misc/index.html">Miscellaneous</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -390,7 +388,7 @@
       
       
       
-      <li><a href="https://github.com/pulserver/pulserver/edit/main/docs/api/recon.md" target="_blank"
+      <li><a href="https://github.com/pulserver/pulserver/edit/main/docs/generated/pulserver.recon.gradient_unwarped.rst" target="_blank"
    class="btn btn-sm btn-source-edit-button dropdown-item"
    title="Suggest edit"
    data-bs-placement="left" data-bs-toggle="tooltip"
@@ -407,7 +405,7 @@
       
       
       
-      <li><a href="https://github.com/pulserver/pulserver/issues/new?title=Issue%20on%20page%20%2Fapi/recon.html&body=Your%20issue%20content%20here." target="_blank"
+      <li><a href="https://github.com/pulserver/pulserver/issues/new?title=Issue%20on%20page%20%2Fgenerated/pulserver.recon.gradient_unwarped.html&body=Your%20issue%20content%20here." target="_blank"
    class="btn btn-sm btn-source-issues-button dropdown-item"
    title="Open an issue"
    data-bs-placement="left" data-bs-toggle="tooltip"
@@ -437,7 +435,7 @@
       
       
       
-      <li><a href="../_sources/api/recon.md" target="_blank"
+      <li><a href="../_sources/generated/pulserver.recon.gradient_unwarped.rst" target="_blank"
    class="btn btn-sm btn-download-source-button dropdown-item"
    title="Download source file"
    data-bs-placement="left" data-bs-toggle="tooltip"
@@ -447,7 +445,7 @@
 <span class="btn__icon-container">
   <i class="fas fa-file"></i>
   </span>
-<span class="btn__text-container">.md</span>
+<span class="btn__text-container">.rst</span>
 </a>
 </li>
       
@@ -520,7 +518,7 @@
               
 
 <div id="jb-print-docs-body" class="onlyprint">
-    <h1>Reconstruction plugins</h1>
+    <h1>gradient_unwarped</h1>
     <!-- Table of contents -->
     <div id="print-main-content">
         <div id="jb-print-toc">
@@ -530,12 +528,7 @@
             </div>
             <nav aria-label="Page">
                 <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#plugin">Plugin</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#readout-gadgets">Readout gadgets</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#scan-context">Scan context</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#calibration">Calibration</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#image-correction">Image correction</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#buffers-and-results">Buffers and results</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.recon.gradient_unwarped"><code class="docutils literal notranslate"><span class="pre">gradient_unwarped()</span></code></a></li>
 </ul>
             </nav>
         </div>
@@ -547,165 +540,38 @@
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <section class="tex2jax_ignore mathjax_ignore" id="reconstruction-plugins">
-<h1>Reconstruction plugins<a class="headerlink" href="#reconstruction-plugins" title="Link to this heading">#</a></h1>
-<p>The interface a reconstruction is written against, and the runtime that drives
-it over an MRD stream.</p>
-<p>A plugin file defines a <a class="reference internal" href="../generated/pulserver.recon.ReconPlugin.html#pulserver.recon.ReconPlugin" title="pulserver.recon.ReconPlugin"><code class="xref py py-class docutils literal notranslate"><span class="pre">ReconPlugin</span></code></a> subclass and a module-level
-<code class="docutils literal notranslate"><span class="pre">PLUGIN</span></code> instance of it. The same hooks run over a live MRD stream in a worker
-of the reconstruction proxy, over an ISMRMRD HDF5 file
-(<a class="reference internal" href="../generated/pulserver.recon.ReconPlugin.run.html#pulserver.recon.ReconPlugin.run" title="pulserver.recon.ReconPlugin.run"><code class="xref py py-meth docutils literal notranslate"><span class="pre">ReconPlugin.run()</span></code></a>) and over an assembled
-<a class="reference internal" href="../generated/pulserver.mrd.AcquisitionBucket.html#pulserver.mrd.AcquisitionBucket" title="pulserver.mrd.AcquisitionBucket"><code class="xref py py-class docutils literal notranslate"><span class="pre">AcquisitionBucket</span></code></a> (calling the instance). The plugin
-reconstructs one unit of readouts at a time, as <a class="reference internal" href="../generated/pulserver.recon.ReconData.html#pulserver.recon.ReconData" title="pulserver.recon.ReconData"><code class="xref py py-class docutils literal notranslate"><span class="pre">ReconData</span></code></a>. Writing one
-is described in <a class="reference internal" href="../user-guide/reconstruction-plugins.html"><span class="doc">Reconstruction plugins</span></a>. The image a
-<a class="reference internal" href="../generated/pulserver.recon.ReconResult.html#pulserver.recon.ReconResult" title="pulserver.recon.ReconResult"><code class="xref py py-class docutils literal notranslate"><span class="pre">ReconResult</span></code></a> becomes takes its geometry from its unit and its values
-from its array, as <a class="reference internal" href="../explanations/reconstruction.html"><span class="doc">Raw-data enrichment and routing</span></a> states. Coil
-sensitivity maps, noise prewhitening and coil compression are the subject of
-<a class="reference internal" href="../explanations/calibration.html"><span class="doc">Calibration, noise and coil compression</span></a>.</p>
-<section id="plugin">
-<h2>Plugin<a class="headerlink" href="#plugin" title="Link to this heading">#</a></h2>
-<div class="pst-scrollable-table-container"><table class="table">
-<thead>
-<tr class="row-odd"><th class="head"><p>Object</p></th>
-<th class="head"><p>Description</p></th>
-</tr>
-</thead>
-<tbody>
-<tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.recon.ReconPlugin.html#pulserver.recon.ReconPlugin" title="pulserver.recon.ReconPlugin"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ReconPlugin</span></code></a></p></td>
-<td><p>Base class for reconstruction plugins.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="../generated/pulserver.recon.Gadget.html#pulserver.recon.Gadget" title="pulserver.recon.Gadget"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Gadget</span></code></a></p></td>
-<td><p>One per-acquisition step, run before a readout is placed.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.recon.load_plugin.html#pulserver.recon.load_plugin" title="pulserver.recon.load_plugin"><code class="xref py py-obj docutils literal notranslate"><span class="pre">load_plugin</span></code></a></p></td>
-<td><p>Import a plugin file and return its <code class="docutils literal notranslate"><span class="pre">PLUGIN</span></code> instance.</p></td>
-</tr>
-</tbody>
-</table>
-</div>
-</section>
-<section id="readout-gadgets">
-<h2>Readout gadgets<a class="headerlink" href="#readout-gadgets" title="Link to this heading">#</a></h2>
-<div class="pst-scrollable-table-container"><table class="table">
-<thead>
-<tr class="row-odd"><th class="head"><p>Object</p></th>
-<th class="head"><p>Description</p></th>
-</tr>
-</thead>
-<tbody>
-<tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.recon.AsymmetricEcho.html#pulserver.recon.AsymmetricEcho" title="pulserver.recon.AsymmetricEcho"><code class="xref py py-obj docutils literal notranslate"><span class="pre">AsymmetricEcho</span></code></a></p></td>
-<td><p>Zero-fill a partial echo to the full echo that is symmetric about its <code class="docutils literal notranslate"><span class="pre">center_sample</span></code>.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="../generated/pulserver.recon.Prewhiten.html#pulserver.recon.Prewhiten" title="pulserver.recon.Prewhiten"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Prewhiten</span></code></a></p></td>
-<td><p>Whiten the channels of each readout with the stream’s noise measurement.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.recon.RemoveReadoutOversampling.html#pulserver.recon.RemoveReadoutOversampling" title="pulserver.recon.RemoveReadoutOversampling"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RemoveReadoutOversampling</span></code></a></p></td>
-<td><p>Crop a full echo to the readout field of view of the reconstruction.</p></td>
-</tr>
-</tbody>
-</table>
-</div>
-</section>
-<section id="scan-context">
-<h2>Scan context<a class="headerlink" href="#scan-context" title="Link to this heading">#</a></h2>
-<div class="pst-scrollable-table-container"><table class="table">
-<thead>
-<tr class="row-odd"><th class="head"><p>Object</p></th>
-<th class="head"><p>Description</p></th>
-</tr>
-</thead>
-<tbody>
-<tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.recon.ReconContext.html#pulserver.recon.ReconContext" title="pulserver.recon.ReconContext"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ReconContext</span></code></a></p></td>
-<td><p>Header, exam cache and configuration passed to every hook.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="../generated/pulserver.recon.ExamCache.html#pulserver.recon.ExamCache" title="pulserver.recon.ExamCache"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ExamCache</span></code></a></p></td>
-<td><p>Thread-safe store of artifacts shared by the series of one exam.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.recon.ExamImage.html#pulserver.recon.ExamImage" title="pulserver.recon.ExamImage"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ExamImage</span></code></a></p></td>
-<td><p>A map one series measured, with its geometry, resampled onto a later series’ grid.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="../generated/pulserver.recon.B0_MAP.html#pulserver.recon.B0_MAP" title="pulserver.recon.B0_MAP"><code class="xref py py-obj docutils literal notranslate"><span class="pre">B0_MAP</span></code></a></p></td>
-<td><p>Where a calibration scan leaves the off-resonance map, in Hz, for the series that follow.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.recon.B1_MAP.html#pulserver.recon.B1_MAP" title="pulserver.recon.B1_MAP"><code class="xref py py-obj docutils literal notranslate"><span class="pre">B1_MAP</span></code></a></p></td>
-<td><p>Where a calibration scan leaves the transmit field map, as a fraction of what was asked for.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="../generated/pulserver.recon.COIL_SENSITIVITIES.html#pulserver.recon.COIL_SENSITIVITIES" title="pulserver.recon.COIL_SENSITIVITIES"><code class="xref py py-obj docutils literal notranslate"><span class="pre">COIL_SENSITIVITIES</span></code></a></p></td>
-<td><p>Where a calibration scan leaves the receive coil sensitivities, a <a class="reference internal" href="../generated/pulserver.recon.CoilSensitivities.html#pulserver.recon.CoilSensitivities" title="pulserver.recon.CoilSensitivities"><code class="xref py py-class docutils literal notranslate"><span class="pre">CoilSensitivities</span></code></a>.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.recon.NOISE_COVARIANCE.html#pulserver.recon.NOISE_COVARIANCE" title="pulserver.recon.NOISE_COVARIANCE"><code class="xref py py-obj docutils literal notranslate"><span class="pre">NOISE_COVARIANCE</span></code></a></p></td>
-<td><p>Where a noise scan leaves the prewhitening of the exam, for the series that follow.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="../generated/pulserver.recon.EXAM_ARTIFACTS.html#pulserver.recon.EXAM_ARTIFACTS" title="pulserver.recon.EXAM_ARTIFACTS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">EXAM_ARTIFACTS</span></code></a></p></td>
-<td><p>The maps a context carries as attributes of itself, each its own key in the exam cache.</p></td>
-</tr>
-</tbody>
-</table>
-</div>
-</section>
-<section id="calibration">
-<h2>Calibration<a class="headerlink" href="#calibration" title="Link to this heading">#</a></h2>
-<div class="pst-scrollable-table-container"><table class="table">
-<thead>
-<tr class="row-odd"><th class="head"><p>Object</p></th>
-<th class="head"><p>Description</p></th>
-</tr>
-</thead>
-<tbody>
-<tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.recon.coil_maps.html#pulserver.recon.coil_maps" title="pulserver.recon.coil_maps"><code class="xref py py-obj docutils literal notranslate"><span class="pre">coil_maps</span></code></a></p></td>
-<td><p>Return the coil sensitivities of a unit from its calibration k-space, the stream or the exam.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="../generated/pulserver.recon.CoilSensitivities.html#pulserver.recon.CoilSensitivities" title="pulserver.recon.CoilSensitivities"><code class="xref py py-obj docutils literal notranslate"><span class="pre">CoilSensitivities</span></code></a></p></td>
-<td><p>Receive coil sensitivity maps with the coils, prewhitening, compression and geometry they were estimated in.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.recon.MissingCalibration.html#pulserver.recon.MissingCalibration" title="pulserver.recon.MissingCalibration"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MissingCalibration</span></code></a></p></td>
-<td><p>No source holds coil sensitivities the unit can use.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="../generated/pulserver.recon.CoilCompression.html#pulserver.recon.CoilCompression" title="pulserver.recon.CoilCompression"><code class="xref py py-obj docutils literal notranslate"><span class="pre">CoilCompression</span></code></a></p></td>
-<td><p>Reduce the receive channels of a unit’s k-space to virtual channels.</p></td>
-</tr>
-</tbody>
-</table>
-</div>
-</section>
-<section id="image-correction">
-<h2>Image correction<a class="headerlink" href="#image-correction" title="Link to this heading">#</a></h2>
-<div class="pst-scrollable-table-container"><table class="table">
-<thead>
-<tr class="row-odd"><th class="head"><p>Object</p></th>
-<th class="head"><p>Description</p></th>
-</tr>
-</thead>
-<tbody>
-<tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.recon.gradient_unwarped.html#pulserver.recon.gradient_unwarped" title="pulserver.recon.gradient_unwarped"><code class="xref py py-obj docutils literal notranslate"><span class="pre">gradient_unwarped</span></code></a></p></td>
-<td><p>Return an image resampled from where its voxels were acquired to where they belong.</p></td>
-</tr>
-</tbody>
-</table>
-</div>
-</section>
-<section id="buffers-and-results">
-<h2>Buffers and results<a class="headerlink" href="#buffers-and-results" title="Link to this heading">#</a></h2>
-<div class="pst-scrollable-table-container"><table class="table">
-<thead>
-<tr class="row-odd"><th class="head"><p>Object</p></th>
-<th class="head"><p>Description</p></th>
-</tr>
-</thead>
-<tbody>
-<tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.recon.ReconData.html#pulserver.recon.ReconData" title="pulserver.recon.ReconData"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ReconData</span></code></a></p></td>
-<td><p>The readouts of one reconstruction unit: imaging and calibration k-space, counters and waveforms.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="../generated/pulserver.recon.ReconBuffer.html#pulserver.recon.ReconBuffer" title="pulserver.recon.ReconBuffer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ReconBuffer</span></code></a></p></td>
-<td><p>K-space of one encoding space, filled one acquisition at a time, with the acquisition nearest the k-space centre.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.recon.ReconResult.html#pulserver.recon.ReconResult" title="pulserver.recon.ReconResult"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ReconResult</span></code></a></p></td>
-<td><p>Image array the runtime packages as an MRD image or DICOM dataset, with the acquisition its geometry is taken from and the rescale of its DICOM pixels.</p></td>
-</tr>
-</tbody>
-</table>
-</div>
-</section>
+  <section id="gradient-unwarped">
+<h1>gradient_unwarped<a class="headerlink" href="#gradient-unwarped" title="Link to this heading">#</a></h1>
+<dl class="py function">
+<dt class="sig sig-object py" id="pulserver.recon.gradient_unwarped">
+<span class="sig-prename descclassname"><span class="pre">pulserver.recon.</span></span><span class="sig-name descname"><span class="pre">gradient_unwarped</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pulserver/recon/_correct.html#gradient_unwarped"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.recon.gradient_unwarped" title="Link to this definition">#</a></dt>
+<dd><p>Return an image resampled from where its voxels were acquired to where they belong.</p>
+<p>The coil’s spherical-harmonic field is evaluated at the scanner position of
+every voxel of the reconstruction matrix, and the image is resampled there.
+A complex image has its real and imaginary parts resampled separately.</p>
+<p>Geometry comes from the header’s reconstruction space and from the unit’s
+reference acquisition, so the correction is in the frame the series was
+acquired in, oblique prescriptions included.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>image</strong> – <code class="docutils literal notranslate"><span class="pre">(...,</span> <span class="pre">[partitions,]</span> <span class="pre">lines,</span> <span class="pre">columns)</span></code>, NumPy array or Torch tensor.</p></li>
+<li><p><strong>context</strong> – The plugin’s <a class="reference internal" href="pulserver.recon.ReconContext.html#pulserver.recon.ReconContext" title="pulserver.recon.ReconContext"><code class="xref py py-class docutils literal notranslate"><span class="pre">ReconContext</span></code></a>, whose header states the table.</p></li>
+<li><p><strong>data</strong> – The plugin’s <a class="reference internal" href="pulserver.recon.ReconData.html#pulserver.recon.ReconData" title="pulserver.recon.ReconData"><code class="xref py py-class docutils literal notranslate"><span class="pre">ReconData</span></code></a>, whose buffer states the geometry.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><ul class="simple">
+<li><p><em>The corrected image, of the type and on the device it was given in.</em></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">image</span></code> itself where the header states no table, where the unit has no</p></li>
+<li><p><strong>reference acquisition, or where the correction fails</strong> (<em>an uncorrected image</em>)</p></li>
+<li><p><em>reaches the scanner, and the reason is logged.</em></p></li>
+</ul>
+</p>
+</dd>
+</dl>
+</dd></dl>
+
 </section>
 
 
@@ -719,24 +585,6 @@ sensitivity maps, noise prewhitening and coil compression are the subject of
                 <footer class="prev-next-footer d-print-none">
                   
 <div class="prev-next-area">
-    <a class="left-prev"
-       href="proxy.html"
-       title="previous page">
-      <i class="fa-solid fa-angle-left"></i>
-      <div class="prev-next-info">
-        <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">Reconstruction proxy</p>
-      </div>
-    </a>
-    <a class="right-next"
-       href="mrd.html"
-       title="next page">
-      <div class="prev-next-info">
-        <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">MRD data</p>
-      </div>
-      <i class="fa-solid fa-angle-right"></i>
-    </a>
 </div>
                 </footer>
               
@@ -755,12 +603,7 @@ sensitivity maps, noise prewhitening and coil compression are the subject of
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#plugin">Plugin</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#readout-gadgets">Readout gadgets</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#scan-context">Scan context</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#calibration">Calibration</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#image-correction">Image correction</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#buffers-and-results">Buffers and results</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.recon.gradient_unwarped"><code class="docutils literal notranslate"><span class="pre">gradient_unwarped()</span></code></a></li>
 </ul>
   </nav></div>
 
