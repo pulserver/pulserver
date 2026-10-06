@@ -38,6 +38,10 @@ class Gre2D(SequencePlugin):
         ),
         UIParam.NX: IntParam("n_x", range_min=32, range_max=512, range_incr=2),
         UIParam.NY: IntParam("n_y", range_min=32, range_max=512, range_incr=2),
+        UIParam.NSLICES: IntParam("n_slices", range_min=1, range_max=64),
+        UIParam.SLICE_THICKNESS: FloatParam(
+            "slice_thickness", unit="mm", scale=1e-3, range_min=1.0, range_max=20.0
+        ),
         UIParam.RY: IntParam("ry", range_min=1, range_max=4),
     }
 
