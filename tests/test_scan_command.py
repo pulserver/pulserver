@@ -364,6 +364,8 @@ def test_a_headless_scan_spreads_two_jittered_isochromats_along_each_axis_by_def
             "4",
             "--coils",
             "1",
+            "--engine",
+            "bloch",
         ]
     )
 

@@ -458,7 +458,7 @@ def _scan(
             field_t=field,
             region=region,
             coil=coil,
-            spins=_voxels.spins_for(args.spins, args.voxel, tissue.VOXEL_AXES),
+            spins=_voxels.spins_for(args.spins, args.voxel, phantom.VOXEL_AXES),
             voxel=args.voxel,
             motion=motion,
             seed=0,
