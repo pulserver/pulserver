@@ -569,7 +569,9 @@ the block’s start and <code class="docutils literal notranslate"><span class="
 <code class="docutils literal notranslate"><span class="pre">(positions,</span> <span class="pre">3,</span> <span class="pre">2)</span></code> into them; where it does, <code class="docutils literal notranslate"><span class="pre">slot_offset</span></code>
 <code class="docutils literal notranslate"><span class="pre">(positions,</span> <span class="pre">slots,</span> <span class="pre">3)</span></code>, <code class="docutils literal notranslate"><span class="pre">slot_samples</span></code> and <code class="docutils literal notranslate"><span class="pre">slot_start_us</span></code>:
 its ring of slots, or, with offsets -1, the span every resident wave
-it plays covers;</p></li>
+it plays covers; and the RF pulse it prepares, at unit amplitude,
+<code class="docutils literal notranslate"><span class="pre">rf_time_us</span></code> from the block’s start and <code class="docutils literal notranslate"><span class="pre">rf_waveform_hz</span></code>, with
+<code class="docutils literal notranslate"><span class="pre">rf_span</span></code> <code class="docutils literal notranslate"><span class="pre">(positions,</span> <span class="pre">2)</span></code> into them;</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">blocks</span></code>: per played block, in play order, <code class="docutils literal notranslate"><span class="pre">subsequence</span></code>,
 <code class="docutils literal notranslate"><span class="pre">segment</span></code>, <code class="docutils literal notranslate"><span class="pre">position</span></code>, <code class="docutils literal notranslate"><span class="pre">instance</span></code> (instances of its segment
 played before its own), <code class="docutils literal notranslate"><span class="pre">slot</span></code> (of its position’s ring, -1 unless
@@ -590,7 +592,8 @@ readout its position prepares, the pulse at the block’s amplitude,
 the readout’s phase modulation, and the gradients: the events its
 position prepares at the block’s amplitudes, or the samples its wave
 reads at the centres of the raster intervals, the first and last
-held over the half intervals at its two ends;</p></li>
+held over the half intervals at its two ends; without <code class="docutils literal notranslate"><span class="pre">pulses</span></code>,
+all but the RF pulse, which its position holds;</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">instances</span></code> and <code class="docutils literal notranslate"><span class="pre">loads</span></code>: the segment instances played and the
 loads into waveform memory;</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">overwrites</span></code>: loads that wrote over memory the instance in play

@@ -596,7 +596,16 @@ anywhere in each cell, as the phantom’s <code class="docutils literal notransl
 <li><p><strong>motion</strong> – The subject’s motion, as <a class="reference internal" href="pulserver.virtual.Isochromats.html#pulserver.virtual.Isochromats" title="pulserver.virtual.Isochromats"><code class="xref py py-class docutils literal notranslate"><span class="pre">Isochromats</span></code></a>
 takes it, on the clock of each scan; at rest without one. Moving
 isochromats play every block alone.</p></li>
+<li><p><strong>engine</strong> – What a scan is simulated by, one of <code class="xref py py-data docutils literal notranslate"><span class="pre">ENGINES</span></code>: the Fourier
+engine (<a class="reference internal" href="pulserver.virtual.FourierPlayer.html#pulserver.virtual.FourierPlayer" title="pulserver.virtual.FourierPlayer"><code class="xref py py-class docutils literal notranslate"><span class="pre">FourierPlayer</span></code></a>) on the phantom’s
+tissue at <code class="docutils literal notranslate"><span class="pre">spacing</span></code>, or the Bloch engine on its isochromats. Without
+it, the Fourier engine unless the subject moves or diffuses, which only
+the Bloch engine models.</p></li>
 </ul>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If <code class="docutils literal notranslate"><span class="pre">engine</span></code> is none of <code class="xref py py-data docutils literal notranslate"><span class="pre">ENGINES</span></code>, or is the Fourier engine
+    for a subject that moves or diffuses.</p>
 </dd>
 </dl>
 </dd></dl>

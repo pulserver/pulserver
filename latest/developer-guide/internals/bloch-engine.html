@@ -689,7 +689,9 @@ S_{cl}(q) = \sum_{j \in q} R_{jc}\,M_{xy,j}\,e^{-(z_j - \bar z)\,t_l}.
 <p>The lattice sums <span class="math notranslate nohighlight">\(S_{cl}(q)\)</span> are exact. The sum over the lattice at each
 sample’s <span class="math notranslate nohighlight">\(\mathbf{k}\)</span> is a type-2 non-uniform FFT, which FINUFFT (Barnett,
 Magland and af Klinteberg, SIAM J Sci Comput 2019) computes for every coil and
-Chebyshev point. <span class="math notranslate nohighlight">\(L\)</span> is the fewest points that interpolate <span class="math notranslate nohighlight">\(e^{-zt}\)</span> to within
+Chebyshev point; on macOS, where the finufft wheel and torch each carry
+LLVM’s OpenMP runtime, it is not loaded and these windows are read sample by
+sample. <span class="math notranslate nohighlight">\(L\)</span> is the fewest points that interpolate <span class="math notranslate nohighlight">\(e^{-zt}\)</span> to within
 <span class="math notranslate nohighlight">\(\varepsilon/4\)</span> for every rate on the boundary of the rectangle the rates
 span, where the error of the interpolation is largest. FINUFFT is given
 <span class="math notranslate nohighlight">\(\varepsilon/4\)</span> divided by the Lebesgue constant of the points and by the most

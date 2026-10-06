@@ -557,11 +557,13 @@ starts <code class="docutils literal notranslate"><span class="pre">emit</span><
 with the wall-clock time left before it does, or <code class="docutils literal notranslate"><span class="pre">null</span></code> before there
 is an estimate. The status is 1 when a text reports a refused or
 failed series, or when the scan is cancelled.</p>
-<p>A scan plays on the phantom’s isochromats in the slabs its excitation
-pulses excite, at the spacing <code class="docutils literal notranslate"><span class="pre">max_isochromats</span></code> allows. Scans of an exam
-that excite the same slabs play on the same isochromats, each from
-equilibrium, which keeps the pulses the engine has computed; a scan
-started while another plays has isochromats of its own.</p>
+<p>The Fourier engine plays a scan on the phantom’s tissue at
+<code class="docutils literal notranslate"><span class="pre">spacing</span></code>, sampled once an exam, where its excitation pulses excite
+it. The Bloch engine plays it on the phantom’s isochromats in the slabs
+its excitation pulses excite, at the spacing <code class="docutils literal notranslate"><span class="pre">max_isochromats</span></code>
+allows. Scans of an exam that excite the same slabs play on the same
+isochromats, each from equilibrium, which keeps the pulses the Bloch
+engine has computed; a scan started while another plays has its own.</p>
 <p><code class="docutils literal notranslate"><span class="pre">recon</span></code> names the reconstruction plugin. Without it, a design of a
 shipped scanner sequence is reconstructed with the shipped
 reconstruction paired with it in <code class="docutils literal notranslate"><span class="pre">pulserver._zoo.ZOO_PAIRS</span></code>. A

@@ -1029,6 +1029,12 @@ from.</p>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.virtual.Slabs.html#pulserver.virtual.Slabs" title="pulserver.virtual.Slabs"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Slabs</span></code></a></p></td>
 <td><p>Slabs of the physical frame, each the isochromats that see a field within its bounds during a pulse.</p></td>
 </tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.virtual.FourierPlayer.html#pulserver.virtual.FourierPlayer" title="pulserver.virtual.FourierPlayer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FourierPlayer</span></code></a></p></td>
+<td><p>The blocks the cache beside a sequence file plays, acquired of a phantom's tissue by the Fourier engine.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.virtual.Tissue.html#pulserver.virtual.Tissue" title="pulserver.virtual.Tissue"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Tissue</span></code></a></p></td>
+<td><p>A phantom sampled for the Fourier engine: what each cube of it holds.</p></td>
+</tr>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.virtual.Isochromats.html#pulserver.virtual.Isochromats" title="pulserver.virtual.Isochromats"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Isochromats</span></code></a></p></td>
 <td><p>Isochromats, and the magnetisation the Bloch equation carries from one block to the next.</p></td>
 </tr>
@@ -1039,7 +1045,7 @@ from.</p>
 <td><p>A subject moving as a rigid body, as <a class="reference internal" href="generated/pulserver.virtual.Isochromats.html#pulserver.virtual.Isochromats" title="pulserver.virtual.Isochromats"><code class="xref py py-class docutils literal notranslate"><span class="pre">Isochromats</span></code></a> takes a <code class="docutils literal notranslate"><span class="pre">motion</span></code>.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.virtual.Scan.html#pulserver.virtual.Scan" title="pulserver.virtual.Scan"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Scan</span></code></a></p></td>
-<td><p>The cache beside a sequence file played on isochromats, against a scan clock.</p></td>
+<td><p>The cache beside a sequence file played on isochromats or acquired by the Fourier engine, against a scan clock.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.virtual.Chunk.html#pulserver.virtual.Chunk" title="pulserver.virtual.Chunk"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Chunk</span></code></a></p></td>
 <td><p>A span of a virtual scan between two block boundaries.</p></td>

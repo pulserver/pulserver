@@ -114,6 +114,22 @@ magnetization the isochromats hold, so a second scan of the same isochromats
 continues the first: sample them again, or call their `reset`, to start from
 equilibrium.
 
+The Fourier engine acquires the phantom's tissue instead, each cube of it at
+`spacing`, at the resolution the prescription asks for whatever that spacing
+is ({class}`~pulserver.virtual.FourierPlayer`): the classes of tissue are
+simulated by extended phase graphs over the events each excitation's slab
+plays, and their images encoded along the trajectory, on a CUDA device where
+there is one. A scan of it is played as one of isochromats is:
+
+```python
+scan = virtual.Scan(sequence, tissue.tissue(1e-3, field_t=3.0))
+readouts = [readout for chunk in scan.chunks(sound=False) for readout in chunk.readouts]
+```
+
+It spoils by the moment the gradients wind across a voxel between pulses
+and readouts, so a voxel needs no isochromats spread over it to be spoiled;
+it models no motion and no diffusion, which the isochromats do.
+
 ## Stream a scan in real time, with its sound
 
 A scan played against its clock releases each readout once it is acquired, and
@@ -205,6 +221,10 @@ line, is written to standard output, and the scan clock to standard error.
   every isochromat are written to a temporary file mapped into memory; where
   the temporary directory is a memory file system, set `TMPDIR` to one on
   disk.
+- `--engine` names what the scan is simulated by: `fourier`, the Fourier
+  engine on the phantom's tissue at `--spacing`, or `bloch`, the isochromats
+  the options below sample. The Fourier engine unless `--diffusion`, `--nod`
+  or `--drift` asks for what only the isochromats model.
 - `--spins` spreads each voxel over that many isochromats, at the quantiles of
   the Lorentzian line of its tissue's T2′: two along each axis of the voxel
   without it, four for a phantom of ellipses, which lies in a plane, and
@@ -311,12 +331,15 @@ BrainWeb, and every design is made under the VOP limits of the exam's transmit
 coil; maps solved at another frequency than the Larmor frequency of the limits'
 `B0` are refused.
 
-A scan is simulated on the phantom's isochromats in the slabs its excitation
-pulses excite ({func}`~pulserver.virtual.excited`), sampled `--spacing` apart,
-1 mm by default. Where they number more than `--max-isochromats`, two million
-by default, as over a whole head, the spacing is coarsened in steps of 1 mm
-until they do not, counting `--spins` isochromats per voxel. `--device`,
-`--spins`, `--voxel`, `--diffusion`, `--nod` and `--drift` act as they do for
+A scan is simulated by the Fourier engine on the phantom's tissue, sampled
+`--spacing` apart, 1 mm by default, once for each exam as it starts. With
+`--engine bloch`, or where the subject moves or diffuses, it is simulated on
+the phantom's isochromats in the slabs its excitation pulses excite
+({func}`~pulserver.virtual.excited`) instead; where they number more than
+`--max-isochromats`, two million by default, as over a whole head, the spacing
+is coarsened in steps of 1 mm until they do not, counting `--spins`
+isochromats per voxel. `--engine`, `--device`, `--spins`,
+`--voxel`, `--diffusion`, `--nod` and `--drift` act as they do for
 `pulserver scan`; a subject's motion starts anew with each scan.
 
 pulserver's image runs such a console by default, with BrainWeb's normal brain

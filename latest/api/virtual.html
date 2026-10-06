@@ -531,6 +531,7 @@
             <nav aria-label="Page">
                 <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#acquisition">Acquisition</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#fourier-engine">Fourier engine</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#bloch-simulation">Bloch simulation</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#scan-clock-and-sound">Scan clock and sound</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#external-simulators">External simulators</a></li>
@@ -551,8 +552,9 @@
   <section class="tex2jax_ignore mathjax_ignore" id="virtual-scanner">
 <h1>Virtual scanner<a class="headerlink" href="#virtual-scanner" title="Link to this heading">#</a></h1>
 <p>The stand-ins for the scanner: the cache played, an analytic phantom acquired
-along the trajectory it plays or the blocks it plays simulated on isochromats,
-and the raw data sent as the scanner’s reconstruction client sends them; and
+along the trajectory it plays, its tissue acquired by the Fourier engine or the
+blocks it plays simulated on isochromats, and the raw data sent as the
+scanner’s reconstruction client sends them; and
 the blocks the cache plays, written as a Pulseq file for a simulator that reads
 one.</p>
 <p>The design calls, the IR, the reconstruction proxy and the reconstruction
@@ -585,6 +587,28 @@ scanner’s centre frequency.</p>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.virtual.Slabs.html#pulserver.virtual.Slabs" title="pulserver.virtual.Slabs"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Slabs</span></code></a></p></td>
 <td><p>Slabs of the physical frame, each the isochromats that see a field within its bounds during a pulse, so that an isochromat’s own frequency moves its slab; the region a phantom is sampled in.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section id="fourier-engine">
+<h2>Fourier engine<a class="headerlink" href="#fourier-engine" title="Link to this heading">#</a></h2>
+<p>Classes of tissue simulated by TorchSim’s extended phase graphs over the event
+stream each excitation’s slab plays, their signals spanned by a temporal basis,
+and the images of the terms encoded along the trajectory by bartorch’s NUFFT.</p>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Object</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.virtual.FourierPlayer.html#pulserver.virtual.FourierPlayer" title="pulserver.virtual.FourierPlayer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FourierPlayer</span></code></a></p></td>
+<td><p>The blocks the cache beside a sequence file plays, acquired of a phantom’s tissue: the configuration states shifted where the gradients’ moment dephases a voxel, each readout reading the pathway that passes the centre of k-space during it.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="../generated/pulserver.virtual.Tissue.html#pulserver.virtual.Tissue" title="pulserver.virtual.Tissue"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Tissue</span></code></a></p></td>
+<td><p>A phantom sampled for the Fourier engine: each cube’s position, proton density, relaxation times and frequency, the transmit field it sees and the coils’ receive sensitivities.</p></td>
 </tr>
 </tbody>
 </table>
@@ -625,7 +649,7 @@ states it. Times are in seconds, gradients in Hz/m and RF fields in Hz.</p>
 </thead>
 <tbody>
 <tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.virtual.Scan.html#pulserver.virtual.Scan" title="pulserver.virtual.Scan"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Scan</span></code></a></p></td>
-<td><p>The cache beside a sequence file played on isochromats as <a class="reference internal" href="../generated/pulserver.virtual.simulate.html#pulserver.virtual.simulate" title="pulserver.virtual.simulate"><code class="xref py py-func docutils literal notranslate"><span class="pre">simulate()</span></code></a> plays it, against a scan clock, in spans carrying their readouts and the sound of their gradients.</p></td>
+<td><p>The cache beside a sequence file acquired of a phantom’s tissue by the Fourier engine, or played on isochromats as <a class="reference internal" href="../generated/pulserver.virtual.simulate.html#pulserver.virtual.simulate" title="pulserver.virtual.simulate"><code class="xref py py-func docutils literal notranslate"><span class="pre">simulate()</span></code></a> plays it, against a scan clock, in spans carrying their readouts and the sound of their gradients.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="../generated/pulserver.virtual.Chunk.html#pulserver.virtual.Chunk" title="pulserver.virtual.Chunk"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Chunk</span></code></a></p></td>
 <td><p>A span of a scan between two block boundaries: its bounds in scan time, its readouts and its sound.</p></td>
@@ -663,10 +687,10 @@ states it. Times are in seconds, gradients in Hz/m and RF fields in Hz.</p>
 </thead>
 <tbody>
 <tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.virtual.Phantom.html#pulserver.virtual.Phantom" title="pulserver.virtual.Phantom"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Phantom</span></code></a></p></td>
-<td><p>Ellipses whose signals add, received by one coil or several of analytic sensitivity, placed in the physical frame by a rotation and a position; sampled as isochromats for the Bloch simulation.</p></td>
+<td><p>Ellipses whose signals add, received by one coil or several of analytic sensitivity, placed in the physical frame by a rotation and a position; sampled as tissue for the Fourier engine or as isochromats for the Bloch simulation.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="../generated/pulserver.virtual.BrainWeb.html#pulserver.virtual.BrainWeb" title="pulserver.virtual.BrainWeb"><code class="xref py py-obj docutils literal notranslate"><span class="pre">BrainWeb</span></code></a></p></td>
-<td><p>BrainWeb’s normal brain, downloaded on first use, placed head first and supine with its tissues’ T1, T2 and proton density, in the field its susceptibility adds to B0; sampled as isochromats for the Bloch simulation.</p></td>
+<td><p>BrainWeb’s normal brain, downloaded on first use, placed head first and supine with its tissues’ T1, T2 and proton density, in the field its susceptibility adds to B0; sampled as tissue for the Fourier engine or as isochromats for the Bloch simulation.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.virtual.Ellipse.html#pulserver.virtual.Ellipse" title="pulserver.virtual.Ellipse"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Ellipse</span></code></a></p></td>
 <td><p>An ellipse of uniform magnetization in a plane of constant z, of one chemical shift and one pair of relaxation times.</p></td>
@@ -769,6 +793,7 @@ states it. Times are in seconds, gradients in Hz/m and RF fields in Hz.</p>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#acquisition">Acquisition</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#fourier-engine">Fourier engine</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#bloch-simulation">Bloch simulation</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#scan-clock-and-sound">Scan clock and sound</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#external-simulators">External simulators</a></li>

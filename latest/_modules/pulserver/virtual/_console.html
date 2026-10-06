@@ -489,6 +489,10 @@
 <span class="c1">#: The design calls a console forwards, answered as ``pulserver design`` answers them.</span>
 <span class="n">DESIGN_CALLS</span> <span class="o">=</span> <span class="p">(</span><span class="s2">"list"</span><span class="p">,</span> <span class="s2">"validate"</span><span class="p">,</span> <span class="s2">"generate"</span><span class="p">,</span> <span class="s2">"import"</span><span class="p">)</span>
 
+<span class="c1">#: The engines a scan is simulated by: the Fourier engine, on a phantom's</span>
+<span class="c1">#: tissue, and the Bloch engine, on its isochromats.</span>
+<span class="n">ENGINES</span> <span class="o">=</span> <span class="p">(</span><span class="s2">"fourier"</span><span class="p">,</span> <span class="s2">"bloch"</span><span class="p">)</span>
+
 <span class="c1"># Spacings, 1 mm apart, a console tries in keeping a scan within its isochromats.</span>
 <span class="n">_COARSER</span> <span class="o">=</span> <span class="mi">100</span>
 
@@ -622,6 +626,18 @@
 <span class="sd">        The subject's motion, as :class:`~pulserver.virtual.Isochromats`</span>
 <span class="sd">        takes it, on the clock of each scan; at rest without one. Moving</span>
 <span class="sd">        isochromats play every block alone.</span>
+<span class="sd">    engine</span>
+<span class="sd">        What a scan is simulated by, one of :data:`ENGINES`: the Fourier</span>
+<span class="sd">        engine (:class:`~pulserver.virtual.FourierPlayer`) on the phantom's</span>
+<span class="sd">        tissue at ``spacing``, or the Bloch engine on its isochromats. Without</span>
+<span class="sd">        it, the Fourier engine unless the subject moves or diffuses, which only</span>
+<span class="sd">        the Bloch engine models.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If ``engine`` is none of :data:`ENGINES`, or is the Fourier engine</span>
+<span class="sd">        for a subject that moves or diffuses.</span>
 <span class="sd">    """</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
@@ -643,6 +659,7 @@
         <span class="n">voxel</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"jittered"</span><span class="p">,</span>
         <span class="n">diffusion</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">motion</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">engine</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="kn">from</span><span class="w"> </span><span class="nn">..host._blocks</span><span class="w"> </span><span class="kn">import</span> <span class="n">parse_limits</span>
         <span class="kn">from</span><span class="w"> </span><span class="nn">..proxy</span><span class="w"> </span><span class="kn">import</span> <span class="n">LocalReconstruction</span>
@@ -652,6 +669,17 @@
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
                 <span class="s2">"a console reconstructs through a proxy or in this process, not both"</span>
             <span class="p">)</span>
+        <span class="n">modelled</span> <span class="o">=</span> <span class="n">motion</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">diffusion</span>
+        <span class="k">if</span> <span class="n">engine</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">engine</span> <span class="o">=</span> <span class="s2">"fourier"</span> <span class="k">if</span> <span class="n">modelled</span> <span class="k">else</span> <span class="s2">"bloch"</span>
+        <span class="k">if</span> <span class="n">engine</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">ENGINES</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"a scan is simulated by one of </span><span class="si">{</span><span class="n">ENGINES</span><span class="si">}</span><span class="s2">, not </span><span class="si">{</span><span class="n">engine</span><span class="si">!r}</span><span class="s2">"</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">engine</span> <span class="o">==</span> <span class="s2">"fourier"</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">modelled</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">"the Fourier engine models no motion or diffusion: simulate with "</span>
+                <span class="s2">"the Bloch engine"</span>
+            <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">engine</span> <span class="o">=</span> <span class="n">engine</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">plugins</span> <span class="o">=</span> <span class="n">directories</span><span class="p">(</span><span class="n">plugins</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">limits</span> <span class="o">=</span> <span class="n">limits</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">store</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">store</span><span class="p">)</span>
@@ -676,15 +704,17 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">coil</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_coil</span><span class="p">(</span><span class="n">coil</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">subject</span> <span class="o">=</span> <span class="s2">""</span>
         <span class="c1"># BrainWeb, kept from one exam to the next with what it has loaded, and</span>
-        <span class="c1"># the thread its field map is computed in after an exam's localizer.</span>
+        <span class="c1"># the thread its field map and the exam's tissue are computed in after</span>
+        <span class="c1"># an exam's localizer.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_brainweb</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_warming</span><span class="p">:</span> <span class="n">threading</span><span class="o">.</span><span class="n">Thread</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">phantom</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_phantom</span><span class="p">(</span><span class="s2">""</span><span class="p">)</span>
         <span class="c1"># The exam's isochromats between its scans, beside the slabs they were</span>
-        <span class="c1"># kept in, and how many exams have started, so that a scan hands back</span>
-        <span class="c1"># only those of the exam in progress.</span>
+        <span class="c1"># kept in, its tissue, and how many exams have started, so that a scan</span>
+        <span class="c1"># hands back only those of the exam in progress.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_held</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Lock</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_isochromats</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_tissue</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_exams</span> <span class="o">=</span> <span class="mi">0</span>
 
 <div class="viewcode-block" id="Console.design">
@@ -771,6 +801,7 @@
         <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_held</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_exams</span> <span class="o">+=</span> <span class="mi">1</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_isochromats</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_tissue</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="n">files</span> <span class="o">=</span> <span class="p">[</span>
             <span class="n">_dicom_bytes</span><span class="p">(</span><span class="n">dataset</span><span class="p">)</span>
             <span class="k">for</span> <span class="n">dataset</span> <span class="ow">in</span> <span class="n">localizer</span><span class="p">(</span>
@@ -808,11 +839,13 @@
 <span class="sd">        is an estimate. The status is 1 when a text reports a refused or</span>
 <span class="sd">        failed series, or when the scan is cancelled.</span>
 
-<span class="sd">        A scan plays on the phantom's isochromats in the slabs its excitation</span>
-<span class="sd">        pulses excite, at the spacing ``max_isochromats`` allows. Scans of an exam</span>
-<span class="sd">        that excite the same slabs play on the same isochromats, each from</span>
-<span class="sd">        equilibrium, which keeps the pulses the engine has computed; a scan</span>
-<span class="sd">        started while another plays has isochromats of its own.</span>
+<span class="sd">        The Fourier engine plays a scan on the phantom's tissue at</span>
+<span class="sd">        ``spacing``, sampled once an exam, where its excitation pulses excite</span>
+<span class="sd">        it. The Bloch engine plays it on the phantom's isochromats in the slabs</span>
+<span class="sd">        its excitation pulses excite, at the spacing ``max_isochromats``</span>
+<span class="sd">        allows. Scans of an exam that excite the same slabs play on the same</span>
+<span class="sd">        isochromats, each from equilibrium, which keeps the pulses the Bloch</span>
+<span class="sd">        engine has computed; a scan started while another plays has its own.</span>
 
 <span class="sd">        ``recon`` names the reconstruction plugin. Without it, a design of a</span>
 <span class="sd">        shipped scanner sequence is reconstructed with the shipped</span>
@@ -837,6 +870,17 @@
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">speed</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">emit</span><span class="p">({</span><span class="s2">"preparing"</span><span class="p">:</span> <span class="kc">None</span><span class="p">})</span>
         <span class="n">rotation</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">rotation</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">engine</span> <span class="o">==</span> <span class="s2">"fourier"</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_scan</span><span class="p">(</span>
+                <span class="n">design</span><span class="p">,</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_exam_tissue</span><span class="p">(),</span>
+                <span class="n">rotation</span><span class="p">,</span>
+                <span class="n">centre_mm</span><span class="p">,</span>
+                <span class="n">emit</span><span class="p">,</span>
+                <span class="n">cancelled</span><span class="p">,</span>
+                <span class="n">sound</span><span class="p">,</span>
+                <span class="n">plugin</span><span class="p">,</span>
+            <span class="p">)</span>
         <span class="n">region</span> <span class="o">=</span> <span class="n">excited</span><span class="p">(</span>
             <span class="n">DesignStore</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">store</span><span class="p">)</span><span class="o">.</span><span class="n">directory</span><span class="p">(</span><span class="n">design</span><span class="p">)</span> <span class="o">/</span> <span class="s2">"sequence.seq"</span><span class="p">,</span> <span class="n">rotation</span>
         <span class="p">)</span>
@@ -845,7 +889,8 @@
             <span class="n">exam</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_exams</span>
         <span class="k">if</span> <span class="n">held</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">held</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="n">region</span><span class="p">:</span>
             <span class="n">isochromats</span> <span class="o">=</span> <span class="n">held</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
-            <span class="n">isochromats</span><span class="o">.</span><span class="n">reset</span><span class="p">()</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">engine</span> <span class="o">==</span> <span class="s2">"bloch"</span><span class="p">:</span>
+                <span class="n">isochromats</span><span class="o">.</span><span class="n">reset</span><span class="p">()</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_warming</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_warming</span><span class="o">.</span><span class="n">join</span><span class="p">()</span>
@@ -872,6 +917,21 @@
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_spins</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">_voxels</span><span class="o">.</span><span class="n">spins_for</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">spins</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">voxel</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">phantom</span><span class="o">.</span><span class="n">VOXEL_AXES</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_exam_tissue</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Return the exam's tissue, sampling it unless the exam's warm-up has."""</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_warming</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_warming</span><span class="o">.</span><span class="n">join</span><span class="p">()</span>
+        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_held</span><span class="p">:</span>
+            <span class="n">tissue</span><span class="p">,</span> <span class="n">exam</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_tissue</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_exams</span>
+        <span class="k">if</span> <span class="n">tissue</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">tissue</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">phantom</span><span class="o">.</span><span class="n">tissue</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">spacing</span><span class="p">,</span> <span class="n">field_t</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">field_t</span><span class="p">,</span> <span class="n">coil</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">coil</span>
+            <span class="p">)</span>
+            <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_held</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">exam</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">_exams</span><span class="p">:</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_tissue</span> <span class="o">=</span> <span class="n">tissue</span>
+        <span class="k">return</span> <span class="n">tissue</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_spacing</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">region</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">"""Return the finest spacing, from ``spacing`` up in steps of 1 mm, that keeps at most ``max_isochromats`` of the phantom's isochromats in ``region``.</span>
@@ -924,22 +984,36 @@
         <span class="k">return</span> <span class="n">default_phantom</span><span class="p">()</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_warm</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""Compute the field map of the exam's BrainWeb in a thread of its own, unless it has one or is computing it."""</span>
-        <span class="n">brain</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">phantom</span>
-        <span class="k">if</span> <span class="n">brain</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_brainweb</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">brain</span><span class="o">.</span><span class="n">susceptibility</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Compute, in a thread of its own, the field map of the exam's BrainWeb unless it has one, and the exam's tissue for the Fourier engine."""</span>
+        <span class="n">phantom</span><span class="p">,</span> <span class="n">coil</span><span class="p">,</span> <span class="n">earlier</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">phantom</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">coil</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_warming</span>
+        <span class="n">mapped</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">phantom</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_brainweb</span>
+            <span class="ow">or</span> <span class="ow">not</span> <span class="n">phantom</span><span class="o">.</span><span class="n">susceptibility</span>
+            <span class="ow">or</span> <span class="s2">"field_ppm"</span> <span class="ow">in</span> <span class="nb">vars</span><span class="p">(</span><span class="n">phantom</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="n">mapped</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">engine</span> <span class="o">!=</span> <span class="s2">"fourier"</span><span class="p">:</span>
             <span class="k">return</span>
-        <span class="k">if</span> <span class="s2">"field_ppm"</span> <span class="ow">in</span> <span class="nb">vars</span><span class="p">(</span><span class="n">brain</span><span class="p">)</span> <span class="ow">or</span> <span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_warming</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_warming</span><span class="o">.</span><span class="n">is_alive</span><span class="p">()</span>
-        <span class="p">):</span>
-            <span class="k">return</span>
+        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_held</span><span class="p">:</span>
+            <span class="n">exam</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_exams</span>
 
         <span class="k">def</span><span class="w"> </span><span class="nf">compute</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="c1"># A failure here is raised again by the scan that needs the map.</span>
+            <span class="k">if</span> <span class="n">earlier</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">earlier</span><span class="o">.</span><span class="n">join</span><span class="p">()</span>
+            <span class="c1"># A failure here is raised again by the scan that needs the map or</span>
+            <span class="c1"># the tissue.</span>
             <span class="k">with</span> <span class="n">contextlib</span><span class="o">.</span><span class="n">suppress</span><span class="p">(</span><span class="ne">Exception</span><span class="p">):</span>
-                <span class="n">brain</span><span class="o">.</span><span class="n">field_ppm</span>  <span class="c1"># noqa: B018</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="n">mapped</span><span class="p">:</span>
+                    <span class="n">phantom</span><span class="o">.</span><span class="n">field_ppm</span>  <span class="c1"># noqa: B018</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">engine</span> <span class="o">==</span> <span class="s2">"fourier"</span><span class="p">:</span>
+                    <span class="n">tissue</span> <span class="o">=</span> <span class="n">phantom</span><span class="o">.</span><span class="n">tissue</span><span class="p">(</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">spacing</span><span class="p">,</span> <span class="n">field_t</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">field_t</span><span class="p">,</span> <span class="n">coil</span><span class="o">=</span><span class="n">coil</span>
+                    <span class="p">)</span>
+                    <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_held</span><span class="p">:</span>
+                        <span class="k">if</span> <span class="n">exam</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">_exams</span><span class="p">:</span>
+                            <span class="bp">self</span><span class="o">.</span><span class="n">_tissue</span> <span class="o">=</span> <span class="n">tissue</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_warming</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Thread</span><span class="p">(</span>
-            <span class="n">target</span><span class="o">=</span><span class="n">compute</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">"pulserver-field"</span><span class="p">,</span> <span class="n">daemon</span><span class="o">=</span><span class="kc">True</span>
+            <span class="n">target</span><span class="o">=</span><span class="n">compute</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">"pulserver-warm"</span><span class="p">,</span> <span class="n">daemon</span><span class="o">=</span><span class="kc">True</span>
         <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_warming</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
 
@@ -965,6 +1039,7 @@
             <span class="n">rotation</span><span class="o">=</span><span class="n">rotation</span><span class="p">,</span>
             <span class="n">default_shim</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">coil</span><span class="o">.</span><span class="n">default_shim</span><span class="p">,</span>
             <span class="n">tolerance</span><span class="o">=</span><span class="n">TOLERANCE</span><span class="p">,</span>
+            <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
         <span class="p">)</span>
         <span class="n">stopped</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Event</span><span class="p">()</span>
 
@@ -1276,6 +1351,13 @@
         <span class="n">action</span><span class="o">=</span><span class="s2">"store_true"</span><span class="p">,</span>
         <span class="n">help</span><span class="o">=</span><span class="s2">"BrainWeb's tissue classes diffuse, as BrainWeb.DIFFUSION gives them"</span><span class="p">,</span>
     <span class="p">)</span>
+    <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span>
+        <span class="s2">"--engine"</span><span class="p">,</span>
+        <span class="n">choices</span><span class="o">=</span><span class="n">ENGINES</span><span class="p">,</span>
+        <span class="n">help</span><span class="o">=</span><span class="s2">"what a scan is simulated by: the Fourier engine on the phantom's "</span>
+        <span class="s2">"tissue, or the Bloch engine on its isochromats; the Fourier engine "</span>
+        <span class="s2">"unless the subject moves or diffuses"</span><span class="p">,</span>
+    <span class="p">)</span>
     <span class="n">motion_arguments</span><span class="p">(</span><span class="n">parser</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">parser</span>
 
@@ -1304,6 +1386,7 @@
         <span class="n">voxel</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">voxel</span><span class="p">,</span>
         <span class="n">diffusion</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">diffusion</span><span class="p">,</span>
         <span class="n">motion</span><span class="o">=</span><span class="n">subject_motion</span><span class="p">(</span><span class="n">args</span><span class="p">),</span>
+        <span class="n">engine</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">engine</span><span class="p">,</span>
     <span class="p">)</span>
     <span class="k">with</span> <span class="n">contextlib</span><span class="o">.</span><span class="n">suppress</span><span class="p">(</span><span class="ne">KeyboardInterrupt</span><span class="p">):</span>
         <span class="n">asyncio</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">serve</span><span class="p">(</span><span class="n">console</span><span class="p">,</span> <span class="n">args</span><span class="o">.</span><span class="n">host</span><span class="p">,</span> <span class="n">args</span><span class="o">.</span><span class="n">port</span><span class="p">,</span> <span class="n">args</span><span class="o">.</span><span class="n">origins</span><span class="p">))</span>

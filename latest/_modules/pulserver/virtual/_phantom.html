@@ -472,6 +472,7 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">math</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Sequence</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">TYPE_CHECKING</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">pypulseqpp</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pp</span>
@@ -480,6 +481,9 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">.</span><span class="w"> </span><span class="kn">import</span> <span class="n">_voxels</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">._coils</span><span class="w"> </span><span class="kn">import</span> <span class="n">Coil</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">._isochromats</span><span class="w"> </span><span class="kn">import</span> <span class="n">Isochromats</span>
+
+<span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">._tissue</span><span class="w"> </span><span class="kn">import</span> <span class="n">Tissue</span>
 
 
 <div class="viewcode-block" id="Ellipse">
@@ -688,6 +692,58 @@
             <span class="n">seed</span><span class="o">=</span><span class="n">rng</span><span class="p">,</span>
             <span class="n">threads</span><span class="o">=</span><span class="n">threads</span><span class="p">,</span>
             <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
+        <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="Phantom.tissue">
+<a class="viewcode-back" href="../../../generated/pulserver.virtual.Phantom.tissue.html#pulserver.virtual.Phantom.tissue">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">tissue</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">spacing</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">field_t</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">off_resonance_hz</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">,</span>
+        <span class="n">region</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">],</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">coil</span><span class="p">:</span> <span class="n">Coil</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tissue</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Return the phantom sampled for the Fourier engine, at the points :meth:`isochromats` samples it at.</span>
+
+<span class="sd">        Each point spans a square ``spacing`` wide in the ellipse's plane.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If an ellipse has a complex intensity, the phantom has a chemical</span>
+<span class="sd">            shift and ``field_t`` is not given, or it has coils of its own and</span>
+<span class="sd">            ``coil`` is given.</span>
+<span class="sd">        """</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">._tissue</span><span class="w"> </span><span class="kn">import</span> <span class="n">Tissue</span><span class="p">,</span> <span class="n">transmitted</span>
+
+        <span class="k">if</span> <span class="n">coil</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">coils</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">"a phantom received by coils of its own is not scanned with a coil"</span>
+            <span class="p">)</span>
+        <span class="n">_</span><span class="p">,</span> <span class="n">positions</span><span class="p">,</span> <span class="n">density</span><span class="p">,</span> <span class="n">t1</span><span class="p">,</span> <span class="n">t2</span><span class="p">,</span> <span class="n">frequency</span><span class="p">,</span> <span class="n">t2_prime</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sampled</span><span class="p">(</span>
+            <span class="n">spacing</span><span class="p">,</span> <span class="n">field_t</span><span class="p">,</span> <span class="n">off_resonance_hz</span><span class="p">,</span> <span class="n">region</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="n">coil</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">receive</span> <span class="o">=</span> <span class="k">lambda</span> <span class="n">points</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_received</span><span class="p">(</span>  <span class="c1"># noqa: E731</span>
+                <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">points</span><span class="p">)</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">_position</span><span class="p">)</span> <span class="o">@</span> <span class="bp">self</span><span class="o">.</span><span class="n">_rotation</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">receive</span> <span class="o">=</span> <span class="n">coil</span><span class="o">.</span><span class="n">receive</span>
+        <span class="k">return</span> <span class="n">Tissue</span><span class="p">(</span>
+            <span class="n">positions</span><span class="o">=</span><span class="n">positions</span><span class="p">,</span>
+            <span class="n">density</span><span class="o">=</span><span class="n">density</span><span class="p">,</span>
+            <span class="n">t1</span><span class="o">=</span><span class="n">t1</span><span class="p">,</span>
+            <span class="n">t2</span><span class="o">=</span><span class="n">t2</span><span class="p">,</span>
+            <span class="n">t2_prime</span><span class="o">=</span><span class="n">t2_prime</span><span class="p">,</span>
+            <span class="n">frequency</span><span class="o">=</span><span class="n">frequency</span><span class="p">,</span>
+            <span class="n">spacing</span><span class="o">=</span><span class="n">spacing</span><span class="p">,</span>
+            <span class="n">axes</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_rotation</span><span class="p">[:,</span> <span class="p">:</span><span class="mi">2</span><span class="p">]</span><span class="o">.</span><span class="n">T</span><span class="p">,</span>
+            <span class="n">transmit</span><span class="o">=</span><span class="kc">None</span> <span class="k">if</span> <span class="n">coil</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">transmitted</span><span class="p">(</span><span class="n">coil</span><span class="p">,</span> <span class="n">positions</span><span class="p">),</span>
+            <span class="n">receive</span><span class="o">=</span><span class="n">receive</span><span class="p">,</span>
+            <span class="n">coils</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">coils</span> <span class="k">if</span> <span class="n">coil</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">coil</span><span class="o">.</span><span class="n">receive_channels</span><span class="p">,</span>
         <span class="p">)</span></div>
 
 

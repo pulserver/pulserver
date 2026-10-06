@@ -18,6 +18,7 @@
    ~BrainWeb.isochromats
    ~BrainWeb.proton_density
    ~BrainWeb.relaxation
+   ~BrainWeb.tissue
 
 
 

@@ -234,6 +234,8 @@ from.
    simulate
    excited
    Slabs
+   FourierPlayer
+   Tissue
    Isochromats
    Repetitions
    RigidMotion

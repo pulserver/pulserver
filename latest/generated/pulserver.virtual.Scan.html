@@ -546,15 +546,17 @@
 <dt class="sig sig-object py" id="pulserver.virtual.Scan">
 <span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">pulserver.virtual.</span></span><span class="sig-name descname"><span class="pre">Scan</span></span><a class="reference internal" href="../_modules/pulserver/virtual/_stream.html#Scan"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.virtual.Scan" title="Link to this definition">#</a></dt>
 <dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/builtins/functions.html#object" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
-<p>The cache beside a sequence file played on isochromats, against a scan clock.</p>
-<p>The blocks are those <a class="reference internal" href="pulserver.virtual.simulate.html#pulserver.virtual.simulate" title="pulserver.virtual.simulate"><code class="xref py py-func docutils literal notranslate"><span class="pre">simulate()</span></code></a> plays, as it
-plays them, and they advance the magnetization of the isochromats from
-where it stands.</p>
+<p>The cache beside a sequence file played on isochromats or acquired by the Fourier engine, against a scan clock.</p>
+<p>On isochromats, the blocks are those <a class="reference internal" href="pulserver.virtual.simulate.html#pulserver.virtual.simulate" title="pulserver.virtual.simulate"><code class="xref py py-func docutils literal notranslate"><span class="pre">simulate()</span></code></a>
+plays, as it plays them, and they advance the magnetization of the
+isochromats from where it stands. On a phantom’s tissue, they are acquired
+as <a class="reference internal" href="pulserver.virtual.FourierPlayer.html#pulserver.virtual.FourierPlayer" title="pulserver.virtual.FourierPlayer"><code class="xref py py-class docutils literal notranslate"><span class="pre">FourierPlayer</span></code></a> acquires them.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>seq_path</strong> – The first file of the sequence’s chain, beside its cache.</p></li>
-<li><p><strong>isochromats</strong> – The isochromats scanned, positioned along the physical axes.</p></li>
+<li><p><strong>isochromats</strong> – The isochromats scanned, positioned along the physical axes, or the
+tissue the Fourier engine acquires.</p></li>
 <li><p><strong>cache_ext</strong> – The extension of the cache beside each file.</p></li>
 <li><p><strong>rotation</strong> – <code class="docutils literal notranslate"><span class="pre">(3,</span> <span class="pre">3)</span></code> rotation of the prescription from logical to physical axes,
 a reflection included; the identity by default.</p></li>
@@ -562,6 +564,8 @@ a reflection included; the identity by default.</p></li>
 <a class="reference internal" href="pulserver.virtual.simulate.html#pulserver.virtual.simulate" title="pulserver.virtual.simulate"><code class="xref py py-func docutils literal notranslate"><span class="pre">simulate()</span></code></a> takes them.</p></li>
 <li><p><strong>tolerance</strong> – The accuracy of the samples of runs of repetitions, as
 <a class="reference internal" href="pulserver.virtual.simulate.html#pulserver.virtual.simulate" title="pulserver.virtual.simulate"><code class="xref py py-func docutils literal notranslate"><span class="pre">simulate()</span></code></a> takes it.</p></li>
+<li><p><strong>device</strong> – Where the Fourier engine runs, as
+<a class="reference internal" href="pulserver.virtual.FourierPlayer.html#pulserver.virtual.FourierPlayer" title="pulserver.virtual.FourierPlayer"><code class="xref py py-class docutils literal notranslate"><span class="pre">FourierPlayer</span></code></a> takes it.</p></li>
 </ul>
 </dd>
 </dl>

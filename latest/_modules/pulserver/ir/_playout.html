@@ -503,6 +503,7 @@
     <span class="n">budget</span><span class="p">:</span> <span class="n">WaveBudget</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="o">*</span><span class="p">,</span>
     <span class="n">waveforms</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="n">pulses</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
     <span class="n">prescan</span><span class="p">:</span> <span class="n">Prescan</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">cache_ext</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">".pseg"</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
@@ -533,7 +534,9 @@
 <span class="sd">          ``(positions, 3, 2)`` into them; where it does, ``slot_offset``</span>
 <span class="sd">          ``(positions, slots, 3)``, ``slot_samples`` and ``slot_start_us``:</span>
 <span class="sd">          its ring of slots, or, with offsets -1, the span every resident wave</span>
-<span class="sd">          it plays covers;</span>
+<span class="sd">          it plays covers; and the RF pulse it prepares, at unit amplitude,</span>
+<span class="sd">          ``rf_time_us`` from the block's start and ``rf_waveform_hz``, with</span>
+<span class="sd">          ``rf_span`` ``(positions, 2)`` into them;</span>
 <span class="sd">        - ``blocks``: per played block, in play order, ``subsequence``,</span>
 <span class="sd">          ``segment``, ``position``, ``instance`` (instances of its segment</span>
 <span class="sd">          played before its own), ``slot`` (of its position's ring, -1 unless</span>
@@ -554,7 +557,8 @@
 <span class="sd">          the readout's phase modulation, and the gradients: the events its</span>
 <span class="sd">          position prepares at the block's amplitudes, or the samples its wave</span>
 <span class="sd">          reads at the centres of the raster intervals, the first and last</span>
-<span class="sd">          held over the half intervals at its two ends;</span>
+<span class="sd">          held over the half intervals at its two ends; without ``pulses``,</span>
+<span class="sd">          all but the RF pulse, which its position holds;</span>
 <span class="sd">        - ``instances`` and ``loads``: the segment instances played and the</span>
 <span class="sd">          loads into waveform memory;</span>
 <span class="sd">        - ``overwrites``: loads that wrote over memory the instance in play</span>
@@ -581,6 +585,7 @@
         <span class="n">_held</span><span class="p">(</span><span class="n">budget</span><span class="p">),</span>
         <span class="n">calibration</span><span class="p">,</span>
         <span class="n">waveforms</span><span class="p">,</span>
+        <span class="n">pulses</span><span class="p">,</span>
     <span class="p">)</span></div>
 
 </pre></div>

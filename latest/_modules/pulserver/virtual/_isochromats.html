@@ -484,10 +484,15 @@
 
 
 <span class="nd">@functools</span><span class="o">.</span><span class="n">cache</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">reads_lattice</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return whether a window under a changing gradient is read on the lattice through FINUFFT, rather than sample by sample."""</span>
+    <span class="k">return</span> <span class="n">_finufft</span><span class="o">.</span><span class="n">install</span><span class="p">(</span><span class="n">require</span><span class="p">(</span><span class="s2">"bloch"</span><span class="p">))</span>
+
+
+<span class="nd">@functools</span><span class="o">.</span><span class="n">cache</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">_kernels</span><span class="p">():</span>
-    <span class="n">kernels</span> <span class="o">=</span> <span class="n">require</span><span class="p">(</span><span class="s2">"bloch"</span><span class="p">)</span>
-    <span class="n">_finufft</span><span class="o">.</span><span class="n">install</span><span class="p">(</span><span class="n">kernels</span><span class="p">)</span>
-    <span class="k">return</span> <span class="n">kernels</span>
+    <span class="n">reads_lattice</span><span class="p">()</span>
+    <span class="k">return</span> <span class="n">require</span><span class="p">(</span><span class="s2">"bloch"</span><span class="p">)</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_per_isochromat</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">count</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
