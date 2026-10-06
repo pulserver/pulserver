@@ -104,10 +104,18 @@ if triton is not None:
                     read = held[:, None] & (coil[None, :] < coils)
                     r_re = tl.trans(tl.load(receive_ptr + at, mask=read, other=0.0))
                     r_im = tl.trans(tl.load(receive_ptr + at + 1, mask=read, other=0.0))
-                    sum_re = tl.dot(r_re, f_re, sum_re, input_precision="ieee")
-                    sum_re = tl.dot(-r_im, f_im, sum_re, input_precision="ieee")
-                    sum_im = tl.dot(r_re, f_im, sum_im, input_precision="ieee")
-                    sum_im = tl.dot(r_im, f_re, sum_im, input_precision="ieee")
+                    sum_re = tl.dot(
+                        r_re, f_re, sum_re, input_precision="ieee", out_dtype=real
+                    )
+                    sum_re = tl.dot(
+                        -r_im, f_im, sum_re, input_precision="ieee", out_dtype=real
+                    )
+                    sum_im = tl.dot(
+                        r_re, f_im, sum_im, input_precision="ieee", out_dtype=real
+                    )
+                    sum_im = tl.dot(
+                        r_im, f_re, sum_im, input_precision="ieee", out_dtype=real
+                    )
                 out = 2 * (
                     (coil[:, None].to(tl.int64) * count + node[None, :]) * points + q
                 )
@@ -264,10 +272,18 @@ if triton is not None:
                     )
                     a_re = r_re * m_re[None, :] - r_im * m_im[None, :]
                     a_im = r_re * m_im[None, :] + r_im * m_re[None, :]
-                    sum_re = tl.dot(a_re, e_re, sum_re, input_precision="ieee")
-                    sum_re = tl.dot(-a_im, e_im, sum_re, input_precision="ieee")
-                    sum_im = tl.dot(a_re, e_im, sum_im, input_precision="ieee")
-                    sum_im = tl.dot(a_im, e_re, sum_im, input_precision="ieee")
+                    sum_re = tl.dot(
+                        a_re, e_re, sum_re, input_precision="ieee", out_dtype=real
+                    )
+                    sum_re = tl.dot(
+                        -a_im, e_im, sum_re, input_precision="ieee", out_dtype=real
+                    )
+                    sum_im = tl.dot(
+                        a_re, e_im, sum_im, input_precision="ieee", out_dtype=real
+                    )
+                    sum_im = tl.dot(
+                        a_im, e_re, sum_im, input_precision="ieee", out_dtype=real
+                    )
         if ONE:
             out = 2 * (split.to(tl.int64) * samples + s)
             tl.store(partial_ptr + out, sum_re, mask=sampled)
@@ -538,10 +554,14 @@ class Device:
         by sample; smaller windows are left to the engine. :data:`SMALLEST`
         on a CUDA device and 0 on the CPU without it.
     smallest_run : int, default=None
-        Least slots times coils of a run carried here; smaller runs, and runs
-        whose slots take more than half the memory free on a CUDA device, are
-        left to the engine. :data:`SMALLEST_RUN` on a CUDA device and 0 on
-        the CPU without it.
+        Least slots times coils of a run carried here; smaller runs are left
+        to the engine. :data:`SMALLEST_RUN` on a CUDA device and 0 on the CPU
+        without it.
+    run_memory : int, default=None
+        Most bytes a run takes on the device at once: half the memory free
+        when the run begins on a CUDA device, and as many as its slots take on
+        the CPU, without it. A run of more is held in parts, those that do
+        not fit waiting in pinned host memory between tiles.
     profile : bool, default=False
         Time each stage of every window, waiting for the device between
         them, into :attr:`stages`, in s.
@@ -561,6 +581,7 @@ class Device:
         memory: int | None = None,
         smallest: int | None = None,
         smallest_run: int | None = None,
+        run_memory: int | None = None,
         profile=False,
     ):
         if triton is None:
@@ -597,6 +618,7 @@ class Device:
         if smallest_run is None:
             smallest_run = SMALLEST_RUN if self.device.type == "cuda" else 0
         self.smallest_run = smallest_run
+        self.run_memory = run_memory
         self._runs: dict[int, _carry.Run] = {}
         self._engines: OrderedDict[int, _Engine] = OrderedDict()
         self._processors = None
@@ -788,19 +810,18 @@ class Device:
         """Take the slots of ``run``, as the engine hands them at its first play; whether they were taken.
 
         A run without windows, unless its first block's pulse is read off
-        tables, one smaller than :attr:`smallest_run`, and one that does not
-        fit in half the memory free on a CUDA device are left to the engine.
+        tables, and one smaller than :attr:`smallest_run` are left to the
+        engine; one larger than :attr:`run_memory` is carried in parts.
         """
         if not len(run["cells"]) and run.get("pulse") is None:
             return False
         if int(run["slots"]) * max(int(run["coils"]), 1) < self.smallest_run:
             return False
-        if self.device.type == "cuda":
-            free = torch.cuda.mem_get_info(self.device)[0]
-            if _carry.bytes_for(run) > free // 2:
-                return False
+        memory = self.run_memory
+        if memory is None and self.device.type == "cuda":
+            memory = torch.cuda.mem_get_info(self.device)[0] // 2
         began = self._clock()
-        self._runs[run["run"]] = _carry.Run(run, self.device)
+        self._runs[run["run"]] = _carry.Run(run, self.device, memory)
         self._lap("upload", began)
         return True
 

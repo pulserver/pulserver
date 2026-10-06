@@ -67,6 +67,8 @@ def test_a_headless_scan_records_the_series_the_virtual_scanner_acquires(
             str(mrd),
             "--sound",
             str(sound),
+            "--voxel",
+            "point",
             "--engine",
             "bloch",
         ]
@@ -336,6 +338,37 @@ def test_a_subject_without_a_nod_or_a_drift_is_at_rest():
     assert _motion() is None
     with pytest.raises(ValueError, match="period"):
         _motion("--nod", "2", "0")
+
+
+def test_a_headless_scan_spreads_two_jittered_isochromats_along_each_axis_by_default(
+    tmp_path, capsys, monkeypatch
+):
+    shutil.copytree(FIXTURES, tmp_path, dirs_exist_ok=True)
+    built = {}
+    build = virtual.Phantom.isochromats
+
+    def isochromats(self, spacing, **options):
+        built.update(options)
+        return build(self, spacing, **options)
+
+    monkeypatch.setattr(virtual.Phantom, "isochromats", isochromats)
+    status = main(
+        [
+            "--seq",
+            str(tmp_path / "gre_2d_3sl.seq"),
+            "--limits",
+            str(_limits(tmp_path / "limits.txt", FIXTURE_LIMITS)),
+            "--store",
+            str(tmp_path / "designs"),
+            "--spacing",
+            "4",
+            "--coils",
+            "1",
+        ]
+    )
+
+    assert status == 0
+    assert (built["spins"], built["voxel"]) == (4, "jittered")
 
 
 def test_a_headless_scan_samples_moves_and_diffuses_the_subject_as_its_options_say(

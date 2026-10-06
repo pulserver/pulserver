@@ -412,8 +412,13 @@ writes the magnetisation back to the engine at the end of each play and takes
 the engine's where the run resumes.
 Transients are dropped as the engine drops them, and once more than a quarter
 have been dropped the device keeps only the rest. A run of fewer than
-$2^{18}$ isochromats times coils, by default, and one whose arrays would take
-more than half the memory free on the device, are carried by the engine.
+$2^{18}$ isochromats times coils, by default, is carried by the engine. A run
+whose arrays would take more than its memory, half the memory free on the
+device by default, is held in parts of an eighth of it: as many parts as fit
+stay on the device, and the rest wait in pinned host memory and cross to the
+device for each tile, their magnetisation alone coming back; each grid is the
+sum of every part's spreading, and a part keeps only its own slots once a
+quarter of them have been dropped.
 
 ## Voxels, motion and diffusion
 
@@ -432,6 +437,13 @@ one of its axes, and not a multiple of $m$, leaves the voxel no signal, as it
 leaves a uniform voxel none; a point voxel, and a lattice of them, keeps its
 signal under any such winding. The cells of all voxels lie on one lattice,
 $m$ times finer, on which windows under a changing gradient are still read.
+A `"jittered"` voxel has the box's cells and moves each isochromat anywhere in
+its own, drawn per isochromat from the seed. Every box voxel holds its
+isochromats at the same offsets, so a coherence the gradients leave
+undephased at those offsets survives in every voxel alike, at any $m$; in
+jittered voxels it survives at different offsets in each, and the voxels add
+it incoherently, as a spread that falls as $1/\sqrt{m^d}$. Off the lattice,
+a window under a changing gradient is summed sample by sample.
 
 *Frequency.* T2′ is the decay of a voxel's signal by a static distribution of
 frequencies within it, which a spin echo refocuses. A Lorentzian line of half

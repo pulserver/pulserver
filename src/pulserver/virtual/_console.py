@@ -18,6 +18,7 @@ from typing import Any
 import numpy as np
 
 from .._plugins import PluginPath, directories, names, recon_names
+from . import _voxels
 from ._command import motion_arguments, reconstruction_plugin, subject_motion
 
 #: The design calls a console forwards, answered as ``pulserver design`` answers them.
@@ -144,10 +145,13 @@ class Console:
         carried on, as :class:`~pulserver.virtual.Isochromats` takes it; the
         engine does both itself without one.
     spins
-        Isochromats per voxel, spread over the T2' line of its tissue.
+        Isochromats per voxel, spread over the T2' line of its tissue; two
+        along each axis the exam's phantom's voxel spans
+        (``VOXEL_AXES``) without it, one for a ``"point"`` voxel.
     voxel
-        Where a voxel's isochromats lie: ``"point"``, at its centre, or
-        ``"box"``, over it, as the phantom's ``isochromats`` places them.
+        Where a voxel's isochromats lie: ``"point"``, at its centre,
+        ``"box"``, at the centres of cells filling it, or ``"jittered"``,
+        anywhere in each cell, as the phantom's ``isochromats`` places them.
     diffusion
         Whether BrainWeb's tissue classes diffuse, as
         :attr:`~pulserver.virtual.BrainWeb.DIFFUSION` gives them.
@@ -184,8 +188,8 @@ class Console:
         fields: Path | str | None = None,
         speed: float | None = None,
         device: str | None = None,
-        spins: int = 1,
-        voxel: str = "point",
+        spins: int | None = None,
+        voxel: str = "jittered",
         diffusion: bool = False,
         motion: Any = None,
         engine: str | None = None,
@@ -411,7 +415,7 @@ class Console:
                 field_t=self.field_t,
                 region=region,
                 coil=self.coil,
-                spins=self.spins,
+                spins=self._spins(),
                 voxel=self.voxel,
                 motion=self.motion,
                 seed=0,
@@ -425,6 +429,9 @@ class Console:
             with self._held:
                 if exam == self._exams:
                     self._isochromats = (region, isochromats)
+
+    def _spins(self) -> int:
+        return _voxels.spins_for(self.spins, self.voxel, self.phantom.VOXEL_AXES)
 
     def _exam_tissue(self) -> Any:
         """Return the exam's tissue, sampling it unless the exam's warm-up has."""
@@ -454,7 +461,7 @@ class Console:
         for step in range(_COARSER):
             spacing = self.spacing + 1e-3 * step
             kept = self.phantom.count(
-                spacing, field_t=self.field_t, region=region, spins=self.spins
+                spacing, field_t=self.field_t, region=region, spins=self._spins()
             )
             if kept <= self.max_isochromats:
                 return spacing
@@ -839,15 +846,16 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--spins",
         type=int,
-        default=1,
-        help="isochromats per voxel, spread over the T2' line of its tissue",
+        help="isochromats per voxel, spread over the T2' line of its tissue; "
+        "two along each axis of the voxel without it, one for a point voxel",
     )
     parser.add_argument(
         "--voxel",
-        choices=("point", "box"),
-        default="point",
-        help="where a voxel's isochromats lie: at its centre, or over it, "
-        "--spins a square number for the vials and a cube for BrainWeb",
+        choices=("point", "box", "jittered"),
+        default="jittered",
+        help="where a voxel's isochromats lie: at its centre, at the centres of "
+        "cells filling it, or anywhere in each cell, --spins a square number for "
+        "the vials and a cube for BrainWeb",
     )
     parser.add_argument(
         "--diffusion",
