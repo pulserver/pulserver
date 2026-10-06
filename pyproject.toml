@@ -20,6 +20,7 @@ classifiers = [
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
 ]
 
 dependencies = [
@@ -41,6 +42,7 @@ design = ["pypulseqpp[design]>=0.0.29"]
 dev = [
   "pytest>=9.1.1",
   "pytest-cov>=7.1.0",
+  "pytest-xdist>=3",
   "coverage>=7.16.2",
   # Pinned, not ranged: a formatter that differs between a contributor and
   # CI makes "one entry point" a lie. Dependabot proposes the bumps.

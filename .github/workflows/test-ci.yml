@@ -1,7 +1,9 @@
 name: Tests
 
 on:
+  # A branch is tested once, through its pull request.
   push:
+    branches: [main]
   pull_request:
   workflow_dispatch:
 
@@ -21,7 +23,7 @@ jobs:
         os: [ubuntu-latest, macos-14]
         # The floor and the ceiling of the supported band: an intermediate
         # release that fails on neither is not a plausible failure.
-        python-version: ["3.10", "3.13"]
+        python-version: ["3.10", "3.14"]
     steps:
       - uses: actions/checkout@v7
         with:
@@ -47,9 +49,15 @@ jobs:
           fi
           python -m pip install .[dev]
 
-      # -ra so a skip is visible rather than reading as a pass.
+      # -ra so a skip is visible rather than reading as a pass. One worker per
+      # core, each held to one thread, or every worker's pool spreads over
+      # every core and they contend.
       - name: Run the tests
-        run: pytest -q -ra --cov --cov-report=xml
+        env:
+          OMP_NUM_THREADS: 1
+          OPENBLAS_NUM_THREADS: 1
+          MKL_NUM_THREADS: 1
+        run: pytest -q -ra -n auto --cov --cov-report=xml
 
       - uses: codecov/codecov-action@v7
         if: runner.os == 'Linux'
