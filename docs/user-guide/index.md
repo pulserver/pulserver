@@ -92,7 +92,8 @@ not through a public issue.
 
 ## Safety
 
-Pulserver designs, converts and reconstructs; it performs no safety check of
-its own. The timing, gradient, PNS, mechanical-resonance and SAR checks of
-pypulseqpp compute estimates. Passing these checks does not establish scanner
-or patient safety.
+Pulserver designs, converts and reconstructs. Before it writes a cache it
+runs pypulseqpp's timing, gradient, PNS, mechanical-resonance and sound
+pressure checks; the interpreter computes SAR and gradient and RF heating
+with the scanner's own routines. These checks compute estimates. Passing them
+does not establish scanner or patient safety.

@@ -270,6 +270,12 @@ typedef struct pulseq_reserved_definitions
      *  matrix; 0 when no VOPs were given. */
     PULSEQ_REAL vop_sar_ratio;
     PULSEQ_REAL vop_global_sar_ratio;
+    /** Computed by the host, not declared by the file: the peak sound
+     *  pressure level in dB and the A-weighted average in dB(A) of the
+     *  loudest repetition played without end; -1 when no acoustic response
+     *  was given. */
+    PULSEQ_REAL spl_peak_db;
+    PULSEQ_REAL spl_average_dba;
     /** Computed by the host, not declared by the file: blocks per repetition,
      *  counted from the first block, as pypulseqpp's Sequence.repetition
      *  finds it; the whole table when the sequence does not repeat. */

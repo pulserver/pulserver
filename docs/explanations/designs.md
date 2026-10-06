@@ -101,11 +101,22 @@ Before a chain is converted, {func}`~pulserver.ir.check` runs pypulseqpp's
 timing check, gradient continuity included, and its gradient amplitude and
 slew-rate checks on every file, against the gradient limits, dead times and
 ringdown time of the scanner. Where the call's limits carry them
-({class}`~pulserver.ir.CheckLimits`), it also runs pypulseqpp's PNS check
-under the scanner's nerve model and its mechanical-resonance check against the
-scanner's forbidden gradient bands. The waveforms are timed by the rasters the
+({class}`~pulserver.ir.CheckLimits`), it also runs pypulseqpp's PNS check under
+the scanner's nerve model, its mechanical-resonance check against the scanner's
+forbidden gradient bands, and its sound pressure check through the gradient
+coil's acoustic transfer function. The waveforms are timed by the rasters the
 file declares. The interpreter passes these limits with every design call
-({doc}`../user-guide/running`); it computes the SAR and the gradient heating.
+({doc}`../user-guide/running`); it computes the SAR and the gradient and RF
+heating.
+
+The sound pressure check filters each file's repetition of most gradient
+energy, the one {func}`~pulserver.ir.repetition_gradients` reads from the
+cache, through the transfer function of each physical axis, as a periodic
+waveform: the levels are those of the steady state the repetition reaches when
+it is played back to back. The peak level is held to 140 dB and the A-weighted
+average to 99 dB(A), the limits of IEC 60601-2-33, and both are written into
+the cache ({class}`~pulserver.ir.SplLevels`), where the interpreter reads them;
+a cache written without a transfer function carries -1.
 
 No design is stored for a generated design or an imported chain that fails a
 check: `generate` and `import` reply with the problems, as they do with a

@@ -343,6 +343,8 @@ def conversion_payload(sequence: Any, system: pp.Opts) -> dict[str, Any]:
             ),
             "vop_sar_ratio": 0.0,
             "vop_global_sar_ratio": 0.0,
+            "spl_peak_db": -1.0,
+            "spl_average_dba": -1.0,
             "repetition_size": _repetition_size(sequence),
             "name": str(declared.get("Name", "")),
             "next_sequence": str(declared.get("NextSequence", "")),

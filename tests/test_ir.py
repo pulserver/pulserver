@@ -338,6 +338,39 @@ def test_each_file_of_a_chain_carries_its_sar_ratios_into_the_cache(tmp_path):
     ] == ratios
 
 
+def test_each_file_of_a_chain_carries_its_sound_pressure_levels_into_the_cache(
+    tmp_path,
+):
+    first = _prescan_chain(tmp_path / "sequence.seq")
+    levels = [ir.SplLevels(80.5, 60.25), ir.SplLevels(112.0, 95.5)]
+    convert(first, SYSTEM, spl_levels=levels)
+    loaded = summary(first, SYSTEM, cache_ext=".pseg")["subsequences"]
+    assert [ir.SplLevels(x["spl_peak_db"], x["spl_average_dba"]) for x in loaded] == (
+        levels
+    )
+
+
+def test_a_cache_written_without_sound_pressure_levels_reads_minus_one(tmp_path):
+    first = _prescan_chain(tmp_path / "sequence.seq")
+    convert(first, SYSTEM)
+    loaded = summary(first, SYSTEM, cache_ext=".pseg")["subsequences"]
+    assert {(x["spl_peak_db"], x["spl_average_dba"]) for x in loaded} == {(-1.0, -1.0)}
+
+
+def test_a_file_without_gradients_carries_zero_db_not_the_absent_mark(tmp_path):
+    first = _prescan_chain(tmp_path / "sequence.seq")
+    silent = ir.SplLevels(float("-inf"), float("-inf"))
+    convert(first, SYSTEM, spl_levels=[silent, silent])
+    loaded = summary(first, SYSTEM, cache_ext=".pseg")["subsequences"]
+    assert {(x["spl_peak_db"], x["spl_average_dba"]) for x in loaded} == {(0.0, 0.0)}
+
+
+def test_a_chain_takes_one_set_of_sound_pressure_levels_per_file(tmp_path):
+    first = _prescan_chain(tmp_path / "sequence.seq")
+    with pytest.raises(ValueError, match="one set of sound pressure levels per file"):
+        convert(first, SYSTEM, spl_levels=[ir.SplLevels(1.0, 1.0)])
+
+
 def test_a_chain_takes_one_sar_ratio_per_file(tmp_path):
     first = _prescan_chain(tmp_path / "sequence.seq")
     with pytest.raises(ValueError, match="one SAR ratio per file"):
@@ -356,7 +389,8 @@ def _reader_lines(s):
             f"subsequence {i} num_trs {x['num_trs']} tr_size {x['tr_size']} "
             f"num_unique_adcs {x['num_unique_adcs']} num_unique_rf {x['num_unique_rf']} "
             f"vop_sar_ratio {x['vop_sar_ratio']:g} "
-            f"vop_global_sar_ratio {x['vop_global_sar_ratio']:g}"
+            f"vop_global_sar_ratio {x['vop_global_sar_ratio']:g} "
+            f"spl_peak_db {x['spl_peak_db']:g} spl_average_dba {x['spl_average_dba']:g}"
         )
         lines += [
             f"group {i} {n} trid {g['trid']} num_instances {g['num_instances']} "
@@ -692,7 +726,31 @@ def test_the_scanner_reader_reads_the_sar_ratios_a_cache_carries(
         check=True,
     ).stdout
     (line,) = (x for x in printed.splitlines() if x.startswith("subsequence 0 "))
-    assert line.endswith("vop_sar_ratio 0.75 vop_global_sar_ratio 0.5")
+    assert line.endswith(
+        "vop_sar_ratio 0.75 vop_global_sar_ratio 0.5 spl_peak_db -1 spl_average_dba -1"
+    )
+
+
+def test_the_scanner_reader_reads_the_sound_pressure_levels_a_cache_carries(
+    tmp_path, scanner_reader
+):
+    seq = _copy("gre_2d_3sl.seq", tmp_path)
+    cache = convert(
+        seq,
+        SYSTEM,
+        vendor=VENDOR,
+        label_column_map=LABELS,
+        cache_ext=".cache",
+        spl_levels=[ir.SplLevels(112.5, 96.25)],
+    )
+    printed = subprocess.run(
+        [str(scanner_reader), str(cache), str(seq.stat().st_size)],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    (line,) = (x for x in printed.splitlines() if x.startswith("subsequence 0 "))
+    assert line.endswith("spl_peak_db 112.5 spl_average_dba 96.25")
 
 
 def _readouts(sequence):

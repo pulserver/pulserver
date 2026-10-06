@@ -1,6 +1,6 @@
 """Conversion of a Pulseq sequence into the scanner's segmented binary IR."""
 
-from ._checks import CheckLimits, SarRatio, check, sar_ratios
+from ._checks import CheckLimits, SarRatio, SplLevels, check, sar_ratios, spl_levels
 from ._convert import (
     Format,
     Grouping,
@@ -26,6 +26,7 @@ __all__ = [
     "Prescan",
     "Quantity",
     "SarRatio",
+    "SplLevels",
     "VendorProfile",
     "WaveBudget",
     "cache_path",
@@ -41,5 +42,6 @@ __all__ = [
     "repetition_gradients",
     "sample_wave",
     "sar_ratios",
+    "spl_levels",
     "summary",
 ]

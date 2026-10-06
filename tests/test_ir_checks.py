@@ -212,3 +212,61 @@ def test_the_checks_apply_no_sar_limit(tmp_path, one_channel):
 def test_a_rotation_that_is_not_orthonormal_is_refused(diagonal):
     with pytest.raises(ValueError, match="not orthonormal"):
         ir.check(diagonal, SYSTEM, rotation=np.diag([1.0, 1.0, 1.01]))
+
+
+def _heard_on(axis, gain=1.0):
+    """An acoustic response of ``gain`` Pa per mT/m on one physical axis, to 20 kHz."""
+    transfer = np.zeros((3, 4001), complex)
+    transfer["xyz".index(axis)] = gain
+    return safety.AcousticResponse(transfer, 5.0)
+
+
+def test_a_repetition_too_loud_on_the_physical_axis_it_plays_on_is_refused(train):
+    limits = ir.CheckLimits(acoustic=_heard_on("y"))
+    assert ir.check(train, SYSTEM, limits=limits) == []
+    problems = ir.check(train, SYSTEM, rotation=QUARTER, limits=limits)
+    assert [p.split(" of ")[0] for p in problems] == [
+        "A-weighted average sound pressure level"
+    ]
+    assert "played without end exceeds 99 dB(A)" in problems[0]
+
+
+def test_the_levels_the_cache_carries_are_those_the_check_holds_to_its_limits(train):
+    limits = ir.CheckLimits(acoustic=_heard_on("y"))
+    (carried,) = ir.spl_levels(train, SYSTEM, limits, rotation=QUARTER)
+    (sequence,) = (s for _, s in ir._checks._read(train))
+    pp.TransformFOV(rotation=QUARTER).apply_to_sequence(sequence, in_place=True)
+    _, checked = safety.check_spl(sequence, limits.acoustic, system=SYSTEM)
+    assert carried.peak_db == pytest.approx(checked.peak, abs=1e-9)
+    assert carried.average_dba == pytest.approx(checked.average, abs=1e-9)
+
+
+def test_an_acoustic_file_is_read_once_per_check_at_its_interval(tmp_path, train):
+    import h5py
+
+    path = tmp_path / "response.h5"
+    with h5py.File(path, "w") as held:
+        for axis in "XYZ":
+            held[f"{axis}_AXIS_TRANSFER_FUNCTION"] = np.stack(
+                [np.full(4096, 10.0), np.zeros(4096)]
+            )
+    limits = ir.CheckLimits(acoustic=path, acoustic_interval=30e-6)
+    assert limits.acoustic_response().frequency_step == pytest.approx(
+        1 / (4096 * 30e-6)
+    )
+    assert ir.check(train, SYSTEM, limits=limits)
+
+
+def test_an_acoustic_file_without_its_interval_is_refused(tmp_path):
+    with pytest.raises(ValueError, match="acoustic_interval"):
+        ir.CheckLimits(acoustic=tmp_path / "response.h5")
+
+
+def test_levels_handed_to_the_check_are_held_to_its_limits_in_place_of_a_response(
+    train,
+):
+    levels = [ir.SplLevels(150.0, 80.0, (1, 2))]
+    assert ir.check(train, SYSTEM, spl_levels=levels) == [
+        "peak sound pressure level of 150.0 dB over blocks 1-2 played without end "
+        "exceeds 140 dB"
+    ]

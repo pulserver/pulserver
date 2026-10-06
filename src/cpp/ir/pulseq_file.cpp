@@ -60,6 +60,8 @@ static void seq_file_set_defaults(pulseq_file *seq)
 
     INIT_LIBRARY(seq, definitions_library, num_definitions, is_definitions_library_parsed);
     memset(&seq->reserved_definitions_library, 0, sizeof(seq->reserved_definitions_library));
+    seq->reserved_definitions_library.spl_peak_db = -1.0;
+    seq->reserved_definitions_library.spl_average_dba = -1.0;
 
     seq->num_blocks = 0;
     seq->is_block_library_parsed = 0;

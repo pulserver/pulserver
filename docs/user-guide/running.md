@@ -136,12 +136,15 @@ the gradient heating.
 | `vop_file` | `.mat` or `.npz` file of VOPs and, optionally, a global SAR matrix, at a path the design calls can read |
 | `vop_drive_per_hz` | Channel drive per Hz of RF amplitude, one per channel separated by spaces; a scale common to every channel cancels, and equal drives when left out |
 | `vop_default_shim` | Magnitude and phase in rad of each channel's weight for a pulse played without an RF shim, separated by spaces; equal weights when left out |
+| `acoustic_file` | HDF5 file of the gradient coil's acoustic transfer function, at a path the design calls can read; the peak and A-weighted average sound pressure levels are held to those of IEC 60601-2-33 and written into the cache |
+| `acoustic_interval_us` | Sampling interval in µs the bins of `acoustic_file` refer to; given with it |
 
 A band given no amplitude is held to the `min_threshold` of
-`pypulseqpp.safety.check_mech_resonance`. The gradient, PNS and resonance
-checks are made in the physical frame of the prescription rotation each
-request carries. A call refuses limits it cannot read, and a design is
-identified with the contents of the VOP file as well as its path.
+`pypulseqpp.safety.check_mech_resonance`. The gradient, PNS, resonance and
+sound pressure checks are made in the physical frame of the prescription
+rotation each request carries. A call refuses limits it cannot read, and a
+design is identified with the contents of the VOP and acoustic files as well
+as their paths.
 
 A plugin can be exercised without a scanner through
 {func}`~pulserver.host.call`, which answers a call in the calling process:
