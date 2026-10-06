@@ -114,6 +114,13 @@ def _parser() -> argparse.ArgumentParser:
         help="BrainWeb's tissue classes diffuse, as BrainWeb.DIFFUSION gives them; "
         "a phantom of ellipses diffuses as its file gives it",
     )
+    parser.add_argument(
+        "--engine",
+        choices=("fourier", "bloch"),
+        help="what the scan is simulated by: the Fourier engine on the phantom's "
+        "tissue, or the Bloch engine on its isochromats; the Fourier engine "
+        "unless the subject moves or diffuses",
+    )
     motion_arguments(parser)
     receivers = parser.add_mutually_exclusive_group()
     receivers.add_argument(
@@ -431,24 +438,38 @@ def _scan(
     rotation, _ = prescription(args)
     field = float(parse_limits(args.limits.read_text())["B0"])
     coil = None if args.coil is None else COILS[args.coil]
-    tissue = _phantom(args)
+    phantom = _phantom(args)
     sequence = DesignStore(store).directory(design) / "sequence.seq"
-    scan = Scan(
-        sequence,
-        tissue.isochromats(
+    region = excited(sequence, rotation)
+    motion = subject_motion(args)
+    modelled = motion is None and not args.diffusion
+    engine = args.engine or ("fourier" if modelled else "bloch")
+    if engine == "fourier" and not modelled:
+        raise SystemExit(
+            "the Fourier engine models no motion or diffusion: --engine bloch"
+        )
+    scanned = (
+        phantom.tissue(1e-3 * args.spacing, field_t=field, region=region, coil=coil)
+        if engine == "fourier"
+        else phantom.isochromats(
             1e-3 * args.spacing,
             field_t=field,
-            region=excited(sequence, rotation),
+            region=region,
             coil=coil,
             spins=args.spins,
             voxel=args.voxel,
-            motion=subject_motion(args),
+            motion=motion,
             seed=0,
             device=args.device,
-        ),
+        )
+    )
+    scan = Scan(
+        sequence,
+        scanned,
         rotation=rotation,
         default_shim=None if coil is None else coil.default_shim,
         tolerance=TOLERANCE,
+        device=args.device,
     )
     series = {
         "frequency_hz": pp.Opts().gamma * field,

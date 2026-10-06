@@ -19,6 +19,7 @@ import pypulseqpp as pp
 
 from ._bloch import Player, _gradients
 from ._isochromats import Isochromats
+from ._tissue import Tissue
 
 #: MATLAB Pulseq's audio sample rate, the default of ``pypulseqpp.gradient_sound``, in Hz.
 SAMPLE_RATE = 44100.0
@@ -60,18 +61,20 @@ class Chunk:
 
 
 class Scan:
-    """The cache beside a sequence file played on isochromats, against a scan clock.
+    """The cache beside a sequence file played on isochromats or acquired by the Fourier engine, against a scan clock.
 
-    The blocks are those :func:`~pulserver.virtual.simulate` plays, as it
-    plays them, and they advance the magnetization of the isochromats from
-    where it stands.
+    On isochromats, the blocks are those :func:`~pulserver.virtual.simulate`
+    plays, as it plays them, and they advance the magnetization of the
+    isochromats from where it stands. On a phantom's tissue, they are acquired
+    as :class:`~pulserver.virtual.FourierPlayer` acquires them.
 
     Parameters
     ----------
     seq_path
         The first file of the sequence's chain, beside its cache.
     isochromats
-        The isochromats scanned, positioned along the physical axes.
+        The isochromats scanned, positioned along the physical axes, or the
+        tissue the Fourier engine acquires.
     cache_ext
         The extension of the cache beside each file.
     rotation
@@ -83,26 +86,37 @@ class Scan:
     tolerance
         The accuracy of the samples of runs of repetitions, as
         :func:`~pulserver.virtual.simulate` takes it.
+    device
+        Where the Fourier engine runs, as
+        :class:`~pulserver.virtual.FourierPlayer` takes it.
     """
 
     def __init__(
         self,
         seq_path: Path | str,
-        isochromats: Isochromats,
+        isochromats: Isochromats | Tissue,
         cache_ext: str = ".pseg",
         *,
         rotation: np.ndarray | None = None,
         default_shim: np.ndarray | None = None,
         tolerance: float = 0.0,
+        device: str | None = None,
     ) -> None:
-        self._player = Player(
-            seq_path,
-            isochromats,
-            cache_ext,
-            rotation=rotation,
-            default_shim=default_shim,
-            tolerance=tolerance,
-        )
+        if isinstance(isochromats, Tissue):
+            from ._fourier import FourierPlayer
+
+            self._player = FourierPlayer(
+                seq_path, isochromats, cache_ext, rotation=rotation, device=device
+            )
+        else:
+            self._player = Player(
+                seq_path,
+                isochromats,
+                cache_ext,
+                rotation=rotation,
+                default_shim=default_shim,
+                tolerance=tolerance,
+            )
         self._played = self._player.played
         self._turn = None if rotation is None else np.asarray(rotation, dtype=float)
         durations = 1e-6 * self._played["duration_us"].astype(float)

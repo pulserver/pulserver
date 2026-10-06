@@ -7,12 +7,16 @@ import math
 from collections.abc import Callable, Mapping
 from pathlib import Path
 from types import MappingProxyType
+from typing import TYPE_CHECKING
 
 import numpy as np
 import pypulseqpp as pp
 
 from . import _voxels
 from ._coils import Coil
+
+if TYPE_CHECKING:
+    from ._tissue import Tissue
 from ._isochromats import Isochromats
 from ._phantom import Phantom
 from ._region import Slabs
@@ -318,6 +322,48 @@ class BrainWeb:
             seed=rng,
             threads=threads,
             device=device,
+        )
+
+    def tissue(
+        self,
+        spacing: float = 1e-3,
+        *,
+        field_t: float | None = None,
+        off_resonance_hz: float = 0.0,
+        region: Callable[[np.ndarray, np.ndarray], np.ndarray] | None = None,
+        coil: Coil | None = None,
+    ) -> Tissue:
+        """Return the brain sampled for the Fourier engine: each tissue of each cube :meth:`isochromats` averages, at the cube's centre.
+
+        Raises
+        ------
+        ValueError
+            If ``spacing`` is not a whole number of millimetres, ``field_t``
+            is not given, or the brain has coils of its own and ``coil`` is
+            given.
+        """
+        from ._tissue import Tissue, transmitted
+
+        _whole_millimetres(spacing)
+        if coil is not None and self.coils > 1:
+            raise ValueError(
+                "a phantom received by coils of its own is not scanned with a coil"
+            )
+        positions, density, t1, t2, frequency, t2_prime, _ = self._sampled(
+            spacing, field_t, off_resonance_hz, region
+        )
+        return Tissue(
+            positions=positions,
+            density=density,
+            t1=t1,
+            t2=t2,
+            t2_prime=t2_prime,
+            frequency=frequency,
+            spacing=spacing,
+            axes=np.eye(3),
+            transmit=None if coil is None else transmitted(coil, positions),
+            receive=self._coils._received if coil is None else coil.receive,
+            coils=self.coils if coil is None else coil.receive_channels,
         )
 
     def count(

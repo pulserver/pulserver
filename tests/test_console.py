@@ -302,7 +302,7 @@ def test_a_scan_reconstructed_in_this_process_returns_the_images_a_proxy_returns
 
 
 def test_an_exams_scans_play_on_its_isochromats_each_from_equilibrium(tmp_path):
-    console = _console(tmp_path, recon_plugins=RECON_PLUGINS)
+    console = _console(tmp_path, recon_plugins=RECON_PLUGINS, engine="bloch")
     design = console.design("generate", "gre2d", _block(TE=5000, nx=32, ny=32))[
         "design"
     ]
@@ -355,7 +355,7 @@ def _builds(console):
 def test_a_scan_plays_on_the_isochromats_in_the_slabs_its_excitations_excite(
     tmp_path,
 ):
-    console = _console(tmp_path)
+    console = _console(tmp_path, engine="bloch")
     design = console.design("generate", "gre2d", _block(TE=5000, nx=32, ny=32))[
         "design"
     ]
@@ -373,7 +373,7 @@ def test_a_scan_plays_on_the_isochromats_in_the_slabs_its_excitations_excite(
 
 
 def test_scans_that_excite_other_slabs_play_on_isochromats_of_their_own(tmp_path):
-    console = _console(tmp_path)
+    console = _console(tmp_path, engine="bloch")
     design = console.design("generate", "gre2d", _block(TE=5000, nx=32, ny=32))[
         "design"
     ]
@@ -390,7 +390,7 @@ def test_scans_that_excite_other_slabs_play_on_isochromats_of_their_own(tmp_path
 def test_a_console_coarsens_its_spacing_until_a_scan_keeps_no_more_isochromats_than_it_may(
     tmp_path,
 ):
-    console = _console(tmp_path, spacing=1e-3)
+    console = _console(tmp_path, spacing=1e-3, engine="bloch")
     design = console.design("generate", "gre2d", _block(TE=5000, nx=32, ny=32))[
         "design"
     ]
@@ -404,7 +404,7 @@ def test_a_console_coarsens_its_spacing_until_a_scan_keeps_no_more_isochromats_t
 
 
 def test_a_scan_no_spacing_keeps_within_the_consoles_isochromats_is_refused(tmp_path):
-    console = _console(tmp_path, max_isochromats=0)
+    console = _console(tmp_path, max_isochromats=0, engine="bloch")
     design = console.design("generate", "gre2d", _block(TE=5000, nx=32, ny=32))[
         "design"
     ]
@@ -417,7 +417,7 @@ def test_a_scan_no_spacing_keeps_within_the_consoles_isochromats_is_refused(tmp_
 def test_a_console_counts_its_spins_per_voxel_in_keeping_within_its_isochromats(
     tmp_path,
 ):
-    console = _console(tmp_path, spacing=1e-3, spins=4, voxel="box")
+    console = _console(tmp_path, spacing=1e-3, spins=4, voxel="box", engine="bloch")
     design = console.design("generate", "gre2d", _block(TE=5000, nx=32, ny=32))[
         "design"
     ]

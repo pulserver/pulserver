@@ -38,9 +38,13 @@ jobs:
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y gcc-multilib
 
+      # torch is a dependency; on Linux its CPU build, not the CUDA one.
       - name: Install
         run: |
           python -m pip install --upgrade pip
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          fi
           python -m pip install .[dev]
 
       # -ra so a skip is visible rather than reading as a pass.

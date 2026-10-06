@@ -28,6 +28,9 @@ dependencies = [
   "ismrmrd>=1.15.0",
   "pydicom>=3.0.2",
   "finufft>=2.3",
+  "torch>=2.4",
+  "torchsim>=0.0.8",
+  "bartorch>=0.0.8",
 ]
 
 [project.optional-dependencies]

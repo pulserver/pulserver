@@ -23,6 +23,10 @@ from ._command import motion_arguments, reconstruction_plugin, subject_motion
 #: The design calls a console forwards, answered as ``pulserver design`` answers them.
 DESIGN_CALLS = ("list", "validate", "generate", "import")
 
+#: The engines a scan is simulated by: the Fourier engine, on a phantom's
+#: tissue, and the Bloch engine, on its isochromats.
+ENGINES = ("fourier", "bloch")
+
 # Spacings, 1 mm apart, a console tries in keeping a scan within its isochromats.
 _COARSER = 100
 
@@ -151,6 +155,18 @@ class Console:
         The subject's motion, as :class:`~pulserver.virtual.Isochromats`
         takes it, on the clock of each scan; at rest without one. Moving
         isochromats play every block alone.
+    engine
+        What a scan is simulated by, one of :data:`ENGINES`: the Fourier
+        engine (:class:`~pulserver.virtual.FourierPlayer`) on the phantom's
+        tissue at ``spacing``, or the Bloch engine on its isochromats. Without
+        it, the Fourier engine unless the subject moves or diffuses, which only
+        the Bloch engine models.
+
+    Raises
+    ------
+    ValueError
+        If ``engine`` is none of :data:`ENGINES`, or is the Fourier engine
+        for a subject that moves or diffuses.
     """
 
     def __init__(
@@ -172,6 +188,7 @@ class Console:
         voxel: str = "point",
         diffusion: bool = False,
         motion: Any = None,
+        engine: str | None = None,
     ) -> None:
         from ..host._blocks import parse_limits
         from ..proxy import LocalReconstruction
@@ -181,6 +198,17 @@ class Console:
             raise ValueError(
                 "a console reconstructs through a proxy or in this process, not both"
             )
+        modelled = motion is None and not diffusion
+        if engine is None:
+            engine = "fourier" if modelled else "bloch"
+        if engine not in ENGINES:
+            raise ValueError(f"a scan is simulated by one of {ENGINES}, not {engine!r}")
+        if engine == "fourier" and not modelled:
+            raise ValueError(
+                "the Fourier engine models no motion or diffusion: simulate with "
+                "the Bloch engine"
+            )
+        self.engine = engine
         self.plugins = directories(plugins)
         self.limits = limits
         self.store = Path(store)
@@ -320,11 +348,12 @@ class Console:
         is an estimate. The status is 1 when a text reports a refused or
         failed series, or when the scan is cancelled.
 
-        A scan plays on the phantom's isochromats in the slabs its excitation
-        pulses excite, at the spacing ``max_isochromats`` allows. Scans of an exam
-        that excite the same slabs play on the same isochromats, each from
-        equilibrium, which keeps the pulses the engine has computed; a scan
-        started while another plays has isochromats of its own.
+        A scan plays on the phantom in the slabs its excitation pulses excite:
+        on its tissue at ``spacing`` for the Fourier engine, on its isochromats
+        at the spacing ``max_isochromats`` allows for the Bloch engine. Scans of
+        an exam that excite the same slabs play on the same tissue or
+        isochromats, each from equilibrium, which keeps the pulses the Bloch
+        engine has computed; a scan started while another plays has its own.
 
         ``recon`` names the reconstruction plugin. Without it, a design of a
         shipped scanner sequence is reconstructed with the shipped
@@ -357,20 +386,27 @@ class Console:
             exam = self._exams
         if held is not None and held[0] == region:
             isochromats = held[1]
-            isochromats.reset()
+            if self.engine == "bloch":
+                isochromats.reset()
         else:
             if self._warming is not None:
                 self._warming.join()
-            isochromats = self.phantom.isochromats(
-                self._spacing(region),
-                field_t=self.field_t,
-                region=region,
-                coil=self.coil,
-                spins=self.spins,
-                voxel=self.voxel,
-                motion=self.motion,
-                seed=0,
-                device=self.device,
+            isochromats = (
+                self.phantom.tissue(
+                    self.spacing, field_t=self.field_t, region=region, coil=self.coil
+                )
+                if self.engine == "fourier"
+                else self.phantom.isochromats(
+                    self._spacing(region),
+                    field_t=self.field_t,
+                    region=region,
+                    coil=self.coil,
+                    spins=self.spins,
+                    voxel=self.voxel,
+                    motion=self.motion,
+                    seed=0,
+                    device=self.device,
+                )
             )
         try:
             return self._scan(
@@ -473,6 +509,7 @@ class Console:
             rotation=rotation,
             default_shim=self.coil.default_shim,
             tolerance=TOLERANCE,
+            device=self.device,
         )
         stopped = threading.Event()
 
@@ -779,6 +816,13 @@ def _parser() -> argparse.ArgumentParser:
         action="store_true",
         help="BrainWeb's tissue classes diffuse, as BrainWeb.DIFFUSION gives them",
     )
+    parser.add_argument(
+        "--engine",
+        choices=ENGINES,
+        help="what a scan is simulated by: the Fourier engine on the phantom's "
+        "tissue, or the Bloch engine on its isochromats; the Fourier engine "
+        "unless the subject moves or diffuses",
+    )
     motion_arguments(parser)
     return parser
 
@@ -807,6 +851,7 @@ def main(argv: list[str] | None = None) -> int:
         voxel=args.voxel,
         diffusion=args.diffusion,
         motion=subject_motion(args),
+        engine=args.engine,
     )
     with contextlib.suppress(KeyboardInterrupt):
         asyncio.run(serve(console, args.host, args.port, args.origins))

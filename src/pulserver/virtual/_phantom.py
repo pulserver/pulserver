@@ -7,6 +7,7 @@ __all__ = ["Ellipse", "Phantom"]
 import math
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 import numpy as np
 import pypulseqpp as pp
@@ -15,6 +16,9 @@ from scipy.special import j1
 from . import _voxels
 from ._coils import Coil
 from ._isochromats import Isochromats
+
+if TYPE_CHECKING:
+    from ._tissue import Tissue
 
 
 @dataclass(frozen=True)
@@ -206,6 +210,55 @@ class Phantom:
             seed=rng,
             threads=threads,
             device=device,
+        )
+
+    def tissue(
+        self,
+        spacing: float,
+        *,
+        field_t: float | None = None,
+        off_resonance_hz: float = 0.0,
+        region: Callable[[np.ndarray, np.ndarray], np.ndarray] | None = None,
+        coil: Coil | None = None,
+    ) -> Tissue:
+        """Return the phantom sampled for the Fourier engine, at the points :meth:`isochromats` samples it at.
+
+        Each point spans a square ``spacing`` wide in the ellipse's plane.
+
+        Raises
+        ------
+        ValueError
+            If an ellipse has a complex intensity, the phantom has a chemical
+            shift and ``field_t`` is not given, or it has coils of its own and
+            ``coil`` is given.
+        """
+        from ._tissue import Tissue, transmitted
+
+        if coil is not None and self.coils > 1:
+            raise ValueError(
+                "a phantom received by coils of its own is not scanned with a coil"
+            )
+        _, positions, density, t1, t2, frequency, t2_prime, _ = self._sampled(
+            spacing, field_t, off_resonance_hz, region
+        )
+        if coil is None:
+            receive = lambda points: self._received(  # noqa: E731
+                (np.asarray(points) - self._position) @ self._rotation
+            )
+        else:
+            receive = coil.receive
+        return Tissue(
+            positions=positions,
+            density=density,
+            t1=t1,
+            t2=t2,
+            t2_prime=t2_prime,
+            frequency=frequency,
+            spacing=spacing,
+            axes=self._rotation[:, :2].T,
+            transmit=None if coil is None else transmitted(coil, positions),
+            receive=receive,
+            coils=self.coils if coil is None else coil.receive_channels,
         )
 
     def count(
