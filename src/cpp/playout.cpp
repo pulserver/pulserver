@@ -17,6 +17,7 @@
 #include <map>
 #include <stdexcept>
 #include <string>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -122,15 +123,15 @@ class Columns
 {
   public:
     template <typename T>
-    void put(const std::string &name, T value)
+    void put(const char *name, T value)
     {
-        column<T>(name).push_back(value);
+        column<T>(name, false).push_back(value);
     }
 
     template <typename T>
-    void put3(const std::string &name, T x, T y, T z)
+    void put3(const char *name, T x, T y, T z)
     {
-        std::vector<T> &c = column<T>(name + "\n3");
+        std::vector<T> &c = column<T>(name, true);
         c.push_back(x);
         c.push_back(y);
         c.push_back(z);
@@ -138,14 +139,36 @@ class Columns
 
     void into(py::dict &out) const
     {
-        fill(out, ints_);
-        fill(out, longs_);
-        fill(out, floats_);
+        fill(out, ints_.columns);
+        fill(out, longs_.columns);
+        fill(out, floats_.columns);
     }
 
   private:
     template <typename T>
-    std::vector<T> &column(const std::string &name);
+    struct Named
+    {
+        std::map<std::string, std::vector<T>> columns;
+        /* Each column by the address of the name its call site passes: a
+         * lookup by name for each value would cost more than the value. */
+        std::unordered_map<const char *, std::vector<T> *> single, triple;
+    };
+
+    template <typename T>
+    std::vector<T> &column(const char *name, bool three)
+    {
+        Named<T> &named = of<T>();
+        auto &cache = three ? named.triple : named.single;
+        const auto found = cache.find(name);
+        if (found != cache.end())
+            return *found->second;
+        std::vector<T> &c = named.columns[three ? std::string(name) + "\n3" : std::string(name)];
+        cache.emplace(name, &c);
+        return c;
+    }
+
+    template <typename T>
+    Named<T> &of();
 
     template <typename T>
     static void fill(py::dict &out, const std::map<std::string, std::vector<T>> &columns)
@@ -161,27 +184,27 @@ class Columns
         }
     }
 
-    std::map<std::string, std::vector<int>> ints_;
-    std::map<std::string, std::vector<long>> longs_;
-    std::map<std::string, std::vector<float>> floats_;
+    Named<int> ints_;
+    Named<long> longs_;
+    Named<float> floats_;
 };
 
 template <>
-std::vector<int> &Columns::column<int>(const std::string &name)
+Columns::Named<int> &Columns::of<int>()
 {
-    return ints_[name];
+    return ints_;
 }
 
 template <>
-std::vector<long> &Columns::column<long>(const std::string &name)
+Columns::Named<long> &Columns::of<long>()
 {
-    return longs_[name];
+    return longs_;
 }
 
 template <>
-std::vector<float> &Columns::column<float>(const std::string &name)
+Columns::Named<float> &Columns::of<float>()
 {
-    return floats_[name];
+    return floats_;
 }
 
 /* The waveforms each block plays: its gradients as corners from its start,
