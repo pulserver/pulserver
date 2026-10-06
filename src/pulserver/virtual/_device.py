@@ -104,10 +104,18 @@ if triton is not None:
                     read = held[:, None] & (coil[None, :] < coils)
                     r_re = tl.trans(tl.load(receive_ptr + at, mask=read, other=0.0))
                     r_im = tl.trans(tl.load(receive_ptr + at + 1, mask=read, other=0.0))
-                    sum_re = tl.dot(r_re, f_re, sum_re, input_precision="ieee")
-                    sum_re = tl.dot(-r_im, f_im, sum_re, input_precision="ieee")
-                    sum_im = tl.dot(r_re, f_im, sum_im, input_precision="ieee")
-                    sum_im = tl.dot(r_im, f_re, sum_im, input_precision="ieee")
+                    sum_re = tl.dot(
+                        r_re, f_re, sum_re, input_precision="ieee", out_dtype=real
+                    )
+                    sum_re = tl.dot(
+                        -r_im, f_im, sum_re, input_precision="ieee", out_dtype=real
+                    )
+                    sum_im = tl.dot(
+                        r_re, f_im, sum_im, input_precision="ieee", out_dtype=real
+                    )
+                    sum_im = tl.dot(
+                        r_im, f_re, sum_im, input_precision="ieee", out_dtype=real
+                    )
                 out = 2 * (
                     (coil[:, None].to(tl.int64) * count + node[None, :]) * points + q
                 )
@@ -264,10 +272,18 @@ if triton is not None:
                     )
                     a_re = r_re * m_re[None, :] - r_im * m_im[None, :]
                     a_im = r_re * m_im[None, :] + r_im * m_re[None, :]
-                    sum_re = tl.dot(a_re, e_re, sum_re, input_precision="ieee")
-                    sum_re = tl.dot(-a_im, e_im, sum_re, input_precision="ieee")
-                    sum_im = tl.dot(a_re, e_im, sum_im, input_precision="ieee")
-                    sum_im = tl.dot(a_im, e_re, sum_im, input_precision="ieee")
+                    sum_re = tl.dot(
+                        a_re, e_re, sum_re, input_precision="ieee", out_dtype=real
+                    )
+                    sum_re = tl.dot(
+                        -a_im, e_im, sum_re, input_precision="ieee", out_dtype=real
+                    )
+                    sum_im = tl.dot(
+                        a_re, e_im, sum_im, input_precision="ieee", out_dtype=real
+                    )
+                    sum_im = tl.dot(
+                        a_im, e_re, sum_im, input_precision="ieee", out_dtype=real
+                    )
         if ONE:
             out = 2 * (split.to(tl.int64) * samples + s)
             tl.store(partial_ptr + out, sum_re, mask=sampled)
