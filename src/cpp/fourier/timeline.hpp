@@ -78,6 +78,14 @@ namespace fourier
         /** Gradient of axis @p axis of @p block at @p since_us, strictly between corners, in Hz/m. */
         double gradient_at(size_t block, int axis, double since_us) const;
 
+        /**
+         * Advance @p moment, in 1/m, across the stretch of @p block from
+         * @p from_us lasting @p width_us, on which every gradient is linear,
+         * and return the integral of |k - @p origin|² over it, in s/m²; zero
+         * where @p origin is NaN.
+         */
+        double stretch(size_t block, double from_us, double width_us, const double* origin, double moment[3]) const;
+
         /** Moment of axis @p axis of @p block from its start to @p since_us, in 1/m. */
         double within(size_t block, int axis, double since_us) const;
 
