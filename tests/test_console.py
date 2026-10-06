@@ -27,6 +27,7 @@ from pulserver.host._blocks import format_limits
 from pulserver.protocol import FOV_OFFSET, FOV_ROTATION, PROTOCOL_BEGIN, PROTOCOL_END
 from pulserver.proxy import ReconProxy
 from pulserver.recon._runtime.readers import deserialize_config
+from pulserver.virtual import _fourier
 from pulserver.virtual._command import ORIENTATIONS
 from pulserver.virtual._console import Console, _connection
 from pulserver.virtual._localizer import PLANES
@@ -586,7 +587,8 @@ def test_a_console_lists_the_reconstruction_plugins_a_scan_can_name(tmp_path):
     assert proxied.recon_names() == sorted(shipped)
 
 
-def test_a_cancelled_scan_stops_and_reports_it(tmp_path):
+def test_a_cancelled_scan_stops_and_reports_it(tmp_path, monkeypatch):
+    monkeypatch.setattr(_fourier, "_SPAN_SAMPLES", 256)
     console = _console(tmp_path)
     design = console.design("generate", "gre2d", _block(TE=5000, nx=32, ny=32))[
         "design"

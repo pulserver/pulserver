@@ -233,15 +233,17 @@ class Console:
         self.coil = self._coil(coil)
         self.subject = ""
         # BrainWeb, kept from one exam to the next with what it has loaded, and
-        # the thread its field map is computed in after an exam's localizer.
+        # the thread its field map and the exam's tissue are computed in after
+        # an exam's localizer.
         self._brainweb: Any = None
         self._warming: threading.Thread | None = None
         self.phantom = self._phantom("")
         # The exam's isochromats between its scans, beside the slabs they were
-        # kept in, and how many exams have started, so that a scan hands back
-        # only those of the exam in progress.
+        # kept in, its tissue, and how many exams have started, so that a scan
+        # hands back only those of the exam in progress.
         self._held = threading.Lock()
         self._isochromats: tuple[Any, Any] | None = None
+        self._tissue: Any = None
         self._exams = 0
 
     def design(self, call: str, plugin: str | None = None, block: str = "") -> dict:
@@ -314,6 +316,7 @@ class Console:
         with self._held:
             self._exams += 1
             self._isochromats = None
+            self._tissue = None
         files = [
             _dicom_bytes(dataset)
             for dataset in localizer(
@@ -348,10 +351,11 @@ class Console:
         is an estimate. The status is 1 when a text reports a refused or
         failed series, or when the scan is cancelled.
 
-        A scan plays on the phantom in the slabs its excitation pulses excite:
-        on its tissue at ``spacing`` for the Fourier engine, on its isochromats
-        at the spacing ``max_isochromats`` allows for the Bloch engine. Scans of
-        an exam that excite the same slabs play on the same tissue or
+        The Fourier engine plays a scan on the phantom's tissue at
+        ``spacing``, sampled once an exam, where its excitation pulses excite
+        it. The Bloch engine plays it on the phantom's isochromats in the slabs
+        its excitation pulses excite, at the spacing ``max_isochromats``
+        allows. Scans of an exam that excite the same slabs play on the same
         isochromats, each from equilibrium, which keeps the pulses the Bloch
         engine has computed; a scan started while another plays has its own.
 
@@ -378,6 +382,17 @@ class Console:
         if self.speed is not None:
             emit({"preparing": None})
         rotation = np.asarray(rotation, dtype=float).reshape(3, 3)
+        if self.engine == "fourier":
+            return self._scan(
+                design,
+                self._exam_tissue(),
+                rotation,
+                centre_mm,
+                emit,
+                cancelled,
+                sound,
+                plugin,
+            )
         region = excited(
             DesignStore(self.store).directory(design) / "sequence.seq", rotation
         )
@@ -391,22 +406,16 @@ class Console:
         else:
             if self._warming is not None:
                 self._warming.join()
-            isochromats = (
-                self.phantom.tissue(
-                    self.spacing, field_t=self.field_t, region=region, coil=self.coil
-                )
-                if self.engine == "fourier"
-                else self.phantom.isochromats(
-                    self._spacing(region),
-                    field_t=self.field_t,
-                    region=region,
-                    coil=self.coil,
-                    spins=self.spins,
-                    voxel=self.voxel,
-                    motion=self.motion,
-                    seed=0,
-                    device=self.device,
-                )
+            isochromats = self.phantom.isochromats(
+                self._spacing(region),
+                field_t=self.field_t,
+                region=region,
+                coil=self.coil,
+                spins=self.spins,
+                voxel=self.voxel,
+                motion=self.motion,
+                seed=0,
+                device=self.device,
             )
         try:
             return self._scan(
@@ -416,6 +425,21 @@ class Console:
             with self._held:
                 if exam == self._exams:
                     self._isochromats = (region, isochromats)
+
+    def _exam_tissue(self) -> Any:
+        """Return the exam's tissue, sampling it unless the exam's warm-up has."""
+        if self._warming is not None:
+            self._warming.join()
+        with self._held:
+            tissue, exam = self._tissue, self._exams
+        if tissue is None:
+            tissue = self.phantom.tissue(
+                self.spacing, field_t=self.field_t, coil=self.coil
+            )
+            with self._held:
+                if exam == self._exams:
+                    self._tissue = tissue
+        return tissue
 
     def _spacing(self, region: Any) -> float:
         """Return the finest spacing, from ``spacing`` up in steps of 1 mm, that keeps at most ``max_isochromats`` of the phantom's isochromats in ``region``.
@@ -468,22 +492,36 @@ class Console:
         return default_phantom()
 
     def _warm(self) -> None:
-        """Compute the field map of the exam's BrainWeb in a thread of its own, unless it has one or is computing it."""
-        brain = self.phantom
-        if brain is not self._brainweb or not brain.susceptibility:
+        """Compute, in a thread of its own, the field map of the exam's BrainWeb unless it has one, and the exam's tissue for the Fourier engine."""
+        phantom, coil, earlier = self.phantom, self.coil, self._warming
+        mapped = (
+            phantom is not self._brainweb
+            or not phantom.susceptibility
+            or "field_ppm" in vars(phantom)
+        )
+        if mapped and self.engine != "fourier":
             return
-        if "field_ppm" in vars(brain) or (
-            self._warming is not None and self._warming.is_alive()
-        ):
-            return
+        with self._held:
+            exam = self._exams
 
         def compute() -> None:
-            # A failure here is raised again by the scan that needs the map.
+            if earlier is not None:
+                earlier.join()
+            # A failure here is raised again by the scan that needs the map or
+            # the tissue.
             with contextlib.suppress(Exception):
-                brain.field_ppm  # noqa: B018
+                if not mapped:
+                    phantom.field_ppm  # noqa: B018
+                if self.engine == "fourier":
+                    tissue = phantom.tissue(
+                        self.spacing, field_t=self.field_t, coil=coil
+                    )
+                    with self._held:
+                        if exam == self._exams:
+                            self._tissue = tissue
 
         self._warming = threading.Thread(
-            target=compute, name="pulserver-field", daemon=True
+            target=compute, name="pulserver-warm", daemon=True
         )
         self._warming.start()
 
