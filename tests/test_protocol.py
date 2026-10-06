@@ -115,6 +115,8 @@ GRE2D_LISTING = block(
         "phase_fov: float|typein|220.0|50.0|500.0|1.0|mm",
         "nx: int|typein|128|32|512|2|",
         "ny: int|typein|128|32|512|2|",
+        "nslices: int|typein|1|1|64|1|",
+        "slice_thickness: float|typein|5.0|1.0|20.0|1.0|mm",
         "Ry: int|typein|1|1|4|1|",
         *PRESCRIPTION_LISTING,
     ]
