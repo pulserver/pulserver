@@ -39,6 +39,11 @@ _CHUNK = 1 << 22
 # intervals one and two before.
 _PATHWAYS = 3
 
+#: Samples of a readout its echo, pathway and reach are first read off,
+#: evenly spaced, before its echo is found among the samples around the
+#: nearest of them.
+_COARSE = 64
+
 
 @dataclass(frozen=True)
 class Pulses:
@@ -210,6 +215,15 @@ class Timeline:
             put(played[name])
             for name in ("adc_dwell_ns", "adc_delay_us", "adc_phase_rad", "adc_freq_hz")
         )
+        modulated = played["adc_modulation_span"]
+        if np.any(modulated[:, 1] > modulated[:, 0]):
+            self._modulated = (
+                put(modulated[:, 0], torch.int64),
+                put(modulated[:, 1] - modulated[:, 0], torch.int64),
+            )
+            self._modulation = put(played["adc_phase_modulation_rad"])
+        else:
+            self._modulated = None
         self.pulses = self._pulses()
         self._origins, self._precession = self._origin()
         self._origins_t = torch.as_tensor(self._origins, device=self.device)
@@ -288,33 +302,34 @@ class Timeline:
         self, first: int, last: int
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """Return :meth:`samples` on the device."""
-        played = self.played
-        blocks = self.readouts.block[first:last]
-        counts = played["adc_samples"][blocks].astype(np.int64)
-        device = self.device
-        counts_t = torch.as_tensor(counts, device=device)
-        blocks_t = torch.as_tensor(blocks, device=device)
-        block = torch.repeat_interleave(blocks_t, counts_t)
-        offsets = torch.cumsum(counts_t, 0) - counts_t
-        index = torch.arange(block.numel(), device=device) - torch.repeat_interleave(
-            offsets, counts_t
+        counts = torch.as_tensor(
+            np.diff(self.readouts.first[first : last + 1]), device=self.device
         )
+        readout = torch.repeat_interleave(
+            torch.arange(first, last, device=self.device), counts
+        )
+        offsets = torch.cumsum(counts, 0) - counts
+        index = torch.arange(readout.numel(), device=self.device) - (
+            torch.repeat_interleave(offsets, counts)
+        )
+        return self._samples_at(readout, index)
+
+    def _samples_at(
+        self, readout: torch.Tensor, index: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """Return :meth:`samples` at sample ``index`` of each ``readout``, on the device."""
+        block = self._readout_blocks[readout]
         dwell_us = 1e-3 * self._adc[0][block]
         since = dwell_us * (index.to(torch.float64) + 0.5)
         sampled_us = self._adc[1][block] + since
         receiver = (
             self._adc[2][block] + 2.0 * math.pi * 1e-6 * self._adc[3][block] * since
         )
-        modulated = played["adc_modulation_span"][blocks]
-        lengths = modulated[:, 1] - modulated[:, 0]
-        if np.any(lengths > 0):
-            modulation = played["adc_phase_modulation_rad"].astype(np.float64)
-            added = np.zeros(int(counts.sum()))
-            starts = np.concatenate([[0], np.cumsum(counts)])
-            for at in np.flatnonzero(lengths > 0):
-                start, stop = modulated[at]
-                added[starts[at] : starts[at] + (stop - start)] = modulation[start:stop]
-            receiver = receiver + torch.as_tensor(added, device=device)
+        if self._modulated is not None:
+            begin, length = self._modulated
+            inside = index < length[block]
+            at = (begin[block] + index).clamp_max(self._modulation.numel() - 1)
+            receiver = receiver + torch.where(inside, self._modulation[at], 0.0)
         return (
             self._starts[block] + sampled_us,
             self._moment(block, sampled_us),
@@ -514,24 +529,35 @@ class Timeline:
         self._offsets = torch.zeros(
             (blocks.size, 3), dtype=torch.float64, device=self.device
         )
+        self._readout_blocks = torch.as_tensor(blocks, device=self.device)
+        steps = np.maximum(1, -(-counts // _COARSE))
+        coarse = (counts - 1) // steps + 2
+        read = coarse + 2 * steps + 1
+        bounds = np.concatenate([[0], np.cumsum(read)])
         start = 0
         while start < blocks.size:
             stop = max(
-                start + 1, int(np.searchsorted(first, first[start] + _CHUNK)) - 1
+                start + 1, int(np.searchsorted(bounds, bounds[start] + _CHUNK)) - 1
             )
-            times, k, phases = self._kspace(start, stop)
-            k = torch.nan_to_num(k, nan=0.0)
-            readouts = stop - start
+            device = self.device
+            readout = torch.arange(start, stop, device=device)
+            count = torch.as_tensor(counts[start:stop], device=device)
+            step = torch.as_tensor(steps[start:stop], device=device)
+            # Evenly spaced samples, and the last.
+            per = torch.as_tensor(coarse[start:stop], device=device)
             owner = torch.repeat_interleave(
-                torch.arange(readouts, device=self.device),
-                torch.as_tensor(counts[start:stop], device=self.device),
+                torch.arange(stop - start, device=device), per
             )
-            starts = torch.as_tensor(
-                first[start:stop] - first[start], device=self.device
-            )
-            winding = self._winding(times[starts])
+            place = torch.arange(
+                owner.numel(), device=device
+            ) - torch.repeat_interleave(torch.cumsum(per, 0) - per, per)
+            index = torch.minimum(place * step[owner], count[owner] - 1)
+            times, moment, _ = self._samples_at(readout[owner], index)
+            k = torch.nan_to_num(moment - self._origins_t[self._last_t(times) + 1])
+            winding = self._winding(times[torch.cumsum(per, 0) - per])
+            readouts = stop - start
             nearest = torch.full(
-                (_PATHWAYS, readouts), math.inf, dtype=k.dtype, device=self.device
+                (_PATHWAYS, readouts), math.inf, dtype=k.dtype, device=device
             )
             for n in range(_PATHWAYS):
                 norm = torch.linalg.vector_norm(k - n * winding[owner], dim=1)
@@ -545,25 +571,46 @@ class Timeline:
             pathway = torch.argmin(nearest, dim=0)
             offset = pathway[:, None].to(k.dtype) * winding
             k = k - offset[owner]
-            norm = torch.linalg.vector_norm(k, dim=1)
-            least = torch.full((readouts,), math.inf, dtype=k.dtype, device=self.device)
-            least.scatter_reduce_(0, owner, norm, "amin")
-            place = torch.arange(norm.numel(), device=self.device)
-            hit = torch.where(norm <= least[owner], place, norm.numel())
-            index = torch.full((readouts,), norm.numel(), device=self.device)
-            index.scatter_reduce_(0, owner, hit, "amin")
-            reach = torch.zeros((readouts, 3), dtype=k.dtype, device=self.device)
+            reach = torch.zeros((readouts, 3), dtype=k.dtype, device=device)
             reach.scatter_reduce_(0, owner[:, None].expand(-1, 3), k.abs(), "amax")
+            centre = index[self._least(k, owner, readouts)]
+            # The samples within a step of the nearest of those.
+            width = 2 * step + 1
+            owner = torch.repeat_interleave(
+                torch.arange(readouts, device=device), width
+            )
+            place = torch.arange(
+                owner.numel(), device=device
+            ) - torch.repeat_interleave(torch.cumsum(width, 0) - width, width)
+            index = (centre[owner] - step[owner] + place).clamp(
+                torch.zeros_like(owner), count[owner] - 1
+            )
+            times, moment, phases = self._samples_at(readout[owner], index)
+            k = torch.nan_to_num(moment - self._origins_t[self._last_t(times) + 1])
+            k = k - offset[owner]
+            reach.scatter_reduce_(0, owner[:, None].expand(-1, 3), k.abs(), "amax")
+            nearest_sample = self._least(k, owner, readouts)
             held = self.readouts
-            held.echo[start:stop] = (index - starts).cpu().numpy()
-            held.echo_us[start:stop] = times[index].cpu().numpy()
-            held.receiver[start:stop] = phases[index].cpu().numpy()
+            held.echo[start:stop] = index[nearest_sample].cpu().numpy()
+            held.echo_us[start:stop] = times[nearest_sample].cpu().numpy()
+            held.receiver[start:stop] = phases[nearest_sample].cpu().numpy()
             held.reach[start:stop] = reach.cpu().numpy()
             held.pathway[start:stop] = pathway.cpu().numpy()
             held.winding[start:stop] = winding.cpu().numpy()
             self._offsets[start:stop] = offset
             start = stop
         return self.readouts
+
+    @staticmethod
+    def _least(k: torch.Tensor, owner: torch.Tensor, count: int) -> torch.Tensor:
+        """Return, per owner, the first of its rows of ``k`` nearest the centre."""
+        norm = torch.linalg.vector_norm(k, dim=1)
+        least = torch.full((count,), math.inf, dtype=k.dtype, device=k.device)
+        least.scatter_reduce_(0, owner, norm, "amin")
+        place = torch.arange(norm.numel(), device=k.device)
+        hit = torch.where(norm <= least[owner], place, norm.numel())
+        first = torch.full((count,), norm.numel(), device=k.device)
+        return first.scatter_reduce_(0, owner, hit, "amin")
 
     def _winding(self, times_us: torch.Tensor) -> torch.Tensor:
         """Return the moment from the pulse before each time to the next one, ``(n, 3)``; zero after a refocusing pulse and before the first excitation.
@@ -616,8 +663,7 @@ class Timeline:
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """Return :meth:`kspace` on the device."""
         times, moment, receiver = self._samples(first, last)
-        played = self._last_t(times)
-        k = moment - self._origins_t[played + 1]
+        k = moment - self._origins_t[self._last_t(times) + 1]
         if hasattr(self, "_offsets"):
             counts = torch.as_tensor(
                 np.diff(self.readouts.first[first : last + 1]), device=self.device
