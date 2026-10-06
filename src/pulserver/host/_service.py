@@ -24,7 +24,7 @@ import pypulseqpp as pp
 from .. import __version__, _plugins, ir
 from .._plugins import PluginPath
 from ..design import RfLayout, SequencePlugin, load_plugin
-from ..ir._convert import _payload, _write_cache
+from ..ir._convert import _payload, _read_chain, _write_cache
 from ..mrd._sequence import designed_chain
 from ..protocol import (
     Parameter,
@@ -214,16 +214,9 @@ def generate(
         chain = designed_chain(written)
         offset = prescribed_offset(validation.values)
         rotation = prescribed_rotation(validation.values)
-        # The cache is segmented from copies of the moved sequences while the
-        # check rotates them.
-        with ThreadPoolExecutor(1) as pool:
-            cache = pool.submit(
-                _converting(paths[0], system, checked, offset, options, chain)
-            )
-            problems = ir.check(
-                paths[0], system, rotation=rotation, limits=checked, designed=chain
-            )
-            cache.result()
+        problems = _check_and_convert(
+            paths[0], system, checked, offset, options, rotation, chain
+        )
         if problems:
             raise CallError("; ".join(problems))
         (staged / "resolved.protocol").write_text(
@@ -286,11 +279,13 @@ def import_chain(
         entry = staged / _ENTRY
         if files[0].name != _ENTRY:
             entry.symlink_to(files[0].name)
-        problems = _check(limits, str(entry), rotation)
+        system, options, checked = split_limits(limits)
+        offset = tuple(value * 1e-3 for value in offset_mm)
+        problems = _check_and_convert(
+            str(entry), system, checked, offset, options, rotation
+        )
         if problems:
             raise CallError("; ".join(problems))
-        offset = tuple(value * 1e-3 for value in offset_mm)
-        _convert(limits, str(entry), offset)
         manifest = {
             **_record(limits),
             "plugin": "",
@@ -306,7 +301,7 @@ def import_chain(
 
 
 def identified_limits(limits: Mapping[str, Any]) -> dict[str, Any]:
-    """Return limits with the digest of each file they name: the VOP and vendor files.
+    """Return limits with the digest of each file they name: the VOP, vendor and acoustic files.
 
     A design converted under one file is not the design of another file
     written to the same path.
@@ -317,7 +312,7 @@ def identified_limits(limits: Mapping[str, Any]) -> dict[str, Any]:
         If a named file cannot be read.
     """
     identified = dict(limits)
-    for key in ("vop_file", "ir_vendor_file"):
+    for key in ("vop_file", "ir_vendor_file", "acoustic_file"):
         if key not in limits:
             continue
         try:
@@ -471,18 +466,45 @@ def _chain(first: str) -> list[str]:
     return [str(path) for path in ir.chain(first)]
 
 
-def _check(limits: Mapping[str, Any], seq_path: str, rotation: Any = None) -> list[str]:
-    system, _, checked = split_limits(limits)
-    return ir.check(seq_path, system, rotation=rotation, limits=checked)
-
-
-def _convert(
-    limits: Mapping[str, Any],
+def _check_and_convert(
     seq_path: str,
-    fov_offset: tuple[float, float, float] = (0.0, 0.0, 0.0),
-) -> str:
-    system, options, checked = split_limits(limits)
-    return _converting(seq_path, system, checked, fov_offset, options)().name
+    system: pp.Opts,
+    checked: ir.CheckLimits,
+    fov_offset: tuple[float, float, float],
+    options: dict[str, Any],
+    rotation: Any,
+    designed: list[tuple[Path, pp.Sequence]] | None = None,
+) -> list[str]:
+    """Check the chain in the frame of ``rotation`` while its cache is written; return the problems.
+
+    The chain is ``designed`` when given, else read once from ``seq_path`` and
+    verified. Its sound pressure levels are taken first, held to the limits
+    by the check and written into the cache. The cache is segmented from
+    copies of the chain moved to ``fov_offset`` while the check rotates the
+    chain in place.
+    """
+    if designed is None:
+        designed = _read_chain(Path(seq_path), True)
+    levels = (
+        None
+        if checked.acoustic is None
+        else ir.spl_levels(seq_path, system, checked, designed, rotation)
+    )
+    writer = _converting(
+        seq_path, system, checked, fov_offset, options, designed, levels
+    )
+    with ThreadPoolExecutor(1) as pool:
+        cache = pool.submit(writer)
+        problems = ir.check(
+            seq_path,
+            system,
+            rotation=rotation,
+            limits=checked,
+            designed=designed,
+            spl_levels=levels,
+        )
+        cache.result()
+    return problems
 
 
 def _converting(
@@ -491,12 +513,13 @@ def _converting(
     checked: ir.CheckLimits,
     fov_offset: tuple[float, float, float],
     options: dict[str, Any],
-    designed: list[tuple[Path, pp.Sequence]] | None = None,
+    designed: list[tuple[Path, pp.Sequence]],
+    spl_levels: list[ir.SplLevels] | None,
 ) -> Callable[[], Path]:
     """Move the chain to ``fov_offset`` and return the call that writes its cache.
 
-    The chain is ``designed`` when given, else read from ``seq_path`` and
-    verified.
+    The cache carries the chain's SAR ratios, taken here before the move, and
+    ``spl_levels``.
     """
     ratios = (
         None
@@ -505,5 +528,11 @@ def _converting(
     )
     payload = _payload(Path(seq_path), system, True, fov_offset, designed)
     return partial(
-        _write_cache, seq_path, system, payload, sar_ratios=ratios, **options
+        _write_cache,
+        seq_path,
+        system,
+        payload,
+        sar_ratios=ratios,
+        spl_levels=spl_levels,
+        **options,
     )

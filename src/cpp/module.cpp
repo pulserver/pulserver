@@ -201,6 +201,8 @@ py::dict summarize(const pulseg_collection *coll)
         entry["sar_burst_requested"] = s.sar_burst_requested;
         entry["vop_sar_ratio"] = s.vop_sar_ratio;
         entry["vop_global_sar_ratio"] = s.vop_global_sar_ratio;
+        entry["spl_peak_db"] = s.spl_peak_db;
+        entry["spl_average_dba"] = s.spl_average_dba;
         entry["grad_raster_us"] = s.grad_raster_us;
         entry["tr_groups"] = tr_groups(coll, i);
         entry["rf"] = rf_statistics(coll, i, s.num_unique_rf);

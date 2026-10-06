@@ -33,7 +33,7 @@
 /* The full (major, minor, revision) triple must match exactly on read: a
  * cache at any other revision is rejected outright and the .seq is
  * re-parsed, never partially or heuristically read. */
-#define PULSEG_CACHE_VERSION_REVISION 2
+#define PULSEG_CACHE_VERSION_REVISION 3
 
 /* Per-consumer sections. Each carries its own distinct payload.
  * COMMON establishes the collection + descriptor framing; the others
@@ -383,6 +383,10 @@ static int write_common(FILE *f, const pulseg_sequence_descriptor *d)
     if (!pulseg__write4(f, &d->vop_sar_ratio, 1))
         return 0;
     if (!pulseg__write4(f, &d->vop_global_sar_ratio, 1))
+        return 0;
+    if (!pulseg__write4(f, &d->spl_peak_db, 1))
+        return 0;
+    if (!pulseg__write4(f, &d->spl_average_dba, 1))
         return 0;
     if (!pulseg__write4(f, d->fov, 3))
         return 0;
@@ -901,10 +905,16 @@ static int read_common(FILE *f, pulseg_sequence_descriptor *d, int do_swap)
         return 0;
     if (!pulseg__read4(f, &d->vop_global_sar_ratio, 1))
         return 0;
+    if (!pulseg__read4(f, &d->spl_peak_db, 1))
+        return 0;
+    if (!pulseg__read4(f, &d->spl_average_dba, 1))
+        return 0;
     if (do_swap)
     {
         pulseg__swap4(&d->vop_sar_ratio);
         pulseg__swap4(&d->vop_global_sar_ratio);
+        pulseg__swap4(&d->spl_peak_db);
+        pulseg__swap4(&d->spl_average_dba);
     }
     if (!pulseg__read4(f, d->fov, 3))
         return 0;

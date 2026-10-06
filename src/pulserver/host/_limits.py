@@ -22,7 +22,7 @@ _WAVE_BUDGET = {
     "ir_wave_headroom": ("headroom", float),
     "ir_wave_slots": ("slots", int),
 }
-_CHECK_PREFIXES = ("pns_", "forbidden_band_", "vop_")
+_CHECK_PREFIXES = ("pns_", "forbidden_band_", "vop_", "acoustic_")
 _DESIGN_LIMITS = {"design_max_grad": "max_grad", "design_max_slew": "max_slew"}
 _CHRONAXIE = {
     "pns_chronaxie": "chronaxie",
@@ -43,6 +43,7 @@ _VOP = (
     "vop_head_limit",
     "vop_local_limit",
 )
+_ACOUSTIC = ("acoustic_file", "acoustic_interval_us")
 
 
 def split_limits(
@@ -56,8 +57,8 @@ def split_limits(
     :func:`pulserver.ir.read_vendor` reads the profile and grouping from), and
     the playout's waveform memory the cache lays the waves out for, the fields of :class:`pulserver.ir.WaveBudget` prefixed
     ``ir_wave_``, of which ``ir_wave_max_samples`` and ``ir_wave_raster_us``
-    are required together. Keys starting with ``pns_``, ``forbidden_band_`` and
-    ``vop_`` are the check limits of :func:`check_limits`, and those starting
+    are required together. Keys starting with ``pns_``, ``forbidden_band_``,
+    ``vop_`` and ``acoustic_`` are the check limits of :func:`check_limits`, and those starting
     with ``design_`` the design limits of :func:`design_system`. The other keys
     are ``pypulseqpp.Opts`` keyword arguments, among which ``B0`` is required:
     the field in T the scan runs at, which ppm offsets are resolved at.
@@ -194,19 +195,24 @@ def check_limits(limits: Mapping[str, Any]) -> ir.CheckLimits:
       scanner reports, which the VOP file's ``transmit`` metadata must name.
       ``vop_head_limit`` and ``vop_local_limit`` are the scanner's head and
       local SAR limits in W/kg in its current operating mode.
+    - ``acoustic_file`` is an HDF5 file of the gradient coil's acoustic
+      transfer function the host can read, and ``acoustic_interval_us`` the
+      sampling interval in µs its bins refer to; :func:`pulserver.ir.check`
+      holds the sound pressure level to its limits through it, and
+      :func:`pulserver.ir.spl_levels` gives the levels the cache carries.
 
     Raises
     ------
     ValueError
         If a key of those families is not one of them, a model mixes the two
-        kinds or misses a field, a band or a shim is malformed, or VOP limits
-        are given without a file.
+        kinds or misses a field, a band or a shim is malformed, VOP limits
+        are given without a file, or an acoustic file without its interval.
     """
     keys = [k for k in limits if k.startswith(_CHECK_PREFIXES)]
     unknown = [
         k
         for k in keys
-        if k not in (*_CHRONAXIE, "pns_limit", *_VOP)
+        if k not in (*_CHRONAXIE, "pns_limit", *_VOP, *_ACOUSTIC)
         and not _SAFE.fullmatch(k)
         and not _BAND.fullmatch(k)
     ]
@@ -232,6 +238,11 @@ def check_limits(limits: Mapping[str, Any]) -> ir.CheckLimits:
                 arguments[key] = float(limits[key])
     elif any(k.startswith("vop_") for k in keys):
         raise ValueError("the vop_ limits need a vop_file")
+    if ("acoustic_file" in limits) != ("acoustic_interval_us" in limits):
+        raise ValueError("acoustic_file and acoustic_interval_us are given together")
+    if "acoustic_file" in limits:
+        arguments["acoustic"] = Path(str(limits["acoustic_file"]))
+        arguments["acoustic_interval"] = float(limits["acoustic_interval_us"]) / 1e6
     return ir.CheckLimits(**arguments)
 
 
