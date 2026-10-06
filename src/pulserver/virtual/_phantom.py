@@ -139,7 +139,7 @@ class Phantom:
             raise ValueError(
                 "a phantom received by coils of its own is not scanned with a coil"
             )
-        _, positions, density, t1, t2, frequency, t2_prime, _ = self._sampled(
+        _, positions, density, t1, t2, frequency, t2_prime, diffusion = self._sampled(
             spacing, field_t, off_resonance_hz, region
         )
         if coil is None:
@@ -160,6 +160,7 @@ class Phantom:
             transmit=None if coil is None else transmitted(coil, positions),
             receive=receive,
             coils=self.coils if coil is None else coil.receive_channels,
+            diffusion=diffusion if np.any(diffusion) else None,
         )
 
     def _sampled(

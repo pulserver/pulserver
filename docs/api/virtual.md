@@ -28,6 +28,8 @@ the images of the terms encoded along the trajectory by bartorch's NUFFT.
 | {obj}`~pulserver.virtual.simulate` | Every readout the cache beside a sequence file acquires of a phantom's tissue, demodulated as the playout demodulates. |
 | {obj}`~pulserver.virtual.FourierPlayer` | The blocks the cache beside a sequence file plays, acquired of a phantom's tissue: the configuration states shifted where the gradients' moment dephases a voxel, each readout reading the pathway that passes the centre of k-space during it. |
 | {obj}`~pulserver.virtual.Tissue` | A phantom sampled for the Fourier engine: each cube's position, proton density, relaxation times and frequency, the transmit field it sees and the coils' receive sensitivities. |
+| {obj}`~pulserver.virtual.RigidMotion` | A subject's rigid pose against scan time: a rotation about a centre and a translation, applied to each readout at its echo. |
+| {obj}`~pulserver.virtual.Girf` | A gradient impulse response per physical axis, through which the played gradients' moment is filtered. |
 
 ## Scan clock and sound
 

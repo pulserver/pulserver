@@ -6,7 +6,9 @@ from ._client import record, send
 from ._coils import Coil
 from ._console import Console
 from ._export import export
+from ._girf import Girf
 from ._localizer import localizer
+from ._motion import RigidMotion
 from ._phantom import Ellipse, Phantom
 from ._stream import SAMPLE_RATE, Chunk, Scan
 from ._tissue import Tissue
@@ -26,7 +28,9 @@ __all__ = [
     "Console",
     "Ellipse",
     "FourierPlayer",
+    "Girf",
     "Phantom",
+    "RigidMotion",
     "Scan",
     "Tissue",
     "export",

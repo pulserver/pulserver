@@ -191,9 +191,28 @@ $R\mathbf{k}_L$ its own transform at $\mathbf{k}_L$. An object posed at the
 prescribed centre, its axes turned by $R$, is therefore acquired as the same
 object at the isocentre under the identity, a reflection in $R$ included.
 
+### Diffusion, motion and the gradient response
+
+A tissue class with a diffusion coefficient $D$ loses $e^{-bD}$ of its signal
+at each readout, where $b = (2\pi)^2\int |\mathbf{k}(t)|^2\,dt$ is integrated
+since the last excitation over the moment measured from the readout's origins,
+so a refocusing pulse mirrors it. Diffusion is isotropic. It is left out where
+no class diffuses, or where the largest $b$ of the scan times the largest $D$
+is below a hundredth.
+
+A subject in rigid motion, {class}`~pulserver.virtual.RigidMotion`, is held in
+the pose it has at each readout's echo for the whole readout. The pose turns
+the readout's k-space and shifts its phase, as a phantom placed in that pose
+would be acquired; the coils, the transmit field and the relaxation move with
+the object.
+
+A gradient impulse response, {class}`~pulserver.virtual.Girf`, filters the
+moment the gradients play on each physical axis, so the trajectory, the
+origins and the dephasing all follow the filtered gradients.
+
 ### What is not modelled
 
-Diffusion and motion are not modelled. A pulse acts at its centre, with no
+A pulse acts at its centre, with no
 relaxation during it, and turns each cube by an ideal rotation, so the phase a
 selective pulse leaves across its slab beyond that rotation is left out. The
 channels of a pTx pulse are summed, as at unit, in-phase sensitivity. A

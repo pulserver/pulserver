@@ -236,7 +236,30 @@ axes; a block that plays in the physical frame is turned back by ``rotation``.
                     { table.value(b, t, n, out); });
             },
             py::arg("block"), py::arg("since_us"),
-            "``(n, 3)`` the gradient at times from block starts, in Hz/m, in the frame each block plays in.");
+            "``(n, 3)`` the gradient at times from block starts, in Hz/m, in the frame each block plays in.")
+        .def(
+            "b_values",
+            [](const fourier::GradientTable& table,
+               const Times& pulse_us,
+               const py::array_t<uint8_t, py::array::c_style | py::array::forcecast>& excites,
+               const py::array_t<double, py::array::c_style | py::array::forcecast>& origins,
+               const Times& echo_us)
+            {
+                if (excites.size() != pulse_us.size() || origins.size() != 3 * (pulse_us.size() + 1))
+                    throw std::invalid_argument("pulse_us, excites and origins disagree on the pulses");
+                const auto n = static_cast<size_t>(echo_us.size());
+                py::array_t<double> out(static_cast<py::ssize_t>(n));
+                {
+                    py::gil_scoped_release released;
+                    table.b_values(
+                        pulse_us.data(), excites.data(), origins.data(),
+                        static_cast<size_t>(pulse_us.size()), echo_us.data(), n, out.mutable_data());
+                }
+                return out;
+            },
+            py::arg("pulse_us"), py::arg("excites"), py::arg("origins"), py::arg("echo_us"),
+            "``(n,)`` the b-value at each echo, in s/m², of k measured from the origins each pulse leaves, "
+            "``(pulses + 1, 3)``, since the last excitation; pulses in play order.");
 
     module.def(
         "read",

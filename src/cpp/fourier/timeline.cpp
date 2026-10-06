@@ -143,6 +143,116 @@ namespace fourier
             });
     }
 
+    double GradientTable::gradient_at(size_t block, int axis, double since_us) const
+    {
+        const int64_t first = span_[6 * block + 2 * axis];
+        const int64_t last = span_[6 * block + 2 * axis + 1];
+        if (last - first < 2 || since_us <= time_[first] || since_us >= time_[last - 1])
+            return 0.0;
+        const double* begin = time_.data() + first;
+        const auto i = static_cast<int64_t>(std::upper_bound(begin, time_.data() + last, since_us) - begin) - 1 + first;
+        const double width = time_[i + 1] - time_[i];
+        return width > 0.0 ? value_[i] + (since_us - time_[i]) / width * (value_[i + 1] - value_[i]) : value_[i + 1];
+    }
+
+    void GradientTable::b_values(
+        const double* pulse_us,
+        const uint8_t* excites,
+        const double* origins,
+        size_t pulses,
+        const double* echo_us,
+        size_t n,
+        double* out) const
+    {
+        // Three Gauss-Legendre points on [0, 1] integrate the quartic |k|² of a
+        // stretch on which every gradient is linear.
+        static const double kNodes[3] = {0.5 - 0.5 * std::sqrt(0.6), 0.5, 0.5 + 0.5 * std::sqrt(0.6)};
+        static const double kWeights[3] = {5.0 / 18.0, 8.0 / 18.0, 5.0 / 18.0};
+        const double kTwoPiSquared = 4.0 * std::acos(-1.0) * std::acos(-1.0);
+        std::vector<size_t> order(n);
+        for (size_t i = 0; i < n; ++i)
+            order[i] = i;
+        std::sort(order.begin(), order.end(), [echo_us](size_t a, size_t b) { return echo_us[a] < echo_us[b]; });
+        const double* origin = origins;  // before any pulse
+        double b = 0.0;
+        size_t next_pulse = 0, next_echo = 0;
+        std::vector<double> edges;
+        for (size_t block = 0; block < blocks() && next_echo < n; ++block)
+        {
+            const double start = starts_[block];
+            const double duration = starts_[block + 1] - start;
+            edges.assign({0.0, duration});
+            for (int axis = 0; axis < 3; ++axis)
+                for (int64_t i = span_[6 * block + 2 * axis]; i < span_[6 * block + 2 * axis + 1]; ++i)
+                    if (time_[i] > 0.0 && time_[i] < duration)
+                        edges.push_back(time_[i]);
+            for (size_t p = next_pulse; p < pulses && pulse_us[p] < start + duration; ++p)
+                if (pulse_us[p] > start)
+                    edges.push_back(pulse_us[p] - start);
+            for (size_t e = next_echo; e < n && echo_us[order[e]] < start + duration; ++e)
+                if (echo_us[order[e]] > start)
+                    edges.push_back(echo_us[order[e]] - start);
+            std::sort(edges.begin(), edges.end());
+            edges.erase(std::unique(edges.begin(), edges.end()), edges.end());
+            double moment[3];
+            for (int axis = 0; axis < 3; ++axis)
+                moment[axis] = start_moment_[3 * block + axis];
+            for (size_t s = 0; s < edges.size(); ++s)
+            {
+                const double at = start + edges[s];
+                while (next_pulse < pulses && pulse_us[next_pulse] <= at)
+                {
+                    origin = origins + 3 * (next_pulse + 1);
+                    if (excites[next_pulse])
+                        b = 0.0;
+                    ++next_pulse;
+                }
+                while (next_echo < n && echo_us[order[next_echo]] <= at)
+                    out[order[next_echo++]] = std::isnan(origin[0]) ? 0.0 : kTwoPiSquared * b;
+                if (s + 1 == edges.size())
+                    break;
+                const double width = edges[s + 1] - edges[s];
+                double g1[3], g3[3];
+                for (int axis = 0; axis < 3; ++axis)
+                {
+                    g1[axis] = gradient_at(block, axis, edges[s] + 0.25 * width);
+                    g3[axis] = gradient_at(block, axis, edges[s] + 0.75 * width);
+                }
+                if (physical_[block])
+                {
+                    double t1[3], t3[3];
+                    turned(rotation_, g1, t1);
+                    turned(rotation_, g3, t3);
+                    std::copy(t1, t1 + 3, g1);
+                    std::copy(t3, t3 + 3, g3);
+                }
+                double slope[3], g0[3];
+                for (int axis = 0; axis < 3; ++axis)
+                {
+                    slope[axis] = (g3[axis] - g1[axis]) / (0.5 * width);
+                    g0[axis] = g1[axis] - 0.25 * width * slope[axis];
+                }
+                auto moment_after = [&](double tau, int axis)
+                { return moment[axis] + 1e-6 * tau * (g0[axis] + 0.5 * slope[axis] * tau); };
+                if (!std::isnan(origin[0]))
+                    for (int q = 0; q < 3; ++q)
+                    {
+                        double squared = 0.0;
+                        for (int axis = 0; axis < 3; ++axis)
+                        {
+                            const double k = moment_after(kNodes[q] * width, axis) - origin[axis];
+                            squared += k * k;
+                        }
+                        b += 1e-6 * width * kWeights[q] * squared;
+                    }
+                for (int axis = 0; axis < 3; ++axis)
+                    moment[axis] = moment_after(width, axis);
+            }
+        }
+        for (; next_echo < n; ++next_echo)
+            out[order[next_echo]] = 0.0;
+    }
+
     namespace
     {
 

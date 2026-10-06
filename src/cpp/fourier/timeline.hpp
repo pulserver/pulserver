@@ -59,7 +59,25 @@ namespace fourier
          *  frame the block plays in. */
         void value(const int64_t* block, const double* since_us, size_t n, double* out) const;
 
+        /**
+         * Write into @p out the b-value at each of @p echo_us, in s/m²:
+         * (2 pi)² times the integral of |k|² from the last excitation, k
+         * measured from the origin each pulse leaves, (p + 1, 3) as origins()
+         * writes them. Zero where no excitation precedes the echo in its file.
+         */
+        void b_values(
+            const double* pulse_us,
+            const uint8_t* excites,
+            const double* origins,
+            size_t pulses,
+            const double* echo_us,
+            size_t n,
+            double* out) const;
+
       private:
+        /** Gradient of axis @p axis of @p block at @p since_us, strictly between corners, in Hz/m. */
+        double gradient_at(size_t block, int axis, double since_us) const;
+
         /** Moment of axis @p axis of @p block from its start to @p since_us, in 1/m. */
         double within(size_t block, int axis, double since_us) const;
 
