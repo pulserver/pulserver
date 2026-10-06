@@ -22,6 +22,11 @@
 
 #include "pulseg.h"
 
+extern "C"
+{
+#include "pulseg_internal.h"
+}
+
 namespace native
 {
 
@@ -206,7 +211,7 @@ class Waves
         std::vector<float> &times,
         std::vector<float> &values)
     {
-        const Axes &axes = get(subsequence, wave);
+        const Axes &axes = get(subsequence, wave, reserved);
         const auto &t = axes[static_cast<size_t>(axis)].first;
         const auto &a = axes[static_cast<size_t>(axis)].second;
         if (static_cast<int>(t.size()) > reserved)
@@ -224,28 +229,35 @@ class Waves
     using Axis = std::pair<std::vector<float>, std::vector<float>>;
     using Axes = std::array<Axis, 3>;
 
-    const Axes &get(int subsequence, int wave)
+    const Axes &get(int subsequence, int wave, int reserved)
     {
         const auto key = std::make_pair(subsequence, wave);
         auto found = cache_.find(key);
         if (found != cache_.end())
             return found->second;
-        Axes axes;
-        for (int axis = 0; axis < 3; ++axis)
+        const auto capacity = static_cast<size_t>(std::max(reserved, 1));
+        std::vector<float> times(capacity);
+        std::array<std::vector<float>, 3> amplitudes;
+        float *out[3];
+        for (size_t axis = 0; axis < 3; ++axis)
         {
-            int points = 0;
-            require(
-                pulseg_materialize_wave(
-                    coll_, subsequence, wave, axis, nullptr, nullptr, 0, &points, nullptr),
-                "wave");
-            Axis &out = axes[static_cast<size_t>(axis)];
-            out.first.resize(static_cast<size_t>(points));
-            out.second.resize(static_cast<size_t>(points));
-            require(
-                pulseg_materialize_wave(
-                    coll_, subsequence, wave, axis, out.first.data(), out.second.data(), points,
-                    &points, nullptr),
-                "wave");
+            amplitudes[axis].resize(capacity);
+            out[axis] = amplitudes[axis].data();
+        }
+        int points = 0;
+        const int rc = pulseg__wave_materialize_axes(
+            coll_, subsequence, wave, times.data(), out, static_cast<int>(capacity), &points);
+        if (rc == PULSEG_ERR_INDEX)
+            throw std::runtime_error(
+                "a block plays a wave of " + std::to_string(points) +
+                " points at a segment position reserving " + std::to_string(reserved));
+        require(rc, "wave");
+        Axes axes;
+        for (size_t axis = 0; axis < 3; ++axis)
+        {
+            Axis &held = axes[axis];
+            held.first.assign(times.begin(), times.begin() + points);
+            held.second.assign(amplitudes[axis].begin(), amplitudes[axis].begin() + points);
         }
         return cache_.emplace(key, std::move(axes)).first->second;
     }

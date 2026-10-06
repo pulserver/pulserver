@@ -61,7 +61,8 @@ typedef struct wave_loader
     const pulseg_playout_backend *backend;
     float raster_us;
     int slots;
-    float *scratch;
+    long longest;    /* samples of the longest region     */
+    float *scratch;  /* one longest region for each axis  */
     PULSEG_WAVE_SAMPLE *samples;
     pulseg_wave_region *span;
 } wave_loader;
@@ -94,7 +95,8 @@ static int loader_open(
     l->backend = backend;
     l->raster_us = plan->budget.raster_us;
     l->slots = plan->budget.slots;
-    l->scratch = (float *)PULSEG_ALLOC(longest * sizeof(float));
+    l->longest = (long)longest;
+    l->scratch = (float *)PULSEG_ALLOC(3 * longest * sizeof(float));
     l->samples = (PULSEG_WAVE_SAMPLE *)PULSEG_ALLOC(longest * sizeof(PULSEG_WAVE_SAMPLE));
     l->span = (pulseg_wave_region *)PULSEG_ALLOC((size_t)l->slots * sizeof(pulseg_wave_region));
     return (l->scratch && l->samples && l->span) ? PULSEG_SUCCESS : PULSEG_ERR_ALLOC_FAILED;
@@ -118,23 +120,24 @@ static void loader_close(wave_loader *l)
 static int load_wave(const wave_loader *l, int s, int w, const pulseg_wave_region *region)
 {
     pulseg_wave_load load;
-    int a, rc = PULSEG_SUCCESS;
+    float *axes[3];
+    int a, rc;
 
+    for (a = 0; a < 3; ++a)
+        axes[a] = region->offset[a] < 0 ? NULL : l->scratch + (long)a * l->longest;
+    rc = pulseg__sample_wave_axes(
+        l->coll, s, w, region->start_us, l->raster_us, region->samples, axes);
     load.subsequence = s;
     load.wave = w;
     load.count = region->samples;
     load.samples = l->samples;
     for (a = 0; a < 3 && PULSEG_SUCCEEDED(rc); ++a)
     {
-        if (region->offset[a] < 0)
+        if (!axes[a])
             continue;
         load.axis = a;
         load.offset = region->offset[a];
-        rc = pulseg_sample_wave(
-            l->coll, s, w, a, region->start_us, l->raster_us, region->samples, l->scratch);
-        if (PULSEG_FAILED(rc))
-            break;
-        pulseg_wave_samples(l->scratch, region->samples, l->samples);
+        pulseg_wave_samples(axes[a], region->samples, l->samples);
         if (l->backend->load_wave)
             rc = l->backend->load_wave(l->backend->ctx, &load);
     }

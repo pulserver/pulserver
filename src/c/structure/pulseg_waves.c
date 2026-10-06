@@ -692,25 +692,139 @@ void pulseg__block_wave(
     *wave_id = w;
 }
 
-/* One axis of a wave's points, normalised, in arrays of its own. */
-static int wave_points(
-    const pulseg_sequence_descriptor *desc,
-    int wave_idx,
-    int out_axis,
-    axis_corners *out)
+/* @p num_samples of the points @p t, @p v at raster centres from @p start_us,
+ * as pulseg__linear_at() reads each: the centres only rise, so the point
+ * below each is found by walking on from the one below the last. */
+static void sampled(
+    const float *t,
+    const float *v,
+    int n,
+    float start_us,
+    float raster_us,
+    long num_samples,
+    float *out)
 {
-    const pulseg_wave *wave = &desc->waves[wave_idx];
-    int n = 0;
-    int rc = pulseg__wave_materialize(desc, wave, out_axis, NULL, NULL, 0, &n, NULL);
+    long i;
+    int lo = 0;
 
-    if (PULSEG_FAILED(rc) || n < 1)
-        return rc;
-    if (!axis_corners_alloc(out, n))
-        return PULSEG_ERR_ALLOC_FAILED;
-    rc = pulseg__wave_materialize(desc, wave, out_axis, out->t, out->v, n, &n, NULL);
+    for (i = 0; i < num_samples; ++i)
+    {
+        const float x = start_us + ((float)i + 0.5f) * raster_us;
+        float span;
+
+        if (n < 2 || x < t[0] || x > t[n - 1])
+        {
+            out[i] = 0.0f;
+            continue;
+        }
+        while (lo + 2 < n && t[lo + 1] <= x)
+            ++lo;
+        span = t[lo + 1] - t[lo];
+        out[i] = span <= 0.0f ? v[lo + 1] : v[lo] + (v[lo + 1] - v[lo]) * (x - t[lo]) / span;
+    }
+}
+
+int pulseg__sample_wave_axes(
+    const pulseg_collection *coll,
+    int subseq_idx,
+    int wave_idx,
+    float start_us,
+    float raster_us,
+    long num_samples,
+    float *const out[3])
+{
+    const pulseg_sequence_descriptor *desc;
+    const pulseg_wave *wave;
+    wave_grid g;
+    float *v = NULL;
+    float peak;
+    int a, i, rc;
+
+    if (!coll || !out)
+        return PULSEG_ERR_NULL_POINTER;
+    desc = wave_owner(coll, subseq_idx, wave_idx);
+    if (!desc || raster_us <= 0.0f || num_samples < 0)
+        return PULSEG_ERR_INVALID_ARGUMENT;
+    wave = &desc->waves[wave_idx];
+    rc = wave_grid_build(desc, wave, &g);
     if (PULSEG_FAILED(rc))
-        axis_corners_free(out);
-    return rc;
+        return rc;
+    if (g.n > 0)
+    {
+        v = (float *)PULSEG_ALLOC((size_t)g.n * sizeof(float));
+        if (!v)
+        {
+            wave_grid_free(&g);
+            return PULSEG_ERR_ALLOC_FAILED;
+        }
+    }
+    for (a = 0; a < 3; ++a)
+    {
+        if (!out[a])
+            continue;
+        peak = 0.0f;
+        for (i = 0; i < g.n; ++i)
+        {
+            v[i] = wave_grid_value(wave, &g, a, i);
+            if ((float)fabs((double)v[i]) > peak)
+                peak = (float)fabs((double)v[i]);
+        }
+        normalised(v, g.n, peak);
+        sampled(g.t, v, g.n, start_us, raster_us, num_samples, out[a]);
+    }
+    if (v)
+        PULSEG_FREE(v);
+    wave_grid_free(&g);
+    return PULSEG_SUCCESS;
+}
+
+int pulseg__wave_materialize_axes(
+    const pulseg_collection *coll,
+    int subseq_idx,
+    int wave_idx,
+    float *out_time_us,
+    float *const out_amp[3],
+    int max_points,
+    int *out_num_points)
+{
+    const pulseg_sequence_descriptor *desc;
+    const pulseg_wave *wave;
+    wave_grid g;
+    float peak;
+    int a, i, rc;
+
+    if (!coll || !out_time_us || !out_amp || !out_num_points)
+        return PULSEG_ERR_NULL_POINTER;
+    desc = wave_owner(coll, subseq_idx, wave_idx);
+    if (!desc)
+        return PULSEG_ERR_INVALID_ARGUMENT;
+    wave = &desc->waves[wave_idx];
+    rc = wave_grid_build(desc, wave, &g);
+    if (PULSEG_FAILED(rc))
+        return rc;
+    *out_num_points = g.n;
+    if (g.n > max_points)
+    {
+        wave_grid_free(&g);
+        return PULSEG_ERR_INDEX;
+    }
+    for (i = 0; i < g.n; ++i)
+        out_time_us[i] = g.t[i];
+    for (a = 0; a < 3; ++a)
+    {
+        if (!out_amp[a])
+            continue;
+        peak = 0.0f;
+        for (i = 0; i < g.n; ++i)
+        {
+            out_amp[a][i] = wave_grid_value(wave, &g, a, i);
+            if ((float)fabs((double)out_amp[a][i]) > peak)
+                peak = (float)fabs((double)out_amp[a][i]);
+        }
+        normalised(out_amp[a], g.n, peak);
+    }
+    wave_grid_free(&g);
+    return PULSEG_SUCCESS;
 }
 
 int pulseg_sample_wave(
@@ -723,24 +837,18 @@ int pulseg_sample_wave(
     long num_samples,
     float *out)
 {
-    const pulseg_sequence_descriptor *desc;
-    axis_corners points;
-    long i;
-    int rc;
+    float *axes[3];
 
     if (!coll || !out)
         return PULSEG_ERR_NULL_POINTER;
-    desc = wave_owner(coll, subseq_idx, wave_idx);
-    if (!desc || raster_us <= 0.0f || num_samples < 0)
+    if (out_axis < PULSEG_GRAD_AXIS_X || out_axis > PULSEG_GRAD_AXIS_Z)
         return PULSEG_ERR_INVALID_ARGUMENT;
-    memset(&points, 0, sizeof(points));
-    rc = wave_points(desc, wave_idx, out_axis, &points);
-    if (PULSEG_FAILED(rc))
-        return rc;
-    for (i = 0; i < num_samples; ++i)
-        out[i] = axis_value_at(&points, start_us + ((float)i + 0.5f) * raster_us);
-    axis_corners_free(&points);
-    return PULSEG_SUCCESS;
+    axes[0] = NULL;
+    axes[1] = NULL;
+    axes[2] = NULL;
+    axes[out_axis] = out;
+    return pulseg__sample_wave_axes(
+        coll, subseq_idx, wave_idx, start_us, raster_us, num_samples, axes);
 }
 
 void pulseg__wave_cover(float start_us, float end_us, float raster_us, pulseg_wave_region *region)
