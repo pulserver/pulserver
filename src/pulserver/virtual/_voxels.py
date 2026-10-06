@@ -7,7 +7,7 @@ import math
 import numpy as np
 
 #: The shapes a voxel's isochromats are spread over.
-VOXELS = ("point", "box")
+VOXELS = ("point", "box", "jittered")
 
 #: Half widths of a T2' line from its centre at which it is cut: an isochromat
 #: precesses at most this many times ``1 / (2 pi T2')`` from its voxel.
@@ -20,7 +20,9 @@ def stencil(spins: int, voxel: str, spacing: float, axes: np.ndarray) -> tuple:
     ``"point"`` places every isochromat at the centre; ``"box"`` places them
     at the centres of a grid of ``spins**(1/d)`` cells along each of the
     ``(d, 3)`` unit ``axes`` of a cube ``spacing`` wide, which take the strata
-    of the line in the order of the golden ratio's multiples.
+    of the line in the order of the golden ratio's multiples. ``"jittered"``
+    has the box's cells and order; :func:`jitter` moves each isochromat within
+    its cell.
 
     Raises
     ------
@@ -39,14 +41,39 @@ def stencil(spins: int, voxel: str, spacing: float, axes: np.ndarray) -> tuple:
     cells = round(spins ** (1.0 / len(axes)))
     if cells ** len(axes) != spins:
         raise ValueError(
-            f"a box of {len(axes)} axes holds a whole number of cells along each, "
-            f"not {spins} isochromats"
+            f"a {voxel} of {len(axes)} axes holds a whole number of cells along "
+            f"each, not {spins} isochromats"
         )
     centres = (np.arange(cells) + 0.5) / cells - 0.5
     grid = np.stack(np.meshgrid(*[centres] * len(axes), indexing="ij"), axis=-1)
     offsets = spacing * grid.reshape(spins, len(axes)) @ axes
     order = np.argsort(np.modf(np.arange(spins) * (math.sqrt(5.0) - 1.0) / 2.0)[0])
     return offsets, order
+
+
+def spins_for(spins: int | None, voxel: str, axes: np.ndarray) -> int:
+    """Return ``spins``, or without it one for a ``"point"`` voxel and two cells along each of ``axes`` for the others."""
+    if spins is not None:
+        return spins
+    return 1 if voxel == "point" else 2 ** len(np.atleast_2d(axes))
+
+
+def jitter(
+    voxels: int,
+    spins: int,
+    spacing: float,
+    axes: np.ndarray,
+    rng: np.random.Generator,
+) -> np.ndarray:
+    """Return a displacement for each spread isochromat, ``(voxels * spins, 3)`` in m, uniform over its cell of a ``"jittered"`` voxel.
+
+    Each isochromat is drawn on its own, so no two voxels share their
+    isochromats' positions and none lies on a lattice.
+    """
+    axes = np.atleast_2d(np.asarray(axes, dtype=float))
+    cells = round(spins ** (1.0 / len(axes)))
+    within = rng.uniform(-0.5, 0.5, (voxels * spins, len(axes)))
+    return (spacing / cells) * within @ axes
 
 
 def spread(values: np.ndarray, spins: int) -> np.ndarray:

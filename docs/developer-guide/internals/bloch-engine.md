@@ -435,6 +435,13 @@ one of its axes, and not a multiple of $m$, leaves the voxel no signal, as it
 leaves a uniform voxel none; a point voxel, and a lattice of them, keeps its
 signal under any such winding. The cells of all voxels lie on one lattice,
 $m$ times finer, on which windows under a changing gradient are still read.
+A `"jittered"` voxel has the box's cells and moves each isochromat anywhere in
+its own, drawn per isochromat from the seed. Every box voxel holds its
+isochromats at the same offsets, so a coherence the gradients leave
+undephased at those offsets survives in every voxel alike, at any $m$; in
+jittered voxels it survives at different offsets in each, and the voxels add
+it incoherently, as a spread that falls as $1/\sqrt{m^d}$. Off the lattice,
+a window under a changing gradient is summed sample by sample.
 
 *Frequency.* T2′ is the decay of a voxel's signal by a static distribution of
 frequencies within it, which a spin echo refocuses. A Lorentzian line of half

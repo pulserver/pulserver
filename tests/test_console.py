@@ -27,6 +27,7 @@ from pulserver.host._blocks import format_limits
 from pulserver.protocol import FOV_OFFSET, FOV_ROTATION, PROTOCOL_BEGIN, PROTOCOL_END
 from pulserver.proxy import ReconProxy
 from pulserver.recon._runtime.readers import deserialize_config
+from pulserver.virtual import _voxels
 from pulserver.virtual._command import ORIENTATIONS
 from pulserver.virtual._console import Console, _connection
 from pulserver.virtual._localizer import PLANES
@@ -55,6 +56,18 @@ def _console(tmp_path, spacing=2e-3, **options):
         spacing=spacing,
         **options,
     )
+
+
+def test_a_console_spreads_two_jittered_isochromats_along_each_axis_of_a_voxel_by_default(
+    tmp_path,
+):
+    """Four over a voxel of the vials, which lie in a plane, and eight over a cube of BrainWeb; one at a point voxel's centre."""
+    console = _console(tmp_path)
+
+    assert (console.voxel, console._spins()) == ("jittered", 4)
+    assert _voxels.spins_for(None, "jittered", virtual.BrainWeb.VOXEL_AXES) == 8
+    assert _console(tmp_path, voxel="point")._spins() == 1
+    assert _console(tmp_path, spins=9, voxel="box")._spins() == 9
 
 
 @pytest.fixture
@@ -355,7 +368,7 @@ def _builds(console):
 def test_a_scan_plays_on_the_isochromats_in_the_slabs_its_excitations_excite(
     tmp_path,
 ):
-    console = _console(tmp_path)
+    console = _console(tmp_path, voxel="point")
     design = console.design("generate", "gre2d", _block(TE=5000, nx=32, ny=32))[
         "design"
     ]
@@ -390,7 +403,7 @@ def test_scans_that_excite_other_slabs_play_on_isochromats_of_their_own(tmp_path
 def test_a_console_coarsens_its_spacing_until_a_scan_keeps_no_more_isochromats_than_it_may(
     tmp_path,
 ):
-    console = _console(tmp_path, spacing=1e-3)
+    console = _console(tmp_path, spacing=1e-3, voxel="point")
     design = console.design("generate", "gre2d", _block(TE=5000, nx=32, ny=32))[
         "design"
     ]
