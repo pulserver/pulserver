@@ -45,6 +45,7 @@ gpu = ["torch>=2.14.1", "triton>=3.0", "cufinufft>=2.5.1"]
 dev = [
   "pytest>=9.1.1",
   "pytest-cov>=7.1.0",
+  "pytest-xdist>=3",
   "coverage>=7.16.2",
   # Pinned, not ranged: a formatter that differs between a contributor and
   # CI makes "one entry point" a lie. Dependabot proposes the bumps.

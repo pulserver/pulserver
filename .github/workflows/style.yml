@@ -4,7 +4,9 @@ name: Style
 # and any file that would change fails the job.
 
 on:
+  # A branch is tested once, through its pull request.
   push:
+    branches: [main]
   pull_request:
   workflow_dispatch:
 
