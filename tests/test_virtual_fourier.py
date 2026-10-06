@@ -413,3 +413,20 @@ def test_a_scan_read_span_by_span_reads_what_it_reads_whole(
     scale = max(np.abs(readout).max() for readout in whole)
     for span, readout in zip(spans, whole, strict=True):
         np.testing.assert_allclose(span, readout, rtol=0, atol=1e-5 * scale)
+
+
+def test_a_rare_group_of_flip_angles_joins_the_nearest_one_the_same_pulses_turn(
+    device,
+):
+    groups = torch.tensor(
+        [[5, 20], [5, 21], [5, 23], [0, 20]], dtype=torch.int8, device=device
+    )
+    group_of = torch.tensor([0] * 9000 + [1] * 995 + [2] * 4 + [3], device=device)
+    density = torch.ones(group_of.numel(), device=device)
+
+    kept, joined = _fourier._merged(groups, group_of, density)
+
+    assert kept.cpu().tolist() == [[5, 20], [5, 21], [0, 20]]
+    assert torch.equal(
+        kept[joined], groups[torch.tensor([0] * 9000 + [1] * 999 + [3], device=device)]
+    )

@@ -48,6 +48,11 @@ _LEVELS = np.concatenate(
     [[0.0], 2.0 ** -np.arange(7, 3, -1), np.arange(0.1, 2.0001, 0.05)]
 )
 
+#: Share of the excited entries' density beyond which a group of their
+#: flip angles is simulated as a train of its own; the entries of rarer groups
+#: join the nearest of those that the same selectors turn.
+_RARE = 1e-3
+
 #: Gradients pulses may play under beyond which they select by frequency
 #: alone: between them, pulses whose bands cover the object, as a ZTE scan's
 #: are.
@@ -187,7 +192,10 @@ class FourierPlayer:
         )
         excited = (profiles[:, excitations] > 0).any(dim=1)
         self._entries = everything.subset(torch.nonzero(excited).reshape(-1))
-        groups, group_of = torch.unique(profiles[excited], dim=0, return_inverse=True)
+        groups, group_of = _merged(
+            *torch.unique(profiles[excited], dim=0, return_inverse=True),
+            self._entries.density,
+        )
         del everything, profiles, excited
         self._groups = groups.cpu().numpy()
         self._group_of = group_of
@@ -827,6 +835,46 @@ def _profiles(entries: _Entries, selectors: np.ndarray, pulses) -> torch.Tensor:
         nearest = torch.searchsorted(levels[1:] + levels[:-1], 2.0 * flip.contiguous())
         held[:, at] = nearest.to(torch.int8)
     return held
+
+
+def _merged(
+    groups: torch.Tensor, group_of: torch.Tensor, density: torch.Tensor
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Return the groups that hold all but :data:`_RARE` of the entries' density, and each entry's group among them.
+
+    A rarer group's entries join the kept group nearest in their flip angles
+    among those the same selectors turn; one with none such is kept.
+    """
+    count = groups.shape[0]
+    mass = torch.zeros(count, dtype=density.dtype, device=density.device)
+    mass.index_add_(0, group_of, density)
+    order = torch.argsort(mass, descending=True)
+    share = torch.cumsum(mass[order], 0) / mass.sum().clamp_min(1e-30)
+    held = (
+        int(
+            torch.searchsorted(
+                share, torch.tensor(1.0 - _RARE, dtype=share.dtype, device=share.device)
+            )
+        )
+        + 1
+    )
+    kept = np.zeros(count, dtype=bool)
+    kept[order[:held].cpu().numpy()] = True
+    rows = groups.cpu().numpy()
+    flips = _LEVELS[rows]
+    turned = rows > 0
+    target = np.arange(count)
+    for group in np.flatnonzero(~kept):
+        alike = np.flatnonzero(kept & (turned == turned[group]).all(axis=1))
+        if not alike.size:
+            kept[group] = True
+            continue
+        target[group] = alike[
+            np.argmin(np.abs(flips[alike] - flips[group]).sum(axis=1))
+        ]
+    place = np.cumsum(kept) - 1
+    renumbered = torch.as_tensor(place[target], device=group_of.device)
+    return groups[torch.as_tensor(kept, device=groups.device)], renumbered[group_of]
 
 
 def _stations(
