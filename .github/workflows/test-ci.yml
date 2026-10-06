@@ -127,7 +127,7 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
           python -m pip install .[dev,coils,design]
-          python -c "import bartorch.tools, torchsim"
+          python -c "import bartorch.tools, blochsim"
 
       - name: Run the coil tests
         run: pytest -q -ra tests/test_virtual_coils.py --cov

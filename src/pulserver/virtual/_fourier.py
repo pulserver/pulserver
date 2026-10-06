@@ -255,8 +255,8 @@ class FourierPlayer:
 
     def _temporal(self, station: int, events, shifted, selector_of) -> _Basis:
         """Return the basis spanning the signals of a station's groups and atoms at its readouts' echoes."""
-        from torchsim.sequence import EpgEngine, TissueProperties
-        from torchsim.sequence._accelerators import pack_description
+        from blochsim.sequence import EpgEngine, TissueProperties
+        from blochsim.sequence._accelerators import pack_description
 
         readouts = np.flatnonzero(self._station_of == station)
         members = np.flatnonzero(self._groups[:, station] > 0)
@@ -1320,7 +1320,7 @@ def _description(stream: _Stream, groups: np.ndarray, device) -> object:
     Each pulse turns a group through its flip angle times the group's profile
     under the pulse's selector.
     """
-    from torchsim.sequence import (
+    from blochsim.sequence import (
         AdcRole,
         EventAction,
         EventType,

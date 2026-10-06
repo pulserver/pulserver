@@ -30,13 +30,13 @@ and `as_rows()` lays it out. Nothing sends it.
 
 It belongs after the MRD XML header and before the first acquisition of a
 series, so a receiver has the description before any data. The receiver is
-`torchsim`, which today has no MRD surface at all: no reader, no header
+`blochsim`, which today has no MRD surface at all: no reader, no header
 handling. The interpretation of the stream is hand-written on the
 reconstruction side, by picking the signal model — that is the intended use,
 not something to generate.
 
 What to do: agree how the rows ride the stream, emit them in the proxy, and
-give torchsim the reader. Check by reading a written stream back into the rows
+give blochsim the reader. Check by reading a written stream back into the rows
 it was built from.
 
 ### Throughput at the sizes that hurt
