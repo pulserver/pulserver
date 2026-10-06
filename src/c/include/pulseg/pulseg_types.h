@@ -711,14 +711,20 @@ typedef struct pulseg_subseq_info
      *  instances, which is what makes pulseg_get_rf_array() report a
      *  positional-max envelope rather than one canonical instance. */
     int rf_amplitude_variable;
-    /** The largest, over the subsequence's repetitions and the VOPs the host
-     *  was given, of a repetition's RF energy at a VOP over that of the same
-     *  repetition with each of its pulses replaced by the reference pulse:
-     *  hard, 1 ms, 180 degrees, in the default channel shim. Scanner SAR
-     *  follows as this ratio times the SAR of the reference repetition.
+    /** Local SAR term, per pulse, against the reference pulse (hard, 1 ms,
+     *  180 degrees, in the default channel shim) at the drive scale where
+     *  the reference meets the head SAR limit: the largest, over the
+     *  subsequence's repetitions, of a repetition's peak local RF energy
+     *  through the VOPs, times the VOP file's safety factor, over the
+     *  reference pulse's head energy in the body model where it is smallest
+     *  and over the pulses the repetition plays, times the head SAR limit
+     *  over the local one. A pulse given the reference pulse's time times
+     *  the larger of this and vop_global_sar_ratio stays within both limits.
      *  0 when the host was given no VOPs or the subsequence plays no RF. */
     float vop_sar_ratio;
-    /** The same ratio for the VOP file's global SAR matrix; 0 without one. */
+    /** Head SAR term: a repetition's head RF energy per pulse over the
+     *  reference pulse's, body model by body model, the largest over
+     *  repetitions and models; 0 as vop_sar_ratio. */
     float vop_global_sar_ratio;
     /** The raster the file's gradient shapes are sampled on, in us: its
      *  GradientRasterTime, or the conversion's where it declares none. */

@@ -46,8 +46,9 @@ class CheckLimits:
         Forbidden gradient bands of ``check_mech_resonance``, on the physical
         axes. Without any, the resonance check is left out.
     vops
-        VOPs, or the ``.mat`` or ``.npz`` file holding them, which
-        :func:`sar_ratios` reads; nothing is refused on SAR.
+        VOPs and the global SAR matrices of their body models, or the ``.mat``
+        or ``.npz`` file holding them, which :func:`sar_ratios` reads; nothing
+        is refused on SAR.
     drive_per_hz
         Channel drive per Hz of RF amplitude, in the VOPs' drive unit: one
         value, or one per channel. A scale common to every channel cancels in
@@ -55,11 +56,17 @@ class CheckLimits:
     default_shim
         Complex channel weights of a pulse played without an RF shim, and of
         the reference pulse; equal weights when None.
+    vop_coil
+        The transmit configuration the scanner reports. When given, the VOP
+        file's ``metadata["transmit"]`` must name the same one.
+    vop_head_limit, vop_local_limit
+        The scanner's head and local SAR limits, W/kg, in its current
+        operating mode; :func:`sar_ratios` needs both.
 
     Raises
     ------
     ValueError
-        If the PNS limit is not positive.
+        If the PNS limit or a SAR limit is not positive.
     """
 
     pns: Any = None
@@ -68,23 +75,32 @@ class CheckLimits:
     vops: safety.VopModel | Path | str | None = None
     drive_per_hz: float | tuple[float, ...] = 1.0
     default_shim: tuple[complex, ...] | None = None
+    vop_coil: str | None = None
+    vop_head_limit: float | None = None
+    vop_local_limit: float | None = None
 
     def __post_init__(self) -> None:
         if self.pns_limit <= 0.0:
             raise ValueError("the PNS limit must be positive")
+        for limit in (self.vop_head_limit, self.vop_local_limit):
+            if limit is not None and not limit > 0.0:
+                raise ValueError(f"a SAR limit must be positive, not {limit}")
 
 
 @dataclass(frozen=True)
 class SarRatio:
-    """A subsequence's RF energy at the VOPs, against the reference pulse.
+    """A subsequence's RF energy per pulse, against the reference pulse at the head SAR limit.
 
-    ``local_sar`` is the largest, over the subsequence's repetitions and the
-    VOPs, of the energy a repetition deposits at a VOP over the energy there
-    of the same repetition with each of its pulses replaced by the reference
-    pulse; ``global_sar`` is that ratio through the global SAR matrix. A
-    scanner's SAR for the subsequence is the ratio times its SAR for that
-    reference repetition. Both are 0 without RF, and ``global_sar`` is 0
-    without a global matrix.
+    Each is the largest over the subsequence's repetitions, per pulse the
+    repetition plays, at the drive scale where the reference pulse meets the
+    head SAR limit. ``local_sar`` is the repetition's peak local energy,
+    through the VOPs and times the VOP file's safety factor, over the
+    reference pulse's head energy in the body model where it is smallest,
+    times the head limit over the local limit. ``global_sar`` is the
+    repetition's head energy over the reference pulse's, body model by body
+    model. Given the time the scanner gives the reference pulse, times the
+    larger of the two, each pulse of the subsequence stays within both
+    limits. Both are 0 without RF.
     """
 
     local_sar: float
@@ -265,7 +281,9 @@ def sar_ratios(
     system
         The rasters and RF dead times the reference pulse is made with.
     limits
-        The VOPs, channel drive and default shim.
+        The VOPs, the head and local SAR limits, the channel drive, the
+        default shim and, when given, the transmit configuration the VOP file
+        must name.
     designed
         The chain as :func:`pulserver.mrd.designed_chain` returns it, weighed
         in place of reading the files.
@@ -278,14 +296,26 @@ def sar_ratios(
     Raises
     ------
     ValueError
-        If ``limits`` carries no VOPs, a file of the chain cannot be read, or a
-        pulse or shim weighs another number of channels than the VOPs.
+        If ``limits`` carries no VOPs or not both SAR limits, the VOPs carry
+        no global SAR matrices, the VOP file names another transmit
+        configuration than ``limits.vop_coil``, a file of the chain cannot be
+        read, or a pulse or shim weighs another number of channels than the
+        VOPs.
     """
     if limits.vops is None:
         raise ValueError("SAR ratios need VOPs")
+    if limits.vop_head_limit is None or limits.vop_local_limit is None:
+        raise ValueError("SAR ratios need the scanner's head and local SAR limits")
     vops = limits.vops
     if not isinstance(vops, safety.VopModel):
         vops = safety.read_vops(vops)
+    if limits.vop_coil is not None:
+        written_for = (vops.metadata or {}).get("transmit")
+        if written_for != limits.vop_coil:
+            raise ValueError(
+                f"the VOPs are for the transmit configuration {written_for!r}, "
+                f"and the scanner reports {limits.vop_coil!r}"
+            )
     drive = {"drive_per_hz": limits.drive_per_hz, "default_shim": limits.default_shim}
     reference = pp.Sequence(system)
     reference.add_block(
@@ -293,16 +323,16 @@ def sar_ratios(
             flip_angle=REFERENCE_FLIP, duration=REFERENCE_DURATION, system=system
         )
     )
-    _, pulse = safety.check_sar(reference, vops, **drive)
+    limit_ratio = limits.vop_head_limit / limits.vop_local_limit
     chain_read = designed if designed is not None else _read(seq_path)
     ratios = []
     for _, sequence in chain_read:
-        _, found = safety.check_sar(sequence, vops, reference=pulse, **drive)
-        ratios.append(_ratio(sequence, found, pulse))
+        _, found = safety.check_sar(sequence, vops, reference=reference, **drive)
+        ratios.append(_ratio(sequence, found, limit_ratio))
     return ratios
 
 
-def _ratio(sequence: pp.Sequence, found: Any, pulse: Any) -> SarRatio:
+def _ratio(sequence: pp.Sequence, found: Any, limit_ratio: float) -> SarRatio:
     """Divide each window's energy against one reference pulse by the pulses it plays."""
     windows = found.windows
     rf = np.array([row[1] for row in sequence.block_events.values()], dtype=int)
@@ -311,13 +341,9 @@ def _ratio(sequence: pp.Sequence, found: Any, pulse: Any) -> SarRatio:
     if not windows.first.size or not pulses.any():
         return SarRatio(0.0, 0.0)
     with_rf = pulses > 0
-    unit = float(pulse.windows.duration[0])
-    per_pulse = windows.duration / (unit * np.maximum(pulses, 1))
-    local = float((windows.reference_ratio * per_pulse)[with_rf].max())
-    whole = 0.0
-    if windows.global_sar is not None and pulse.windows.global_sar[0] > 0.0:
-        against = float(pulse.windows.global_sar[0])
-        whole = float((windows.global_sar / against * per_pulse)[with_rf].max())
+    per_pulse = windows.duration / (found.reference.duration * np.maximum(pulses, 1))
+    local = float((windows.local_to_head * per_pulse)[with_rf].max()) * limit_ratio
+    whole = float((windows.global_ratio * per_pulse)[with_rf].max())
     return SarRatio(local, whole)
 
 

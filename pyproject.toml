@@ -23,7 +23,7 @@ classifiers = [
 ]
 
 dependencies = [
-  "pypulseqpp>=0.0.28",
+  "pypulseqpp>=0.0.29",
   "numpy>=2.2.6",
   "ismrmrd>=1.15.0",
   "pydicom>=3.0.2",
@@ -38,10 +38,10 @@ brainweb = ["brainweb-dl>=0.4.6"]
 coils = ["bartorch[motion]>=0.0.8"]
 console = ["websockets>=16.1.1"]
 # The fse3d plugin's optimized refocusing trains, designed with torchsim.
-design = ["pypulseqpp[design]>=0.0.28"]
+design = ["pypulseqpp[design]>=0.0.29"]
 # Windows read on the isochromats' lattice on a CUDA device: the sums by a
 # Triton kernel, the transforms by cuFINUFFT.
-gpu = ["torch>=2.14.1", "triton>=3.0", "cufinufft>=2.3"]
+gpu = ["torch>=2.14.1", "triton>=3.0", "cufinufft>=2.5.1"]
 dev = [
   "pytest>=9.1.1",
   "pytest-cov>=7.1.0",
