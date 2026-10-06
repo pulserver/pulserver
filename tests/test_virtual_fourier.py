@@ -620,3 +620,13 @@ def test_a_delaying_girf_plays_the_moment_its_delay_later(converted):
 def test_a_girf_has_unit_gain_at_zero_frequency():
     girf = virtual.Girf.delay_lowpass(20e-6, 10e-6)
     np.testing.assert_allclose(girf.impulse.sum(axis=0) * girf.dt_s, 1.0, rtol=1e-12)
+
+
+def test_a_readout_of_one_shape_is_spanned_by_one_finite_term():
+    column = torch.ones((10, 1), dtype=torch.complex64)
+    basis = _fourier._span(lambda: iter([column]), 10, 1e-3, torch.device("cpu"))
+    assert basis.shape == (10, 1)
+    assert torch.isfinite(basis).all()
+    np.testing.assert_allclose(
+        torch.abs(basis.mH @ column).item(), np.sqrt(10.0), rtol=1e-5
+    )
