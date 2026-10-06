@@ -546,14 +546,17 @@
 <dt class="sig sig-object py" id="pulserver.ir.SarRatio">
 <span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">pulserver.ir.</span></span><span class="sig-name descname"><span class="pre">SarRatio</span></span><a class="reference internal" href="../_modules/pulserver/ir/_checks.html#SarRatio"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.ir.SarRatio" title="Link to this definition">#</a></dt>
 <dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/builtins/functions.html#object" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
-<p>A subsequence’s RF energy at the VOPs, against the reference pulse.</p>
-<p><code class="docutils literal notranslate"><span class="pre">local_sar</span></code> is the largest, over the subsequence’s repetitions and the
-VOPs, of the energy a repetition deposits at a VOP over the energy there
-of the same repetition with each of its pulses replaced by the reference
-pulse; <code class="docutils literal notranslate"><span class="pre">global_sar</span></code> is that ratio through the global SAR matrix. A
-scanner’s SAR for the subsequence is the ratio times its SAR for that
-reference repetition. Both are 0 without RF, and <code class="docutils literal notranslate"><span class="pre">global_sar</span></code> is 0
-without a global matrix.</p>
+<p>A subsequence’s RF energy per pulse, against the reference pulse at the head SAR limit.</p>
+<p>Each is the largest over the subsequence’s repetitions, per pulse the
+repetition plays, at the drive scale where the reference pulse meets the
+head SAR limit. <code class="docutils literal notranslate"><span class="pre">local_sar</span></code> is the repetition’s peak local energy,
+through the VOPs and times the VOP file’s safety factor, over the
+reference pulse’s head energy in the body model where it is smallest,
+times the head limit over the local limit. <code class="docutils literal notranslate"><span class="pre">global_sar</span></code> is the
+repetition’s head energy over the reference pulse’s, body model by body
+model. Given the time the scanner gives the reference pulse, times the
+larger of the two, each pulse of the subsequence stays within both
+limits. Both are 0 without RF.</p>
 </dd></dl>
 
 <p class="rubric">Attributes</p>

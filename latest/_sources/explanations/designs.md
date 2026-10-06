@@ -114,33 +114,51 @@ establish scanner or patient safety.
 
 ## SAR against a reference pulse
 
-The interpreter computes SAR under its own calibration of the transmit chain. Where
-local SAR is computed from virtual observation points (VOPs), the energy a
-pulse deposits at VOP $v$ is $\int \mathbf{b}(t)^H Q_v\, \mathbf{b}(t)\,dt$,
-with $\mathbf{b}$ the drive of each transmit channel and $Q_v$ the VOP's
-matrix, and it depends on the shape of the pulse and its channel weights. The
-host evaluates it against a reference: the hard pulse of 180° and 1 ms, played
-in the default channel weights. For each repetition $w$ of a subsequence, the
-blocks before the first repetition and after the last included, as
-pypulseqpp's SAR check averages over them, {func}`~pulserver.ir.sar_ratios`
-computes
+The interpreter computes SAR under its own calibration of the transmit chain,
+which covers a pulse played in the coil's default channel weights. Where local
+SAR is computed from virtual observation points (VOPs), the host relates every
+pulse of a subsequence to such a pulse, the reference: hard, 180° and 1 ms, in
+the default channel weights. The energy a pulse deposits at VOP $v$ is
+$\int \mathbf{b}(t)^H Q_v\, \mathbf{b}(t)\,dt$, with $\mathbf{b}$ the drive of
+each transmit channel and $Q_v$ the VOP's matrix, and in the head of body model
+$b$ the same integral with that model's head SAR matrix $G_b$. For each
+repetition $w$ of a subsequence, the blocks before the first repetition and
+after the last included, as pypulseqpp's SAR check averages over them,
+{func}`~pulserver.ir.sar_ratios` computes
 
 $$
-r = \max_w \max_v \frac{E_{v,w}}{N_w\, E_v^{\mathrm{ref}}},
+r_{\mathrm{local}} = \frac{L_{\mathrm{head}}}{L_{\mathrm{local}}} \max_w
+\frac{M \max_v E_{v,w}}{N_w \min_b E^{\mathrm{ref}}_{G_b}},
+\qquad
+r_{\mathrm{head}} = \max_w \max_b \frac{E_{G_b,w}}{N_w\, E^{\mathrm{ref}}_{G_b}},
 $$
 
-with $E_{v,w}$ the energy of the repetition at VOP $v$, $N_w$ the number of
-pulses it plays and $E_v^{\mathrm{ref}}$ the energy of the reference pulse
-there: the energy of the repetition over that of the same repetition with each
-of its pulses replaced by the reference. A 1 ms hard pulse of 90° counts a
-quarter of the reference, and the ratio is 1 for a repetition of reference
-pulses. The global SAR matrix of the VOP file gives the same ratio for global
-SAR. A scale common to every channel's drive and to the VOPs cancels in both.
+with $E_{v,w}$ and $E_{G_b,w}$ the energy of the repetition at VOP $v$ and in
+the head of body model $b$, $N_w$ the number of pulses it plays,
+$E^{\mathrm{ref}}_{G_b}$ the head energy of one reference pulse, $M$ the VOP
+file's safety factor, and $L_{\mathrm{head}}$ and $L_{\mathrm{local}}$ the
+scanner's head and local SAR limits, `vop_head_limit` and `vop_local_limit`.
 
-The cache carries the two ratios of each subsequence in its
+The interpreter gives the reference pulse the shortest time its calibration
+allows, at which the reference's head SAR reaches $L_{\mathrm{head}}$. That
+fixes the drive scale without a measurement of transmitted power: at that
+scale, a pulse of the subsequence given $\max(r_{\mathrm{local}},
+r_{\mathrm{head}})$ times the reference pulse's time deposits at most
+$L_{\mathrm{local}}$ of peak local SAR and $L_{\mathrm{head}}$ of head SAR. The
+smallest reference energy over the body models sets the largest drive scale, so
+the local term holds in every model; the head term is taken body model by body
+model, since a subject's head SAR is that of one body. The bound rests on the
+interpreter's head SAR for the reference not falling below the true one, and on
+the VOPs and the safety factor bounding peak local SAR; the reference's own
+local SAR does not enter. A 1 ms hard pulse of 90° counts a quarter of the
+reference in both terms, and a repetition of reference pulses has a head term
+of 1. A scale common to every channel's drive and to the matrices cancels in
+both terms; the relative channel gains do not.
+
+The cache carries the two terms of each subsequence in its
 `pulseg_subseq_info`, zero without VOPs or without RF, and the interpreter
-computes the SAR of the subsequence as the ratio times its SAR for the reference
-repetition.
+charges each pulse of the subsequence the time of a reference pulse times the
+larger of the two.
 
 ## Access from the reconstruction side
 

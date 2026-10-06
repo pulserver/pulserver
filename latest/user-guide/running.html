@@ -743,13 +743,19 @@ the gradient heating.</p>
 <td><p>One forbidden band: its physical axis (<code class="docutils literal notranslate"><span class="pre">x</span></code>, <code class="docutils literal notranslate"><span class="pre">y</span></code>, <code class="docutils literal notranslate"><span class="pre">z</span></code> or <code class="docutils literal notranslate"><span class="pre">all</span></code>), its lowest and highest frequency in Hz and, optionally, the largest amplitude allowed in it in mT/m, separated by spaces</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">vop_file</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">.mat</span></code> or <code class="docutils literal notranslate"><span class="pre">.npz</span></code> file of VOPs and, optionally, a global SAR matrix, at a path the design calls can read</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">.mat</span></code> or <code class="docutils literal notranslate"><span class="pre">.npz</span></code> file of VOPs and the head SAR matrix of each body model, at a path the design calls can read; its <code class="docutils literal notranslate"><span class="pre">safety_factor</span></code> multiplies local SAR</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">vop_drive_per_hz</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">vop_head_limit</span></code>, <code class="docutils literal notranslate"><span class="pre">vop_local_limit</span></code></p></td>
+<td><p>The scanner’s head and local SAR limits in W/kg in its current operating mode; both needed with a <code class="docutils literal notranslate"><span class="pre">vop_file</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">vop_drive_per_hz</span></code></p></td>
 <td><p>Channel drive per Hz of RF amplitude, one per channel separated by spaces; a scale common to every channel cancels, and equal drives when left out</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">vop_default_shim</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">vop_default_shim</span></code></p></td>
 <td><p>Magnitude and phase in rad of each channel’s weight for a pulse played without an RF shim, separated by spaces; equal weights when left out</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">vop_coil</span></code></p></td>
+<td><p>Transmit configuration the scanner reports; the VOP file’s <code class="docutils literal notranslate"><span class="pre">transmit</span></code> metadata must name the same one</p></td>
 </tr>
 </tbody>
 </table>

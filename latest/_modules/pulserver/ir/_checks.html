@@ -513,8 +513,9 @@
 <span class="sd">        Forbidden gradient bands of ``check_mech_resonance``, on the physical</span>
 <span class="sd">        axes. Without any, the resonance check is left out.</span>
 <span class="sd">    vops</span>
-<span class="sd">        VOPs, or the ``.mat`` or ``.npz`` file holding them, which</span>
-<span class="sd">        :func:`sar_ratios` reads; nothing is refused on SAR.</span>
+<span class="sd">        VOPs and the global SAR matrices of their body models, or the ``.mat``</span>
+<span class="sd">        or ``.npz`` file holding them, which :func:`sar_ratios` reads; nothing</span>
+<span class="sd">        is refused on SAR.</span>
 <span class="sd">    drive_per_hz</span>
 <span class="sd">        Channel drive per Hz of RF amplitude, in the VOPs' drive unit: one</span>
 <span class="sd">        value, or one per channel. A scale common to every channel cancels in</span>
@@ -522,11 +523,17 @@
 <span class="sd">    default_shim</span>
 <span class="sd">        Complex channel weights of a pulse played without an RF shim, and of</span>
 <span class="sd">        the reference pulse; equal weights when None.</span>
+<span class="sd">    vop_coil</span>
+<span class="sd">        The transmit configuration the scanner reports. When given, the VOP</span>
+<span class="sd">        file's ``metadata["transmit"]`` must name the same one.</span>
+<span class="sd">    vop_head_limit, vop_local_limit</span>
+<span class="sd">        The scanner's head and local SAR limits, W/kg, in its current</span>
+<span class="sd">        operating mode; :func:`sar_ratios` needs both.</span>
 
 <span class="sd">    Raises</span>
 <span class="sd">    ------</span>
 <span class="sd">    ValueError</span>
-<span class="sd">        If the PNS limit is not positive.</span>
+<span class="sd">        If the PNS limit or a SAR limit is not positive.</span>
 <span class="sd">    """</span>
 
     <span class="n">pns</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span>
@@ -535,10 +542,16 @@
     <span class="n">vops</span><span class="p">:</span> <span class="n">safety</span><span class="o">.</span><span class="n">VopModel</span> <span class="o">|</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">drive_per_hz</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">=</span> <span class="mf">1.0</span>
     <span class="n">default_shim</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">complex</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">vop_coil</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">vop_head_limit</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">vop_local_limit</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">__post_init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">pns_limit</span> <span class="o">&lt;=</span> <span class="mf">0.0</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"the PNS limit must be positive"</span><span class="p">)</span></div>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"the PNS limit must be positive"</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">limit</span> <span class="ow">in</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">vop_head_limit</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">vop_local_limit</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">limit</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">limit</span> <span class="o">&gt;</span> <span class="mf">0.0</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"a SAR limit must be positive, not </span><span class="si">{</span><span class="n">limit</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span></div>
 
 
 
@@ -546,15 +559,18 @@
 <a class="viewcode-back" href="../../../generated/pulserver.ir.SarRatio.html#pulserver.ir.SarRatio">[docs]</a>
 <span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 <span class="k">class</span><span class="w"> </span><span class="nc">SarRatio</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""A subsequence's RF energy at the VOPs, against the reference pulse.</span>
+<span class="w">    </span><span class="sd">"""A subsequence's RF energy per pulse, against the reference pulse at the head SAR limit.</span>
 
-<span class="sd">    ``local_sar`` is the largest, over the subsequence's repetitions and the</span>
-<span class="sd">    VOPs, of the energy a repetition deposits at a VOP over the energy there</span>
-<span class="sd">    of the same repetition with each of its pulses replaced by the reference</span>
-<span class="sd">    pulse; ``global_sar`` is that ratio through the global SAR matrix. A</span>
-<span class="sd">    scanner's SAR for the subsequence is the ratio times its SAR for that</span>
-<span class="sd">    reference repetition. Both are 0 without RF, and ``global_sar`` is 0</span>
-<span class="sd">    without a global matrix.</span>
+<span class="sd">    Each is the largest over the subsequence's repetitions, per pulse the</span>
+<span class="sd">    repetition plays, at the drive scale where the reference pulse meets the</span>
+<span class="sd">    head SAR limit. ``local_sar`` is the repetition's peak local energy,</span>
+<span class="sd">    through the VOPs and times the VOP file's safety factor, over the</span>
+<span class="sd">    reference pulse's head energy in the body model where it is smallest,</span>
+<span class="sd">    times the head limit over the local limit. ``global_sar`` is the</span>
+<span class="sd">    repetition's head energy over the reference pulse's, body model by body</span>
+<span class="sd">    model. Given the time the scanner gives the reference pulse, times the</span>
+<span class="sd">    larger of the two, each pulse of the subsequence stays within both</span>
+<span class="sd">    limits. Both are 0 without RF.</span>
 <span class="sd">    """</span>
 
     <span class="n">local_sar</span><span class="p">:</span> <span class="nb">float</span>
@@ -741,7 +757,9 @@
 <span class="sd">    system</span>
 <span class="sd">        The rasters and RF dead times the reference pulse is made with.</span>
 <span class="sd">    limits</span>
-<span class="sd">        The VOPs, channel drive and default shim.</span>
+<span class="sd">        The VOPs, the head and local SAR limits, the channel drive, the</span>
+<span class="sd">        default shim and, when given, the transmit configuration the VOP file</span>
+<span class="sd">        must name.</span>
 <span class="sd">    designed</span>
 <span class="sd">        The chain as :func:`pulserver.mrd.designed_chain` returns it, weighed</span>
 <span class="sd">        in place of reading the files.</span>
@@ -754,14 +772,26 @@
 <span class="sd">    Raises</span>
 <span class="sd">    ------</span>
 <span class="sd">    ValueError</span>
-<span class="sd">        If ``limits`` carries no VOPs, a file of the chain cannot be read, or a</span>
-<span class="sd">        pulse or shim weighs another number of channels than the VOPs.</span>
+<span class="sd">        If ``limits`` carries no VOPs or not both SAR limits, the VOPs carry</span>
+<span class="sd">        no global SAR matrices, the VOP file names another transmit</span>
+<span class="sd">        configuration than ``limits.vop_coil``, a file of the chain cannot be</span>
+<span class="sd">        read, or a pulse or shim weighs another number of channels than the</span>
+<span class="sd">        VOPs.</span>
 <span class="sd">    """</span>
     <span class="k">if</span> <span class="n">limits</span><span class="o">.</span><span class="n">vops</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"SAR ratios need VOPs"</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">limits</span><span class="o">.</span><span class="n">vop_head_limit</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">limits</span><span class="o">.</span><span class="n">vop_local_limit</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"SAR ratios need the scanner's head and local SAR limits"</span><span class="p">)</span>
     <span class="n">vops</span> <span class="o">=</span> <span class="n">limits</span><span class="o">.</span><span class="n">vops</span>
     <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">vops</span><span class="p">,</span> <span class="n">safety</span><span class="o">.</span><span class="n">VopModel</span><span class="p">):</span>
         <span class="n">vops</span> <span class="o">=</span> <span class="n">safety</span><span class="o">.</span><span class="n">read_vops</span><span class="p">(</span><span class="n">vops</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">limits</span><span class="o">.</span><span class="n">vop_coil</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">written_for</span> <span class="o">=</span> <span class="p">(</span><span class="n">vops</span><span class="o">.</span><span class="n">metadata</span> <span class="ow">or</span> <span class="p">{})</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"transmit"</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">written_for</span> <span class="o">!=</span> <span class="n">limits</span><span class="o">.</span><span class="n">vop_coil</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"the VOPs are for the transmit configuration </span><span class="si">{</span><span class="n">written_for</span><span class="si">!r}</span><span class="s2">, "</span>
+                <span class="sa">f</span><span class="s2">"and the scanner reports </span><span class="si">{</span><span class="n">limits</span><span class="o">.</span><span class="n">vop_coil</span><span class="si">!r}</span><span class="s2">"</span>
+            <span class="p">)</span>
     <span class="n">drive</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"drive_per_hz"</span><span class="p">:</span> <span class="n">limits</span><span class="o">.</span><span class="n">drive_per_hz</span><span class="p">,</span> <span class="s2">"default_shim"</span><span class="p">:</span> <span class="n">limits</span><span class="o">.</span><span class="n">default_shim</span><span class="p">}</span>
     <span class="n">reference</span> <span class="o">=</span> <span class="n">pp</span><span class="o">.</span><span class="n">Sequence</span><span class="p">(</span><span class="n">system</span><span class="p">)</span>
     <span class="n">reference</span><span class="o">.</span><span class="n">add_block</span><span class="p">(</span>
@@ -769,17 +799,17 @@
             <span class="n">flip_angle</span><span class="o">=</span><span class="n">REFERENCE_FLIP</span><span class="p">,</span> <span class="n">duration</span><span class="o">=</span><span class="n">REFERENCE_DURATION</span><span class="p">,</span> <span class="n">system</span><span class="o">=</span><span class="n">system</span>
         <span class="p">)</span>
     <span class="p">)</span>
-    <span class="n">_</span><span class="p">,</span> <span class="n">pulse</span> <span class="o">=</span> <span class="n">safety</span><span class="o">.</span><span class="n">check_sar</span><span class="p">(</span><span class="n">reference</span><span class="p">,</span> <span class="n">vops</span><span class="p">,</span> <span class="o">**</span><span class="n">drive</span><span class="p">)</span>
+    <span class="n">limit_ratio</span> <span class="o">=</span> <span class="n">limits</span><span class="o">.</span><span class="n">vop_head_limit</span> <span class="o">/</span> <span class="n">limits</span><span class="o">.</span><span class="n">vop_local_limit</span>
     <span class="n">chain_read</span> <span class="o">=</span> <span class="n">designed</span> <span class="k">if</span> <span class="n">designed</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">_read</span><span class="p">(</span><span class="n">seq_path</span><span class="p">)</span>
     <span class="n">ratios</span> <span class="o">=</span> <span class="p">[]</span>
     <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">sequence</span> <span class="ow">in</span> <span class="n">chain_read</span><span class="p">:</span>
-        <span class="n">_</span><span class="p">,</span> <span class="n">found</span> <span class="o">=</span> <span class="n">safety</span><span class="o">.</span><span class="n">check_sar</span><span class="p">(</span><span class="n">sequence</span><span class="p">,</span> <span class="n">vops</span><span class="p">,</span> <span class="n">reference</span><span class="o">=</span><span class="n">pulse</span><span class="p">,</span> <span class="o">**</span><span class="n">drive</span><span class="p">)</span>
-        <span class="n">ratios</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">_ratio</span><span class="p">(</span><span class="n">sequence</span><span class="p">,</span> <span class="n">found</span><span class="p">,</span> <span class="n">pulse</span><span class="p">))</span>
+        <span class="n">_</span><span class="p">,</span> <span class="n">found</span> <span class="o">=</span> <span class="n">safety</span><span class="o">.</span><span class="n">check_sar</span><span class="p">(</span><span class="n">sequence</span><span class="p">,</span> <span class="n">vops</span><span class="p">,</span> <span class="n">reference</span><span class="o">=</span><span class="n">reference</span><span class="p">,</span> <span class="o">**</span><span class="n">drive</span><span class="p">)</span>
+        <span class="n">ratios</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">_ratio</span><span class="p">(</span><span class="n">sequence</span><span class="p">,</span> <span class="n">found</span><span class="p">,</span> <span class="n">limit_ratio</span><span class="p">))</span>
     <span class="k">return</span> <span class="n">ratios</span></div>
 
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_ratio</span><span class="p">(</span><span class="n">sequence</span><span class="p">:</span> <span class="n">pp</span><span class="o">.</span><span class="n">Sequence</span><span class="p">,</span> <span class="n">found</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">pulse</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">SarRatio</span><span class="p">:</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_ratio</span><span class="p">(</span><span class="n">sequence</span><span class="p">:</span> <span class="n">pp</span><span class="o">.</span><span class="n">Sequence</span><span class="p">,</span> <span class="n">found</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">limit_ratio</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">SarRatio</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Divide each window's energy against one reference pulse by the pulses it plays."""</span>
     <span class="n">windows</span> <span class="o">=</span> <span class="n">found</span><span class="o">.</span><span class="n">windows</span>
     <span class="n">rf</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">row</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">sequence</span><span class="o">.</span><span class="n">block_events</span><span class="o">.</span><span class="n">values</span><span class="p">()],</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">int</span><span class="p">)</span>
@@ -788,13 +818,9 @@
     <span class="k">if</span> <span class="ow">not</span> <span class="n">windows</span><span class="o">.</span><span class="n">first</span><span class="o">.</span><span class="n">size</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">pulses</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
         <span class="k">return</span> <span class="n">SarRatio</span><span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span>
     <span class="n">with_rf</span> <span class="o">=</span> <span class="n">pulses</span> <span class="o">&gt;</span> <span class="mi">0</span>
-    <span class="n">unit</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">pulse</span><span class="o">.</span><span class="n">windows</span><span class="o">.</span><span class="n">duration</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
-    <span class="n">per_pulse</span> <span class="o">=</span> <span class="n">windows</span><span class="o">.</span><span class="n">duration</span> <span class="o">/</span> <span class="p">(</span><span class="n">unit</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">maximum</span><span class="p">(</span><span class="n">pulses</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
-    <span class="n">local</span> <span class="o">=</span> <span class="nb">float</span><span class="p">((</span><span class="n">windows</span><span class="o">.</span><span class="n">reference_ratio</span> <span class="o">*</span> <span class="n">per_pulse</span><span class="p">)[</span><span class="n">with_rf</span><span class="p">]</span><span class="o">.</span><span class="n">max</span><span class="p">())</span>
-    <span class="n">whole</span> <span class="o">=</span> <span class="mf">0.0</span>
-    <span class="k">if</span> <span class="n">windows</span><span class="o">.</span><span class="n">global_sar</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">pulse</span><span class="o">.</span><span class="n">windows</span><span class="o">.</span><span class="n">global_sar</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mf">0.0</span><span class="p">:</span>
-        <span class="n">against</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">pulse</span><span class="o">.</span><span class="n">windows</span><span class="o">.</span><span class="n">global_sar</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
-        <span class="n">whole</span> <span class="o">=</span> <span class="nb">float</span><span class="p">((</span><span class="n">windows</span><span class="o">.</span><span class="n">global_sar</span> <span class="o">/</span> <span class="n">against</span> <span class="o">*</span> <span class="n">per_pulse</span><span class="p">)[</span><span class="n">with_rf</span><span class="p">]</span><span class="o">.</span><span class="n">max</span><span class="p">())</span>
+    <span class="n">per_pulse</span> <span class="o">=</span> <span class="n">windows</span><span class="o">.</span><span class="n">duration</span> <span class="o">/</span> <span class="p">(</span><span class="n">found</span><span class="o">.</span><span class="n">reference</span><span class="o">.</span><span class="n">duration</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">maximum</span><span class="p">(</span><span class="n">pulses</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
+    <span class="n">local</span> <span class="o">=</span> <span class="nb">float</span><span class="p">((</span><span class="n">windows</span><span class="o">.</span><span class="n">local_to_head</span> <span class="o">*</span> <span class="n">per_pulse</span><span class="p">)[</span><span class="n">with_rf</span><span class="p">]</span><span class="o">.</span><span class="n">max</span><span class="p">())</span> <span class="o">*</span> <span class="n">limit_ratio</span>
+    <span class="n">whole</span> <span class="o">=</span> <span class="nb">float</span><span class="p">((</span><span class="n">windows</span><span class="o">.</span><span class="n">global_ratio</span> <span class="o">*</span> <span class="n">per_pulse</span><span class="p">)[</span><span class="n">with_rf</span><span class="p">]</span><span class="o">.</span><span class="n">max</span><span class="p">())</span>
     <span class="k">return</span> <span class="n">SarRatio</span><span class="p">(</span><span class="n">local</span><span class="p">,</span> <span class="n">whole</span><span class="p">)</span>
 
 

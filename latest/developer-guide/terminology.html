@@ -791,21 +791,30 @@ verb that classifies the operation: “Return…”, “Read…”, “Format…
 <td><p>Hz; amplitude allowed in it in mT/m</p></td>
 </tr>
 <tr class="row-even"><td><p>SAR ratio (<code class="docutils literal notranslate"><span class="pre">vop_sar_ratio</span></code>, <code class="docutils literal notranslate"><span class="pre">vop_global_sar_ratio</span></code>)</p></td>
-<td><p>unitless: energy over that of the reference repetition</p></td>
+<td><p>unitless: energy per pulse over that of the reference pulse, the local term scaled by the head limit over the local limit</p></td>
 </tr>
-<tr class="row-odd"><td><p>Default channel weights (<code class="docutils literal notranslate"><span class="pre">vop_default_shim</span></code>)</p></td>
+<tr class="row-odd"><td><p>SAR limits (<code class="docutils literal notranslate"><span class="pre">vop_head_limit</span></code>, <code class="docutils literal notranslate"><span class="pre">vop_local_limit</span></code>)</p></td>
+<td><p>W/kg</p></td>
+</tr>
+<tr class="row-even"><td><p>Default channel weights (<code class="docutils literal notranslate"><span class="pre">vop_default_shim</span></code>)</p></td>
 <td><p>unitless magnitude, phase in rad</p></td>
 </tr>
-<tr class="row-even"><td><p>Dwell time in an enriched acquisition (<code class="docutils literal notranslate"><span class="pre">sample_time_us</span></code>)</p></td>
+<tr class="row-odd"><td><p>VOP safety factor (<code class="docutils literal notranslate"><span class="pre">safety_factor</span></code> of a VOP file)</p></td>
+<td><p>unitless, at least 1, on local SAR</p></td>
+</tr>
+<tr class="row-even"><td><p>Transmit configuration (<code class="docutils literal notranslate"><span class="pre">vop_coil</span></code>, <code class="docutils literal notranslate"><span class="pre">transmit</span></code> of a VOP file)</p></td>
+<td><p>an opaque string the scanner reports</p></td>
+</tr>
+<tr class="row-odd"><td><p>Dwell time in an enriched acquisition (<code class="docutils literal notranslate"><span class="pre">sample_time_us</span></code>)</p></td>
 <td><p>µs</p></td>
 </tr>
-<tr class="row-odd"><td><p>k-space trajectory</p></td>
+<tr class="row-even"><td><p>k-space trajectory</p></td>
 <td><p>1/m, as pypulseqpp reports it</p></td>
 </tr>
-<tr class="row-even"><td><p>Grid trajectory (<code class="docutils literal notranslate"><span class="pre">ReconBuffer.grid_trajectory</span></code>)</p></td>
+<tr class="row-odd"><td><p>Grid trajectory (<code class="docutils literal notranslate"><span class="pre">ReconBuffer.grid_trajectory</span></code>)</p></td>
 <td><p>k times the reconstructed field of view; an N-point matrix spans [-N/2, N/2)</p></td>
 </tr>
-<tr class="row-odd"><td><p>Design identifier</p></td>
+<tr class="row-even"><td><p>Design identifier</p></td>
 <td><p>18 hexadecimal digits: three 24-bit integers, each exact in a float32</p></td>
 </tr>
 </tbody>

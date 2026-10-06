@@ -21,4 +21,7 @@
    ~CheckLimits.drive_per_hz
    ~CheckLimits.pns
    ~CheckLimits.pns_limit
+   ~CheckLimits.vop_coil
+   ~CheckLimits.vop_head_limit
+   ~CheckLimits.vop_local_limit
    ~CheckLimits.vops
