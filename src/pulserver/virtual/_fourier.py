@@ -83,6 +83,18 @@ _MIXED_SAMPLE = 1 << 16
 #: which the rest are projected onto it.
 _SKETCH = 4096
 
+#: Deviation from the periodic state, relative to the equilibrium
+#: magnetization, below which one period of a stream stands for every later
+#: one: relaxation contracts the deviation by at least ``exp(-t / T1)``.
+_SETTLED = 1e-3
+
+#: Resolution, in rad, of the phase increments two periods of a stream are
+#: compared by: a sequence file keeps a phase to about 1e-5.
+_PHASE_STEP = 2.0 * math.pi / 2**16
+
+#: Values a period is tried at, from those the stream's middle TR recurs at.
+_PERIODS = 64
+
 # The cache's RF uses.
 _EXCITATION = 1
 _REFOCUSING = 2
@@ -222,21 +234,24 @@ class FourierPlayer:
         member_t = torch.as_tensor(members, device=self.device)
         local = torch.nonzero(torch.isin(self._group_of, member_t)).reshape(-1)
         atoms = torch.unique(self._atoms.index[local])
-        description = _description(
+        held = self._atoms
+        stream = _stream(
             self._timeline,
             events,
             shifted,
             selector_of,
-            self._groups[members],
+            (self._groups[members] > 0).any(axis=0),
             readouts,
-            self.device,
         )
+        settle_us = 1e6 * float(held.t1[atoms].max()) * math.log(1.0 / _SETTLED)
+        stream, column = _periodic(stream, settle_us)
+        played = int(np.count_nonzero(stream.kind == 2))
+        description = _description(stream, self._groups[members], self.device)
         packed = pack_description(
             description, repetitions=1, record="all", device=self.device
         )
         count = members.size
-        held = self._atoms
-        step = max(1, _BUDGET // max(8 * count * readouts.size, 1))
+        step = max(1, _BUDGET // max(8 * count * played, 1))
 
         def simulated(chosen: torch.Tensor) -> torch.Tensor:
             """Return the signals of the chosen atoms, ``(groups, atoms, readouts)``."""
@@ -255,13 +270,13 @@ class FourierPlayer:
                     device=self.device,
                     events=packed,
                 )
-                parts.append(result.signal.reshape(count, -1, readouts.size).conj())
+                parts.append(result.signal.reshape(count, -1, played).conj())
             return torch.cat(parts, dim=1)
 
         sketched = max(1, _SKETCH // count)
         if atoms.numel() <= sketched:
             left, right = _leading(
-                simulated(atoms).reshape(-1, readouts.size), self._tolerance
+                simulated(atoms).reshape(-1, played), self._tolerance
             )
             coefficients = left.reshape(count, atoms.numel(), -1)
         else:
@@ -270,9 +285,7 @@ class FourierPlayer:
                 atoms.numel(), device=self.device, generator=generator
             )
             sample = atoms[order[:sketched]]
-            _, right = _leading(
-                simulated(sample).reshape(-1, readouts.size), self._tolerance
-            )
+            _, right = _leading(simulated(sample).reshape(-1, played), self._tolerance)
             coefficients = torch.empty(
                 (count, atoms.numel(), right.shape[0]),
                 dtype=torch.complex64,
@@ -288,6 +301,7 @@ class FourierPlayer:
             atoms=atoms,
             coefficients=coefficients,
             temporal=right,
+            column=torch.as_tensor(column, device=self.device),
         )
 
     def _image(self, basis: _Basis, tissue: Tissue, rotation: np.ndarray) -> _Grid:
@@ -387,7 +401,9 @@ class FourierPlayer:
                 continue
             grid, basis = self._grids[index], self._bases[index]
             position = np.searchsorted(basis.readouts, readout[chosen])
-            temporal = basis.temporal[:, torch.as_tensor(position, device=self.device)]
+            temporal = basis.temporal[
+                :, basis.column[torch.as_tensor(position, device=self.device)]
+            ]
             within = firsts[first] + chosen - firsts[readout[chosen]]
             across = self._readout.basis(readout[chosen], within)
             weights = grid.mix @ (temporal[:, None, :] * across[None, :, :]).reshape(
@@ -493,7 +509,10 @@ class _Basis:
     coefficients
         ``(groups, atoms, rank)`` each group's atoms' coefficients.
     temporal
-        ``(rank, readouts)`` the basis.
+        ``(rank, played)`` the basis, at the readouts the station's stream
+        plays.
+    column
+        ``(readouts,)`` per readout, the played one whose signal it records.
     """
 
     readouts: np.ndarray
@@ -502,6 +521,7 @@ class _Basis:
     atoms: torch.Tensor
     coefficients: torch.Tensor
     temporal: torch.Tensor
+    column: torch.Tensor
 
 
 @dataclass(frozen=True)
@@ -883,15 +903,330 @@ class _Atoms:
         self.b1 = weakest + _B1_BIN * (rest % strengths).to(torch.float32)
 
 
-def _description(timeline, events, shifted, selector_of, groups, readouts, device):
-    """Return a station's event stream as a TorchSim description, a train per group.
+@dataclass(frozen=True)
+class _Stream:
+    """A station's events in play order: its pulses and its readouts, and the shifts after each.
 
-    The stream holds the pulses that act on one of ``groups``, each turning a
-    group through its flip angle times the group's profile under the pulse's
-    selector, and the ``readouts``. Between two of them, the states shift by
-    as many orders as the interval between them does where they are
-    consecutive in the scan, and by one where any interval of the scan
-    between them shifts them.
+    ``selector`` is a pulse's selector and ``flip`` its nominal flip angle in
+    rad, -1 and 0 for a readout; ``phase`` is a pulse's phase or a readout's
+    receiver phase, in rad; ``orders`` shift the states at ``shift_us``;
+    ``readout`` is a readout's index among the timeline's, -1 for a pulse.
+    """
+
+    kind: np.ndarray
+    time_us: np.ndarray
+    selector: np.ndarray
+    flip: np.ndarray
+    use: np.ndarray
+    phase: np.ndarray
+    orders: np.ndarray
+    shift_us: np.ndarray
+    readout: np.ndarray
+
+    def subset(self, chosen: np.ndarray) -> _Stream:
+        return _Stream(
+            *(getattr(self, name)[chosen] for name in self.__dataclass_fields__)
+        )
+
+
+def _stream(timeline, events, shifted, selector_of, acting, readouts) -> _Stream:
+    """Return the pulses that act on a station's groups, under the selectors ``acting`` marks, and its ``readouts``.
+
+    Between two of them, the states shift by as many orders as the interval
+    between them does where they are consecutive in the scan, and by one
+    where any interval of the scan between them shifts them.
+    """
+    pulses = timeline.pulses
+    own = np.zeros(len(timeline.readouts), dtype=bool)
+    own[readouts] = True
+    pulse = events.kind == 1
+    index = events.index
+    kept = np.flatnonzero(
+        np.where(
+            pulse,
+            acting[selector_of[np.where(pulse, index, 0)]],
+            own[np.where(pulse, 0, index)],
+        )
+    )
+    passed = np.concatenate([[0], np.cumsum(shifted)])
+    following = np.append(kept[1:], events.kind.size - 1)
+    orders = passed[following] - passed[kept]
+    orders = np.where(following - kept > 1, np.minimum(orders, 1), orders)
+    every = np.arange(shifted.size)
+    first_shift = np.minimum.accumulate(
+        np.where(shifted > 0, every, shifted.size)[::-1]
+    )[::-1]
+    gap = (
+        first_shift[np.minimum(kept, max(shifted.size - 1, 0))]
+        if shifted.size
+        else kept
+    )
+    gap = np.minimum(gap, max(events.kind.size - 2, 0))
+    shift_us = np.where(
+        orders > 0,
+        0.5
+        * (
+            events.time_us[gap]
+            + events.time_us[np.minimum(gap + 1, events.kind.size - 1)]
+        ),
+        events.time_us[kept],
+    )
+    is_pulse = pulse[kept]
+    at = index[kept]
+    rf = np.where(is_pulse, at, 0)
+    readout = np.where(is_pulse, -1, at)
+    return _Stream(
+        kind=events.kind[kept],
+        time_us=events.time_us[kept],
+        selector=np.where(is_pulse, selector_of[rf], -1),
+        flip=np.where(is_pulse, pulses.flip[rf], 0.0),
+        use=np.where(is_pulse, pulses.use[rf], 0),
+        phase=np.where(
+            is_pulse,
+            pulses.phase[rf],
+            timeline.readouts.receiver[np.maximum(readout, 0)],
+        ),
+        orders=orders,
+        shift_us=shift_us,
+        readout=readout,
+    )
+
+
+def _signatures(stream: _Stream) -> np.ndarray:
+    """Return what makes each event of a stream act as another does after the same history, ``(events, 8)``.
+
+    A pulse's phase counts by its increase over the pulse before it, and a
+    readout's by its increase over the last pulse's: two periods whose pulses
+    and receivers differ by one phase throughout record the same signal.
+    """
+    count = stream.kind.size
+    every = np.arange(count)
+    pulse = stream.kind == 1
+    last = np.maximum.accumulate(np.where(pulse, every, -1))
+    before = np.where(pulse, np.concatenate([[-1], last[:-1]]), last)
+    reference = np.where(before >= 0, stream.phase[np.maximum(before, 0)], 0.0)
+    turns = 2**16
+    increase = (
+        np.round(np.mod(stream.phase - reference, 2.0 * math.pi) / _PHASE_STEP).astype(
+            np.int64
+        )
+        % turns
+    )
+    step_ns = np.round(
+        1e3 * np.diff(stream.time_us, append=stream.time_us[-1:])
+    ).astype(np.int64)
+    shift_ns = np.round(1e3 * (stream.shift_us - stream.time_us)).astype(np.int64)
+    return np.stack(
+        [
+            stream.kind,
+            stream.selector,
+            np.round(stream.flip * 1e7).astype(np.int64),
+            stream.use,
+            increase,
+            stream.orders,
+            step_ns,
+            shift_ns,
+        ],
+        axis=1,
+    ).astype(np.int64)
+
+
+def _hashed(rows: np.ndarray) -> np.ndarray:
+    """Return a 64-bit hash of each row."""
+    multipliers = np.array(
+        [
+            0x9E3779B97F4A7C15,
+            0xC2B2AE3D27D4EB4F,
+            0x165667B19E3779F9,
+            0x27D4EB2F165667C5,
+            0xFF51AFD7ED558CCD,
+            0xC4CEB9FE1A85EC53,
+            0x94D049BB133111EB,
+            0xD6E8FEB86659FD93,
+        ],
+        dtype=np.uint64,
+    )[: rows.shape[1]]
+    with np.errstate(over="ignore"):
+        mixed = (rows.astype(np.uint64) * multipliers).sum(axis=1, dtype=np.uint64)
+        mixed ^= mixed >> np.uint64(31)
+        mixed *= np.uint64(0xBF58476D1CE4E5B9)
+        mixed ^= mixed >> np.uint64(29)
+    return mixed
+
+
+def _periodic(stream: _Stream, settle_us: float) -> tuple[_Stream, np.ndarray]:
+    """Return the events of a stream to play and, per readout, the readout among them whose signal it records.
+
+    What the magnetization goes through is the pulses, the increase of each
+    one's phase over the one before, the time from each to the next and the
+    shifts between them; a readout records it after the pulse before it. The
+    longest stretch of pulses that recurs every ``q`` of them plays its first
+    periods until ``settle_us`` has passed, its last ``(length mod q)``
+    pulses, and none between. A readout after a skipped pulse records what
+    the same readout of the last period played records: after each of its
+    pulses, that period reads what any period of the stretch reads there,
+    which leaves its pulses acting as they do. The events after the stretch
+    play on from the last period, their times and phases moved back by what
+    the skipped pulses took and turned through. Where no stretch is long
+    enough to skip a period, or two periods read after the same pulse
+    differently, every event plays.
+
+    Returns
+    -------
+    _Stream
+        The events that play, with ``readout`` -1 for those read only so that
+        a skipped readout has one to record.
+    numpy.ndarray
+        ``(readouts,)`` per readout of the stream, its index among the played
+        ones.
+    """
+    count = stream.kind.size
+    reading = stream.kind == 2
+    everything = stream, np.arange(int(reading.sum()))
+    pulses = np.flatnonzero(stream.kind == 1)
+    if pulses.size < 4:
+        return everything
+
+    rows = _signatures(stream)
+    acting = rows[pulses].copy()
+    acting[:, 5] = np.add.reduceat(stream.orders, pulses)
+    following = np.append(stream.time_us[pulses[1:]], stream.time_us[-1])
+    acting[:, 6] = np.round(1e3 * (following - stream.time_us[pulses])).astype(np.int64)
+    acting[:, 7] = 0
+    signature = _hashed(acting)
+    middle = pulses.size // 2
+    periods = np.unique(np.abs(np.flatnonzero(signature == signature[middle]) - middle))
+    best = (0, 0, 0)
+    for q in periods[periods > 0][:_PERIODS]:
+        q = int(q)
+        match = np.concatenate([[False], signature[q:] == signature[:-q], [False]])
+        edges = np.flatnonzero(np.diff(match.astype(np.int8)))
+        lengths = edges[1::2] - edges[::2]
+        longest = int(np.argmax(lengths))
+        if int(lengths[longest]) + q > best[0]:
+            best = (int(lengths[longest]) + q, int(edges[2 * longest]), q)
+        if best[0] >= pulses.size - q:
+            break
+    length, first, q = best
+    if q == 0:
+        return everything
+    period_us = float(stream.time_us[pulses[first + q]] - stream.time_us[pulses[first]])
+    settle = math.ceil(settle_us / max(period_us, 1e-9)) + 1
+    whole, rest = divmod(length, q)
+    if whole <= settle + 1 or not np.array_equal(
+        acting[first : first + length - q], acting[first + q : first + length]
+    ):
+        return everything
+    skip_from, skip_to = first + settle * q, first + length - rest
+
+    # What each pulse reads before the next: each readout's offset, phase
+    # increase, shifts and their offset; the same after the same pulse of
+    # every period of the stretch, or nothing.
+    owner = np.cumsum(stream.kind == 1) - 1
+    after = np.arange(count) - np.searchsorted(owner, owner)
+    owned = owner[reading]
+    reads = rows[reading]
+    relative = np.stack(
+        [
+            np.round(
+                1e3
+                * (
+                    stream.time_us[reading]
+                    - stream.time_us[pulses[np.maximum(owned, 0)]]
+                )
+            ).astype(np.int64),
+            reads[:, 4],
+            reads[:, 5],
+            reads[:, 7],
+        ],
+        axis=1,
+    )
+    slots = int(after.max()) + 1
+    with np.errstate(over="ignore"):
+        powers = np.cumprod(
+            np.full(slots, 0x100000001B3, dtype=np.uint64), dtype=np.uint64
+        )
+        pattern = np.zeros(pulses.size, dtype=np.uint64)
+        led = owned >= 0
+        np.add.at(
+            pattern, owned[led], _hashed(relative[led]) * powers[after[reading][led]]
+        )
+    line = (np.arange(pulses.size) - first) % q
+    rich = np.flatnonzero(pattern != 0)
+    rich = rich[(rich >= first) & (rich < first + length)]
+    lines, donors = np.unique(line[rich], return_index=True)
+    donor_of = np.full(q, -1, dtype=np.int64)
+    donor_of[lines] = rich[donors]
+    if np.any(pattern[rich] != pattern[donor_of[line[rich]]]):
+        return everything
+
+    names = tuple(stream.__dataclass_fields__)
+    chunks = [{name: getattr(stream, name)[: pulses[skip_from - q]] for name in names}]
+    for at in range(skip_from - q, skip_from):
+        own, stop = int(pulses[at]), int(pulses[at + 1])
+        donor = int(donor_of[line[at]])
+        if pattern[at] != 0 or donor < 0:
+            chunks.append({name: getattr(stream, name)[own:stop] for name in names})
+            continue
+        lead = int(pulses[donor])
+        tail = int(pulses[donor + 1]) if donor + 1 < pulses.size else count
+        indices = np.concatenate([[own], np.arange(lead + 1, tail)])
+        chunk = {name: getattr(stream, name)[indices].copy() for name in names}
+        moved = stream.time_us[own] - stream.time_us[lead]
+        chunk["orders"][0] = stream.orders[lead]
+        chunk["shift_us"][0] = stream.shift_us[lead] + moved
+        chunk["time_us"][1:] += moved
+        chunk["shift_us"][1:] += moved
+        chunk["phase"][1:] += stream.phase[own] - stream.phase[lead]
+        chunk["readout"][1:] = -1
+        chunks.append(chunk)
+    natural = int(pulses[skip_from])
+    resume = int(pulses[skip_to]) if skip_to < pulses.size else count
+    later = {name: getattr(stream, name)[resume:].copy() for name in names}
+    if resume < count:
+        moved = stream.time_us[resume] - stream.time_us[natural]
+        later["time_us"] -= moved
+        later["shift_us"] -= moved
+        later["phase"] -= (
+            stream.phase[pulses[skip_to - 1]] - stream.phase[pulses[skip_from - 1]]
+        )
+    chunks.append(later)
+    played = _Stream(
+        **{name: np.concatenate([c[name] for c in chunks]) for name in names}
+    )
+
+    # A readout is keyed by the pulse before it, among the stream's, and its
+    # place after that pulse; one after a skipped pulse by the same pulse of
+    # the last period played.
+    kept = np.concatenate([np.arange(skip_from), np.arange(skip_to, pulses.size)])
+    played_owner = np.cumsum(played.kind == 1) - 1
+    played_after = np.arange(played.kind.size) - np.searchsorted(
+        played_owner, played_owner
+    )
+    read = played.kind == 2
+    led = played_owner[read] >= 0
+    played_keys = (
+        np.where(led, kept[np.maximum(played_owner[read], 0)] + 1, 0) * slots
+        + played_after[read]
+    )
+    source = np.where(
+        (owned >= skip_from) & (owned < skip_to),
+        skip_from - q + (owned - first) % q,
+        owned,
+    )
+    wanted = (source + 1) * slots + after[reading]
+    column = np.searchsorted(played_keys, wanted)
+    found = column < played_keys.size
+    if not found.all() or np.any(played_keys[column] != wanted):
+        return everything
+    return played, column
+
+
+def _description(stream: _Stream, groups: np.ndarray, device) -> object:
+    """Return a stream as a TorchSim description, a train per group.
+
+    Each pulse turns a group through its flip angle times the group's profile
+    under the pulse's selector.
     """
     from torchsim.sequence import (
         AdcRole,
@@ -903,21 +1238,8 @@ def _description(timeline, events, shifted, selector_of, groups, readouts, devic
         ideal_rf_definition,
     )
 
-    pulses = timeline.pulses
     count = groups.shape[0]
     flips = _LEVELS[groups].astype(np.float32)
-    acting = (groups > 0).any(axis=0)
-    own = np.zeros(len(timeline.readouts), dtype=bool)
-    own[readouts] = True
-    pulse = events.kind == 1
-    kept = np.flatnonzero(
-        np.where(
-            pulse,
-            acting[selector_of[np.where(pulse, events.index, 0)]],
-            own[np.where(pulse, 0, events.index)],
-        )
-    )
-    passed = np.concatenate([[0], np.cumsum(shifted)])
     amplitudes: dict[tuple[int, float], object] = {}
 
     def amplitude(selector: int, flip: float):
@@ -932,39 +1254,38 @@ def _description(timeline, events, shifted, selector_of, groups, readouts, devic
         return amplitudes[key]
 
     uses = {int(use) for use in RfUse}
-    stream = []
-    for at, event in enumerate(kept):
-        index = int(events.index[event])
-        when = float(events.time_us[event])
-        if events.kind[event] == 1:
-            use = int(pulses.use[index])
-            stream.append(
+    events = []
+    for kind, when, selector, flip, use, phase, orders, shift_us in zip(
+        stream.kind.tolist(),
+        stream.time_us.tolist(),
+        stream.selector.tolist(),
+        stream.flip.tolist(),
+        stream.use.tolist(),
+        stream.phase.tolist(),
+        stream.orders.tolist(),
+        stream.shift_us.tolist(),
+        strict=True,
+    ):
+        if kind == 1:
+            events.append(
                 SequenceEvent.rf(
                     when,
                     0,
                     RfUse(use) if use in uses else RfUse.UNKNOWN,
-                    amplitude(int(selector_of[index]), float(pulses.flip[index])),
-                    float(pulses.phase[index]),
+                    amplitude(selector, flip),
+                    phase,
                 )
             )
         else:
-            receiver = float(timeline.readouts.receiver[index])
-            stream.append(SequenceEvent.adc(when, AdcRole.SINGLE, receiver))
-        following = kept[at + 1] if at + 1 < kept.size else events.kind.size - 1
-        orders = int(passed[following] - passed[event])
-        if following - event > 1:
-            orders = min(orders, 1)
-        if orders > 0:
-            gap = event + int(np.argmax(shifted[event:following] > 0))
-            middle = 0.5 * float(events.time_us[gap] + events.time_us[gap + 1])
-            stream.extend(
-                SequenceEvent(EventType.WAIT, middle, (), EventAction.SHIFT_AFTER)
-                for _ in range(orders)
-            )
+            events.append(SequenceEvent.adc(when, AdcRole.SINGLE, phase))
+        events.extend(
+            SequenceEvent(EventType.WAIT, shift_us, (), EventAction.SHIFT_AFTER)
+            for _ in range(orders)
+        )
     return SequenceDescription(
         subsequence_index=0,
-        tr_duration_us=float(timeline.starts_us[-1]),
-        events=tuple(stream),
+        tr_duration_us=float(stream.time_us[-1]) if stream.time_us.size else 0.0,
+        events=tuple(events),
         rf_definitions={0: ideal_rf_definition()},
     )
 

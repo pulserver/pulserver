@@ -315,3 +315,40 @@ def test_the_fourier_engine_acquires_what_the_bloch_engine_does_of_an_unspoiled_
     )
 
     assert np.linalg.norm(fourier - bloch) < 0.05 * np.linalg.norm(bloch)
+
+
+def test_a_stream_plays_its_repetitions_until_they_settle_and_reads_the_rest_off_the_last(
+    tmp_path, device, monkeypatch
+):
+    sequence = _steady("fid", tmp_path / "fid.seq", selective=False)
+    tissue = virtual.Phantom(
+        [virtual.Ellipse((0.0, 0.0, 0.0), (0.03, 0.03), t1=0.01, t2=0.005)]
+    ).tissue(2e-3, field_t=3.0)
+    periodic = _fourier._periodic
+    counts = {}
+
+    def counted(stream, settle_us):
+        played, column = periodic(stream, settle_us)
+        counts.update(events=stream.kind.size, played=played.kind.size)
+        return played, column
+
+    def acquired():
+        player = virtual.FourierPlayer(sequence, tissue, device=device)
+        return np.concatenate(
+            [readout.ravel() for readout in player.readouts(0, player.blocks)]
+        )
+
+    monkeypatch.setattr(_fourier, "_periodic", counted)
+    settled = acquired()
+    monkeypatch.setattr(
+        _fourier,
+        "_periodic",
+        lambda stream, settle_us: (
+            stream,
+            np.arange(np.count_nonzero(stream.kind == 2)),
+        ),
+    )
+    whole = acquired()
+
+    assert counts["played"] < counts["events"] / 2
+    assert np.linalg.norm(settled - whole) < 1e-3 * np.linalg.norm(whole)
