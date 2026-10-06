@@ -219,6 +219,28 @@ namespace fourier
         return integral;
     }
 
+    void GradientTable::stretches(
+        size_t block,
+        const double* pulse_us,
+        size_t pulses,
+        const double* echo_us,
+        const size_t* order,
+        size_t echoes,
+        std::vector<double>& edges) const
+    {
+        const double start = starts_[block];
+        const double duration = starts_[block + 1] - start;
+        edges.assign({0.0, duration});
+        for (int axis = 0; axis < 3; ++axis)
+            for (int64_t i = span_[6 * block + 2 * axis]; i < span_[6 * block + 2 * axis + 1]; ++i)
+                if (time_[i] > 0.0 && time_[i] < duration)
+                    edges.push_back(time_[i]);
+        add_times_within(pulse_us, pulses, nullptr, start, duration, edges);
+        add_times_within(echo_us, echoes, order, start, duration, edges);
+        std::sort(edges.begin(), edges.end());
+        edges.erase(std::unique(edges.begin(), edges.end()), edges.end());
+    }
+
     void GradientTable::b_values(
         const double* pulse_us,
         const uint8_t* excites,
@@ -240,16 +262,7 @@ namespace fourier
         for (size_t block = 0; block < blocks() && next_echo < n; ++block)
         {
             const double start = starts_[block];
-            const double duration = starts_[block + 1] - start;
-            edges.assign({0.0, duration});
-            for (int axis = 0; axis < 3; ++axis)
-                for (int64_t i = span_[6 * block + 2 * axis]; i < span_[6 * block + 2 * axis + 1]; ++i)
-                    if (time_[i] > 0.0 && time_[i] < duration)
-                        edges.push_back(time_[i]);
-            add_times_within(pulse_us + next_pulse, pulses - next_pulse, nullptr, start, duration, edges);
-            add_times_within(echo_us, n - next_echo, order.data() + next_echo, start, duration, edges);
-            std::sort(edges.begin(), edges.end());
-            edges.erase(std::unique(edges.begin(), edges.end()), edges.end());
+            stretches(block, pulse_us + next_pulse, pulses - next_pulse, echo_us, order.data() + next_echo, n - next_echo, edges);
             double moment[3];
             for (int axis = 0; axis < 3; ++axis)
                 moment[axis] = start_moment_[3 * block + axis];

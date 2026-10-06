@@ -79,6 +79,21 @@ namespace fourier
         double gradient_at(size_t block, int axis, double since_us) const;
 
         /**
+         * Write into @p edges the times, from the start of @p block, between
+         * which every gradient is linear and no pulse or echo falls: its
+         * corners, and the ascending @p pulse_us and @p echo_us (read through
+         * @p order) inside it.
+         */
+        void stretches(
+            size_t block,
+            const double* pulse_us,
+            size_t pulses,
+            const double* echo_us,
+            const size_t* order,
+            size_t echoes,
+            std::vector<double>& edges) const;
+
+        /**
          * Advance @p moment, in 1/m, across the stretch of @p block from
          * @p from_us lasting @p width_us, on which every gradient is linear,
          * and return the integral of |k - @p origin|² over it, in s/m²; zero
