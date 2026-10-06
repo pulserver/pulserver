@@ -18,18 +18,10 @@ from typing import Any
 import numpy as np
 
 from .._plugins import PluginPath, directories, names, recon_names
-from . import _voxels
-from ._command import motion_arguments, reconstruction_plugin, subject_motion
+from ._command import reconstruction_plugin
 
 #: The design calls a console forwards, answered as ``pulserver design`` answers them.
 DESIGN_CALLS = ("list", "validate", "generate", "import")
-
-#: The engines a scan is simulated by: the Fourier engine, on a phantom's
-#: tissue, and the Bloch engine, on its isochromats.
-ENGINES = ("fourier", "bloch")
-
-# Spacings, 1 mm apart, a console tries in keeping a scan within its isochromats.
-_COARSER = 100
 
 #: What each design call takes, as ``pulserver design`` passes it.
 _CALL_INPUTS = {
@@ -122,13 +114,7 @@ class Console:
     push
         Recon-side intake each design is pushed to.
     spacing
-        Finest isochromat spacing of the phantom, in metres.
-    max_isochromats
-        Most isochromats a scan is simulated on. A scan is simulated on the
-        isochromats in the slabs its excitation pulses excite
-        (:func:`~pulserver.virtual.excited`), at the finest spacing, from
-        ``spacing`` up in steps of 1 mm, that keeps no more of them than this;
-        at ``spacing`` without it.
+        Spacing at which the exam's phantom is sampled as tissue, in metres.
     coil
         Name of the coil an exam is started with unless it names another.
     fields
@@ -141,36 +127,8 @@ class Console:
         Scan time elapsed per wall-clock second once the scan's simulation is
         far enough ahead of its clock; as fast as it is simulated without it.
     device
-        Device a scan's ADC windows are read and its runs of repetitions
-        carried on, as :class:`~pulserver.virtual.Isochromats` takes it; the
-        engine does both itself without one.
-    spins
-        Isochromats per voxel, spread over the T2' line of its tissue; two
-        along each axis the exam's phantom's voxel spans
-        (``VOXEL_AXES``) without it, one for a ``"point"`` voxel.
-    voxel
-        Where a voxel's isochromats lie: ``"point"``, at its centre,
-        ``"box"``, at the centres of cells filling it, or ``"jittered"``,
-        anywhere in each cell, as the phantom's ``isochromats`` places them.
-    diffusion
-        Whether BrainWeb's tissue classes diffuse, as
-        :attr:`~pulserver.virtual.BrainWeb.DIFFUSION` gives them.
-    motion
-        The subject's motion, as :class:`~pulserver.virtual.Isochromats`
-        takes it, on the clock of each scan; at rest without one. Moving
-        isochromats play every block alone.
-    engine
-        What a scan is simulated by, one of :data:`ENGINES`: the Fourier
-        engine (:class:`~pulserver.virtual.FourierPlayer`) on the phantom's
-        tissue at ``spacing``, or the Bloch engine on its isochromats. Without
-        it, the Fourier engine unless the subject moves or diffuses, which only
-        the Bloch engine models.
-
-    Raises
-    ------
-    ValueError
-        If ``engine`` is none of :data:`ENGINES`, or is the Fourier engine
-        for a subject that moves or diffuses.
+        Device a scan is simulated on, as
+        :class:`~pulserver.virtual.FourierPlayer` takes it.
     """
 
     def __init__(
@@ -183,16 +141,10 @@ class Console:
         recon_plugins: PluginPath | None = None,
         push: str | None = None,
         spacing: float = 1e-3,
-        max_isochromats: int | None = None,
         coil: str = "body",
         fields: Path | str | None = None,
         speed: float | None = None,
         device: str | None = None,
-        spins: int | None = None,
-        voxel: str = "jittered",
-        diffusion: bool = False,
-        motion: Any = None,
-        engine: str | None = None,
     ) -> None:
         from ..host._blocks import parse_limits
         from ..proxy import LocalReconstruction
@@ -202,17 +154,6 @@ class Console:
             raise ValueError(
                 "a console reconstructs through a proxy or in this process, not both"
             )
-        modelled = motion is None and not diffusion
-        if engine is None:
-            engine = "fourier" if modelled else "bloch"
-        if engine not in ENGINES:
-            raise ValueError(f"a scan is simulated by one of {ENGINES}, not {engine!r}")
-        if engine == "fourier" and not modelled:
-            raise ValueError(
-                "the Fourier engine models no motion or diffusion: simulate with "
-                "the Bloch engine"
-            )
-        self.engine = engine
         self.plugins = directories(plugins)
         self.limits = limits
         self.store = Path(store)
@@ -224,13 +165,8 @@ class Console:
         )
         self.push = push
         self.spacing = spacing
-        self.max_isochromats = max_isochromats
         self.speed = speed
         self.device = device
-        self.spins = spins
-        self.voxel = voxel
-        self.diffusion = diffusion
-        self.motion = motion
         self.field_t = float(parse_limits(limits)["B0"])
         self.fields = None if fields is None else Path(fields)
         self._coils = coils(self.fields, field_t=self.field_t)
@@ -242,11 +178,9 @@ class Console:
         self._brainweb: Any = None
         self._warming: threading.Thread | None = None
         self.phantom = self._phantom("")
-        # The exam's isochromats between its scans, beside the slabs they were
-        # kept in, its tissue, and how many exams have started, so that a scan
-        # hands back only those of the exam in progress.
+        # The exam's tissue, and how many exams have started, so that a scan
+        # keeps only the tissue of the exam in progress.
         self._held = threading.Lock()
-        self._isochromats: tuple[Any, Any] | None = None
         self._tissue: Any = None
         self._exams = 0
 
@@ -319,7 +253,6 @@ class Console:
         self.phantom = self._phantom(subject)
         with self._held:
             self._exams += 1
-            self._isochromats = None
             self._tissue = None
         files = [
             _dicom_bytes(dataset)
@@ -357,11 +290,7 @@ class Console:
 
         The Fourier engine plays a scan on the phantom's tissue at
         ``spacing``, sampled once an exam, where its excitation pulses excite
-        it. The Bloch engine plays it on the phantom's isochromats in the slabs
-        its excitation pulses excite, at the spacing ``max_isochromats``
-        allows. Scans of an exam that excite the same slabs play on the same
-        isochromats, each from equilibrium, which keeps the pulses the Bloch
-        engine has computed; a scan started while another plays has its own.
+        it.
 
         ``recon`` names the reconstruction plugin. Without it, a design of a
         shipped scanner sequence is reconstructed with the shipped
@@ -376,7 +305,6 @@ class Console:
             not.
         """
         from ..host import DesignStore
-        from ._region import excited
 
         plugin = None
         if self.recon is not None or self.local is not None:
@@ -386,52 +314,16 @@ class Console:
         if self.speed is not None:
             emit({"preparing": None})
         rotation = np.asarray(rotation, dtype=float).reshape(3, 3)
-        if self.engine == "fourier":
-            return self._scan(
-                design,
-                self._exam_tissue(),
-                rotation,
-                centre_mm,
-                emit,
-                cancelled,
-                sound,
-                plugin,
-            )
-        region = excited(
-            DesignStore(self.store).directory(design) / "sequence.seq", rotation
+        return self._scan(
+            design,
+            self._exam_tissue(),
+            rotation,
+            centre_mm,
+            emit,
+            cancelled,
+            sound,
+            plugin,
         )
-        with self._held:
-            held, self._isochromats = self._isochromats, None
-            exam = self._exams
-        if held is not None and held[0] == region:
-            isochromats = held[1]
-            if self.engine == "bloch":
-                isochromats.reset()
-        else:
-            if self._warming is not None:
-                self._warming.join()
-            isochromats = self.phantom.isochromats(
-                self._spacing(region),
-                field_t=self.field_t,
-                region=region,
-                coil=self.coil,
-                spins=self._spins(),
-                voxel=self.voxel,
-                motion=self.motion,
-                seed=0,
-                device=self.device,
-            )
-        try:
-            return self._scan(
-                design, isochromats, rotation, centre_mm, emit, cancelled, sound, plugin
-            )
-        finally:
-            with self._held:
-                if exam == self._exams:
-                    self._isochromats = (region, isochromats)
-
-    def _spins(self) -> int:
-        return _voxels.spins_for(self.spins, self.voxel, self.phantom.VOXEL_AXES)
 
     def _exam_tissue(self) -> Any:
         """Return the exam's tissue, sampling it unless the exam's warm-up has."""
@@ -447,28 +339,6 @@ class Console:
                 if exam == self._exams:
                     self._tissue = tissue
         return tissue
-
-    def _spacing(self, region: Any) -> float:
-        """Return the finest spacing, from ``spacing`` up in steps of 1 mm, that keeps at most ``max_isochromats`` of the phantom's isochromats in ``region``.
-
-        Raises
-        ------
-        ValueError
-            If none within 10 cm of it does.
-        """
-        if self.max_isochromats is None:
-            return self.spacing
-        for step in range(_COARSER):
-            spacing = self.spacing + 1e-3 * step
-            kept = self.phantom.count(
-                spacing, field_t=self.field_t, region=region, spins=self._spins()
-            )
-            if kept <= self.max_isochromats:
-                return spacing
-        raise ValueError(
-            f"the phantom holds more than {self.max_isochromats} isochromats at "
-            f"every spacing from {1e3 * self.spacing:g} mm to {1e3 * spacing:g} mm"
-        )
 
     def _limits(self) -> str:
         """Return the limits block of a design: the console's, with the VOP entries of the exam's coil."""
@@ -492,9 +362,7 @@ class Console:
 
         if self.fields is not None or subject.strip().lower() == "brainweb":
             if self._brainweb is None:
-                self._brainweb = BrainWeb(
-                    diffusion=BrainWeb.DIFFUSION if self.diffusion else None
-                )
+                self._brainweb = BrainWeb()
             return self._brainweb
         return default_phantom()
 
@@ -506,8 +374,6 @@ class Console:
             or not phantom.susceptibility
             or "field_ppm" in vars(phantom)
         )
-        if mapped and self.engine != "fourier":
-            return
         with self._held:
             exam = self._exams
 
@@ -519,13 +385,10 @@ class Console:
             with contextlib.suppress(Exception):
                 if not mapped:
                     phantom.field_ppm  # noqa: B018
-                if self.engine == "fourier":
-                    tissue = phantom.tissue(
-                        self.spacing, field_t=self.field_t, coil=coil
-                    )
-                    with self._held:
-                        if exam == self._exams:
-                            self._tissue = tissue
+                tissue = phantom.tissue(self.spacing, field_t=self.field_t, coil=coil)
+                with self._held:
+                    if exam == self._exams:
+                        self._tissue = tissue
 
         self._warming = threading.Thread(
             target=compute, name="pulserver-warm", daemon=True
@@ -535,7 +398,7 @@ class Console:
     def _scan(
         self,
         design: str,
-        isochromats: Any,
+        tissue: Any,
         rotation: np.ndarray,
         centre_mm: Sequence[float],
         emit: Callable[[dict], None],
@@ -545,15 +408,12 @@ class Console:
     ) -> int:
         from ..host import DesignStore
         from . import SAMPLE_RATE, Scan
-        from ._bloch import TOLERANCE
 
         rotation = np.asarray(rotation, dtype=float).reshape(3, 3)
         scan = Scan(
             DesignStore(self.store).directory(design) / "sequence.seq",
-            isochromats,
+            tissue,
             rotation=rotation,
-            default_shim=self.coil.default_shim,
-            tolerance=TOLERANCE,
             device=self.device,
         )
         stopped = threading.Event()
@@ -587,8 +447,7 @@ class Console:
                 emit(clock)
                 yield from chunk.readouts
 
-        # Closed however the scan ends, which stops its simulation before the
-        # isochromats are handed on.
+        # Closed however the scan ends, which stops its simulation.
         with contextlib.closing(played()) as readouts:
             return self._acquire(
                 design, readouts, rotation, centre_mm, emit, stopped, plugin
@@ -814,14 +673,10 @@ def _parser() -> argparse.ArgumentParser:
         help="origin of the browser pages served, repeatable; every origin without it",
     )
     parser.add_argument(
-        "--spacing", type=float, default=1.0, help="finest isochromat spacing, in mm"
-    )
-    parser.add_argument(
-        "--max-isochromats",
-        type=int,
-        default=2_000_000,
-        help="most isochromats a scan is simulated on; the spacing is coarsened "
-        "by 1 mm until the slabs a scan excites hold no more",
+        "--spacing",
+        type=float,
+        default=1.0,
+        help="spacing at which the exam's phantom is sampled, in mm",
     )
     parser.add_argument(
         "--coil", default="body", help="coil an exam starts with unless it names one"
@@ -840,36 +695,9 @@ def _parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--device",
-        help="torch device the ADC windows are read and the runs of repetitions "
-        "carried on, such as cuda (the gpu extra); the engine does both without it",
+        help="torch device a scan is simulated on, such as cuda; a card where "
+        "there is one without it",
     )
-    parser.add_argument(
-        "--spins",
-        type=int,
-        help="isochromats per voxel, spread over the T2' line of its tissue; "
-        "two along each axis of the voxel without it, one for a point voxel",
-    )
-    parser.add_argument(
-        "--voxel",
-        choices=("point", "box", "jittered"),
-        default="jittered",
-        help="where a voxel's isochromats lie: at its centre, at the centres of "
-        "cells filling it, or anywhere in each cell, --spins a square number for "
-        "the vials and a cube for BrainWeb",
-    )
-    parser.add_argument(
-        "--diffusion",
-        action="store_true",
-        help="BrainWeb's tissue classes diffuse, as BrainWeb.DIFFUSION gives them",
-    )
-    parser.add_argument(
-        "--engine",
-        choices=ENGINES,
-        help="what a scan is simulated by: the Fourier engine on the phantom's "
-        "tissue, or the Bloch engine on its isochromats; the Fourier engine "
-        "unless the subject moves or diffuses",
-    )
-    motion_arguments(parser)
     return parser
 
 
@@ -888,16 +716,10 @@ def main(argv: list[str] | None = None) -> int:
         recon_plugins=args.recon_plugins,
         push=args.push,
         spacing=1e-3 * args.spacing,
-        max_isochromats=args.max_isochromats,
         coil=args.coil,
         fields=args.fields,
         speed=args.speed,
         device=args.device,
-        spins=args.spins,
-        voxel=args.voxel,
-        diffusion=args.diffusion,
-        motion=subject_motion(args),
-        engine=args.engine,
     )
     with contextlib.suppress(KeyboardInterrupt):
         asyncio.run(serve(console, args.host, args.port, args.origins))

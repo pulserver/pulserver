@@ -19,7 +19,7 @@ interpreters; they call pulserver's public API and carry no sequence or
 reconstruction logic of their own. Code that belongs to an engine goes
 upstream into that engine, not into a copy here. The virtual scanner, which
 stands in for a scanner and its interpreter, is pulserver's own, and so is the
-Bloch simulation it plays the IR cache with: neither engine reads the cache.
+Fourier engine it plays the IR cache with: neither engine reads the cache.
 
 ## Build and test
 
@@ -56,8 +56,8 @@ The default branch is `main`; pull requests target it.
 | `src/pulserver/recon/` | Reconstruction plugin contract and the runtime that drives it over MRD |
 | `src/pulserver/mrd/` | MRD acquisitions, header entries, images and readout tables |
 | `src/pulserver/validate/` | Checking a sequence against a recording of a machine playing it, or against its own cache |
-| `src/pulserver/virtual/` | The virtual scanner: the cache played on a phantom or on isochromats, the scan clock, the console and the raw-data client |
-| `src/cpp/` | The extension `pulserver._ext`: the IR passes in `ir/`, the virtual scanner's isochromat engine in `bloch/`, and pocketfft, vendored, in `third_party/` |
+| `src/pulserver/virtual/` | The virtual scanner: the cache played on a phantom's tissue by the Fourier engine, the scan clock, the console and the raw-data client |
+| `src/cpp/` | The extension `pulserver._ext`: the IR passes in `ir/` and the Fourier engine's timeline in `fourier/` |
 | `src/c/` | The C89 library a scanner links: cache reader and writer, accessors, protocol |
 | `tests/` | pytest suite; `plugins/` and `recon_plugins/` are the plugin files the services load in tests |
 | `gallery/` | sphinx-gallery example scripts, one directory per section, executed when the pages are built |

@@ -63,21 +63,22 @@ for name, chain in designs.items():
 # Acquisitions
 # ------------
 #
-# The phantom is acquired twice per design: placed at :math:`\mathbf{d}` and
-# played from the cache converted at the offset, and placed at the isocentre
-# and played from the cache converted there. Under the identity rotation the
-# physical axes are the logical ones.
+# The phantom, sampled as tissue on a 2 mm grid, is acquired by the Fourier
+# engine twice per design: placed at :math:`\mathbf{d}` and played from the
+# cache converted at the offset, and placed at the isocentre and played from
+# the cache converted there. Under the identity rotation the physical axes are
+# the logical ones.
 ellipses = [
-    virtual.Ellipse((0.0, 0.0, 0.0), (0.06, 0.04)),
-    virtual.Ellipse((0.02, 0.01, 0.0), (0.015, 0.015), intensity=-0.5),
+    virtual.Ellipse((0.0, 0.0, 0.0), (0.06, 0.04), t1=1.0, t2=0.1),
+    virtual.Ellipse((0.02, 0.01, 0.0), (0.015, 0.015), intensity=-0.5, t1=1.0, t2=0.1),
 ]
 at_offset = virtual.Phantom(ellipses, position=offset)
 at_isocentre = virtual.Phantom(ellipses)
 
 readouts = {
     name: (
-        virtual.acquire(files[name, "offset"], at_offset),
-        virtual.acquire(files[name, "isocentre"], at_isocentre),
+        virtual.simulate(files[name, "offset"], at_offset.tissue(2e-3)),
+        virtual.simulate(files[name, "isocentre"], at_isocentre.tissue(2e-3)),
     )
     for name in designs
 }
@@ -122,28 +123,27 @@ plt.show()
 
 # %%
 # With the proxy phase applied, the samples of the object at the offset are
-# those of the object at the isocentre, to the precision of the acquisition;
-# as received, the echo planar samples are not.
+# those of the object at the isocentre, to the tolerance of the Fourier
+# engine's bases; as received, the echo planar samples are not.
 
 
 def agreement(name, corrected):
     moved, centred = readouts[name]
     table = tables[name]
-    worst = 0.0
+    difference, norm = 0.0, 0.0
     for row in range(len(table)):
         samples = moved[row]
         phase = table.readout_phase_modulation(row)
         if corrected and phase is not None:
             samples = samples * np.exp(1j * phase)
-        worst = max(
-            worst, np.abs(samples - centred[row]).max() / np.abs(centred[row]).max()
-        )
-    return worst
+        difference += np.linalg.norm(samples - centred[row]) ** 2
+        norm += np.linalg.norm(centred[row]) ** 2
+    return np.sqrt(difference / norm)
 
 
 for name in designs:
     print(
-        f"{name}: largest difference from the isocentre, as received "
+        f"{name}: relative difference from the isocentre, as received "
         f"{agreement(name, False):.1e}, with the proxy phase {agreement(name, True):.1e}"
     )
 

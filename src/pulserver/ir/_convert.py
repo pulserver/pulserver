@@ -451,14 +451,24 @@ def prescribe(sequence: pp.Sequence, fov_offset: Sequence[float]) -> pp.Sequence
     ValueError
         If ``fov_offset`` is not three values.
     """
+    transform = _translation(fov_offset)
+    if transform is not None:
+        transform.apply_to_sequence(sequence, in_place=True)
+    return sequence
+
+
+def _translation(fov_offset: Sequence[float]) -> pp.TransformFOV | None:
+    """Return the translation :func:`prescribe` applies; None for none.
+
+    Applied to the files of a chain in play order, it counts the gradient area
+    on from the end of the file before.
+    """
     shift = tuple(float(v) for v in fov_offset)
     if len(shift) != 3:
         raise ValueError(f"fov_offset takes three values, got {len(shift)}")
-    if any(shift):
-        pp.TransformFOV(translation=shift, through_rotation=True).apply_to_sequence(
-            sequence, in_place=True
-        )
-    return sequence
+    if not any(shift):
+        return None
+    return pp.TransformFOV(translation=shift, through_rotation=True)
 
 
 def play(
@@ -578,16 +588,21 @@ def _payload(
 ) -> list[dict[str, Any]]:
     """Read the chain and return each file's libraries, in play order, prescribed to ``fov_offset``.
 
+    The gradient area the offset's phases follow is counted from the start of
+    the chain, so magnetization coherent across a file boundary keeps its
+    phase.
+
     A file the reader refuses raises ``ValueError``, whatever the reader
     itself raised.
     """
     chain_read = (
         designed if designed is not None else _read_chain(seq_path, verify_signature)
     )
+    transform = None if fov_offset is None else _translation(fov_offset)
     payload = []
     for _, sequence in chain_read:
-        if fov_offset is not None:
-            prescribe(sequence, fov_offset)
+        if transform is not None:
+            transform.apply_to_sequence(sequence, in_place=True)
         payload.append(conversion_payload(sequence, system))
     return payload
 

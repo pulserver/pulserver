@@ -27,8 +27,7 @@ from pulserver.host._blocks import format_limits
 from pulserver.protocol import FOV_OFFSET, FOV_ROTATION, PROTOCOL_BEGIN, PROTOCOL_END
 from pulserver.proxy import ReconProxy
 from pulserver.recon._runtime.readers import deserialize_config
-from pulserver.virtual import _fourier, _voxels
-from pulserver.virtual._command import ORIENTATIONS
+from pulserver.virtual import _fourier
 from pulserver.virtual._console import Console, _connection
 from pulserver.virtual._localizer import PLANES
 
@@ -56,18 +55,6 @@ def _console(tmp_path, spacing=2e-3, **options):
         spacing=spacing,
         **options,
     )
-
-
-def test_a_console_spreads_two_jittered_isochromats_along_each_axis_of_a_voxel_by_default(
-    tmp_path,
-):
-    """Four over a voxel of the vials, which lie in a plane, and eight over a cube of BrainWeb; one at a point voxel's centre."""
-    console = _console(tmp_path)
-
-    assert (console.voxel, console._spins()) == ("jittered", 4)
-    assert _voxels.spins_for(None, "jittered", virtual.BrainWeb.VOXEL_AXES) == 8
-    assert _console(tmp_path, voxel="point")._spins() == 1
-    assert _console(tmp_path, spins=9, voxel="box")._spins() == 9
 
 
 @pytest.fixture
@@ -321,12 +308,14 @@ def test_a_scan_reconstructed_in_this_process_returns_the_images_a_proxy_returns
     )
 
 
-def test_an_exams_scans_play_on_its_isochromats_each_from_equilibrium(tmp_path):
-    console = _console(tmp_path, recon_plugins=RECON_PLUGINS, engine="bloch")
+def test_an_exam_samples_its_tissue_once_and_each_scan_plays_from_equilibrium(
+    tmp_path,
+):
+    console = _console(tmp_path, recon_plugins=RECON_PLUGINS)
     design = console.design("generate", "gre2d", _block(TE=5000, nx=32, ny=32))[
         "design"
     ]
-    built = []
+    sampled = []
 
     def scanned():
         messages = []
@@ -342,15 +331,17 @@ def test_an_exams_scans_play_on_its_isochromats_each_from_equilibrium(tmp_path):
 
     def exam():
         console.exam("vials")
-        build = console.phantom.isochromats
-        console.phantom.isochromats = lambda *a, **k: built.append(1) or build(*a, **k)
+        console._warming.join()
+        console._tissue = None
+        sample = console.phantom.tissue
+        console.phantom.tissue = lambda *a, **k: sampled.append(1) or sample(*a, **k)
 
     exam()
     first, second = scanned(), scanned()
     exam()
     third = scanned()
 
-    assert len(built) == 2
+    assert len(sampled) == 2
     np.testing.assert_array_equal(second, first)
     np.testing.assert_array_equal(third, first)
 
@@ -360,135 +351,6 @@ def _scanned(console, design, rotation):
         design, rotation=rotation, centre_mm=(0.0, 0.0, 0.0), emit=lambda _: None
     )
     assert status == 0
-
-
-def _builds(console):
-    """The spacings the exam's phantom is sampled at, one per set of isochromats built."""
-    spacings = []
-    build = console.phantom.isochromats
-    console.phantom.isochromats = lambda spacing, **k: (
-        spacings.append(spacing) or build(spacing, **k)
-    )
-    return spacings
-
-
-def test_a_scan_plays_on_the_isochromats_in_the_slabs_its_excitations_excite(
-    tmp_path,
-):
-    console = _console(tmp_path, engine="bloch", voxel="point")
-    design = console.design("generate", "gre2d", _block(TE=5000, nx=32, ny=32))[
-        "design"
-    ]
-    console.exam("vials")
-    coronal = ORIENTATIONS["coronal"]
-
-    _scanned(console, design, coronal)
-
-    region, isochromats = console._isochromats
-    sequence = DesignStore(tmp_path / "designs").directory(design) / "sequence.seq"
-    assert region == virtual.excited(sequence, coronal)
-    kept = console.phantom.count(2e-3, field_t=console.field_t, region=region)
-    assert len(isochromats) == kept
-    assert 0 < kept < console.phantom.count(2e-3, field_t=console.field_t)
-
-
-def test_scans_that_excite_other_slabs_play_on_isochromats_of_their_own(tmp_path):
-    console = _console(tmp_path, engine="bloch")
-    design = console.design("generate", "gre2d", _block(TE=5000, nx=32, ny=32))[
-        "design"
-    ]
-    console.exam("vials")
-    spacings = _builds(console)
-
-    _scanned(console, design, np.eye(3))
-    _scanned(console, design, np.eye(3))
-    _scanned(console, design, ORIENTATIONS["coronal"])
-
-    assert len(spacings) == 2
-
-
-def test_a_console_coarsens_its_spacing_until_a_scan_keeps_no_more_isochromats_than_it_may(
-    tmp_path,
-):
-    console = _console(tmp_path, spacing=1e-3, engine="bloch", voxel="point")
-    design = console.design("generate", "gre2d", _block(TE=5000, nx=32, ny=32))[
-        "design"
-    ]
-    console.exam("vials")
-    console.max_isochromats = console.phantom.count(2e-3, field_t=console.field_t)
-    spacings = _builds(console)
-
-    _scanned(console, design, np.eye(3))
-
-    assert spacings == [pytest.approx(2e-3)]
-
-
-def test_a_scan_no_spacing_keeps_within_the_consoles_isochromats_is_refused(tmp_path):
-    console = _console(tmp_path, max_isochromats=0, engine="bloch")
-    design = console.design("generate", "gre2d", _block(TE=5000, nx=32, ny=32))[
-        "design"
-    ]
-    console.exam("vials")
-
-    with pytest.raises(ValueError, match="at every spacing"):
-        _scanned(console, design, np.eye(3))
-
-
-def test_a_console_counts_its_spins_per_voxel_in_keeping_within_its_isochromats(
-    tmp_path,
-):
-    console = _console(tmp_path, spacing=1e-3, spins=4, voxel="box", engine="bloch")
-    design = console.design("generate", "gre2d", _block(TE=5000, nx=32, ny=32))[
-        "design"
-    ]
-    console.exam("vials")
-    console.max_isochromats = console.phantom.count(
-        2e-3, field_t=console.field_t, spins=4
-    )
-    spacings = _builds(console)
-
-    _scanned(console, design, np.eye(3))
-
-    region, isochromats = console._isochromats
-    assert spacings == [pytest.approx(2e-3)]
-    single = console.phantom.count(2e-3, field_t=console.field_t, region=region)
-    assert len(isochromats) == 4 * single
-
-
-def test_a_console_moves_its_subject_from_rest_at_the_start_of_each_scan(tmp_path):
-    times = []
-
-    def still(t, positions):
-        times.append(t)
-        return positions
-
-    console = _console(tmp_path, motion=still)
-    design = console.design("generate", "gre2d", _block(TE=5000, nx=32, ny=32))[
-        "design"
-    ]
-    console.exam("vials")
-
-    _scanned(console, design, np.eye(3))
-    first = list(times)
-    times.clear()
-    _scanned(console, design, np.eye(3))
-
-    assert console._isochromats[1].moving
-    assert first[0] == times[0] == 0.0
-    assert times == first
-
-
-def test_a_console_examines_a_brainweb_whose_tissues_diffuse_when_asked(
-    tmp_path, brainweb
-):
-    still = _console(tmp_path)
-    diffusing = _console(tmp_path, diffusion=True)
-
-    still.exam("brainweb")
-    diffusing.exam("brainweb")
-
-    assert not still.phantom.diffusion
-    assert dict(diffusing.phantom.diffusion) == dict(virtual.BrainWeb.DIFFUSION)
 
 
 def test_a_console_reconstructs_through_a_proxy_or_in_process_not_both(tmp_path):
@@ -844,20 +706,12 @@ def test_the_console_command_serves_a_console_of_its_options(tmp_path, monkeypat
             "9876",
             "--spacing",
             "2",
-            "--max-isochromats",
-            "500000",
             "--coil",
             "head8/head32",
             "--origin",
             "https://pulserver.github.io",
-            "--spins",
-            "8",
-            "--voxel",
-            "box",
-            "--diffusion",
-            "--nod",
-            "2",
-            "4",
+            "--device",
+            "cpu",
         ]
     )
 
@@ -868,15 +722,9 @@ def test_the_console_command_serves_a_console_of_its_options(tmp_path, monkeypat
     assert console.recon == ("recon.local", 9020)
     assert console.local is None
     assert console.spacing == pytest.approx(2e-3)
-    assert console.max_isochromats == 500_000
     assert console.coil is virtual.COILS["head8/head32"]
     assert console.field_t == ANY_ORIENTATION["B0"]
-    assert (console.spins, console.voxel, console.diffusion) == (8, "box", True)
-    turned = console.motion(1.0, np.array([[0.0, 0.1, 0.0]]))
-    angle = np.radians(2.0)
-    np.testing.assert_allclose(
-        turned, [[0.0, 0.1 * np.cos(angle), 0.1 * np.sin(angle)]]
-    )
+    assert console.device == "cpu"
 
 
 def test_the_console_command_scans_in_the_coils_of_the_field_maps_it_names(
@@ -901,7 +749,6 @@ def test_the_console_command_scans_in_the_coils_of_the_field_maps_it_names(
     assert status == 0
     console = served["console"]
     assert console.fields == fields
-    assert console.max_isochromats == 2_000_000
     assert console.coil.transmit_model == fields / "head8.npz"
     assert console.coil.receive_model == fields / "head32.npz"
 

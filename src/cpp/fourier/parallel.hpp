@@ -4,8 +4,8 @@
  *        one call to the next.
  */
 
-#ifndef PULSERVER_BLOCH_PARALLEL_HPP
-#define PULSERVER_BLOCH_PARALLEL_HPP
+#ifndef PULSERVER_FOURIER_PARALLEL_HPP
+#define PULSERVER_FOURIER_PARALLEL_HPP
 
 #include <algorithm>
 #include <atomic>
@@ -26,7 +26,7 @@
 #include <immintrin.h>
 #endif
 
-namespace bloch
+namespace fourier
 {
 
     /** How many workers parallel() runs for @p count items. */
@@ -251,6 +251,6 @@ namespace bloch
             thread.join();
     }
 
-} // namespace bloch
+} // namespace fourier
 
-#endif /* PULSERVER_BLOCH_PARALLEL_HPP */
+#endif /* PULSERVER_FOURIER_PARALLEL_HPP */

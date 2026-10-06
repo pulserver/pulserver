@@ -9,6 +9,7 @@ import ismrmrd
 import numpy as np
 import pypulseqpp as pp
 import pytest
+from _analytic import acquire, trajectory
 from _host import ANY_ORIENTATION, generate
 from _virtual import (
     OBLIQUE,
@@ -168,7 +169,7 @@ def test_the_played_trajectory_is_the_one_each_file_designs_turned_as_it_is_chec
 ):
     seq = _copy(name, tmp_path)
     ir.convert(seq, SYSTEM)
-    played = np.concatenate(virtual.trajectory(seq, rotation=rotation), axis=1)
+    played = np.concatenate(trajectory(seq, rotation=rotation), axis=1)
     np.testing.assert_allclose(
         played, _designed_trajectory(seq, rotation), atol=K_TOLERANCE
     )
@@ -202,7 +203,7 @@ def test_the_prescription_turns_a_block_after_its_own_rotation_unless_it_is_labe
     path = tmp_path / "scan.seq"
     seq.write(str(path))
     ir.convert(path, SYSTEM)
-    played = np.concatenate(virtual.trajectory(path, rotation=REFLECTED), axis=1)
+    played = np.concatenate(trajectory(path, rotation=REFLECTED), axis=1)
     np.testing.assert_allclose(
         played, _designed_trajectory(path, REFLECTED), atol=K_TOLERANCE
     )
@@ -215,7 +216,7 @@ def test_the_enrichment_states_the_trajectory_the_scanner_plays(name, tmp_path):
     seq = _copy(name, tmp_path)
     ir.convert(seq, SYSTEM)
     table = SequenceTable.read(seq)
-    played = virtual.trajectory(seq)
+    played = trajectory(seq)
     assert len(table) == len(played)
     for index, k in enumerate(played):
         np.testing.assert_allclose(table.readout_k(index), k, atol=K_TOLERANCE)
@@ -263,7 +264,7 @@ def test_an_object_posed_as_prescribed_is_acquired_as_at_the_isocentre(
     sequences.write(seq, design(SYSTEM, n_x=MATRIX, n_y=MATRIX))
     ir.convert(seq, SYSTEM, fov_offset=OFFSET)
     residual, gain = _residual(
-        virtual.acquire(seq, posed(rotation), rotation=rotation),
+        acquire(seq, posed(rotation), rotation=rotation),
         _ideal(seq, phantom()),
     )
     assert residual < 1e-4
@@ -273,9 +274,9 @@ def test_an_object_posed_as_prescribed_is_acquired_as_at_the_isocentre(
 def _precessed(seq):
     """How far each sample of a chain, acquired off resonance, has precessed from its sample on resonance."""
     tissue = phantom(coils=1)
-    on = np.concatenate(virtual.acquire(seq, tissue), axis=1)
+    on = np.concatenate(acquire(seq, tissue), axis=1)
     off = np.concatenate(
-        virtual.acquire(seq, tissue, off_resonance_hz=OFF_RESONANCE_HZ), axis=1
+        acquire(seq, tissue, off_resonance_hz=OFF_RESONANCE_HZ), axis=1
     )
     accrued = np.concatenate([precession(sequence) for _, sequence in read_chain(seq)])
     expected = on * np.exp(-2j * np.pi * OFF_RESONANCE_HZ * np.nan_to_num(accrued))
@@ -304,7 +305,7 @@ def test_fat_precesses_at_its_chemical_shift_at_the_field_of_the_magnet(tmp_path
     sequences.write(seq, gre2d(SYSTEM, n_x=MATRIX, n_y=MATRIX))
     ir.convert(seq, SYSTEM)
     tissue = water_and_fat()
-    acquired = virtual.acquire(seq, tissue, field_t=SYSTEM.B0)
+    acquired = acquire(seq, tissue, field_t=SYSTEM.B0)
     residual, gain = _residual(acquired, _ideal(seq, tissue, field_t=SYSTEM.B0))
     assert residual < 1e-4
     assert gain == pytest.approx(1.0, rel=1e-4)
@@ -317,7 +318,7 @@ def test_a_phantom_with_a_chemical_shift_is_scanned_at_a_field(tmp_path):
     sequences.write(seq, gre2d(SYSTEM, n_x=MATRIX, n_y=MATRIX))
     ir.convert(seq, SYSTEM)
     with pytest.raises(ValueError, match="field_t"):
-        virtual.acquire(seq, water_and_fat())
+        acquire(seq, water_and_fat())
 
 
 @pytest.mark.parametrize(
@@ -358,7 +359,7 @@ def test_fat_saturation_leaves_each_shift_what_its_designed_pulse_leaves_it(tmp_
     # resonance, and water, a stopband away, nearly all of its magnetization.
     assert left[FAT_SHIFT_PPM] == pytest.approx(np.cos(np.radians(110.0)), abs=1e-2)
     assert left[0.0] == pytest.approx(1.0, abs=1e-2)
-    acquired = virtual.acquire(path, tissue, field_t=system.B0)
+    acquired = acquire(path, tissue, field_t=system.B0)
     ideal = _ideal(path, tissue, field_t=system.B0, longitudinal=left)
     residual, _ = _residual(*_excited(acquired, ideal))
     assert residual < 1e-4
@@ -371,7 +372,7 @@ def test_a_fat_saturation_converted_at_another_field_misses_the_fat(tmp_path):
     tissue = water_and_fat(coils=1)
     missed = _left_by_saturation(design, converted, scanned.B0, tissue)
     assert missed[FAT_SHIFT_PPM] > 0.9
-    acquired = virtual.acquire(path, tissue, field_t=scanned.B0)
+    acquired = acquire(path, tissue, field_t=scanned.B0)
     residual, _ = _residual(
         *_excited(
             acquired, _ideal(path, tissue, field_t=scanned.B0, longitudinal=missed)
@@ -408,7 +409,7 @@ def test_a_hard_saturation_pulse_acts_over_its_duration(tmp_path):
     tissue = water_and_fat(coils=1)
     left = _left_by_saturation(seq, system, system.B0, tissue)
     assert abs(left[FAT_SHIFT_PPM]) < 1e-3
-    acquired = virtual.acquire(path, tissue, field_t=system.B0)
+    acquired = acquire(path, tissue, field_t=system.B0)
     residual, _ = _residual(
         acquired, _ideal(path, tissue, field_t=system.B0, longitudinal=left)
     )
@@ -427,7 +428,7 @@ def test_a_readout_before_the_first_excitation_acquires_nothing(tmp_path):
     path = tmp_path / "scan.seq"
     seq.write(str(path))
     ir.convert(path, SYSTEM)
-    before, after = virtual.acquire(path, phantom(coils=1))
+    before, after = acquire(path, phantom(coils=1))
     assert not np.abs(before).any()
     assert np.abs(after).all()
 
@@ -446,16 +447,14 @@ def test_a_saturation_band_selected_in_space_is_refused(tmp_path):
     seq.write(str(path))
     ir.convert(path, system)
     with pytest.raises(ValueError, match="band in space"):
-        virtual.acquire(path, phantom(coils=1))
+        acquire(path, phantom(coils=1))
 
 
 def test_an_object_off_the_prescription_is_not_acquired_centred(tmp_path):
     seq = tmp_path / "scan.seq"
     sequences.write(seq, gre2d(SYSTEM, n_x=MATRIX, n_y=MATRIX))
     ir.convert(seq, SYSTEM)
-    residual, _ = _residual(
-        virtual.acquire(seq, phantom(OFFSET)), _ideal(seq, phantom())
-    )
+    residual, _ = _residual(acquire(seq, phantom(OFFSET)), _ideal(seq, phantom()))
     assert residual > 0.5
 
 
@@ -471,7 +470,7 @@ def test_an_object_turned_otherwise_than_prescribed_is_not_acquired_as_at_the_is
     sequences.write(seq, gre2d(SYSTEM, n_x=MATRIX, n_y=MATRIX))
     ir.convert(seq, SYSTEM, fov_offset=OFFSET)
     residual, _ = _residual(
-        virtual.acquire(seq, phantom(rotation @ OFFSET, turned), rotation=rotation),
+        acquire(seq, phantom(rotation @ OFFSET, turned), rotation=rotation),
         _ideal(seq, phantom()),
     )
     assert residual > 0.3
@@ -491,7 +490,7 @@ def test_a_readout_under_a_varying_gradient_is_acquired_centred_off_the_isocentr
     """Centred once the proxy applies the curvature the shift adds."""
     seq = _copy(name, tmp_path)
     ir.convert(seq, SYSTEM, fov_offset=OFFSET)
-    acquired = virtual.acquire(seq, phantom(OFFSET, coils=1))
+    acquired = acquire(seq, phantom(OFFSET, coils=1))
     table = SequenceTable.read(seq, fov_offset_m=OFFSET)
     corrected = []
     for index, samples in enumerate(acquired):
@@ -579,7 +578,7 @@ def _scan(proxy, tmp_path, rotation, readouts=None):
     values.update(zip(FOV_ROTATION, rotation.ravel(), strict=True))
     design = generate(store, "gre2d", values, limits=ANY_ORIENTATION)
     seq = store.directory(design) / "sequence.seq"
-    acquired = virtual.acquire(seq, posed(rotation), rotation=rotation)
+    acquired = acquire(seq, posed(rotation), rotation=rotation)
     received = virtual.send(
         ("127.0.0.1", proxy.port),
         design,
@@ -622,9 +621,9 @@ def test_a_series_streamed_as_it_is_acquired_is_reconstructed_as_one_sent_whole(
     store = DesignStore(tmp_path / "designs")
     design = generate(store, "gre2d", {"TE": 5000, "nx": MATRIX, "ny": MATRIX})
     seq = store.directory(design) / "sequence.seq"
-    scan = virtual.Scan(seq, phantom().isochromats(2e-3))
+    scan = virtual.Scan(seq, phantom().tissue(2e-3))
     streamed = (readout for chunk in scan.chunks() for readout in chunk.readouts)
-    whole = virtual.simulate(seq, phantom().isochromats(2e-3))
+    whole = virtual.simulate(seq, phantom().tissue(2e-3))
     images = []
     for readouts in (streamed, whole):
         received = virtual.send(
@@ -636,8 +635,9 @@ def test_a_series_streamed_as_it_is_acquired_is_reconstructed_as_one_sent_whole(
         )
         (image,) = [item for item in received if isinstance(item, ismrmrd.Image)]
         images.append(np.squeeze(np.abs(image.data)).astype(float))
-    np.testing.assert_array_equal(images[0], images[1])
+    # Each span is simulated on its own, so the two agree to float32 round-off.
     assert images[0].max() > 0.0
+    np.testing.assert_allclose(images[0], images[1], atol=1e-3 * images[1].max())
 
 
 def test_a_virtual_series_short_of_a_readout_is_refused(proxy, tmp_path):

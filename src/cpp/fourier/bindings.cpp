@@ -5,21 +5,145 @@
 
 #include "fourier/bindings.hpp"
 
+#include <pybind11/complex.h>
 #include <pybind11/numpy.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 
+#include <algorithm>
 #include <array>
+#include <cmath>
+#include <complex>
 #include <cstdint>
 #include <stdexcept>
+#include <thread>
 #include <vector>
 
+#include "fourier/parallel.hpp"
 #include "fourier/timeline.hpp"
 
 namespace py = pybind11;
 
 namespace
 {
+
+    using Complex = std::complex<double>;
+    using Doubles = py::array_t<double, py::array::c_style | py::array::forcecast>;
+    using SingleComplexes = py::array_t<std::complex<float>, py::array::c_style | py::array::forcecast>;
+
+    /** Points one worker interpolates at least. */
+    constexpr size_t kPointsPerWorker = 4096;
+
+    /** An axis of a grid at a point: its two samples and their weights. */
+    struct Straddle
+    {
+        size_t low;
+        size_t high;
+        double weight[2];
+    };
+
+    Straddle straddle(double position, double step, double centre, size_t size)
+    {
+        const double index = std::min(std::max(position / step + centre, 0.0), static_cast<double>(size) - 1.0);
+        const size_t low = std::min(static_cast<size_t>(std::floor(index)), size > 1 ? size - 2 : 0);
+        const double above = index - static_cast<double>(low);
+        return {low, std::min(low + 1, size - 1), {1.0 - above, above}};
+    }
+
+    /** Maps, (channels, z, y, x), and where their samples lie: sample i
+     *  along an axis (i - centre) * step m from the isocentre, @c centre and
+     *  @c step along x, y and z. */
+    struct MapGrid
+    {
+        const std::complex<float>* values;
+        size_t channels;
+        size_t size[3];
+        const double* centre;
+        const double* step;
+    };
+
+    MapGrid map_grid(const SingleComplexes& values, const Doubles& centre, const Doubles& step)
+    {
+        if (values.ndim() != 4)
+            throw std::invalid_argument("the maps must be (channels, z, y, x)");
+        if (centre.ndim() != 1 || centre.shape(0) != 3 || step.ndim() != 1 || step.shape(0) != 3)
+            throw std::invalid_argument("the grid's centre and step must hold three values, along x, y and z");
+        MapGrid grid{values.data(),
+                     static_cast<size_t>(values.shape(0)),
+                     {static_cast<size_t>(values.shape(1)),
+                      static_cast<size_t>(values.shape(2)),
+                      static_cast<size_t>(values.shape(3))},
+                     centre.data(),
+                     step.data()};
+        if (grid.size[0] == 0 || grid.size[1] == 0 || grid.size[2] == 0)
+            throw std::invalid_argument("the maps must hold a sample along each axis");
+        return grid;
+    }
+
+    /** @p grid interpolated trilinearly at @p point, along x, y and z in m,
+     *  into @p re and @p im, a value per channel; a point beyond the grid
+     *  takes its edge value. Each weight is rounded to single precision and
+     *  the eight corners are summed in single precision, z slowest and x
+     *  fastest, as ``_coils._trilinear`` sums them. */
+    void interpolate(const MapGrid& grid, const double* point, float* re, float* im)
+    {
+        Straddle axes[3];
+        for (size_t k = 0; k < 3; ++k)
+            axes[k] = straddle(point[2 - k], grid.step[2 - k], grid.centre[2 - k], grid.size[k]);
+        std::fill(re, re + grid.channels, 0.0f);
+        std::fill(im, im + grid.channels, 0.0f);
+        const size_t per_channel = grid.size[0] * grid.size[1] * grid.size[2];
+        for (int z = 0; z < 2; ++z)
+            for (int y = 0; y < 2; ++y)
+                for (int x = 0; x < 2; ++x)
+                {
+                    const float weight =
+                        static_cast<float>(axes[0].weight[z] * axes[1].weight[y] * axes[2].weight[x]);
+                    const size_t row = (z ? axes[0].high : axes[0].low) * grid.size[1] + (y ? axes[1].high : axes[1].low);
+                    const std::complex<float>* sample = grid.values + row * grid.size[2] + (x ? axes[2].high : axes[2].low);
+                    for (size_t c = 0; c < grid.channels; ++c, sample += per_channel)
+                    {
+                        const float real = weight * sample->real();
+                        const float imaginary = weight * sample->imag();
+                        re[c] += real;
+                        im[c] += imaginary;
+                    }
+                }
+    }
+
+    /** @p values, (channels, z, y, x), interpolated trilinearly at @p points,
+     *  (n, 3) along x, y and z in m, into @p out, (n, channels), on every
+     *  core, as interpolate() interpolates them. */
+    void trilinear(
+        const SingleComplexes& values,
+        const Doubles& centre,
+        const Doubles& step,
+        const Doubles& points,
+        py::array_t<Complex, py::array::c_style> out)
+    {
+        const MapGrid grid = map_grid(values, centre, step);
+        if (points.ndim() != 2 || points.shape(1) != 3)
+            throw std::invalid_argument("the points must be (n, 3)");
+        const size_t count = static_cast<size_t>(points.shape(0));
+        if (out.ndim() != 2 || static_cast<size_t>(out.shape(0)) != count ||
+            static_cast<size_t>(out.shape(1)) != grid.channels)
+            throw std::invalid_argument("out must be (points, channels)");
+        const double* at = points.data();
+        Complex* into = out.mutable_data();
+        py::gil_scoped_release unlocked;
+        fourier::parallel(
+            count, std::max(1u, std::thread::hardware_concurrency()), kPointsPerWorker,
+            [&](size_t, size_t first, size_t last) {
+                std::vector<float> re(grid.channels), im(grid.channels);
+                for (size_t n = first; n < last; ++n)
+                {
+                    interpolate(grid, at + 3 * n, re.data(), im.data());
+                    for (size_t c = 0; c < grid.channels; ++c)
+                        into[n * grid.channels + c] = Complex(re[c], im[c]);
+                }
+            });
+    }
+
 
     template <typename T>
     std::vector<T> copied(const py::array_t<T, py::array::c_style | py::array::forcecast>& values)
@@ -210,4 +334,14 @@ samples within a step of the nearest of those.)doc");
 after each pulse, ``(pulses + 1, 3)`` and ``(pulses + 1,)``: an excitation sets
 both, a refocusing pulse mirrors both about its own, a new file of a chain
 forgets them, as NaN.)doc");
+
+    module.def(
+        "trilinear",
+        &trilinear,
+        py::arg("values"),
+        py::arg("centre"),
+        py::arg("step"),
+        py::arg("points"),
+        py::arg("out"),
+        "Maps (channels, z, y, x) interpolated trilinearly at (n, 3) points into out, (n, channels).");
 }

@@ -14,7 +14,6 @@ import torch
 
 from .. import ir
 from .._accelerators import require
-from ._scanner import _on_a_raster
 
 _EXCITATION = 1
 _REFOCUSING = 2
@@ -636,3 +635,25 @@ def _turn(
     inside = np.flatnonzero(ratio >= _IN_BAND)
     low, high = (int(inside[0]), int(inside[-1])) if inside.size else (reach, reach)
     return flip, axis, (detunings[low : high + 1], ratio[low : high + 1])
+
+
+def _on_a_raster(times_us: np.ndarray, b1: np.ndarray) -> tuple[np.ndarray, float]:
+    """Return an RF pulse's samples on a uniform raster, and the raster in µs.
+
+    ``times_us`` are from the pulse's start. Samples at the middles of equal
+    intervals from the start, as a pulse on the RF raster holds them, are
+    returned as they are. The points of a time shape, a block pulse's two
+    corners among them, are joined linearly and sampled at the middles of
+    1 µs intervals, or of the shape's shortest step where that is shorter.
+    """
+    steps = np.diff(times_us)
+    if not steps.size:
+        return b1, 2.0 * float(times_us[0])
+    if np.allclose(steps, steps[0]) and np.isclose(times_us[0], 0.5 * steps[0]):
+        return b1, float(steps[0])
+    step = min(1.0, float(steps[steps > 0].min()))
+    count = max(1, round((times_us[-1] - times_us[0]) / step))
+    grid = times_us[0] + step * (np.arange(count) + 0.5)
+    return np.interp(grid, times_us, b1.real) + 1j * np.interp(
+        grid, times_us, b1.imag
+    ), step

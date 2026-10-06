@@ -7,6 +7,7 @@ import numpy as np
 import pypulseqpp as pp
 import pytest
 import torch
+from _analytic import trajectory
 from _virtual import ORIENTATIONS
 from bartorch import linop
 from pypulseqpp.sequences.preparation.fatsat import FAT_SHIFT_PPM
@@ -16,6 +17,10 @@ from pulserver.virtual import _fourier
 from pulserver.virtual._timeline import Timeline
 
 FIXTURES = Path(__file__).parent / "fixtures" / "sequences"
+#: Converged Bloch simulations of the cases below, the readouts of each joined
+#: in play order: isochromats four to a voxel, at the centres of the cells
+#: filling it, played block by block through the Bloch equation.
+BLOCH = Path(__file__).parent / "fixtures" / "bloch"
 SEQUENCES = [
     "dedup_gre_pair.seq",
     "epi_2d_main.seq",
@@ -25,11 +30,12 @@ SEQUENCES = [
 ]
 SYSTEM = pp.Opts(B0=3.0)
 #: Steps, in m, between the sheets a slab phantom stacks through its slices:
-#: fine enough that the Bloch engine dephases the orders a spoiler winds.
+#: fine enough that the Bloch simulation dephases the orders a spoiler winds.
 SHEETS = 2e-5
-#: Relative residuals at which the two engines agree on a phantom filling its
-#: slices: the interleaved 12 degree slices, fat included; and the 70 degree
-#: EPI, whose fat saturation the Bloch engine spoils only as finely as its
+#: Relative residuals at which the engine agrees with the Bloch simulation on a
+#: phantom filling its slices: the interleaved 12 degree slices, fat included;
+#: and the 70 degree EPI, whose fat saturation the Bloch simulation spoils only
+#: as finely as its
 #: isochromats sample the spoiler, on water, the excitation's phase across the
 #: slice beyond an ideal rotation's.
 AGREEMENT = {"gre_2d_3sl.seq": (True, 0.05), "epi_2d_main.seq": (False, 0.08)}
@@ -78,7 +84,7 @@ def test_the_timeline_samples_where_the_cache_plays_its_trajectory(
 ):
     timeline = Timeline(converted / name, rotation=rotation, device=device)
     _, k, _ = timeline.kspace(0, len(timeline.readouts))
-    played = np.concatenate(virtual.trajectory(converted / name, rotation=rotation), 1)
+    played = np.concatenate(trajectory(converted / name, rotation=rotation), 1)
     excited = np.isfinite(k).all(axis=1)
 
     assert k.shape == (played.shape[1], 3)
@@ -163,30 +169,19 @@ def test_a_pulse_played_without_a_gradient_selects_by_frequency(converted):
 
 
 @pytest.mark.parametrize("name", AGREEMENT)
-def test_the_fourier_engine_acquires_what_the_bloch_engine_does_of_a_phantom_filling_its_slices(
+def test_the_fourier_engine_acquires_what_a_bloch_simulation_does_of_a_phantom_filling_its_slices(
     name, converted, device
 ):
     fat, agreement = AGREEMENT[name]
     phantom = _slab(fat=fat)
     sequence = converted / name
-    region = virtual.excited(sequence)
     player = virtual.FourierPlayer(
-        sequence, phantom.tissue(3e-3, field_t=3.0, region=region), device=device
+        sequence, phantom.tissue(3e-3, field_t=3.0), device=device
     )
     fourier = np.concatenate(
         [readout.ravel() for readout in player.readouts(0, player.blocks)]
     )
-    bloch = np.concatenate(
-        [
-            readout.ravel()
-            for readout in virtual.simulate(
-                sequence,
-                phantom.isochromats(
-                    3e-3, field_t=3.0, region=region, spins=4, voxel="box"
-                ),
-            )
-        ]
-    )
+    bloch = np.load(BLOCH / f"{Path(name).stem}.npy")
 
     assert fourier.shape == bloch.shape
     assert np.linalg.norm(fourier - bloch) < agreement * np.linalg.norm(bloch)
@@ -194,9 +189,7 @@ def test_the_fourier_engine_acquires_what_the_bloch_engine_does_of_a_phantom_fil
 
 def test_a_scan_on_a_tissue_plays_through_the_fourier_engine(converted):
     sequence = converted / "gre_2d_3sl.seq"
-    tissue = _slab(half_thickness=2e-3).tissue(
-        4e-3, field_t=3.0, region=virtual.excited(sequence)
-    )
+    tissue = _slab(half_thickness=2e-3).tissue(4e-3, field_t=3.0)
 
     chunks = list(virtual.Scan(sequence, tissue).chunks(0.1, sound=False))
 
@@ -204,23 +197,6 @@ def test_a_scan_on_a_tissue_plays_through_the_fourier_engine(converted):
     assert len(readouts) == len(Timeline(sequence).readouts)
     assert all(readout.dtype == np.complex64 for readout in readouts)
     assert chunks[-1].stop == pytest.approx(virtual.Scan(sequence, tissue).duration)
-
-
-def test_a_console_simulates_by_the_fourier_engine_unless_the_subject_moves_or_diffuses(
-    tmp_path,
-):
-    options = {
-        "plugins": [],
-        "limits": "[Limits]\nB0: 3.0\n[Limits End]\n",
-        "store": tmp_path,
-    }
-
-    assert virtual.Console(**options).engine == "fourier"
-    assert virtual.Console(**options, diffusion=True).engine == "bloch"
-    with pytest.raises(ValueError, match="models no motion or diffusion"):
-        virtual.Console(**options, diffusion=True, engine="fourier")
-    with pytest.raises(ValueError, match="one of"):
-        virtual.Console(**options, engine="isochromats")
 
 
 def _steady(kind, path, *, selective, lines=16, dummies=64, matrix=32, fov=0.12):
@@ -299,36 +275,21 @@ def test_each_readout_reads_the_pathway_that_passes_the_centre_during_it(
         ("dess", False, 30.0),
     ],
 )
-def test_the_fourier_engine_acquires_what_the_bloch_engine_does_of_an_unspoiled_steady_state(
+def test_the_fourier_engine_acquires_what_a_bloch_simulation_does_of_an_unspoiled_steady_state(
     kind, selective, offset_hz, tmp_path, device
 ):
     sequence = _steady(kind, tmp_path / f"{kind}.seq", selective=selective)
     water = _slab(half_thickness=6e-3, radius=0.03, fat=False)
-    region = virtual.excited(sequence)
     player = virtual.FourierPlayer(
         sequence,
-        water.tissue(2e-3, field_t=3.0, region=region, off_resonance_hz=offset_hz),
+        water.tissue(2e-3, field_t=3.0, off_resonance_hz=offset_hz),
         device=device,
     )
     fourier = np.concatenate(
         [readout.ravel() for readout in player.readouts(0, player.blocks)]
     )
-    bloch = np.concatenate(
-        [
-            readout.ravel()
-            for readout in virtual.simulate(
-                sequence,
-                water.isochromats(
-                    2e-3,
-                    field_t=3.0,
-                    region=region,
-                    spins=4,
-                    voxel="box",
-                    off_resonance_hz=offset_hz,
-                ),
-            )
-        ]
-    )
+    profile = "selective" if selective else "hard"
+    bloch = np.load(BLOCH / f"steady_{kind}_{profile}_{int(offset_hz)}hz.npy")
 
     assert np.linalg.norm(fourier - bloch) < 0.05 * np.linalg.norm(bloch)
 
@@ -364,7 +325,7 @@ def _balanced(path, *, matrix=32, fov=0.12, lines=32, dummies=200):
     return path
 
 
-def test_a_balanced_steady_state_reads_the_free_induction_as_the_bloch_engine_does(
+def test_a_balanced_steady_state_reads_the_free_induction_as_a_bloch_simulation_does(
     tmp_path, device
 ):
     sequence = _balanced(tmp_path / "bssfp.seq")
@@ -377,14 +338,7 @@ def test_a_balanced_steady_state_reads_the_free_induction_as_the_bloch_engine_do
     fourier = np.concatenate(
         [readout.ravel() for readout in player.readouts(0, player.blocks)]
     )
-    bloch = np.concatenate(
-        [
-            readout.ravel()
-            for readout in virtual.simulate(
-                sequence, water.isochromats(2e-3, field_t=3.0, spins=4, voxel="box")
-            )
-        ]
-    )
+    bloch = np.load(BLOCH / "bssfp.npy")
 
     assert not np.any(player._timeline.readouts.pathway)
     assert np.linalg.norm(fourier - bloch) < 0.05 * np.linalg.norm(bloch)

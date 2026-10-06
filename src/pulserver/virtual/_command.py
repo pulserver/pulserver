@@ -15,16 +15,15 @@ from typing import Any
 import numpy as np
 
 from .._zoo import ZOO_PAIRS
-from . import _voxels
 from ._coils import COILS
 
 _DESCRIPTION = """\
 Scan a phantom on the virtual scanner, as a console would. The design is
 generated from a scanner-sequence plugin, or imported from a sequence file,
 and checked and converted to its IR cache under --limits, as the design calls
-do. Its cache is played through the Bloch equation on the phantom's
-isochromats in the slabs its excitation pulses excite, and the series is
-written to an ISMRMRD file, streamed to a reconstruction proxy, or both. The
+do. Its cache is played by the Fourier engine on the phantom's tissue, and the
+series is written to an ISMRMRD file, streamed to a reconstruction proxy, or
+both. The
 design call's reply is written to standard output, and the scan clock to
 standard error.
 """
@@ -94,36 +93,11 @@ def _parser() -> argparse.ArgumentParser:
         "normal brain (the brainweb extra); vials of several T1 and T2 without one",
     )
     parser.add_argument(
-        "--spacing", type=float, default=1.0, help="isochromat spacing, in mm"
+        "--spacing",
+        type=float,
+        default=1.0,
+        help="spacing at which the phantom is sampled, in mm",
     )
-    parser.add_argument(
-        "--spins",
-        type=int,
-        help="isochromats per voxel, spread over the T2' line of its tissue; "
-        "two along each axis of the voxel without it, one for a point voxel",
-    )
-    parser.add_argument(
-        "--voxel",
-        choices=("point", "box", "jittered"),
-        default="jittered",
-        help="where a voxel's isochromats lie: at its centre, at the centres of "
-        "cells filling it, or anywhere in each cell, --spins a square number for "
-        "a phantom of ellipses and a cube for BrainWeb",
-    )
-    parser.add_argument(
-        "--diffusion",
-        action="store_true",
-        help="BrainWeb's tissue classes diffuse, as BrainWeb.DIFFUSION gives them; "
-        "a phantom of ellipses diffuses as its file gives it",
-    )
-    parser.add_argument(
-        "--engine",
-        choices=("fourier", "bloch"),
-        help="what the scan is simulated by: the Fourier engine on the phantom's "
-        "tissue, or the Bloch engine on its isochromats; the Fourier engine "
-        "unless the subject moves or diffuses",
-    )
-    motion_arguments(parser)
     receivers = parser.add_mutually_exclusive_group()
     receivers.add_argument(
         "--coils", type=int, default=4, help="receive coils of the phantom's own"
@@ -141,8 +115,8 @@ def _parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--device",
-        help="torch device the ADC windows are read and the runs of repetitions "
-        "carried on, such as cuda (the gpu extra); the engine does both without it",
+        help="torch device the scan is simulated on, such as cuda; a card where "
+        "there is one without it",
     )
     parser.add_argument("--mrd", type=Path, help="ISMRMRD file to write the series to")
     parser.add_argument("--sound", type=Path, help="WAV file to write the sound to")
@@ -161,54 +135,6 @@ def _parser() -> argparse.ArgumentParser:
         help="directory the reconstruction's images are written to",
     )
     return parser
-
-
-def motion_arguments(parser: argparse.ArgumentParser) -> None:
-    """Add the options :func:`subject_motion` reads to ``parser``."""
-    parser.add_argument(
-        "--nod",
-        type=float,
-        nargs=2,
-        metavar=("DEGREES", "PERIOD"),
-        help="the subject turns about the physical x axis through the isocentre "
-        "by DEGREES times the sine of 2 pi t / PERIOD, PERIOD in s",
-    )
-    parser.add_argument(
-        "--drift",
-        type=float,
-        nargs=3,
-        metavar=("X", "Y", "Z"),
-        help="the subject drifts along the physical axes, in mm/min",
-    )
-
-
-def subject_motion(args: argparse.Namespace) -> Any:
-    """Return the :class:`~pulserver.virtual.RigidMotion` that ``--nod`` and ``--drift`` describe; None without either.
-
-    The time is the isochromats' clock, from the start of the scan.
-    """
-    from . import RigidMotion
-
-    if args.nod is None and args.drift is None:
-        return None
-    rotation = offset = None
-    if args.nod is not None:
-        amplitude, period = np.radians(args.nod[0]), args.nod[1]
-        if not period > 0.0:
-            raise ValueError(f"a nod's period is above zero, not {period} s")
-
-        def rotation(t: float) -> np.ndarray:
-            angle = amplitude * np.sin(2.0 * np.pi * t / period)
-            c, s = np.cos(angle), np.sin(angle)
-            return np.array([[1.0, 0.0, 0.0], [0.0, c, -s], [0.0, s, c]])
-
-    if args.drift is not None:
-        velocity = 1e-3 * np.asarray(args.drift, dtype=float) / 60.0
-
-        def offset(t: float) -> np.ndarray:
-            return velocity * t
-
-    return RigidMotion(rotation, offset)
 
 
 def default_phantom(coils: int = 1) -> Any:
@@ -433,8 +359,7 @@ def _scan(
 
     from ..host import DesignStore
     from ..host._blocks import parse_limits
-    from . import Scan, excited, record, send
-    from ._bloch import TOLERANCE
+    from . import Scan, record, send
     from ._stream import SAMPLE_RATE
 
     rotation, _ = prescription(args)
@@ -442,35 +367,10 @@ def _scan(
     coil = None if args.coil is None else COILS[args.coil]
     phantom = _phantom(args)
     sequence = DesignStore(store).directory(design) / "sequence.seq"
-    region = excited(sequence, rotation)
-    motion = subject_motion(args)
-    modelled = motion is None and not args.diffusion
-    engine = args.engine or ("fourier" if modelled else "bloch")
-    if engine == "fourier" and not modelled:
-        raise SystemExit(
-            "the Fourier engine models no motion or diffusion: --engine bloch"
-        )
-    scanned = (
-        phantom.tissue(1e-3 * args.spacing, field_t=field, region=region, coil=coil)
-        if engine == "fourier"
-        else phantom.isochromats(
-            1e-3 * args.spacing,
-            field_t=field,
-            region=region,
-            coil=coil,
-            spins=_voxels.spins_for(args.spins, args.voxel, phantom.VOXEL_AXES),
-            voxel=args.voxel,
-            motion=motion,
-            seed=0,
-            device=args.device,
-        )
-    )
     scan = Scan(
         sequence,
-        scanned,
+        phantom.tissue(1e-3 * args.spacing, field_t=field, coil=coil),
         rotation=rotation,
-        default_shim=None if coil is None else coil.default_shim,
-        tolerance=TOLERANCE,
         device=args.device,
     )
     series = {
@@ -511,9 +411,7 @@ def _phantom(args: argparse.Namespace) -> Any:
     if args.phantom is None:
         return default_phantom(coils)
     if str(args.phantom) == "brainweb":
-        return BrainWeb(
-            coils=coils, diffusion=BrainWeb.DIFFUSION if args.diffusion else None
-        )
+        return BrainWeb(coils=coils)
     return read_phantom(args.phantom, coils)
 
 

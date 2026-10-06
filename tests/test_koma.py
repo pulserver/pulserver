@@ -1,10 +1,9 @@
-"""What the cache plays, simulated by KomaMRI: the exported file gives the design's signal, and the virtual scanner's Bloch simulation of the cache gives KomaMRI's.
+"""What the cache plays, simulated by KomaMRI: the exported file gives the design's signal.
 
 Runs where ``PULSERVER_KOMA_PROJECT`` names a Julia project holding KomaMRI,
 such as ``tests/koma`` once instantiated, with ``julia`` on the path.
 """
 
-import math
 import os
 import shutil
 import subprocess
@@ -27,10 +26,6 @@ SYSTEM = pp.Opts(B0=3.0)
 #: turned gradient's amplitude to six significant figures, and the phase that
 #: rounding accrues over a spoiler's moment stays well below this.
 TOLERANCE = 1e-3
-#: Relative to the peak sample of KomaMRI's signal: the two simulators step
-#: through an RF pulse on different grids, and KomaMRI plays the 10 ns ramp the
-#: file holds where the cache plays a gradient's step.
-ENGINE_TOLERANCE = 2e-3
 #: The cases ``PULSERVER_KOMA_CASES`` names, comma-separated; every one without it.
 NAMES = [
     name
@@ -87,82 +82,6 @@ def _write_phantom(spins, path):
             column.astype("<f8").tofile(file)
 
 
-def _held(t, signal):
-    """Return the times and samples at which KomaMRI plays a pulse as the playout does.
-
-    The playout holds each sample of a pulse sampled at the middles of equal
-    intervals over its interval, as the virtual scanner's Bloch simulation does.
-    KomaMRI joins a pulse's samples linearly and takes the field at the start
-    of each time step, so it would play such a pulse half an interval late.
-    Each sample is therefore given at the start of its interval and a quarter
-    of the way through it, and the last again at the pulse's end, so that each
-    of KomaMRI's steps starts at a knot holding the sample. A time shape whose
-    i-th time lies within the i-th raster step is written as the default
-    raster, one sample at the middle of each step, as the reference writer
-    writes it; no knot a quarter of the way through an interval lies there.
-    Both simulators join the samples of any other pulse linearly, and its
-    times and samples are returned as they are.
-    """
-    if t.size < 2:
-        return t, signal
-    interval = t[1] - t[0]
-    at_middles = np.all(
-        np.abs(np.diff(t) - interval) <= 1e-9 * interval
-    ) and math.isclose(t[0], 0.5 * interval, rel_tol=1e-9)
-    if not at_middles:
-        return t, signal
-    starts = interval * np.arange(t.size)
-    times = np.append(
-        np.column_stack([starts, starts + 0.25 * interval]), t.size * interval
-    )
-    return times, np.append(np.repeat(signal, 2), signal[-1])
-
-
-def _as_komamri_plays_it(exported, path):
-    """Write the exported file with each RF pulse in KomaMRI's convention.
-
-    KomaMRI adds a pulse's phase shape and phase offset to its field with the
-    opposite sign to the virtual scanner's Bloch simulation, and refers the
-    phase the frequency offset f accrues to the pulse's centre t_c. With the
-    samples conjugated and held as :func:`_held` holds them, and the phase
-    offset phi replaced by -phi - 2 pi f t_c, KomaMRI plays the field the
-    virtual scanner plays of the pulse. The offset is written within one turn
-    of zero, where the text format keeps it to its six significant figures of
-    a radian or less.
-    """
-    seq = pp.Sequence(SYSTEM)
-    seq.read(str(exported))
-    turned = pp.Sequence(SYSTEM)
-    for index in range(1, len(seq.block_events) + 1):
-        block = seq.get_block(index)
-        events = [e for e in (block.gx, block.gy, block.gz, block.adc) if e is not None]
-        if block.rf is not None:
-            rf = block.rf
-            times, samples = _held(np.asarray(rf.t), np.conj(np.asarray(rf.signal)))
-            events.append(
-                SimpleNamespace(
-                    type="rf",
-                    signal=samples,
-                    t=times,
-                    shape_dur=rf.shape_dur,
-                    delay=rf.delay,
-                    freq_offset=rf.freq_offset,
-                    phase_offset=math.remainder(
-                        -rf.phase_offset - 2.0 * np.pi * rf.freq_offset * rf.center,
-                        2.0 * np.pi,
-                    ),
-                    freq_ppm=0.0,
-                    phase_ppm=0.0,
-                    center=rf.center,
-                    use=rf.use,
-                    dead_time=rf.dead_time,
-                    ringdown_time=rf.ringdown_time,
-                )
-            )
-        turned.add_block(*events, pp.make_delay(block.block_duration))
-    turned.write(str(path))
-
-
 def _design(name, directory):
     """Write the design ``name`` names into ``directory`` and return its first file."""
     if name in SMALL:
@@ -192,36 +111,19 @@ def _as_komamri_reads_it(first, directory):
 
 @pytest.fixture(scope="module")
 def simulated(tmp_path_factory):
-    """The signals of each design, by name, of its cache, and of that cache in the virtual scanner's Bloch simulation.
-
-    KomaMRI simulates the design, the exported cache and the exported cache in
-    its own RF convention, each without the ADC's offsets; the last is
-    demodulated by the receiver phase the export returns, as the playout
-    demodulates. The virtual scanner simulates the cache on the same spins.
-    """
+    """The signals KomaMRI simulates of each design, by name, and of its exported cache, each without the ADC's offsets."""
     root = tmp_path_factory.mktemp("koma")
     spins = _phantom()
     _write_phantom(spins, root / "phantom.bin")
-    cases, received, engine = [], {}, {}
+    cases = []
     for name in NAMES:
         case = root / name
         (case / "design").mkdir(parents=True)
         first = _design(name, case / "design")
         ir.convert(first, SYSTEM)
-        received[name] = np.concatenate(
-            virtual.export(first, case / "exported.seq", SYSTEM)
-        )
-        _as_komamri_plays_it(case / "exported.seq", case / "komamri.seq")
+        virtual.export(first, case / "exported.seq", SYSTEM)
         files = _as_komamri_reads_it(first, case)
         (case / "design.txt").write_text("\n".join(files) + "\n")
-        isochromats = virtual.Isochromats(
-            spins.positions,
-            proton_density=spins.density,
-            t1=spins.t1,
-            t2=spins.t2,
-            off_resonance=spins.off_resonance,
-        )
-        engine[name] = np.concatenate(virtual.simulate(first, isochromats), axis=1)[0]
         cases.append(case)
     subprocess.run(
         [
@@ -235,16 +137,11 @@ def simulated(tmp_path_factory):
     )
     signals = {}
     for case in cases:
-        design, exported, komamri = (
+        design, exported = (
             np.fromfile(case / f"{kind}.sig", dtype="<c16")
-            for kind in ("design", "exported", "komamri")
+            for kind in ("design", "exported")
         )
-        signals[case.name] = SimpleNamespace(
-            design=design,
-            exported=exported,
-            komamri=komamri * np.exp(1j * received[case.name]),
-            engine=engine[case.name],
-        )
+        signals[case.name] = SimpleNamespace(design=design, exported=exported)
     return signals
 
 
@@ -264,32 +161,3 @@ def test_komamri_simulates_the_signal_of_the_design_from_the_exported_cache(
     np.testing.assert_allclose(
         exported, design, rtol=0, atol=TOLERANCE * np.abs(design).max()
     )
-
-
-@pytest.mark.parametrize("name", NAMES)
-def test_komamri_and_the_virtual_scanners_bloch_simulation_give_one_signal_of_the_cache(
-    simulated, name
-):
-    komamri, engine = simulated[name].komamri, simulated[name].engine
-
-    assert engine.size == komamri.size
-    gain = np.vdot(komamri, engine) / np.vdot(komamri, komamri)
-    print(
-        f"{name}: {_apart(engine, komamri):.1e} of KomaMRI's peak; "
-        f"{_apart(engine, gain * komamri):.1e} after a gain of {gain:.3f}"
-    )
-    try:
-        np.testing.assert_allclose(
-            engine, komamri, rtol=0, atol=ENGINE_TOLERANCE * np.abs(komamri).max()
-        )
-    except AssertionError:
-        print(f"{name}: KomaMRI's samples of the file in its RF convention:")
-        print(_listed(komamri))
-        print(f"{name}: KomaMRI's samples of the exported file, not demodulated:")
-        print(_listed(simulated[name].exported))
-        raise
-
-
-def _listed(signal):
-    """The samples of a signal as real,imaginary pairs, to five significant figures."""
-    return " ".join(f"{sample.real:.5g},{sample.imag:.5g}" for sample in signal)

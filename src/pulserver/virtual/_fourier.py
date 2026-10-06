@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-__all__ = ["FourierPlayer"]
+__all__ = ["FourierPlayer", "simulate"]
 
 import math
 from collections.abc import Callable, Iterator
@@ -126,7 +126,7 @@ class FourierPlayer:
     group, and the groups an excitation turns form a station: its readouts,
     and a stream of the events that act on its groups, a train per group,
     over each class of tissue, bin of the field and bin of the transmit field
-    the entries interpolate between, simulated by TorchSim's extended phase
+    the entries interpolate between, simulated by blochsim's extended phase
     graphs. At each readout's echo, the sample nearest the centre of k-space,
     those signals are spanned by a temporal basis. Across the readout, each
     entry decays with its T2 from the echo, dephases with its T2' over the
@@ -272,7 +272,10 @@ class FourierPlayer:
             (self._groups[members] > 0).any(axis=0),
             readouts,
         )
-        settle_us = 1e6 * float(held.t1[atoms].max()) * math.log(1.0 / _SETTLED)
+        settle_us = min(
+            1e6 * float(held.t1[atoms].max()) * math.log(1.0 / _SETTLED),
+            float(self._timeline.starts_us[-1]),
+        )
         stream, column = _periodic(stream, settle_us)
         played = int(np.count_nonzero(stream.kind == 2))
         description = _description(stream, self._groups[members], self.device)
@@ -491,6 +494,26 @@ class FourierPlayer:
         marks = np.arange(_SPAN_SAMPLES, int(total[-1]) + 1, _SPAN_SAMPLES)
         ends = np.searchsorted(total, marks) + 1
         return np.unique(np.concatenate([ends[ends < self.blocks], [self.blocks]]))
+
+
+def simulate(
+    seq_path: Path | str,
+    tissue: Tissue,
+    cache_ext: str = ".pseg",
+    *,
+    rotation: np.ndarray | None = None,
+    device: torch.device | str | None = None,
+) -> list[np.ndarray]:
+    """Return every readout the cache beside a sequence file acquires of a phantom's tissue.
+
+    One ``(coils, samples)`` complex64 array per readout, in play order,
+    demodulated, as :class:`FourierPlayer` acquires them with the same
+    arguments.
+    """
+    player = FourierPlayer(
+        seq_path, tissue, cache_ext, rotation=rotation, device=device
+    )
+    return list(player.readouts(0, player.blocks))
 
 
 @dataclass(frozen=True, eq=False)

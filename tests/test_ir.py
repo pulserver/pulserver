@@ -927,3 +927,32 @@ def test_an_instance_the_backend_asks_for_again_is_played_again(
     its = [row[2] for row in blocks if row[:2] == instance]
     assert its == its[: len(its) // 2] * 2
     assert its[0] == "0"
+
+
+def test_an_offset_chain_counts_the_gradient_area_on_across_its_files(tmp_path):
+    def unit():
+        sequence = pp.Sequence(SYSTEM)
+        sequence.add_block(pp.make_block_pulse(0.5, duration=1e-3, system=SYSTEM))
+        sequence.add_block(
+            pp.make_trapezoid("y", area=1030, duration=2e-3, system=SYSTEM)
+        )
+        sequence.add_block(pp.make_adc(10, duration=1e-3, system=SYSTEM))
+        return sequence
+
+    whole = unit()
+    for index in range(1, len(whole) + 1):
+        whole.add_block(whole.get_block(index))
+    offset = (0.0, 0.01, 0.0)
+    first = sequences.write(tmp_path / "chain.seq", [unit(), unit()])[0]
+    ir.convert(first, SYSTEM, fov_offset=offset)
+    single = tmp_path / "whole.seq"
+    whole.write(str(single))
+    ir.convert(single, SYSTEM, fov_offset=offset)
+
+    played = [ir.playout(path, pulses=False)["blocks"] for path in (first, single)]
+    for name in ("rf_phase_rad", "adc_phase_rad"):
+        np.testing.assert_allclose(
+            np.mod(played[0][name], 2.0 * np.pi),
+            np.mod(played[1][name], 2.0 * np.pi),
+            atol=1e-5,
+        )
