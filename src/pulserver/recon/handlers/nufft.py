@@ -11,6 +11,7 @@ import numpy as np
 from ...mrd._acquisitions import AcquisitionFlag
 from ...mrd._images import center_crop
 from .._buffers import ReconBuffer, ReconData
+from .._correct import gradient_unwarped, states_gradient_coefficients
 from ..gadgets import Prewhiten
 from ..plugin import ReconContext, ReconPlugin, ReconResult
 from .pics import averaged
@@ -86,10 +87,11 @@ class NufftRecon(ReconPlugin):
         image = self._fitted(
             kspace, trajectory, played, buffer.image_shape, context.device
         )
-        return ReconResult(
-            image,
-            attributes={"ImageProcessingHistory": ["PULSERVER", "PYTHON", "PICS"]},
-        )
+        history = ["PULSERVER", "PYTHON", "PICS"]
+        if states_gradient_coefficients(context.header):
+            image = gradient_unwarped(image, context, data)
+            history.append("GRADUNWARP")
+        return ReconResult(image, attributes={"ImageProcessingHistory": history})
 
     def _fitted(
         self,

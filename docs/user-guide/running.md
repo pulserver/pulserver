@@ -133,9 +133,11 @@ the gradient heating.
 | `pns_<axis>_<field>` | SAFE nerve model, for the axes `x`, `y` and `z` and the fields `a1` to `a3`, `tau1` to `tau3` in ms, `stim_limit` in T/m/s and `g_scale` |
 | `pns_limit` | Largest PNS response allowed, as a fraction of the model's threshold; 1 when left out |
 | `forbidden_band_<n>` | One forbidden band: its physical axis (`x`, `y`, `z` or `all`), its lowest and highest frequency in Hz and, optionally, the largest amplitude allowed in it in mT/m, separated by spaces |
-| `vop_file` | `.mat` or `.npz` file of VOPs and, optionally, a global SAR matrix, at a path the design calls can read |
+| `vop_file` | `.mat` or `.npz` file of VOPs and the head SAR matrix of each body model, at a path the design calls can read; its `safety_factor` multiplies local SAR |
+| `vop_head_limit`, `vop_local_limit` | The scanner's head and local SAR limits in W/kg in its current operating mode; both needed with a `vop_file` |
 | `vop_drive_per_hz` | Channel drive per Hz of RF amplitude, one per channel separated by spaces; a scale common to every channel cancels, and equal drives when left out |
 | `vop_default_shim` | Magnitude and phase in rad of each channel's weight for a pulse played without an RF shim, separated by spaces; equal weights when left out |
+| `vop_coil` | Transmit configuration the scanner reports; the VOP file's `transmit` metadata must name the same one |
 | `acoustic_file` | HDF5 file of the gradient coil's acoustic transfer function, at a path the design calls can read; the peak and A-weighted average sound pressure levels are held to those of IEC 60601-2-33 and written into the cache |
 | `acoustic_interval_us` | Sampling interval in µs the bins of `acoustic_file` refer to; given with it |
 

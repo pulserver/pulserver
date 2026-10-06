@@ -107,6 +107,9 @@ class BrainWeb:
         :attr:`DIFFUSION` gives them; a class without one does not diffuse.
     """
 
+    #: The axes a voxel spans: all three, physical.
+    VOXEL_AXES = np.eye(3)
+
     #: Isotropic diffusion coefficients, in m²/s, of the tissue classes whose
     #: water diffusion is measured: the apparent diffusion coefficients of
     #: cortical grey matter and of white matter in adults (Helenius et al.,
@@ -247,7 +250,8 @@ class BrainWeb:
         holds is ``spins`` isochromats of proton density, between them, the
         tissue's times the fraction of the cube it fills times the cube's
         volume in m³, precessing at the cube's mean :attr:`field_ppm`: at the
-        cube's centre, or over the cube for a ``"box"`` ``voxel``, and at the
+        cube's centre, or over the cube for a ``"box"`` or ``"jittered"``
+        ``voxel``, and at the
         quantiles of the Lorentzian line of the tissue's T2'
         (:doc:`/developer-guide/internals/bloch-engine`).
 
@@ -270,9 +274,11 @@ class BrainWeb:
             The scanner's coil the brain is scanned with, in place of the
             phantom's coils.
         spins
-            Isochromats per tissue of a cube: a cube number for a ``"box"``.
+            Isochromats per tissue of a cube: a cube number for a ``"box"`` or a
+            ``"jittered"`` voxel.
         voxel
-            ``"point"`` or ``"box"``: where a cube's isochromats lie.
+            ``"point"``, ``"box"`` or ``"jittered"``: where a cube's
+            isochromats lie.
         motion
             The head's motion, as :class:`~pulserver.virtual.Isochromats`
             takes it.
@@ -301,9 +307,11 @@ class BrainWeb:
         centres, proton_density, t1, t2, frequency, t2_prime, diffusion = self._sampled(
             spacing, field_t, off_resonance_hz, region
         )
-        offsets, order = _voxels.stencil(spins, voxel, spacing, np.eye(3))
+        offsets, order = _voxels.stencil(spins, voxel, spacing, self.VOXEL_AXES)
         rng = np.random.default_rng(seed)
         own = _voxels.spread(centres, spins) + np.tile(offsets, (len(t1), 1))
+        if voxel == "jittered":
+            own += _voxels.jitter(len(t1), spins, spacing, self.VOXEL_AXES, rng)
         return Isochromats(
             own,
             proton_density=_voxels.spread(proton_density, spins) / spins,

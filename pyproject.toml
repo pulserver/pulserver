@@ -1,5 +1,5 @@
 [build-system]
-requires = ["scikit-build-core>=1.1.0", "pybind11>=3.1.0", "setuptools_scm[toml]>=8"]
+requires = ["scikit-build-core>=1.1.0", "pybind11>=3.1.0", "setuptools_scm[toml]>=10.3.4"]
 build-backend = "scikit_build_core.build"
 
 [project]
@@ -33,22 +33,22 @@ dependencies = [
 [project.optional-dependencies]
 brainweb = ["brainweb-dl>=0.4.6"]
 coils = ["bartorch[motion]>=0.0.8"]
-console = ["websockets>=13"]
+console = ["websockets>=16.1.1"]
 # The fse3d plugin's optimized refocusing trains, designed with torchsim.
 design = ["pypulseqpp[design]>=0.0.29"]
 # Windows read on the isochromats' lattice on a CUDA device: the sums by a
 # Triton kernel, the transforms by cuFINUFFT.
-gpu = ["torch>=2.4", "triton>=3.0", "cufinufft>=2.3"]
+gpu = ["torch>=2.14.1", "triton>=3.0", "cufinufft>=2.5.1"]
 dev = [
   "pytest>=9.1.1",
   "pytest-cov>=7.1.0",
   "coverage>=7.16.2",
   # Pinned, not ranged: a formatter that differs between a contributor and
   # CI makes "one entry point" a lie. Dependabot proposes the bumps.
-  "ruff==0.16.9",
+  "ruff==0.16.10",
   "pre-commit>=4.6.2",
   "build",
-  "websockets>=13",
+  "websockets>=16.1.1",
 ]
 
 doc = [

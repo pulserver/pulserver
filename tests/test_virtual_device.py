@@ -780,6 +780,60 @@ def test_a_run_resumed_after_blocks_played_between_its_repetitions_is_carried_on
     np.testing.assert_allclose(settled, left, rtol=0, atol=within)
 
 
+@pytest.mark.parametrize("kind", ["spoiled", "dropping", "turned", "spokes", "resumed"])
+def test_a_run_larger_than_its_memory_is_carried_in_parts_as_the_engine_carries_it(
+    device, kind, monkeypatch
+):
+    """Cut into parts most of which wait off the device between tiles: their spreading adds up to each window, transients drop part by part, pulses are read off tables in each, and a resumed run takes the state of every part."""
+    from pulserver.virtual import _carry
+
+    made = []
+
+    class Recorded(_carry.Run):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            made.append(self)
+
+    monkeypatch.setattr(_carry, "Run", Recorded)
+    # Parts of half the memory: a few, one staying, so that the interpreter
+    # carries them in reasonable time.
+    monkeypatch.setattr(_carry, "PARTS", 2)
+    coils = 3 if kind in ("turned", "spokes") else 20
+    positions, properties = _lattice_spins(coils, scattered=kind == "spokes")
+    if kind == "dropping":
+        properties["t1"] = np.full(len(positions), 4e-3)
+        properties["t2"] = np.full(len(positions), 3e-3)
+    carrier = _window_device(device, run_memory=200 * len(positions))
+    on_device = Isochromats(positions, **properties, device=carrier)
+    alone = Isochromats(positions, **properties)
+    tolerance = 1e-2 if kind == "dropping" else 1e-4
+    if kind == "spokes":
+        signal, settled = _spokes(on_device, tolerance)
+        expected, left = _spokes(alone, tolerance)
+    elif kind == "resumed":
+        signal, settled = _resumed(on_device, tolerance)
+        expected, left = _resumed(alone, tolerance)
+    else:
+        readouts = None
+        if kind == "turned":
+            k = np.arange(RUN)
+            readouts = np.zeros((RUN, 1, 3))
+            readouts[:, 0, 1] = 1e3 * np.sin(0.1 * k)
+            readouts[:, 0, 2] = 5e2 * np.cos(0.3 * k)
+        schedule = "split" if kind == "dropping" else "spoiled"
+        signal, settled, _ = _carried(on_device, schedule, tolerance, readouts=readouts)
+        expected, left, _ = _carried(alone, schedule, tolerance, readouts=readouts)
+
+    (run,) = made
+    assert len(run.parts) > 1
+    assert any(part.stays for part in run.parts)
+    assert not all(part.stays for part in run.parts)
+    within = 1e-2 if kind == "dropping" else 1e-5
+    scale = np.abs(expected).max()
+    np.testing.assert_allclose(signal, expected, rtol=0, atol=within * scale)
+    np.testing.assert_allclose(settled, left, rtol=0, atol=within)
+
+
 def test_a_run_without_windows_is_carried_by_the_engine(device):
     positions, properties = _lattice_spins(3)
     carrier = _window_device(device, profile=True)

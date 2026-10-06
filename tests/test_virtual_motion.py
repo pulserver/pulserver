@@ -271,6 +271,37 @@ def test_a_box_voxel_dephases_under_a_cycle_across_it_where_a_point_voxel_does_n
     assert abs(read["box"]) < 1e-12
 
 
+def test_a_jittered_voxel_keeps_each_isochromat_in_its_own_cell():
+    """Anywhere in its cell of the box, in the ellipses' plane, no two voxels alike, the same for a seed."""
+    phantom = virtual.Phantom([virtual.Ellipse((0.0, 0.0, 0.0), (0.01, 0.01))])
+    spacing = 2e-3
+    box = phantom.isochromats(spacing, spins=4, voxel="box", seed=0).positions
+    jittered = phantom.isochromats(spacing, spins=4, voxel="jittered", seed=0).positions
+
+    assert np.abs(jittered - box).max() <= spacing / 4
+    assert np.abs(jittered[:, 2]).max() == 0.0
+    offsets = jittered - np.repeat(phantom.isochromats(spacing).positions, 4, axis=0)
+    assert len(np.unique(np.round(offsets, 12), axis=0)) == len(offsets)
+    again = phantom.isochromats(spacing, spins=4, voxel="jittered", seed=0).positions
+    np.testing.assert_array_equal(jittered, again)
+
+
+def test_jittered_voxels_dephase_under_a_cycle_across_them_as_random_phases_add():
+    """Where a box voxel cancels exactly, jittered voxels leave the square root of their count."""
+    ellipse = virtual.Ellipse((0.0, 0.0, 0.0), (0.02, 0.02))
+    phantom = virtual.Phantom([ellipse])
+    spacing = 2e-3
+    iso = phantom.isochromats(spacing, spins=4, voxel="jittered", seed=0)
+    iso.magnetization = [0.0, 1.0, 0.0]
+    # One cycle across a voxel along x.
+    crusher = [np.array([[0.0, 1e-3], [1.0 / spacing / 1e-3] * 2]), None, None]
+    read = iso.play(1e-3, gradients=crusher, adc=[1e-3])[0, 0]
+
+    voxels = len(phantom.isochromats(spacing))
+    # Each of the 4 * voxels isochromats carries a quarter of its voxel's signal.
+    assert abs(read) < 5 * math.sqrt(4 * voxels) / 4
+
+
 @pytest.mark.parametrize(
     "given, message",
     [
