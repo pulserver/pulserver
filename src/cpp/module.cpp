@@ -943,14 +943,16 @@ PYBIND11_MODULE(_ext, module)
            int source_size,
            const std::optional<Budget> &budget,
            const std::array<int, 2> &prescan,
-           bool waveforms)
+           bool waveforms,
+           bool pulses)
         {
             const Collection coll = load(cache_path, source_size);
             const WavePlan planned = wave_plan(coll.get(), budget);
             pulseg_playout_options options = PULSEG_PLAYOUT_OPTIONS_INIT;
             options.prescan_subsequence = prescan[0];
             options.prescan_readouts = prescan[1];
-            return native::record_playout(coll.get(), planned.plan, options, waveforms);
+            return native::record_playout(
+                coll.get(), planned.plan, options, waveforms, pulses);
         },
         "Play a written cache's two stages over a backend that records them.");
 

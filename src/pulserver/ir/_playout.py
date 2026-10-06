@@ -33,6 +33,7 @@ def playout(
     budget: WaveBudget | None = None,
     *,
     waveforms: bool = False,
+    pulses: bool = True,
     prescan: Prescan | None = None,
     cache_ext: str = ".pseg",
 ) -> dict[str, Any]:
@@ -63,7 +64,9 @@ def playout(
           ``(positions, 3, 2)`` into them; where it does, ``slot_offset``
           ``(positions, slots, 3)``, ``slot_samples`` and ``slot_start_us``:
           its ring of slots, or, with offsets -1, the span every resident wave
-          it plays covers;
+          it plays covers; and the RF pulse it prepares, at unit amplitude,
+          ``rf_time_us`` from the block's start and ``rf_waveform_hz``, with
+          ``rf_span`` ``(positions, 2)`` into them;
         - ``blocks``: per played block, in play order, ``subsequence``,
           ``segment``, ``position``, ``instance`` (instances of its segment
           played before its own), ``slot`` (of its position's ring, -1 unless
@@ -84,7 +87,8 @@ def playout(
           the readout's phase modulation, and the gradients: the events its
           position prepares at the block's amplitudes, or the samples its wave
           reads at the centres of the raster intervals, the first and last
-          held over the half intervals at its two ends;
+          held over the half intervals at its two ends; without ``pulses``,
+          all but the RF pulse, which its position holds;
         - ``instances`` and ``loads``: the segment instances played and the
           loads into waveform memory;
         - ``overwrites``: loads that wrote over memory the instance in play
@@ -111,4 +115,5 @@ def playout(
         _held(budget),
         calibration,
         waveforms,
+        pulses,
     )

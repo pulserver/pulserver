@@ -169,8 +169,24 @@ class Timeline:
         rotation: np.ndarray | None = None,
         device: torch.device | str = "cpu",
     ) -> None:
-        playout = ir.playout(Path(seq_path), waveforms=True, cache_ext=cache_ext)
+        playout = ir.playout(
+            Path(seq_path), waveforms=True, pulses=False, cache_ext=cache_ext
+        )
         self.played = played = playout["blocks"]
+        self._prepared = prepared = playout["positions"]
+        width = (
+            int(
+                max(
+                    played["position"].max(initial=0),
+                    prepared["position"].max(initial=0),
+                )
+            )
+            + 1
+        )
+        self._position = np.searchsorted(
+            prepared["segment"].astype(np.int64) * width + prepared["position"],
+            played["segment"].astype(np.int64) * width + played["position"],
+        )
         self.rotation = np.eye(3) if rotation is None else np.asarray(rotation, float)
         self.device = torch.device(device)
         durations = played["duration_us"].astype(np.float64)
@@ -377,22 +393,29 @@ class Timeline:
 
     def _pulses(self) -> Pulses:
         played = self.played
-        span = played["rf_span"]
+        span = self._prepared["rf_span"][self._position]
         blocks = np.flatnonzero(
             (span[:, 1] > span[:, 0]) & (played["rf_amp_hz"] != 0.0)
         )
         keys = np.column_stack(
             [
-                played["segment"][blocks],
-                played["position"][blocks],
+                self._position[blocks],
                 played["rf_amp_hz"][blocks].astype(np.float64).view(np.int64),
-                span[blocks, 1] - span[blocks, 0],
             ]
         )
         _, first, kind_of = np.unique(
             keys, axis=0, return_index=True, return_inverse=True
         )
-        turns = [_turn(played, int(blocks[at])) for at in first]
+        turns = [
+            _turn(
+                self._prepared,
+                int(self._position[blocks[at]]),
+                float(played["rf_amp_hz"][blocks[at]]),
+                int(played["rf_channels"][blocks[at]]),
+                float(played["rf_delay_us"][blocks[at]]),
+            )
+            for at in first
+        ]
         kind_of = kind_of.reshape(-1)
         flips = np.array([turn[0] for turn in turns])[kind_of]
         axes = np.array([turn[1] for turn in turns])[kind_of]
@@ -435,9 +458,9 @@ class Timeline:
     def _held(self, blocks: np.ndarray) -> np.ndarray:
         """Return the gradient each block's pulse plays under along the physical axes, in Hz/m, ``(n, 3)``; zero where it changes during the pulse."""
         played = self.played
-        span = played["rf_span"][blocks]
+        span = self._prepared["rf_span"][self._position[blocks]]
         channels = np.maximum(played["rf_channels"][blocks], 1)
-        times = played["rf_time_us"].astype(np.float64)
+        times = self._prepared["rf_time_us"].astype(np.float64)
         first = times[span[:, 0]]
         last = times[span[:, 0] + (span[:, 1] - span[:, 0]) // channels - 1]
         samples = np.stack(
@@ -651,9 +674,9 @@ class Timeline:
 
 
 def _turn(
-    played: dict, block: int
+    prepared: dict, at: int, amplitude: float, channels: int, delay_us: float
 ) -> tuple[float, float, tuple[np.ndarray, np.ndarray]]:
-    """Return what a block's pulse does on resonance, and its flip angle across the band it selects.
+    """Return what the pulse prepared position ``at`` plays does at ``amplitude`` on resonance, and its flip angle across the band it selects.
 
     Returns
     -------
@@ -668,16 +691,16 @@ def _turn(
         ``_IN_BAND`` of the angle it does on resonance, side lobes included,
         and that angle's ratio at each.
     """
-    start, stop = played["rf_span"][block]
-    channels = max(int(played["rf_channels"][block]), 1)
-    times = played["rf_time_us"][start:stop].astype(float).reshape(channels, -1)[0]
-    b1 = (
-        played["rf_waveform_hz"][start:stop]
+    start, stop = prepared["rf_span"][at]
+    channels = max(channels, 1)
+    times = prepared["rf_time_us"][start:stop].astype(float).reshape(channels, -1)[0]
+    b1 = amplitude * (
+        prepared["rf_waveform_hz"][start:stop]
         .astype(complex)
         .reshape(channels, -1)
         .sum(axis=0)
     )
-    b1, step_us = _on_a_raster(times - float(played["rf_delay_us"][block]), b1)
+    b1, step_us = _on_a_raster(times - delay_us, b1)
     dt = 1e-6 * step_us
     turned = pp.sim_bloch(b1, np.zeros((3, 1)), dt, initial=np.eye(3)).T
     flip = float(np.arccos(np.clip(0.5 * (np.trace(turned) - 1.0), -1.0, 1.0)))

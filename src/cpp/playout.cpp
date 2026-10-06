@@ -188,10 +188,13 @@ std::vector<float> &Columns::column<float>(const std::string &name)
  * its RF pulse and its readout's phase modulation, each with the start and
  * stop of the block's part.  A wave plays as the IR defines it, linear
  * between its points: how a playout's hardware plays the samples it loads is
- * the playout's. */
+ * the playout's.  Without pulses, the RF pulse is left to the position that
+ * prepares it. */
 class Waveforms
 {
   public:
+    explicit Waveforms(bool pulses) : pulses_(pulses) {}
+
     void gradients(
         const Position &p,
         int subsequence,
@@ -215,6 +218,8 @@ class Waveforms
 
     void rf(const Position &p, float amplitude)
     {
+        if (!pulses_)
+            return;
         rf_span_.push_back(static_cast<py::ssize_t>(rf_time_.size()));
         for (const RfShape &pulse : p.rf)
             pulse.play(amplitude, rf_time_, rf_value_);
@@ -235,9 +240,12 @@ class Waveforms
         out["gradient_time_us"] = as_array(gradient_time_, {corners});
         out["gradient_waveform_hz_per_m"] = as_array(gradient_value_, {corners});
         out["gradient_span"] = as_array(gradient_span_, {n, 3, 2});
-        out["rf_time_us"] = as_array(rf_time_, {rf_samples});
-        out["rf_waveform_hz"] = as_array(rf_value_, {rf_samples});
-        out["rf_span"] = as_array(rf_span_, {n, 2});
+        if (pulses_)
+        {
+            out["rf_time_us"] = as_array(rf_time_, {rf_samples});
+            out["rf_waveform_hz"] = as_array(rf_value_, {rf_samples});
+            out["rf_span"] = as_array(rf_span_, {n, 2});
+        }
         out["adc_phase_modulation_rad"] =
             as_array(modulation_, {static_cast<py::ssize_t>(modulation_.size())});
         out["adc_modulation_span"] = as_array(modulation_span_, {n, 2});
@@ -252,6 +260,7 @@ class Waveforms
             [amplitude](float s) { return amplitude * s; });
     }
 
+    bool pulses_;
     std::vector<float> gradient_time_, gradient_value_, rf_time_, modulation_;
     std::vector<std::complex<float>> rf_value_;
     std::vector<py::ssize_t> gradient_span_, rf_span_, modulation_span_;
@@ -338,6 +347,10 @@ class PreparedRows
             shape_.insert(shape_.end(), p.shape[a].begin(), p.shape[a].end());
             span_.push_back(static_cast<py::ssize_t>(time_us_.size()));
         }
+        rf_span_.push_back(static_cast<py::ssize_t>(rf_time_.size()));
+        for (const RfShape &pulse : p.rf)
+            pulse.play(1.0f, rf_time_, rf_value_);
+        rf_span_.push_back(static_cast<py::ssize_t>(rf_time_.size()));
         for (size_t k = 0; k < static_cast<size_t>(slots_); ++k)
         {
             const bool held = p.waves && k < p.slots.size();
@@ -362,14 +375,19 @@ class PreparedRows
         out["slot_offset"] = as_array(slot_offset_, {n, k, 3});
         out["slot_samples"] = as_array(slot_samples_, {n, k});
         out["slot_start_us"] = as_array(slot_start_us_, {n, k});
+        const auto rf_samples = static_cast<py::ssize_t>(rf_time_.size());
+        out["rf_time_us"] = as_array(rf_time_, {rf_samples});
+        out["rf_waveform_hz"] = as_array(rf_value_, {rf_samples});
+        out["rf_span"] = as_array(rf_span_, {n, 2});
         return out;
     }
 
   private:
     int slots_;
     std::vector<int> segment_, position_;
-    std::vector<float> time_us_, shape_, slot_start_us_;
-    std::vector<py::ssize_t> span_;
+    std::vector<float> time_us_, shape_, slot_start_us_, rf_time_;
+    std::vector<std::complex<float>> rf_value_;
+    std::vector<py::ssize_t> span_, rf_span_;
     std::vector<long> slot_offset_, slot_samples_;
 };
 
@@ -386,8 +404,8 @@ py::dict positions_dict(const std::map<std::pair<int, int>, Position> &positions
 class Recorder
 {
   public:
-    Recorder(const pulseg_collection *coll, bool waveforms)
-        : coll_(coll), waveforms_(waveforms), waves_(coll)
+    Recorder(const pulseg_collection *coll, bool waveforms, bool pulses)
+        : coll_(coll), waveforms_(waveforms), waves_(coll), waveforms_played_(pulses)
     {
     }
 
@@ -546,7 +564,10 @@ class Recorder
 /* The recorder, and what it raised: an exception cannot cross the C library. */
 struct Session
 {
-    Session(const pulseg_collection *coll, bool waveforms) : recorder(coll, waveforms) {}
+    Session(const pulseg_collection *coll, bool waveforms, bool pulses)
+        : recorder(coll, waveforms, pulses)
+    {
+    }
 
     Recorder recorder;
     std::exception_ptr failure;
@@ -597,9 +618,10 @@ py::dict record_playout(
     pulseg_collection *coll,
     const pulseg_wave_plan &plan,
     const pulseg_playout_options &options,
-    bool waveforms)
+    bool waveforms,
+    bool pulses)
 {
-    Session session(coll, waveforms);
+    Session session(coll, waveforms, pulses);
     const pulseg_playout_backend backend = backend_for(session);
     pulseg_diagnostic diag = PULSEG_DIAGNOSTIC_INIT;
     int rc = pulseg_playout_prepare(coll, &plan, &backend);
