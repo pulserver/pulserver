@@ -369,10 +369,12 @@ def test_finer_than_its_cubes_a_scan_reads_their_spectrum_off_the_lattice_they_l
     k = player._timeline.kspace(0, len(player._timeline.readouts))[1]
     k = k[np.isfinite(k).all(axis=1)][::7]
 
-    traj = torch.as_tensor(grid.trajectory(k), dtype=torch.float32, device=device)
+    at = torch.as_tensor(k, device=device)
+    spectrum = grid.spectrum(at).cpu().numpy()
+    traj = grid.trajectory(at).to(torch.float32)
     held = grid.sensitivity(1, 2) * grid.images[:1]
     read = linop.NUFFT(traj[None], (1, *grid.shape), toeplitz=False)(held)
-    read = read.reshape(-1).cpu().numpy() * np.sqrt(grid.points) * grid.spectrum(k)
+    read = read.reshape(-1).cpu().numpy() * np.sqrt(grid.points) * spectrum
     read *= np.exp(-2j * np.pi * (k @ grid.centre))
     cells = torch.nonzero(held[0] != 0)
     position = np.tile(grid.centre, (cells.shape[0], 1))
@@ -380,7 +382,34 @@ def test_finer_than_its_cubes_a_scan_reads_their_spectrum_off_the_lattice_they_l
         index = cells[:, held.dim() - 2 - at].cpu().numpy()
         position[:, axis] += (index - grid.size[at] // 2) * grid.delta[at]
     values = held[0][tuple(cells.T)].cpu().numpy()
-    summed = np.exp(-2j * np.pi * k @ position.T) @ values * grid.spectrum(k)
+    summed = np.exp(-2j * np.pi * k @ position.T) @ values * spectrum
 
     assert grid.lattice == 2e-3
     assert np.linalg.norm(read - summed) < 1e-2 * np.linalg.norm(summed)
+
+
+def test_a_scan_read_span_by_span_reads_what_it_reads_whole(
+    tmp_path, device, monkeypatch
+):
+    monkeypatch.setattr(_fourier, "_SPAN_SAMPLES", 64)
+    monkeypatch.setattr(_fourier, "_AHEAD_SAMPLES", 512)
+    sequence = _steady("fid", tmp_path / "fid.seq", selective=False)
+    tissue = virtual.Phantom(
+        [virtual.Ellipse((0.0, 0.0, 0.0), (0.03, 0.03), t1=0.8, t2=0.08)], coils=2
+    ).tissue(2e-3, field_t=3.0)
+    player = virtual.FourierPlayer(sequence, tissue, device=device)
+    spans, first = [], 0
+    while first < player.blocks:
+        last = player.boundary(first + 1)
+        spans.extend(player.readouts(first, last))
+        first = last
+    whole = list(
+        virtual.FourierPlayer(sequence, tissue, device=device).readouts(
+            0, player.blocks
+        )
+    )
+
+    assert len(spans) == len(whole) > 2
+    scale = max(np.abs(readout).max() for readout in whole)
+    for span, readout in zip(spans, whole, strict=True):
+        np.testing.assert_allclose(span, readout, rtol=0, atol=1e-5 * scale)

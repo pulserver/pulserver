@@ -76,6 +76,11 @@ _BUDGET = 1 << 28
 #: Samples a span of the scan holds at least, unless it ends the scan.
 _SPAN_SAMPLES = 1 << 18
 
+#: Most samples acquired at once, ahead of the span asked for: a batch costs
+#: one transform of the images whatever its samples, so batches grow from a
+#: span to this as the scan plays.
+_AHEAD_SAMPLES = 1 << 21
+
 #: Entries whose weights the terms the images are of are fitted to.
 _MIXED_SAMPLE = 1 << 16
 
@@ -201,6 +206,8 @@ class FourierPlayer:
         ]
         del self._entries, self._atoms, self._group_of
         self._ends = self._span_ends()
+        self._batch = _SPAN_SAMPLES
+        self._acquired_ahead: tuple[int, int, np.ndarray] | None = None
 
     @property
     def blocks(self) -> int:
@@ -215,15 +222,26 @@ class FourierPlayer:
     def readouts(self, first: int, last: int) -> Iterator[np.ndarray]:
         """Yield each readout of the blocks from ``first`` to before ``last``: ``(coils, samples)`` complex64, demodulated."""
         timeline = self._timeline
-        start, stop = np.searchsorted(timeline.readouts.block, [first, last])
+        start, stop = (
+            int(at) for at in np.searchsorted(timeline.readouts.block, [first, last])
+        )
         if stop <= start:
             return
-        samples = self._acquired(int(start), int(stop))
-        firsts = (
-            timeline.readouts.first[start : stop + 1] - timeline.readouts.first[start]
-        )
-        for at in range(stop - start):
+        held = self._acquired_ahead
+        if held is None or start < held[0] or stop > held[1]:
+            ahead = self._ahead(start, stop)
+            held = self._acquired_ahead = (start, ahead, self._acquired(start, ahead))
+        begin, _, samples = held
+        firsts = timeline.readouts.first - timeline.readouts.first[begin]
+        for at in range(start, stop):
             yield samples[:, firsts[at] : firsts[at + 1]]
+
+    def _ahead(self, start: int, stop: int) -> int:
+        """Return the readout before which a batch from ``start`` acquires: past ``stop``, to the batch's samples, which double from one batch to the next up to :data:`_AHEAD_SAMPLES`."""
+        firsts = self._timeline.readouts.first
+        reach = int(np.searchsorted(firsts, firsts[start] + self._batch, side="right"))
+        self._batch = min(2 * self._batch, _AHEAD_SAMPLES)
+        return max(stop, min(reach - 1, firsts.size - 1))
 
     def _temporal(self, station: int, events, shifted, selector_of) -> _Basis:
         """Return the basis spanning the signals of a station's groups and atoms at its readouts' echoes."""
@@ -404,13 +422,13 @@ class FourierPlayer:
         """Return the samples of the readouts from ``first`` to before ``last``, ``(coils, samples)``."""
         from bartorch import linop
 
-        timeline = self._timeline
-        times, k, receiver = timeline.kspace(first, last)
+        timeline, device = self._timeline, self.device
+        times, k, receiver = timeline._kspace(first, last)
         firsts = timeline.readouts.first
         readout = np.repeat(np.arange(first, last), np.diff(firsts[first : last + 1]))
-        echo_phase = timeline.readouts.receiver[readout]
+        echo_phase = torch.as_tensor(timeline.readouts.receiver[readout], device=device)
         out = torch.zeros(
-            (self._coils, times.size), dtype=torch.complex64, device=self.device
+            (self._coils, times.numel()), dtype=torch.complex64, device=device
         )
         stations = self._station_of[readout]
         for index, station in enumerate(self._stations):
@@ -418,37 +436,33 @@ class FourierPlayer:
             if not chosen.size:
                 continue
             grid, basis = self._grids[index], self._bases[index]
+            where = torch.as_tensor(chosen, device=device)
             position = np.searchsorted(basis.readouts, readout[chosen])
             temporal = basis.temporal[
-                :, basis.column[torch.as_tensor(position, device=self.device)]
+                :, basis.column[torch.as_tensor(position, device=device)]
             ]
             within = firsts[first] + chosen - firsts[readout[chosen]]
             across = self._readout.basis(readout[chosen], within)
             weights = grid.mix @ (temporal[:, None, :] * across[None, :, :]).reshape(
                 -1, chosen.size
             )
-            phase = -2.0 * math.pi * (k[chosen] @ grid.centre) + (
-                receiver[chosen] - echo_phase[chosen]
+            at = k[where]
+            centre = torch.as_tensor(grid.centre, dtype=at.dtype, device=device)
+            phase = -2.0 * math.pi * (at * centre).sum(dim=1) + (
+                receiver[where] - echo_phase[where]
             )
-            factor = torch.as_tensor(
-                math.sqrt(grid.points) * grid.spectrum(k[chosen]) * np.exp(1j * phase),
-                dtype=torch.complex64,
-                device=self.device,
-            )
-            traj = torch.as_tensor(
-                grid.trajectory(k[chosen]), dtype=torch.float32, device=self.device
-            )[None]
+            factor = (
+                math.sqrt(grid.points) * grid.spectrum(at) * torch.exp(1j * phase)
+            ).to(torch.complex64)
+            traj = grid.trajectory(at).to(torch.float32)[None]
             terms = grid.images.shape[0]
             coils = grid.sensitivities.shape[0]
             per_coil = max(1, min(coils, _BUDGET // (8 * grid.points * terms)))
             nufft = linop.NUFFT(traj, (per_coil * terms, *grid.shape), toeplitz=False)
-            where = torch.as_tensor(chosen, device=self.device)
             for c0 in range(0, coils, per_coil):
                 c1 = min(c0 + per_coil, coils)
                 held = torch.zeros(
-                    (per_coil, terms, *grid.shape),
-                    dtype=torch.complex64,
-                    device=self.device,
+                    (per_coil, terms, *grid.shape), dtype=torch.complex64, device=device
                 )
                 held[: c1 - c0] = grid.sensitivity(c0, c1)[:, None] * grid.images[None]
                 transformed = nufft(held.reshape(-1, *grid.shape)).reshape(
@@ -1484,13 +1498,14 @@ class _Grid:
             edges=edges,
         )
 
-    def spectrum(self, k: np.ndarray) -> np.ndarray:
+    def spectrum(self, k: torch.Tensor) -> torch.Tensor:
         """Return the spectrum of an entry's cube at k, ``(n, 3)`` logical in 1/m, one at zero; ones off a lattice."""
-        out = np.ones(k.shape[0])
+        out = torch.ones(k.shape[0], dtype=k.dtype, device=k.device)
         if self.lattice is None:
             return out
         for edge in self.edges:
-            out *= np.sinc(self.lattice * (k @ edge))
+            along = k @ torch.as_tensor(edge, dtype=k.dtype, device=k.device)
+            out = out * torch.sinc(self.lattice * along)
         return out
 
     @classmethod
@@ -1543,11 +1558,13 @@ class _Grid:
             spectrum = spectrum * torch.sinc(spacing * along)
         return spectrum
 
-    def trajectory(self, k: np.ndarray) -> np.ndarray:
+    def trajectory(self, k: torch.Tensor) -> torch.Tensor:
         """Return k-space locations in the grid's units, ``(n, axes)``, its first axis first: on a lattice, within the period its spectrum repeats over."""
-        located = k[:, self.axes] * (self.size * self.delta)
+        size = torch.as_tensor(self.size, dtype=k.dtype, device=k.device)
+        span = torch.as_tensor(self.size * self.delta, dtype=k.dtype, device=k.device)
+        located = k[:, torch.as_tensor(self.axes, device=k.device)] * span
         if self.lattice is not None:
-            located = located - self.size * np.round(located / self.size)
+            located = located - size * torch.round(located / size)
         return located
 
     def coils(self, tissue: Tissue, rotation: np.ndarray, device) -> torch.Tensor:
