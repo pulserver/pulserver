@@ -36,11 +36,6 @@ struct Span
     long end;
 };
 
-bool overlap(const Span &a, const Span &b)
-{
-    return a.axis == b.axis && a.begin < b.end && b.begin < a.end;
-}
-
 /* What the first stage prepares at one segment position: where it plays no
  * wave, its gradient events at unit amplitude, as corners from the block's
  * start; where it does, the points its longest wave takes and the ring of
@@ -458,10 +453,8 @@ class Recorder
         const auto axis = static_cast<size_t>(load.axis);
         if (static_cast<size_t>(load.offset + load.count) > memory_[axis].size())
             return PULSEG_ERR_INDEX;
-        const Span written{load.axis, load.offset, load.offset + load.count};
-        overwrites_ += std::count_if(
-            playing_.begin(), playing_.end(),
-            [&written](const Span &read) { return overlap(written, read); });
+        if (read_in_play(axis, load.offset, load.offset + load.count))
+            overwrites_ += 1;
         std::transform(
             load.samples, load.samples + load.count, memory_[axis].begin() + load.offset,
             unit_sample);
@@ -489,7 +482,12 @@ class Recorder
 
     int play()
     {
-        playing_.swap(setting_);
+        for (auto &spans : playing_)
+            spans.clear();
+        for (const Span &span : setting_)
+            playing_[static_cast<size_t>(span.axis)].emplace_back(span.begin, span.end);
+        for (auto &spans : playing_)
+            merge(spans);
         setting_.clear();
         instances_ += 1;
         return PULSEG_SUCCESS;
@@ -544,6 +542,31 @@ class Recorder
         return subsequences;
     }
 
+    /* Whether the instance in play reads any of [begin, end) along @p axis. */
+    bool read_in_play(size_t axis, long begin, long end) const
+    {
+        const auto &spans = playing_[axis];
+        const auto after = std::upper_bound(
+            spans.begin(), spans.end(), begin,
+            [](long at, const std::pair<long, long> &span) { return at < span.second; });
+        return after != spans.end() && after->first < end;
+    }
+
+    /* Sort spans and join those that overlap. */
+    static void merge(std::vector<std::pair<long, long>> &spans)
+    {
+        std::sort(spans.begin(), spans.end());
+        size_t kept = 0;
+        for (const auto &span : spans)
+        {
+            if (kept && span.first < spans[kept - 1].second)
+                spans[kept - 1].second = std::max(spans[kept - 1].second, span.second);
+            else
+                spans[kept++] = span;
+        }
+        spans.resize(kept);
+    }
+
     /* Keep what each axis of the block's wave reads from memory, counting
      * samples nothing was loaded into. */
     void read(const pulseg_wave_region *region)
@@ -568,7 +591,8 @@ class Recorder
     bool waveforms_;
     Waves waves_;
     std::array<std::vector<float>, 3> memory_;
-    std::vector<Span> playing_; /* what the instance in play reads */
+    /* What the instance in play reads, per axis, as disjoint spans in order. */
+    std::array<std::vector<std::pair<long, long>>, 3> playing_;
     std::vector<Span> setting_; /* what the instance being set reads */
     std::map<std::pair<int, int>, Position> positions_;
     Columns columns_;
