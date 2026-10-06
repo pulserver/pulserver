@@ -4,6 +4,7 @@ import ismrmrd
 import ismrmrd.xsd
 import numpy as np
 import pytest
+from _analytic import acquire
 from _host import generate
 from conftest import play
 
@@ -59,7 +60,7 @@ def _reconstructed(directory, wave, device):
     (plugins / "gre3d.py").write_text(source)
     store = DesignStore(directory / "designs")
     design = generate(store, "gre3d", PROTOCOL, plugins=plugins)
-    acquired = virtual.acquire(store.directory(design) / "sequence.seq", _slab())
+    acquired = acquire(store.directory(design) / "sequence.seq", _slab())
     virtual.record(directory / "raw.h5", design, acquired)
 
     dataset = ismrmrd.Dataset(str(directory / "raw.h5"), "dataset")

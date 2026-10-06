@@ -3,11 +3,12 @@
 import numpy as np
 import pypulseqpp as pp
 import pytest
+from _analytic import acquire, trajectory
 from _virtual import OFF_RESONANCE_HZ, OFFSET, ORIENTATIONS, phantom, posed, precession
 from _zoo import SMALL, designed
 from pypulseqpp import sequences
 
-from pulserver import ir, virtual
+from pulserver import ir
 from pulserver.proxy import SequenceTable
 
 # A small fraction of the k-space spacing of every sequence here.
@@ -31,7 +32,7 @@ def test_every_shipped_sequence_plays_its_design_turned_as_it_is_checked(
 ):
     _, sequence, path = design
     ir.convert(path, pp.Opts())
-    played = np.concatenate(virtual.trajectory(path, rotation=rotation), axis=1)
+    played = np.concatenate(trajectory(path, rotation=rotation), axis=1)
     turned = pp.TransformFOV(rotation=rotation).apply_to_sequence(sequence)
     np.testing.assert_allclose(played, turned.calculate_kspace()[0], atol=K_TOLERANCE)
 
@@ -57,7 +58,7 @@ def test_every_shipped_sequence_scans_an_object_posed_as_prescribed_as_at_the_is
 ):
     _, sequence, path = design
     ir.convert(path, pp.Opts(), fov_offset=OFFSET)
-    acquired = virtual.acquire(path, posed(rotation, coils=1), rotation=rotation)
+    acquired = acquire(path, posed(rotation, coils=1), rotation=rotation)
     table = SequenceTable.read(path, fov_offset_m=OFFSET)
     assert _centred_residual(sequence, acquired, table) < 1e-3
 
@@ -65,7 +66,7 @@ def test_every_shipped_sequence_scans_an_object_posed_as_prescribed_as_at_the_is
 def test_an_object_moved_from_the_converted_shift_is_centred_by_the_proxy_alone(design):
     _, sequence, path = design
     ir.convert(path, pp.Opts())
-    acquired = virtual.acquire(path, posed(np.eye(3), coils=1))
+    acquired = acquire(path, posed(np.eye(3), coils=1))
     table = SequenceTable.read(path)
     assert _centred_residual(sequence, acquired, table, OFFSET) < 1e-3
 
@@ -74,9 +75,9 @@ def test_every_shipped_sequence_accrues_off_resonance_as_its_design_times_it(des
     _, sequence, path = design
     ir.convert(path, pp.Opts())
     tissue = phantom(coils=1)
-    on = np.concatenate(virtual.acquire(path, tissue), axis=1)
+    on = np.concatenate(acquire(path, tissue), axis=1)
     off = np.concatenate(
-        virtual.acquire(path, tissue, off_resonance_hz=OFF_RESONANCE_HZ), axis=1
+        acquire(path, tissue, off_resonance_hz=OFF_RESONANCE_HZ), axis=1
     )
     accrued = np.nan_to_num(precession(sequence))
     expected = on * np.exp(-2j * np.pi * OFF_RESONANCE_HZ * accrued)

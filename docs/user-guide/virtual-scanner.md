@@ -1,8 +1,7 @@
 # Scanning a phantom without a scanner
 
-The virtual scanner plays a stored design's IR cache, acquires an analytic
-phantom along the trajectory the cache plays or simulates the cache on the
-phantom's isochromats, and sends the series to a reconstruction proxy as the
+The virtual scanner plays a stored design's IR cache on a phantom's tissue
+with its Fourier engine, and sends the series to a reconstruction proxy as the
 scanner's reconstruction client does ({doc}`../explanations/virtual-scanner`). A scanner-sequence plugin and a
 reconstruction plugin are exercised together, through the production design
 calls and proxy.
@@ -38,9 +37,13 @@ from pulserver import virtual
 design = "..."  # the identifier the generation replied
 sequence = f"designs/{design}/sequence.seq"
 phantom = virtual.Phantom(
-    [virtual.Ellipse((0.02, 0.0, 0.0), (0.08, 0.06))], coils=4
+    [
+        virtual.Ellipse((0.02, 0.0, 0.0), (0.08, 0.06), t1=0.9, t2=0.07),
+        virtual.Ellipse((0.02, 0.02, 0.0), (0.02, 0.015), t1=1.8, t2=0.25),
+    ],
+    coils=4,
 )
-readouts = virtual.acquire(sequence, phantom)
+readouts = virtual.simulate(sequence, phantom.tissue(1e-3))
 received = virtual.send(
     ("127.0.0.1", 9002),
     design,
@@ -49,6 +52,23 @@ received = virtual.send(
     config="pics",
 )
 ```
+
+{meth}`~pulserver.virtual.Phantom.tissue` samples the phantom as cubes of
+uniform magnetization, here 1 mm wide, each with its proton density, T1, T2,
+T2′ and frequency. {func}`~pulserver.virtual.simulate` plays the cache on
+them with the Fourier engine ({class}`~pulserver.virtual.FourierPlayer`,
+{doc}`../explanations/virtual-scanner`): each RF pulse the cache plays turns
+a cube through the flip angle its profile gives at the field the cube sees,
+the gradients' moments dephase the cubes, they relax between the events, and
+the images are encoded at the resolution the trajectory reaches, whatever the
+spacing. The
+spacing sets how closely the cubes follow the phantom's edges; the number of
+cubes grows as $1/\Delta^2$ for a spacing $\Delta$, or as $1/\Delta^3$ for a
+phantom that fills a volume. The engine runs on a CUDA device where there is
+one, and on the CPU otherwise; `device` names another. It returns one
+`(coils, samples)` array per readout, in play order, demodulated as the
+playout demodulates. It spoils by the moment the gradients wind across a
+voxel between pulses and readouts, and models no motion and no diffusion.
 
 `config` names the reconstruction plugin, here the shipped `pics`, as the
 config text of a reconstruction client does ({doc}`reconstruction-client`); the
@@ -65,70 +85,25 @@ beginning `pulserver:` reports a refused or failed series.
 
 ## Scan water and fat
 
-An ellipse of fat carries its chemical shift, and the acquisition the
-magnet's field strength, at which the shift is resolved; `off_resonance_hz`
-adds a frequency offset common to every spin:
+An ellipse of fat carries its chemical shift, and the tissue the magnet's
+field strength, at which the shift is resolved; `off_resonance_hz` adds a
+frequency offset common to every cube:
 
 ```python
-water = virtual.Ellipse((0.02, 0.0, 0.0), (0.06, 0.05))
-fat = virtual.Ellipse((0.02, 0.07, 0.0), (0.04, 0.01), shift_ppm=-3.45)
-readouts = virtual.acquire(
-    sequence, virtual.Phantom([water, fat], coils=4), field_t=3.0
+water = virtual.Ellipse((0.02, 0.0, 0.0), (0.06, 0.05), t1=1.2, t2=0.08)
+fat = virtual.Ellipse(
+    (0.02, 0.07, 0.0), (0.04, 0.01), shift_ppm=-3.45, t1=0.35, t2=0.07
 )
+tissue = virtual.Phantom([water, fat], coils=4).tissue(1e-3, field_t=3.0)
+readouts = virtual.simulate(sequence, tissue)
 ```
 
-Fat is acquired at its chemical shift, and a fat saturation the design plays
-leaves it the magnetization its pulse leaves at that frequency. Generate the
+A phantom with a chemical shift is refused without `field_t`. Fat precesses
+at its chemical shift, and a fat saturation the design plays turns it through
+the flip angle its pulse plays at that frequency. Generate the
 design under limits whose `B0` is the same field: the host resolves the ppm
 offsets of the design's RF pulses at it when it builds the IR
 ({doc}`running`).
-
-## Simulate relaxation and the RF pulses
-
-The analytic acquisition acts on the phantom's density alone. For relaxation,
-flip angles and slice profiles, sample the phantom as isochromats and play the
-cache on them ({doc}`../explanations/virtual-scanner`); the readouts are sent
-as before:
-
-```python
-tissue = virtual.Phantom(
-    [
-        virtual.Ellipse((0.02, 0.0, 0.0), (0.08, 0.06), t1=0.9, t2=0.07),
-        virtual.Ellipse((0.02, 0.02, 0.0), (0.02, 0.015), t1=1.8, t2=0.25),
-    ],
-    coils=4,
-)
-readouts = virtual.simulate(sequence, tissue.isochromats(1e-3))
-```
-
-The isochromats approximate the phantom in k-space below $1/(2\Delta)$ for a
-grid spacing $\Delta$, here 1 mm, so choose a spacing several times finer than
-the pixel; their number, and the time the simulation takes, grow as
-$1/\Delta^2$, or as $1/\Delta^3$ for a phantom that fills a volume. Sample
-such a phantom only where the design's excitation pulses excite it,
-`virtual.BrainWeb().isochromats(1e-3, field_t=3.0, region=virtual.excited(sequence))`,
-giving `excited` the prescription's rotation where there is one. A phantom with a
-chemical shift is sampled at the magnet's field,
-`tissue.isochromats(1e-3, field_t=3.0)`. The simulation starts from the
-magnetization the isochromats hold, so a second scan of the same isochromats
-continues the first: sample them again, or call their `reset`, to start from
-equilibrium.
-
-The Fourier engine acquires the phantom's tissue instead, each cube of it at
-`spacing`, at the resolution the prescription asks for whatever that spacing
-is ({class}`~pulserver.virtual.FourierPlayer`): the classes of tissue are
-simulated by extended phase graphs over the events each excitation's slab
-plays, and their images encoded along the trajectory, on a CUDA device where
-there is one. A scan of it is played as one of isochromats is:
-
-```python
-scan = virtual.Scan(sequence, tissue.tissue(1e-3, field_t=3.0))
-readouts = [readout for chunk in scan.chunks(sound=False) for readout in chunk.readouts]
-```
-
-It spoils by the moment the gradients wind across a voxel between pulses
-and readouts, so a voxel needs no isochromats spread over it to be spoiled;
-it models no motion and no diffusion, which the isochromats do.
 
 ## Stream a scan in real time, with its sound
 
@@ -140,7 +115,7 @@ import wave
 
 import numpy as np
 
-scan = virtual.Scan(sequence, tissue.isochromats(1e-3))
+scan = virtual.Scan(sequence, tissue)
 with wave.open("scan.wav", "wb") as audio:
     audio.setnchannels(2)
     audio.setsampwidth(2)
@@ -166,8 +141,8 @@ it is. Without `speed`, the spans come as fast as they are simulated.
 
 `pulserver scan` runs a scan without a script. It imports a sequence file or
 generates a design from a scanner-sequence plugin, as the design calls do,
-plays its IR cache on a phantom in the Bloch simulation, and writes the series
-to an ISMRMRD file, streams it to a reconstruction proxy, or both:
+plays its IR cache on a phantom's tissue with the Fourier engine, and writes
+the series to an ISMRMRD file, streams it to a reconstruction proxy, or both:
 
 ```bash
 pulserver scan --seq sequence.seq --limits limits.txt \
@@ -211,36 +186,13 @@ line, is written to standard output, and the scan clock to standard error.
   (`pip install 'pulserver[brainweb]'`); its `--spacing` is a whole number of
   millimetres. Without `--phantom`, the phantom is seven vials of water around
   one of fat, with T1 from 0.3 s to 2.0 s and T2 from 0.04 s to 0.3 s.
-  Its isochromats are those in the slabs the design's excitation pulses excite
-  ({func}`~pulserver.virtual.excited`).
-  `--spacing`, in mm, and `--coils` set its isochromats and its receive coils;
-  `--coil` scans it with one of the scanner's coils instead, `body`,
-  `body/head48` or `head8/head32`, named `transmit/receive`, whose
-  sensitivities bartorch samples from BART's coil models, which the `coils`
-  extra installs (`pip install 'pulserver[coils]'`). The sensitivities at
-  every isochromat are written to a temporary file mapped into memory; where
-  the temporary directory is a memory file system, set `TMPDIR` to one on
-  disk.
-- `--engine` names what the scan is simulated by: `fourier`, the Fourier
-  engine on the phantom's tissue at `--spacing`, or `bloch`, the isochromats
-  the options below sample. The Fourier engine unless `--diffusion`, `--nod`
-  or `--drift` asks for what only the isochromats model.
-- `--spins` spreads each voxel over that many isochromats, at the quantiles of
-  the Lorentzian line of its tissue's T2′: two along each axis of the voxel
-  without it, four for a phantom of ellipses, which lies in a plane, and
-  eight for BrainWeb. `--voxel` places them anywhere in each of the cells
-  filling the voxel, `jittered`, the default; at the cells' centres, `box`; or
-  at the voxel's centre, `point`, which takes one isochromat without
-  `--spins`. `--diffusion` lets BrainWeb's tissue classes diffuse
-  ({doc}`../developer-guide/internals/bloch-engine`). A phantom file gives each ellipse
-  its `t2_prime`, in s, and `diffusion`, in m²/s. Isochromats that diffuse are
-  played block by block, and a voxel's diffusion attenuation needs many spins
-  to be resolved.
-- `--nod DEGREES PERIOD` turns the subject about the physical x axis through
-  the isocentre by `DEGREES` times the sine of 2π t / `PERIOD`, and
-  `--drift X Y Z` translates it along the physical axes, in mm/min, t being the
-  time from the start of the scan ({class}`~pulserver.virtual.RigidMotion`).
-  Isochromats that move are played block by block.
+  `--spacing`, in mm, 1 mm by default, is the spacing at which the phantom is
+  sampled as tissue, and `--coils` sets its receive coils; `--coil` scans it
+  with one of the scanner's coils instead, `body`, `body/head48` or
+  `head8/head32`, named `transmit/receive`, whose sensitivities bartorch
+  samples from BART's coil models, which the `coils` extra installs
+  (`pip install 'pulserver[coils]'`). A phantom file gives each ellipse its
+  `t2_prime`, in s.
 - `--recon` streams the series to a reconstruction proxy, which looks the
   design up in its store: give that store as `--store`, or the proxy's design
   intake as `--push`. The images go to `images.h5` in `--output`, the DICOM
@@ -254,17 +206,8 @@ line, is written to standard output, and the scan clock to standard error.
 - `--speed` plays the scan that many times as fast as a scanner, once the
   simulation is far enough ahead, writing the time left before it is to
   standard error; without it, the scan runs as fast as the simulation.
-- `--device cuda` reads the ADC windows and carries the runs of repetitions
-  on the CUDA device. A window outside a run under a changing gradient, such
-  as a spiral's, whose isochromats lie on a lattice along the axes its k
-  moves along, as a phantom's do, is summed onto the lattice by a Triton
-  kernel and transformed by cuFINUFFT; every other one, under a held gradient
-  or with its isochromats off any lattice, as a moving subject's are, is
-  summed sample by sample by a second Triton kernel. A run of repetitions,
-  Cartesian, radial or of ZTE spokes, is carried and spread onto its windows'
-  grids by more Triton kernels, a tile of repetitions at a time. The `gpu` extra
-  installs all of them (`pip install 'pulserver[gpu]'`). The rest of the scan
-  is simulated on the CPU.
+- `--device` names the torch device the Fourier engine runs on, such as
+  `cpu` or `cuda`; a CUDA device where there is one without it.
 
 ## Prescribe an orientation
 
@@ -288,7 +231,7 @@ phantom = virtual.Phantom(
     rotation=rotation,
     position=centre,
 )
-readouts = virtual.acquire(sequence, phantom, rotation=rotation)  # or virtual.simulate
+readouts = virtual.simulate(sequence, phantom.tissue(1e-3), rotation=rotation)
 received = virtual.send(
     ("127.0.0.1", 9002),
     design,
@@ -332,15 +275,8 @@ coil; maps solved at another frequency than the Larmor frequency of the limits'
 `B0` are refused.
 
 A scan is simulated by the Fourier engine on the phantom's tissue, sampled
-`--spacing` apart, 1 mm by default, once for each exam as it starts. With
-`--engine bloch`, or where the subject moves or diffuses, it is simulated on
-the phantom's isochromats in the slabs its excitation pulses excite
-({func}`~pulserver.virtual.excited`) instead; where they number more than
-`--max-isochromats`, two million by default, as over a whole head, the spacing
-is coarsened in steps of 1 mm until they do not, counting `--spins`
-isochromats per voxel. `--engine`, `--device`, `--spins`,
-`--voxel`, `--diffusion`, `--nod` and `--drift` act as they do for
-`pulserver scan`; a subject's motion starts anew with each scan.
+`--spacing` apart, in mm, 1 mm by default, once for each exam as it starts.
+`--device` acts as it does for `pulserver scan`.
 
 pulserver's image runs such a console by default, with BrainWeb's normal brain
 and the field maps solved in it, `--fields=/console/fields`, so that every exam
@@ -356,14 +292,12 @@ docker run -d --restart unless-stopped --name pulserver \
 
 Options after the image's name are added to its console's: an option of one
 value takes the value given last, and `--plugins`, `--recon-plugins` and
-`--origin` add to the image's. A console whose scans spread each voxel over
-twenty-seven isochromats, in tissue that diffuses, of a subject that nods
-through ±2° with a period of 8 s:
+`--origin` add to the image's. A console whose exams are sampled 2 mm apart:
 
 ```bash
 docker run -d --restart unless-stopped --name pulserver \
   -p 127.0.0.1:8765:8765 ghcr.io/pulserver/pulserver \
-  --spins 27 --diffusion --nod 2 8
+  --spacing 2
 ```
 
 Its sequences are the ones listed under {ref}`shipped-sequences`,
@@ -415,9 +349,8 @@ Worker running pulserver beside a browser page.
 A subject named `brainweb` is BrainWeb's normal brain, and so is every subject
 of a console with field maps; any other is the vials. An exam is scanned in the
 coil it names, or in the one it had, `--coil` at first; a head coil of BART's
-models needs the `coils` extra. Scans of an exam that excite the same slabs play on
-one set of isochromats, each from equilibrium, so that a repeated scan neither
-builds them nor computes again the pulses an earlier one played. A console
+models needs the `coils` extra. The scans of an exam play on one tissue, each
+from equilibrium, sampled while the exam's localizer is viewed. A console
 loads BrainWeb once, and computes the field its head adds while the first
 exam's localizer is viewed. The localizer is drawn from the
 phantom's proton density, so an exam can be planned before any scan. MaRGE is
@@ -432,5 +365,5 @@ each scan's sound as it streams; it is published at
 ## See also
 
 * {doc}`../explanations/virtual-scanner` — the stand-ins and the signal model.
-* {doc}`../api/virtual` — the phantom, the acquisition, the Bloch simulation, the scan clock and the client.
+* {doc}`../api/virtual` — the phantom, the Fourier engine, the scan clock and the client.
 * {doc}`reconstruction-client` — the stream the client sends.

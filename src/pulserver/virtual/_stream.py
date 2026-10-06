@@ -17,8 +17,6 @@ from pathlib import Path
 import numpy as np
 import pypulseqpp as pp
 
-from ._bloch import Player, _gradients
-from ._isochromats import Isochromats
 from ._tissue import Tissue
 
 #: MATLAB Pulseq's audio sample rate, the default of ``pypulseqpp.gradient_sound``, in Hz.
@@ -61,31 +59,22 @@ class Chunk:
 
 
 class Scan:
-    """The cache beside a sequence file played on isochromats or acquired by the Fourier engine, against a scan clock.
+    """The cache beside a sequence file acquired of a phantom's tissue by the Fourier engine, against a scan clock.
 
-    On isochromats, the blocks are those :func:`~pulserver.virtual.simulate`
-    plays, as it plays them, and they advance the magnetization of the
-    isochromats from where it stands. On a phantom's tissue, they are acquired
-    as :class:`~pulserver.virtual.FourierPlayer` acquires them.
+    The blocks are acquired as :class:`~pulserver.virtual.FourierPlayer`
+    acquires them.
 
     Parameters
     ----------
     seq_path
         The first file of the sequence's chain, beside its cache.
-    isochromats
-        The isochromats scanned, positioned along the physical axes, or the
-        tissue the Fourier engine acquires.
+    tissue
+        The phantom's tissue.
     cache_ext
         The extension of the cache beside each file.
     rotation
         ``(3, 3)`` rotation of the prescription from logical to physical axes,
         a reflection included; the identity by default.
-    default_shim
-        Channel weights of a coil of several transmit channels, as
-        :func:`~pulserver.virtual.simulate` takes them.
-    tolerance
-        The accuracy of the samples of runs of repetitions, as
-        :func:`~pulserver.virtual.simulate` takes it.
     device
         Where the Fourier engine runs, as
         :class:`~pulserver.virtual.FourierPlayer` takes it.
@@ -94,29 +83,17 @@ class Scan:
     def __init__(
         self,
         seq_path: Path | str,
-        isochromats: Isochromats | Tissue,
+        tissue: Tissue,
         cache_ext: str = ".pseg",
         *,
         rotation: np.ndarray | None = None,
-        default_shim: np.ndarray | None = None,
-        tolerance: float = 0.0,
         device: str | None = None,
     ) -> None:
-        if isinstance(isochromats, Tissue):
-            from ._fourier import FourierPlayer
+        from ._fourier import FourierPlayer
 
-            self._player = FourierPlayer(
-                seq_path, isochromats, cache_ext, rotation=rotation, device=device
-            )
-        else:
-            self._player = Player(
-                seq_path,
-                isochromats,
-                cache_ext,
-                rotation=rotation,
-                default_shim=default_shim,
-                tolerance=tolerance,
-            )
+        self._player = FourierPlayer(
+            seq_path, tissue, cache_ext, rotation=rotation, device=device
+        )
         self._played = self._player.played
         self._turn = None if rotation is None else np.asarray(rotation, dtype=float)
         durations = 1e-6 * self._played["duration_us"].astype(float)
@@ -433,3 +410,15 @@ class _Clock:
             if (self._samples[k] > 0) == acquiring and self._durations[k] > 0.0
         ]
         return statistics.median(rates[-_RECENT:]) if rates else None
+
+
+def _gradients(played: dict, block: int) -> list[np.ndarray | None]:
+    """Return the block's gradient corners per logical axis: times in s from its start over Hz/m."""
+    span = played["gradient_span"][block]
+    corners = []
+    for axis in range(3):
+        where = slice(*span[axis])
+        times = 1e-6 * played["gradient_time_us"][where].astype(float)
+        values = played["gradient_waveform_hz_per_m"][where].astype(float)
+        corners.append(np.array([times, values]) if times.size else None)
+    return corners

@@ -2,10 +2,10 @@
 
 The implementation of the virtual scanner
 ({doc}`../../explanations/virtual-scanner`): how the virtual interpreter
-resolves each block's waveforms, how runs of repetitions are played and to
-what tolerance, how a cache is exported to an external Bloch simulator, what
-the test suite establishes by playing caches, the coils taken from field maps,
-and the scan clock and the sound.
+resolves each block's waveforms, how the Fourier engine builds its timeline,
+event streams, bases and images and to what tolerance, how a cache is exported
+to an external Bloch simulator, what the test suite establishes by playing
+caches, the coils taken from field maps, and the scan clock and the sound.
 
 ## Played waveforms
 
@@ -29,74 +29,122 @@ modelled. {func}`~pulserver.ir.play` walks the same cache with the cursor and
 resolves each block by its own instance, and the test suite holds the two to
 the same waveforms, bit for bit.
 
-## Runs of repetitions
+## Fourier engine
 
-Most of a scan repeats a few blocks many times, changing only the phase
-offsets of its pulses and ADC events, the amplitudes of its phase-encoding
-gradients and the direction of its readout. Such a run plays from each
-isochromat's map over one repetition, as
-{meth}`~pulserver.virtual.Isochromats.repetitions` plays it, rather than
-block by block. A repetition is the fewest consecutive blocks, up to 64, that the
-blocks after them repeat event for event, with the same registers but the
-phase offsets, the gradients' amplitudes and their waves; runs start at any
-block, so a preparation or a train of dummy excitations before the imaging
-blocks is a run of its own or plays block by block. Within a run:
+{class}`~pulserver.virtual.FourierPlayer` builds the acquisition of a tissue
+once, from the whole playout, and then acquires any range of readouts from it.
+`src/pulserver/virtual/_fourier.py` holds the engine and
+`src/pulserver/virtual/_timeline.py` the timeline it reads; the integration of
+the gradients and the search for each readout's echo are native, in
+`src/cpp/fourier/`.
 
-- every pulse of a repetition has its phase offset larger by the same
-  increment than in the first repetition, and so has every ADC event;
-- a gradient that varies across the repetitions differs from the first
-  repetition's by a waveform zero during its block's pulse and held through
-  its block's ADC window: a phase encoding, whose amplitude varies, or a
-  readout turned by a rotation with its prephaser, as a radial spoke is, whose
-  wave's corners fall at the first repetition's times; the waveforms of a
-  repetition leave no area by any of its pulses, so that they turn only the
-  samples of its windows and, by the area they leave over it, each
-  isochromat's magnetization at its end;
-- or, in the first block, a gradient held through the block, under its pulse,
-  varies across the repetitions, as each spoke of a ZTE scan plays its pulse
-  under its own readout gradient; the block then reads no ADC window;
-- each ADC window is read under a gradient held throughout it.
+### Timeline
 
-A run ends where one of these stops holding. Runs of the same blocks join into
-one run whose repetitions other blocks play between, as far as their
-gradients differ from the first repetition's as the list states: the spokes of
-a ZTE scan's shells are one run, with each shell's closing spoke and the ramp
-onto the next shell's first spoke between them. The run resumes from the
-magnetization those blocks leave, so its maps are made once rather than for
-every shell. Stretches of blocks between runs that repeat one another at least
-eight times are the repetitions of a run of their own, as those between a ZTE
-scan's shells are. An interleaved multislice scan
-whose RF spoiling steps each slice's pulse by its own increment, a spin echo
-phase-encoded before its refocusing pulse, and spiral readouts, whose
-gradients vary during the windows, play block by block; a spiral's windows are
-read from the lattice the phantom is sampled on, as
-{doc}`bloch-engine` states.
+The timeline holds the moment of the played gradients from the start of the
+scan along the logical axes, without the resets of an excitation: a block's
+gradients carry its own rotation, and those of a block labelled `NOROT`, which
+play along the physical axes, are turned back by $R$. An excitation sets the
+origin $k$ is measured from and a refocusing pulse negates $k$, at the RF
+centre the cache carries, and each file of a chain starts from no
+excitation.
 
-The maps take memory in proportion to the isochromats and to the ADC windows of
-a repetition. A repetition whose maps would take more than 4 GiB is not played
-from them: a run takes a shorter repetition that fits, or its blocks play one
-by one.
+Each RF pulse is reduced to a flip angle and the phase of its axis, from
+`pypulseqpp.sim_bloch` of its samples on a uniform raster with the channels of
+a pTx pulse summed, and to a profile: the angle it tips magnetization at rest
+through, over the angle on resonance, at detunings $1/(16T)$ apart within
+$\pm 64/T$ of its frequency, for a pulse of duration $T$, cut where it falls
+below $1/128$. Pulses of the same samples at the same amplitude share one
+profile. A pulse plays under the gradient read at five points of its duration
+when the gradient changes by less than $10^{-6}$ of its largest axis, and
+under none otherwise.
 
-{func}`~pulserver.virtual.simulate` and {class}`~pulserver.virtual.Scan` take
-the `tolerance` of {meth}`~pulserver.virtual.Isochromats.repetitions`. At zero,
-a run samples what its blocks played one by one sample, to the single precision
-of the cache's amplitudes, which leave the varying gradients' area by a pulse
-at rounding where the run takes it as zero. The console and `pulserver scan`
-play runs, and read the windows of the blocks played one by one, to a
-tolerance of $10^{-4}$, at which the transients of a steady state are carried
-until they fall below it and its fixed points are summed once, by columns of isochromats along the encoded axes; a run whose column sums
-would take more than 4 GiB carries every transient instead. Played to a
-tolerance, a run also takes as zero the area its varying gradients leave by a
-pulse or over a repetition at the six significant digits a Pulseq file keeps
-of an amplitude, up to $2 \times 10^{-5}$ of the largest area one of them
-plays, and its samples then differ from the blocks' by the phase that area
-accrues.
+Each readout's echo is the sample at which the pathway it reads passes nearest
+the centre of k-space, found first among 64 samples spread over the window
+and then among those around the nearest. The pathways considered are the free
+induction and the echoes of the one or two intervals before; a readout whose
+excitation's interval winds less than `SHIFT_CYCLES`, half a cycle,
+across a voxel reads the free induction.
+
+### Groups, stations and shifts
+
+The voxel along each logical axis is the smallest of $1/(2k_\mathrm{max})$,
+the full width at half maximum of each excitation's profile over its gradient
+along that axis, and the extent of the tissue. A pulse's selector is its
+gradient, its frequency and its profile; where the pulses play under more than
+16 distinct gradients, as a ZTE scan's do, every selector selects by frequency
+alone. Under each selector, a cube's flip angle relative to the one on
+resonance is rounded to a level: halving from $2^{-7}$ to $2^{-4}$, then in
+steps of 0.05 from 0.1 to 2. Cubes of the same levels under every selector form
+a group, and the groups that together hold less than $10^{-3}$ of the excited
+density join the kept group nearest in level that the same selectors turn.
+Cubes no excitation turns are dropped.
+
+An interval between two events shifts the states by one order where the
+median of its dephasing across the voxel, over the intervals at the same pair
+of segment positions, reaches `SHIFT_CYCLES`. The part of an
+interval's moment that changes from one repetition to the next counts where
+the intervals between two consecutive pulses do not sum it to less than that.
+
+### Event streams
+
+A station's stream holds the pulses whose selectors turn its groups and the
+readouts its excitations precede, each readout at its echo. Each event is
+described to blochsim as an ideal rotation through its selector's flip angle
+at each group's level, and the stream is simulated by `EpgEngine` for each
+atom: a class of tissue, a bin of the field and a bin of the transmit field's
+magnitude. A cube's signal interpolates linearly between the two bins of each
+that bracket its frequency and its transmit magnitude, four atoms in all. The
+transmit field is binned in steps of 0.05 of the nominal amplitude. The field
+is binned only where an interval between two pulses shifts nothing; the bin is
+the narrower of the width over which the phase changes by 0.3 rad over the
+longest time from an excitation to an echo and a 32nd of the inverse of the
+shortest such interval, and lies between 0.5 Hz and 16 Hz.
+
+A stream whose pulses recur, with the same phase increments, times and
+shifts, every $q$ of them, plays its first periods until the deviation from
+the periodic state, which relaxation contracts by at least
+$\exp(-t/T_{1,\mathrm{max}})$, falls below $10^{-3}$ of the equilibrium
+magnetization, and its readouts in later periods record what the same readout
+of the last period played records. Up to 64 periods are tried, from those at
+which the middle pulse of the stream recurs.
+
+### Bases and images
+
+The signals of a station's groups and atoms at its readouts' echoes are
+spanned by the fewest leading singular vectors that leave a relative residual
+of `TOLERANCE`, at most
+`MAX_TERMS` of them; where the groups and
+atoms are too many to simulate at once, the basis is fitted to a random sample
+of them and the rest are projected onto it. The decay, $T'_2$ dephasing and
+precession across the readouts are tabulated per pair of $T_2$ and $T'_2$ at
+frequencies at most 0.5 Hz apart and spanned, by a randomized range finder, to
+the same residual; a cube's coefficients interpolate linearly in frequency.
+
+The pairs of temporal and readout terms are compressed to the fewest
+combinations that span the weights of up to $2^{16}$ cubes of the station to
+the same residual, and each combination is an image. The image grid spans the
+logical axes the trajectory encodes across the cubes, at least two, with
+frequencies reaching 1.25 times past the widest $k$ and at least 16 points
+along each axis. Where the cubes lie on a lattice finer than that, the grid is
+the lattice itself: each image holds the cubes' weights at their centres, and
+each sample is weighed by the cube's spectrum, a product of sincs along its
+edges, with its $k$ folded into the period the lattice's spectrum repeats over.
+Elsewhere, the cubes are spread onto the grid by the adjoint of bartorch's
+NUFFT and multiplied by the cube's spectrum at the grid's frequencies. The
+receive sensitivities are evaluated at points at most 4 mm apart over the grid
+and interpolated linearly onto it. Each image times each coil's sensitivity is
+transformed to the samples by bartorch's NUFFT, its centre's phase and the
+receiver phase relative to the echo's applied to each sample.
+
+Readouts are acquired in batches that run ahead of the range asked for,
+growing from $2^{18}$ samples to $2^{21}$, since a batch costs one transform of
+the images whatever its samples.
 
 ## External simulators
 
-A Bloch simulator that reads Pulseq files, KomaMRI for example, models what
-the signal model above leaves out: relaxation, slice profiles and the action
-of every RF pulse on the magnetization. A simulation of the design would test
+A Bloch simulator that reads Pulseq files, KomaMRI for example, integrates the
+Bloch equation through every RF pulse, which the Fourier engine reduces to a
+rotation at its centre. A simulation of the design would test
 the design alone; {func}`~pulserver.virtual.export` writes the blocks the
 cache plays instead, so that a simulation of the file tests the IR as the
 virtual interpreter does. Each played block becomes one block of a Pulseq
@@ -140,21 +188,6 @@ without a flat top, so the job turns a design's gradients itself. The two
 simulations then differ only where the cache plays something other than the
 design, or by the rounding of the text format.
 
-The same job compares KomaMRI with the virtual scanner's Bloch simulation.
-KomaMRI adds a pulse's phase shape and phase offset to its field with the
-opposite sign, and refers the phase its frequency offset accrues to the
-pulse's centre ({doc}`bloch-engine`). It also joins a pulse's samples linearly and takes the field at the
-start of each time step, where the playout holds each sample of a pulse sampled
-at the middles of equal intervals over its interval; read as written, such a
-pulse would play half an interval late. The exported file is therefore
-simulated a third time with each pulse rewritten in KomaMRI's convention: its
-samples conjugated, each sample of a pulse sampled at the middles of equal
-intervals held from the start of its interval, and its phase offset $\phi$
-replaced by $-\phi - 2\pi f t_c$, for the frequency offset $f$ and the centre
-$t_c$. KomaMRI then plays the field the virtual scanner plays. That signal,
-demodulated by the receiver phase the export returns, is compared with the
-virtual scanner's simulation of the cache on the same spins.
-
 ## What a run establishes
 
 - The trajectory the cache plays is the one each file designs, for the
@@ -184,30 +217,22 @@ virtual scanner's simulation of the cache on the same spins.
   isocentre, and the image carries the prescribed centre and the columns of
   $R$ as its read, phase and slice directions; a series short of a readout is
   refused.
-- Played on isochromats, the cache of every fixture samples what its design's
-  blocks played one by one sample, under an axial, an oblique and a reflected
-  prescription, with the magnetization carried across the files of a chain.
-- The runs of a balanced SSFP, a spoiled and a multi-echo gradient echo, a
-  spin echo, a fast spin echo and an MPRAGE sample what their blocks played
-  one by one sample; a balanced SSFP plays as runs of one repetition but for
-  its preparation, and to a tolerance of $10^{-4}$ samples within a thousandth
-  of its exact samples, with its fixed points summed by columns and without.
-  An interleaved multislice scan whose pulses step unevenly, a spin echo
-  phase-encoded before its refocusing pulse, and spiral readouts play block by
-  block, and so do the echoes of a three-echo gradient echo where the maps of
-  one window fit and those of three do not. A balanced gradient echo whose
-  rewinders are off by a few millionths plays as one run to a tolerance. A run
-  played across spans samples what it samples played whole.
-- The spokes of a ZTE scan of ten shells play as one run, each spoke's pulse
-  read off its tables, resumed after the blocks between its shells, which play
-  as a run of their own; the scan samples what its blocks played one by one
-  sample, played whole and in spans that end within a shell.
-- The phantom sampled as isochromats, posed where an axial, an oblique or a
-  reflected prescription places the field of view and scanned by a
-  single-shot EPI, is acquired as the analytic phantom is: a 90° excitation
-  leaves its density at the phase the signal model states. Each ellipse's
-  isochromats relax with its $T_1$ and $T_2$ and precess at its chemical shift
-  at the magnet's field.
+- The Fourier engine's timeline samples the trajectory the cache plays, for
+  the fixtures under an axial, an oblique and a reflected prescription. Each
+  readout's echo is its sample nearest the centre of k-space, and each readout
+  reads the pathway that passes the centre during it.
+- A spoiled train shifts the states after each readout and nowhere else, and a
+  flat phantom is not dephased along the axis it does not span. Each slice of
+  an interleaved multislice scan is a station of its own, and a pulse played
+  without a gradient selects by frequency: a fat saturation turns the fat and
+  not the water.
+- Of a phantom filling its slices, of an unspoiled and of a balanced steady
+  state, the Fourier engine acquires the signals of a Bloch simulation of
+  isochromats held as reference fixtures, to a few per cent of their norm.
+- A stream plays its repetitions until they settle and reads the rest off the
+  last; a cube lattice finer than the image grid is read through the cubes'
+  spectrum; and a group of flip angles holding too little of the density joins
+  the nearest one the same pulses turn.
 - Played in spans, the scan of every fixture plays each block once: the
   spans' readouts are those of the whole scan, and the sound of a single-file
   fixture, joined across its spans, is `Sequence.sound` of its design as the
@@ -227,10 +252,7 @@ virtual scanner's simulation of the cache on the same spins.
   the samples, offsets, centre and use of the design's.
 - In the scheduled KomaMRI job, the signal simulated from the exported file of
   every fixture and every shipped sequence is the one simulated from its
-  design, to the rounding of the text format, and the virtual scanner's Bloch
-  simulation of the cache gives the signal KomaMRI simulates of the exported
-  file in its own RF convention, to the difference of the two simulators' time
-  steps through an RF pulse.
+  design, to the rounding of the text format.
 
 ## Coils from field maps
 
@@ -265,18 +287,20 @@ the susceptibility difference convolved with the dipole kernel
 $1/3 - k_z^2/|\mathbf{k}|^2$, whose $1/3$ is the Lorentz sphere's (Marques and
 Bowtell, Concepts Magn Reson B 25:65, 2005). The constant and linear terms over
 the head are removed, as a first-order shim removes them. The field is in ppm
-of $B_0$, so an isochromat precesses $\gamma B_0$ times it faster, whatever
+of $B_0$, so a cube precesses $\gamma B_0$ times it faster, whatever
 the magnet's field.
 
 ## Scan clock and sound
 
 A scanner acquires in real time: each readout reaches the reconstruction once
 the scanner has played it, and the gradients sound as they play.
-{class}`~pulserver.virtual.Scan` plays the cache on isochromats against a scan
-clock, the sum of the durations of the blocks played, in spans of whole blocks
-that end where a repetition of a run starts. Each span carries the readouts of
-its blocks, as
-{func}`~pulserver.virtual.simulate` returns them, and the sound of the gradients
+{class}`~pulserver.virtual.Scan` acquires the cache by the Fourier engine
+against a scan clock, the sum of the durations of the blocks played, in spans
+of whole blocks that last at least the length asked for and end at the first
+block after which the samples acquired since the start of the scan pass a
+multiple of $2^{18}$, or at the end of the scan. The engine is built when the scan is, before its first span. Each span
+carries the readouts of its blocks, as {func}`~pulserver.virtual.simulate`
+returns them, and the sound of the gradients
 it plays. At a speed, a span is released once the wall clock, running that many
 times as fast as the scan, has passed its end, so that a reconstruction
 receives the readouts at the rate a scanner acquires them;
@@ -285,12 +309,12 @@ receives the readouts at the rate a scanner acquires them;
 The spans are simulated in a thread of their own, ahead of their release, and
 the clock starts once the simulation will stay ahead of it to the end of the
 scan. A span's simulation time is estimated from the spans simulated before it:
-per ADC sample for a span that acquires, since the readouts' coil sums dominate
-it, and per second of scan time for one that does not, such as a train of
+per ADC sample for a span that acquires, since the transforms of its samples
+dominate it, and per second of scan time for one that does not, such as a train of
 dummy excitations. Where the simulation runs faster than the scan, the clock
 starts once a span of each kind has been simulated; where it runs slower, as
-for a short-TR balanced SSFP on a head of many isochromats and coils, most of
-the scan is simulated before the clock starts and the rest while it runs. A
+for a head received by many coils on a CPU, most of the scan is simulated
+before the clock starts and the rest while it runs. A
 span simulated after its end on the clock, where the estimate fell short,
 holds the clock until it is, and the spans after it keep the scanner's pace.
 

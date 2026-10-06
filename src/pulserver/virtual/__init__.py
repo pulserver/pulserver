@@ -1,18 +1,13 @@
-"""A virtual scanner: an IR cache played, a phantom acquired along it, the series sent as the scanner sends it."""
+"""A virtual scanner: an IR cache played on a phantom's tissue by the Fourier engine, the series sent as the scanner sends it."""
 
 from . import _coils
-from ._bloch import simulate
 from ._brainweb import BrainWeb
 from ._client import record, send
 from ._coils import Coil
 from ._console import Console
 from ._export import export
-from ._isochromats import Isochromats, Repetitions
 from ._localizer import localizer
-from ._motion import RigidMotion
 from ._phantom import Ellipse, Phantom
-from ._region import Slabs, excited
-from ._scanner import acquire, trajectory
 from ._stream import SAMPLE_RATE, Chunk, Scan
 from ._tissue import Tissue
 
@@ -31,28 +26,21 @@ __all__ = [
     "Console",
     "Ellipse",
     "FourierPlayer",
-    "Isochromats",
     "Phantom",
-    "Repetitions",
-    "RigidMotion",
     "Scan",
-    "Slabs",
     "Tissue",
-    "acquire",
-    "excited",
     "export",
     "localizer",
     "record",
     "send",
     "simulate",
-    "trajectory",
 ]
 
 
 def __getattr__(name: str):
     """Import the Fourier engine, and torch with it, the first time it is named."""
-    if name == "FourierPlayer":
-        from ._fourier import FourierPlayer
+    if name in ("FourierPlayer", "simulate"):
+        from . import _fourier
 
-        return FourierPlayer
+        return getattr(_fourier, name)
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

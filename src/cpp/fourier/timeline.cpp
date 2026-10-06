@@ -12,7 +12,7 @@
 #include <thread>
 #include <utility>
 
-#include "bloch/parallel.hpp"
+#include "fourier/parallel.hpp"
 
 namespace fourier
 {
@@ -89,7 +89,7 @@ namespace fourier
 
     void GradientTable::moment(const int64_t* block, const double* since_us, size_t n, double* out) const
     {
-        bloch::parallel(
+        parallel(
             n, threads(), kLeast,
             [&](size_t, size_t begin, size_t end)
             {
@@ -112,7 +112,7 @@ namespace fourier
 
     void GradientTable::value(const int64_t* block, const double* since_us, size_t n, double* out) const
     {
-        bloch::parallel(
+        parallel(
             n, threads(), kLeast,
             [&](size_t, size_t begin, size_t end)
             {
@@ -166,7 +166,7 @@ namespace fourier
         int64_t pathways,
         Reading* out)
     {
-        bloch::parallel(
+        parallel(
             count, threads(), 64,
             [&](size_t, size_t begin, size_t end)
             {
