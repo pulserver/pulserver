@@ -229,16 +229,9 @@ from.
    :toctree: generated
    :nosignatures:
 
-   trajectory
-   acquire
    simulate
-   excited
-   Slabs
    FourierPlayer
    Tissue
-   Isochromats
-   Repetitions
-   RigidMotion
    Scan
    Chunk
    SAMPLE_RATE

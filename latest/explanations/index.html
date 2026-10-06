@@ -256,7 +256,6 @@
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/protocol-wire.html">Protocol text blocks</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/reconstruction-proxy.html">Reconstruction proxy</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/virtual-scanner.html">Virtual scanner</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/bloch-engine.html">Bloch engine</a></li>
 </ul>
 </details></li>
 <li class="toctree-l2"><a class="reference internal" href="../developer-guide/pre-commit.html">Pre-commit</a></li>
@@ -554,7 +553,7 @@ rest of the documentation assumes.</p>
 <td><p>The base blocks, virtual segments and execution stream a scanner interpreter plays, and how pulserver derives them from a Pulseq sequence.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="virtual-scanner.html"><span class="doc">The virtual scanner</span></a></p></td>
-<td><p>The stand-ins that replace the scanner in tests: the playout, the signal model, the Bloch simulation and the reconstruction client.</p></td>
+<td><p>The stand-ins that replace the scanner in tests: the playout, the Fourier engine’s signal model and the reconstruction client.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="reconstruction.html"><span class="doc">Raw-data enrichment and routing</span></a></p></td>
 <td><p>Enrichment of the raw data from the sequence that played it, and the routing of each series to a reconstruction.</p></td>
@@ -566,7 +565,7 @@ rest of the documentation assumes.</p>
 </table>
 </div>
 <p>Implementation detail – the cache layout, the wire format, the proxy’s
-buffers and workers, and the Bloch engine – is in
+buffers and workers, and the virtual scanner’s Fourier engine – is in
 <a class="reference internal" href="../developer-guide/internals/index.html"><span class="doc">Internals</span></a>.</p>
 <div class="toctree-wrapper compound">
 </div>

@@ -255,7 +255,6 @@
 <li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/protocol-wire.html">Protocol text blocks</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/reconstruction-proxy.html">Reconstruction proxy</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/virtual-scanner.html">Virtual scanner</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/bloch-engine.html">Bloch engine</a></li>
 </ul>
 </details></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/pre-commit.html">Pre-commit</a></li>
@@ -467,7 +466,7 @@
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
-<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"FourierPlayer"</span><span class="p">]</span>
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"FourierPlayer"</span><span class="p">,</span> <span class="s2">"simulate"</span><span class="p">]</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">math</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Iterator</span>
@@ -593,7 +592,7 @@
 <span class="sd">    group, and the groups an excitation turns form a station: its readouts,</span>
 <span class="sd">    and a stream of the events that act on its groups, a train per group,</span>
 <span class="sd">    over each class of tissue, bin of the field and bin of the transmit field</span>
-<span class="sd">    the entries interpolate between, simulated by TorchSim's extended phase</span>
+<span class="sd">    the entries interpolate between, simulated by blochsim's extended phase</span>
 <span class="sd">    graphs. At each readout's echo, the sample nearest the centre of k-space,</span>
 <span class="sd">    those signals are spanned by a temporal basis. Across the readout, each</span>
 <span class="sd">    entry decays with its T2 from the echo, dephases with its T2' over the</span>
@@ -745,7 +744,10 @@
             <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_groups</span><span class="p">[</span><span class="n">members</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">),</span>
             <span class="n">readouts</span><span class="p">,</span>
         <span class="p">)</span>
-        <span class="n">settle_us</span> <span class="o">=</span> <span class="mf">1e6</span> <span class="o">*</span> <span class="nb">float</span><span class="p">(</span><span class="n">held</span><span class="o">.</span><span class="n">t1</span><span class="p">[</span><span class="n">atoms</span><span class="p">]</span><span class="o">.</span><span class="n">max</span><span class="p">())</span> <span class="o">*</span> <span class="n">math</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="mf">1.0</span> <span class="o">/</span> <span class="n">_SETTLED</span><span class="p">)</span>
+        <span class="n">settle_us</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span>
+            <span class="mf">1e6</span> <span class="o">*</span> <span class="nb">float</span><span class="p">(</span><span class="n">held</span><span class="o">.</span><span class="n">t1</span><span class="p">[</span><span class="n">atoms</span><span class="p">]</span><span class="o">.</span><span class="n">max</span><span class="p">())</span> <span class="o">*</span> <span class="n">math</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="mf">1.0</span> <span class="o">/</span> <span class="n">_SETTLED</span><span class="p">),</span>
+            <span class="nb">float</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_timeline</span><span class="o">.</span><span class="n">starts_us</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]),</span>
+        <span class="p">)</span>
         <span class="n">stream</span><span class="p">,</span> <span class="n">column</span> <span class="o">=</span> <span class="n">_periodic</span><span class="p">(</span><span class="n">stream</span><span class="p">,</span> <span class="n">settle_us</span><span class="p">)</span>
         <span class="n">played</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">count_nonzero</span><span class="p">(</span><span class="n">stream</span><span class="o">.</span><span class="n">kind</span> <span class="o">==</span> <span class="mi">2</span><span class="p">))</span>
         <span class="n">description</span> <span class="o">=</span> <span class="n">_description</span><span class="p">(</span><span class="n">stream</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_groups</span><span class="p">[</span><span class="n">members</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
@@ -964,6 +966,29 @@
         <span class="n">marks</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">_SPAN_SAMPLES</span><span class="p">,</span> <span class="nb">int</span><span class="p">(</span><span class="n">total</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="n">_SPAN_SAMPLES</span><span class="p">)</span>
         <span class="n">ends</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">searchsorted</span><span class="p">(</span><span class="n">total</span><span class="p">,</span> <span class="n">marks</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span>
         <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">([</span><span class="n">ends</span><span class="p">[</span><span class="n">ends</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">blocks</span><span class="p">],</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">blocks</span><span class="p">]]))</span></div>
+
+
+
+<div class="viewcode-block" id="simulate">
+<a class="viewcode-back" href="../../../generated/pulserver.virtual.simulate.html#pulserver.virtual.simulate">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">simulate</span><span class="p">(</span>
+    <span class="n">seq_path</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">tissue</span><span class="p">:</span> <span class="n">Tissue</span><span class="p">,</span>
+    <span class="n">cache_ext</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">".pseg"</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">rotation</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Return every readout the cache beside a sequence file acquires of a phantom's tissue.</span>
+
+<span class="sd">    One ``(coils, samples)`` complex64 array per readout, in play order,</span>
+<span class="sd">    demodulated, as :class:`FourierPlayer` acquires them with the same</span>
+<span class="sd">    arguments.</span>
+<span class="sd">    """</span>
+    <span class="n">player</span> <span class="o">=</span> <span class="n">FourierPlayer</span><span class="p">(</span>
+        <span class="n">seq_path</span><span class="p">,</span> <span class="n">tissue</span><span class="p">,</span> <span class="n">cache_ext</span><span class="p">,</span> <span class="n">rotation</span><span class="o">=</span><span class="n">rotation</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="nb">list</span><span class="p">(</span><span class="n">player</span><span class="o">.</span><span class="n">readouts</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">player</span><span class="o">.</span><span class="n">blocks</span><span class="p">))</span></div>
 
 
 

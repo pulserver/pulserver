@@ -255,7 +255,6 @@
 <li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/protocol-wire.html">Protocol text blocks</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/reconstruction-proxy.html">Reconstruction proxy</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/virtual-scanner.html">Virtual scanner</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/bloch-engine.html">Bloch engine</a></li>
 </ul>
 </details></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/pre-commit.html">Pre-commit</a></li>
@@ -756,14 +755,14 @@
 <span class="k">def</span><span class="w"> </span><span class="nf">_interpolated</span><span class="p">(</span><span class="n">grid</span><span class="p">:</span> <span class="n">_Grid</span><span class="p">,</span> <span class="n">points</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Return ``grid`` interpolated trilinearly at ``(n, 3)`` physical points, as :func:`_trilinear` interpolates it; the edge value beyond it.</span>
 
-<span class="sd">    The result is complex128, as :class:`Isochromats` takes it,</span>
+<span class="sd">    The result is complex128,</span>
 <span class="sd">    in a temporary file mapped into memory: its pages belong to the file,</span>
 <span class="sd">    which the operating system writes back rather than holding in the</span>
 <span class="sd">    process's memory. ``TMPDIR`` names where the file is made.</span>
 <span class="sd">    """</span>
     <span class="n">points</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">points</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">3</span><span class="p">))</span>
     <span class="n">out</span> <span class="o">=</span> <span class="n">_mapped</span><span class="p">((</span><span class="nb">len</span><span class="p">(</span><span class="n">points</span><span class="p">),</span> <span class="n">grid</span><span class="o">.</span><span class="n">values</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]))</span>
-    <span class="n">require</span><span class="p">(</span><span class="s2">"bloch"</span><span class="p">)</span><span class="o">.</span><span class="n">trilinear</span><span class="p">(</span>
+    <span class="n">require</span><span class="p">(</span><span class="s2">"fourier"</span><span class="p">)</span><span class="o">.</span><span class="n">trilinear</span><span class="p">(</span>
         <span class="n">grid</span><span class="o">.</span><span class="n">values</span><span class="p">,</span>
         <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">grid</span><span class="o">.</span><span class="n">centre</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">),</span>
         <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">grid</span><span class="o">.</span><span class="n">step</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">),</span>

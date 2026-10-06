@@ -258,7 +258,6 @@
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/protocol-wire.html">Protocol text blocks</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/reconstruction-proxy.html">Reconstruction proxy</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/virtual-scanner.html">Virtual scanner</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/bloch-engine.html">Bloch engine</a></li>
 </ul>
 </details></li>
 <li class="toctree-l2"><a class="reference internal" href="../developer-guide/pre-commit.html">Pre-commit</a></li>
@@ -558,7 +557,7 @@ in-phase sensitivity;</p></li>
 logical axes, the block’s own rotation included, turned, except in a
 block labelled <code class="docutils literal notranslate"><span class="pre">NOROT</span></code>, by the prescription’s <code class="docutils literal notranslate"><span class="pre">rotation</span></code> from
 logical to physical axes, as
-<a class="reference internal" href="pulserver.virtual.trajectory.html#pulserver.virtual.trajectory" title="pulserver.virtual.trajectory"><code class="xref py py-func docutils literal notranslate"><span class="pre">trajectory()</span></code></a> turns them, each as a time-shaped
+<code class="xref py py-func docutils literal notranslate"><span class="pre">trajectory()</span></code> turns them, each as a time-shaped
 gradient through the corners the cache plays, a step from or to zero
 as a ramp 10 ns wide;</p></li>
 <li><p>its ADC window, without frequency or phase offsets.</p></li>
@@ -580,7 +579,7 @@ identity by default.</p></li>
 <dd class="field-even"><p>The receiver phase of every readout, in play order, in radians, one
 per sample: the ADC phase offset at the ADC’s start, advancing at its
 frequency offset; the cache carries no phase modulation. The playout
-demodulates by it, as <a class="reference internal" href="pulserver.virtual.acquire.html#pulserver.virtual.acquire" title="pulserver.virtual.acquire"><code class="xref py py-func docutils literal notranslate"><span class="pre">acquire()</span></code></a> does, and
+demodulates by it, as <code class="xref py py-func docutils literal notranslate"><span class="pre">acquire()</span></code> does, and
 <code class="docutils literal notranslate"><span class="pre">target</span></code> leaves it out.</p>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>

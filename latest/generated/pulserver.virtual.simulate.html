@@ -258,7 +258,6 @@
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/protocol-wire.html">Protocol text blocks</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/reconstruction-proxy.html">Reconstruction proxy</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/virtual-scanner.html">Virtual scanner</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/bloch-engine.html">Bloch engine</a></li>
 </ul>
 </details></li>
 <li class="toctree-l2"><a class="reference internal" href="../developer-guide/pre-commit.html">Pre-commit</a></li>
@@ -544,28 +543,11 @@
 <h1>simulate<a class="headerlink" href="#simulate" title="Link to this heading">#</a></h1>
 <dl class="py function">
 <dt class="sig sig-object py" id="pulserver.virtual.simulate">
-<span class="sig-prename descclassname"><span class="pre">pulserver.virtual.</span></span><span class="sig-name descname"><span class="pre">simulate</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pulserver/virtual/_bloch.html#simulate"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.virtual.simulate" title="Link to this definition">#</a></dt>
-<dd><p>Return what each coil receives at every ADC sample the cache beside a sequence file plays on isochromats.</p>
+<span class="sig-prename descclassname"><span class="pre">pulserver.virtual.</span></span><span class="sig-name descname"><span class="pre">simulate</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pulserver/virtual/_fourier.html#simulate"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.virtual.simulate" title="Link to this definition">#</a></dt>
+<dd><p>Return every readout the cache beside a sequence file acquires of a phantom’s tissue.</p>
 <p>One <code class="docutils literal notranslate"><span class="pre">(coils,</span> <span class="pre">samples)</span></code> complex64 array per readout, in play order,
-demodulated. The blocks the cache plays (<a class="reference internal" href="pulserver.ir.playout.html#pulserver.ir.playout" title="pulserver.ir.playout"><code class="xref py py-func docutils literal notranslate"><span class="pre">pulserver.ir.playout()</span></code></a>)
-advance the magnetization of <code class="docutils literal notranslate"><span class="pre">isochromats</span></code>, whose positions are along
-the physical axes, from where it stands, across the files of a chain as
-one scan. Each block’s gradients, its own rotation in them, are turned by
-the prescription’s <code class="docutils literal notranslate"><span class="pre">rotation</span></code> from logical to physical axes, a
-reflection included, except in blocks labelled <code class="docutils literal notranslate"><span class="pre">NOROT</span></code>. Its RF pulse
-and ADC play as <a class="reference internal" href="pulserver.virtual.Isochromats.play.html#pulserver.virtual.Isochromats.play" title="pulserver.virtual.Isochromats.play"><code class="xref py py-meth docutils literal notranslate"><span class="pre">Isochromats.play()</span></code></a> plays RF and ADC events, with
-the frequency and phase offsets the playout sets. With
-<code class="docutils literal notranslate"><span class="pre">default_shim</span></code>, the channel weights of a coil of several transmit
-channels, a single-channel pulse plays on every channel, weighted by its
-block’s RF shim or, without one, by <code class="docutils literal notranslate"><span class="pre">default_shim</span></code>.</p>
-<p>Runs of repetitions of blocks that differ only in their phase offsets,
-phase encodings and turned readouts play from each isochromat’s map over
-one repetition, as <a class="reference internal" href="pulserver.virtual.Isochromats.repetitions.html#pulserver.virtual.Isochromats.repetitions" title="pulserver.virtual.Isochromats.repetitions"><code class="xref py py-meth docutils literal notranslate"><span class="pre">Isochromats.repetitions()</span></code></a> plays them to within
-<code class="docutils literal notranslate"><span class="pre">tolerance</span></code>; at zero, their samples are those of the blocks played one
-by one, to rounding. Isochromats that move or diffuse play every block
-one by one. The other blocks read their ADC windows as
-<a class="reference internal" href="pulserver.virtual.Isochromats.play.html#pulserver.virtual.Isochromats.play" title="pulserver.virtual.Isochromats.play"><code class="xref py py-meth docutils literal notranslate"><span class="pre">Isochromats.play()</span></code></a> reads them to within <code class="docutils literal notranslate"><span class="pre">tolerance</span></code>.</p>
-<p><a class="reference internal" href="../explanations/virtual-scanner.html"><span class="doc">The virtual scanner</span></a> states the signal model.</p>
+demodulated, as <a class="reference internal" href="pulserver.virtual.FourierPlayer.html#pulserver.virtual.FourierPlayer" title="pulserver.virtual.FourierPlayer"><code class="xref py py-class docutils literal notranslate"><span class="pre">FourierPlayer</span></code></a> acquires them with the same
+arguments.</p>
 </dd></dl>
 
 </section>

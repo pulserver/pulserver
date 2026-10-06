@@ -256,7 +256,6 @@
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/protocol-wire.html">Protocol text blocks</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/reconstruction-proxy.html">Reconstruction proxy</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/virtual-scanner.html">Virtual scanner</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/bloch-engine.html">Bloch engine</a></li>
 </ul>
 </details></li>
 <li class="toctree-l2"><a class="reference internal" href="../developer-guide/pre-commit.html">Pre-commit</a></li>
@@ -541,10 +540,10 @@
 <td><p>Sequence design engine: the sequence functions a scanner sequence binds, and the Pulseq reader and writer.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference external" href="https://github.com/mcencini/bartorch">bartorch</a></p></td>
-<td><p>Reconstruction engine, imported into the spare reconstruction workers when installed.</p></td>
+<td><p>Reconstruction engine, imported into the spare reconstruction workers when installed; its NUFFT encodes the images of the virtual scanner’s Fourier engine along the trajectory.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference external" href="https://github.com/flatironinstitute/finufft">FINUFFT</a></p></td>
-<td><p>Non-uniform FFT library whose type-2 transform the isochromat engine reads an ADC window under a changing gradient with, through the entry points of the <code class="docutils literal notranslate"><span class="pre">finufft</span></code> wheel.</p></td>
+<tr class="row-even"><td><p><a class="reference external" href="https://github.com/pulserver/blochsim">blochsim</a></p></td>
+<td><p>Differentiable MR signal simulation, whose extended phase graphs the virtual scanner’s Fourier engine simulates each class of tissue with.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference external" href="https://pulseq.github.io/">Pulseq</a></p></td>
 <td><p>Open sequence-file specification of every design pulserver stores.</p></td>

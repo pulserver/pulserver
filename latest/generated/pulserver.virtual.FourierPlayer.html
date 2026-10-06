@@ -258,7 +258,6 @@
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/protocol-wire.html">Protocol text blocks</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/reconstruction-proxy.html">Reconstruction proxy</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/virtual-scanner.html">Virtual scanner</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/bloch-engine.html">Bloch engine</a></li>
 </ul>
 </details></li>
 <li class="toctree-l2"><a class="reference internal" href="../developer-guide/pre-commit.html">Pre-commit</a></li>
@@ -559,7 +558,7 @@ anything less is taken as balanced. Entries a pulse turns alike form a
 group, and the groups an excitation turns form a station: its readouts,
 and a stream of the events that act on its groups, a train per group,
 over each class of tissue, bin of the field and bin of the transmit field
-the entries interpolate between, simulated by TorchSim’s extended phase
+the entries interpolate between, simulated by blochsim’s extended phase
 graphs. At each readout’s echo, the sample nearest the centre of k-space,
 those signals are spanned by a temporal basis. Across the readout, each
 entry decays with its T2 from the echo, dephases with its T2’ over the

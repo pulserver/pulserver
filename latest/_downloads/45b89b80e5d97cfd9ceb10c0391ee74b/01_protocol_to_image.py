@@ -107,9 +107,9 @@ print(sorted(path.name for path in (store / design).iterdir()))
 #
 # An exam names its subject and coil: here the vials phantom, seven water vials
 # and one fat vial, in the body coil, which transmits and receives on one
-# channel. The scan plays the stored design on the phantom with a Bloch
-# simulation, sends the raw data to the reconstruction, here ``pics``,
-# and receives the images as DICOM.
+# channel. The scan plays the stored design on the phantom's tissue with the
+# virtual scanner's Fourier engine, sends the raw data to the reconstruction,
+# here ``pics``, and receives the images as DICOM.
 import base64
 import io
 

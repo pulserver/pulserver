@@ -94,31 +94,32 @@ readout, phase-encoding and slice axes, and again at the isocentre.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 63-70
+.. GENERATED FROM PYTHON SOURCE LINES 63-71
 
 Acquisitions
 ------------
 
-The phantom is acquired twice per design: placed at :math:`\mathbf{d}` and
-played from the cache converted at the offset, and placed at the isocentre
-and played from the cache converted there. Under the identity rotation the
-physical axes are the logical ones.
+The phantom, sampled as tissue on a 2 mm grid, is acquired by the Fourier
+engine twice per design: placed at :math:`\mathbf{d}` and played from the
+cache converted at the offset, and placed at the isocentre and played from
+the cache converted there. Under the identity rotation the physical axes are
+the logical ones.
 
-.. GENERATED FROM PYTHON SOURCE LINES 70-85
+.. GENERATED FROM PYTHON SOURCE LINES 71-86
 
 .. code-block:: Python
 
     ellipses = [
-        virtual.Ellipse((0.0, 0.0, 0.0), (0.06, 0.04)),
-        virtual.Ellipse((0.02, 0.01, 0.0), (0.015, 0.015), intensity=-0.5),
+        virtual.Ellipse((0.0, 0.0, 0.0), (0.06, 0.04), t1=1.0, t2=0.1),
+        virtual.Ellipse((0.02, 0.01, 0.0), (0.015, 0.015), intensity=-0.5, t1=1.0, t2=0.1),
     ]
     at_offset = virtual.Phantom(ellipses, position=offset)
     at_isocentre = virtual.Phantom(ellipses)
 
     readouts = {
         name: (
-            virtual.acquire(files[name, "offset"], at_offset),
-            virtual.acquire(files[name, "isocentre"], at_isocentre),
+            virtual.simulate(files[name, "offset"], at_offset.tissue(2e-3)),
+            virtual.simulate(files[name, "isocentre"], at_isocentre.tissue(2e-3)),
         )
         for name in designs
     }
@@ -130,7 +131,7 @@ physical axes are the logical ones.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 86-92
+.. GENERATED FROM PYTHON SOURCE LINES 87-93
 
 The proxy phase
 ---------------
@@ -139,7 +140,7 @@ The proxy phase
 converted at, gives the phase the proxy applies to each readout, in rad,
 or ``None`` where the scanner's offsets carry the whole phase.
 
-.. GENERATED FROM PYTHON SOURCE LINES 92-101
+.. GENERATED FROM PYTHON SOURCE LINES 93-102
 
 .. code-block:: Python
 
@@ -166,7 +167,7 @@ or ``None`` where the scanner's offsets carry the whole phase.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 102-107
+.. GENERATED FROM PYTHON SOURCE LINES 103-108
 
 On the echo planar readouts the phase is the curvature of
 :math:`2\pi\,\mathbf{d}\cdot\mathbf{k}(t)` about the line through the
@@ -174,7 +175,7 @@ middle of the sampling window, which the scanner's frequency and phase
 offsets play. The imaging readouts are those of the encoding space of the
 main subsequence that is not the navigators'.
 
-.. GENERATED FROM PYTHON SOURCE LINES 107-123
+.. GENERATED FROM PYTHON SOURCE LINES 108-124
 
 .. code-block:: Python
 
@@ -196,13 +197,13 @@ main subsequence that is not the navigators'.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 124-127
+.. GENERATED FROM PYTHON SOURCE LINES 125-128
 
 With the proxy phase applied, the samples of the object at the offset are
-those of the object at the isocentre, to the precision of the acquisition;
-as received, the echo planar samples are not.
+those of the object at the isocentre, to the tolerance of the Fourier
+engine's bases; as received, the echo planar samples are not.
 
-.. GENERATED FROM PYTHON SOURCE LINES 127-150
+.. GENERATED FROM PYTHON SOURCE LINES 128-150
 
 .. code-block:: Python
 
@@ -211,21 +212,20 @@ as received, the echo planar samples are not.
     def agreement(name, corrected):
         moved, centred = readouts[name]
         table = tables[name]
-        worst = 0.0
+        difference, norm = 0.0, 0.0
         for row in range(len(table)):
             samples = moved[row]
             phase = table.readout_phase_modulation(row)
             if corrected and phase is not None:
                 samples = samples * np.exp(1j * phase)
-            worst = max(
-                worst, np.abs(samples - centred[row]).max() / np.abs(centred[row]).max()
-            )
-        return worst
+            difference += np.linalg.norm(samples - centred[row]) ** 2
+            norm += np.linalg.norm(centred[row]) ** 2
+        return np.sqrt(difference / norm)
 
 
     for name in designs:
         print(
-            f"{name}: largest difference from the isocentre, as received "
+            f"{name}: relative difference from the isocentre, as received "
             f"{agreement(name, False):.1e}, with the proxy phase {agreement(name, True):.1e}"
         )
 
@@ -237,8 +237,8 @@ as received, the echo planar samples are not.
 
  .. code-block:: none
 
-    gradient echo: largest difference from the isocentre, as received 9.5e-07, with the proxy phase 9.5e-07
-    echo planar: largest difference from the isocentre, as received 1.1e+00, with the proxy phase 9.4e-07
+    gradient echo: relative difference from the isocentre, as received 4.5e-03, with the proxy phase 4.5e-03
+    echo planar: relative difference from the isocentre, as received 5.9e-01, with the proxy phase 5.9e-01
 
 
 
@@ -312,7 +312,7 @@ which needs no new cache.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.422 seconds)
+   **Total running time of the script:** (0 minutes 0.512 seconds)
 
 
 .. _sphx_glr_download_generated_gallery_02-tours_03_fov_offset_enrichment.py:

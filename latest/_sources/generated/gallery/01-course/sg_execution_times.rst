@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:01.431** total execution time for 5 files **from generated/gallery/01-course**:
+**00:01.549** total execution time for 5 files **from generated/gallery/01-course**:
 
 .. container::
 
@@ -33,17 +33,17 @@ Computation times
      - Time
      - Mem (MB)
    * - :ref:`sphx_glr_generated_gallery_01-course_04_reconstruction_plugin.py` (``04_reconstruction_plugin.py``)
-     - 00:00.598
+     - 00:00.590
      - 0.0
    * - :ref:`sphx_glr_generated_gallery_01-course_01_protocol_to_image.py` (``01_protocol_to_image.py``)
-     - 00:00.488
+     - 00:00.489
      - 0.0
    * - :ref:`sphx_glr_generated_gallery_01-course_05_testing_on_the_virtual_scanner.py` (``05_testing_on_the_virtual_scanner.py``)
-     - 00:00.145
+     - 00:00.247
      - 0.0
    * - :ref:`sphx_glr_generated_gallery_01-course_03_scanner_representation.py` (``03_scanner_representation.py``)
-     - 00:00.143
+     - 00:00.152
      - 0.0
    * - :ref:`sphx_glr_generated_gallery_01-course_02_sequence_plugin.py` (``02_sequence_plugin.py``)
-     - 00:00.057
+     - 00:00.072
      - 0.0

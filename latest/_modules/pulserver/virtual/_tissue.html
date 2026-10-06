@@ -255,7 +255,6 @@
 <li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/protocol-wire.html">Protocol text blocks</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/reconstruction-proxy.html">Reconstruction proxy</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/virtual-scanner.html">Virtual scanner</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/bloch-engine.html">Bloch engine</a></li>
 </ul>
 </details></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/pre-commit.html">Pre-commit</a></li>
@@ -523,14 +522,15 @@
 <span class="k">def</span><span class="w"> </span><span class="nf">transmitted</span><span class="p">(</span><span class="n">coil</span><span class="p">,</span> <span class="n">positions</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Return the transmit field a coil's channels play a single-channel pulse with at ``(n, 3)`` physical points, ``(n,)`` relative to its nominal amplitude; None for one uniform channel.</span>
 
-<span class="sd">    Each channel plays the pulse times its weight in the coil's default shim.</span>
+<span class="sd">    Each channel plays the pulse times its weight in the coil's default shim,</span>
+<span class="sd">    which scales the waveform by the conjugate of the field it adds.</span>
 <span class="sd">    """</span>
     <span class="n">sensitivities</span> <span class="o">=</span> <span class="n">coil</span><span class="o">.</span><span class="n">transmit</span><span class="p">(</span><span class="n">positions</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">sensitivities</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">return</span> <span class="kc">None</span>
     <span class="n">sensitivities</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">sensitivities</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">positions</span><span class="p">),</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
     <span class="n">shim</span> <span class="o">=</span> <span class="n">coil</span><span class="o">.</span><span class="n">default_shim</span>
-    <span class="k">return</span> <span class="n">sensitivities</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">]</span> <span class="k">if</span> <span class="n">shim</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">sensitivities</span> <span class="o">@</span> <span class="n">shim</span>
+    <span class="k">return</span> <span class="n">sensitivities</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">]</span> <span class="k">if</span> <span class="n">shim</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">sensitivities</span> <span class="o">@</span> <span class="n">np</span><span class="o">.</span><span class="n">conj</span><span class="p">(</span><span class="n">shim</span><span class="p">)</span>
 </pre></div>
 
                 </article>

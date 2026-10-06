@@ -14,8 +14,6 @@
    :toctree:
    :nosignatures:
 
-   ~Phantom.count
-   ~Phantom.isochromats
    ~Phantom.kspace
    ~Phantom.proton_density
    ~Phantom.tissue
@@ -28,5 +26,4 @@
    :toctree:
    :nosignatures:
 
-   ~Phantom.VOXEL_AXES
    ~Phantom.shifts_ppm

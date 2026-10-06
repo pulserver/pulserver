@@ -262,7 +262,6 @@
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/protocol-wire.html">Protocol text blocks</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/reconstruction-proxy.html">Reconstruction proxy</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/virtual-scanner.html">Virtual scanner</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/bloch-engine.html">Bloch engine</a></li>
 </ul>
 </details></li>
 <li class="toctree-l2"><a class="reference internal" href="../developer-guide/pre-commit.html">Pre-commit</a></li>
@@ -536,7 +535,6 @@
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#start-a-proxy">Start a proxy</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#acquire-and-send-the-series">Acquire and send the series</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#scan-water-and-fat">Scan water and fat</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#simulate-relaxation-and-the-rf-pulses">Simulate relaxation and the RF pulses</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#stream-a-scan-in-real-time-with-its-sound">Stream a scan in real time, with its sound</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#scan-from-the-command-line">Scan from the command line</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#prescribe-an-orientation">Prescribe an orientation</a></li>
@@ -555,9 +553,8 @@
                   
   <section class="tex2jax_ignore mathjax_ignore" id="scanning-a-phantom-without-a-scanner">
 <h1>Scanning a phantom without a scanner<a class="headerlink" href="#scanning-a-phantom-without-a-scanner" title="Link to this heading">#</a></h1>
-<p>The virtual scanner plays a stored design’s IR cache, acquires an analytic
-phantom along the trajectory the cache plays or simulates the cache on the
-phantom’s isochromats, and sends the series to a reconstruction proxy as the
+<p>The virtual scanner plays a stored design’s IR cache on a phantom’s tissue
+with its Fourier engine, and sends the series to a reconstruction proxy as the
 scanner’s reconstruction client does (<a class="reference internal" href="../explanations/virtual-scanner.html"><span class="doc">The virtual scanner</span></a>). A scanner-sequence plugin and a
 reconstruction plugin are exercised together, through the production design
 calls and proxy.</p>
@@ -587,9 +584,13 @@ field-of-view offset in the protocol block (<a class="reference internal" href="
 <span class="n">design</span> <span class="o">=</span> <span class="s2">"..."</span>  <span class="c1"># the identifier the generation replied</span>
 <span class="n">sequence</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"designs/</span><span class="si">{</span><span class="n">design</span><span class="si">}</span><span class="s2">/sequence.seq"</span>
 <span class="n">phantom</span> <span class="o">=</span> <span class="n">virtual</span><span class="o">.</span><span class="n">Phantom</span><span class="p">(</span>
-    <span class="p">[</span><span class="n">virtual</span><span class="o">.</span><span class="n">Ellipse</span><span class="p">((</span><span class="mf">0.02</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">),</span> <span class="p">(</span><span class="mf">0.08</span><span class="p">,</span> <span class="mf">0.06</span><span class="p">))],</span> <span class="n">coils</span><span class="o">=</span><span class="mi">4</span>
+    <span class="p">[</span>
+        <span class="n">virtual</span><span class="o">.</span><span class="n">Ellipse</span><span class="p">((</span><span class="mf">0.02</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">),</span> <span class="p">(</span><span class="mf">0.08</span><span class="p">,</span> <span class="mf">0.06</span><span class="p">),</span> <span class="n">t1</span><span class="o">=</span><span class="mf">0.9</span><span class="p">,</span> <span class="n">t2</span><span class="o">=</span><span class="mf">0.07</span><span class="p">),</span>
+        <span class="n">virtual</span><span class="o">.</span><span class="n">Ellipse</span><span class="p">((</span><span class="mf">0.02</span><span class="p">,</span> <span class="mf">0.02</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">),</span> <span class="p">(</span><span class="mf">0.02</span><span class="p">,</span> <span class="mf">0.015</span><span class="p">),</span> <span class="n">t1</span><span class="o">=</span><span class="mf">1.8</span><span class="p">,</span> <span class="n">t2</span><span class="o">=</span><span class="mf">0.25</span><span class="p">),</span>
+    <span class="p">],</span>
+    <span class="n">coils</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span>
 <span class="p">)</span>
-<span class="n">readouts</span> <span class="o">=</span> <span class="n">virtual</span><span class="o">.</span><span class="n">acquire</span><span class="p">(</span><span class="n">sequence</span><span class="p">,</span> <span class="n">phantom</span><span class="p">)</span>
+<span class="n">readouts</span> <span class="o">=</span> <span class="n">virtual</span><span class="o">.</span><span class="n">simulate</span><span class="p">(</span><span class="n">sequence</span><span class="p">,</span> <span class="n">phantom</span><span class="o">.</span><span class="n">tissue</span><span class="p">(</span><span class="mf">1e-3</span><span class="p">))</span>
 <span class="n">received</span> <span class="o">=</span> <span class="n">virtual</span><span class="o">.</span><span class="n">send</span><span class="p">(</span>
     <span class="p">(</span><span class="s2">"127.0.0.1"</span><span class="p">,</span> <span class="mi">9002</span><span class="p">),</span>
     <span class="n">design</span><span class="p">,</span>
@@ -599,6 +600,22 @@ field-of-view offset in the protocol block (<a class="reference internal" href="
 <span class="p">)</span>
 </pre></div>
 </div>
+<p><a class="reference internal" href="../generated/pulserver.virtual.Phantom.tissue.html#pulserver.virtual.Phantom.tissue" title="pulserver.virtual.Phantom.tissue"><code class="xref py py-meth docutils literal notranslate"><span class="pre">tissue()</span></code></a> samples the phantom as cubes of
+uniform magnetization, here 1 mm wide, each with its proton density, T1, T2,
+T2′ and frequency. <a class="reference internal" href="../generated/pulserver.virtual.simulate.html#pulserver.virtual.simulate" title="pulserver.virtual.simulate"><code class="xref py py-func docutils literal notranslate"><span class="pre">simulate()</span></code></a> plays the cache on
+them with the Fourier engine (<a class="reference internal" href="../generated/pulserver.virtual.FourierPlayer.html#pulserver.virtual.FourierPlayer" title="pulserver.virtual.FourierPlayer"><code class="xref py py-class docutils literal notranslate"><span class="pre">FourierPlayer</span></code></a>,
+<a class="reference internal" href="../explanations/virtual-scanner.html"><span class="doc">The virtual scanner</span></a>): each RF pulse the cache plays turns
+a cube through the flip angle its profile gives at the field the cube sees,
+the gradients’ moments dephase the cubes, they relax between the events, and
+the images are encoded at the resolution the trajectory reaches, whatever the
+spacing. The
+spacing sets how closely the cubes follow the phantom’s edges; the number of
+cubes grows as <span class="math notranslate nohighlight">\(1/\Delta^2\)</span> for a spacing <span class="math notranslate nohighlight">\(\Delta\)</span>, or as <span class="math notranslate nohighlight">\(1/\Delta^3\)</span> for a
+phantom that fills a volume. The engine runs on a CUDA device where there is
+one, and on the CPU otherwise; <code class="docutils literal notranslate"><span class="pre">device</span></code> names another. It returns one
+<code class="docutils literal notranslate"><span class="pre">(coils,</span> <span class="pre">samples)</span></code> array per readout, in play order, demodulated as the
+playout demodulates. It spoils by the moment the gradients wind across a
+voxel between pulses and readouts, and models no motion and no diffusion.</p>
 <p><code class="docutils literal notranslate"><span class="pre">config</span></code> names the reconstruction plugin, here the shipped <code class="docutils literal notranslate"><span class="pre">pics</span></code>, as the
 config text of a reconstruction client does (<a class="reference internal" href="reconstruction-client.html"><span class="doc">Reconstruction clients</span></a>); the
 proxy refuses a series whose config names none.</p>
@@ -613,63 +630,23 @@ beginning <code class="docutils literal notranslate"><span class="pre">pulserver
 </section>
 <section id="scan-water-and-fat">
 <h2>Scan water and fat<a class="headerlink" href="#scan-water-and-fat" title="Link to this heading">#</a></h2>
-<p>An ellipse of fat carries its chemical shift, and the acquisition the
-magnet’s field strength, at which the shift is resolved; <code class="docutils literal notranslate"><span class="pre">off_resonance_hz</span></code>
-adds a frequency offset common to every spin:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">water</span> <span class="o">=</span> <span class="n">virtual</span><span class="o">.</span><span class="n">Ellipse</span><span class="p">((</span><span class="mf">0.02</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">),</span> <span class="p">(</span><span class="mf">0.06</span><span class="p">,</span> <span class="mf">0.05</span><span class="p">))</span>
-<span class="n">fat</span> <span class="o">=</span> <span class="n">virtual</span><span class="o">.</span><span class="n">Ellipse</span><span class="p">((</span><span class="mf">0.02</span><span class="p">,</span> <span class="mf">0.07</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">),</span> <span class="p">(</span><span class="mf">0.04</span><span class="p">,</span> <span class="mf">0.01</span><span class="p">),</span> <span class="n">shift_ppm</span><span class="o">=-</span><span class="mf">3.45</span><span class="p">)</span>
-<span class="n">readouts</span> <span class="o">=</span> <span class="n">virtual</span><span class="o">.</span><span class="n">acquire</span><span class="p">(</span>
-    <span class="n">sequence</span><span class="p">,</span> <span class="n">virtual</span><span class="o">.</span><span class="n">Phantom</span><span class="p">([</span><span class="n">water</span><span class="p">,</span> <span class="n">fat</span><span class="p">],</span> <span class="n">coils</span><span class="o">=</span><span class="mi">4</span><span class="p">),</span> <span class="n">field_t</span><span class="o">=</span><span class="mf">3.0</span>
+<p>An ellipse of fat carries its chemical shift, and the tissue the magnet’s
+field strength, at which the shift is resolved; <code class="docutils literal notranslate"><span class="pre">off_resonance_hz</span></code> adds a
+frequency offset common to every cube:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">water</span> <span class="o">=</span> <span class="n">virtual</span><span class="o">.</span><span class="n">Ellipse</span><span class="p">((</span><span class="mf">0.02</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">),</span> <span class="p">(</span><span class="mf">0.06</span><span class="p">,</span> <span class="mf">0.05</span><span class="p">),</span> <span class="n">t1</span><span class="o">=</span><span class="mf">1.2</span><span class="p">,</span> <span class="n">t2</span><span class="o">=</span><span class="mf">0.08</span><span class="p">)</span>
+<span class="n">fat</span> <span class="o">=</span> <span class="n">virtual</span><span class="o">.</span><span class="n">Ellipse</span><span class="p">(</span>
+    <span class="p">(</span><span class="mf">0.02</span><span class="p">,</span> <span class="mf">0.07</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">),</span> <span class="p">(</span><span class="mf">0.04</span><span class="p">,</span> <span class="mf">0.01</span><span class="p">),</span> <span class="n">shift_ppm</span><span class="o">=-</span><span class="mf">3.45</span><span class="p">,</span> <span class="n">t1</span><span class="o">=</span><span class="mf">0.35</span><span class="p">,</span> <span class="n">t2</span><span class="o">=</span><span class="mf">0.07</span>
 <span class="p">)</span>
+<span class="n">tissue</span> <span class="o">=</span> <span class="n">virtual</span><span class="o">.</span><span class="n">Phantom</span><span class="p">([</span><span class="n">water</span><span class="p">,</span> <span class="n">fat</span><span class="p">],</span> <span class="n">coils</span><span class="o">=</span><span class="mi">4</span><span class="p">)</span><span class="o">.</span><span class="n">tissue</span><span class="p">(</span><span class="mf">1e-3</span><span class="p">,</span> <span class="n">field_t</span><span class="o">=</span><span class="mf">3.0</span><span class="p">)</span>
+<span class="n">readouts</span> <span class="o">=</span> <span class="n">virtual</span><span class="o">.</span><span class="n">simulate</span><span class="p">(</span><span class="n">sequence</span><span class="p">,</span> <span class="n">tissue</span><span class="p">)</span>
 </pre></div>
 </div>
-<p>Fat is acquired at its chemical shift, and a fat saturation the design plays
-leaves it the magnetization its pulse leaves at that frequency. Generate the
+<p>A phantom with a chemical shift is refused without <code class="docutils literal notranslate"><span class="pre">field_t</span></code>. Fat precesses
+at its chemical shift, and a fat saturation the design plays turns it through
+the flip angle its pulse plays at that frequency. Generate the
 design under limits whose <code class="docutils literal notranslate"><span class="pre">B0</span></code> is the same field: the host resolves the ppm
 offsets of the design’s RF pulses at it when it builds the IR
 (<a class="reference internal" href="running.html"><span class="doc">Running the services</span></a>).</p>
-</section>
-<section id="simulate-relaxation-and-the-rf-pulses">
-<h2>Simulate relaxation and the RF pulses<a class="headerlink" href="#simulate-relaxation-and-the-rf-pulses" title="Link to this heading">#</a></h2>
-<p>The analytic acquisition acts on the phantom’s density alone. For relaxation,
-flip angles and slice profiles, sample the phantom as isochromats and play the
-cache on them (<a class="reference internal" href="../explanations/virtual-scanner.html"><span class="doc">The virtual scanner</span></a>); the readouts are sent
-as before:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">tissue</span> <span class="o">=</span> <span class="n">virtual</span><span class="o">.</span><span class="n">Phantom</span><span class="p">(</span>
-    <span class="p">[</span>
-        <span class="n">virtual</span><span class="o">.</span><span class="n">Ellipse</span><span class="p">((</span><span class="mf">0.02</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">),</span> <span class="p">(</span><span class="mf">0.08</span><span class="p">,</span> <span class="mf">0.06</span><span class="p">),</span> <span class="n">t1</span><span class="o">=</span><span class="mf">0.9</span><span class="p">,</span> <span class="n">t2</span><span class="o">=</span><span class="mf">0.07</span><span class="p">),</span>
-        <span class="n">virtual</span><span class="o">.</span><span class="n">Ellipse</span><span class="p">((</span><span class="mf">0.02</span><span class="p">,</span> <span class="mf">0.02</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">),</span> <span class="p">(</span><span class="mf">0.02</span><span class="p">,</span> <span class="mf">0.015</span><span class="p">),</span> <span class="n">t1</span><span class="o">=</span><span class="mf">1.8</span><span class="p">,</span> <span class="n">t2</span><span class="o">=</span><span class="mf">0.25</span><span class="p">),</span>
-    <span class="p">],</span>
-    <span class="n">coils</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span>
-<span class="p">)</span>
-<span class="n">readouts</span> <span class="o">=</span> <span class="n">virtual</span><span class="o">.</span><span class="n">simulate</span><span class="p">(</span><span class="n">sequence</span><span class="p">,</span> <span class="n">tissue</span><span class="o">.</span><span class="n">isochromats</span><span class="p">(</span><span class="mf">1e-3</span><span class="p">))</span>
-</pre></div>
-</div>
-<p>The isochromats approximate the phantom in k-space below <span class="math notranslate nohighlight">\(1/(2\Delta)\)</span> for a
-grid spacing <span class="math notranslate nohighlight">\(\Delta\)</span>, here 1 mm, so choose a spacing several times finer than
-the pixel; their number, and the time the simulation takes, grow as
-<span class="math notranslate nohighlight">\(1/\Delta^2\)</span>, or as <span class="math notranslate nohighlight">\(1/\Delta^3\)</span> for a phantom that fills a volume. Sample
-such a phantom only where the design’s excitation pulses excite it,
-<code class="docutils literal notranslate"><span class="pre">virtual.BrainWeb().isochromats(1e-3,</span> <span class="pre">field_t=3.0,</span> <span class="pre">region=virtual.excited(sequence))</span></code>,
-giving <code class="docutils literal notranslate"><span class="pre">excited</span></code> the prescription’s rotation where there is one. A phantom with a
-chemical shift is sampled at the magnet’s field,
-<code class="docutils literal notranslate"><span class="pre">tissue.isochromats(1e-3,</span> <span class="pre">field_t=3.0)</span></code>. The simulation starts from the
-magnetization the isochromats hold, so a second scan of the same isochromats
-continues the first: sample them again, or call their <code class="docutils literal notranslate"><span class="pre">reset</span></code>, to start from
-equilibrium.</p>
-<p>The Fourier engine acquires the phantom’s tissue instead, each cube of it at
-<code class="docutils literal notranslate"><span class="pre">spacing</span></code>, at the resolution the prescription asks for whatever that spacing
-is (<a class="reference internal" href="../generated/pulserver.virtual.FourierPlayer.html#pulserver.virtual.FourierPlayer" title="pulserver.virtual.FourierPlayer"><code class="xref py py-class docutils literal notranslate"><span class="pre">FourierPlayer</span></code></a>): the classes of tissue are
-simulated by extended phase graphs over the events each excitation’s slab
-plays, and their images encoded along the trajectory, on a CUDA device where
-there is one. A scan of it is played as one of isochromats is:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">scan</span> <span class="o">=</span> <span class="n">virtual</span><span class="o">.</span><span class="n">Scan</span><span class="p">(</span><span class="n">sequence</span><span class="p">,</span> <span class="n">tissue</span><span class="o">.</span><span class="n">tissue</span><span class="p">(</span><span class="mf">1e-3</span><span class="p">,</span> <span class="n">field_t</span><span class="o">=</span><span class="mf">3.0</span><span class="p">))</span>
-<span class="n">readouts</span> <span class="o">=</span> <span class="p">[</span><span class="n">readout</span> <span class="k">for</span> <span class="n">chunk</span> <span class="ow">in</span> <span class="n">scan</span><span class="o">.</span><span class="n">chunks</span><span class="p">(</span><span class="n">sound</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span> <span class="k">for</span> <span class="n">readout</span> <span class="ow">in</span> <span class="n">chunk</span><span class="o">.</span><span class="n">readouts</span><span class="p">]</span>
-</pre></div>
-</div>
-<p>It spoils by the moment the gradients wind across a voxel between pulses
-and readouts, so a voxel needs no isochromats spread over it to be spoiled;
-it models no motion and no diffusion, which the isochromats do.</p>
 </section>
 <section id="stream-a-scan-in-real-time-with-its-sound">
 <h2>Stream a scan in real time, with its sound<a class="headerlink" href="#stream-a-scan-in-real-time-with-its-sound" title="Link to this heading">#</a></h2>
@@ -679,7 +656,7 @@ the client sends it on; the sound of its gradients can be written as it plays:</
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 
-<span class="n">scan</span> <span class="o">=</span> <span class="n">virtual</span><span class="o">.</span><span class="n">Scan</span><span class="p">(</span><span class="n">sequence</span><span class="p">,</span> <span class="n">tissue</span><span class="o">.</span><span class="n">isochromats</span><span class="p">(</span><span class="mf">1e-3</span><span class="p">))</span>
+<span class="n">scan</span> <span class="o">=</span> <span class="n">virtual</span><span class="o">.</span><span class="n">Scan</span><span class="p">(</span><span class="n">sequence</span><span class="p">,</span> <span class="n">tissue</span><span class="p">)</span>
 <span class="k">with</span> <span class="n">wave</span><span class="o">.</span><span class="n">open</span><span class="p">(</span><span class="s2">"scan.wav"</span><span class="p">,</span> <span class="s2">"wb"</span><span class="p">)</span> <span class="k">as</span> <span class="n">audio</span><span class="p">:</span>
     <span class="n">audio</span><span class="o">.</span><span class="n">setnchannels</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
     <span class="n">audio</span><span class="o">.</span><span class="n">setsampwidth</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
@@ -705,8 +682,8 @@ it is. Without <code class="docutils literal notranslate"><span class="pre">spee
 <h2>Scan from the command line<a class="headerlink" href="#scan-from-the-command-line" title="Link to this heading">#</a></h2>
 <p><code class="docutils literal notranslate"><span class="pre">pulserver</span> <span class="pre">scan</span></code> runs a scan without a script. It imports a sequence file or
 generates a design from a scanner-sequence plugin, as the design calls do,
-plays its IR cache on a phantom in the Bloch simulation, and writes the series
-to an ISMRMRD file, streams it to a reconstruction proxy, or both:</p>
+plays its IR cache on a phantom’s tissue with the Fourier engine, and writes
+the series to an ISMRMRD file, streams it to a reconstruction proxy, or both:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pulserver<span class="w"> </span>scan<span class="w"> </span>--seq<span class="w"> </span>sequence.seq<span class="w"> </span>--limits<span class="w"> </span>limits.txt<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>--orientation<span class="w"> </span>coronal<span class="w"> </span>--center<span class="w"> </span><span class="m">10</span><span class="w"> </span>-5<span class="w"> </span><span class="m">3</span><span class="w"> </span>--mrd<span class="w"> </span>raw.h5<span class="w"> </span>--sound<span class="w"> </span>scan.wav
 
@@ -767,37 +744,14 @@ normal brain, downloaded on first use by the <code class="docutils literal notra
 (<code class="docutils literal notranslate"><span class="pre">pip</span> <span class="pre">install</span> <span class="pre">'pulserver[brainweb]'</span></code>); its <code class="docutils literal notranslate"><span class="pre">--spacing</span></code> is a whole number of
 millimetres. Without <code class="docutils literal notranslate"><span class="pre">--phantom</span></code>, the phantom is seven vials of water around
 one of fat, with T1 from 0.3 s to 2.0 s and T2 from 0.04 s to 0.3 s.
-Its isochromats are those in the slabs the design’s excitation pulses excite
-(<a class="reference internal" href="../generated/pulserver.virtual.excited.html#pulserver.virtual.excited" title="pulserver.virtual.excited"><code class="xref py py-func docutils literal notranslate"><span class="pre">excited()</span></code></a>).
-<code class="docutils literal notranslate"><span class="pre">--spacing</span></code>, in mm, and <code class="docutils literal notranslate"><span class="pre">--coils</span></code> set its isochromats and its receive coils;
-<code class="docutils literal notranslate"><span class="pre">--coil</span></code> scans it with one of the scanner’s coils instead, <code class="docutils literal notranslate"><span class="pre">body</span></code>,
-<code class="docutils literal notranslate"><span class="pre">body/head48</span></code> or <code class="docutils literal notranslate"><span class="pre">head8/head32</span></code>, named <code class="docutils literal notranslate"><span class="pre">transmit/receive</span></code>, whose
-sensitivities bartorch samples from BART’s coil models, which the <code class="docutils literal notranslate"><span class="pre">coils</span></code>
-extra installs (<code class="docutils literal notranslate"><span class="pre">pip</span> <span class="pre">install</span> <span class="pre">'pulserver[coils]'</span></code>). The sensitivities at
-every isochromat are written to a temporary file mapped into memory; where
-the temporary directory is a memory file system, set <code class="docutils literal notranslate"><span class="pre">TMPDIR</span></code> to one on
-disk.</p>
+<code class="docutils literal notranslate"><span class="pre">--spacing</span></code>, in mm, 1 mm by default, is the spacing at which the phantom is
+sampled as tissue, and <code class="docutils literal notranslate"><span class="pre">--coils</span></code> sets its receive coils; <code class="docutils literal notranslate"><span class="pre">--coil</span></code> scans it
+with one of the scanner’s coils instead, <code class="docutils literal notranslate"><span class="pre">body</span></code>, <code class="docutils literal notranslate"><span class="pre">body/head48</span></code> or
+<code class="docutils literal notranslate"><span class="pre">head8/head32</span></code>, named <code class="docutils literal notranslate"><span class="pre">transmit/receive</span></code>, whose sensitivities bartorch
+samples from BART’s coil models, which the <code class="docutils literal notranslate"><span class="pre">coils</span></code> extra installs
+(<code class="docutils literal notranslate"><span class="pre">pip</span> <span class="pre">install</span> <span class="pre">'pulserver[coils]'</span></code>). A phantom file gives each ellipse its
+<code class="docutils literal notranslate"><span class="pre">t2_prime</span></code>, in s.</p>
 </li>
-<li><p><code class="docutils literal notranslate"><span class="pre">--engine</span></code> names what the scan is simulated by: <code class="docutils literal notranslate"><span class="pre">fourier</span></code>, the Fourier
-engine on the phantom’s tissue at <code class="docutils literal notranslate"><span class="pre">--spacing</span></code>, or <code class="docutils literal notranslate"><span class="pre">bloch</span></code>, the isochromats
-the options below sample. The Fourier engine unless <code class="docutils literal notranslate"><span class="pre">--diffusion</span></code>, <code class="docutils literal notranslate"><span class="pre">--nod</span></code>
-or <code class="docutils literal notranslate"><span class="pre">--drift</span></code> asks for what only the isochromats model.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">--spins</span></code> spreads each voxel over that many isochromats, at the quantiles of
-the Lorentzian line of its tissue’s T2′: two along each axis of the voxel
-without it, four for a phantom of ellipses, which lies in a plane, and
-eight for BrainWeb. <code class="docutils literal notranslate"><span class="pre">--voxel</span></code> places them anywhere in each of the cells
-filling the voxel, <code class="docutils literal notranslate"><span class="pre">jittered</span></code>, the default; at the cells’ centres, <code class="docutils literal notranslate"><span class="pre">box</span></code>; or
-at the voxel’s centre, <code class="docutils literal notranslate"><span class="pre">point</span></code>, which takes one isochromat without
-<code class="docutils literal notranslate"><span class="pre">--spins</span></code>. <code class="docutils literal notranslate"><span class="pre">--diffusion</span></code> lets BrainWeb’s tissue classes diffuse
-(<a class="reference internal" href="../developer-guide/internals/bloch-engine.html"><span class="doc">Bloch engine</span></a>). A phantom file gives each ellipse
-its <code class="docutils literal notranslate"><span class="pre">t2_prime</span></code>, in s, and <code class="docutils literal notranslate"><span class="pre">diffusion</span></code>, in m²/s. Isochromats that diffuse are
-played block by block, and a voxel’s diffusion attenuation needs many spins
-to be resolved.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">--nod</span> <span class="pre">DEGREES</span> <span class="pre">PERIOD</span></code> turns the subject about the physical x axis through
-the isocentre by <code class="docutils literal notranslate"><span class="pre">DEGREES</span></code> times the sine of 2π t / <code class="docutils literal notranslate"><span class="pre">PERIOD</span></code>, and
-<code class="docutils literal notranslate"><span class="pre">--drift</span> <span class="pre">X</span> <span class="pre">Y</span> <span class="pre">Z</span></code> translates it along the physical axes, in mm/min, t being the
-time from the start of the scan (<a class="reference internal" href="../generated/pulserver.virtual.RigidMotion.html#pulserver.virtual.RigidMotion" title="pulserver.virtual.RigidMotion"><code class="xref py py-class docutils literal notranslate"><span class="pre">RigidMotion</span></code></a>).
-Isochromats that move are played block by block.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">--recon</span></code> streams the series to a reconstruction proxy, which looks the
 design up in its store: give that store as <code class="docutils literal notranslate"><span class="pre">--store</span></code>, or the proxy’s design
 intake as <code class="docutils literal notranslate"><span class="pre">--push</span></code>. The images go to <code class="docutils literal notranslate"><span class="pre">images.h5</span></code> in <code class="docutils literal notranslate"><span class="pre">--output</span></code>, the DICOM
@@ -811,17 +765,8 @@ reconstructed with the shipped reconstruction paired with it
 <li><p><code class="docutils literal notranslate"><span class="pre">--speed</span></code> plays the scan that many times as fast as a scanner, once the
 simulation is far enough ahead, writing the time left before it is to
 standard error; without it, the scan runs as fast as the simulation.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">--device</span> <span class="pre">cuda</span></code> reads the ADC windows and carries the runs of repetitions
-on the CUDA device. A window outside a run under a changing gradient, such
-as a spiral’s, whose isochromats lie on a lattice along the axes its k
-moves along, as a phantom’s do, is summed onto the lattice by a Triton
-kernel and transformed by cuFINUFFT; every other one, under a held gradient
-or with its isochromats off any lattice, as a moving subject’s are, is
-summed sample by sample by a second Triton kernel. A run of repetitions,
-Cartesian, radial or of ZTE spokes, is carried and spread onto its windows’
-grids by more Triton kernels, a tile of repetitions at a time. The <code class="docutils literal notranslate"><span class="pre">gpu</span></code> extra
-installs all of them (<code class="docutils literal notranslate"><span class="pre">pip</span> <span class="pre">install</span> <span class="pre">'pulserver[gpu]'</span></code>). The rest of the scan
-is simulated on the CPU.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--device</span></code> names the torch device the Fourier engine runs on, such as
+<code class="docutils literal notranslate"><span class="pre">cpu</span></code> or <code class="docutils literal notranslate"><span class="pre">cuda</span></code>; a CUDA device where there is one without it.</p></li>
 </ul>
 </section>
 <section id="prescribe-an-orientation">
@@ -844,7 +789,7 @@ the client sends <span class="math notranslate nohighlight">\(R\)</span> times t
     <span class="n">rotation</span><span class="o">=</span><span class="n">rotation</span><span class="p">,</span>
     <span class="n">position</span><span class="o">=</span><span class="n">centre</span><span class="p">,</span>
 <span class="p">)</span>
-<span class="n">readouts</span> <span class="o">=</span> <span class="n">virtual</span><span class="o">.</span><span class="n">acquire</span><span class="p">(</span><span class="n">sequence</span><span class="p">,</span> <span class="n">phantom</span><span class="p">,</span> <span class="n">rotation</span><span class="o">=</span><span class="n">rotation</span><span class="p">)</span>  <span class="c1"># or virtual.simulate</span>
+<span class="n">readouts</span> <span class="o">=</span> <span class="n">virtual</span><span class="o">.</span><span class="n">simulate</span><span class="p">(</span><span class="n">sequence</span><span class="p">,</span> <span class="n">phantom</span><span class="o">.</span><span class="n">tissue</span><span class="p">(</span><span class="mf">1e-3</span><span class="p">),</span> <span class="n">rotation</span><span class="o">=</span><span class="n">rotation</span><span class="p">)</span>
 <span class="n">received</span> <span class="o">=</span> <span class="n">virtual</span><span class="o">.</span><span class="n">send</span><span class="p">(</span>
     <span class="p">(</span><span class="s2">"127.0.0.1"</span><span class="p">,</span> <span class="mi">9002</span><span class="p">),</span>
     <span class="n">design</span><span class="p">,</span>
@@ -885,15 +830,8 @@ BrainWeb, and every design is made under the VOP limits of the exam’s transmit
 coil; maps solved at another frequency than the Larmor frequency of the limits’
 <code class="docutils literal notranslate"><span class="pre">B0</span></code> are refused.</p>
 <p>A scan is simulated by the Fourier engine on the phantom’s tissue, sampled
-<code class="docutils literal notranslate"><span class="pre">--spacing</span></code> apart, 1 mm by default, once for each exam as it starts. With
-<code class="docutils literal notranslate"><span class="pre">--engine</span> <span class="pre">bloch</span></code>, or where the subject moves or diffuses, it is simulated on
-the phantom’s isochromats in the slabs its excitation pulses excite
-(<a class="reference internal" href="../generated/pulserver.virtual.excited.html#pulserver.virtual.excited" title="pulserver.virtual.excited"><code class="xref py py-func docutils literal notranslate"><span class="pre">excited()</span></code></a>) instead; where they number more than
-<code class="docutils literal notranslate"><span class="pre">--max-isochromats</span></code>, two million by default, as over a whole head, the spacing
-is coarsened in steps of 1 mm until they do not, counting <code class="docutils literal notranslate"><span class="pre">--spins</span></code>
-isochromats per voxel. <code class="docutils literal notranslate"><span class="pre">--engine</span></code>, <code class="docutils literal notranslate"><span class="pre">--device</span></code>, <code class="docutils literal notranslate"><span class="pre">--spins</span></code>,
-<code class="docutils literal notranslate"><span class="pre">--voxel</span></code>, <code class="docutils literal notranslate"><span class="pre">--diffusion</span></code>, <code class="docutils literal notranslate"><span class="pre">--nod</span></code> and <code class="docutils literal notranslate"><span class="pre">--drift</span></code> act as they do for
-<code class="docutils literal notranslate"><span class="pre">pulserver</span> <span class="pre">scan</span></code>; a subject’s motion starts anew with each scan.</p>
+<code class="docutils literal notranslate"><span class="pre">--spacing</span></code> apart, in mm, 1 mm by default, once for each exam as it starts.
+<code class="docutils literal notranslate"><span class="pre">--device</span></code> acts as it does for <code class="docutils literal notranslate"><span class="pre">pulserver</span> <span class="pre">scan</span></code>.</p>
 <p>pulserver’s image runs such a console by default, with BrainWeb’s normal brain
 and the field maps solved in it, <code class="docutils literal notranslate"><span class="pre">--fields=/console/fields</span></code>, so that every exam
 is on BrainWeb and downloads nothing, and with bartorch for the non-Cartesian
@@ -906,12 +844,10 @@ computer, and plays each scan at the scanner’s speed, <code class="docutils li
 </div>
 <p>Options after the image’s name are added to its console’s: an option of one
 value takes the value given last, and <code class="docutils literal notranslate"><span class="pre">--plugins</span></code>, <code class="docutils literal notranslate"><span class="pre">--recon-plugins</span></code> and
-<code class="docutils literal notranslate"><span class="pre">--origin</span></code> add to the image’s. A console whose scans spread each voxel over
-twenty-seven isochromats, in tissue that diffuses, of a subject that nods
-through ±2° with a period of 8 s:</p>
+<code class="docutils literal notranslate"><span class="pre">--origin</span></code> add to the image’s. A console whose exams are sampled 2 mm apart:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>docker<span class="w"> </span>run<span class="w"> </span>-d<span class="w"> </span>--restart<span class="w"> </span>unless-stopped<span class="w"> </span>--name<span class="w"> </span>pulserver<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>-p<span class="w"> </span><span class="m">127</span>.0.0.1:8765:8765<span class="w"> </span>ghcr.io/pulserver/pulserver<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--spins<span class="w"> </span><span class="m">27</span><span class="w"> </span>--diffusion<span class="w"> </span>--nod<span class="w"> </span><span class="m">2</span><span class="w"> </span><span class="m">8</span>
+<span class="w">  </span>--spacing<span class="w"> </span><span class="m">2</span>
 </pre></div>
 </div>
 <p>Its sequences are the ones listed under <a class="reference internal" href="scanner-sequences.html#shipped-sequences"><span class="std std-ref">Shipped sequences</span></a>,
@@ -989,9 +925,8 @@ Worker running pulserver beside a browser page.</p>
 <p>A subject named <code class="docutils literal notranslate"><span class="pre">brainweb</span></code> is BrainWeb’s normal brain, and so is every subject
 of a console with field maps; any other is the vials. An exam is scanned in the
 coil it names, or in the one it had, <code class="docutils literal notranslate"><span class="pre">--coil</span></code> at first; a head coil of BART’s
-models needs the <code class="docutils literal notranslate"><span class="pre">coils</span></code> extra. Scans of an exam that excite the same slabs play on
-one set of isochromats, each from equilibrium, so that a repeated scan neither
-builds them nor computes again the pulses an earlier one played. A console
+models needs the <code class="docutils literal notranslate"><span class="pre">coils</span></code> extra. The scans of an exam play on one tissue, each
+from equilibrium, sampled while the exam’s localizer is viewed. A console
 loads BrainWeb once, and computes the field its head adds while the first
 exam’s localizer is viewed. The localizer is drawn from the
 phantom’s proton density, so an exam can be planned before any scan. MaRGE is
@@ -1007,7 +942,7 @@ each scan’s sound as it streams; it is published at
 <h2>See also<a class="headerlink" href="#see-also" title="Link to this heading">#</a></h2>
 <ul class="simple">
 <li><p><a class="reference internal" href="../explanations/virtual-scanner.html"><span class="doc">The virtual scanner</span></a> — the stand-ins and the signal model.</p></li>
-<li><p><a class="reference internal" href="../api/virtual.html"><span class="doc">Virtual scanner</span></a> — the phantom, the acquisition, the Bloch simulation, the scan clock and the client.</p></li>
+<li><p><a class="reference internal" href="../api/virtual.html"><span class="doc">Virtual scanner</span></a> — the phantom, the Fourier engine, the scan clock and the client.</p></li>
 <li><p><a class="reference internal" href="reconstruction-client.html"><span class="doc">Reconstruction clients</span></a> — the stream the client sends.</p></li>
 </ul>
 </section>
@@ -1064,7 +999,6 @@ each scan’s sound as it streams; it is published at
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#start-a-proxy">Start a proxy</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#acquire-and-send-the-series">Acquire and send the series</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#scan-water-and-fat">Scan water and fat</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#simulate-relaxation-and-the-rf-pulses">Simulate relaxation and the RF pulses</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#stream-a-scan-in-real-time-with-its-sound">Stream a scan in real time, with its sound</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#scan-from-the-command-line">Scan from the command line</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#prescribe-an-orientation">Prescribe an orientation</a></li>

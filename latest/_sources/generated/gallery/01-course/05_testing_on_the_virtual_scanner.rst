@@ -24,18 +24,18 @@
 
 This lesson is optional: it extends the course rather than completing it. The
 virtual scanner stands in for the scanner and nothing else, so a sequence and
-a reconstruction plugin can be tested before a scanner is involved. It
-acquires in two ways: along the played trajectory from an analytic phantom,
-which leaves relaxation out, or by a Bloch simulation of every block the cache
-plays. The conversion itself is checked by comparing the gradients a sequence
-asks for with those its cache plays. The models are described in
-:doc:`/explanations/virtual-scanner`.
+a reconstruction plugin can be tested before a scanner is involved. Its
+Fourier engine acquires a phantom's tissue under every RF pulse, gradient and
+receiver phase the cache plays, with relaxation, so a scan shows the contrast
+and the artefacts of the sequence as well as its encoding. The conversion
+itself is checked by comparing the gradients a sequence asks for with those its
+cache plays. The model is described in :doc:`/explanations/virtual-scanner`.
 
 **Learning objectives**
 
-- Acquire a phantom with :func:`~pulserver.virtual.acquire` and simulate it on
-  isochromats with :func:`~pulserver.virtual.simulate`, and state what each
-  models.
+- Acquire a phantom's tissue with :func:`~pulserver.virtual.simulate`, and
+  compare the contrast of the images with the closed-form steady state of the
+  sequence.
 - Check a cache against the sequence it was converted from with
   :func:`~pulserver.validate.validate`.
 
@@ -50,17 +50,18 @@ The previous lesson reconstructed a series with a plugin of its own.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 32-39
+.. GENERATED FROM PYTHON SOURCE LINES 32-40
 
 A sequence with T1 contrast
 ---------------------------
 
-The design is the 2D gradient echo at a 20 ms TR and a 30° flip angle,
-without dummy scans, converted into its cache. The phantom holds two
-ellipses of equal proton density and T2, with a T1 of 300 ms on the left and
-1500 ms on the right.
+The design is the RF-spoiled 2D gradient echo at a 20 ms TR and a 30° flip
+angle, converted into its cache twice: without dummy scans, and with 100,
+which play for 2 s before the first readout. The phantom holds two ellipses
+of equal proton density and T2, with a T1 of 300 ms on the left and 1500 ms
+on the right.
 
-.. GENERATED FROM PYTHON SOURCE LINES 39-61
+.. GENERATED FROM PYTHON SOURCE LINES 40-70
 
 .. code-block:: Python
 
@@ -74,15 +75,23 @@ ellipses of equal proton density and T2, with a T1 of 300 ms on the left and
     from pulserver import ir, virtual
     from pulserver.proxy import SequenceTable
 
+    TR, FLIP, T1 = 0.02, np.radians(30.0), (0.3, 1.5)
+
     system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
-    path = Path(tempfile.mkdtemp()) / "gre2d.seq"
-    gre2d(system, n_x=64, n_y=64, tr=0.02, flip_angle_deg=30.0, n_dummy=0).write(path)
-    ir.convert(path, system)
+    directory = Path(tempfile.mkdtemp())
+    paths = {}
+    for dummies in (0, 100):
+        paths[dummies] = directory / f"gre2d_{dummies}.seq"
+        sequence = gre2d(
+            system, n_x=64, n_y=64, tr=TR, flip_angle_deg=30.0, n_dummy=dummies
+        )
+        sequence.write(paths[dummies])
+        ir.convert(paths[dummies], system)
 
     phantom = virtual.Phantom(
         [
-            virtual.Ellipse((-0.04, 0.0, 0.0), (0.03, 0.05), t1=0.3, t2=0.08),
-            virtual.Ellipse((0.04, 0.0, 0.0), (0.03, 0.05), t1=1.5, t2=0.08),
+            virtual.Ellipse((-0.04, 0.0, 0.0), (0.03, 0.05), t1=T1[0], t2=0.08),
+            virtual.Ellipse((0.04, 0.0, 0.0), (0.03, 0.05), t1=T1[1], t2=0.08),
         ]
     )
 
@@ -93,66 +102,75 @@ ellipses of equal proton density and T2, with a T1 of 300 ms on the left and
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 62-72
+.. GENERATED FROM PYTHON SOURCE LINES 71-83
 
-Two acquisitions
-----------------
+The acquisition
+---------------
 
-:func:`~pulserver.virtual.acquire` evaluates the phantom's analytic
-transform at the k-space location of every sample: each excitation tips the
-whole magnetization, whatever the flip angle and T1. The isochromats of
-:meth:`~pulserver.virtual.Phantom.isochromats`, here on a 1 mm grid, are
-played block by block by :func:`~pulserver.virtual.simulate` with the Bloch
-equation, so the flip angle, relaxation and the approach to steady state
-act on the signal.
+:meth:`~pulserver.virtual.Phantom.tissue` samples the phantom as cubes of
+uniform magnetization, here 2 mm wide; the resolution of the images is the
+one the trajectory reaches, whatever that spacing is.
+:func:`~pulserver.virtual.simulate` plays the cache on the tissue with the
+Fourier engine: the signal of each class of tissue follows from extended
+phase graphs of the pulses and gradient moments the cache plays, so the flip
+angle, relaxation, RF spoiling and the approach to steady state act on it.
+It returns one ``(coils, samples)`` array per readout in play order; the
+encoding counters of the sequence place them in k-space.
 
-.. GENERATED FROM PYTHON SOURCE LINES 72-75
-
-.. code-block:: Python
-
-    analytic = virtual.acquire(path, phantom)
-    simulated = virtual.simulate(path, phantom.isochromats(1e-3))
-
-
-
-
-
-
-
-
-.. GENERATED FROM PYTHON SOURCE LINES 76-78
-
-Both return one array of samples per readout in play order; the encoding
-counters of the sequence place them in k-space.
-
-.. GENERATED FROM PYTHON SOURCE LINES 78-108
+.. GENERATED FROM PYTHON SOURCE LINES 83-97
 
 .. code-block:: Python
 
-    lines = SequenceTable.read(path).counters["LIN"]
+    tissue = phantom.tissue(2e-3)
+    readouts = {dummies: virtual.simulate(path, tissue) for dummies, path in paths.items()}
 
 
-    def image(readouts):
+    def image(path, readouts):
+        lines = SequenceTable.read(path).counters["LIN"]
         kspace = np.zeros((64, readouts[0].shape[-1]), complex)
         kspace[lines] = np.stack([readout[0] for readout in readouts])
         pixels = np.fft.fftshift(np.fft.ifft2(np.fft.ifftshift(kspace)))
         return np.abs(pixels[:, 32:96])
 
 
-    images = {"acquire": image(analytic), "simulate": image(simulated)}
-    inside = images["acquire"] > 0.5 * images["acquire"].max()
-    short_t1, long_t1 = inside.copy(), inside.copy()
-    short_t1[:, 32:], long_t1[:, :32] = False, False
-    for name, pixels in images.items():
-        ratio = pixels[short_t1].mean() / pixels[long_t1].mean()
-        print(f"{name}: mean signal, short T1 over long T1, {ratio:.2f}")
+    images = {dummies: image(paths[dummies], readouts[dummies]) for dummies in paths}
+
+
+
+
+
+
+
+
+.. GENERATED FROM PYTHON SOURCE LINES 98-104
+
+The ratio of the two ellipses' signals in steady state is that of the
+spoiled gradient echo's closed form,
+:math:`\sin\alpha\,(1 - E_1) / (1 - \cos\alpha\,E_1)`, with
+:math:`E_1 = e^{-T_R/T_1}`; the factor :math:`e^{-T_E/T_2}` is common to both.
+Each ellipse's signal is averaged inside half its semi-axes, away from the
+ringing at its edge.
+
+.. GENERATED FROM PYTHON SOURCE LINES 104-131
+
+.. code-block:: Python
+
+    rows, columns = np.mgrid[-32:32, -32:32] * 0.22 / 64
+    short_t1 = ((columns + 0.04) / 0.015) ** 2 + (rows / 0.025) ** 2 < 1
+    long_t1 = ((columns - 0.04) / 0.015) ** 2 + (rows / 0.025) ** 2 < 1
+
+
+    def ernst(t1):
+        e1 = np.exp(-TR / t1)
+        return np.sin(FLIP) * (1 - e1) / (1 - np.cos(FLIP) * e1)
+
 
 
 
 
 
 .. image-sg:: /generated/gallery/01-course/images/sphx_glr_05_testing_on_the_virtual_scanner_001.png
-   :alt: acquire, simulate
+   :alt: 0 dummy scans, 100 dummy scans
    :srcset: /generated/gallery/01-course/images/sphx_glr_05_testing_on_the_virtual_scanner_001.png
    :class: sphx-glr-single-img
 
@@ -161,19 +179,21 @@ counters of the sequence place them in k-space.
 
  .. code-block:: none
 
-    acquire: mean signal, short T1 over long T1, 1.00
-    simulate: mean signal, short T1 over long T1, 3.28
+    closed form: short T1 over long T1, 3.73
+      0 dummy scans: short T1 over long T1, 3.56
+    100 dummy scans: short T1 over long T1, 3.73
 
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 109-122
+.. GENERATED FROM PYTHON SOURCE LINES 132-146
 
-The analytic acquisition shows two ellipses of equal signal: it tests the
-trajectory, the encoding and the reconstruction. The Bloch simulation shows
-the T1 weighting of a spoiled gradient echo at a short TR and, since the
-scan plays no dummy scans, the ghosts along the phase-encoding axis that the
-approach to steady state leaves. It tests the sequence's contrast.
+With dummy scans, the images show the T1 weighting of a spoiled gradient echo
+at a short TR, at the ratio the closed form gives. Without them, each line is
+acquired on the way to steady state: the long-T1 ellipse is brighter than in
+steady state, and its signal changes from line to line, which leaves ghosts
+along the phase-encoding axis. A scan on the Fourier engine tests the
+sequence's contrast as well as its trajectory and its reconstruction.
 
 Conversion check
 ----------------
@@ -183,13 +203,13 @@ for with a second rendering. Without a recording of a scanner playing it, the
 rendering is the cache's own waveforms. Agreement establishes that the
 conversion kept the sequence; it does not establish that a scanner plays it.
 
-.. GENERATED FROM PYTHON SOURCE LINES 122-125
+.. GENERATED FROM PYTHON SOURCE LINES 146-149
 
 .. code-block:: Python
 
     from pulserver.validate import validate
 
-    print(validate(path, system=system))
+    print(validate(paths[0], system=system))
 
 
 
@@ -209,7 +229,7 @@ conversion kept the sequence; it does not establish that a scanner plays it.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.145 seconds)
+   **Total running time of the script:** (0 minutes 0.247 seconds)
 
 
 .. _sphx_glr_download_generated_gallery_01-course_05_testing_on_the_virtual_scanner.py:

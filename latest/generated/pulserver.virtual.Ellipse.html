@@ -258,7 +258,6 @@
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/protocol-wire.html">Protocol text blocks</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/reconstruction-proxy.html">Reconstruction proxy</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/virtual-scanner.html">Virtual scanner</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/bloch-engine.html">Bloch engine</a></li>
 </ul>
 </details></li>
 <li class="toctree-l2"><a class="reference internal" href="../developer-guide/pre-commit.html">Pre-commit</a></li>
@@ -552,8 +551,8 @@
 ellipse is infinitely thin, so its signal depends on the k-space location
 along z only through the phase of its plane. <code class="docutils literal notranslate"><span class="pre">shift_ppm</span></code> is the chemical
 shift of its spins from water, in ppm: -3.45 for the main fat resonance.
-<code class="docutils literal notranslate"><span class="pre">t1</span></code>, <code class="docutils literal notranslate"><span class="pre">t2</span></code> and <code class="docutils literal notranslate"><span class="pre">t2_prime</span></code>, in s, and <code class="docutils literal notranslate"><span class="pre">diffusion</span></code>, the isotropic
-diffusion coefficient in m²/s, act in <a class="reference internal" href="pulserver.virtual.Phantom.isochromats.html#pulserver.virtual.Phantom.isochromats" title="pulserver.virtual.Phantom.isochromats"><code class="xref py py-meth docutils literal notranslate"><span class="pre">Phantom.isochromats()</span></code></a> alone.</p>
+<code class="docutils literal notranslate"><span class="pre">t1</span></code>, <code class="docutils literal notranslate"><span class="pre">t2</span></code> and <code class="docutils literal notranslate"><span class="pre">t2_prime</span></code>, in s, act in <a class="reference internal" href="pulserver.virtual.Phantom.tissue.html#pulserver.virtual.Phantom.tissue" title="pulserver.virtual.Phantom.tissue"><code class="xref py py-meth docutils literal notranslate"><span class="pre">Phantom.tissue()</span></code></a>
+alone; <code class="docutils literal notranslate"><span class="pre">diffusion</span></code> is the isotropic diffusion coefficient in m²/s.</p>
 </dd></dl>
 
 <p class="rubric">Methods</p>

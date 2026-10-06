@@ -258,7 +258,6 @@
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/protocol-wire.html">Protocol text blocks</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/reconstruction-proxy.html">Reconstruction proxy</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/virtual-scanner.html">Virtual scanner</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/bloch-engine.html">Bloch engine</a></li>
 </ul>
 </details></li>
 <li class="toctree-l2"><a class="reference internal" href="../developer-guide/pre-commit.html">Pre-commit</a></li>
@@ -545,8 +544,10 @@
 <dl class="py method">
 <dt class="sig sig-object py" id="pulserver.virtual.Phantom.tissue">
 <span class="sig-prename descclassname"><span class="pre">Phantom.</span></span><span class="sig-name descname"><span class="pre">tissue</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pulserver/virtual/_phantom.html#Phantom.tissue"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.virtual.Phantom.tissue" title="Link to this definition">#</a></dt>
-<dd><p>Return the phantom sampled for the Fourier engine, at the points <a class="reference internal" href="pulserver.virtual.Phantom.isochromats.html#pulserver.virtual.Phantom.isochromats" title="pulserver.virtual.Phantom.isochromats"><code class="xref py py-meth docutils literal notranslate"><span class="pre">isochromats()</span></code></a> samples it at.</p>
-<p>Each point spans a square <code class="docutils literal notranslate"><span class="pre">spacing</span></code> wide in the ellipse’s plane.</p>
+<dd><p>Return the phantom sampled for the Fourier engine.</p>
+<p>Each point spans a square <code class="docutils literal notranslate"><span class="pre">spacing</span></code> wide in the ellipse’s plane.
+<code class="docutils literal notranslate"><span class="pre">region</span></code> keeps the points it answers True for, from their <code class="docutils literal notranslate"><span class="pre">(n,</span> <span class="pre">3)</span></code>
+physical positions, in m, and their frequencies, in Hz.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Raises<span class="colon">:</span></dt>
 <dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If an ellipse has a complex intensity, the phantom has a chemical

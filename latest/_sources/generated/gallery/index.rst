@@ -114,7 +114,7 @@ Course
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="This lesson is optional: it extends the course rather than completing it. The virtual scanner stands in for the scanner and nothing else, so a sequence and a reconstruction plugin can be tested before a scanner is involved. It acquires in two ways: along the played trajectory from an analytic phantom, which leaves relaxation out, or by a Bloch simulation of every block the cache plays. The conversion itself is checked by comparing the gradients a sequence asks for with those its cache plays. The models are described in /explanations/virtual-scanner.">
+    <div class="sphx-glr-thumbcontainer" tooltip="This lesson is optional: it extends the course rather than completing it. The virtual scanner stands in for the scanner and nothing else, so a sequence and a reconstruction plugin can be tested before a scanner is involved. Its Fourier engine acquires a phantom&#x27;s tissue under every RF pulse, gradient and receiver phase the cache plays, with relaxation, so a scan shows the contrast and the artefacts of the sequence as well as its encoding. The conversion itself is checked by comparing the gradients a sequence asks for with those its cache plays. The model is described in /explanations/virtual-scanner.">
 
 .. only:: html
 

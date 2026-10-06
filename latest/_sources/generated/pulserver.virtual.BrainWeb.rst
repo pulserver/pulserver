@@ -14,8 +14,6 @@
    :toctree:
    :nosignatures:
 
-   ~BrainWeb.count
-   ~BrainWeb.isochromats
    ~BrainWeb.proton_density
    ~BrainWeb.relaxation
    ~BrainWeb.tissue
@@ -29,6 +27,5 @@
    :nosignatures:
 
    ~BrainWeb.DIFFUSION
-   ~BrainWeb.VOXEL_AXES
    ~BrainWeb.field_ppm
    ~BrainWeb.fractions

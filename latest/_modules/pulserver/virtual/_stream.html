@@ -255,7 +255,6 @@
 <li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/protocol-wire.html">Protocol text blocks</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/reconstruction-proxy.html">Reconstruction proxy</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/virtual-scanner.html">Virtual scanner</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/bloch-engine.html">Bloch engine</a></li>
 </ul>
 </details></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/pre-commit.html">Pre-commit</a></li>
@@ -482,8 +481,6 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">pypulseqpp</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pp</span>
 
-<span class="kn">from</span><span class="w"> </span><span class="nn">._bloch</span><span class="w"> </span><span class="kn">import</span> <span class="n">Player</span><span class="p">,</span> <span class="n">_gradients</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">._isochromats</span><span class="w"> </span><span class="kn">import</span> <span class="n">Isochromats</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">._tissue</span><span class="w"> </span><span class="kn">import</span> <span class="n">Tissue</span>
 
 <span class="c1">#: MATLAB Pulseq's audio sample rate, the default of ``pypulseqpp.gradient_sound``, in Hz.</span>
@@ -531,31 +528,22 @@
 <div class="viewcode-block" id="Scan">
 <a class="viewcode-back" href="../../../generated/pulserver.virtual.Scan.html#pulserver.virtual.Scan">[docs]</a>
 <span class="k">class</span><span class="w"> </span><span class="nc">Scan</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""The cache beside a sequence file played on isochromats or acquired by the Fourier engine, against a scan clock.</span>
+<span class="w">    </span><span class="sd">"""The cache beside a sequence file acquired of a phantom's tissue by the Fourier engine, against a scan clock.</span>
 
-<span class="sd">    On isochromats, the blocks are those :func:`~pulserver.virtual.simulate`</span>
-<span class="sd">    plays, as it plays them, and they advance the magnetization of the</span>
-<span class="sd">    isochromats from where it stands. On a phantom's tissue, they are acquired</span>
-<span class="sd">    as :class:`~pulserver.virtual.FourierPlayer` acquires them.</span>
+<span class="sd">    The blocks are acquired as :class:`~pulserver.virtual.FourierPlayer`</span>
+<span class="sd">    acquires them.</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
 <span class="sd">    seq_path</span>
 <span class="sd">        The first file of the sequence's chain, beside its cache.</span>
-<span class="sd">    isochromats</span>
-<span class="sd">        The isochromats scanned, positioned along the physical axes, or the</span>
-<span class="sd">        tissue the Fourier engine acquires.</span>
+<span class="sd">    tissue</span>
+<span class="sd">        The phantom's tissue.</span>
 <span class="sd">    cache_ext</span>
 <span class="sd">        The extension of the cache beside each file.</span>
 <span class="sd">    rotation</span>
 <span class="sd">        ``(3, 3)`` rotation of the prescription from logical to physical axes,</span>
 <span class="sd">        a reflection included; the identity by default.</span>
-<span class="sd">    default_shim</span>
-<span class="sd">        Channel weights of a coil of several transmit channels, as</span>
-<span class="sd">        :func:`~pulserver.virtual.simulate` takes them.</span>
-<span class="sd">    tolerance</span>
-<span class="sd">        The accuracy of the samples of runs of repetitions, as</span>
-<span class="sd">        :func:`~pulserver.virtual.simulate` takes it.</span>
 <span class="sd">    device</span>
 <span class="sd">        Where the Fourier engine runs, as</span>
 <span class="sd">        :class:`~pulserver.virtual.FourierPlayer` takes it.</span>
@@ -564,29 +552,17 @@
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">seq_path</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span><span class="p">,</span>
-        <span class="n">isochromats</span><span class="p">:</span> <span class="n">Isochromats</span> <span class="o">|</span> <span class="n">Tissue</span><span class="p">,</span>
+        <span class="n">tissue</span><span class="p">:</span> <span class="n">Tissue</span><span class="p">,</span>
         <span class="n">cache_ext</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">".pseg"</span><span class="p">,</span>
         <span class="o">*</span><span class="p">,</span>
         <span class="n">rotation</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">default_shim</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">tolerance</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">,</span>
         <span class="n">device</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">isochromats</span><span class="p">,</span> <span class="n">Tissue</span><span class="p">):</span>
-            <span class="kn">from</span><span class="w"> </span><span class="nn">._fourier</span><span class="w"> </span><span class="kn">import</span> <span class="n">FourierPlayer</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">._fourier</span><span class="w"> </span><span class="kn">import</span> <span class="n">FourierPlayer</span>
 
-            <span class="bp">self</span><span class="o">.</span><span class="n">_player</span> <span class="o">=</span> <span class="n">FourierPlayer</span><span class="p">(</span>
-                <span class="n">seq_path</span><span class="p">,</span> <span class="n">isochromats</span><span class="p">,</span> <span class="n">cache_ext</span><span class="p">,</span> <span class="n">rotation</span><span class="o">=</span><span class="n">rotation</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span>
-            <span class="p">)</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_player</span> <span class="o">=</span> <span class="n">Player</span><span class="p">(</span>
-                <span class="n">seq_path</span><span class="p">,</span>
-                <span class="n">isochromats</span><span class="p">,</span>
-                <span class="n">cache_ext</span><span class="p">,</span>
-                <span class="n">rotation</span><span class="o">=</span><span class="n">rotation</span><span class="p">,</span>
-                <span class="n">default_shim</span><span class="o">=</span><span class="n">default_shim</span><span class="p">,</span>
-                <span class="n">tolerance</span><span class="o">=</span><span class="n">tolerance</span><span class="p">,</span>
-            <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_player</span> <span class="o">=</span> <span class="n">FourierPlayer</span><span class="p">(</span>
+            <span class="n">seq_path</span><span class="p">,</span> <span class="n">tissue</span><span class="p">,</span> <span class="n">cache_ext</span><span class="p">,</span> <span class="n">rotation</span><span class="o">=</span><span class="n">rotation</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span>
+        <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_played</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_player</span><span class="o">.</span><span class="n">played</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_turn</span> <span class="o">=</span> <span class="kc">None</span> <span class="k">if</span> <span class="n">rotation</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">rotation</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span>
         <span class="n">durations</span> <span class="o">=</span> <span class="mf">1e-6</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">_played</span><span class="p">[</span><span class="s2">"duration_us"</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">float</span><span class="p">)</span>
@@ -907,6 +883,18 @@
             <span class="k">if</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_samples</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)</span> <span class="o">==</span> <span class="n">acquiring</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_durations</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mf">0.0</span>
         <span class="p">]</span>
         <span class="k">return</span> <span class="n">statistics</span><span class="o">.</span><span class="n">median</span><span class="p">(</span><span class="n">rates</span><span class="p">[</span><span class="o">-</span><span class="n">_RECENT</span><span class="p">:])</span> <span class="k">if</span> <span class="n">rates</span> <span class="k">else</span> <span class="kc">None</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_gradients</span><span class="p">(</span><span class="n">played</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span> <span class="n">block</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Return the block's gradient corners per logical axis: times in s from its start over Hz/m."""</span>
+    <span class="n">span</span> <span class="o">=</span> <span class="n">played</span><span class="p">[</span><span class="s2">"gradient_span"</span><span class="p">][</span><span class="n">block</span><span class="p">]</span>
+    <span class="n">corners</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">axis</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">3</span><span class="p">):</span>
+        <span class="n">where</span> <span class="o">=</span> <span class="nb">slice</span><span class="p">(</span><span class="o">*</span><span class="n">span</span><span class="p">[</span><span class="n">axis</span><span class="p">])</span>
+        <span class="n">times</span> <span class="o">=</span> <span class="mf">1e-6</span> <span class="o">*</span> <span class="n">played</span><span class="p">[</span><span class="s2">"gradient_time_us"</span><span class="p">][</span><span class="n">where</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">float</span><span class="p">)</span>
+        <span class="n">values</span> <span class="o">=</span> <span class="n">played</span><span class="p">[</span><span class="s2">"gradient_waveform_hz_per_m"</span><span class="p">][</span><span class="n">where</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">float</span><span class="p">)</span>
+        <span class="n">corners</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">times</span><span class="p">,</span> <span class="n">values</span><span class="p">])</span> <span class="k">if</span> <span class="n">times</span><span class="o">.</span><span class="n">size</span> <span class="k">else</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">corners</span>
 </pre></div>
 
                 </article>

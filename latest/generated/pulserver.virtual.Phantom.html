@@ -258,7 +258,6 @@
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/protocol-wire.html">Protocol text blocks</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/reconstruction-proxy.html">Reconstruction proxy</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/virtual-scanner.html">Virtual scanner</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/bloch-engine.html">Bloch engine</a></li>
 </ul>
 </details></li>
 <li class="toctree-l2"><a class="reference internal" href="../developer-guide/pre-commit.html">Pre-commit</a></li>
@@ -573,12 +572,6 @@ ones, a reflection included; the identity by default.</p></li>
 <p class="rubric">Methods</p>
 <div class="pst-scrollable-table-container"><table class="autosummary longtable table">
 <tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.virtual.Phantom.count.html#pulserver.virtual.Phantom.count" title="pulserver.virtual.Phantom.count"><code class="xref py py-obj docutils literal notranslate"><span class="pre">count</span></code></a></p></td>
-<td><p>Return how many isochromats <code class="xref py py-meth docutils literal notranslate"><span class="pre">isochromats()</span></code> samples the phantom as, with the same arguments.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pulserver.virtual.Phantom.isochromats.html#pulserver.virtual.Phantom.isochromats" title="pulserver.virtual.Phantom.isochromats"><code class="xref py py-obj docutils literal notranslate"><span class="pre">isochromats</span></code></a></p></td>
-<td><p>Return the phantom sampled as isochromats, for <a class="reference internal" href="pulserver.virtual.simulate.html#pulserver.virtual.simulate" title="pulserver.virtual.simulate"><code class="xref py py-func docutils literal notranslate"><span class="pre">simulate()</span></code></a>.</p></td>
-</tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="pulserver.virtual.Phantom.kspace.html#pulserver.virtual.Phantom.kspace" title="pulserver.virtual.Phantom.kspace"><code class="xref py py-obj docutils literal notranslate"><span class="pre">kspace</span></code></a></p></td>
 <td><p>Return each coil's signal at <code class="docutils literal notranslate"><span class="pre">(3,</span> <span class="pre">n)</span></code> physical k-space locations in 1/m: <code class="docutils literal notranslate"><span class="pre">(coils,</span> <span class="pre">n)</span></code>.</p></td>
 </tr>
@@ -586,7 +579,7 @@ ones, a reflection included; the identity by default.</p></li>
 <td><p>Return the magnitude of the intensity of a slab <code class="docutils literal notranslate"><span class="pre">thickness</span></code> thick at each of <code class="docutils literal notranslate"><span class="pre">(n,</span> <span class="pre">3)</span></code> physical points, in metres.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="pulserver.virtual.Phantom.tissue.html#pulserver.virtual.Phantom.tissue" title="pulserver.virtual.Phantom.tissue"><code class="xref py py-obj docutils literal notranslate"><span class="pre">tissue</span></code></a></p></td>
-<td><p>Return the phantom sampled for the Fourier engine, at the points <code class="xref py py-meth docutils literal notranslate"><span class="pre">isochromats()</span></code> samples it at.</p></td>
+<td><p>Return the phantom sampled for the Fourier engine.</p></td>
 </tr>
 </tbody>
 </table>
@@ -594,10 +587,7 @@ ones, a reflection included; the identity by default.</p></li>
 <p class="rubric">Attributes</p>
 <div class="pst-scrollable-table-container"><table class="autosummary longtable table">
 <tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.virtual.Phantom.VOXEL_AXES.html#pulserver.virtual.Phantom.VOXEL_AXES" title="pulserver.virtual.Phantom.VOXEL_AXES"><code class="xref py py-obj docutils literal notranslate"><span class="pre">VOXEL_AXES</span></code></a></p></td>
-<td><p>the ellipses' plane.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pulserver.virtual.Phantom.shifts_ppm.html#pulserver.virtual.Phantom.shifts_ppm" title="pulserver.virtual.Phantom.shifts_ppm"><code class="xref py py-obj docutils literal notranslate"><span class="pre">shifts_ppm</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.virtual.Phantom.shifts_ppm.html#pulserver.virtual.Phantom.shifts_ppm" title="pulserver.virtual.Phantom.shifts_ppm"><code class="xref py py-obj docutils literal notranslate"><span class="pre">shifts_ppm</span></code></a></p></td>
 <td><p>The chemical shifts of its ellipses, each once, in ascending order.</p></td>
 </tr>
 </tbody>

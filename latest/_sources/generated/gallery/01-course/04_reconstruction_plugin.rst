@@ -52,19 +52,20 @@ The previous lesson walked the cache this series is played from.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 34-43
+.. GENERATED FROM PYTHON SOURCE LINES 34-44
 
 The design and the series
 -------------------------
 
 The protocol of the first lesson resolves to the same design, so generating
-it again returns the stored one. :func:`~pulserver.virtual.acquire` samples
-an analytic phantom of four coils along the trajectory the cache plays, and
+it again returns the stored one. :func:`~pulserver.virtual.simulate` acquires
+a phantom of four coils, sampled as tissue on a 2 mm grid, by the virtual
+scanner's Fourier engine, and
 :func:`~pulserver.virtual.record` writes the series to an ISMRMRD file as the
 scanner's client sends it: the design identifier in the header, and the
 samples of each readout.
 
-.. GENERATED FROM PYTHON SOURCE LINES 43-79
+.. GENERATED FROM PYTHON SOURCE LINES 44-81
 
 .. code-block:: Python
 
@@ -102,7 +103,8 @@ samples of each readout.
         coils=4,
     )
     series = store / "series.h5"
-    print(virtual.record(series, design, virtual.acquire(sequence, phantom)), "readouts")
+    readouts = virtual.simulate(sequence, phantom.tissue(2e-3))
+    print(virtual.record(series, design, readouts), "readouts")
 
 
 
@@ -117,12 +119,12 @@ samples of each readout.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 80-82
+.. GENERATED FROM PYTHON SOURCE LINES 82-84
 
 As received, the header's encoding space holds placeholder sizes, and every
 acquisition the same encoding counters.
 
-.. GENERATED FROM PYTHON SOURCE LINES 82-92
+.. GENERATED FROM PYTHON SOURCE LINES 84-94
 
 .. code-block:: Python
 
@@ -150,7 +152,7 @@ acquisition the same encoding counters.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 93-100
+.. GENERATED FROM PYTHON SOURCE LINES 95-102
 
 Enrichment
 ----------
@@ -160,7 +162,7 @@ play order. Each row gives one acquisition its encoding counters, its flags
 and its encoding space; the header receives the encoding spaces, matrix and
 field of view the sequence defines.
 
-.. GENERATED FROM PYTHON SOURCE LINES 100-118
+.. GENERATED FROM PYTHON SOURCE LINES 102-120
 
 .. code-block:: Python
 
@@ -198,7 +200,7 @@ field of view the sequence defines.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 119-125
+.. GENERATED FROM PYTHON SOURCE LINES 121-127
 
 The readouts sample the flat top of the readout gradient, so they are placed
 by their counters and carry no trajectory. Nor does any carry a phase: the
@@ -207,7 +209,7 @@ which are the whole of its phase on a flat top. The proxy computes a phase
 only where the readout gradient varies during sampling, which a Tour treats
 (:doc:`/generated/gallery/02-tours/03_fov_offset_enrichment`).
 
-.. GENERATED FROM PYTHON SOURCE LINES 125-128
+.. GENERATED FROM PYTHON SOURCE LINES 127-130
 
 .. code-block:: Python
 
@@ -227,7 +229,7 @@ only where the readout gradient varies during sampling, which a Tour treats
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 129-138
+.. GENERATED FROM PYTHON SOURCE LINES 131-140
 
 A plugin
 --------
@@ -239,7 +241,7 @@ into reconstruction units and when a unit closes, here at
 ``(coils, phase encodes, readout)``, its readout oversampled; the image is
 cropped to the reconstruction matrix, ``image_shape``.
 
-.. GENERATED FROM PYTHON SOURCE LINES 138-158
+.. GENERATED FROM PYTHON SOURCE LINES 140-160
 
 .. code-block:: Python
 
@@ -270,13 +272,13 @@ cropped to the reconstruction matrix, ``image_shape``.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 159-162
+.. GENERATED FROM PYTHON SOURCE LINES 161-164
 
 :meth:`~pulserver.recon.ReconPlugin.run` reconstructs a recorded series in
 this process through the same hooks a worker drives; with ``store`` it
 enriches the series from its design first, as the proxy does.
 
-.. GENERATED FROM PYTHON SOURCE LINES 162-179
+.. GENERATED FROM PYTHON SOURCE LINES 164-181
 
 .. code-block:: Python
 
@@ -306,7 +308,7 @@ enriches the series from its design first, as the proxy does.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 180-184
+.. GENERATED FROM PYTHON SOURCE LINES 182-186
 
 A plugin file holds the class and a module-level ``PLUGIN`` instance; the
 proxy loads it by name from its plugin directories
@@ -316,7 +318,7 @@ acquisition on the virtual scanner.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.598 seconds)
+   **Total running time of the script:** (0 minutes 0.590 seconds)
 
 
 .. _sphx_glr_download_generated_gallery_01-course_04_reconstruction_plugin.py:

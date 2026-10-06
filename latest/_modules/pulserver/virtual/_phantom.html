@@ -255,7 +255,6 @@
 <li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/protocol-wire.html">Protocol text blocks</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/reconstruction-proxy.html">Reconstruction proxy</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/virtual-scanner.html">Virtual scanner</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/bloch-engine.html">Bloch engine</a></li>
 </ul>
 </details></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/pre-commit.html">Pre-commit</a></li>
@@ -478,9 +477,7 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">pypulseqpp</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pp</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">scipy.special</span><span class="w"> </span><span class="kn">import</span> <span class="n">j1</span>
 
-<span class="kn">from</span><span class="w"> </span><span class="nn">.</span><span class="w"> </span><span class="kn">import</span> <span class="n">_voxels</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">._coils</span><span class="w"> </span><span class="kn">import</span> <span class="n">Coil</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">._isochromats</span><span class="w"> </span><span class="kn">import</span> <span class="n">Isochromats</span>
 
 <span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>
     <span class="kn">from</span><span class="w"> </span><span class="nn">._tissue</span><span class="w"> </span><span class="kn">import</span> <span class="n">Tissue</span>
@@ -497,8 +494,8 @@
 <span class="sd">    ellipse is infinitely thin, so its signal depends on the k-space location</span>
 <span class="sd">    along z only through the phase of its plane. ``shift_ppm`` is the chemical</span>
 <span class="sd">    shift of its spins from water, in ppm: -3.45 for the main fat resonance.</span>
-<span class="sd">    ``t1``, ``t2`` and ``t2_prime``, in s, and ``diffusion``, the isotropic</span>
-<span class="sd">    diffusion coefficient in m²/s, act in :meth:`Phantom.isochromats` alone.</span>
+<span class="sd">    ``t1``, ``t2`` and ``t2_prime``, in s, act in :meth:`Phantom.tissue`</span>
+<span class="sd">    alone; ``diffusion`` is the isotropic diffusion coefficient in m²/s.</span>
 <span class="sd">    """</span>
 
     <span class="n">centre</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span>
@@ -564,9 +561,6 @@
 <span class="sd">        Physical location of the phantom's origin, in metres.</span>
 <span class="sd">    """</span>
 
-    <span class="c1">#: The axes a voxel spans, along the phantom's own: the ellipses' plane.</span>
-    <span class="n">VOXEL_AXES</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">3</span><span class="p">)[:</span><span class="mi">2</span><span class="p">]</span>
-
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">ellipses</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">Ellipse</span><span class="p">],</span>
@@ -589,112 +583,6 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_rotation</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span> <span class="k">if</span> <span class="n">rotation</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">rotation</span><span class="p">,</span> <span class="nb">float</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_position</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">position</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span>
 
-<div class="viewcode-block" id="Phantom.isochromats">
-<a class="viewcode-back" href="../../../generated/pulserver.virtual.Phantom.isochromats.html#pulserver.virtual.Phantom.isochromats">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">isochromats</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span>
-        <span class="n">spacing</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
-        <span class="o">*</span><span class="p">,</span>
-        <span class="n">field_t</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">off_resonance_hz</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">,</span>
-        <span class="n">region</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">],</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">coil</span><span class="p">:</span> <span class="n">Coil</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">spins</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
-        <span class="n">voxel</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"point"</span><span class="p">,</span>
-        <span class="n">motion</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-        <span class="n">seed</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">threads</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span>
-        <span class="n">device</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Isochromats</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""Return the phantom sampled as isochromats, for :func:`~pulserver.virtual.simulate`.</span>
-
-<span class="sd">        Each ellipse is sampled at the points of a square grid, aligned with the</span>
-<span class="sd">        phantom's origin and axes, that lie inside it: each a voxel of</span>
-<span class="sd">        ``spins`` isochromats of proton density ``intensity * spacing**2``</span>
-<span class="sd">        between them, relaxing with the ellipse's ``t1`` and ``t2``, so that</span>
-<span class="sd">        the sum over them approximates the ellipse's transform below the</span>
-<span class="sd">        grid's Nyquist frequency. A voxel's isochromats lie at its centre, or</span>
-<span class="sd">        over a square ``spacing`` wide in the ellipse's plane for a ``"box"``</span>
-<span class="sd">        ``voxel``, and precess at the quantiles of the Lorentzian line of the</span>
-<span class="sd">        ellipse's ``t2_prime`` (:doc:`/developer-guide/internals/bloch-engine`).</span>
-<span class="sd">        Overlapping ellipses are separate isochromats. The positions are placed</span>
-<span class="sd">        in the physical frame as the phantom is, and the receive sensitivities</span>
-<span class="sd">        are the phantom's coils', or ``coil``'s transmit and receive</span>
-<span class="sd">        sensitivities there. The isochromats diffuse with the ellipses'</span>
-<span class="sd">        ``diffusion``.</span>
-
-<span class="sd">        Parameters</span>
-<span class="sd">        ----------</span>
-<span class="sd">        spacing</span>
-<span class="sd">            Grid spacing, in metres.</span>
-<span class="sd">        field_t</span>
-<span class="sd">            The magnet's field, in T, at which each ellipse's chemical shift is</span>
-<span class="sd">            resolved into a frequency, with pypulseqpp's default gamma.</span>
-<span class="sd">        off_resonance_hz</span>
-<span class="sd">            Frequency of every isochromat from the scanner's centre frequency,</span>
-<span class="sd">            in Hz, beside its chemical shift.</span>
-<span class="sd">        region</span>
-<span class="sd">            Which isochromats are kept, from their ``(n, 3)`` physical</span>
-<span class="sd">            positions, in m, and ``(n,)`` frequencies, in Hz, as</span>
-<span class="sd">            :class:`~pulserver.virtual.Slabs` answers; every one without one.</span>
-<span class="sd">        coil</span>
-<span class="sd">            The scanner's coil the phantom is scanned with.</span>
-<span class="sd">        spins</span>
-<span class="sd">            Isochromats per voxel: a square number for a ``"box"`` or a</span>
-<span class="sd">            ``"jittered"`` voxel.</span>
-<span class="sd">        voxel</span>
-<span class="sd">            ``"point"``, ``"box"`` or ``"jittered"``: where a voxel's</span>
-<span class="sd">            isochromats lie.</span>
-<span class="sd">        motion</span>
-<span class="sd">            The phantom's motion, as :class:`~pulserver.virtual.Isochromats`</span>
-<span class="sd">            takes it.</span>
-<span class="sd">        seed</span>
-<span class="sd">            Seed of the frequencies of each voxel's isochromats and of their</span>
-<span class="sd">            Brownian walks.</span>
-<span class="sd">        threads</span>
-<span class="sd">            Worker threads of the simulation; 0 for every core.</span>
-<span class="sd">        device</span>
-<span class="sd">            The device the ADC windows are read and the runs of repetitions</span>
-<span class="sd">            carried on, as :class:`~pulserver.virtual.Isochromats` takes it;</span>
-<span class="sd">            the engine does both itself without one.</span>
-
-<span class="sd">        Raises</span>
-<span class="sd">        ------</span>
-<span class="sd">        ValueError</span>
-<span class="sd">            If an ellipse has a complex intensity, the phantom has a chemical</span>
-<span class="sd">            shift and ``field_t`` is not given, it has coils of its own and</span>
-<span class="sd">            ``coil`` is given, or ``spins`` do not fill a ``voxel``.</span>
-<span class="sd">        """</span>
-        <span class="k">if</span> <span class="n">coil</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">coils</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                <span class="s2">"a phantom received by coils of its own is not scanned with a coil"</span>
-            <span class="p">)</span>
-        <span class="n">own</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">density</span><span class="p">,</span> <span class="n">t1</span><span class="p">,</span> <span class="n">t2</span><span class="p">,</span> <span class="n">frequency</span><span class="p">,</span> <span class="n">t2_prime</span><span class="p">,</span> <span class="n">diffusion</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sampled</span><span class="p">(</span>
-            <span class="n">spacing</span><span class="p">,</span> <span class="n">field_t</span><span class="p">,</span> <span class="n">off_resonance_hz</span><span class="p">,</span> <span class="n">region</span>
-        <span class="p">)</span>
-        <span class="n">offsets</span><span class="p">,</span> <span class="n">order</span> <span class="o">=</span> <span class="n">_voxels</span><span class="o">.</span><span class="n">stencil</span><span class="p">(</span><span class="n">spins</span><span class="p">,</span> <span class="n">voxel</span><span class="p">,</span> <span class="n">spacing</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">VOXEL_AXES</span><span class="p">)</span>
-        <span class="n">rng</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">default_rng</span><span class="p">(</span><span class="n">seed</span><span class="p">)</span>
-        <span class="n">own</span> <span class="o">=</span> <span class="n">_voxels</span><span class="o">.</span><span class="n">spread</span><span class="p">(</span><span class="n">own</span><span class="p">,</span> <span class="n">spins</span><span class="p">)</span> <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">tile</span><span class="p">(</span><span class="n">offsets</span><span class="p">,</span> <span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">t1</span><span class="p">),</span> <span class="mi">1</span><span class="p">))</span>
-        <span class="k">if</span> <span class="n">voxel</span> <span class="o">==</span> <span class="s2">"jittered"</span><span class="p">:</span>
-            <span class="n">own</span> <span class="o">+=</span> <span class="n">_voxels</span><span class="o">.</span><span class="n">jitter</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">t1</span><span class="p">),</span> <span class="n">spins</span><span class="p">,</span> <span class="n">spacing</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">VOXEL_AXES</span><span class="p">,</span> <span class="n">rng</span><span class="p">)</span>
-        <span class="n">positions</span> <span class="o">=</span> <span class="n">own</span> <span class="o">@</span> <span class="bp">self</span><span class="o">.</span><span class="n">_rotation</span><span class="o">.</span><span class="n">T</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">_position</span>
-        <span class="k">return</span> <span class="n">Isochromats</span><span class="p">(</span>
-            <span class="n">positions</span><span class="p">,</span>
-            <span class="n">proton_density</span><span class="o">=</span><span class="n">_voxels</span><span class="o">.</span><span class="n">spread</span><span class="p">(</span><span class="n">density</span><span class="p">,</span> <span class="n">spins</span><span class="p">)</span> <span class="o">/</span> <span class="n">spins</span><span class="p">,</span>
-            <span class="n">t1</span><span class="o">=</span><span class="n">_voxels</span><span class="o">.</span><span class="n">spread</span><span class="p">(</span><span class="n">t1</span><span class="p">,</span> <span class="n">spins</span><span class="p">),</span>
-            <span class="n">t2</span><span class="o">=</span><span class="n">_voxels</span><span class="o">.</span><span class="n">spread</span><span class="p">(</span><span class="n">t2</span><span class="p">,</span> <span class="n">spins</span><span class="p">),</span>
-            <span class="n">off_resonance</span><span class="o">=</span><span class="n">_voxels</span><span class="o">.</span><span class="n">spread</span><span class="p">(</span><span class="n">frequency</span><span class="p">,</span> <span class="n">spins</span><span class="p">)</span>
-            <span class="o">+</span> <span class="n">_voxels</span><span class="o">.</span><span class="n">frequencies</span><span class="p">(</span><span class="n">t2_prime</span><span class="p">,</span> <span class="n">order</span><span class="p">,</span> <span class="n">rng</span><span class="p">),</span>
-            <span class="n">transmit</span><span class="o">=</span><span class="kc">None</span> <span class="k">if</span> <span class="n">coil</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">coil</span><span class="o">.</span><span class="n">transmit</span><span class="p">(</span><span class="n">positions</span><span class="p">),</span>
-            <span class="n">receive</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_received</span><span class="p">(</span><span class="n">own</span><span class="p">)</span> <span class="k">if</span> <span class="n">coil</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">coil</span><span class="o">.</span><span class="n">receive</span><span class="p">(</span><span class="n">positions</span><span class="p">),</span>
-            <span class="n">diffusion</span><span class="o">=</span><span class="n">_voxels</span><span class="o">.</span><span class="n">spread</span><span class="p">(</span><span class="n">diffusion</span><span class="p">,</span> <span class="n">spins</span><span class="p">),</span>
-            <span class="n">motion</span><span class="o">=</span><span class="n">motion</span><span class="p">,</span>
-            <span class="n">seed</span><span class="o">=</span><span class="n">rng</span><span class="p">,</span>
-            <span class="n">threads</span><span class="o">=</span><span class="n">threads</span><span class="p">,</span>
-            <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
-        <span class="p">)</span></div>
-
-
 <div class="viewcode-block" id="Phantom.tissue">
 <a class="viewcode-back" href="../../../generated/pulserver.virtual.Phantom.tissue.html#pulserver.virtual.Phantom.tissue">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">tissue</span><span class="p">(</span>
@@ -706,9 +594,11 @@
         <span class="n">region</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">],</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">coil</span><span class="p">:</span> <span class="n">Coil</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tissue</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""Return the phantom sampled for the Fourier engine, at the points :meth:`isochromats` samples it at.</span>
+<span class="w">        </span><span class="sd">"""Return the phantom sampled for the Fourier engine.</span>
 
 <span class="sd">        Each point spans a square ``spacing`` wide in the ellipse's plane.</span>
+<span class="sd">        ``region`` keeps the points it answers True for, from their ``(n, 3)``</span>
+<span class="sd">        physical positions, in m, and their frequencies, in Hz.</span>
 
 <span class="sd">        Raises</span>
 <span class="sd">        ------</span>
@@ -745,28 +635,6 @@
             <span class="n">receive</span><span class="o">=</span><span class="n">receive</span><span class="p">,</span>
             <span class="n">coils</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">coils</span> <span class="k">if</span> <span class="n">coil</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">coil</span><span class="o">.</span><span class="n">receive_channels</span><span class="p">,</span>
         <span class="p">)</span></div>
-
-
-<div class="viewcode-block" id="Phantom.count">
-<a class="viewcode-back" href="../../../generated/pulserver.virtual.Phantom.count.html#pulserver.virtual.Phantom.count">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">count</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span>
-        <span class="n">spacing</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
-        <span class="o">*</span><span class="p">,</span>
-        <span class="n">field_t</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">off_resonance_hz</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">,</span>
-        <span class="n">region</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">],</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">spins</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""Return how many isochromats :meth:`isochromats` samples the phantom as, with the same arguments.</span>
-
-<span class="sd">        Raises</span>
-<span class="sd">        ------</span>
-<span class="sd">        ValueError</span>
-<span class="sd">            If an ellipse has a complex intensity, or the phantom has a</span>
-<span class="sd">            chemical shift and ``field_t`` is not given.</span>
-<span class="sd">        """</span>
-        <span class="k">return</span> <span class="n">spins</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_sampled</span><span class="p">(</span><span class="n">spacing</span><span class="p">,</span> <span class="n">field_t</span><span class="p">,</span> <span class="n">off_resonance_hz</span><span class="p">,</span> <span class="n">region</span><span class="p">)[</span><span class="mi">0</span><span class="p">])</span></div>
 
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_sampled</span><span class="p">(</span>
@@ -879,7 +747,7 @@
 <span class="w">    </span><span class="sd">"""Return the points of the grid of ``spacing`` inside ``ellipse``, ``(n, 3)`` along the phantom's axes."""</span>
     <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">imag</span><span class="p">(</span><span class="n">ellipse</span><span class="o">.</span><span class="n">intensity</span><span class="p">)</span> <span class="o">!=</span> <span class="mf">0.0</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-            <span class="s2">"isochromats carry a real proton density, not a complex intensity"</span>
+            <span class="s2">"a sampled phantom carries a real proton density, not a complex intensity"</span>
         <span class="p">)</span>
     <span class="n">reach</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">ellipse</span><span class="o">.</span><span class="n">semi_axes</span><span class="p">)</span> <span class="o">+</span> <span class="n">spacing</span>
     <span class="n">lo</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">floor</span><span class="p">((</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">ellipse</span><span class="o">.</span><span class="n">centre</span><span class="p">[:</span><span class="mi">2</span><span class="p">])</span> <span class="o">-</span> <span class="n">reach</span><span class="p">)</span> <span class="o">/</span> <span class="n">spacing</span><span class="p">)</span>

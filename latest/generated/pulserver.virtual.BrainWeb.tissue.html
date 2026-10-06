@@ -258,7 +258,6 @@
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/protocol-wire.html">Protocol text blocks</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/reconstruction-proxy.html">Reconstruction proxy</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/virtual-scanner.html">Virtual scanner</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/bloch-engine.html">Bloch engine</a></li>
 </ul>
 </details></li>
 <li class="toctree-l2"><a class="reference internal" href="../developer-guide/pre-commit.html">Pre-commit</a></li>
@@ -545,7 +544,7 @@
 <dl class="py method">
 <dt class="sig sig-object py" id="pulserver.virtual.BrainWeb.tissue">
 <span class="sig-prename descclassname"><span class="pre">BrainWeb.</span></span><span class="sig-name descname"><span class="pre">tissue</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pulserver/virtual/_brainweb.html#BrainWeb.tissue"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.virtual.BrainWeb.tissue" title="Link to this definition">#</a></dt>
-<dd><p>Return the brain sampled for the Fourier engine: each tissue of each cube <a class="reference internal" href="pulserver.virtual.BrainWeb.isochromats.html#pulserver.virtual.BrainWeb.isochromats" title="pulserver.virtual.BrainWeb.isochromats"><code class="xref py py-meth docutils literal notranslate"><span class="pre">isochromats()</span></code></a> averages, at the cube’s centre.</p>
+<dd><p>Return the brain sampled for the Fourier engine: each tissue of each cube <code class="docutils literal notranslate"><span class="pre">spacing</span></code> wide, at the cube’s centre.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Raises<span class="colon">:</span></dt>
 <dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If <code class="docutils literal notranslate"><span class="pre">spacing</span></code> is not a whole number of millimetres, <code class="docutils literal notranslate"><span class="pre">field_t</span></code>

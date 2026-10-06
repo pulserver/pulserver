@@ -201,7 +201,7 @@ IR cache and stores both as a design. The reply is the design's identifier.
 
  .. code-block:: none
 
-    GENERATED c22d3dc6b363f932ff
+    GENERATED bf6ad6ca7a403839d6
 
     ['manifest.json', 'resolved.protocol', 'sequence.pseg', 'sequence.seq']
 
@@ -215,9 +215,9 @@ The scan
 
 An exam names its subject and coil: here the vials phantom, seven water vials
 and one fat vial, in the body coil, which transmits and receives on one
-channel. The scan plays the stored design on the phantom with a Bloch
-simulation, sends the raw data to the reconstruction, here ``pics``,
-and receives the images as DICOM.
+channel. The scan plays the stored design on the phantom's tissue with the
+virtual scanner's Fourier engine, sends the raw data to the reconstruction,
+here ``pics``, and receives the images as DICOM.
 
 .. GENERATED FROM PYTHON SOURCE LINES 113-144
 
@@ -287,7 +287,7 @@ at a time.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.488 seconds)
+   **Total running time of the script:** (0 minutes 0.489 seconds)
 
 
 .. _sphx_glr_download_generated_gallery_01-course_01_protocol_to_image.py:

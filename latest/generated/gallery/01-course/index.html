@@ -254,7 +254,6 @@
 <li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/protocol-wire.html">Protocol text blocks</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/reconstruction-proxy.html">Reconstruction proxy</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/virtual-scanner.html">Virtual scanner</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/bloch-engine.html">Bloch engine</a></li>
 </ul>
 </details></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/pre-commit.html">Pre-commit</a></li>
@@ -541,7 +540,7 @@
 </div><div class="sphx-glr-thumbcontainer" tooltip="The raw data a scanner&#x27;s reconstruction client streams carry the samples of each readout and little else: the encoding counters and flags it records describe the interpreter&#x27;s loop, not the sequence. The reconstruction proxy replaces them with what the sequence states, then hands the readouts to a reconstruction plugin grouped into reconstruction units. This lesson acquires a series of the design from the first lesson, enriches it, and reconstructs it with a plugin of its own. The enrichment is described in /explanations/reconstruction."><img alt="" src="../../../_images/sphx_glr_04_reconstruction_plugin_thumb.png" />
 <p><a class="reference internal" href="04_reconstruction_plugin.html"><span class="doc">4. A reconstruction plugin</span></a></p>
   <div class="sphx-glr-thumbnail-title">4. A reconstruction plugin</div>
-</div><div class="sphx-glr-thumbcontainer" tooltip="This lesson is optional: it extends the course rather than completing it. The virtual scanner stands in for the scanner and nothing else, so a sequence and a reconstruction plugin can be tested before a scanner is involved. It acquires in two ways: along the played trajectory from an analytic phantom, which leaves relaxation out, or by a Bloch simulation of every block the cache plays. The conversion itself is checked by comparing the gradients a sequence asks for with those its cache plays. The models are described in /explanations/virtual-scanner."><img alt="" src="../../../_images/sphx_glr_05_testing_on_the_virtual_scanner_thumb.png" />
+</div><div class="sphx-glr-thumbcontainer" tooltip="This lesson is optional: it extends the course rather than completing it. The virtual scanner stands in for the scanner and nothing else, so a sequence and a reconstruction plugin can be tested before a scanner is involved. Its Fourier engine acquires a phantom&#x27;s tissue under every RF pulse, gradient and receiver phase the cache plays, with relaxation, so a scan shows the contrast and the artefacts of the sequence as well as its encoding. The conversion itself is checked by comparing the gradients a sequence asks for with those its cache plays. The model is described in /explanations/virtual-scanner."><img alt="" src="../../../_images/sphx_glr_05_testing_on_the_virtual_scanner_thumb.png" />
 <p><a class="reference internal" href="05_testing_on_the_virtual_scanner.html"><span class="doc">5. Testing on the virtual scanner</span></a></p>
   <div class="sphx-glr-thumbnail-title">5. Testing on the virtual scanner</div>
 </div></div><div class="toctree-wrapper compound">

@@ -10,7 +10,7 @@ Repository development, contribution and release procedures.
 | {doc}`style` | Ruff, formatting, tests, the KomaMRI simulation, C89 and code conventions. |
 | {doc}`documentation` | Documentation types and scientific writing. |
 | {doc}`terminology` | Scanner, protocol, Pulseq and MRD terminology, units and layers. |
-| {doc}`internals/index` | The implementation behind the explanations: the IR cache, the protocol text blocks, the reconstruction proxy, the virtual scanner and the Bloch engine. |
+| {doc}`internals/index` | The implementation behind the explanations: the IR cache, the protocol text blocks, the reconstruction proxy and the virtual scanner. |
 | {doc}`pre-commit` | Local hooks, deliberate bypasses and CI. |
 | {doc}`pull-requests` | Pull-request contents and validation. |
 | {doc}`releases` | Versioning, wheels, PyPI and the published documentation. |

@@ -258,7 +258,6 @@
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/protocol-wire.html">Protocol text blocks</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/reconstruction-proxy.html">Reconstruction proxy</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/virtual-scanner.html">Virtual scanner</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/bloch-engine.html">Bloch engine</a></li>
 </ul>
 </details></li>
 <li class="toctree-l2"><a class="reference internal" href="../developer-guide/pre-commit.html">Pre-commit</a></li>
@@ -568,12 +567,7 @@ is the virtual magnet’s field.</p></li>
 order, which reconstruct each scan in this process
 (<a class="reference internal" href="pulserver.proxy.LocalReconstruction.html#pulserver.proxy.LocalReconstruction" title="pulserver.proxy.LocalReconstruction"><code class="xref py py-class docutils literal notranslate"><span class="pre">LocalReconstruction</span></code></a>).</p></li>
 <li><p><strong>push</strong> – Recon-side intake each design is pushed to.</p></li>
-<li><p><strong>spacing</strong> – Finest isochromat spacing of the phantom, in metres.</p></li>
-<li><p><strong>max_isochromats</strong> – Most isochromats a scan is simulated on. A scan is simulated on the
-isochromats in the slabs its excitation pulses excite
-(<a class="reference internal" href="pulserver.virtual.excited.html#pulserver.virtual.excited" title="pulserver.virtual.excited"><code class="xref py py-func docutils literal notranslate"><span class="pre">excited()</span></code></a>), at the finest spacing, from
-<code class="docutils literal notranslate"><span class="pre">spacing</span></code> up in steps of 1 mm, that keeps no more of them than this;
-at <code class="docutils literal notranslate"><span class="pre">spacing</span></code> without it.</p></li>
+<li><p><strong>spacing</strong> – Spacing at which the exam’s phantom is sampled as tissue, in metres.</p></li>
 <li><p><strong>coil</strong> – Name of the coil an exam is started with unless it names another.</p></li>
 <li><p><strong>fields</strong> – Directory of the coils’ field maps, <code class="docutils literal notranslate"><span class="pre">&lt;coil&gt;.npz</span></code>, and of the VOPs of
 those that transmit, <code class="docutils literal notranslate"><span class="pre">&lt;coil&gt;_vops.npz</span></code>, as mariepy writes them for
@@ -582,30 +576,9 @@ made under the VOPs of the exam’s transmit coil. Without it, the coils
 are <a class="reference internal" href="pulserver.virtual.COILS.html#pulserver.virtual.COILS" title="pulserver.virtual.COILS"><code class="xref py py-data docutils literal notranslate"><span class="pre">COILS</span></code></a>.</p></li>
 <li><p><strong>speed</strong> – Scan time elapsed per wall-clock second once the scan’s simulation is
 far enough ahead of its clock; as fast as it is simulated without it.</p></li>
-<li><p><strong>device</strong> – Device a scan’s ADC windows are read and its runs of repetitions
-carried on, as <a class="reference internal" href="pulserver.virtual.Isochromats.html#pulserver.virtual.Isochromats" title="pulserver.virtual.Isochromats"><code class="xref py py-class docutils literal notranslate"><span class="pre">Isochromats</span></code></a> takes it; the
-engine does both itself without one.</p></li>
-<li><p><strong>spins</strong> – Isochromats per voxel, spread over the T2’ line of its tissue; two
-along each axis the exam’s phantom’s voxel spans
-(<code class="docutils literal notranslate"><span class="pre">VOXEL_AXES</span></code>) without it, one for a <code class="docutils literal notranslate"><span class="pre">&quot;point&quot;</span></code> voxel.</p></li>
-<li><p><strong>voxel</strong> – Where a voxel’s isochromats lie: <code class="docutils literal notranslate"><span class="pre">&quot;point&quot;</span></code>, at its centre,
-<code class="docutils literal notranslate"><span class="pre">&quot;box&quot;</span></code>, at the centres of cells filling it, or <code class="docutils literal notranslate"><span class="pre">&quot;jittered&quot;</span></code>,
-anywhere in each cell, as the phantom’s <code class="docutils literal notranslate"><span class="pre">isochromats</span></code> places them.</p></li>
-<li><p><strong>diffusion</strong> – Whether BrainWeb’s tissue classes diffuse, as
-<a class="reference internal" href="pulserver.virtual.BrainWeb.DIFFUSION.html#pulserver.virtual.BrainWeb.DIFFUSION" title="pulserver.virtual.BrainWeb.DIFFUSION"><code class="xref py py-attr docutils literal notranslate"><span class="pre">DIFFUSION</span></code></a> gives them.</p></li>
-<li><p><strong>motion</strong> – The subject’s motion, as <a class="reference internal" href="pulserver.virtual.Isochromats.html#pulserver.virtual.Isochromats" title="pulserver.virtual.Isochromats"><code class="xref py py-class docutils literal notranslate"><span class="pre">Isochromats</span></code></a>
-takes it, on the clock of each scan; at rest without one. Moving
-isochromats play every block alone.</p></li>
-<li><p><strong>engine</strong> – What a scan is simulated by, one of <code class="xref py py-data docutils literal notranslate"><span class="pre">ENGINES</span></code>: the Fourier
-engine (<a class="reference internal" href="pulserver.virtual.FourierPlayer.html#pulserver.virtual.FourierPlayer" title="pulserver.virtual.FourierPlayer"><code class="xref py py-class docutils literal notranslate"><span class="pre">FourierPlayer</span></code></a>) on the phantom’s
-tissue at <code class="docutils literal notranslate"><span class="pre">spacing</span></code>, or the Bloch engine on its isochromats. Without
-it, the Fourier engine unless the subject moves or diffuses, which only
-the Bloch engine models.</p></li>
+<li><p><strong>device</strong> – Device a scan is simulated on, as
+<a class="reference internal" href="pulserver.virtual.FourierPlayer.html#pulserver.virtual.FourierPlayer" title="pulserver.virtual.FourierPlayer"><code class="xref py py-class docutils literal notranslate"><span class="pre">FourierPlayer</span></code></a> takes it.</p></li>
 </ul>
-</dd>
-<dt class="field-even">Raises<span class="colon">:</span></dt>
-<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If <code class="docutils literal notranslate"><span class="pre">engine</span></code> is none of <code class="xref py py-data docutils literal notranslate"><span class="pre">ENGINES</span></code>, or is the Fourier engine
-    for a subject that moves or diffuses.</p>
 </dd>
 </dl>
 </dd></dl>

@@ -255,7 +255,6 @@
 <li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/protocol-wire.html">Protocol text blocks</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/reconstruction-proxy.html">Reconstruction proxy</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/virtual-scanner.html">Virtual scanner</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/bloch-engine.html">Bloch engine</a></li>
 </ul>
 </details></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/pre-commit.html">Pre-commit</a></li>
@@ -951,15 +950,25 @@
 <span class="sd">    ValueError</span>
 <span class="sd">        If ``fov_offset`` is not three values.</span>
 <span class="sd">    """</span>
+    <span class="n">transform</span> <span class="o">=</span> <span class="n">_translation</span><span class="p">(</span><span class="n">fov_offset</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">transform</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">transform</span><span class="o">.</span><span class="n">apply_to_sequence</span><span class="p">(</span><span class="n">sequence</span><span class="p">,</span> <span class="n">in_place</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">sequence</span></div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_translation</span><span class="p">(</span><span class="n">fov_offset</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">float</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">pp</span><span class="o">.</span><span class="n">TransformFOV</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return the translation :func:`prescribe` applies; None for none.</span>
+
+<span class="sd">    Applied to the files of a chain in play order, it counts the gradient area</span>
+<span class="sd">    on from the end of the file before.</span>
+<span class="sd">    """</span>
     <span class="n">shift</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="nb">float</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">fov_offset</span><span class="p">)</span>
     <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">shift</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">3</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"fov_offset takes three values, got </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">shift</span><span class="p">)</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
-    <span class="k">if</span> <span class="nb">any</span><span class="p">(</span><span class="n">shift</span><span class="p">):</span>
-        <span class="n">pp</span><span class="o">.</span><span class="n">TransformFOV</span><span class="p">(</span><span class="n">translation</span><span class="o">=</span><span class="n">shift</span><span class="p">,</span> <span class="n">through_rotation</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">apply_to_sequence</span><span class="p">(</span>
-            <span class="n">sequence</span><span class="p">,</span> <span class="n">in_place</span><span class="o">=</span><span class="kc">True</span>
-        <span class="p">)</span>
-    <span class="k">return</span> <span class="n">sequence</span></div>
-
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">any</span><span class="p">(</span><span class="n">shift</span><span class="p">):</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="k">return</span> <span class="n">pp</span><span class="o">.</span><span class="n">TransformFOV</span><span class="p">(</span><span class="n">translation</span><span class="o">=</span><span class="n">shift</span><span class="p">,</span> <span class="n">through_rotation</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 
 
 <div class="viewcode-block" id="play">
@@ -1082,16 +1091,21 @@
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]:</span>
 <span class="w">    </span><span class="sd">"""Read the chain and return each file's libraries, in play order, prescribed to ``fov_offset``.</span>
 
+<span class="sd">    The gradient area the offset's phases follow is counted from the start of</span>
+<span class="sd">    the chain, so magnetization coherent across a file boundary keeps its</span>
+<span class="sd">    phase.</span>
+
 <span class="sd">    A file the reader refuses raises ``ValueError``, whatever the reader</span>
 <span class="sd">    itself raised.</span>
 <span class="sd">    """</span>
     <span class="n">chain_read</span> <span class="o">=</span> <span class="p">(</span>
         <span class="n">designed</span> <span class="k">if</span> <span class="n">designed</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">_read_chain</span><span class="p">(</span><span class="n">seq_path</span><span class="p">,</span> <span class="n">verify_signature</span><span class="p">)</span>
     <span class="p">)</span>
+    <span class="n">transform</span> <span class="o">=</span> <span class="kc">None</span> <span class="k">if</span> <span class="n">fov_offset</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">_translation</span><span class="p">(</span><span class="n">fov_offset</span><span class="p">)</span>
     <span class="n">payload</span> <span class="o">=</span> <span class="p">[]</span>
     <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">sequence</span> <span class="ow">in</span> <span class="n">chain_read</span><span class="p">:</span>
-        <span class="k">if</span> <span class="n">fov_offset</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">prescribe</span><span class="p">(</span><span class="n">sequence</span><span class="p">,</span> <span class="n">fov_offset</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">transform</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">transform</span><span class="o">.</span><span class="n">apply_to_sequence</span><span class="p">(</span><span class="n">sequence</span><span class="p">,</span> <span class="n">in_place</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
         <span class="n">payload</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">conversion_payload</span><span class="p">(</span><span class="n">sequence</span><span class="p">,</span> <span class="n">system</span><span class="p">))</span>
     <span class="k">return</span> <span class="n">payload</span>
 
