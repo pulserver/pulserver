@@ -133,6 +133,8 @@ interpreter fills from the scanner's; they are left out of the print.
     phase_fov: float|typein|220.0|50.0|500.0|1.0|mm
     nx: int|typein|128|32|512|2|
     ny: int|typein|128|32|512|2|
+    nslices: int|typein|1|1|64|1|
+    slice_thickness: float|typein|5.0|1.0|20.0|1.0|mm
     Ry: int|typein|1|1|4|1|
 
 
@@ -199,7 +201,7 @@ IR cache and stores both as a design. The reply is the design's identifier.
 
  .. code-block:: none
 
-    GENERATED e576c2e3fa554fef54
+    GENERATED a621d9f5cc1ea2b179
 
     ['manifest.json', 'resolved.protocol', 'sequence.pseg', 'sequence.seq']
 
@@ -285,7 +287,7 @@ at a time.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 2.056 seconds)
+   **Total running time of the script:** (0 minutes 2.253 seconds)
 
 
 .. _sphx_glr_download_generated_gallery_01-course_01_protocol_to_image.py:
