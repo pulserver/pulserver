@@ -85,10 +85,10 @@ REQUESTS = [pytest.param(name, {}, id=f"{name}-default") for name in SHIPPED] + 
     pytest.param(name, CHANGED[name], id=f"{name}-changed") for name in SHIPPED
 ]
 
-#: The toggled sequences whose refocusing trains torchsim designs.
+#: The toggled sequences whose refocusing trains blochsim designs.
 OPTIMIZED = ("fse3d+OPTIMIZED", "fse3d+DUAL_REGION")
-WITH_TORCHSIM = pytest.mark.skipif(
-    importlib.util.find_spec("torchsim") is None, reason="needs torchsim"
+WITH_BLOCHSIM = pytest.mark.skipif(
+    importlib.util.find_spec("blochsim") is None, reason="needs blochsim"
 )
 
 # The defaults, and prescriptions that change what the repetitions of a scan
@@ -100,7 +100,7 @@ SCANS = [pytest.param(name, {}, id=name) for name in SHIPPED] + [
         name,
         changes,
         id=f"{name}-{label}",
-        marks=WITH_TORCHSIM if name in OPTIMIZED else (),
+        marks=WITH_BLOCHSIM if name in OPTIMIZED else (),
     )
     for name, label, changes in (
         ("bssfp2d", "slices", {"nslices": 3, "TR": 6000, "ny": 64}),
@@ -372,7 +372,7 @@ def zoo(tmp_path_factory):
     """The shipped scanner sequences by name, and those of ``TOGGLED`` as a copy of the file with the constant set."""
     plugins = {name: load_plugin(_plugins.SEQUENCES / f"{name}.py") for name in SHIPPED}
     for key, (name, constant) in TOGGLED.items():
-        if key in OPTIMIZED and importlib.util.find_spec("torchsim") is None:
+        if key in OPTIMIZED and importlib.util.find_spec("blochsim") is None:
             continue
         source = (_plugins.SEQUENCES / f"{name}.py").read_text()
         assert f"\n{constant} = False\n" in source

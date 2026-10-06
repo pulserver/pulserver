@@ -14,6 +14,7 @@ from ._phantom import Ellipse, Phantom
 from ._region import Slabs, excited
 from ._scanner import acquire, trajectory
 from ._stream import SAMPLE_RATE, Chunk, Scan
+from ._tissue import Tissue
 
 #: The virtual scanner's coils, by name, ``transmit/receive``: the body coil
 #: both ways, the body coil transmitting to a 48-channel receive head array,
@@ -29,12 +30,14 @@ __all__ = [
     "Coil",
     "Console",
     "Ellipse",
+    "FourierPlayer",
     "Isochromats",
     "Phantom",
     "Repetitions",
     "RigidMotion",
     "Scan",
     "Slabs",
+    "Tissue",
     "acquire",
     "excited",
     "export",
@@ -44,3 +47,12 @@ __all__ = [
     "simulate",
     "trajectory",
 ]
+
+
+def __getattr__(name: str):
+    """Import the Fourier engine, and torch with it, the first time it is named."""
+    if name == "FourierPlayer":
+        from ._fourier import FourierPlayer
+
+        return FourierPlayer
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

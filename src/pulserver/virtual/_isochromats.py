@@ -19,10 +19,15 @@ MEMORY = 4 << 30
 
 
 @functools.cache
+def reads_lattice() -> bool:
+    """Return whether a window under a changing gradient is read on the lattice through FINUFFT, rather than sample by sample."""
+    return _finufft.install(require("bloch"))
+
+
+@functools.cache
 def _kernels():
-    kernels = require("bloch")
-    _finufft.install(kernels)
-    return kernels
+    reads_lattice()
+    return require("bloch")
 
 
 def _per_isochromat(value, count: int, name: str) -> np.ndarray:

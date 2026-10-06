@@ -5,6 +5,7 @@ import math
 import numpy as np
 import pypulseqpp as pp
 import pytest
+from _virtual import on_the_lattice
 from _zoo import designed
 from pypulseqpp import sequences
 
@@ -124,6 +125,7 @@ def _spiral_lattice(seed=3):
     return rest, properties, window
 
 
+@on_the_lattice
 def test_a_subject_moved_between_windows_is_read_on_the_lattice_it_was_moved_onto():
     rest, properties, window = _spiral_lattice()
     shift = np.array([1.5e-3, -2.25e-3, 0.0])
@@ -184,6 +186,7 @@ def test_isochromats_diffusing_through_a_diffusion_encoding_lose_signal_as_exp_m
     assert abs(signal - expected) < 4.0 / math.sqrt(2.0 * count)
 
 
+@on_the_lattice
 def test_isochromats_that_diffuse_keep_their_positions_and_their_lattice():
     rest, properties, window = _spiral_lattice()
     spins = virtual.Isochromats(rest, diffusion=2e-9, seed=0, **properties)

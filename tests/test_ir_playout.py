@@ -110,6 +110,34 @@ def test_every_block_plays_the_waveforms_the_cursor_plays(played):
             np.testing.assert_array_equal(blocks[key], cursor[key], err_msg=key)
 
 
+def test_a_position_holds_at_unit_amplitude_the_pulse_its_blocks_play(played):
+    seq, _ = played
+    record = ir.playout(seq, waveforms=True)
+    blocks, positions = record["blocks"], record["positions"]
+    shapes = ir.playout(seq, waveforms=True, pulses=False)["blocks"]
+    width = int(blocks["position"].max()) + 1
+    at = np.searchsorted(
+        positions["segment"] * width + positions["position"],
+        blocks["segment"] * width + blocks["position"],
+    )
+    for block in np.flatnonzero(blocks["rf_span"][:, 1] > blocks["rf_span"][:, 0]):
+        start, stop = blocks["rf_span"][block]
+        first, last = positions["rf_span"][at[block]]
+        np.testing.assert_array_equal(
+            blocks["rf_time_us"][start:stop], positions["rf_time_us"][first:last]
+        )
+        np.testing.assert_allclose(
+            blocks["rf_waveform_hz"][start:stop],
+            blocks["rf_amp_hz"][block] * positions["rf_waveform_hz"][first:last],
+            rtol=1e-6,
+            atol=1e-6 * abs(blocks["rf_amp_hz"][block]),
+        )
+    assert "rf_waveform_hz" not in shapes
+    np.testing.assert_array_equal(
+        shapes["gradient_waveform_hz_per_m"], blocks["gradient_waveform_hz_per_m"]
+    )
+
+
 @pytest.mark.parametrize("name", WAVED)
 def test_without_a_budget_every_wave_is_held_on_the_files_gradient_raster(
     name, tmp_path

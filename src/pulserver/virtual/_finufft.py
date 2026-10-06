@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import ctypes
-import importlib.util
 import sys
 import warnings
 
@@ -14,9 +13,18 @@ def install(kernels) -> bool:
     The layout is read from the package the library comes from, so that a
     release that moves a field is read where it is. Without them the engine
     reads every window under a changing gradient sample by sample, and a
-    warning says so.
+    warning says so. They are not taken on macOS, where the finufft wheel
+    carries its own copy of LLVM's OpenMP runtime and torch another, and a
+    process that initialises a second copy ends.
     """
-    _one_openmp_runtime()
+    if sys.platform == "darwin":
+        warnings.warn(
+            "FINUFFT is not loaded beside torch on macOS (two OpenMP runtimes): "
+            "windows under a changing gradient are read sample by sample",
+            RuntimeWarning,
+            stacklevel=2,
+        )
+        return False
     try:
         from finufft import _finufft
 
@@ -44,16 +52,3 @@ def install(kernels) -> bool:
         )
         return False
     return kernels.use_finufft(entries, layout)
-
-
-def _one_openmp_runtime() -> None:
-    """On macOS, point FINUFFT's library at torch's OpenMP runtime before it loads, where bartorch is installed to do it.
-
-    torch and the finufft wheel each carry LLVM's OpenMP runtime, which ends a
-    process that loads a second copy of it.
-    """
-    if sys.platform != "darwin" or importlib.util.find_spec("bartorch") is None:
-        return
-    from bartorch import _macos_openmp
-
-    _macos_openmp.ensure()

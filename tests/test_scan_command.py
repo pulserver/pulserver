@@ -69,6 +69,8 @@ def test_a_headless_scan_records_the_series_the_virtual_scanner_acquires(
             str(sound),
             "--voxel",
             "point",
+            "--engine",
+            "bloch",
         ]
     )
     assert status == 0
@@ -362,6 +364,8 @@ def test_a_headless_scan_spreads_two_jittered_isochromats_along_each_axis_by_def
             "4",
             "--coils",
             "1",
+            "--engine",
+            "bloch",
         ]
     )
 

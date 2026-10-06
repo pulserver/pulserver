@@ -1,8 +1,9 @@
 # Virtual scanner
 
 The stand-ins for the scanner: the cache played, an analytic phantom acquired
-along the trajectory it plays or the blocks it plays simulated on isochromats,
-and the raw data sent as the scanner's reconstruction client sends them; and
+along the trajectory it plays, its tissue acquired by the Fourier engine or the
+blocks it plays simulated on isochromats, and the raw data sent as the
+scanner's reconstruction client sends them; and
 the blocks the cache plays, written as a Pulseq file for a simulator that reads
 one.
 
@@ -28,6 +29,17 @@ scanner's centre frequency.
 | {obj}`~pulserver.virtual.excited` | The slabs the excitation pulses of the cache beside a sequence file excite, found by playing each on a line of isochromats along its gradient; none where one excites the whole phantom. |
 | {obj}`~pulserver.virtual.Slabs` | Slabs of the physical frame, each the isochromats that see a field within its bounds during a pulse, so that an isochromat's own frequency moves its slab; the region a phantom is sampled in. |
 
+## Fourier engine
+
+Classes of tissue simulated by TorchSim's extended phase graphs over the event
+stream each excitation's slab plays, their signals spanned by a temporal basis,
+and the images of the terms encoded along the trajectory by bartorch's NUFFT.
+
+| Object | Description |
+| --- | --- |
+| {obj}`~pulserver.virtual.FourierPlayer` | The blocks the cache beside a sequence file plays, acquired of a phantom's tissue: the configuration states shifted where the gradients' moment dephases a voxel, each readout reading the pathway that passes the centre of k-space during it. |
+| {obj}`~pulserver.virtual.Tissue` | A phantom sampled for the Fourier engine: each cube's position, proton density, relaxation times and frequency, the transmit field it sees and the coils' receive sensitivities. |
+
 ## Bloch simulation
 
 The Bloch equation with relaxation, integrated on isochromats in the frame
@@ -44,7 +56,7 @@ states it. Times are in seconds, gradients in Hz/m and RF fields in Hz.
 
 | Object | Description |
 | --- | --- |
-| {obj}`~pulserver.virtual.Scan` | The cache beside a sequence file played on isochromats as {func}`~pulserver.virtual.simulate` plays it, against a scan clock, in spans carrying their readouts and the sound of their gradients. |
+| {obj}`~pulserver.virtual.Scan` | The cache beside a sequence file acquired of a phantom's tissue by the Fourier engine, or played on isochromats as {func}`~pulserver.virtual.simulate` plays it, against a scan clock, in spans carrying their readouts and the sound of their gradients. |
 | {obj}`~pulserver.virtual.Chunk` | A span of a scan between two block boundaries: its bounds in scan time, its readouts and its sound. |
 | {obj}`~pulserver.virtual.SAMPLE_RATE` | MATLAB Pulseq's audio sample rate, which a scan's sound takes unless given another. |
 
@@ -58,8 +70,8 @@ states it. Times are in seconds, gradients in Hz/m and RF fields in Hz.
 
 | Object | Description |
 | --- | --- |
-| {obj}`~pulserver.virtual.Phantom` | Ellipses whose signals add, received by one coil or several of analytic sensitivity, placed in the physical frame by a rotation and a position; sampled as isochromats for the Bloch simulation. |
-| {obj}`~pulserver.virtual.BrainWeb` | BrainWeb's normal brain, downloaded on first use, placed head first and supine with its tissues' T1, T2 and proton density, in the field its susceptibility adds to B0; sampled as isochromats for the Bloch simulation. |
+| {obj}`~pulserver.virtual.Phantom` | Ellipses whose signals add, received by one coil or several of analytic sensitivity, placed in the physical frame by a rotation and a position; sampled as tissue for the Fourier engine or as isochromats for the Bloch simulation. |
+| {obj}`~pulserver.virtual.BrainWeb` | BrainWeb's normal brain, downloaded on first use, placed head first and supine with its tissues' T1, T2 and proton density, in the field its susceptibility adds to B0; sampled as tissue for the Fourier engine or as isochromats for the Bloch simulation. |
 | {obj}`~pulserver.virtual.Ellipse` | An ellipse of uniform magnetization in a plane of constant z, of one chemical shift and one pair of relaxation times. |
 | {obj}`~pulserver.virtual.localizer` | The axial, coronal and sagittal images of a phantom's proton density through a point, as DICOM, drawn from its ground truth with no sequence played. |
 

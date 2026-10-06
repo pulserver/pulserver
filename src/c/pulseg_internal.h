@@ -803,6 +803,30 @@ float pulseg__grad_boundary_last(const pulseg_sequence_descriptor *desc, int raw
 float pulseg__grad_shape_first(const pulseg_sequence_descriptor *desc, int shape_id);
 float pulseg__grad_shape_last(const pulseg_sequence_descriptor *desc, int shape_id);
 
+/* pulseg_sample_wave() of every axis of a wave whose @p out is not NULL, from
+ * one materialisation of the wave. */
+int pulseg__sample_wave_axes(
+    const pulseg_collection *coll,
+    int subseq_idx,
+    int wave_idx,
+    float start_us,
+    float raster_us,
+    long num_samples,
+    float *const out[3]);
+
+/* pulseg_materialize_wave() of every axis of a wave whose @p out_amp is not
+ * NULL, from one materialisation: the axes share their points' times.
+ * PULSEG_ERR_INDEX, with the points in @p out_num_points, where they are more
+ * than @p max_points. */
+int pulseg__wave_materialize_axes(
+    const pulseg_collection *coll,
+    int subseq_idx,
+    int wave_idx,
+    float *out_time_us,
+    float *const out_amp[3],
+    int max_points,
+    int *out_num_points);
+
 /* pulseg_materialize_wave() on one descriptor's wave; see there. */
 int pulseg__wave_materialize(
     const pulseg_sequence_descriptor *desc,

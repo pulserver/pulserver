@@ -6,6 +6,7 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
+from _virtual import on_the_lattice
 
 from pulserver import virtual
 from pulserver.virtual import Isochromats, RigidMotion
@@ -160,6 +161,7 @@ def _sum_directly(window) -> bool:
     return True
 
 
+@on_the_lattice
 @pytest.mark.parametrize(
     ("trajectory", "tolerance", "coils"),
     [("ramps", 1e-4, 3), ("spiral", 0.0, 3), ("spiral", 1e-4, None), ("cone", 1e-4, 3)],
@@ -180,6 +182,7 @@ def test_a_device_reading_the_window_the_engine_describes_reads_the_window(
     )
 
 
+@on_the_lattice
 def test_a_window_a_device_declines_is_read_by_the_engine():
     """Declining leaves the window to the engine, which reads it as it would without a device."""
     positions, properties, start = _window("spiral", 3)

@@ -21,7 +21,7 @@ from pulserver.protocol import TEPreset, TRPreset, UIParam
 #: reconstruction states to the scan.
 NAVIGATOR = False
 
-#: Refocusing trains designed with torchsim's extended phase graphs around
+#: Refocusing trains designed with blochsim's extended phase graphs around
 #: the refocusing angle at the TE echo, one train shared by every shot.
 OPTIMIZED = False
 
@@ -40,7 +40,7 @@ WAVE_AMPLITUDE = 6e-3
 WAVE_CYCLES = 8
 
 if OPTIMIZED or DUAL_REGION:
-    import torchsim  # noqa: F401  the trains are designed with it
+    import blochsim  # noqa: F401  the trains are designed with it
 
 
 class Fse3D(SequencePlugin):

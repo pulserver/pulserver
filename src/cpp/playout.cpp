@@ -17,6 +17,7 @@
 #include <map>
 #include <stdexcept>
 #include <string>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -34,11 +35,6 @@ struct Span
     long begin;
     long end;
 };
-
-bool overlap(const Span &a, const Span &b)
-{
-    return a.axis == b.axis && a.begin < b.end && b.begin < a.end;
-}
 
 /* What the first stage prepares at one segment position: where it plays no
  * wave, its gradient events at unit amplitude, as corners from the block's
@@ -122,15 +118,15 @@ class Columns
 {
   public:
     template <typename T>
-    void put(const std::string &name, T value)
+    void put(const char *name, T value)
     {
-        column<T>(name).push_back(value);
+        column<T>(name, false).push_back(value);
     }
 
     template <typename T>
-    void put3(const std::string &name, T x, T y, T z)
+    void put3(const char *name, T x, T y, T z)
     {
-        std::vector<T> &c = column<T>(name + "\n3");
+        std::vector<T> &c = column<T>(name, true);
         c.push_back(x);
         c.push_back(y);
         c.push_back(z);
@@ -138,14 +134,36 @@ class Columns
 
     void into(py::dict &out) const
     {
-        fill(out, ints_);
-        fill(out, longs_);
-        fill(out, floats_);
+        fill(out, ints_.columns);
+        fill(out, longs_.columns);
+        fill(out, floats_.columns);
     }
 
   private:
     template <typename T>
-    std::vector<T> &column(const std::string &name);
+    struct Named
+    {
+        std::map<std::string, std::vector<T>> columns;
+        /* Each column by the address of the name its call site passes: a
+         * lookup by name for each value would cost more than the value. */
+        std::unordered_map<const char *, std::vector<T> *> single, triple;
+    };
+
+    template <typename T>
+    std::vector<T> &column(const char *name, bool three)
+    {
+        Named<T> &named = of<T>();
+        auto &cache = three ? named.triple : named.single;
+        const auto found = cache.find(name);
+        if (found != cache.end())
+            return *found->second;
+        std::vector<T> &c = named.columns[three ? std::string(name) + "\n3" : std::string(name)];
+        cache.emplace(name, &c);
+        return c;
+    }
+
+    template <typename T>
+    Named<T> &of();
 
     template <typename T>
     static void fill(py::dict &out, const std::map<std::string, std::vector<T>> &columns)
@@ -161,37 +179,40 @@ class Columns
         }
     }
 
-    std::map<std::string, std::vector<int>> ints_;
-    std::map<std::string, std::vector<long>> longs_;
-    std::map<std::string, std::vector<float>> floats_;
+    Named<int> ints_;
+    Named<long> longs_;
+    Named<float> floats_;
 };
 
 template <>
-std::vector<int> &Columns::column<int>(const std::string &name)
+Columns::Named<int> &Columns::of<int>()
 {
-    return ints_[name];
+    return ints_;
 }
 
 template <>
-std::vector<long> &Columns::column<long>(const std::string &name)
+Columns::Named<long> &Columns::of<long>()
 {
-    return longs_[name];
+    return longs_;
 }
 
 template <>
-std::vector<float> &Columns::column<float>(const std::string &name)
+Columns::Named<float> &Columns::of<float>()
 {
-    return floats_[name];
+    return floats_;
 }
 
 /* The waveforms each block plays: its gradients as corners from its start,
  * its RF pulse and its readout's phase modulation, each with the start and
  * stop of the block's part.  A wave plays as the IR defines it, linear
  * between its points: how a playout's hardware plays the samples it loads is
- * the playout's. */
+ * the playout's.  Without pulses, the RF pulse is left to the position that
+ * prepares it. */
 class Waveforms
 {
   public:
+    explicit Waveforms(bool pulses) : pulses_(pulses) {}
+
     void gradients(
         const Position &p,
         int subsequence,
@@ -215,6 +236,8 @@ class Waveforms
 
     void rf(const Position &p, float amplitude)
     {
+        if (!pulses_)
+            return;
         rf_span_.push_back(static_cast<py::ssize_t>(rf_time_.size()));
         for (const RfShape &pulse : p.rf)
             pulse.play(amplitude, rf_time_, rf_value_);
@@ -235,9 +258,12 @@ class Waveforms
         out["gradient_time_us"] = as_array(gradient_time_, {corners});
         out["gradient_waveform_hz_per_m"] = as_array(gradient_value_, {corners});
         out["gradient_span"] = as_array(gradient_span_, {n, 3, 2});
-        out["rf_time_us"] = as_array(rf_time_, {rf_samples});
-        out["rf_waveform_hz"] = as_array(rf_value_, {rf_samples});
-        out["rf_span"] = as_array(rf_span_, {n, 2});
+        if (pulses_)
+        {
+            out["rf_time_us"] = as_array(rf_time_, {rf_samples});
+            out["rf_waveform_hz"] = as_array(rf_value_, {rf_samples});
+            out["rf_span"] = as_array(rf_span_, {n, 2});
+        }
         out["adc_phase_modulation_rad"] =
             as_array(modulation_, {static_cast<py::ssize_t>(modulation_.size())});
         out["adc_modulation_span"] = as_array(modulation_span_, {n, 2});
@@ -252,6 +278,7 @@ class Waveforms
             [amplitude](float s) { return amplitude * s; });
     }
 
+    bool pulses_;
     std::vector<float> gradient_time_, gradient_value_, rf_time_, modulation_;
     std::vector<std::complex<float>> rf_value_;
     std::vector<py::ssize_t> gradient_span_, rf_span_, modulation_span_;
@@ -338,6 +365,10 @@ class PreparedRows
             shape_.insert(shape_.end(), p.shape[a].begin(), p.shape[a].end());
             span_.push_back(static_cast<py::ssize_t>(time_us_.size()));
         }
+        rf_span_.push_back(static_cast<py::ssize_t>(rf_time_.size()));
+        for (const RfShape &pulse : p.rf)
+            pulse.play(1.0f, rf_time_, rf_value_);
+        rf_span_.push_back(static_cast<py::ssize_t>(rf_time_.size()));
         for (size_t k = 0; k < static_cast<size_t>(slots_); ++k)
         {
             const bool held = p.waves && k < p.slots.size();
@@ -362,14 +393,19 @@ class PreparedRows
         out["slot_offset"] = as_array(slot_offset_, {n, k, 3});
         out["slot_samples"] = as_array(slot_samples_, {n, k});
         out["slot_start_us"] = as_array(slot_start_us_, {n, k});
+        const auto rf_samples = static_cast<py::ssize_t>(rf_time_.size());
+        out["rf_time_us"] = as_array(rf_time_, {rf_samples});
+        out["rf_waveform_hz"] = as_array(rf_value_, {rf_samples});
+        out["rf_span"] = as_array(rf_span_, {n, 2});
         return out;
     }
 
   private:
     int slots_;
     std::vector<int> segment_, position_;
-    std::vector<float> time_us_, shape_, slot_start_us_;
-    std::vector<py::ssize_t> span_;
+    std::vector<float> time_us_, shape_, slot_start_us_, rf_time_;
+    std::vector<std::complex<float>> rf_value_;
+    std::vector<py::ssize_t> span_, rf_span_;
     std::vector<long> slot_offset_, slot_samples_;
 };
 
@@ -386,8 +422,8 @@ py::dict positions_dict(const std::map<std::pair<int, int>, Position> &positions
 class Recorder
 {
   public:
-    Recorder(const pulseg_collection *coll, bool waveforms)
-        : coll_(coll), waveforms_(waveforms), waves_(coll)
+    Recorder(const pulseg_collection *coll, bool waveforms, bool pulses)
+        : coll_(coll), waveforms_(waveforms), waves_(coll), waveforms_played_(pulses)
     {
     }
 
@@ -417,10 +453,8 @@ class Recorder
         const auto axis = static_cast<size_t>(load.axis);
         if (static_cast<size_t>(load.offset + load.count) > memory_[axis].size())
             return PULSEG_ERR_INDEX;
-        const Span written{load.axis, load.offset, load.offset + load.count};
-        overwrites_ += std::count_if(
-            playing_.begin(), playing_.end(),
-            [&written](const Span &read) { return overlap(written, read); });
+        if (read_in_play(axis, load.offset, load.offset + load.count))
+            overwrites_ += 1;
         std::transform(
             load.samples, load.samples + load.count, memory_[axis].begin() + load.offset,
             unit_sample);
@@ -448,7 +482,12 @@ class Recorder
 
     int play()
     {
-        playing_.swap(setting_);
+        for (auto &spans : playing_)
+            spans.clear();
+        for (const Span &span : setting_)
+            playing_[static_cast<size_t>(span.axis)].emplace_back(span.begin, span.end);
+        for (auto &spans : playing_)
+            merge(spans);
         setting_.clear();
         instances_ += 1;
         return PULSEG_SUCCESS;
@@ -503,6 +542,31 @@ class Recorder
         return subsequences;
     }
 
+    /* Whether the instance in play reads any of [begin, end) along @p axis. */
+    bool read_in_play(size_t axis, long begin, long end) const
+    {
+        const auto &spans = playing_[axis];
+        const auto after = std::upper_bound(
+            spans.begin(), spans.end(), begin,
+            [](long at, const std::pair<long, long> &span) { return at < span.second; });
+        return after != spans.end() && after->first < end;
+    }
+
+    /* Sort spans and join those that overlap. */
+    static void merge(std::vector<std::pair<long, long>> &spans)
+    {
+        std::sort(spans.begin(), spans.end());
+        size_t kept = 0;
+        for (const auto &span : spans)
+        {
+            if (kept && span.first < spans[kept - 1].second)
+                spans[kept - 1].second = std::max(spans[kept - 1].second, span.second);
+            else
+                spans[kept++] = span;
+        }
+        spans.resize(kept);
+    }
+
     /* Keep what each axis of the block's wave reads from memory, counting
      * samples nothing was loaded into. */
     void read(const pulseg_wave_region *region)
@@ -527,7 +591,8 @@ class Recorder
     bool waveforms_;
     Waves waves_;
     std::array<std::vector<float>, 3> memory_;
-    std::vector<Span> playing_; /* what the instance in play reads */
+    /* What the instance in play reads, per axis, as disjoint spans in order. */
+    std::array<std::vector<std::pair<long, long>>, 3> playing_;
     std::vector<Span> setting_; /* what the instance being set reads */
     std::map<std::pair<int, int>, Position> positions_;
     Columns columns_;
@@ -546,7 +611,10 @@ class Recorder
 /* The recorder, and what it raised: an exception cannot cross the C library. */
 struct Session
 {
-    Session(const pulseg_collection *coll, bool waveforms) : recorder(coll, waveforms) {}
+    Session(const pulseg_collection *coll, bool waveforms, bool pulses)
+        : recorder(coll, waveforms, pulses)
+    {
+    }
 
     Recorder recorder;
     std::exception_ptr failure;
@@ -597,9 +665,10 @@ py::dict record_playout(
     pulseg_collection *coll,
     const pulseg_wave_plan &plan,
     const pulseg_playout_options &options,
-    bool waveforms)
+    bool waveforms,
+    bool pulses)
 {
-    Session session(coll, waveforms);
+    Session session(coll, waveforms, pulses);
     const pulseg_playout_backend backend = backend_for(session);
     pulseg_diagnostic diag = PULSEG_DIAGNOSTIC_INIT;
     int rc = pulseg_playout_prepare(coll, &plan, &backend);

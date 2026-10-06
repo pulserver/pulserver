@@ -10,7 +10,7 @@ from types import SimpleNamespace
 import numpy as np
 import pypulseqpp as pp
 import pytest
-from _virtual import design_samples
+from _virtual import design_samples, on_the_lattice
 
 from pulserver.virtual import Isochromats
 
@@ -612,6 +612,7 @@ def _window_terms(positions, t2, off_resonance, start, gradients, times):
     return start * np.exp(-times[:, None] / t2 - 2j * np.pi * phase)
 
 
+@on_the_lattice
 @pytest.mark.parametrize(
     ("trajectory", "tolerance", "coils"),
     [
@@ -695,6 +696,7 @@ def test_a_window_that_no_lattice_serves_is_read_sample_by_sample(reason):
     )
 
 
+@on_the_lattice
 @pytest.mark.skipif(not hasattr(os, "fork"), reason="needs fork()")
 @pytest.mark.parametrize("tolerance", [0.0, 1e-4])
 def test_a_window_read_on_a_lattice_before_a_fork_is_read_on_it_in_the_child(

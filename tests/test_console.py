@@ -27,7 +27,7 @@ from pulserver.host._blocks import format_limits
 from pulserver.protocol import FOV_OFFSET, FOV_ROTATION, PROTOCOL_BEGIN, PROTOCOL_END
 from pulserver.proxy import ReconProxy
 from pulserver.recon._runtime.readers import deserialize_config
-from pulserver.virtual import _voxels
+from pulserver.virtual import _fourier, _voxels
 from pulserver.virtual._command import ORIENTATIONS
 from pulserver.virtual._console import Console, _connection
 from pulserver.virtual._localizer import PLANES
@@ -311,11 +311,18 @@ def test_a_scan_reconstructed_in_this_process_returns_the_images_a_proxy_returns
         returned[name] = _images(messages)
 
     assert len(returned["local"]) == len(returned["proxied"]) == 1
-    np.testing.assert_array_equal(returned["local"][0], returned["proxied"][0])
+    # Each scan simulates in its own order of floating-point sums.
+    proxied_image = returned["proxied"][0]
+    np.testing.assert_allclose(
+        returned["local"][0],
+        proxied_image,
+        rtol=0,
+        atol=1e-4 * np.abs(proxied_image).max(),
+    )
 
 
 def test_an_exams_scans_play_on_its_isochromats_each_from_equilibrium(tmp_path):
-    console = _console(tmp_path, recon_plugins=RECON_PLUGINS)
+    console = _console(tmp_path, recon_plugins=RECON_PLUGINS, engine="bloch")
     design = console.design("generate", "gre2d", _block(TE=5000, nx=32, ny=32))[
         "design"
     ]
@@ -368,7 +375,7 @@ def _builds(console):
 def test_a_scan_plays_on_the_isochromats_in_the_slabs_its_excitations_excite(
     tmp_path,
 ):
-    console = _console(tmp_path, voxel="point")
+    console = _console(tmp_path, engine="bloch", voxel="point")
     design = console.design("generate", "gre2d", _block(TE=5000, nx=32, ny=32))[
         "design"
     ]
@@ -386,7 +393,7 @@ def test_a_scan_plays_on_the_isochromats_in_the_slabs_its_excitations_excite(
 
 
 def test_scans_that_excite_other_slabs_play_on_isochromats_of_their_own(tmp_path):
-    console = _console(tmp_path)
+    console = _console(tmp_path, engine="bloch")
     design = console.design("generate", "gre2d", _block(TE=5000, nx=32, ny=32))[
         "design"
     ]
@@ -403,7 +410,7 @@ def test_scans_that_excite_other_slabs_play_on_isochromats_of_their_own(tmp_path
 def test_a_console_coarsens_its_spacing_until_a_scan_keeps_no_more_isochromats_than_it_may(
     tmp_path,
 ):
-    console = _console(tmp_path, spacing=1e-3, voxel="point")
+    console = _console(tmp_path, spacing=1e-3, engine="bloch", voxel="point")
     design = console.design("generate", "gre2d", _block(TE=5000, nx=32, ny=32))[
         "design"
     ]
@@ -417,7 +424,7 @@ def test_a_console_coarsens_its_spacing_until_a_scan_keeps_no_more_isochromats_t
 
 
 def test_a_scan_no_spacing_keeps_within_the_consoles_isochromats_is_refused(tmp_path):
-    console = _console(tmp_path, max_isochromats=0)
+    console = _console(tmp_path, max_isochromats=0, engine="bloch")
     design = console.design("generate", "gre2d", _block(TE=5000, nx=32, ny=32))[
         "design"
     ]
@@ -430,7 +437,7 @@ def test_a_scan_no_spacing_keeps_within_the_consoles_isochromats_is_refused(tmp_
 def test_a_console_counts_its_spins_per_voxel_in_keeping_within_its_isochromats(
     tmp_path,
 ):
-    console = _console(tmp_path, spacing=1e-3, spins=4, voxel="box")
+    console = _console(tmp_path, spacing=1e-3, spins=4, voxel="box", engine="bloch")
     design = console.design("generate", "gre2d", _block(TE=5000, nx=32, ny=32))[
         "design"
     ]
@@ -599,7 +606,8 @@ def test_a_console_lists_the_reconstruction_plugins_a_scan_can_name(tmp_path):
     assert proxied.recon_names() == sorted(shipped)
 
 
-def test_a_cancelled_scan_stops_and_reports_it(tmp_path):
+def test_a_cancelled_scan_stops_and_reports_it(tmp_path, monkeypatch):
+    monkeypatch.setattr(_fourier, "_SPAN_SAMPLES", 256)
     console = _console(tmp_path)
     design = console.design("generate", "gre2d", _block(TE=5000, nx=32, ny=32))[
         "design"
