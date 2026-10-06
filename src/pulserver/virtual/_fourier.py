@@ -79,8 +79,9 @@ _SPAN_SAMPLES = 1 << 18
 #: Entries whose weights the terms the images are of are fitted to.
 _MIXED_SAMPLE = 1 << 16
 
-#: Groups times atoms whose signals a temporal basis is fitted to, beyond
-#: which the rest are projected onto it.
+#: Groups times atoms whose signals a temporal basis is fitted to where the
+#: signals of all of them do not fit in :data:`_BUDGET`; the rest are
+#: projected onto it.
 _SKETCH = 4096
 
 #: Deviation from the periodic state, relative to the equilibrium
@@ -274,7 +275,7 @@ class FourierPlayer:
             return torch.cat(parts, dim=1)
 
         sketched = max(1, _SKETCH // count)
-        if atoms.numel() <= sketched:
+        if atoms.numel() <= max(sketched, step):
             left, right = _leading(
                 simulated(atoms).reshape(-1, played), self._tolerance
             )
