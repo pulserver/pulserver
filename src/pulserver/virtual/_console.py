@@ -19,6 +19,8 @@ import numpy as np
 
 from .._plugins import PluginPath, directories, names, recon_names
 from ._command import reconstruction_plugin
+from ._girf import Girf, girf_arguments, system_girf
+from ._motion import RigidMotion, motion_arguments, subject_motion
 
 #: The design calls a console forwards, answered as ``pulserver design`` answers them.
 DESIGN_CALLS = ("list", "validate", "generate", "import")
@@ -129,6 +131,10 @@ class Console:
     device
         Device a scan is simulated on, as
         :class:`~pulserver.virtual.FourierPlayer` takes it.
+    motion
+        How the subject moves during every scan, from each scan's start.
+    girf
+        The impulse response every scan's gradients play through.
     """
 
     def __init__(
@@ -145,6 +151,8 @@ class Console:
         fields: Path | str | None = None,
         speed: float | None = None,
         device: str | None = None,
+        motion: RigidMotion | None = None,
+        girf: Girf | None = None,
     ) -> None:
         from ..host._blocks import parse_limits
         from ..proxy import LocalReconstruction
@@ -167,6 +175,8 @@ class Console:
         self.spacing = spacing
         self.speed = speed
         self.device = device
+        self.motion = motion
+        self.girf = girf
         self.field_t = float(parse_limits(limits)["B0"])
         self.fields = None if fields is None else Path(fields)
         self._coils = coils(self.fields, field_t=self.field_t)
@@ -362,7 +372,7 @@ class Console:
 
         if self.fields is not None or subject.strip().lower() == "brainweb":
             if self._brainweb is None:
-                self._brainweb = BrainWeb()
+                self._brainweb = BrainWeb(diffusion=BrainWeb.DIFFUSION)
             return self._brainweb
         return default_phantom()
 
@@ -415,6 +425,8 @@ class Console:
             tissue,
             rotation=rotation,
             device=self.device,
+            motion=self.motion,
+            girf=self.girf,
         )
         stopped = threading.Event()
 
@@ -698,6 +710,8 @@ def _parser() -> argparse.ArgumentParser:
         help="torch device a scan is simulated on, such as cuda; a card where "
         "there is one without it",
     )
+    motion_arguments(parser)
+    girf_arguments(parser)
     return parser
 
 
@@ -720,6 +734,8 @@ def main(argv: list[str] | None = None) -> int:
         fields=args.fields,
         speed=args.speed,
         device=args.device,
+        motion=subject_motion(args),
+        girf=system_girf(args),
     )
     with contextlib.suppress(KeyboardInterrupt):
         asyncio.run(serve(console, args.host, args.port, args.origins))

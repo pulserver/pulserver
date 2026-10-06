@@ -1,5 +1,6 @@
 """The virtual scanner's Fourier engine: its timeline, its event streams, and what it acquires."""
 
+import itertools
 import shutil
 from pathlib import Path
 
@@ -455,3 +456,167 @@ def test_a_rare_group_of_flip_angles_joins_the_nearest_one_the_same_pulses_turn(
     assert torch.equal(
         kept[joined], groups[torch.tensor([0] * 9000 + [1] * 999 + [3], device=device)]
     )
+
+
+#: A system whose pulses and readouts start after their dead times.
+DIFFUSION_SYSTEM = pp.Opts(
+    max_grad=40,
+    grad_unit="mT/m",
+    max_slew=150,
+    slew_unit="T/m/s",
+    rf_ringdown_time=20e-6,
+    rf_dead_time=100e-6,
+    adc_dead_time=10e-6,
+    B0=3.0,
+)
+
+
+def _spin_echo(directory, amplitude_hz_per_m):
+    """A spin echo with a trapezoid lobe either side of its refocusing pulse, read at the echo; the lobe, and the block between each lobe's start and the next lobe's."""
+    system = DIFFUSION_SYSTEM
+    lobe = pp.make_trapezoid(
+        "x",
+        amplitude=amplitude_hz_per_m,
+        flat_time=10e-3,
+        rise_time=0.3e-3,
+        system=system,
+    )
+    weighting = (
+        [lobe] if amplitude_hz_per_m else [pp.make_delay(pp.calc_duration(lobe))]
+    )
+    seq = pp.Sequence(system)
+    seq.add_block(
+        pp.make_block_pulse(np.pi / 2, duration=0.5e-3, delay=100e-6, system=system)
+    )
+    seq.add_block(*weighting)
+    seq.add_block(pp.make_delay(2e-3))
+    seq.add_block(
+        pp.make_block_pulse(
+            np.pi, duration=0.5e-3, delay=100e-6, use="refocusing", system=system
+        )
+    )
+    seq.add_block(pp.make_delay(2e-3))
+    seq.add_block(*weighting)
+    seq.add_block(pp.make_adc(1, duration=20e-6, delay=10e-6, system=system))
+    path = directory / f"spin_echo_{amplitude_hz_per_m:.0f}.seq"
+    seq.write(str(path))
+    ir.convert(path, system)
+    return path, lobe
+
+
+def test_a_readouts_b_value_is_stejskal_and_tanners_of_the_lobes_either_side_of_its_refocusing_pulse(
+    tmp_path,
+):
+    amplitude = 30e-3 * DIFFUSION_SYSTEM.gamma
+    path, lobe = _spin_echo(tmp_path, amplitude)
+    timeline = Timeline(path)
+    rise, width = lobe.rise_time, lobe.flat_time + lobe.rise_time
+    separation = 1e-6 * (timeline.starts_us[5] - timeline.starts_us[1])
+    expected = (2.0 * np.pi * amplitude) ** 2 * (
+        width**2 * (separation - width / 3.0) + rise**3 / 30.0 - width * rise**2 / 6.0
+    )
+
+    np.testing.assert_allclose(timeline.readout_b_values(), [expected], rtol=1e-9)
+
+
+def test_a_diffusing_tissue_loses_exp_minus_b_d_of_its_echo_to_the_lobes(tmp_path):
+    diffusion = 3e-9
+    phantom = virtual.Phantom(
+        [virtual.Ellipse((0, 0, 0), (0.05, 0.05), t1=1.0, t2=0.1, diffusion=diffusion)]
+    )
+    echoes = []
+    for amplitude in (0.0, 30e-3 * DIFFUSION_SYSTEM.gamma):
+        path, _ = _spin_echo(tmp_path, amplitude)
+        (readout,) = virtual.simulate(path, phantom.tissue(2e-3), device="cpu")
+        echoes.append(np.abs(readout).max())
+    b = Timeline(path).readout_b_values()[0]
+
+    assert echoes[1] / echoes[0] == pytest.approx(np.exp(-b * diffusion), rel=1e-4)
+
+
+def test_a_tissue_that_does_not_diffuse_takes_no_b_values(tmp_path, monkeypatch):
+    path, _ = _spin_echo(tmp_path, 30e-3 * DIFFUSION_SYSTEM.gamma)
+    monkeypatch.setattr(
+        Timeline, "readout_b_values", lambda self: pytest.fail("b-values taken")
+    )
+    phantom = virtual.Phantom(
+        [virtual.Ellipse((0, 0, 0), (0.05, 0.05), t1=1.0, t2=0.1)]
+    )
+
+    virtual.simulate(path, phantom.tissue(2e-3), device="cpu")
+
+
+def test_a_subject_held_in_a_pose_acquires_what_a_phantom_placed_in_it_does(
+    converted,
+):
+    ellipses = [
+        virtual.Ellipse((0.01, 0.0, 0.0), (0.05, 0.03), t1=1.0, t2=0.1),
+        virtual.Ellipse(
+            (0.02, 0.01, 0.0), (0.01, 0.01), t1=0.5, t2=0.05, intensity=0.5
+        ),
+    ]
+    angle, shift = 0.2, (0.004, -0.003, 0.0)
+    turn = np.array(
+        [
+            [np.cos(angle), -np.sin(angle), 0.0],
+            [np.sin(angle), np.cos(angle), 0.0],
+            [0.0, 0.0, 1.0],
+        ]
+    )
+    path = converted / "gre_2d_3sl.seq"
+
+    placed = virtual.simulate(
+        path,
+        virtual.Phantom(ellipses, rotation=turn, position=shift).tissue(1e-3),
+        device="cpu",
+    )
+    held = virtual.simulate(
+        path,
+        virtual.Phantom(ellipses).tissue(1e-3),
+        device="cpu",
+        motion=virtual.RigidMotion(lambda t: turn, lambda t: shift),
+    )
+
+    placed, held = np.concatenate(placed, axis=1), np.concatenate(held, axis=1)
+    assert np.linalg.norm(held - placed) < 1e-2 * np.linalg.norm(placed)
+
+
+def test_a_subject_that_jumps_holds_each_pose_until_its_next_move():
+    motion = virtual.RigidMotion.jumps(
+        rate_hz=2.0, translation_m=1e-3, rotation_rad=0.01, duration_s=10.0, seed=3
+    )
+    times = np.linspace(0.0, 10.0, 2001)
+    poses = [motion.transform(t) for t in times]
+    moved = np.array(
+        [
+            not (np.array_equal(a[0], b[0]) and np.array_equal(a[1], b[1]))
+            for a, b in itertools.pairwise(poses)
+        ]
+    )
+
+    np.testing.assert_array_equal(poses[0][0], np.eye(3))
+    np.testing.assert_array_equal(poses[0][1], np.zeros(3))
+    assert 5 <= moved.sum() <= 40
+    for turn, _ in poses:
+        np.testing.assert_allclose(turn @ turn.T, np.eye(3), atol=1e-12)
+
+
+def test_a_delaying_girf_plays_the_moment_its_delay_later(converted):
+    delay_s = 20e-6
+    plain = Timeline(converted / "gre_2d_3sl.seq")
+    late = Timeline(
+        converted / "gre_2d_3sl.seq", girf=virtual.Girf.delay_lowpass(delay_s, 0.0)
+    )
+    blocks = np.flatnonzero(plain.played["adc"] != 0)[:5]
+    since = np.full(blocks.size, 500.0)
+
+    np.testing.assert_allclose(
+        late.moment(blocks, since),
+        plain.moment(blocks, since - 1e6 * delay_s),
+        atol=1e-9,
+    )
+
+
+def test_a_girf_has_unit_gain_at_zero_frequency():
+    girf = virtual.Girf.delay_lowpass(20e-6, 10e-6)
+    np.testing.assert_allclose(girf.impulse.sum(axis=0) * girf.dt_s, 1.0, rtol=1e-12)

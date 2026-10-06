@@ -59,7 +59,48 @@ namespace fourier
          *  frame the block plays in. */
         void value(const int64_t* block, const double* since_us, size_t n, double* out) const;
 
+        /**
+         * Write into @p out the b-value at each of @p echo_us, in s/m²:
+         * (2 pi)² times the integral of |k|² from the last excitation, k
+         * measured from the origin each pulse leaves, (p + 1, 3) as origins()
+         * writes them. Zero where no excitation precedes the echo in its file.
+         */
+        void b_values(
+            const double* pulse_us,
+            const uint8_t* excites,
+            const double* origins,
+            size_t pulses,
+            const double* echo_us,
+            size_t n,
+            double* out) const;
+
       private:
+        /** Gradient of axis @p axis of @p block at @p since_us, strictly between corners, in Hz/m. */
+        double gradient_at(size_t block, int axis, double since_us) const;
+
+        /**
+         * Write into @p edges the times, from the start of @p block, between
+         * which every gradient is linear and no pulse or echo falls: its
+         * corners, and the ascending @p pulse_us and @p echo_us (read through
+         * @p order) inside it.
+         */
+        void stretches(
+            size_t block,
+            const double* pulse_us,
+            size_t pulses,
+            const double* echo_us,
+            const size_t* order,
+            size_t echoes,
+            std::vector<double>& edges) const;
+
+        /**
+         * Advance @p moment, in 1/m, across the stretch of @p block from
+         * @p from_us lasting @p width_us, on which every gradient is linear,
+         * and return the integral of |k - @p origin|² over it, in s/m²; zero
+         * where @p origin is NaN.
+         */
+        double stretch(size_t block, double from_us, double width_us, const double* origin, double moment[3]) const;
+
         /** Moment of axis @p axis of @p block from its start to @p since_us, in 1/m. */
         double within(size_t block, int axis, double since_us) const;
 

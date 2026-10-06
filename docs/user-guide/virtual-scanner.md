@@ -68,7 +68,10 @@ phantom that fills a volume. The engine runs on a CUDA device where there is
 one, and on the CPU otherwise; `device` names another. It returns one
 `(coils, samples)` array per readout, in play order, demodulated as the
 playout demodulates. It spoils by the moment the gradients wind across a
-voxel between pulses and readouts, and models no motion and no diffusion.
+voxel between pulses and readouts. `motion` takes a
+{class}`~pulserver.virtual.RigidMotion` and `girf` a
+{class}`~pulserver.virtual.Girf`; a tissue whose `diffusion` is set loses
+$e^{-bD}$ at each readout.
 
 `config` names the reconstruction plugin, here the shipped `pics`, as the
 config text of a reconstruction client does ({doc}`reconstruction-client`); the
@@ -192,7 +195,12 @@ line, is written to standard output, and the scan clock to standard error.
   `head8/head32`, named `transmit/receive`, whose sensitivities bartorch
   samples from BART's coil models, which the `coils` extra installs
   (`pip install 'pulserver[coils]'`). A phantom file gives each ellipse its
-  `t2_prime`, in s.
+  `t2_prime`, in s. BrainWeb's grey and white matter and CSF diffuse.
+- `--nod DEGREES PERIOD` turns the subject about the physical x axis
+  sinusoidally, `--drift X Y Z` translates it in mm/min, and `--jumps RATE MM
+  DEGREES` moves it suddenly at random, `RATE` times a second on average.
+  `--girf DELAY_US TIME_CONSTANT_US` plays the gradients through a delay and a
+  first-order low pass. The console takes the same options.
 - `--recon` streams the series to a reconstruction proxy, which looks the
   design up in its store: give that store as `--store`, or the proxy's design
   intake as `--push`. The images go to `images.h5` in `--output`, the DICOM

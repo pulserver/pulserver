@@ -16,6 +16,8 @@ import numpy as np
 
 from .._zoo import ZOO_PAIRS
 from ._coils import COILS
+from ._girf import girf_arguments, system_girf
+from ._motion import motion_arguments, subject_motion
 
 _DESCRIPTION = """\
 Scan a phantom on the virtual scanner, as a console would. The design is
@@ -118,6 +120,8 @@ def _parser() -> argparse.ArgumentParser:
         help="torch device the scan is simulated on, such as cuda; a card where "
         "there is one without it",
     )
+    motion_arguments(parser)
+    girf_arguments(parser)
     parser.add_argument("--mrd", type=Path, help="ISMRMRD file to write the series to")
     parser.add_argument("--sound", type=Path, help="WAV file to write the sound to")
     parser.add_argument(
@@ -372,6 +376,8 @@ def _scan(
         phantom.tissue(1e-3 * args.spacing, field_t=field, coil=coil),
         rotation=rotation,
         device=args.device,
+        motion=subject_motion(args),
+        girf=system_girf(args),
     )
     series = {
         "frequency_hz": pp.Opts().gamma * field,
@@ -411,7 +417,7 @@ def _phantom(args: argparse.Namespace) -> Any:
     if args.phantom is None:
         return default_phantom(coils)
     if str(args.phantom) == "brainweb":
-        return BrainWeb(coils=coils)
+        return BrainWeb(coils=coils, diffusion=BrainWeb.DIFFUSION)
     return read_phantom(args.phantom, coils)
 
 

@@ -14,6 +14,7 @@ import torch
 
 from .. import ir
 from .._accelerators import require
+from ._girf import Girf
 
 _EXCITATION = 1
 _REFOCUSING = 2
@@ -150,6 +151,9 @@ class Timeline:
         the identity by default.
     device
         Where the moments of many samples are integrated.
+    girf
+        The impulse response the gradients play through; the moments are of
+        the gradients played, the cache's gradients themselves without one.
 
     Attributes
     ----------
@@ -170,7 +174,9 @@ class Timeline:
         *,
         rotation: np.ndarray | None = None,
         device: torch.device | str = "cpu",
+        girf: Girf | None = None,
     ) -> None:
+        self._girf = girf
         playout = ir.playout(
             Path(seq_path), waveforms=True, pulses=False, cache_ext=cache_ext
         )
@@ -257,13 +263,21 @@ class Timeline:
         since_us
             ``(n,)`` times from their starts, in µs.
         """
-        return self._gradients.moment(
-            np.asarray(block, dtype=np.int64), np.asarray(since_us, dtype=np.float64)
+        block = np.asarray(block, dtype=np.int64)
+        since_us = np.asarray(since_us, dtype=np.float64)
+        if self._girf is None:
+            return self._gradients.moment(block, since_us)
+        turn = self.rotation
+        physical = self._girf.filtered(
+            lambda b, s: self._gradients.moment(b, s) @ turn.T,
+            self.starts_us,
+            self.starts_us[block] + since_us,
         )
+        return physical @ turn
 
     def _moment(self, block: torch.Tensor, since_us: torch.Tensor) -> torch.Tensor:
         """Return :meth:`moment` on the device, from device tensors."""
-        moment = self._gradients.moment(block.cpu().numpy(), since_us.cpu().numpy())
+        moment = self.moment(block.cpu().numpy(), since_us.cpu().numpy())
         return torch.as_tensor(moment, device=self.device)
 
     def samples(
@@ -512,6 +526,21 @@ class Timeline:
         last = self._last(echo)
         behind = np.where(last >= 0, self._interval_us[np.maximum(last, 0)], 0.0)
         return self.unrefocused_us(echo) - self.readouts.pathway * behind
+
+    def readout_b_values(self) -> np.ndarray:
+        """Return the b-value each readout's echo is weighted with, ``(n,)`` in s/m².
+
+        (2 pi)² times the integral of |k|² since the last excitation, k as
+        :meth:`kspace` measures it before a pathway's shift: the weighting of
+        the free induction and of the echoes refocusing pulses form.
+        """
+        pulses = self.pulses
+        return self._gradients.b_values(
+            pulses.time_us,
+            pulses.use == _EXCITATION,
+            self._origins,
+            self.readouts.echo_us,
+        )
 
     def kspace(
         self, first: int, last: int

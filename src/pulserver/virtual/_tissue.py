@@ -37,6 +37,9 @@ class Tissue:
         coils)``; None for one coil of unit sensitivity.
     coils
         Receive channels.
+    diffusion
+        ``(n,)`` its isotropic diffusion coefficient, in m²/s; None where
+        nothing diffuses.
     """
 
     positions: np.ndarray
@@ -50,6 +53,7 @@ class Tissue:
     transmit: np.ndarray | None
     receive: Callable[[np.ndarray], np.ndarray | None]
     coils: int
+    diffusion: np.ndarray | None = None
 
 
 def transmitted(coil, positions: np.ndarray) -> np.ndarray | None:

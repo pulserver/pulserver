@@ -17,6 +17,8 @@ from pathlib import Path
 import numpy as np
 import pypulseqpp as pp
 
+from ._girf import Girf
+from ._motion import RigidMotion
 from ._tissue import Tissue
 
 #: MATLAB Pulseq's audio sample rate, the default of ``pypulseqpp.gradient_sound``, in Hz.
@@ -78,6 +80,9 @@ class Scan:
     device
         Where the Fourier engine runs, as
         :class:`~pulserver.virtual.FourierPlayer` takes it.
+    motion, girf
+        How the subject moves and the gradients' impulse response, as
+        :class:`~pulserver.virtual.FourierPlayer` takes them.
     """
 
     def __init__(
@@ -88,11 +93,19 @@ class Scan:
         *,
         rotation: np.ndarray | None = None,
         device: str | None = None,
+        motion: RigidMotion | None = None,
+        girf: Girf | None = None,
     ) -> None:
         from ._fourier import FourierPlayer
 
         self._player = FourierPlayer(
-            seq_path, tissue, cache_ext, rotation=rotation, device=device
+            seq_path,
+            tissue,
+            cache_ext,
+            rotation=rotation,
+            device=device,
+            motion=motion,
+            girf=girf,
         )
         self._played = self._player.played
         self._turn = None if rotation is None else np.asarray(rotation, dtype=float)

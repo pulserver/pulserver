@@ -12,6 +12,8 @@ from pathlib import Path
 import numpy as np
 import torch
 
+from ._girf import Girf
+from ._motion import RigidMotion
 from ._timeline import Timeline
 from ._tissue import Tissue
 
@@ -103,6 +105,9 @@ _SETTLED = 1e-3
 #: compared by: a sequence file keeps a phase to about 1e-5.
 _PHASE_STEP = 2.0 * math.pi / 2**16
 
+#: Resolution, in s/m², of the b-values readouts share a temporal column at.
+_B_STEP = 1e3
+
 #: Values a period is tried at, from those the stream's middle TR recurs at.
 _PERIODS = 64
 
@@ -153,6 +158,11 @@ class FourierPlayer:
         Where the simulation runs; a card where there is one by default.
     tolerance
         The relative residual of the bases.
+    motion
+        How the subject moves, at each readout's echo; it moves its encoding
+        alone, its excitation, relaxation and coil sensitivities following it.
+    girf
+        The impulse response the gradients play through.
 
     Attributes
     ----------
@@ -169,12 +179,14 @@ class FourierPlayer:
         rotation: np.ndarray | None = None,
         device: torch.device | str | None = None,
         tolerance: float = TOLERANCE,
+        motion: RigidMotion | None = None,
+        girf: Girf | None = None,
     ) -> None:
         if device is None:
             device = "cuda" if torch.cuda.is_available() else "cpu"
         self.device = torch.device(device)
         self._timeline = timeline = Timeline(
-            seq_path, cache_ext, rotation=rotation, device=self.device
+            seq_path, cache_ext, rotation=rotation, device=self.device, girf=girf
         )
         self.played = timeline.played
         self._tolerance = tolerance
@@ -187,6 +199,7 @@ class FourierPlayer:
         winds = np.linalg.norm((timeline.readouts.winding @ spanned) * voxel, axis=1)
         timeline.read_free_induction(np.flatnonzero(winds < SHIFT_CYCLES))
         shifted = _shifted(timeline, events, voxel, spanned)
+        self._poses = None if motion is None else _poses(timeline, motion, self.device)
         selector_of, selectors = _selectors(pulses)
         profiles = _profiles(everything, selectors, pulses)
         excitations = torch.as_tensor(
@@ -204,6 +217,7 @@ class FourierPlayer:
         self._stations, self._station_of = _stations(timeline, selector_of)
         step = _field_step(timeline, events, shifted)
         self._atoms = _Atoms(self._entries, step)
+        self._b = _b_values(timeline, self._entries, tolerance)
         self._bases = [
             self._temporal(station, events, shifted, selector_of)
             for station in self._stations
@@ -212,7 +226,8 @@ class FourierPlayer:
             timeline, self._entries, tolerance, from_excitation=step is None
         )
         self._grids = [
-            self._image(basis, tissue, timeline.rotation) for basis in self._bases
+            None if basis is None else self._image(basis, tissue, timeline.rotation)
+            for basis in self._bases
         ]
         del self._entries, self._atoms, self._group_of
         self._ends = self._span_ends()
@@ -253,8 +268,8 @@ class FourierPlayer:
         self._batch = min(2 * self._batch, _AHEAD_SAMPLES)
         return max(stop, min(reach - 1, firsts.size - 1))
 
-    def _temporal(self, station: int, events, shifted, selector_of) -> _Basis:
-        """Return the basis spanning the signals of a station's groups and atoms at its readouts' echoes."""
+    def _temporal(self, station: int, events, shifted, selector_of) -> _Basis | None:
+        """Return the basis spanning the signals of a station's groups and atoms at its readouts' echoes; None where it excites no entry."""
         from blochsim.sequence import EpgEngine, TissueProperties
         from blochsim.sequence._accelerators import pack_description
 
@@ -262,6 +277,8 @@ class FourierPlayer:
         members = np.flatnonzero(self._groups[:, station] > 0)
         member_t = torch.as_tensor(members, device=self.device)
         local = torch.nonzero(torch.isin(self._group_of, member_t)).reshape(-1)
+        if not local.numel():
+            return None
         atoms = torch.unique(self._atoms.index[local])
         held = self._atoms
         stream = _stream(
@@ -278,6 +295,8 @@ class FourierPlayer:
         )
         stream, column = _periodic(stream, settle_us)
         played = int(np.count_nonzero(stream.kind == 2))
+        weigh, column = self._weighting(readouts, column, held)
+        width = played if weigh is None else int(column.max()) + 1
         description = _description(stream, self._groups[members], self.device)
         packed = pack_description(
             description, repetitions=1, record="all", device=self.device
@@ -302,14 +321,13 @@ class FourierPlayer:
                     device=self.device,
                     events=packed,
                 )
-                parts.append(result.signal.reshape(count, -1, played).conj())
+                signal = result.signal.reshape(count, -1, played).conj()
+                parts.append(signal if weigh is None else weigh(signal, some))
             return torch.cat(parts, dim=1)
 
         sketched = max(1, _SKETCH // count)
         if atoms.numel() <= max(sketched, step):
-            left, right = _leading(
-                simulated(atoms).reshape(-1, played), self._tolerance
-            )
+            left, right = _leading(simulated(atoms).reshape(-1, width), self._tolerance)
             coefficients = left.reshape(count, atoms.numel(), -1)
         else:
             generator = torch.Generator(device=self.device).manual_seed(0)
@@ -317,7 +335,7 @@ class FourierPlayer:
                 atoms.numel(), device=self.device, generator=generator
             )
             sample = atoms[order[:sketched]]
-            _, right = _leading(simulated(sample).reshape(-1, played), self._tolerance)
+            _, right = _leading(simulated(sample).reshape(-1, width), self._tolerance)
             coefficients = torch.empty(
                 (count, atoms.numel(), right.shape[0]),
                 dtype=torch.complex64,
@@ -335,6 +353,30 @@ class FourierPlayer:
             temporal=right,
             column=torch.as_tensor(column, device=self.device),
         )
+
+    def _weighting(self, readouts: np.ndarray, column: np.ndarray, atoms: _Atoms):
+        """Return what weighs a station's played signals with each readout's diffusion, and the columns it writes; None and ``column`` where nothing diffuses.
+
+        Each readout's signal is the played one's, times exp(-b D) at its own
+        b-value: readouts that share a played signal and a b-value, to
+        :data:`_B_STEP`, share a column.
+        """
+        if self._b is None:
+            return None, column
+        steps = np.round(self._b[readouts] / _B_STEP)
+        pairs, column = np.unique(
+            np.column_stack([column, steps]), axis=0, return_inverse=True
+        )
+        source = torch.as_tensor(pairs[:, 0].astype(np.int64), device=self.device)
+        b = torch.as_tensor(
+            _B_STEP * pairs[:, 1], dtype=torch.float32, device=self.device
+        )
+
+        def weigh(signal: torch.Tensor, some: torch.Tensor) -> torch.Tensor:
+            decay = torch.exp(-atoms.diffusion[some][:, None] * b[None, :])
+            return signal[..., source] * decay.to(signal.dtype)
+
+        return weigh, column.reshape(-1)
 
     def _image(self, basis: _Basis, tissue: Tissue, rotation: np.ndarray) -> _Grid:
         """Return the images a station's readouts encode.
@@ -449,6 +491,8 @@ class FourierPlayer:
             if not chosen.size:
                 continue
             grid, basis = self._grids[index], self._bases[index]
+            if grid is None:
+                continue
             where = torch.as_tensor(chosen, device=device)
             position = np.searchsorted(basis.readouts, readout[chosen])
             temporal = basis.temporal[
@@ -460,10 +504,14 @@ class FourierPlayer:
                 -1, chosen.size
             )
             at = k[where]
+            phase = receiver[where] - echo_phase[where]
+            if self._poses is not None:
+                turns, shifts = self._poses
+                moved = torch.as_tensor(readout[chosen], device=device)
+                phase = phase - 2.0 * math.pi * (at * shifts[moved]).sum(dim=1)
+                at = torch.einsum("nij,nj->ni", turns[moved], at)
             centre = torch.as_tensor(grid.centre, dtype=at.dtype, device=device)
-            phase = -2.0 * math.pi * (at * centre).sum(dim=1) + (
-                receiver[where] - echo_phase[where]
-            )
+            phase = phase - 2.0 * math.pi * (at * centre).sum(dim=1)
             factor = (
                 math.sqrt(grid.points) * grid.spectrum(at) * torch.exp(1j * phase)
             ).to(torch.complex64)
@@ -503,6 +551,8 @@ def simulate(
     *,
     rotation: np.ndarray | None = None,
     device: torch.device | str | None = None,
+    motion: RigidMotion | None = None,
+    girf: Girf | None = None,
 ) -> list[np.ndarray]:
     """Return every readout the cache beside a sequence file acquires of a phantom's tissue.
 
@@ -511,9 +561,51 @@ def simulate(
     arguments.
     """
     player = FourierPlayer(
-        seq_path, tissue, cache_ext, rotation=rotation, device=device
+        seq_path,
+        tissue,
+        cache_ext,
+        rotation=rotation,
+        device=device,
+        motion=motion,
+        girf=girf,
     )
     return list(player.readouts(0, player.blocks))
+
+
+def _poses(
+    timeline: Timeline, motion: RigidMotion, device
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Return what the subject's pose at each readout's echo does to its k-space locations, and widen the reach of each to cover them.
+
+    A subject at ``R p + s`` acquires at k what the subject at rest acquires
+    at ``R^T k``, times exp(-2 pi i k . s): per readout, ``R^T`` along the
+    logical axes, ``(n, 3, 3)``, and ``s`` along them, ``(n, 3)`` in m.
+    """
+    rotation = timeline.rotation
+    readouts = timeline.readouts
+    turns = np.empty((len(readouts), 3, 3))
+    shifts = np.empty((len(readouts), 3))
+    for at, echo_us in enumerate(readouts.echo_us):
+        turn, shift = motion.transform(1e-6 * float(echo_us))
+        turns[at] = rotation.T @ turn.T @ rotation
+        shifts[at] = rotation.T @ shift
+    readouts.reach[:] = np.einsum("nij,nj->ni", np.abs(turns), readouts.reach)
+    return (
+        torch.as_tensor(turns, device=device),
+        torch.as_tensor(shifts, device=device),
+    )
+
+
+def _b_values(
+    timeline: Timeline, entries: _Entries, tolerance: float
+) -> np.ndarray | None:
+    """Return each readout's b-value, in s/m²; None where nothing diffuses or no readout's weighting reaches ``tolerance``."""
+    if entries.diffusion is None or not entries.diffusion.numel():
+        return None
+    b = timeline.readout_b_values()
+    if float(b.max(initial=0.0)) * float(entries.diffusion.max()) < tolerance:
+        return None
+    return b
 
 
 @dataclass(frozen=True, eq=False)
@@ -527,6 +619,7 @@ class _Entries:
     t2: torch.Tensor
     t2_prime: torch.Tensor
     transmit: torch.Tensor | None
+    diffusion: torch.Tensor | None = None
 
     @classmethod
     def of(cls, tissue: Tissue, device: torch.device) -> _Entries:
@@ -543,6 +636,7 @@ class _Entries:
             transmit=None
             if tissue.transmit is None
             else put(tissue.transmit, torch.complex64),
+            diffusion=None if tissue.diffusion is None else put(tissue.diffusion),
         )
 
     def subset(self, index: torch.Tensor) -> _Entries:
@@ -554,6 +648,7 @@ class _Entries:
             t2=self.t2[index],
             t2_prime=self.t2_prime[index],
             transmit=None if self.transmit is None else self.transmit[index],
+            diffusion=None if self.diffusion is None else self.diffusion[index],
         )
 
 
@@ -967,10 +1062,15 @@ class _Atoms:
         weights; ``(entries, 2)`` without bins of the field.
     t1, t2, frequency, b1
         Each atom's relaxation times in s, field in Hz and transmit field.
+    diffusion
+        Each atom's diffusion coefficient in m²/s; None where nothing diffuses.
     """
 
     def __init__(self, entries: _Entries, step: float | None) -> None:
-        relaxation = torch.stack([entries.t1, entries.t2, entries.t2_prime], dim=1)
+        columns = [entries.t1, entries.t2, entries.t2_prime]
+        if entries.diffusion is not None:
+            columns.append(entries.diffusion)
+        relaxation = torch.stack(columns, dim=1)
         classes, class_of = torch.unique(relaxation, dim=0, return_inverse=True)
         if step is None:
             lowest, step = 0.0, 1.0
@@ -1014,6 +1114,7 @@ class _Atoms:
         held_class, rest = unique // (fields * strengths), unique % (fields * strengths)
         self.t1 = classes[held_class, 0]
         self.t2 = classes[held_class, 1]
+        self.diffusion = None if entries.diffusion is None else classes[held_class, 3]
         self.frequency = lowest + step * (rest // strengths).to(torch.float32)
         self.b1 = weakest + _B1_BIN * (rest % strengths).to(torch.float32)
 
