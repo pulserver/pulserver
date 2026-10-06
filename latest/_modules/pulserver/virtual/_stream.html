@@ -481,6 +481,8 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">pypulseqpp</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pp</span>
 
+<span class="kn">from</span><span class="w"> </span><span class="nn">._girf</span><span class="w"> </span><span class="kn">import</span> <span class="n">Girf</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">._motion</span><span class="w"> </span><span class="kn">import</span> <span class="n">RigidMotion</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">._tissue</span><span class="w"> </span><span class="kn">import</span> <span class="n">Tissue</span>
 
 <span class="c1">#: MATLAB Pulseq's audio sample rate, the default of ``pypulseqpp.gradient_sound``, in Hz.</span>
@@ -547,6 +549,9 @@
 <span class="sd">    device</span>
 <span class="sd">        Where the Fourier engine runs, as</span>
 <span class="sd">        :class:`~pulserver.virtual.FourierPlayer` takes it.</span>
+<span class="sd">    motion, girf</span>
+<span class="sd">        How the subject moves and the gradients' impulse response, as</span>
+<span class="sd">        :class:`~pulserver.virtual.FourierPlayer` takes them.</span>
 <span class="sd">    """</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
@@ -557,11 +562,19 @@
         <span class="o">*</span><span class="p">,</span>
         <span class="n">rotation</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">device</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">motion</span><span class="p">:</span> <span class="n">RigidMotion</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">girf</span><span class="p">:</span> <span class="n">Girf</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="kn">from</span><span class="w"> </span><span class="nn">._fourier</span><span class="w"> </span><span class="kn">import</span> <span class="n">FourierPlayer</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_player</span> <span class="o">=</span> <span class="n">FourierPlayer</span><span class="p">(</span>
-            <span class="n">seq_path</span><span class="p">,</span> <span class="n">tissue</span><span class="p">,</span> <span class="n">cache_ext</span><span class="p">,</span> <span class="n">rotation</span><span class="o">=</span><span class="n">rotation</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span>
+            <span class="n">seq_path</span><span class="p">,</span>
+            <span class="n">tissue</span><span class="p">,</span>
+            <span class="n">cache_ext</span><span class="p">,</span>
+            <span class="n">rotation</span><span class="o">=</span><span class="n">rotation</span><span class="p">,</span>
+            <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
+            <span class="n">motion</span><span class="o">=</span><span class="n">motion</span><span class="p">,</span>
+            <span class="n">girf</span><span class="o">=</span><span class="n">girf</span><span class="p">,</span>
         <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_played</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_player</span><span class="o">.</span><span class="n">played</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_turn</span> <span class="o">=</span> <span class="kc">None</span> <span class="k">if</span> <span class="n">rotation</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">rotation</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span>

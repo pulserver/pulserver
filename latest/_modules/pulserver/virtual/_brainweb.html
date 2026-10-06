@@ -722,7 +722,7 @@
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
                 <span class="s2">"a phantom received by coils of its own is not scanned with a coil"</span>
             <span class="p">)</span>
-        <span class="n">positions</span><span class="p">,</span> <span class="n">density</span><span class="p">,</span> <span class="n">t1</span><span class="p">,</span> <span class="n">t2</span><span class="p">,</span> <span class="n">frequency</span><span class="p">,</span> <span class="n">t2_prime</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sampled</span><span class="p">(</span>
+        <span class="n">positions</span><span class="p">,</span> <span class="n">density</span><span class="p">,</span> <span class="n">t1</span><span class="p">,</span> <span class="n">t2</span><span class="p">,</span> <span class="n">frequency</span><span class="p">,</span> <span class="n">t2_prime</span><span class="p">,</span> <span class="n">diffusion</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sampled</span><span class="p">(</span>
             <span class="n">spacing</span><span class="p">,</span> <span class="n">field_t</span><span class="p">,</span> <span class="n">off_resonance_hz</span><span class="p">,</span> <span class="n">region</span>
         <span class="p">)</span>
         <span class="k">return</span> <span class="n">Tissue</span><span class="p">(</span>
@@ -737,6 +737,7 @@
             <span class="n">transmit</span><span class="o">=</span><span class="kc">None</span> <span class="k">if</span> <span class="n">coil</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">transmitted</span><span class="p">(</span><span class="n">coil</span><span class="p">,</span> <span class="n">positions</span><span class="p">),</span>
             <span class="n">receive</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_coils</span><span class="o">.</span><span class="n">_received</span> <span class="k">if</span> <span class="n">coil</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">coil</span><span class="o">.</span><span class="n">receive</span><span class="p">,</span>
             <span class="n">coils</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">coils</span> <span class="k">if</span> <span class="n">coil</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">coil</span><span class="o">.</span><span class="n">receive_channels</span><span class="p">,</span>
+            <span class="n">diffusion</span><span class="o">=</span><span class="n">diffusion</span> <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">diffusion</span><span class="p">)</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
         <span class="p">)</span></div>
 
 

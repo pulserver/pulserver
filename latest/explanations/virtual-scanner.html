@@ -539,6 +539,7 @@
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#configuration-states">Configuration states</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#temporal-and-readout-bases">Temporal and readout bases</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#demodulation-and-the-field-of-view-offset">Demodulation and the field-of-view offset</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#diffusion-motion-and-the-gradient-response">Diffusion, motion and the gradient response</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#what-is-not-modelled">What is not modelled</a></li>
 </ul>
 </li>
@@ -770,9 +771,26 @@ the line through the window centre and the proxy the rest. An object turned by <
 prescribed centre, its axes turned by <span class="math notranslate nohighlight">\(R\)</span>, is therefore acquired as the same
 object at the isocentre under the identity, a reflection in <span class="math notranslate nohighlight">\(R\)</span> included.</p>
 </section>
+<section id="diffusion-motion-and-the-gradient-response">
+<h3>Diffusion, motion and the gradient response<a class="headerlink" href="#diffusion-motion-and-the-gradient-response" title="Link to this heading">#</a></h3>
+<p>A tissue class with a diffusion coefficient <span class="math notranslate nohighlight">\(D\)</span> loses <span class="math notranslate nohighlight">\(e^{-bD}\)</span> of its signal
+at each readout, where <span class="math notranslate nohighlight">\(b = (2\pi)^2\int |\mathbf{k}(t)|^2\,dt\)</span> is integrated
+since the last excitation over the moment measured from the readout’s origins,
+so a refocusing pulse mirrors it. Diffusion is isotropic. It is left out where
+no class diffuses, or where the largest <span class="math notranslate nohighlight">\(b\)</span> of the scan times the largest <span class="math notranslate nohighlight">\(D\)</span>
+is below a hundredth.</p>
+<p>A subject in rigid motion, <a class="reference internal" href="../generated/pulserver.virtual.RigidMotion.html#pulserver.virtual.RigidMotion" title="pulserver.virtual.RigidMotion"><code class="xref py py-class docutils literal notranslate"><span class="pre">RigidMotion</span></code></a>, is held in
+the pose it has at each readout’s echo for the whole readout. The pose turns
+the readout’s k-space and shifts its phase, as a phantom placed in that pose
+would be acquired; the coils, the transmit field and the relaxation move with
+the object.</p>
+<p>A gradient impulse response, <a class="reference internal" href="../generated/pulserver.virtual.Girf.html#pulserver.virtual.Girf" title="pulserver.virtual.Girf"><code class="xref py py-class docutils literal notranslate"><span class="pre">Girf</span></code></a>, filters the
+moment the gradients play on each physical axis, so the trajectory, the
+origins and the dephasing all follow the filtered gradients.</p>
+</section>
 <section id="what-is-not-modelled">
 <h3>What is not modelled<a class="headerlink" href="#what-is-not-modelled" title="Link to this heading">#</a></h3>
-<p>Diffusion and motion are not modelled. A pulse acts at its centre, with no
+<p>A pulse acts at its centre, with no
 relaxation during it, and turns each cube by an ideal rotation, so the phase a
 selective pulse leaves across its slab beyond that rotation is left out. The
 channels of a pTx pulse are summed, as at unit, in-phase sensitivity. A
@@ -870,6 +888,7 @@ electromagnetic and susceptibility models of BrainWeb’s head instead
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#configuration-states">Configuration states</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#temporal-and-readout-bases">Temporal and readout bases</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#demodulation-and-the-field-of-view-offset">Demodulation and the field-of-view offset</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#diffusion-motion-and-the-gradient-response">Diffusion, motion and the gradient response</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#what-is-not-modelled">What is not modelled</a></li>
 </ul>
 </li>

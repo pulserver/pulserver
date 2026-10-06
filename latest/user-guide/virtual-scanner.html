@@ -615,7 +615,10 @@ phantom that fills a volume. The engine runs on a CUDA device where there is
 one, and on the CPU otherwise; <code class="docutils literal notranslate"><span class="pre">device</span></code> names another. It returns one
 <code class="docutils literal notranslate"><span class="pre">(coils,</span> <span class="pre">samples)</span></code> array per readout, in play order, demodulated as the
 playout demodulates. It spoils by the moment the gradients wind across a
-voxel between pulses and readouts, and models no motion and no diffusion.</p>
+voxel between pulses and readouts. <code class="docutils literal notranslate"><span class="pre">motion</span></code> takes a
+<a class="reference internal" href="../generated/pulserver.virtual.RigidMotion.html#pulserver.virtual.RigidMotion" title="pulserver.virtual.RigidMotion"><code class="xref py py-class docutils literal notranslate"><span class="pre">RigidMotion</span></code></a> and <code class="docutils literal notranslate"><span class="pre">girf</span></code> a
+<a class="reference internal" href="../generated/pulserver.virtual.Girf.html#pulserver.virtual.Girf" title="pulserver.virtual.Girf"><code class="xref py py-class docutils literal notranslate"><span class="pre">Girf</span></code></a>; a tissue whose <code class="docutils literal notranslate"><span class="pre">diffusion</span></code> is set loses
+<span class="math notranslate nohighlight">\(e^{-bD}\)</span> at each readout.</p>
 <p><code class="docutils literal notranslate"><span class="pre">config</span></code> names the reconstruction plugin, here the shipped <code class="docutils literal notranslate"><span class="pre">pics</span></code>, as the
 config text of a reconstruction client does (<a class="reference internal" href="reconstruction-client.html"><span class="doc">Reconstruction clients</span></a>); the
 proxy refuses a series whose config names none.</p>
@@ -750,8 +753,12 @@ with one of the scanner’s coils instead, <code class="docutils literal notrans
 <code class="docutils literal notranslate"><span class="pre">head8/head32</span></code>, named <code class="docutils literal notranslate"><span class="pre">transmit/receive</span></code>, whose sensitivities bartorch
 samples from BART’s coil models, which the <code class="docutils literal notranslate"><span class="pre">coils</span></code> extra installs
 (<code class="docutils literal notranslate"><span class="pre">pip</span> <span class="pre">install</span> <span class="pre">'pulserver[coils]'</span></code>). A phantom file gives each ellipse its
-<code class="docutils literal notranslate"><span class="pre">t2_prime</span></code>, in s.</p>
+<code class="docutils literal notranslate"><span class="pre">t2_prime</span></code>, in s. BrainWeb’s grey and white matter and CSF diffuse.</p>
 </li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--nod</span> <span class="pre">DEGREES</span> <span class="pre">PERIOD</span></code> turns the subject about the physical x axis
+sinusoidally, <code class="docutils literal notranslate"><span class="pre">--drift</span> <span class="pre">X</span> <span class="pre">Y</span> <span class="pre">Z</span></code> translates it in mm/min, and <code class="docutils literal notranslate"><span class="pre">--jumps</span> <span class="pre">RATE</span> <span class="pre">MM</span> <span class="pre">DEGREES</span></code> moves it suddenly at random, <code class="docutils literal notranslate"><span class="pre">RATE</span></code> times a second on average.
+<code class="docutils literal notranslate"><span class="pre">--girf</span> <span class="pre">DELAY_US</span> <span class="pre">TIME_CONSTANT_US</span></code> plays the gradients through a delay and a
+first-order low pass. The console takes the same options.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">--recon</span></code> streams the series to a reconstruction proxy, which looks the
 design up in its store: give that store as <code class="docutils literal notranslate"><span class="pre">--store</span></code>, or the proxy’s design
 intake as <code class="docutils literal notranslate"><span class="pre">--push</span></code>. The images go to <code class="docutils literal notranslate"><span class="pre">images.h5</span></code> in <code class="docutils literal notranslate"><span class="pre">--output</span></code>, the DICOM

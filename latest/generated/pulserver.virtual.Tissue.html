@@ -561,6 +561,8 @@ pulse’s nominal amplitude; None for one uniform channel.</p></li>
 <li><p><strong>receive</strong> (<em>collections.abc.Callable[[numpy.ndarray], numpy.ndarray | None]</em>) – Each coil’s receive sensitivity at <code class="docutils literal notranslate"><span class="pre">(p,</span> <span class="pre">3)</span></code> physical points, <code class="docutils literal notranslate"><span class="pre">(p,</span>
 <span class="pre">coils)</span></code>; None for one coil of unit sensitivity.</p></li>
 <li><p><strong>coils</strong> (<em>int</em>) – Receive channels.</p></li>
+<li><p><strong>diffusion</strong> (<em>numpy.ndarray | None</em>) – <code class="docutils literal notranslate"><span class="pre">(n,)</span></code> its isotropic diffusion coefficient, in m²/s; None where
+nothing diffuses.</p></li>
 </ul>
 </dd>
 </dl>
@@ -569,37 +571,40 @@ pulse’s nominal amplitude; None for one uniform channel.</p></li>
 <p class="rubric">Attributes</p>
 <div class="pst-scrollable-table-container"><table class="autosummary longtable table">
 <tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.virtual.Tissue.positions.html#pulserver.virtual.Tissue.positions" title="pulserver.virtual.Tissue.positions"><code class="xref py py-obj docutils literal notranslate"><span class="pre">positions</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.virtual.Tissue.diffusion.html#pulserver.virtual.Tissue.diffusion" title="pulserver.virtual.Tissue.diffusion"><code class="xref py py-obj docutils literal notranslate"><span class="pre">diffusion</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pulserver.virtual.Tissue.density.html#pulserver.virtual.Tissue.density" title="pulserver.virtual.Tissue.density"><code class="xref py py-obj docutils literal notranslate"><span class="pre">density</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pulserver.virtual.Tissue.positions.html#pulserver.virtual.Tissue.positions" title="pulserver.virtual.Tissue.positions"><code class="xref py py-obj docutils literal notranslate"><span class="pre">positions</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.virtual.Tissue.t1.html#pulserver.virtual.Tissue.t1" title="pulserver.virtual.Tissue.t1"><code class="xref py py-obj docutils literal notranslate"><span class="pre">t1</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.virtual.Tissue.density.html#pulserver.virtual.Tissue.density" title="pulserver.virtual.Tissue.density"><code class="xref py py-obj docutils literal notranslate"><span class="pre">density</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pulserver.virtual.Tissue.t2.html#pulserver.virtual.Tissue.t2" title="pulserver.virtual.Tissue.t2"><code class="xref py py-obj docutils literal notranslate"><span class="pre">t2</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pulserver.virtual.Tissue.t1.html#pulserver.virtual.Tissue.t1" title="pulserver.virtual.Tissue.t1"><code class="xref py py-obj docutils literal notranslate"><span class="pre">t1</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.virtual.Tissue.t2_prime.html#pulserver.virtual.Tissue.t2_prime" title="pulserver.virtual.Tissue.t2_prime"><code class="xref py py-obj docutils literal notranslate"><span class="pre">t2_prime</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.virtual.Tissue.t2.html#pulserver.virtual.Tissue.t2" title="pulserver.virtual.Tissue.t2"><code class="xref py py-obj docutils literal notranslate"><span class="pre">t2</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pulserver.virtual.Tissue.frequency.html#pulserver.virtual.Tissue.frequency" title="pulserver.virtual.Tissue.frequency"><code class="xref py py-obj docutils literal notranslate"><span class="pre">frequency</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pulserver.virtual.Tissue.t2_prime.html#pulserver.virtual.Tissue.t2_prime" title="pulserver.virtual.Tissue.t2_prime"><code class="xref py py-obj docutils literal notranslate"><span class="pre">t2_prime</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.virtual.Tissue.spacing.html#pulserver.virtual.Tissue.spacing" title="pulserver.virtual.Tissue.spacing"><code class="xref py py-obj docutils literal notranslate"><span class="pre">spacing</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.virtual.Tissue.frequency.html#pulserver.virtual.Tissue.frequency" title="pulserver.virtual.Tissue.frequency"><code class="xref py py-obj docutils literal notranslate"><span class="pre">frequency</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pulserver.virtual.Tissue.axes.html#pulserver.virtual.Tissue.axes" title="pulserver.virtual.Tissue.axes"><code class="xref py py-obj docutils literal notranslate"><span class="pre">axes</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pulserver.virtual.Tissue.spacing.html#pulserver.virtual.Tissue.spacing" title="pulserver.virtual.Tissue.spacing"><code class="xref py py-obj docutils literal notranslate"><span class="pre">spacing</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.virtual.Tissue.transmit.html#pulserver.virtual.Tissue.transmit" title="pulserver.virtual.Tissue.transmit"><code class="xref py py-obj docutils literal notranslate"><span class="pre">transmit</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.virtual.Tissue.axes.html#pulserver.virtual.Tissue.axes" title="pulserver.virtual.Tissue.axes"><code class="xref py py-obj docutils literal notranslate"><span class="pre">axes</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pulserver.virtual.Tissue.receive.html#pulserver.virtual.Tissue.receive" title="pulserver.virtual.Tissue.receive"><code class="xref py py-obj docutils literal notranslate"><span class="pre">receive</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pulserver.virtual.Tissue.transmit.html#pulserver.virtual.Tissue.transmit" title="pulserver.virtual.Tissue.transmit"><code class="xref py py-obj docutils literal notranslate"><span class="pre">transmit</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.virtual.Tissue.coils.html#pulserver.virtual.Tissue.coils" title="pulserver.virtual.Tissue.coils"><code class="xref py py-obj docutils literal notranslate"><span class="pre">coils</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.virtual.Tissue.receive.html#pulserver.virtual.Tissue.receive" title="pulserver.virtual.Tissue.receive"><code class="xref py py-obj docutils literal notranslate"><span class="pre">receive</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pulserver.virtual.Tissue.coils.html#pulserver.virtual.Tissue.coils" title="pulserver.virtual.Tissue.coils"><code class="xref py py-obj docutils literal notranslate"><span class="pre">coils</span></code></a></p></td>
 <td><p></p></td>
 </tr>
 </tbody>

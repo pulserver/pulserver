@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>Scan &#8212; pulserver documentation</title>
+    <title>Girf &#8212; pulserver documentation</title>
   
   
   
@@ -52,7 +52,7 @@
     <script src="../_static/copybutton.js?v=f281be69"></script>
     <script src="../_static/sg-tags.js?v=d80f6fa4"></script>
     <script src="../_static/scripts/sphinx-book-theme.js?v=fab101a9"></script>
-    <script>DOCUMENTATION_OPTIONS.pagename = 'generated/pulserver.virtual.Scan';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'generated/pulserver.virtual.Girf';</script>
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
@@ -61,7 +61,7 @@
             true;
         </script>
     <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
-    <link rel="canonical" href="https://pulserver.github.io/pulserver/latest/generated/pulserver.virtual.Scan.html" />
+    <link rel="canonical" href="https://pulserver.github.io/pulserver/latest/generated/pulserver.virtual.Girf.html" />
     <link rel="icon" href="../_static/pulserver-mark.svg"/>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
@@ -387,7 +387,7 @@
       
       
       
-      <li><a href="https://github.com/pulserver/pulserver/edit/main/docs/generated/pulserver.virtual.Scan.rst" target="_blank"
+      <li><a href="https://github.com/pulserver/pulserver/edit/main/docs/generated/pulserver.virtual.Girf.rst" target="_blank"
    class="btn btn-sm btn-source-edit-button dropdown-item"
    title="Suggest edit"
    data-bs-placement="left" data-bs-toggle="tooltip"
@@ -404,7 +404,7 @@
       
       
       
-      <li><a href="https://github.com/pulserver/pulserver/issues/new?title=Issue%20on%20page%20%2Fgenerated/pulserver.virtual.Scan.html&body=Your%20issue%20content%20here." target="_blank"
+      <li><a href="https://github.com/pulserver/pulserver/issues/new?title=Issue%20on%20page%20%2Fgenerated/pulserver.virtual.Girf.html&body=Your%20issue%20content%20here." target="_blank"
    class="btn btn-sm btn-source-issues-button dropdown-item"
    title="Open an issue"
    data-bs-placement="left" data-bs-toggle="tooltip"
@@ -434,7 +434,7 @@
       
       
       
-      <li><a href="../_sources/generated/pulserver.virtual.Scan.rst" target="_blank"
+      <li><a href="../_sources/generated/pulserver.virtual.Girf.rst" target="_blank"
    class="btn btn-sm btn-download-source-button dropdown-item"
    title="Download source file"
    data-bs-placement="left" data-bs-toggle="tooltip"
@@ -517,7 +517,7 @@
               
 
 <div id="jb-print-docs-body" class="onlyprint">
-    <h1>Scan</h1>
+    <h1>Girf</h1>
     <!-- Table of contents -->
     <div id="print-main-content">
         <div id="jb-print-toc">
@@ -527,7 +527,7 @@
             </div>
             <nav aria-label="Page">
                 <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.virtual.Scan"><code class="docutils literal notranslate"><span class="pre">Scan</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.virtual.Girf"><code class="docutils literal notranslate"><span class="pre">Girf</span></code></a></li>
 </ul>
             </nav>
         </div>
@@ -539,29 +539,22 @@
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <section id="scan">
-<h1>Scan<a class="headerlink" href="#scan" title="Link to this heading">#</a></h1>
+  <section id="girf">
+<h1>Girf<a class="headerlink" href="#girf" title="Link to this heading">#</a></h1>
 <dl class="py class">
-<dt class="sig sig-object py" id="pulserver.virtual.Scan">
-<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">pulserver.virtual.</span></span><span class="sig-name descname"><span class="pre">Scan</span></span><a class="reference internal" href="../_modules/pulserver/virtual/_stream.html#Scan"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.virtual.Scan" title="Link to this definition">#</a></dt>
+<dt class="sig sig-object py" id="pulserver.virtual.Girf">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">pulserver.virtual.</span></span><span class="sig-name descname"><span class="pre">Girf</span></span><a class="reference internal" href="../_modules/pulserver/virtual/_girf.html#Girf"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.virtual.Girf" title="Link to this definition">#</a></dt>
 <dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/builtins/functions.html#object" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
-<p>The cache beside a sequence file acquired of a phantom’s tissue by the Fourier engine, against a scan clock.</p>
-<p>The blocks are acquired as <a class="reference internal" href="pulserver.virtual.FourierPlayer.html#pulserver.virtual.FourierPlayer" title="pulserver.virtual.FourierPlayer"><code class="xref py py-class docutils literal notranslate"><span class="pre">FourierPlayer</span></code></a>
-acquires them.</p>
+<p>A gradient impulse response function per physical axis.</p>
+<p>The gradient played along a physical axis is the one the cache asks for
+convolved with that axis’s impulse response, so the moment is too.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>seq_path</strong> – The first file of the sequence’s chain, beside its cache.</p></li>
-<li><p><strong>tissue</strong> – The phantom’s tissue.</p></li>
-<li><p><strong>cache_ext</strong> – The extension of the cache beside each file.</p></li>
-<li><p><strong>rotation</strong> – <code class="docutils literal notranslate"><span class="pre">(3,</span> <span class="pre">3)</span></code> rotation of the prescription from logical to physical axes,
-a reflection included; the identity by default.</p></li>
-<li><p><strong>device</strong> – Where the Fourier engine runs, as
-<a class="reference internal" href="pulserver.virtual.FourierPlayer.html#pulserver.virtual.FourierPlayer" title="pulserver.virtual.FourierPlayer"><code class="xref py py-class docutils literal notranslate"><span class="pre">FourierPlayer</span></code></a> takes it.</p></li>
-<li><p><strong>motion</strong> – How the subject moves and the gradients’ impulse response, as
-<a class="reference internal" href="pulserver.virtual.FourierPlayer.html#pulserver.virtual.FourierPlayer" title="pulserver.virtual.FourierPlayer"><code class="xref py py-class docutils literal notranslate"><span class="pre">FourierPlayer</span></code></a> takes them.</p></li>
-<li><p><strong>girf</strong> – How the subject moves and the gradients’ impulse response, as
-<a class="reference internal" href="pulserver.virtual.FourierPlayer.html#pulserver.virtual.FourierPlayer" title="pulserver.virtual.FourierPlayer"><code class="xref py py-class docutils literal notranslate"><span class="pre">FourierPlayer</span></code></a> takes them.</p></li>
+<li><p><strong>impulse</strong> – <code class="docutils literal notranslate"><span class="pre">(taps,</span> <span class="pre">3)</span></code> the response along x, y and z at <code class="docutils literal notranslate"><span class="pre">taps</span></code> delays
+<code class="docutils literal notranslate"><span class="pre">dt_s</span></code> apart from zero, in 1/s; each column’s sum times <code class="docutils literal notranslate"><span class="pre">dt_s</span></code> is
+the axis’s gain at zero frequency.</p></li>
+<li><p><strong>dt_s</strong> – The spacing of the delays, in s.</p></li>
 </ul>
 </dd>
 </dl>
@@ -570,17 +563,11 @@ a reflection included; the identity by default.</p></li>
 <p class="rubric">Methods</p>
 <div class="pst-scrollable-table-container"><table class="autosummary longtable table">
 <tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.virtual.Scan.chunks.html#pulserver.virtual.Scan.chunks" title="pulserver.virtual.Scan.chunks"><code class="xref py py-obj docutils literal notranslate"><span class="pre">chunks</span></code></a></p></td>
-<td><p>Play the scan in spans of whole blocks; yield each once released.</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.virtual.Girf.delay_lowpass.html#pulserver.virtual.Girf.delay_lowpass" title="pulserver.virtual.Girf.delay_lowpass"><code class="xref py py-obj docutils literal notranslate"><span class="pre">delay_lowpass</span></code></a></p></td>
+<td><p>Return a delay followed by a first-order low pass, alike on every axis, of unit gain at zero frequency.</p></td>
 </tr>
-</tbody>
-</table>
-</div>
-<p class="rubric">Attributes</p>
-<div class="pst-scrollable-table-container"><table class="autosummary longtable table">
-<tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.virtual.Scan.duration.html#pulserver.virtual.Scan.duration" title="pulserver.virtual.Scan.duration"><code class="xref py py-obj docutils literal notranslate"><span class="pre">duration</span></code></a></p></td>
-<td><p>The scan's duration, in s.</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pulserver.virtual.Girf.filtered.html#pulserver.virtual.Girf.filtered" title="pulserver.virtual.Girf.filtered"><code class="xref py py-obj docutils literal notranslate"><span class="pre">filtered</span></code></a></p></td>
+<td><p>Return the moment the response plays by <code class="docutils literal notranslate"><span class="pre">times_us</span></code>, from <code class="docutils literal notranslate"><span class="pre">moment(block,</span> <span class="pre">since_us)</span></code> of the gradients asked for, <code class="docutils literal notranslate"><span class="pre">(n,</span> <span class="pre">3)</span></code> along the physical axes.</p></td>
 </tr>
 </tbody>
 </table>
@@ -616,7 +603,7 @@ a reflection included; the identity by default.</p></li>
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.virtual.Scan"><code class="docutils literal notranslate"><span class="pre">Scan</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.virtual.Girf"><code class="docutils literal notranslate"><span class="pre">Girf</span></code></a></li>
 </ul>
   </nav></div>
 

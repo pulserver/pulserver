@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>Scan &#8212; pulserver documentation</title>
+    <title>RigidMotion &#8212; pulserver documentation</title>
   
   
   
@@ -52,7 +52,7 @@
     <script src="../_static/copybutton.js?v=f281be69"></script>
     <script src="../_static/sg-tags.js?v=d80f6fa4"></script>
     <script src="../_static/scripts/sphinx-book-theme.js?v=fab101a9"></script>
-    <script>DOCUMENTATION_OPTIONS.pagename = 'generated/pulserver.virtual.Scan';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'generated/pulserver.virtual.RigidMotion';</script>
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
@@ -61,7 +61,7 @@
             true;
         </script>
     <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
-    <link rel="canonical" href="https://pulserver.github.io/pulserver/latest/generated/pulserver.virtual.Scan.html" />
+    <link rel="canonical" href="https://pulserver.github.io/pulserver/latest/generated/pulserver.virtual.RigidMotion.html" />
     <link rel="icon" href="../_static/pulserver-mark.svg"/>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
@@ -387,7 +387,7 @@
       
       
       
-      <li><a href="https://github.com/pulserver/pulserver/edit/main/docs/generated/pulserver.virtual.Scan.rst" target="_blank"
+      <li><a href="https://github.com/pulserver/pulserver/edit/main/docs/generated/pulserver.virtual.RigidMotion.rst" target="_blank"
    class="btn btn-sm btn-source-edit-button dropdown-item"
    title="Suggest edit"
    data-bs-placement="left" data-bs-toggle="tooltip"
@@ -404,7 +404,7 @@
       
       
       
-      <li><a href="https://github.com/pulserver/pulserver/issues/new?title=Issue%20on%20page%20%2Fgenerated/pulserver.virtual.Scan.html&body=Your%20issue%20content%20here." target="_blank"
+      <li><a href="https://github.com/pulserver/pulserver/issues/new?title=Issue%20on%20page%20%2Fgenerated/pulserver.virtual.RigidMotion.html&body=Your%20issue%20content%20here." target="_blank"
    class="btn btn-sm btn-source-issues-button dropdown-item"
    title="Open an issue"
    data-bs-placement="left" data-bs-toggle="tooltip"
@@ -434,7 +434,7 @@
       
       
       
-      <li><a href="../_sources/generated/pulserver.virtual.Scan.rst" target="_blank"
+      <li><a href="../_sources/generated/pulserver.virtual.RigidMotion.rst" target="_blank"
    class="btn btn-sm btn-download-source-button dropdown-item"
    title="Download source file"
    data-bs-placement="left" data-bs-toggle="tooltip"
@@ -517,7 +517,7 @@
               
 
 <div id="jb-print-docs-body" class="onlyprint">
-    <h1>Scan</h1>
+    <h1>RigidMotion</h1>
     <!-- Table of contents -->
     <div id="print-main-content">
         <div id="jb-print-toc">
@@ -527,7 +527,7 @@
             </div>
             <nav aria-label="Page">
                 <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.virtual.Scan"><code class="docutils literal notranslate"><span class="pre">Scan</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.virtual.RigidMotion"><code class="docutils literal notranslate"><span class="pre">RigidMotion</span></code></a></li>
 </ul>
             </nav>
         </div>
@@ -539,48 +539,49 @@
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <section id="scan">
-<h1>Scan<a class="headerlink" href="#scan" title="Link to this heading">#</a></h1>
+  <section id="rigidmotion">
+<h1>RigidMotion<a class="headerlink" href="#rigidmotion" title="Link to this heading">#</a></h1>
 <dl class="py class">
-<dt class="sig sig-object py" id="pulserver.virtual.Scan">
-<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">pulserver.virtual.</span></span><span class="sig-name descname"><span class="pre">Scan</span></span><a class="reference internal" href="../_modules/pulserver/virtual/_stream.html#Scan"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.virtual.Scan" title="Link to this definition">#</a></dt>
+<dt class="sig sig-object py" id="pulserver.virtual.RigidMotion">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">pulserver.virtual.</span></span><span class="sig-name descname"><span class="pre">RigidMotion</span></span><a class="reference internal" href="../_modules/pulserver/virtual/_motion.html#RigidMotion"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.virtual.RigidMotion" title="Link to this definition">#</a></dt>
 <dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/builtins/functions.html#object" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
-<p>The cache beside a sequence file acquired of a phantom’s tissue by the Fourier engine, against a scan clock.</p>
-<p>The blocks are acquired as <a class="reference internal" href="pulserver.virtual.FourierPlayer.html#pulserver.virtual.FourierPlayer" title="pulserver.virtual.FourierPlayer"><code class="xref py py-class docutils literal notranslate"><span class="pre">FourierPlayer</span></code></a>
-acquires them.</p>
+<p>A subject moving as a rigid body.</p>
+<p>At time <code class="docutils literal notranslate"><span class="pre">t</span></code>, in s from the start of the scan, the point <code class="docutils literal notranslate"><span class="pre">p</span></code> of the
+subject at rest lies at <code class="docutils literal notranslate"><span class="pre">R(t)</span> <span class="pre">(p</span> <span class="pre">-</span> <span class="pre">centre)</span> <span class="pre">+</span> <span class="pre">centre</span> <span class="pre">+</span> <span class="pre">offset(t)</span></code>, every
+vector along the physical axes, in m.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>seq_path</strong> – The first file of the sequence’s chain, beside its cache.</p></li>
-<li><p><strong>tissue</strong> – The phantom’s tissue.</p></li>
-<li><p><strong>cache_ext</strong> – The extension of the cache beside each file.</p></li>
-<li><p><strong>rotation</strong> – <code class="docutils literal notranslate"><span class="pre">(3,</span> <span class="pre">3)</span></code> rotation of the prescription from logical to physical axes,
-a reflection included; the identity by default.</p></li>
-<li><p><strong>device</strong> – Where the Fourier engine runs, as
-<a class="reference internal" href="pulserver.virtual.FourierPlayer.html#pulserver.virtual.FourierPlayer" title="pulserver.virtual.FourierPlayer"><code class="xref py py-class docutils literal notranslate"><span class="pre">FourierPlayer</span></code></a> takes it.</p></li>
-<li><p><strong>motion</strong> – How the subject moves and the gradients’ impulse response, as
-<a class="reference internal" href="pulserver.virtual.FourierPlayer.html#pulserver.virtual.FourierPlayer" title="pulserver.virtual.FourierPlayer"><code class="xref py py-class docutils literal notranslate"><span class="pre">FourierPlayer</span></code></a> takes them.</p></li>
-<li><p><strong>girf</strong> – How the subject moves and the gradients’ impulse response, as
-<a class="reference internal" href="pulserver.virtual.FourierPlayer.html#pulserver.virtual.FourierPlayer" title="pulserver.virtual.FourierPlayer"><code class="xref py py-class docutils literal notranslate"><span class="pre">FourierPlayer</span></code></a> takes them.</p></li>
+<li><p><strong>rotation</strong> (<em>callable</em><em>, </em><em>optional</em>) – <code class="docutils literal notranslate"><span class="pre">R(t)</span></code>, a <code class="docutils literal notranslate"><span class="pre">(3,</span> <span class="pre">3)</span></code> orthonormal matrix; the identity without one.</p></li>
+<li><p><strong>offset</strong> (<em>callable</em><em>, </em><em>optional</em>) – <code class="docutils literal notranslate"><span class="pre">offset(t)</span></code>, a translation of <code class="docutils literal notranslate"><span class="pre">(3,)</span></code> metres; none without one.</p></li>
+<li><p><strong>centre</strong> (<em>array_like</em><em>, </em><em>default=</em><em>(</em><em>0</em><em>, </em><em>0</em><em>, </em><em>0</em><em>)</em>) – The point <code class="docutils literal notranslate"><span class="pre">rotation</span></code> turns about, in m.</p></li>
 </ul>
 </dd>
 </dl>
+<p class="rubric">Examples</p>
+<p>A nod of 2 degrees about x, once every 4 s, and a drift of 1 mm/min
+along z:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">pulserver.virtual</span><span class="w"> </span><span class="kn">import</span> <span class="n">RigidMotion</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">def</span><span class="w"> </span><span class="nf">nod</span><span class="p">(</span><span class="n">t</span><span class="p">):</span>
+<span class="gp">... </span>    <span class="n">angle</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">radians</span><span class="p">(</span><span class="mf">2.0</span><span class="p">)</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="mf">2.0</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span> <span class="o">*</span> <span class="n">t</span> <span class="o">/</span> <span class="mf">4.0</span><span class="p">)</span>
+<span class="gp">... </span>    <span class="n">c</span><span class="p">,</span> <span class="n">s</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="n">angle</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="n">angle</span><span class="p">)</span>
+<span class="gp">... </span>    <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([[</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">],</span> <span class="p">[</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">c</span><span class="p">,</span> <span class="o">-</span><span class="n">s</span><span class="p">],</span> <span class="p">[</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">s</span><span class="p">,</span> <span class="n">c</span><span class="p">]])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">motion</span> <span class="o">=</span> <span class="n">RigidMotion</span><span class="p">(</span><span class="n">nod</span><span class="p">,</span> <span class="k">lambda</span> <span class="n">t</span><span class="p">:</span> <span class="p">[</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">1e-3</span> <span class="o">*</span> <span class="n">t</span> <span class="o">/</span> <span class="mf">60.0</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">motion</span><span class="p">(</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([[</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">]]))</span><span class="o">.</span><span class="n">round</span><span class="p">(</span><span class="mi">5</span><span class="p">)</span>
+<span class="go">array([[0.     , 0.09994, 0.00351]])</span>
+</pre></div>
+</div>
 </dd></dl>
 
 <p class="rubric">Methods</p>
 <div class="pst-scrollable-table-container"><table class="autosummary longtable table">
 <tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.virtual.Scan.chunks.html#pulserver.virtual.Scan.chunks" title="pulserver.virtual.Scan.chunks"><code class="xref py py-obj docutils literal notranslate"><span class="pre">chunks</span></code></a></p></td>
-<td><p>Play the scan in spans of whole blocks; yield each once released.</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.virtual.RigidMotion.jumps.html#pulserver.virtual.RigidMotion.jumps" title="pulserver.virtual.RigidMotion.jumps"><code class="xref py py-obj docutils literal notranslate"><span class="pre">jumps</span></code></a></p></td>
+<td><p>Return a subject that holds still between sudden moves.</p></td>
 </tr>
-</tbody>
-</table>
-</div>
-<p class="rubric">Attributes</p>
-<div class="pst-scrollable-table-container"><table class="autosummary longtable table">
-<tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.virtual.Scan.duration.html#pulserver.virtual.Scan.duration" title="pulserver.virtual.Scan.duration"><code class="xref py py-obj docutils literal notranslate"><span class="pre">duration</span></code></a></p></td>
-<td><p>The scan's duration, in s.</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pulserver.virtual.RigidMotion.transform.html#pulserver.virtual.RigidMotion.transform" title="pulserver.virtual.RigidMotion.transform"><code class="xref py py-obj docutils literal notranslate"><span class="pre">transform</span></code></a></p></td>
+<td><p>Return <code class="docutils literal notranslate"><span class="pre">(R,</span> <span class="pre">shift)</span></code>, with which the point <code class="docutils literal notranslate"><span class="pre">p</span></code> at rest lies at <code class="docutils literal notranslate"><span class="pre">R</span> <span class="pre">&#64;</span> <span class="pre">p</span> <span class="pre">+</span> <span class="pre">shift</span></code> at <code class="docutils literal notranslate"><span class="pre">t</span></code>.</p></td>
 </tr>
 </tbody>
 </table>
@@ -616,7 +617,7 @@ a reflection included; the identity by default.</p></li>
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.virtual.Scan"><code class="docutils literal notranslate"><span class="pre">Scan</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.virtual.RigidMotion"><code class="docutils literal notranslate"><span class="pre">RigidMotion</span></code></a></li>
 </ul>
   </nav></div>
 

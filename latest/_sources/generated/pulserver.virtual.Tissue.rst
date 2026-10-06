@@ -16,6 +16,7 @@
    :toctree:
    :nosignatures:
 
+   ~Tissue.diffusion
    ~Tissue.positions
    ~Tissue.density
    ~Tissue.t1

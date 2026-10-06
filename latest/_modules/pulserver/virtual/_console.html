@@ -483,6 +483,8 @@
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">.._plugins</span><span class="w"> </span><span class="kn">import</span> <span class="n">PluginPath</span><span class="p">,</span> <span class="n">directories</span><span class="p">,</span> <span class="n">names</span><span class="p">,</span> <span class="n">recon_names</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">._command</span><span class="w"> </span><span class="kn">import</span> <span class="n">reconstruction_plugin</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">._girf</span><span class="w"> </span><span class="kn">import</span> <span class="n">Girf</span><span class="p">,</span> <span class="n">girf_arguments</span><span class="p">,</span> <span class="n">system_girf</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">._motion</span><span class="w"> </span><span class="kn">import</span> <span class="n">RigidMotion</span><span class="p">,</span> <span class="n">motion_arguments</span><span class="p">,</span> <span class="n">subject_motion</span>
 
 <span class="c1">#: The design calls a console forwards, answered as ``pulserver design`` answers them.</span>
 <span class="n">DESIGN_CALLS</span> <span class="o">=</span> <span class="p">(</span><span class="s2">"list"</span><span class="p">,</span> <span class="s2">"validate"</span><span class="p">,</span> <span class="s2">"generate"</span><span class="p">,</span> <span class="s2">"import"</span><span class="p">)</span>
@@ -595,6 +597,10 @@
 <span class="sd">    device</span>
 <span class="sd">        Device a scan is simulated on, as</span>
 <span class="sd">        :class:`~pulserver.virtual.FourierPlayer` takes it.</span>
+<span class="sd">    motion</span>
+<span class="sd">        How the subject moves during every scan, from each scan's start.</span>
+<span class="sd">    girf</span>
+<span class="sd">        The impulse response every scan's gradients play through.</span>
 <span class="sd">    """</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
@@ -611,6 +617,8 @@
         <span class="n">fields</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">speed</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">device</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">motion</span><span class="p">:</span> <span class="n">RigidMotion</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">girf</span><span class="p">:</span> <span class="n">Girf</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="kn">from</span><span class="w"> </span><span class="nn">..host._blocks</span><span class="w"> </span><span class="kn">import</span> <span class="n">parse_limits</span>
         <span class="kn">from</span><span class="w"> </span><span class="nn">..proxy</span><span class="w"> </span><span class="kn">import</span> <span class="n">LocalReconstruction</span>
@@ -633,6 +641,8 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">spacing</span> <span class="o">=</span> <span class="n">spacing</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">speed</span> <span class="o">=</span> <span class="n">speed</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">device</span> <span class="o">=</span> <span class="n">device</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">motion</span> <span class="o">=</span> <span class="n">motion</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">girf</span> <span class="o">=</span> <span class="n">girf</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">field_t</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">parse_limits</span><span class="p">(</span><span class="n">limits</span><span class="p">)[</span><span class="s2">"B0"</span><span class="p">])</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">fields</span> <span class="o">=</span> <span class="kc">None</span> <span class="k">if</span> <span class="n">fields</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">Path</span><span class="p">(</span><span class="n">fields</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_coils</span> <span class="o">=</span> <span class="n">coils</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">fields</span><span class="p">,</span> <span class="n">field_t</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">field_t</span><span class="p">)</span>
@@ -846,7 +856,7 @@
 
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">fields</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">subject</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="o">==</span> <span class="s2">"brainweb"</span><span class="p">:</span>
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_brainweb</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_brainweb</span> <span class="o">=</span> <span class="n">BrainWeb</span><span class="p">()</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_brainweb</span> <span class="o">=</span> <span class="n">BrainWeb</span><span class="p">(</span><span class="n">diffusion</span><span class="o">=</span><span class="n">BrainWeb</span><span class="o">.</span><span class="n">DIFFUSION</span><span class="p">)</span>
             <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_brainweb</span>
         <span class="k">return</span> <span class="n">default_phantom</span><span class="p">()</span>
 
@@ -899,6 +909,8 @@
             <span class="n">tissue</span><span class="p">,</span>
             <span class="n">rotation</span><span class="o">=</span><span class="n">rotation</span><span class="p">,</span>
             <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+            <span class="n">motion</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">motion</span><span class="p">,</span>
+            <span class="n">girf</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">girf</span><span class="p">,</span>
         <span class="p">)</span>
         <span class="n">stopped</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Event</span><span class="p">()</span>
 
@@ -1186,6 +1198,8 @@
         <span class="n">help</span><span class="o">=</span><span class="s2">"torch device a scan is simulated on, such as cuda; a card where "</span>
         <span class="s2">"there is one without it"</span><span class="p">,</span>
     <span class="p">)</span>
+    <span class="n">motion_arguments</span><span class="p">(</span><span class="n">parser</span><span class="p">)</span>
+    <span class="n">girf_arguments</span><span class="p">(</span><span class="n">parser</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">parser</span>
 
 
@@ -1208,6 +1222,8 @@
         <span class="n">fields</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">fields</span><span class="p">,</span>
         <span class="n">speed</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">speed</span><span class="p">,</span>
         <span class="n">device</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+        <span class="n">motion</span><span class="o">=</span><span class="n">subject_motion</span><span class="p">(</span><span class="n">args</span><span class="p">),</span>
+        <span class="n">girf</span><span class="o">=</span><span class="n">system_girf</span><span class="p">(</span><span class="n">args</span><span class="p">),</span>
     <span class="p">)</span>
     <span class="k">with</span> <span class="n">contextlib</span><span class="o">.</span><span class="n">suppress</span><span class="p">(</span><span class="ne">KeyboardInterrupt</span><span class="p">):</span>
         <span class="n">asyncio</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">serve</span><span class="p">(</span><span class="n">console</span><span class="p">,</span> <span class="n">args</span><span class="o">.</span><span class="n">host</span><span class="p">,</span> <span class="n">args</span><span class="o">.</span><span class="n">port</span><span class="p">,</span> <span class="n">args</span><span class="o">.</span><span class="n">origins</span><span class="p">))</span>

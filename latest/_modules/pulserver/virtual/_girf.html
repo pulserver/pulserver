@@ -7,7 +7,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>pulserver.virtual._tissue &#8212; pulserver documentation</title>
+    <title>pulserver.virtual._girf &#8212; pulserver documentation</title>
   
   
   
@@ -51,7 +51,7 @@
     <script src="../../../_static/copybutton.js?v=f281be69"></script>
     <script src="../../../_static/sg-tags.js?v=d80f6fa4"></script>
     <script src="../../../_static/scripts/sphinx-book-theme.js?v=fab101a9"></script>
-    <script>DOCUMENTATION_OPTIONS.pagename = '_modules/pulserver/virtual/_tissue';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = '_modules/pulserver/virtual/_girf';</script>
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
@@ -60,7 +60,7 @@
             true;
         </script>
     <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
-    <link rel="canonical" href="https://pulserver.github.io/pulserver/latest/_modules/pulserver/virtual/_tissue.html" />
+    <link rel="canonical" href="https://pulserver.github.io/pulserver/latest/_modules/pulserver/virtual/_girf.html" />
     <link rel="icon" href="../../../_static/pulserver-mark.svg"/>
     <link rel="index" title="Index" href="../../../genindex.html" />
     <link rel="search" title="Search" href="../../../search.html" />
@@ -384,7 +384,7 @@
       
       
       
-      <li><a href="https://github.com/pulserver/pulserver/issues/new?title=Issue%20on%20page%20%2F_modules/pulserver/virtual/_tissue.html&body=Your%20issue%20content%20here." target="_blank"
+      <li><a href="https://github.com/pulserver/pulserver/issues/new?title=Issue%20on%20page%20%2F_modules/pulserver/virtual/_girf.html&body=Your%20issue%20content%20here." target="_blank"
    class="btn btn-sm btn-source-issues-button dropdown-item"
    title="Open an issue"
    data-bs-placement="left" data-bs-toggle="tooltip"
@@ -461,80 +461,101 @@
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <h1>Source code for pulserver.virtual._tissue</h1><div class="highlight"><pre>
-<span></span><span class="sd">"""A phantom sampled for the Fourier engine."""</span>
+  <h1>Source code for pulserver.virtual._girf</h1><div class="highlight"><pre>
+<span></span><span class="sd">"""The gradient system's impulse response, which the played gradients pass through."""</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
-<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"Tissue"</span><span class="p">,</span> <span class="s2">"transmitted"</span><span class="p">]</span>
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"Girf"</span><span class="p">]</span>
 
-<span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Callable</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">argparse</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 
 
-<div class="viewcode-block" id="Tissue">
-<a class="viewcode-back" href="../../../generated/pulserver.virtual.Tissue.html#pulserver.virtual.Tissue">[docs]</a>
-<span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">eq</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-<span class="k">class</span><span class="w"> </span><span class="nc">Tissue</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""A phantom sampled for the Fourier engine: what each cube of it holds.</span>
+<div class="viewcode-block" id="Girf">
+<a class="viewcode-back" href="../../../generated/pulserver.virtual.Girf.html#pulserver.virtual.Girf">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">Girf</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""A gradient impulse response function per physical axis.</span>
 
-<span class="sd">    Attributes</span>
+<span class="sd">    The gradient played along a physical axis is the one the cache asks for</span>
+<span class="sd">    convolved with that axis's impulse response, so the moment is too.</span>
+
+<span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
-<span class="sd">    positions</span>
-<span class="sd">        ``(n, 3)`` each entry's position, in m, along the physical axes.</span>
-<span class="sd">    density</span>
-<span class="sd">        ``(n,)`` its proton density: its equilibrium magnetization, per entry.</span>
-<span class="sd">    t1, t2, t2_prime</span>
-<span class="sd">        ``(n,)`` its relaxation times, in s.</span>
-<span class="sd">    frequency</span>
-<span class="sd">        ``(n,)`` its precession frequency at rest, in Hz from the reference</span>
-<span class="sd">        frequency: field inhomogeneity and chemical shift together.</span>
-<span class="sd">    spacing</span>
-<span class="sd">        Width of an entry's cube, in m.</span>
-<span class="sd">    axes</span>
-<span class="sd">        ``(m, 3)`` the physical axes along which an entry spans ``spacing``.</span>
-<span class="sd">    transmit</span>
-<span class="sd">        ``(n,)`` the complex transmit field an entry sees, relative to a</span>
-<span class="sd">        pulse's nominal amplitude; None for one uniform channel.</span>
-<span class="sd">    receive</span>
-<span class="sd">        Each coil's receive sensitivity at ``(p, 3)`` physical points, ``(p,</span>
-<span class="sd">        coils)``; None for one coil of unit sensitivity.</span>
-<span class="sd">    coils</span>
-<span class="sd">        Receive channels.</span>
-<span class="sd">    diffusion</span>
-<span class="sd">        ``(n,)`` its isotropic diffusion coefficient, in m²/s; None where</span>
-<span class="sd">        nothing diffuses.</span>
+<span class="sd">    impulse</span>
+<span class="sd">        ``(taps, 3)`` the response along x, y and z at ``taps`` delays</span>
+<span class="sd">        ``dt_s`` apart from zero, in 1/s; each column's sum times ``dt_s`` is</span>
+<span class="sd">        the axis's gain at zero frequency.</span>
+<span class="sd">    dt_s</span>
+<span class="sd">        The spacing of the delays, in s.</span>
 <span class="sd">    """</span>
 
-    <span class="n">positions</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
-    <span class="n">density</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
-    <span class="n">t1</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
-    <span class="n">t2</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
-    <span class="n">t2_prime</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
-    <span class="n">frequency</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
-    <span class="n">spacing</span><span class="p">:</span> <span class="nb">float</span>
-    <span class="n">axes</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
-    <span class="n">transmit</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span>
-    <span class="n">receive</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">],</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]</span>
-    <span class="n">coils</span><span class="p">:</span> <span class="nb">int</span>
-    <span class="n">diffusion</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span></div>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">impulse</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">dt_s</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">impulse</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">impulse</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">impulse</span><span class="o">.</span><span class="n">ndim</span> <span class="o">!=</span> <span class="mi">2</span> <span class="ow">or</span> <span class="n">impulse</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">!=</span> <span class="mi">3</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"an impulse response is (taps, 3), not </span><span class="si">{</span><span class="n">impulse</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">dt_s</span> <span class="o">&gt;</span> <span class="mf">0.0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"the delays are spaced above zero, not </span><span class="si">{</span><span class="n">dt_s</span><span class="si">}</span><span class="s2"> s"</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">impulse</span> <span class="o">=</span> <span class="n">impulse</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dt_s</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">dt_s</span><span class="p">)</span>
+
+<div class="viewcode-block" id="Girf.delay_lowpass">
+<a class="viewcode-back" href="../../../generated/pulserver.virtual.Girf.delay_lowpass.html#pulserver.virtual.Girf.delay_lowpass">[docs]</a>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">delay_lowpass</span><span class="p">(</span>
+        <span class="bp">cls</span><span class="p">,</span> <span class="n">delay_s</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">time_constant_s</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">dt_s</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1e-6</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Girf</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Return a delay followed by a first-order low pass, alike on every axis, of unit gain at zero frequency."""</span>
+        <span class="k">if</span> <span class="n">time_constant_s</span> <span class="o">&lt;=</span> <span class="mf">0.0</span><span class="p">:</span>
+            <span class="n">taps</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="nb">round</span><span class="p">(</span><span class="n">delay_s</span> <span class="o">/</span> <span class="n">dt_s</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
+            <span class="n">taps</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="mf">1.0</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">tau</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">delay_s</span> <span class="o">+</span> <span class="mf">8.0</span> <span class="o">*</span> <span class="n">time_constant_s</span><span class="p">,</span> <span class="n">dt_s</span><span class="p">)</span>
+            <span class="n">taps</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span>
+                <span class="n">tau</span> <span class="o">&gt;=</span> <span class="n">delay_s</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="p">(</span><span class="n">tau</span> <span class="o">-</span> <span class="n">delay_s</span><span class="p">)</span> <span class="o">/</span> <span class="n">time_constant_s</span><span class="p">),</span> <span class="mf">0.0</span>
+            <span class="p">)</span>
+            <span class="n">taps</span> <span class="o">/=</span> <span class="n">taps</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span>
+        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">repeat</span><span class="p">(</span><span class="n">taps</span><span class="p">[:,</span> <span class="kc">None</span><span class="p">]</span> <span class="o">/</span> <span class="n">dt_s</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">),</span> <span class="n">dt_s</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="Girf.filtered">
+<a class="viewcode-back" href="../../../generated/pulserver.virtual.Girf.filtered.html#pulserver.virtual.Girf.filtered">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">filtered</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">moment</span><span class="p">,</span> <span class="n">starts_us</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">times_us</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Return the moment the response plays by ``times_us``, from ``moment(block, since_us)`` of the gradients asked for, ``(n, 3)`` along the physical axes."""</span>
+        <span class="n">out</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">times_us</span><span class="o">.</span><span class="n">size</span><span class="p">,</span> <span class="mi">3</span><span class="p">))</span>
+        <span class="k">for</span> <span class="n">tap</span><span class="p">,</span> <span class="n">weights</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">impulse</span><span class="p">):</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">weights</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
+                <span class="k">continue</span>
+            <span class="n">at</span> <span class="o">=</span> <span class="n">times_us</span> <span class="o">-</span> <span class="mf">1e6</span> <span class="o">*</span> <span class="n">tap</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">dt_s</span>
+            <span class="n">block</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">clip</span><span class="p">(</span>
+                <span class="n">np</span><span class="o">.</span><span class="n">searchsorted</span><span class="p">(</span><span class="n">starts_us</span><span class="p">,</span> <span class="n">at</span><span class="p">,</span> <span class="n">side</span><span class="o">=</span><span class="s2">"right"</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">starts_us</span><span class="o">.</span><span class="n">size</span> <span class="o">-</span> <span class="mi">2</span>
+            <span class="p">)</span>
+            <span class="n">since</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">maximum</span><span class="p">(</span><span class="n">at</span> <span class="o">-</span> <span class="n">starts_us</span><span class="p">[</span><span class="n">block</span><span class="p">],</span> <span class="mf">0.0</span><span class="p">)</span>
+            <span class="n">out</span> <span class="o">+=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">dt_s</span> <span class="o">*</span> <span class="n">weights</span><span class="p">)</span> <span class="o">*</span> <span class="n">moment</span><span class="p">(</span><span class="n">block</span><span class="p">,</span> <span class="n">since</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">out</span></div>
+</div>
 
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">transmitted</span><span class="p">(</span><span class="n">coil</span><span class="p">,</span> <span class="n">positions</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""Return the transmit field a coil's channels play a single-channel pulse with at ``(n, 3)`` physical points, ``(n,)`` relative to its nominal amplitude; None for one uniform channel.</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">girf_arguments</span><span class="p">(</span><span class="n">parser</span><span class="p">:</span> <span class="n">argparse</span><span class="o">.</span><span class="n">ArgumentParser</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Add the option :func:`system_girf` reads to ``parser``."""</span>
+    <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span>
+        <span class="s2">"--girf"</span><span class="p">,</span>
+        <span class="nb">type</span><span class="o">=</span><span class="nb">float</span><span class="p">,</span>
+        <span class="n">nargs</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+        <span class="n">metavar</span><span class="o">=</span><span class="p">(</span><span class="s2">"DELAY_US"</span><span class="p">,</span> <span class="s2">"TIME_CONSTANT_US"</span><span class="p">),</span>
+        <span class="n">help</span><span class="o">=</span><span class="s2">"the gradients play delayed by DELAY_US and through a first-order "</span>
+        <span class="s2">"low pass of TIME_CONSTANT_US, both in µs"</span><span class="p">,</span>
+    <span class="p">)</span>
 
-<span class="sd">    Each channel plays the pulse times its weight in the coil's default shim,</span>
-<span class="sd">    which scales the waveform by the conjugate of the field it adds.</span>
-<span class="sd">    """</span>
-    <span class="n">sensitivities</span> <span class="o">=</span> <span class="n">coil</span><span class="o">.</span><span class="n">transmit</span><span class="p">(</span><span class="n">positions</span><span class="p">)</span>
-    <span class="k">if</span> <span class="n">sensitivities</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">system_girf</span><span class="p">(</span><span class="n">args</span><span class="p">:</span> <span class="n">argparse</span><span class="o">.</span><span class="n">Namespace</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Girf</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return the impulse response ``--girf`` describes; None without it."""</span>
+    <span class="k">if</span> <span class="n">args</span><span class="o">.</span><span class="n">girf</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">return</span> <span class="kc">None</span>
-    <span class="n">sensitivities</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">sensitivities</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">positions</span><span class="p">),</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
-    <span class="n">shim</span> <span class="o">=</span> <span class="n">coil</span><span class="o">.</span><span class="n">default_shim</span>
-    <span class="k">return</span> <span class="n">sensitivities</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">]</span> <span class="k">if</span> <span class="n">shim</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">sensitivities</span> <span class="o">@</span> <span class="n">np</span><span class="o">.</span><span class="n">conj</span><span class="p">(</span><span class="n">shim</span><span class="p">)</span>
+    <span class="n">delay_us</span><span class="p">,</span> <span class="n">time_constant_us</span> <span class="o">=</span> <span class="n">args</span><span class="o">.</span><span class="n">girf</span>
+    <span class="k">return</span> <span class="n">Girf</span><span class="o">.</span><span class="n">delay_lowpass</span><span class="p">(</span><span class="mf">1e-6</span> <span class="o">*</span> <span class="n">delay_us</span><span class="p">,</span> <span class="mf">1e-6</span> <span class="o">*</span> <span class="n">time_constant_us</span><span class="p">)</span>
 </pre></div>
 
                 </article>

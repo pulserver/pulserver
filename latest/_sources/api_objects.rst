@@ -232,6 +232,8 @@ from.
    simulate
    FourierPlayer
    Tissue
+   RigidMotion
+   Girf
    Scan
    Chunk
    SAMPLE_RATE
