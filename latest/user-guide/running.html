@@ -757,14 +757,21 @@ the gradient heating.</p>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">vop_coil</span></code></p></td>
 <td><p>Transmit configuration the scanner reports; the VOP file’s <code class="docutils literal notranslate"><span class="pre">transmit</span></code> metadata must name the same one</p></td>
 </tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">acoustic_file</span></code></p></td>
+<td><p>HDF5 file of the gradient coil’s acoustic transfer function, at a path the design calls can read; the peak and A-weighted average sound pressure levels are held to those of IEC 60601-2-33 and written into the cache</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">acoustic_interval_us</span></code></p></td>
+<td><p>Sampling interval in µs the bins of <code class="docutils literal notranslate"><span class="pre">acoustic_file</span></code> refer to; given with it</p></td>
+</tr>
 </tbody>
 </table>
 </div>
 <p>A band given no amplitude is held to the <code class="docutils literal notranslate"><span class="pre">min_threshold</span></code> of
-<code class="docutils literal notranslate"><span class="pre">pypulseqpp.safety.check_mech_resonance</span></code>. The gradient, PNS and resonance
-checks are made in the physical frame of the prescription rotation each
-request carries. A call refuses limits it cannot read, and a design is
-identified with the contents of the VOP file as well as its path.</p>
+<code class="docutils literal notranslate"><span class="pre">pypulseqpp.safety.check_mech_resonance</span></code>. The gradient, PNS, resonance and
+sound pressure checks are made in the physical frame of the prescription
+rotation each request carries. A call refuses limits it cannot read, and a
+design is identified with the contents of the VOP and acoustic files as well
+as their paths.</p>
 <p>A plugin can be exercised without a scanner through
 <a class="reference internal" href="../generated/pulserver.host.call.html#pulserver.host.call" title="pulserver.host.call"><code class="xref py py-func docutils literal notranslate"><span class="pre">call()</span></code></a>, which answers a call in the calling process:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pulserver.host</span><span class="w"> </span><span class="kn">import</span> <span class="n">DesignStore</span><span class="p">,</span> <span class="n">call</span>

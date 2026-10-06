@@ -556,16 +556,22 @@ the cache layout in <a class="reference internal" href="../developer-guide/inter
 <td><p>Move a logical-frame sequence to a prescribed field-of-view centre, in place.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.ir.check.html#pulserver.ir.check" title="pulserver.ir.check"><code class="xref py py-obj docutils literal notranslate"><span class="pre">check</span></code></a></p></td>
-<td><p>Timing, gradient, PNS and forbidden-band problems of a chain under a scanner’s limits, in the physical frame.</p></td>
+<td><p>Timing, gradient, PNS, forbidden-band and sound pressure problems of a chain under a scanner’s limits, in the physical frame.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="../generated/pulserver.ir.CheckLimits.html#pulserver.ir.CheckLimits" title="pulserver.ir.CheckLimits"><code class="xref py py-obj docutils literal notranslate"><span class="pre">CheckLimits</span></code></a></p></td>
-<td><p>The nerve model and forbidden bands a chain is checked against, and the VOPs of its SAR ratios, besides the gradient limits.</p></td>
+<td><p>The nerve model, forbidden bands and acoustic transfer function a chain is checked against, and the VOPs of its SAR ratios, besides the gradient limits.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.ir.sar_ratios.html#pulserver.ir.sar_ratios" title="pulserver.ir.sar_ratios"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sar_ratios</span></code></a></p></td>
 <td><p>The RF energy of each subsequence of a chain at the VOPs, against the same repetitions of a hard, 180°, 1 ms reference pulse.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="../generated/pulserver.ir.SarRatio.html#pulserver.ir.SarRatio" title="pulserver.ir.SarRatio"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SarRatio</span></code></a></p></td>
 <td><p>The local and global SAR ratios of one subsequence, as the cache carries them.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.ir.spl_levels.html#pulserver.ir.spl_levels" title="pulserver.ir.spl_levels"><code class="xref py py-obj docutils literal notranslate"><span class="pre">spl_levels</span></code></a></p></td>
+<td><p>The peak and A-weighted average sound pressure levels of each subsequence of a chain, its loudest repetition played without end, in the prescription frame.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="../generated/pulserver.ir.SplLevels.html#pulserver.ir.SplLevels" title="pulserver.ir.SplLevels"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SplLevels</span></code></a></p></td>
+<td><p>The sound pressure levels of one subsequence, as the cache carries them.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.ir.played_rf.html#pulserver.ir.played_rf" title="pulserver.ir.played_rf"><code class="xref py py-obj docutils literal notranslate"><span class="pre">played_rf</span></code></a></p></td>
 <td><p>The definition and designed flip angle of each RF row a sequence plays, definitions numbered as the cache numbers them.</p></td>

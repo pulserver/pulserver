@@ -477,7 +477,7 @@
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">.._accelerators</span><span class="w"> </span><span class="kn">import</span> <span class="n">require</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..mrd._sequence</span><span class="w"> </span><span class="kn">import</span> <span class="n">read_chain</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">._checks</span><span class="w"> </span><span class="kn">import</span> <span class="n">SarRatio</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">._checks</span><span class="w"> </span><span class="kn">import</span> <span class="n">SarRatio</span><span class="p">,</span> <span class="n">SplLevels</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">._source</span><span class="w"> </span><span class="kn">import</span> <span class="n">conversion_payload</span>
 
 
@@ -714,6 +714,7 @@
     <span class="n">cache_ext</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">".pseg"</span><span class="p">,</span>
     <span class="n">verify_signature</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
     <span class="n">sar_ratios</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">SarRatio</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">spl_levels</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">SplLevels</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">wave_budget</span><span class="p">:</span> <span class="n">WaveBudget</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">profile</span><span class="p">:</span> <span class="n">VendorProfile</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">grouping</span><span class="p">:</span> <span class="n">Grouping</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -758,6 +759,10 @@
 <span class="sd">    sar_ratios</span>
 <span class="sd">        One per file of the chain, as :func:`sar_ratios` returns them, written</span>
 <span class="sd">        into each subsequence of the cache; zero when None.</span>
+<span class="sd">    spl_levels</span>
+<span class="sd">        One per file of the chain, as :func:`spl_levels` returns them, written</span>
+<span class="sd">        into each subsequence of the cache, 0 dB for a file without</span>
+<span class="sd">        gradients; -1 when None.</span>
 <span class="sd">    profile</span>
 <span class="sd">        What the cache holds its numbers as; every quantity a float in its SI</span>
 <span class="sd">        unit when left out.</span>
@@ -784,7 +789,8 @@
 <span class="sd">    ------</span>
 <span class="sd">    ValueError</span>
 <span class="sd">        If a file of the chain cannot be read, verified or segmented,</span>
-<span class="sd">        ``sar_ratios`` does not give one per file, or the waves fit neither</span>
+<span class="sd">        ``sar_ratios`` or ``spl_levels`` does not give one per file, or the</span>
+<span class="sd">        waves fit neither</span>
 <span class="sd">        layout of ``wave_budget`` or cannot be loaded in time.</span>
 <span class="sd">    OSError</span>
 <span class="sd">        If no cache was written.</span>
@@ -799,6 +805,7 @@
         <span class="n">label_column_map</span><span class="o">=</span><span class="n">label_column_map</span><span class="p">,</span>
         <span class="n">cache_ext</span><span class="o">=</span><span class="n">cache_ext</span><span class="p">,</span>
         <span class="n">sar_ratios</span><span class="o">=</span><span class="n">sar_ratios</span><span class="p">,</span>
+        <span class="n">spl_levels</span><span class="o">=</span><span class="n">spl_levels</span><span class="p">,</span>
         <span class="n">wave_budget</span><span class="o">=</span><span class="n">wave_budget</span><span class="p">,</span>
         <span class="n">profile</span><span class="o">=</span><span class="n">profile</span><span class="p">,</span>
         <span class="n">grouping</span><span class="o">=</span><span class="n">grouping</span><span class="p">,</span>
@@ -815,6 +822,7 @@
     <span class="n">label_column_map</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">),</span>
     <span class="n">cache_ext</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">".pseg"</span><span class="p">,</span>
     <span class="n">sar_ratios</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">SarRatio</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">spl_levels</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">SplLevels</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">wave_budget</span><span class="p">:</span> <span class="n">WaveBudget</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">profile</span><span class="p">:</span> <span class="n">VendorProfile</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">grouping</span><span class="p">:</span> <span class="n">Grouping</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -836,6 +844,17 @@
         <span class="k">for</span> <span class="n">libraries</span><span class="p">,</span> <span class="n">ratio</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">payload</span><span class="p">,</span> <span class="n">sar_ratios</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
             <span class="n">libraries</span><span class="p">[</span><span class="s2">"reserved"</span><span class="p">][</span><span class="s2">"vop_sar_ratio"</span><span class="p">]</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">ratio</span><span class="o">.</span><span class="n">local_sar</span><span class="p">)</span>
             <span class="n">libraries</span><span class="p">[</span><span class="s2">"reserved"</span><span class="p">][</span><span class="s2">"vop_global_sar_ratio"</span><span class="p">]</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">ratio</span><span class="o">.</span><span class="n">global_sar</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">spl_levels</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">spl_levels</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="n">payload</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"expected one set of sound pressure levels per file of the chain, "</span>
+                <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">payload</span><span class="p">)</span><span class="si">}</span><span class="s2">; got </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">spl_levels</span><span class="p">)</span><span class="si">}</span><span class="s2">"</span>
+            <span class="p">)</span>
+        <span class="k">for</span> <span class="n">libraries</span><span class="p">,</span> <span class="n">levels</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">payload</span><span class="p">,</span> <span class="n">spl_levels</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+            <span class="n">libraries</span><span class="p">[</span><span class="s2">"reserved"</span><span class="p">][</span><span class="s2">"spl_peak_db"</span><span class="p">]</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="nb">float</span><span class="p">(</span><span class="n">levels</span><span class="o">.</span><span class="n">peak_db</span><span class="p">),</span> <span class="mf">0.0</span><span class="p">)</span>
+            <span class="n">libraries</span><span class="p">[</span><span class="s2">"reserved"</span><span class="p">][</span><span class="s2">"spl_average_dba"</span><span class="p">]</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span>
+                <span class="nb">float</span><span class="p">(</span><span class="n">levels</span><span class="o">.</span><span class="n">average_dba</span><span class="p">),</span> <span class="mf">0.0</span>
+            <span class="p">)</span>
     <span class="n">require</span><span class="p">(</span><span class="s2">"convert_libraries"</span><span class="p">)(</span>
         <span class="n">payload</span><span class="p">,</span>
         <span class="nb">str</span><span class="p">(</span><span class="n">seq_path</span><span class="p">),</span>
@@ -873,7 +892,8 @@
 <span class="sd">    ``pypulseqpp.calc_rf_power``'s energy over its peak power, both summed</span>
 <span class="sd">    over a dynamic pTx pulse's channels.</span>
 <span class="sd">    ``vop_sar_ratio`` and ``vop_global_sar_ratio`` are those the cache was</span>
-<span class="sd">    written with, zero when the chain is read and segmented again.</span>
+<span class="sd">    written with, zero when the chain is read and segmented again;</span>
+<span class="sd">    ``spl_peak_db`` and ``spl_average_dba`` likewise, -1 when it is.</span>
 <span class="sd">    ``readout_labels`` lists, per readout in play order, the values of the</span>
 <span class="sd">    three labels ``label_column_map`` selects, as in force at that readout.</span>
 <span class="sd">    ``waves`` lists the subsequence's waves, as :func:`play` indexes</span>
@@ -1065,19 +1085,25 @@
 <span class="sd">    A file the reader refuses raises ``ValueError``, whatever the reader</span>
 <span class="sd">    itself raised.</span>
 <span class="sd">    """</span>
-    <span class="k">if</span> <span class="n">designed</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="n">chain_read</span> <span class="o">=</span> <span class="n">designed</span>
-    <span class="k">else</span><span class="p">:</span>
-        <span class="k">try</span><span class="p">:</span>
-            <span class="n">chain_read</span> <span class="o">=</span> <span class="n">read_chain</span><span class="p">(</span><span class="n">seq_path</span><span class="p">,</span> <span class="n">verify</span><span class="o">=</span><span class="n">verify_signature</span><span class="p">)</span>
-        <span class="k">except</span> <span class="ne">RuntimeError</span> <span class="k">as</span> <span class="n">failure</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"cannot read </span><span class="si">{</span><span class="n">seq_path</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">failure</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">failure</span>
+    <span class="n">chain_read</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="n">designed</span> <span class="k">if</span> <span class="n">designed</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">_read_chain</span><span class="p">(</span><span class="n">seq_path</span><span class="p">,</span> <span class="n">verify_signature</span><span class="p">)</span>
+    <span class="p">)</span>
     <span class="n">payload</span> <span class="o">=</span> <span class="p">[]</span>
     <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">sequence</span> <span class="ow">in</span> <span class="n">chain_read</span><span class="p">:</span>
         <span class="k">if</span> <span class="n">fov_offset</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">prescribe</span><span class="p">(</span><span class="n">sequence</span><span class="p">,</span> <span class="n">fov_offset</span><span class="p">)</span>
         <span class="n">payload</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">conversion_payload</span><span class="p">(</span><span class="n">sequence</span><span class="p">,</span> <span class="n">system</span><span class="p">))</span>
     <span class="k">return</span> <span class="n">payload</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_read_chain</span><span class="p">(</span>
+    <span class="n">seq_path</span><span class="p">:</span> <span class="n">Path</span><span class="p">,</span> <span class="n">verify_signature</span><span class="p">:</span> <span class="nb">bool</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="n">Path</span><span class="p">,</span> <span class="n">pp</span><span class="o">.</span><span class="n">Sequence</span><span class="p">]]:</span>
+<span class="w">    </span><span class="sd">"""Read the ``NextSequence`` chain; a file the reader refuses raises ``ValueError``."""</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">read_chain</span><span class="p">(</span><span class="n">seq_path</span><span class="p">,</span> <span class="n">verify</span><span class="o">=</span><span class="n">verify_signature</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">RuntimeError</span> <span class="k">as</span> <span class="n">failure</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"cannot read </span><span class="si">{</span><span class="n">seq_path</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">failure</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">failure</span>
 </pre></div>
 
                 </article>

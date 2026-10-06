@@ -546,7 +546,7 @@
 <dt class="sig sig-object py" id="pulserver.ir.CheckLimits">
 <span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">pulserver.ir.</span></span><span class="sig-name descname"><span class="pre">CheckLimits</span></span><a class="reference internal" href="../_modules/pulserver/ir/_checks.html#CheckLimits"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.ir.CheckLimits" title="Link to this definition">#</a></dt>
 <dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/builtins/functions.html#object" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
-<p>The nerve and resonance limits of a chain, and the VOPs of its SAR ratios, besides <code class="docutils literal notranslate"><span class="pre">pypulseqpp.Opts</span></code>.</p>
+<p>The nerve, resonance and acoustic limits of a chain, and the VOPs of its SAR ratios, besides <code class="docutils literal notranslate"><span class="pre">pypulseqpp.Opts</span></code>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Attributes<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
@@ -567,17 +567,41 @@ the reference pulse; equal weights when None.</p></li>
 file’s <code class="docutils literal notranslate"><span class="pre">metadata[&quot;transmit&quot;]</span></code> must name the same one.</p></li>
 <li><p><strong>vop_head_limit, vop_local_limit</strong> – The scanner’s head and local SAR limits, W/kg, in its current
 operating mode; <a class="reference internal" href="pulserver.ir.sar_ratios.html#pulserver.ir.sar_ratios" title="pulserver.ir.sar_ratios"><code class="xref py py-func docutils literal notranslate"><span class="pre">sar_ratios()</span></code></a> needs both.</p></li>
+<li><p><strong>acoustic</strong> (<em>pypulseqpp.safety._acoustic.AcousticResponse | pathlib.Path | str | None</em>) – The gradient coil’s acoustic transfer function on the physical axes,
+or the HDF5 file <code class="docutils literal notranslate"><span class="pre">pypulseqpp.safety.read_acoustic_response</span></code> reads
+it from. <code class="docutils literal notranslate"><span class="pre">None</span></code> leaves out the sound pressure check.</p></li>
+<li><p><strong>acoustic_interval</strong> (<em>float</em>) – Sampling interval in s the bins of an <code class="docutils literal notranslate"><span class="pre">acoustic</span></code> file refer to.</p></li>
+<li><p><strong>spl_peak_limit</strong> (<em>float</em>) – Largest peak sound pressure level allowed, in dB re 20 µPa; that of
+IEC 60601-2-33 by default.</p></li>
+<li><p><strong>spl_average_limit</strong> (<em>float</em>) – Largest A-weighted average sound pressure level allowed, in dB(A);
+that of IEC 60601-2-33 by default.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Raises<span class="colon">:</span></dt>
-<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If the PNS limit or a SAR limit is not positive.</p>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If the PNS limit or a SAR limit is not positive, or an acoustic
+    file comes without its interval.</p>
 </dd>
 </dl>
 </dd></dl>
 
+<p class="rubric">Methods</p>
+<div class="pst-scrollable-table-container"><table class="autosummary longtable table">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.ir.CheckLimits.acoustic_response.html#pulserver.ir.CheckLimits.acoustic_response" title="pulserver.ir.CheckLimits.acoustic_response"><code class="xref py py-obj docutils literal notranslate"><span class="pre">acoustic_response</span></code></a></p></td>
+<td><p>Return the acoustic transfer function, read from its file where given as one.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
 <p class="rubric">Attributes</p>
 <div class="pst-scrollable-table-container"><table class="autosummary longtable table">
 <tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.ir.CheckLimits.acoustic.html#pulserver.ir.CheckLimits.acoustic" title="pulserver.ir.CheckLimits.acoustic"><code class="xref py py-obj docutils literal notranslate"><span class="pre">acoustic</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pulserver.ir.CheckLimits.acoustic_interval.html#pulserver.ir.CheckLimits.acoustic_interval" title="pulserver.ir.CheckLimits.acoustic_interval"><code class="xref py py-obj docutils literal notranslate"><span class="pre">acoustic_interval</span></code></a></p></td>
+<td><p></p></td>
+</tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="pulserver.ir.CheckLimits.bands.html#pulserver.ir.CheckLimits.bands" title="pulserver.ir.CheckLimits.bands"><code class="xref py py-obj docutils literal notranslate"><span class="pre">bands</span></code></a></p></td>
 <td><p></p></td>
 </tr>
@@ -591,6 +615,12 @@ operating mode; <a class="reference internal" href="pulserver.ir.sar_ratios.html
 <td><p></p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="pulserver.ir.CheckLimits.pns_limit.html#pulserver.ir.CheckLimits.pns_limit" title="pulserver.ir.CheckLimits.pns_limit"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pns_limit</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pulserver.ir.CheckLimits.spl_average_limit.html#pulserver.ir.CheckLimits.spl_average_limit" title="pulserver.ir.CheckLimits.spl_average_limit"><code class="xref py py-obj docutils literal notranslate"><span class="pre">spl_average_limit</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.ir.CheckLimits.spl_peak_limit.html#pulserver.ir.CheckLimits.spl_peak_limit" title="pulserver.ir.CheckLimits.spl_peak_limit"><code class="xref py py-obj docutils literal notranslate"><span class="pre">spl_peak_limit</span></code></a></p></td>
 <td><p></p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="pulserver.ir.CheckLimits.vop_coil.html#pulserver.ir.CheckLimits.vop_coil" title="pulserver.ir.CheckLimits.vop_coil"><code class="xref py py-obj docutils literal notranslate"><span class="pre">vop_coil</span></code></a></p></td>

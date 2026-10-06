@@ -463,13 +463,14 @@
                 <article class="bd-article">
                   
   <h1>Source code for pulserver.ir._checks</h1><div class="highlight"><pre>
-<span></span><span class="sd">"""The checks a sequence chain passes before its IR is built, and its SAR against a reference."""</span>
+<span></span><span class="sd">"""The checks a sequence chain passes before its IR is built, its SAR against a reference and its sound pressure levels."""</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">contextlib</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">copy</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">io</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Sequence</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">concurrent.futures</span><span class="w"> </span><span class="kn">import</span> <span class="n">ThreadPoolExecutor</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
@@ -500,7 +501,7 @@
 <a class="viewcode-back" href="../../../generated/pulserver.ir.CheckLimits.html#pulserver.ir.CheckLimits">[docs]</a>
 <span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 <span class="k">class</span><span class="w"> </span><span class="nc">CheckLimits</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""The nerve and resonance limits of a chain, and the VOPs of its SAR ratios, besides ``pypulseqpp.Opts``.</span>
+<span class="w">    </span><span class="sd">"""The nerve, resonance and acoustic limits of a chain, and the VOPs of its SAR ratios, besides ``pypulseqpp.Opts``.</span>
 
 <span class="sd">    Attributes</span>
 <span class="sd">    ----------</span>
@@ -529,11 +530,24 @@
 <span class="sd">    vop_head_limit, vop_local_limit</span>
 <span class="sd">        The scanner's head and local SAR limits, W/kg, in its current</span>
 <span class="sd">        operating mode; :func:`sar_ratios` needs both.</span>
+<span class="sd">    acoustic</span>
+<span class="sd">        The gradient coil's acoustic transfer function on the physical axes,</span>
+<span class="sd">        or the HDF5 file ``pypulseqpp.safety.read_acoustic_response`` reads</span>
+<span class="sd">        it from. ``None`` leaves out the sound pressure check.</span>
+<span class="sd">    acoustic_interval</span>
+<span class="sd">        Sampling interval in s the bins of an ``acoustic`` file refer to.</span>
+<span class="sd">    spl_peak_limit</span>
+<span class="sd">        Largest peak sound pressure level allowed, in dB re 20 µPa; that of</span>
+<span class="sd">        IEC 60601-2-33 by default.</span>
+<span class="sd">    spl_average_limit</span>
+<span class="sd">        Largest A-weighted average sound pressure level allowed, in dB(A);</span>
+<span class="sd">        that of IEC 60601-2-33 by default.</span>
 
 <span class="sd">    Raises</span>
 <span class="sd">    ------</span>
 <span class="sd">    ValueError</span>
-<span class="sd">        If the PNS limit or a SAR limit is not positive.</span>
+<span class="sd">        If the PNS limit or a SAR limit is not positive, or an acoustic</span>
+<span class="sd">        file comes without its interval.</span>
 <span class="sd">    """</span>
 
     <span class="n">pns</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span>
@@ -545,13 +559,47 @@
     <span class="n">vop_coil</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">vop_head_limit</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">vop_local_limit</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">acoustic</span><span class="p">:</span> <span class="n">safety</span><span class="o">.</span><span class="n">AcousticResponse</span> <span class="o">|</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">acoustic_interval</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span>
+    <span class="n">spl_peak_limit</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">140.0</span>
+    <span class="n">spl_average_limit</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">99.0</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">__post_init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">pns_limit</span> <span class="o">&lt;=</span> <span class="mf">0.0</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"the PNS limit must be positive"</span><span class="p">)</span>
         <span class="k">for</span> <span class="n">limit</span> <span class="ow">in</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">vop_head_limit</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">vop_local_limit</span><span class="p">):</span>
             <span class="k">if</span> <span class="n">limit</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">limit</span> <span class="o">&gt;</span> <span class="mf">0.0</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"a SAR limit must be positive, not </span><span class="si">{</span><span class="n">limit</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span></div>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"a SAR limit must be positive, not </span><span class="si">{</span><span class="n">limit</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">acoustic</span><span class="p">,</span> <span class="p">(</span><span class="n">Path</span><span class="p">,</span> <span class="nb">str</span><span class="p">))</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">acoustic_interval</span> <span class="o">&gt;</span> <span class="mf">0.0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"an acoustic file needs a positive acoustic_interval"</span><span class="p">)</span>
+
+<div class="viewcode-block" id="CheckLimits.acoustic_response">
+<a class="viewcode-back" href="../../../generated/pulserver.ir.CheckLimits.acoustic_response.html#pulserver.ir.CheckLimits.acoustic_response">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">acoustic_response</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">safety</span><span class="o">.</span><span class="n">AcousticResponse</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Return the acoustic transfer function, read from its file where given as one."""</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">acoustic</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">acoustic</span><span class="p">,</span> <span class="n">safety</span><span class="o">.</span><span class="n">AcousticResponse</span><span class="p">):</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">acoustic</span>
+        <span class="k">return</span> <span class="n">safety</span><span class="o">.</span><span class="n">read_acoustic_response</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">acoustic</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">acoustic_interval</span><span class="p">)</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="SplLevels">
+<a class="viewcode-back" href="../../../generated/pulserver.ir.SplLevels.html#pulserver.ir.SplLevels">[docs]</a>
+<span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">SplLevels</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""A subsequence's sound pressure levels, its loudest repetition played without end.</span>
+
+<span class="sd">    ``peak_db`` is the peak level in dB and ``average_dba`` the A-weighted</span>
+<span class="sd">    average in dB(A), both re 20 µPa, through the gradient coil's acoustic</span>
+<span class="sd">    transfer function on the physical axes of the prescription; ``-inf``</span>
+<span class="sd">    without gradients. ``repetition`` is the 1-based first and last block of</span>
+<span class="sd">    the repetition. See ``pypulseqpp.safety.check_spl``.</span>
+<span class="sd">    """</span>
+
+    <span class="n">peak_db</span><span class="p">:</span> <span class="nb">float</span>
+    <span class="n">average_dba</span><span class="p">:</span> <span class="nb">float</span>
+    <span class="n">repetition</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span></div>
 
 
 
@@ -587,6 +635,7 @@
     <span class="n">rotation</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">limits</span><span class="p">:</span> <span class="n">CheckLimits</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">designed</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="n">Path</span><span class="p">,</span> <span class="n">pp</span><span class="o">.</span><span class="n">Sequence</span><span class="p">]]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">spl_levels</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">SplLevels</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
 <span class="w">    </span><span class="sd">"""Return the problems of a chain under a scanner's limits, in the physical frame.</span>
 
@@ -596,9 +645,10 @@
 <span class="sd">    ``pypulseqpp.check_timing``, gradient continuity included, and with</span>
 <span class="sd">    ``pypulseqpp.safety.check_max_grad`` and ``check_max_slew``, against the</span>
 <span class="sd">    gradient limits, dead times and ringdown time of ``system``; and with</span>
-<span class="sd">    ``check_pns`` and ``check_mech_resonance`` where ``limits`` carries a</span>
-<span class="sd">    nerve model or forbidden bands. The waveforms are timed by the file's own</span>
-<span class="sd">    rasters. VOPs are not checked here: see :func:`sar_ratios`.</span>
+<span class="sd">    ``check_pns``, ``check_mech_resonance`` and ``check_spl`` where ``limits``</span>
+<span class="sd">    carries a nerve model, forbidden bands or an acoustic transfer function.</span>
+<span class="sd">    The waveforms are timed by the file's own rasters. VOPs are not checked</span>
+<span class="sd">    here: see :func:`sar_ratios`.</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
@@ -614,6 +664,9 @@
 <span class="sd">    designed</span>
 <span class="sd">        The chain as :func:`pulserver.mrd.designed_chain` returns it, checked</span>
 <span class="sd">        in place of reading the files, and rotated in place.</span>
+<span class="sd">    spl_levels</span>
+<span class="sd">        One per file of the chain, as :func:`spl_levels` returns them for</span>
+<span class="sd">        ``rotation``, held to the limits in place of computing them.</span>
 
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
@@ -624,15 +677,18 @@
 <span class="sd">    Raises</span>
 <span class="sd">    ------</span>
 <span class="sd">    ValueError</span>
-<span class="sd">        If a file of the chain cannot be read, or ``rotation`` is not</span>
-<span class="sd">        orthonormal.</span>
+<span class="sd">        If a file of the chain or the acoustic file cannot be read, or</span>
+<span class="sd">        ``rotation`` is not orthonormal.</span>
 <span class="sd">    """</span>
     <span class="n">limits</span> <span class="o">=</span> <span class="n">CheckLimits</span><span class="p">()</span> <span class="k">if</span> <span class="n">limits</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">limits</span>
+    <span class="n">response</span> <span class="o">=</span> <span class="kc">None</span> <span class="k">if</span> <span class="n">spl_levels</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">limits</span><span class="o">.</span><span class="n">acoustic_response</span><span class="p">()</span>
     <span class="n">chain_read</span> <span class="o">=</span> <span class="n">designed</span> <span class="k">if</span> <span class="n">designed</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">_read</span><span class="p">(</span><span class="n">seq_path</span><span class="p">)</span>
     <span class="n">turn</span> <span class="o">=</span> <span class="kc">None</span> <span class="k">if</span> <span class="n">rotation</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">_prescription</span><span class="p">(</span><span class="n">rotation</span><span class="p">)</span>
     <span class="n">problems</span> <span class="o">=</span> <span class="p">[]</span>
-    <span class="k">for</span> <span class="n">path</span><span class="p">,</span> <span class="n">sequence</span> <span class="ow">in</span> <span class="n">chain_read</span><span class="p">:</span>
-        <span class="n">found</span> <span class="o">=</span> <span class="n">_problems</span><span class="p">(</span><span class="n">sequence</span><span class="p">,</span> <span class="n">system</span><span class="p">,</span> <span class="n">turn</span><span class="p">,</span> <span class="n">limits</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">index</span><span class="p">,</span> <span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">sequence</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">chain_read</span><span class="p">):</span>
+        <span class="n">found</span> <span class="o">=</span> <span class="n">_problems</span><span class="p">(</span><span class="n">sequence</span><span class="p">,</span> <span class="n">system</span><span class="p">,</span> <span class="n">turn</span><span class="p">,</span> <span class="n">limits</span><span class="p">,</span> <span class="n">response</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">spl_levels</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">found</span> <span class="o">+=</span> <span class="n">_spl_problems</span><span class="p">(</span><span class="n">spl_levels</span><span class="p">[</span><span class="n">index</span><span class="p">],</span> <span class="n">limits</span><span class="p">)</span>
         <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">chain_read</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
             <span class="n">found</span> <span class="o">=</span> <span class="p">[</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">path</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">problem</span><span class="si">}</span><span class="s2">"</span> <span class="k">for</span> <span class="n">problem</span> <span class="ow">in</span> <span class="n">found</span><span class="p">]</span>
         <span class="n">problems</span> <span class="o">+=</span> <span class="n">found</span>
@@ -660,6 +716,7 @@
     <span class="n">system</span><span class="p">:</span> <span class="n">pp</span><span class="o">.</span><span class="n">Opts</span><span class="p">,</span>
     <span class="n">rotation</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">limits</span><span class="p">:</span> <span class="n">CheckLimits</span><span class="p">,</span>
+    <span class="n">response</span><span class="p">:</span> <span class="n">safety</span><span class="o">.</span><span class="n">AcousticResponse</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
     <span class="n">opts</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">copy</span><span class="p">(</span><span class="n">system</span><span class="p">)</span>
     <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">_RASTERS</span><span class="p">:</span>
@@ -679,6 +736,8 @@
         <span class="n">checks</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">_pns</span><span class="p">,</span> <span class="n">limits</span><span class="p">))</span>
     <span class="k">if</span> <span class="n">limits</span><span class="o">.</span><span class="n">bands</span><span class="p">:</span>
         <span class="n">checks</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">_resonance</span><span class="p">,</span> <span class="n">limits</span><span class="p">))</span>
+    <span class="k">if</span> <span class="n">response</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">checks</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">_spl</span><span class="p">,</span> <span class="n">response</span><span class="p">,</span> <span class="n">limits</span><span class="p">))</span>
     <span class="c1"># The native checks read the sequence and release the GIL; check_timing</span>
     <span class="c1"># records TotalDuration, so it runs before them.</span>
     <span class="k">with</span> <span class="n">ThreadPoolExecutor</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">checks</span><span class="p">))</span> <span class="k">as</span> <span class="n">pool</span><span class="p">:</span>
@@ -732,6 +791,93 @@
         <span class="k">for</span> <span class="n">band</span> <span class="ow">in</span> <span class="n">found</span><span class="o">.</span><span class="n">bands</span>
         <span class="k">if</span> <span class="n">band</span><span class="o">.</span><span class="n">violations</span>
     <span class="p">]</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_spl</span><span class="p">(</span>
+    <span class="n">sequence</span><span class="p">:</span> <span class="n">pp</span><span class="o">.</span><span class="n">Sequence</span><span class="p">,</span>
+    <span class="n">system</span><span class="p">:</span> <span class="n">pp</span><span class="o">.</span><span class="n">Opts</span><span class="p">,</span>
+    <span class="n">response</span><span class="p">:</span> <span class="n">safety</span><span class="o">.</span><span class="n">AcousticResponse</span><span class="p">,</span>
+    <span class="n">limits</span><span class="p">:</span> <span class="n">CheckLimits</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+    <span class="k">return</span> <span class="n">_spl_problems</span><span class="p">(</span><span class="n">_levels</span><span class="p">(</span><span class="n">sequence</span><span class="p">,</span> <span class="n">response</span><span class="p">,</span> <span class="n">system</span><span class="p">,</span> <span class="kc">None</span><span class="p">),</span> <span class="n">limits</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_levels</span><span class="p">(</span>
+    <span class="n">sequence</span><span class="p">:</span> <span class="n">pp</span><span class="o">.</span><span class="n">Sequence</span><span class="p">,</span>
+    <span class="n">response</span><span class="p">:</span> <span class="n">safety</span><span class="o">.</span><span class="n">AcousticResponse</span><span class="p">,</span>
+    <span class="n">system</span><span class="p">:</span> <span class="n">pp</span><span class="o">.</span><span class="n">Opts</span><span class="p">,</span>
+    <span class="n">rotation</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">SplLevels</span><span class="p">:</span>
+    <span class="n">_</span><span class="p">,</span> <span class="n">found</span> <span class="o">=</span> <span class="n">safety</span><span class="o">.</span><span class="n">check_spl</span><span class="p">(</span><span class="n">sequence</span><span class="p">,</span> <span class="n">response</span><span class="p">,</span> <span class="n">rotation</span><span class="o">=</span><span class="n">rotation</span><span class="p">,</span> <span class="n">system</span><span class="o">=</span><span class="n">system</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">SplLevels</span><span class="p">(</span><span class="n">found</span><span class="o">.</span><span class="n">peak</span><span class="p">,</span> <span class="n">found</span><span class="o">.</span><span class="n">average</span><span class="p">,</span> <span class="n">found</span><span class="o">.</span><span class="n">repetition</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_spl_problems</span><span class="p">(</span><span class="n">levels</span><span class="p">:</span> <span class="n">SplLevels</span><span class="p">,</span> <span class="n">limits</span><span class="p">:</span> <span class="n">CheckLimits</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+    <span class="n">first</span><span class="p">,</span> <span class="n">last</span> <span class="o">=</span> <span class="n">levels</span><span class="o">.</span><span class="n">repetition</span>
+    <span class="n">where</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"over blocks </span><span class="si">{</span><span class="n">first</span><span class="si">}</span><span class="s2">-</span><span class="si">{</span><span class="n">last</span><span class="si">}</span><span class="s2"> played without end"</span>
+    <span class="n">problems</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">if</span> <span class="n">levels</span><span class="o">.</span><span class="n">peak_db</span> <span class="o">&gt;</span> <span class="n">limits</span><span class="o">.</span><span class="n">spl_peak_limit</span><span class="p">:</span>
+        <span class="n">problems</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"peak sound pressure level of </span><span class="si">{</span><span class="n">levels</span><span class="o">.</span><span class="n">peak_db</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2"> dB </span><span class="si">{</span><span class="n">where</span><span class="si">}</span><span class="s2"> exceeds "</span>
+            <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">limits</span><span class="o">.</span><span class="n">spl_peak_limit</span><span class="si">:</span><span class="s2">.0f</span><span class="si">}</span><span class="s2"> dB"</span>
+        <span class="p">)</span>
+    <span class="k">if</span> <span class="n">levels</span><span class="o">.</span><span class="n">average_dba</span> <span class="o">&gt;</span> <span class="n">limits</span><span class="o">.</span><span class="n">spl_average_limit</span><span class="p">:</span>
+        <span class="n">problems</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"A-weighted average sound pressure level of </span><span class="si">{</span><span class="n">levels</span><span class="o">.</span><span class="n">average_dba</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2"> "</span>
+            <span class="sa">f</span><span class="s2">"dB(A) </span><span class="si">{</span><span class="n">where</span><span class="si">}</span><span class="s2"> exceeds </span><span class="si">{</span><span class="n">limits</span><span class="o">.</span><span class="n">spl_average_limit</span><span class="si">:</span><span class="s2">.0f</span><span class="si">}</span><span class="s2"> dB(A)"</span>
+        <span class="p">)</span>
+    <span class="k">return</span> <span class="n">problems</span>
+
+
+<div class="viewcode-block" id="spl_levels">
+<a class="viewcode-back" href="../../../generated/pulserver.ir.spl_levels.html#pulserver.ir.spl_levels">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">spl_levels</span><span class="p">(</span>
+    <span class="n">seq_path</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">system</span><span class="p">:</span> <span class="n">pp</span><span class="o">.</span><span class="n">Opts</span><span class="p">,</span>
+    <span class="n">limits</span><span class="p">:</span> <span class="n">CheckLimits</span><span class="p">,</span>
+    <span class="n">designed</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="n">Path</span><span class="p">,</span> <span class="n">pp</span><span class="o">.</span><span class="n">Sequence</span><span class="p">]]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">rotation</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">SplLevels</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Return the sound pressure levels of each file of a chain, in the physical frame.</span>
+
+<span class="sd">    Each file's loudest repetition is rotated by ``rotation`` after each</span>
+<span class="sd">    block's own rotation and filtered by the acoustic transfer function of</span>
+<span class="sd">    ``limits``, as ``pypulseqpp.safety.check_spl`` does; the sequences are</span>
+<span class="sd">    not changed.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    seq_path</span>
+<span class="sd">        The first file of the chain.</span>
+<span class="sd">    system</span>
+<span class="sd">        Source of the gyromagnetic ratio.</span>
+<span class="sd">    limits</span>
+<span class="sd">        The acoustic transfer function.</span>
+<span class="sd">    designed</span>
+<span class="sd">        The chain as :func:`pulserver.mrd.designed_chain` returns it, read in</span>
+<span class="sd">        place of the files.</span>
+<span class="sd">    rotation</span>
+<span class="sd">        ``(3, 3)`` prescription rotation from logical to physical axes; the</span>
+<span class="sd">        identity by default.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    list of SplLevels</span>
+<span class="sd">        One per file, in play order.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If ``limits`` carries no acoustic transfer function, a file of the</span>
+<span class="sd">        chain cannot be read, or ``rotation`` is not orthonormal.</span>
+<span class="sd">    """</span>
+    <span class="n">response</span> <span class="o">=</span> <span class="n">limits</span><span class="o">.</span><span class="n">acoustic_response</span><span class="p">()</span>
+    <span class="k">if</span> <span class="n">response</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"sound pressure levels need an acoustic transfer function"</span><span class="p">)</span>
+    <span class="n">chain_read</span> <span class="o">=</span> <span class="n">designed</span> <span class="k">if</span> <span class="n">designed</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">_read</span><span class="p">(</span><span class="n">seq_path</span><span class="p">)</span>
+    <span class="n">turn</span> <span class="o">=</span> <span class="kc">None</span> <span class="k">if</span> <span class="n">rotation</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">_prescription</span><span class="p">(</span><span class="n">rotation</span><span class="p">)</span>
+    <span class="k">return</span> <span class="p">[</span><span class="n">_levels</span><span class="p">(</span><span class="n">sequence</span><span class="p">,</span> <span class="n">response</span><span class="p">,</span> <span class="n">system</span><span class="p">,</span> <span class="n">turn</span><span class="p">)</span> <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">sequence</span> <span class="ow">in</span> <span class="n">chain_read</span><span class="p">]</span></div>
+
 
 
 <div class="viewcode-block" id="sar_ratios">

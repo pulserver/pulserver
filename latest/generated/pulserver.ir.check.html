@@ -552,9 +552,10 @@ exempt, as the scanner plays it. It is then checked with
 <code class="docutils literal notranslate"><span class="pre">pypulseqpp.check_timing</span></code>, gradient continuity included, and with
 <code class="docutils literal notranslate"><span class="pre">pypulseqpp.safety.check_max_grad</span></code> and <code class="docutils literal notranslate"><span class="pre">check_max_slew</span></code>, against the
 gradient limits, dead times and ringdown time of <code class="docutils literal notranslate"><span class="pre">system</span></code>; and with
-<code class="docutils literal notranslate"><span class="pre">check_pns</span></code> and <code class="docutils literal notranslate"><span class="pre">check_mech_resonance</span></code> where <code class="docutils literal notranslate"><span class="pre">limits</span></code> carries a
-nerve model or forbidden bands. The waveforms are timed by the file’s own
-rasters. VOPs are not checked here: see <a class="reference internal" href="pulserver.ir.sar_ratios.html#pulserver.ir.sar_ratios" title="pulserver.ir.sar_ratios"><code class="xref py py-func docutils literal notranslate"><span class="pre">sar_ratios()</span></code></a>.</p>
+<code class="docutils literal notranslate"><span class="pre">check_pns</span></code>, <code class="docutils literal notranslate"><span class="pre">check_mech_resonance</span></code> and <code class="docutils literal notranslate"><span class="pre">check_spl</span></code> where <code class="docutils literal notranslate"><span class="pre">limits</span></code>
+carries a nerve model, forbidden bands or an acoustic transfer function.
+The waveforms are timed by the file’s own rasters. VOPs are not checked
+here: see <a class="reference internal" href="pulserver.ir.sar_ratios.html#pulserver.ir.sar_ratios" title="pulserver.ir.sar_ratios"><code class="xref py py-func docutils literal notranslate"><span class="pre">sar_ratios()</span></code></a>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
@@ -565,6 +566,8 @@ reflection included; the identity by default.</p></li>
 <li><p><strong>limits</strong> – The nerve and resonance limits; none by default.</p></li>
 <li><p><strong>designed</strong> – The chain as <code class="xref py py-func docutils literal notranslate"><span class="pre">pulserver.mrd.designed_chain()</span></code> returns it, checked
 in place of reading the files, and rotated in place.</p></li>
+<li><p><strong>spl_levels</strong> – One per file of the chain, as <a class="reference internal" href="pulserver.ir.spl_levels.html#pulserver.ir.spl_levels" title="pulserver.ir.spl_levels"><code class="xref py py-func docutils literal notranslate"><span class="pre">spl_levels()</span></code></a> returns them for
+<code class="docutils literal notranslate"><span class="pre">rotation</span></code>, held to the limits in place of computing them.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
@@ -575,8 +578,8 @@ one; empty when every check passes.</p>
 <dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#list" title="(in Python v3.14)">list</a> of <a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)">str</a></p>
 </dd>
 <dt class="field-even">Raises<span class="colon">:</span></dt>
-<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If a file of the chain cannot be read, or <code class="docutils literal notranslate"><span class="pre">rotation</span></code> is not
-    orthonormal.</p>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If a file of the chain or the acoustic file cannot be read, or
+    <code class="docutils literal notranslate"><span class="pre">rotation</span></code> is not orthonormal.</p>
 </dd>
 </dl>
 </dd></dl>

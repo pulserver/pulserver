@@ -54,6 +54,8 @@ from.
    CheckLimits
    sar_ratios
    SarRatio
+   spl_levels
+   SplLevels
    played_rf
    summary
    play

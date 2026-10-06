@@ -556,7 +556,8 @@ the integral of the squared envelope scaled to unit peak, in s:
 <code class="docutils literal notranslate"><span class="pre">pypulseqpp.calc_rf_power</span></code>’s energy over its peak power, both summed
 over a dynamic pTx pulse’s channels.
 <code class="docutils literal notranslate"><span class="pre">vop_sar_ratio</span></code> and <code class="docutils literal notranslate"><span class="pre">vop_global_sar_ratio</span></code> are those the cache was
-written with, zero when the chain is read and segmented again.
+written with, zero when the chain is read and segmented again;
+<code class="docutils literal notranslate"><span class="pre">spl_peak_db</span></code> and <code class="docutils literal notranslate"><span class="pre">spl_average_dba</span></code> likewise, -1 when it is.
 <code class="docutils literal notranslate"><span class="pre">readout_labels</span></code> lists, per readout in play order, the values of the
 three labels <code class="docutils literal notranslate"><span class="pre">label_column_map</span></code> selects, as in force at that readout.
 <code class="docutils literal notranslate"><span class="pre">waves</span></code> lists the subsequence’s waves, as <a class="reference internal" href="pulserver.ir.play.html#pulserver.ir.play" title="pulserver.ir.play"><code class="xref py py-func docutils literal notranslate"><span class="pre">play()</span></code></a> indexes

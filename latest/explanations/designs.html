@@ -648,11 +648,21 @@ axes are checked against the gradient coils’ own, <code class="docutils litera
 timing check, gradient continuity included, and its gradient amplitude and
 slew-rate checks on every file, against the gradient limits, dead times and
 ringdown time of the scanner. Where the call’s limits carry them
-(<a class="reference internal" href="../generated/pulserver.ir.CheckLimits.html#pulserver.ir.CheckLimits" title="pulserver.ir.CheckLimits"><code class="xref py py-class docutils literal notranslate"><span class="pre">CheckLimits</span></code></a>), it also runs pypulseqpp’s PNS check
-under the scanner’s nerve model and its mechanical-resonance check against the
-scanner’s forbidden gradient bands. The waveforms are timed by the rasters the
+(<a class="reference internal" href="../generated/pulserver.ir.CheckLimits.html#pulserver.ir.CheckLimits" title="pulserver.ir.CheckLimits"><code class="xref py py-class docutils literal notranslate"><span class="pre">CheckLimits</span></code></a>), it also runs pypulseqpp’s PNS check under
+the scanner’s nerve model, its mechanical-resonance check against the scanner’s
+forbidden gradient bands, and its sound pressure check through the gradient
+coil’s acoustic transfer function. The waveforms are timed by the rasters the
 file declares. The interpreter passes these limits with every design call
-(<a class="reference internal" href="../user-guide/running.html"><span class="doc">Running the services</span></a>); it computes the SAR and the gradient heating.</p>
+(<a class="reference internal" href="../user-guide/running.html"><span class="doc">Running the services</span></a>); it computes the SAR and the gradient and RF
+heating.</p>
+<p>The sound pressure check filters each file’s repetition of most gradient
+energy, the one <a class="reference internal" href="../generated/pulserver.ir.repetition_gradients.html#pulserver.ir.repetition_gradients" title="pulserver.ir.repetition_gradients"><code class="xref py py-func docutils literal notranslate"><span class="pre">repetition_gradients()</span></code></a> reads from the
+cache, through the transfer function of each physical axis, as a periodic
+waveform: the levels are those of the steady state the repetition reaches when
+it is played back to back. The peak level is held to 140 dB and the A-weighted
+average to 99 dB(A), the limits of IEC 60601-2-33, and both are written into
+the cache (<a class="reference internal" href="../generated/pulserver.ir.SplLevels.html#pulserver.ir.SplLevels" title="pulserver.ir.SplLevels"><code class="xref py py-class docutils literal notranslate"><span class="pre">SplLevels</span></code></a>), where the interpreter reads them;
+a cache written without a transfer function carries -1.</p>
 <p>No design is stored for a generated design or an imported chain that fails a
 check: <code class="docutils literal notranslate"><span class="pre">generate</span></code> and <code class="docutils literal notranslate"><span class="pre">import</span></code> reply with the problems, as they do with a
 design error. The checks compute estimates; passing them does not
