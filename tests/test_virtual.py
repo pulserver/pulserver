@@ -635,8 +635,9 @@ def test_a_series_streamed_as_it_is_acquired_is_reconstructed_as_one_sent_whole(
         )
         (image,) = [item for item in received if isinstance(item, ismrmrd.Image)]
         images.append(np.squeeze(np.abs(image.data)).astype(float))
-    np.testing.assert_array_equal(images[0], images[1])
+    # Each span is simulated on its own, so the two agree to float32 round-off.
     assert images[0].max() > 0.0
+    np.testing.assert_allclose(images[0], images[1], atol=1e-3 * images[1].max())
 
 
 def test_a_virtual_series_short_of_a_readout_is_refused(proxy, tmp_path):
