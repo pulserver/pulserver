@@ -154,3 +154,48 @@ def test_forward_and_reversed_lines_leave_the_gadgets_in_one_direction_with_one_
 
     assert [echo for echo, _ in lines] == [COLUMNS // 2, COLUMNS // 2]
     np.testing.assert_allclose(lines[1][1], lines[0][1], atol=1e-3)
+
+
+class _Correction:
+    """Stands in for bartorch's susceptibility correction: records what it is given and shifts ``blip_up`` by one along the phase encode."""
+
+    def __init__(self):
+        self.calls = []
+
+    def __call__(self, blip_up, blip_down, *, voxel_size, phase_encoding_axis):
+        self.calls.append((tuple(blip_up.shape), voxel_size, phase_encoding_axis))
+        return SimpleNamespace(blip_up=blip_up.roll(1, dims=phase_encoding_axis))
+
+
+@pytest.fixture
+def correction(monkeypatch):
+    from bartorch import tools
+
+    stand_in = _Correction()
+    monkeypatch.setattr(tools, "correct_susceptibility", stand_in)
+    return stand_in
+
+
+def test_a_slice_is_corrected_as_three_identical_slices_its_phase_encode_first(
+    correction,
+):
+    from pulserver.recon.handlers.epi import undistorted
+
+    image = np.random.default_rng(0).random((6, 8))
+
+    corrected = undistorted(image, image, (2.0, 3.0))
+
+    assert correction.calls == [((6, 8, 3), (2.0, 3.0, 1.0), 0)]
+    np.testing.assert_allclose(corrected, np.roll(image, 1, axis=0))
+
+
+def test_a_volume_is_corrected_as_one_its_phase_encode_first(correction):
+    from pulserver.recon.handlers.epi import undistorted
+
+    volume = np.random.default_rng(1).random((4, 6, 8))
+
+    corrected = undistorted(volume, volume, (5.0, 2.0, 3.0))
+
+    # (partition, phase, readout) goes in as (phase, readout, partition).
+    assert correction.calls == [((6, 8, 4), (2.0, 3.0, 5.0), 0)]
+    np.testing.assert_allclose(corrected, np.roll(volume, 1, axis=1))

@@ -1,6 +1,6 @@
-# pulserver with its console, BrainWeb and coil extras, BrainWeb's normal
-# brain, and the field maps and VOPs of the virtual scanner's coils solved in
-# it, on which every exam is scanned. Run without a command, it serves the
+# pulserver with its console, BrainWeb and coil extras and PyHySCO,
+# BrainWeb's normal brain, and the field maps and VOPs of the virtual
+# scanner's coils solved in it, on which every exam is scanned. Run without a command, it serves the
 # console of the virtual scanner on port 8765, reconstructing each scan in its
 # own process, for MaRGE's page:
 #
@@ -31,6 +31,12 @@ RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/wh
 COPY --from=build /wheels /wheels
 RUN pip install --no-cache-dir "$(echo /wheels/pulserver-*.whl)[console,brainweb,coils]" \
  && rm -rf /wheels
+
+# PyHySCO, with which the EPI reconstruction corrects each image and volume
+# for susceptibility distortion against its phase-encode-reversed reference.
+# It is GPL-3.0-only: bartorch never ships it, and the image carries it as
+# installed from PyPI, where its source is.
+RUN pip install --no-cache-dir "bartorch[pyhysco]"
 
 # BrainWeb's normal brain, downloaded while the image is built, so that no
 # exam reaches BrainWeb's server; brainweb-dl reads it from BRAINWEB_DIR.
