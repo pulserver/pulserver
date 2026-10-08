@@ -887,6 +887,13 @@ def test_every_band_is_played_before_every_excitation_exempt_from_the_prescripti
     assert {("NOPOS", 1), ("NOROT", 1)} <= exempt
 
 
+def test_the_3d_epi_excites_water_alone(zoo):
+    plugin = zoo["epi3d"]
+    main = _main(plugin, _protocol(plugin, {"nx": 64, "ny": 64, "nslices": 16}))
+
+    assert main.definitions["Excitation"] == "spsp"
+
+
 def test_the_2d_epi_saturates_fat_and_plays_no_band(zoo):
     plugin = zoo["epi2d"]
     *_, main = plugin.generate(SYSTEM, _protocol(plugin, {"nx": 64, "ny": 64}))
