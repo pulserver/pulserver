@@ -158,7 +158,8 @@ along the physical axes, its centre's distance from the isocentre along that
 normal and its thickness, in mm. The field-of-view offset and rotation leave a
 band where it was placed, and a band not yet placed waits 150 mm from the
 isocentre, outside the head. `BANDS = 0` plays none. `epi2d` saturates fat before
-every shot while `FAT_SATURATION` is `True`.
+every shot while `FAT_SATURATION` is `True`, and `epi3d` excites water alone
+with a spectral-spatial pulse while `EXCITATION` is `"spsp"`.
 
 Optional features are switched by a module constant of the plugin, off in
 the shipped files; a copy of the file in a `--plugins` directory with the
