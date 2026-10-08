@@ -613,6 +613,7 @@ interpreter fills from the scanner’s; they are left out of the print.</p>
 </span><span class="nb">print</span><span class="p">(</span><a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="str"><span class="n">block</span></a><span class="p">[</span><span class="p">:</span> <a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="str"><span class="n">block</span></a><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="s2">&quot;</span><span class="s2">fov_offset_x</span><span class="s2">&quot;</span><span class="p">)</span><span class="p">]</span><span class="p">)</span><span class="w">
 </span></pre></div></div>
 <div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>[Protocol]
+imaging_mode: stringlist|0|2d|3d
 flip: float|typein|12.0|1.0|90.0|1.0|deg
 TE: int|dropdown|8000|1000|80000|10|us|-2|5000|8000
 TR: int|dropdown|250000|1000|5000000|1|us|-1
@@ -622,6 +623,7 @@ phase_fov: float|typein|220.0|50.0|500.0|1.0|mm
 nx: int|typein|128|32|512|2|
 ny: int|typein|128|32|512|2|
 nslices: int|typein|1|1|64|1|
+slice_spacing: float|typein|0.0|0.0|100.0|0.1|mm
 slice_thickness: float|typein|5.0|1.0|20.0|1.0|mm
 Ry: int|typein|1|1|4|1|
 </pre></div>
@@ -654,7 +656,7 @@ IR cache and stores both as a design. The reply is the design’s identifier.</p
 </span><span class="nb">print</span><span class="p">(</span><a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict" title="dict"><span class="n">generated</span></a><span class="p">[</span><span class="s2">&quot;</span><span class="s2">reply</span><span class="s2">&quot;</span><span class="p">]</span><span class="p">)</span><span class="w">
 </span><span class="nb">print</span><span class="p">(</span><span class="nb">sorted</span><span class="p">(</span><span class="n">path</span><span class="o">.</span><span class="n">name</span> <span class="k">for</span> <span class="n">path</span> <span class="ow">in</span> <span class="p">(</span><a class="sphx-glr-backref-module-pathlib sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.PosixPath" title="pathlib.PosixPath"><span class="n">store</span></a> <span class="o">/</span> <a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="str"><span class="n">design</span></a><span class="p">)</span><span class="o">.</span><span class="n">iterdir</span><span class="p">(</span><span class="p">)</span><span class="p">)</span><span class="p">)</span><span class="w">
 </span></pre></div></div>
-<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>GENERATED 5c77e4c928efa9b945
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>GENERATED 50dbe7c49fddb12f4c
 
 ['manifest.json', 'resolved.protocol', 'sequence.pseg', 'sequence.seq']
 </pre></div>
@@ -710,7 +712,7 @@ plays it on a phantom (<a class="reference internal" href="../../../explanations
 played them and reconstructed by a reconstruction plugin
 (<a class="reference internal" href="04_reconstruction_plugin.html"><span class="doc">4. A reconstruction plugin</span></a>).</p></li>
 </ol>
-<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 0.584 seconds)</p>
+<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 0.436 seconds)</p>
 <div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-generated-gallery-01-course-01-protocol-to-image-py">
 <div class="sphx-glr-download sphx-glr-download-jupyter docutils container">
 <p><a class="reference download internal" download="" href="../../../_downloads/968025b00f820fb8bab966158ad54e67/01_protocol_to_image.ipynb"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Jupyter</span> <span class="pre">notebook:</span> <span class="pre">01_protocol_to_image.ipynb</span></code></a></p>

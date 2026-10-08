@@ -28,6 +28,7 @@ from.
    BoolParam
    ChoiceParam
    StringListParam
+   StatedParam
    ConfigParam
    Description
 

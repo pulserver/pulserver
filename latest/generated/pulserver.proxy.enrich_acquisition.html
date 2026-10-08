@@ -549,7 +549,9 @@
 <code class="docutils literal notranslate"><span class="pre">encoding_space_ref</span></code>, and <code class="docutils literal notranslate"><span class="pre">center_sample</span></code> unless k does not move
 across the readout, in which case the received value stays. A readout
 whose k moves gets it as <code class="docutils literal notranslate"><span class="pre">traj</span></code>, trailing constant axes dropped, unless
-it is a Cartesian readout sampled on its flat top alone.</p>
+it is a Cartesian readout sampled on its flat top alone. The received
+<code class="docutils literal notranslate"><span class="pre">position</span></code>, the field-of-view centre, is moved along <code class="docutils literal notranslate"><span class="pre">slice_dir</span></code> to
+the centre of the readout’s slice (<a class="reference internal" href="pulserver.proxy.SequenceTable.slice_offset_m.html#pulserver.proxy.SequenceTable.slice_offset_m" title="pulserver.proxy.SequenceTable.slice_offset_m"><code class="xref py py-attr docutils literal notranslate"><span class="pre">SequenceTable.slice_offset_m</span></code></a>).</p>
 <p>The samples are left as received, except where
 <a class="reference internal" href="pulserver.proxy.SequenceTable.readout_phase_modulation.html#pulserver.proxy.SequenceTable.readout_phase_modulation" title="pulserver.proxy.SequenceTable.readout_phase_modulation"><code class="xref py py-meth docutils literal notranslate"><span class="pre">SequenceTable.readout_phase_modulation()</span></code></a> gives a phase, with the
 object at <code class="docutils literal notranslate"><span class="pre">fov_offset_m</span></code> when given. That is the

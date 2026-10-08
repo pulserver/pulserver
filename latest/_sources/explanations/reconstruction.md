@@ -59,6 +59,12 @@ is applied to the stream as follows.
   sizes. The ratio of the encoded to the reconstructed field of view along the
   readout is the readout oversampling. A space with a trajectory keeps the
   matrix size and field of view the sequence defines.
+- A subsequence that writes no `PAR` and either defines `SlicePositions` or
+  writes more than one `SLC` excites a stack of 2D slices, each an image of its
+  own. Its `Matrix` and `FOV` along z describe the stack, so each of its
+  spaces is one sample deep along z, over the `SliceThickness` the sequence
+  defines, or the stack's field of view shared among its slices where it
+  defines none.
 - The encoding limits of each space are the minimum and maximum of the
   counters its readouts reach. The `center` of `kspace_encoding_step_1` and
   `kspace_encoding_step_2` is the counter of the k-space centre the sequence
@@ -75,7 +81,10 @@ is applied to the stream as follows.
   receives the encoding counters, the MRD flags, the dwell time and the
   encoding space reference, and the k-space trajectory when the k-space
   location changes across the readout, except on a Cartesian readout sampled
-  on the flat top of its readout gradient alone. When the client numbers its
+  on the flat top of its readout gradient alone. In a stack of slices, its
+  position, the field-of-view centre the client sends, is moved along
+  `slice_dir` by the `SlicePositions` entry its `SLC` indexes, to the centre of
+  its slice. When the client numbers its
   acquisitions, each `scan_counter` must follow the previous one by one; a gap
   or a repeat stops the series before it is reconstructed, since every later
   row would be shifted.

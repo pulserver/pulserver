@@ -610,6 +610,12 @@ the readout is the reconstructed one times the ratio of the two matrix
 sizes. The ratio of the encoded to the reconstructed field of view along the
 readout is the readout oversampling. A space with a trajectory keeps the
 matrix size and field of view the sequence defines.</p></li>
+<li><p>A subsequence that writes no <code class="docutils literal notranslate"><span class="pre">PAR</span></code> and either defines <code class="docutils literal notranslate"><span class="pre">SlicePositions</span></code> or
+writes more than one <code class="docutils literal notranslate"><span class="pre">SLC</span></code> excites a stack of 2D slices, each an image of its
+own. Its <code class="docutils literal notranslate"><span class="pre">Matrix</span></code> and <code class="docutils literal notranslate"><span class="pre">FOV</span></code> along z describe the stack, so each of its
+spaces is one sample deep along z, over the <code class="docutils literal notranslate"><span class="pre">SliceThickness</span></code> the sequence
+defines, or the stack’s field of view shared among its slices where it
+defines none.</p></li>
 <li><p>The encoding limits of each space are the minimum and maximum of the
 counters its readouts reach. The <code class="docutils literal notranslate"><span class="pre">center</span></code> of <code class="docutils literal notranslate"><span class="pre">kspace_encoding_step_1</span></code> and
 <code class="docutils literal notranslate"><span class="pre">kspace_encoding_step_2</span></code> is the counter of the k-space centre the sequence
@@ -626,7 +632,10 @@ around it. The flip angles it does not define are the distinct values of
 receives the encoding counters, the MRD flags, the dwell time and the
 encoding space reference, and the k-space trajectory when the k-space
 location changes across the readout, except on a Cartesian readout sampled
-on the flat top of its readout gradient alone. When the client numbers its
+on the flat top of its readout gradient alone. In a stack of slices, its
+position, the field-of-view centre the client sends, is moved along
+<code class="docutils literal notranslate"><span class="pre">slice_dir</span></code> by the <code class="docutils literal notranslate"><span class="pre">SlicePositions</span></code> entry its <code class="docutils literal notranslate"><span class="pre">SLC</span></code> indexes, to the centre of
+its slice. When the client numbers its
 acquisitions, each <code class="docutils literal notranslate"><span class="pre">scan_counter</span></code> must follow the previous one by one; a gap
 or a repeat stops the series before it is reconstructed, since every later
 row would be shifted.</p></li>

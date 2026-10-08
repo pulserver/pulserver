@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>Reconstruction clients &#8212; pulserver documentation</title>
+    <title>StatedParam.value &#8212; pulserver documentation</title>
   
   
   
@@ -52,7 +52,7 @@
     <script src="../_static/copybutton.js?v=f281be69"></script>
     <script src="../_static/sg-tags.js?v=d80f6fa4"></script>
     <script src="../_static/scripts/sphinx-book-theme.js?v=fab101a9"></script>
-    <script>DOCUMENTATION_OPTIONS.pagename = 'user-guide/reconstruction-client';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'generated/pulserver.design.StatedParam.value';</script>
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
@@ -61,12 +61,10 @@
             true;
         </script>
     <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
-    <link rel="canonical" href="https://pulserver.github.io/pulserver/latest/user-guide/reconstruction-client.html" />
+    <link rel="canonical" href="https://pulserver.github.io/pulserver/latest/generated/pulserver.design.StatedParam.value.html" />
     <link rel="icon" href="../_static/pulserver-mark.svg"/>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Scanning a phantom without a scanner" href="virtual-scanner.html" />
-    <link rel="prev" title="Reconstruction plugins" href="reconstruction-plugins.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   <meta name="docsearch:version" content="latest" />
@@ -239,13 +237,13 @@
                 </a>
             </li>
         </ul>
-        <ul class="current nav bd-sidenav">
-<li class="toctree-l1 current active has-children"><a class="reference internal" href="index.html">User guide</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
-<li class="toctree-l2"><a class="reference internal" href="running.html">Running the services</a></li>
-<li class="toctree-l2"><a class="reference internal" href="scanner-sequences.html">Scanner sequences</a></li>
-<li class="toctree-l2"><a class="reference internal" href="reconstruction-plugins.html">Reconstruction plugins</a></li>
-<li class="toctree-l2 current active"><a class="current reference internal" href="#">Reconstruction clients</a></li>
-<li class="toctree-l2"><a class="reference internal" href="virtual-scanner.html">Scanning a phantom without a scanner</a></li>
+        <ul class="nav bd-sidenav">
+<li class="toctree-l1 has-children"><a class="reference internal" href="../user-guide/index.html">User guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../user-guide/running.html">Running the services</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../user-guide/scanner-sequences.html">Scanner sequences</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../user-guide/reconstruction-plugins.html">Reconstruction plugins</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../user-guide/reconstruction-client.html">Reconstruction clients</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../user-guide/virtual-scanner.html">Scanning a phantom without a scanner</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../developer-guide/index.html">Developer guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -280,17 +278,17 @@
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../examples/index.html">Examples</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../examples/course.html">Course</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/01_protocol_to_image.html">1. From protocol to image</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/02_sequence_plugin.html">2. A scanner sequence and its protocol</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/03_scanner_representation.html">3. Scanner representation</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/04_reconstruction_plugin.html">4. A reconstruction plugin</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/05_testing_on_the_virtual_scanner.html">5. Testing on the virtual scanner</a></li>
+<li class="toctree-l3"><a class="reference internal" href="gallery/01-course/01_protocol_to_image.html">1. From protocol to image</a></li>
+<li class="toctree-l3"><a class="reference internal" href="gallery/01-course/02_sequence_plugin.html">2. A scanner sequence and its protocol</a></li>
+<li class="toctree-l3"><a class="reference internal" href="gallery/01-course/03_scanner_representation.html">3. Scanner representation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="gallery/01-course/04_reconstruction_plugin.html">4. A reconstruction plugin</a></li>
+<li class="toctree-l3"><a class="reference internal" href="gallery/01-course/05_testing_on_the_virtual_scanner.html">5. Testing on the virtual scanner</a></li>
 </ul>
 </details></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../examples/tours.html">Tours</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/02-tours/01_protocol_resolution.html">Protocol resolution for a 2D gradient echo</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/02-tours/02_segmentation.html">Segmentation of a sequence for the scanner</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/02-tours/03_fov_offset_enrichment.html">Field-of-view offset and the proxy phase</a></li>
+<li class="toctree-l3"><a class="reference internal" href="gallery/02-tours/01_protocol_resolution.html">Protocol resolution for a 2D gradient echo</a></li>
+<li class="toctree-l3"><a class="reference internal" href="gallery/02-tours/02_segmentation.html">Segmentation of a sequence for the scanner</a></li>
+<li class="toctree-l3"><a class="reference internal" href="gallery/02-tours/03_fov_offset_enrichment.html">Field-of-view offset and the proxy phase</a></li>
 </ul>
 </details></li>
 </ul>
@@ -389,7 +387,7 @@
       
       
       
-      <li><a href="https://github.com/pulserver/pulserver/edit/main/docs/user-guide/reconstruction-client.md" target="_blank"
+      <li><a href="https://github.com/pulserver/pulserver/edit/main/docs/generated/pulserver.design.StatedParam.value.rst" target="_blank"
    class="btn btn-sm btn-source-edit-button dropdown-item"
    title="Suggest edit"
    data-bs-placement="left" data-bs-toggle="tooltip"
@@ -406,7 +404,7 @@
       
       
       
-      <li><a href="https://github.com/pulserver/pulserver/issues/new?title=Issue%20on%20page%20%2Fuser-guide/reconstruction-client.html&body=Your%20issue%20content%20here." target="_blank"
+      <li><a href="https://github.com/pulserver/pulserver/issues/new?title=Issue%20on%20page%20%2Fgenerated/pulserver.design.StatedParam.value.html&body=Your%20issue%20content%20here." target="_blank"
    class="btn btn-sm btn-source-issues-button dropdown-item"
    title="Open an issue"
    data-bs-placement="left" data-bs-toggle="tooltip"
@@ -436,7 +434,7 @@
       
       
       
-      <li><a href="../_sources/user-guide/reconstruction-client.md" target="_blank"
+      <li><a href="../_sources/generated/pulserver.design.StatedParam.value.rst" target="_blank"
    class="btn btn-sm btn-download-source-button dropdown-item"
    title="Download source file"
    data-bs-placement="left" data-bs-toggle="tooltip"
@@ -446,7 +444,7 @@
 <span class="btn__icon-container">
   <i class="fas fa-file"></i>
   </span>
-<span class="btn__text-container">.md</span>
+<span class="btn__text-container">.rst</span>
 </a>
 </li>
       
@@ -519,7 +517,7 @@
               
 
 <div id="jb-print-docs-body" class="onlyprint">
-    <h1>Reconstruction clients</h1>
+    <h1>StatedParam.value</h1>
     <!-- Table of contents -->
     <div id="print-main-content">
         <div id="jb-print-toc">
@@ -529,10 +527,7 @@
             </div>
             <nav aria-label="Page">
                 <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#messages">Messages</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#header">Header</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#acquisitions">Acquisitions</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#see-also">See also</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.design.StatedParam.value"><code class="docutils literal notranslate"><span class="pre">StatedParam.value</span></code></a></li>
 </ul>
             </nav>
         </div>
@@ -544,181 +539,13 @@
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <section class="tex2jax_ignore mathjax_ignore" id="reconstruction-clients">
-<h1>Reconstruction clients<a class="headerlink" href="#reconstruction-clients" title="Link to this heading">#</a></h1>
-<p>The reconstruction client is the scanner-side program that streams the raw
-data of each series to the reconstruction proxy and returns the images to the
-console. It connects to the proxy’s TCP port (<a class="reference internal" href="running.html"><span class="doc">Running the services</span></a>), sends one series
-per connection as MRD messages, and reads what the reconstruction returns on
-the same connection.</p>
-<p>The proxy replaces the encoding counters, flags, encoding spaces and trajectory
-of the series with those the sequence states (<a class="reference internal" href="../explanations/reconstruction.html"><span class="doc">Raw-data enrichment and routing</span></a>).
-The client therefore sends what the scanner measured, the identity of the
-design the series was played from and the reconstruction plugin to run, and
-leaves the Pulseq structure of the scan to the proxy.</p>
-<section id="messages">
-<h2>Messages<a class="headerlink" href="#messages" title="Link to this heading">#</a></h2>
-<p>A series is sent in this order:</p>
-<div class="pst-scrollable-table-container"><table class="table">
-<thead>
-<tr class="row-odd"><th class="head"><p>Message</p></th>
-<th class="head"><p>Identifier</p></th>
-<th class="head"><p>Content</p></th>
-</tr>
-</thead>
-<tbody>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">CONFIG</span></code></p></td>
-<td><p>2</p></td>
-<td><p>The reconstruction plugin, as a bare name or the path of its <code class="docutils literal notranslate"><span class="pre">&lt;plugin&gt;.py</span></code> file, or as either under <code class="docutils literal notranslate"><span class="pre">parameters.config</span></code> of a JSON, YAML or XML text</p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">HEADER</span></code></p></td>
-<td><p>3</p></td>
-<td><p>The MRD XML header, once</p></td>
-</tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">ACQUISITION</span></code></p></td>
-<td><p>1008</p></td>
-<td><p>One per readout of the sequence chain, in play order</p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">WAVEFORM</span></code></p></td>
-<td><p>1026</p></td>
-<td><p>Optional, anywhere after the header: physiological waveforms, passed to the reconstruction unchanged</p></td>
-</tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">CLOSE</span></code></p></td>
-<td><p>4</p></td>
-<td><p>The end of the series</p></td>
-</tr>
-</tbody>
-</table>
-</div>
-<p>The design names no reconstruction, so the proxy refuses a series whose config
-names none, unless it forwards with a <code class="docutils literal notranslate"><span class="pre">--forward-config</span></code>. A path ending in <code class="docutils literal notranslate"><span class="pre">.py</span></code>
-names the plugin its file is called, without the extension; the proxy searches
-its own <code class="docutils literal notranslate"><span class="pre">--plugins</span></code> directories for that name, whatever the path’s directory.</p>
-<p>The client then reads until the proxy’s <code class="docutils literal notranslate"><span class="pre">CLOSE</span></code>: images (<code class="docutils literal notranslate"><span class="pre">IMAGE</span></code>, 1022),
-DICOM datasets (<code class="docutils literal notranslate"><span class="pre">DICOM_WITHNAME</span></code>, 1018) and texts (<code class="docutils literal notranslate"><span class="pre">TEXT</span></code>, 5), in the order the
-reconstruction produces them. A text beginning <code class="docutils literal notranslate"><span class="pre">pulserver:</span></code> reports a series
-that failed. A refused series receives that text and a <code class="docutils literal notranslate"><span class="pre">CLOSE</span></code> at once; the
-proxy then discards what the client still sends until it closes the
-connection, so the client can finish sending and read the reason.</p>
-</section>
-<section id="header">
-<h2>Header<a class="headerlink" href="#header" title="Link to this heading">#</a></h2>
-<div class="pst-scrollable-table-container"><table class="table">
-<thead>
-<tr class="row-odd"><th class="head"><p>Element</p></th>
-<th class="head"><p>Requirement</p></th>
-<th class="head"><p>Use</p></th>
-</tr>
-</thead>
-<tbody>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">pulserver_design</span></code>, a <code class="docutils literal notranslate"><span class="pre">userParameterString</span></code></p></td>
-<td><p>Required</p></td>
-<td><p>The identifier of the design the interpreter plays, from the <code class="docutils literal notranslate"><span class="pre">GENERATED</span></code> or <code class="docutils literal notranslate"><span class="pre">IMPORTED</span></code> reply: 18 hexadecimal digits, which are three 24-bit integers of six digits each</p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">experimentalConditions.H1resonanceFrequency_Hz</span></code></p></td>
-<td><p>Required by the MRD schema</p></td>
-<td><p>DICOM <code class="docutils literal notranslate"><span class="pre">ImagingFrequency</span></code></p></td>
-</tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">acquisitionSystemInformation.receiverChannels</span></code></p></td>
-<td><p>Optional</p></td>
-<td><p>The coil count of a reconstruction buffer laid out before its first acquisition</p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">ExamID</span></code>, a <code class="docutils literal notranslate"><span class="pre">userParameterString</span></code>, or else <code class="docutils literal notranslate"><span class="pre">studyInformation.studyInstanceUID</span></code>, or else <code class="docutils literal notranslate"><span class="pre">studyInformation.studyID</span></code></p></td>
-<td><p>Optional</p></td>
-<td><p>The exam; the series of one exam share its exam cache, and a series without one is an exam of its own</p></td>
-</tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">fov_offset_mm</span></code>, a <code class="docutils literal notranslate"><span class="pre">userParameterString</span></code></p></td>
-<td><p>Optional</p></td>
-<td><p>The position of the field-of-view centre, three millimetres along the logical readout, phase and slice axes separated by spaces; a difference from the offset the design was converted at is applied to the samples as a receive phase. Without it, the converted offset</p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">subjectInformation</span></code>, <code class="docutils literal notranslate"><span class="pre">studyInformation</span></code>, <code class="docutils literal notranslate"><span class="pre">measurementInformation</span></code>, <code class="docutils literal notranslate"><span class="pre">acquisitionSystemInformation</span></code></p></td>
-<td><p>Optional</p></td>
-<td><p>Copied into the DICOM datasets; <code class="docutils literal notranslate"><span class="pre">relativeTablePosition</span></code> is not</p></td>
-</tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">measurementInformation.measurementID</span></code></p></td>
-<td><p>A non-negative integer when <code class="docutils literal notranslate"><span class="pre">systemVendor</span></code> names GE</p></td>
-<td><p>The DICOM series number on a GE system</p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">encoding</span></code></p></td>
-<td><p>Optional</p></td>
-<td><p>Replaced by one encoding space per subsequence, and one more for the navigator readouts of a subsequence that has them. The reconstruction space is the sequence’s matrix size and field of view, one slice deep for a stack of 2D slices; the encoded space of a Cartesian space has the readout widened to the full echo, oversampling included, and its field of view in proportion. The encoding limits are the extremes of the counters the readouts reach, centred on the k-space centre line and partition the sequence defines. A matrix size or field of view the sequence does not define is kept from the client’s encoding at the same index</p></td>
-</tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">sequenceParameters</span></code></p></td>
-<td><p>Optional</p></td>
-<td><p>TR, TE, TI and flip angles replaced by those the sequence defines; TR and TE it does not define are measured by pypulseqpp’s <code class="docutils literal notranslate"><span class="pre">test_report_dict</span></code>, flip angles it does not define are the distinct values of <code class="docutils literal notranslate"><span class="pre">rf_flip_angles</span></code></p></td>
-</tr>
-</tbody>
-</table>
-</div>
-<p>A header that the ISMRMRD schema does not accept, or that names no design of
-the store, is refused before any acquisition is read.</p>
-</section>
-<section id="acquisitions">
-<h2>Acquisitions<a class="headerlink" href="#acquisitions" title="Link to this heading">#</a></h2>
-<p>The proxy matches acquisitions to readouts by their position in the stream, so
-the client sends every readout the sequence chain plays, those of dummy scans,
-noise scans and navigators included, and no other.</p>
-<div class="pst-scrollable-table-container"><table class="table">
-<thead>
-<tr class="row-odd"><th class="head"><p>Field</p></th>
-<th class="head"><p>Client</p></th>
-<th class="head"><p>Proxy</p></th>
-</tr>
-</thead>
-<tbody>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">number_of_samples</span></code></p></td>
-<td><p>The sample count of the readout’s ADC event</p></td>
-<td><p>Checked</p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">active_channels</span></code>, data</p></td>
-<td><p>The samples, demodulated by each ADC’s frequency and phase offsets</p></td>
-<td><p>Multiplied by the phase a field-of-view offset adds to a readout under a moving gradient, and by any phase modulation the sequence file stores</p></td>
-</tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">scan_counter</span></code></p></td>
-<td><p>0 on every acquisition, or increasing by one from any start</p></td>
-<td><p>Checked</p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">flags</span></code></p></td>
-<td><p>None, or <code class="docutils literal notranslate"><span class="pre">LAST_IN_MEASUREMENT</span></code> on the last acquisition</p></td>
-<td><p>Replaced</p></td>
-</tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">idx</span></code>, <code class="docutils literal notranslate"><span class="pre">sample_time_us</span></code>, <code class="docutils literal notranslate"><span class="pre">encoding_space_ref</span></code></p></td>
-<td><p>Any value</p></td>
-<td><p>Replaced</p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">center_sample</span></code></p></td>
-<td><p>Any value</p></td>
-<td><p>Replaced, except on a readout whose k-space location does not change</p></td>
-</tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">trajectory_dimensions</span></code>, <code class="docutils literal notranslate"><span class="pre">traj</span></code></p></td>
-<td><p>Any value</p></td>
-<td><p>Replaced on a readout whose k-space location changes, in 1/m along the sequence’s gradient axes</p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">position</span></code></p></td>
-<td><p>The prescribed field-of-view centre, in mm from isocentre</p></td>
-<td><p>Moved along <code class="docutils literal notranslate"><span class="pre">slice_dir</span></code> to the centre of the readout’s slice, for a stack of 2D slices whose sequence defines <code class="docutils literal notranslate"><span class="pre">SlicePositions</span></code>; an image takes it from its reference acquisition</p></td>
-</tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">measurement_uid</span></code>, <code class="docutils literal notranslate"><span class="pre">read_dir</span></code>, <code class="docutils literal notranslate"><span class="pre">phase_dir</span></code>, <code class="docutils literal notranslate"><span class="pre">slice_dir</span></code>, <code class="docutils literal notranslate"><span class="pre">patient_table_position</span></code>, <code class="docutils literal notranslate"><span class="pre">acquisition_time_stamp</span></code>, <code class="docutils literal notranslate"><span class="pre">physiology_time_stamp</span></code>, <code class="docutils literal notranslate"><span class="pre">user_int</span></code>, <code class="docutils literal notranslate"><span class="pre">user_float</span></code></p></td>
-<td><p>The scanner’s values, as MRD defines them</p></td>
-<td><p>Passed on unchanged; an image takes them from its reference acquisition</p></td>
-</tr>
-</tbody>
-</table>
-</div>
-<p>A series is refused, and its reconstruction stopped, when an acquisition has a
-sample count other than its readout’s, when the scan counters skip or repeat
-one, when an acquisition before the last is flagged <code class="docutils literal notranslate"><span class="pre">LAST_IN_MEASUREMENT</span></code>, or
-when the stream carries more or fewer acquisitions than the chain plays.</p>
-</section>
-<section id="see-also">
-<h2>See also<a class="headerlink" href="#see-also" title="Link to this heading">#</a></h2>
-<ul class="simple">
-<li><p><a class="reference internal" href="running.html"><span class="doc">Running the services</span></a> — starting the proxy.</p></li>
-<li><p><a class="reference internal" href="../explanations/reconstruction.html"><span class="doc">Raw-data enrichment and routing</span></a> — enrichment and routing.</p></li>
-<li><p><a class="reference internal" href="../explanations/designs.html"><span class="doc">Designs and the design store</span></a> — the design store and the identifier of a design.</p></li>
-<li><p><a class="reference internal" href="../generated/pulserver.proxy.ReconProxy.html#pulserver.proxy.ReconProxy" title="pulserver.proxy.ReconProxy"><code class="xref py py-class docutils literal notranslate"><span class="pre">ReconProxy</span></code></a> — the proxy.</p></li>
-</ul>
-</section>
+  <section id="statedparam-value">
+<h1>StatedParam.value<a class="headerlink" href="#statedparam-value" title="Link to this heading">#</a></h1>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="pulserver.design.StatedParam.value">
+<span class="sig-prename descclassname"><span class="pre">StatedParam.</span></span><span class="sig-name descname"><span class="pre">value</span></span><a class="headerlink" href="#pulserver.design.StatedParam.value" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
 </section>
 
 
@@ -732,24 +559,6 @@ when the stream carries more or fewer acquisitions than the chain plays.</p>
                 <footer class="prev-next-footer d-print-none">
                   
 <div class="prev-next-area">
-    <a class="left-prev"
-       href="reconstruction-plugins.html"
-       title="previous page">
-      <i class="fa-solid fa-angle-left"></i>
-      <div class="prev-next-info">
-        <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">Reconstruction plugins</p>
-      </div>
-    </a>
-    <a class="right-next"
-       href="virtual-scanner.html"
-       title="next page">
-      <div class="prev-next-info">
-        <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Scanning a phantom without a scanner</p>
-      </div>
-      <i class="fa-solid fa-angle-right"></i>
-    </a>
 </div>
                 </footer>
               
@@ -768,10 +577,7 @@ when the stream carries more or fewer acquisitions than the chain plays.</p>
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#messages">Messages</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#header">Header</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#acquisitions">Acquisitions</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#see-also">See also</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.design.StatedParam.value"><code class="docutils literal notranslate"><span class="pre">StatedParam.value</span></code></a></li>
 </ul>
   </nav></div>
 

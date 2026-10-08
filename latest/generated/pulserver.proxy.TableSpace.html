@@ -552,9 +552,13 @@
 <li><p><strong>subsequence</strong> (<em>int</em>) – Index of the chain file the space belongs to.</p></li>
 <li><p><strong>navigator</strong> (<em>bool</em>) – Whether the space holds the subsequence’s <code class="docutils literal notranslate"><span class="pre">NAV</span></code> readouts.</p></li>
 <li><p><strong>matrix</strong> (<em>tuple[int, int, int] | None</em>) – <code class="docutils literal notranslate"><span class="pre">(x,</span> <span class="pre">y,</span> <span class="pre">z)</span></code> from <code class="docutils literal notranslate"><span class="pre">Matrix</span></code>, or <code class="docutils literal notranslate"><span class="pre">NavMatrix</span></code> for a navigator;
-<code class="docutils literal notranslate"><span class="pre">None</span></code> when undefined.</p></li>
+<code class="docutils literal notranslate"><span class="pre">None</span></code> when undefined. 1 along z in a slice stack, a file that
+writes no <code class="docutils literal notranslate"><span class="pre">PAR</span></code> and defines <code class="docutils literal notranslate"><span class="pre">SlicePositions</span></code> or writes more than
+one <code class="docutils literal notranslate"><span class="pre">SLC</span></code>: its z counts the slices, each an image of its own.</p></li>
 <li><p><strong>fov_mm</strong> (<em>tuple[float, float, float] | None</em>) – <code class="docutils literal notranslate"><span class="pre">(x,</span> <span class="pre">y,</span> <span class="pre">z)</span></code> from <code class="docutils literal notranslate"><span class="pre">FOV</span></code>, or <code class="docutils literal notranslate"><span class="pre">NavFOV</span></code> for a navigator, in mm;
-<code class="docutils literal notranslate"><span class="pre">None</span></code> when undefined.</p></li>
+<code class="docutils literal notranslate"><span class="pre">None</span></code> when undefined. In a slice stack, z is one slice’s:
+<code class="docutils literal notranslate"><span class="pre">SliceThickness</span></code>, or the file’s z shared among its slices when that
+is undefined.</p></li>
 <li><p><strong>trajectory</strong> (<em>bool</em>) – Whether some readout of the space keeps more than one k axis, which
 makes the space non-Cartesian.</p></li>
 <li><p><strong>centre_line, centre_partition</strong> – The <code class="docutils literal notranslate"><span class="pre">LIN</span></code> and <code class="docutils literal notranslate"><span class="pre">PAR</span></code> counter of the k-space centre, from

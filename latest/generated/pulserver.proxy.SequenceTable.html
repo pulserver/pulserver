@@ -566,6 +566,10 @@ across the readout; 0 for a readout whose k does not move and for
 every readout of a Cartesian space not <a class="reference internal" href="pulserver.proxy.TableSpace.ramp_sampled.html#pulserver.proxy.TableSpace.ramp_sampled" title="pulserver.proxy.TableSpace.ramp_sampled"><code class="xref py py-attr docutils literal notranslate"><span class="pre">TableSpace.ramp_sampled</span></code></a>.</p></li>
 <li><p><strong>sample_time_us</strong> (<em>ndarray</em>) – <code class="docutils literal notranslate"><span class="pre">float32</span></code> dwell, in µs.</p></li>
 <li><p><strong>encoding_space</strong> (<em>ndarray</em>) – <code class="docutils literal notranslate"><span class="pre">int32</span></code> index into <a class="reference internal" href="pulserver.proxy.SequenceTable.spaces.html#pulserver.proxy.SequenceTable.spaces" title="pulserver.proxy.SequenceTable.spaces"><code class="xref py py-attr docutils literal notranslate"><span class="pre">spaces</span></code></a>.</p></li>
+<li><p><strong>slice_offset_m</strong> (<em>ndarray</em>) – <code class="docutils literal notranslate"><span class="pre">float64</span></code> centre of each readout’s slice along the logical slice
+axis from the field-of-view centre, in m: the <code class="docutils literal notranslate"><span class="pre">SlicePositions</span></code> entry
+its <code class="docutils literal notranslate"><span class="pre">SLC</span></code> indexes, in a file whose readouts are slices of a stack
+(<a class="reference internal" href="pulserver.proxy.TableSpace.html#pulserver.proxy.TableSpace" title="pulserver.proxy.TableSpace"><code class="xref py py-class docutils literal notranslate"><span class="pre">TableSpace</span></code></a>), and 0 elsewhere.</p></li>
 <li><p><strong>spaces</strong> (<em>tuple of TableSpace</em>) – Numbered in chain order: each subsequence’s primary space, then its
 navigator space when it has <code class="docutils literal notranslate"><span class="pre">NAV</span></code> readouts.</p></li>
 <li><p><strong>sequence_parameters</strong> (<em>dict of str to list of float</em>) – Over the chain’s <a class="reference internal" href="pulserver.mrd.SequenceDefinitions.html#pulserver.mrd.SequenceDefinitions" title="pulserver.mrd.SequenceDefinitions"><code class="xref py py-class docutils literal notranslate"><span class="pre">SequenceDefinitions</span></code></a>: the
@@ -622,10 +626,13 @@ the axes the design’s blocks are rotated onto, as
 <tr class="row-even"><td><p><a class="reference internal" href="pulserver.proxy.SequenceTable.num_samples.html#pulserver.proxy.SequenceTable.num_samples" title="pulserver.proxy.SequenceTable.num_samples"><code class="xref py py-obj docutils literal notranslate"><span class="pre">num_samples</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.proxy.SequenceTable.spaces.html#pulserver.proxy.SequenceTable.spaces" title="pulserver.proxy.SequenceTable.spaces"><code class="xref py py-obj docutils literal notranslate"><span class="pre">spaces</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.proxy.SequenceTable.slice_offset_m.html#pulserver.proxy.SequenceTable.slice_offset_m" title="pulserver.proxy.SequenceTable.slice_offset_m"><code class="xref py py-obj docutils literal notranslate"><span class="pre">slice_offset_m</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pulserver.proxy.SequenceTable.sequence_parameters.html#pulserver.proxy.SequenceTable.sequence_parameters" title="pulserver.proxy.SequenceTable.sequence_parameters"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sequence_parameters</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pulserver.proxy.SequenceTable.spaces.html#pulserver.proxy.SequenceTable.spaces" title="pulserver.proxy.SequenceTable.spaces"><code class="xref py py-obj docutils literal notranslate"><span class="pre">spaces</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.proxy.SequenceTable.sequence_parameters.html#pulserver.proxy.SequenceTable.sequence_parameters" title="pulserver.proxy.SequenceTable.sequence_parameters"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sequence_parameters</span></code></a></p></td>
 <td><p></p></td>
 </tr>
 </tbody>

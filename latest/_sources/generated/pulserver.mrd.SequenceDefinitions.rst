@@ -26,6 +26,8 @@
 
    ~SequenceDefinitions.centre_line
    ~SequenceDefinitions.centre_partition
+   ~SequenceDefinitions.slice_positions
+   ~SequenceDefinitions.slice_thickness
    ~SequenceDefinitions.matrix
    ~SequenceDefinitions.fov
    ~SequenceDefinitions.navigator_matrix

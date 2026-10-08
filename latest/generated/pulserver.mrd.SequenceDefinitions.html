@@ -562,6 +562,10 @@ undefined.</p></li>
 <li><p><strong>centre_line, centre_partition</strong> (<em>int or None</em>) – <code class="docutils literal notranslate"><span class="pre">kSpaceCenterLine</span></code> and <code class="docutils literal notranslate"><span class="pre">kSpaceCenterPartition</span></code>: the <code class="docutils literal notranslate"><span class="pre">LIN</span></code> and
 <code class="docutils literal notranslate"><span class="pre">PAR</span></code> counter at which k-space is sampled at its centre; <code class="docutils literal notranslate"><span class="pre">None</span></code>
 when undefined.</p></li>
+<li><p><strong>slice_positions</strong> (<em>tuple of float</em>) – <code class="docutils literal notranslate"><span class="pre">SlicePositions</span></code>: the centre of each slice along the logical slice
+axis from the field-of-view centre, in metres, indexed by <code class="docutils literal notranslate"><span class="pre">SLC</span></code>;
+empty when undefined.</p></li>
+<li><p><strong>slice_thickness</strong> (<em>float or None</em>) – <code class="docutils literal notranslate"><span class="pre">SliceThickness</span></code>, in metres; <code class="docutils literal notranslate"><span class="pre">None</span></code> when undefined.</p></li>
 </ul>
 </dd>
 </dl>
@@ -583,6 +587,12 @@ when undefined.</p></li>
 <td><p></p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="pulserver.mrd.SequenceDefinitions.centre_partition.html#pulserver.mrd.SequenceDefinitions.centre_partition" title="pulserver.mrd.SequenceDefinitions.centre_partition"><code class="xref py py-obj docutils literal notranslate"><span class="pre">centre_partition</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.mrd.SequenceDefinitions.slice_positions.html#pulserver.mrd.SequenceDefinitions.slice_positions" title="pulserver.mrd.SequenceDefinitions.slice_positions"><code class="xref py py-obj docutils literal notranslate"><span class="pre">slice_positions</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pulserver.mrd.SequenceDefinitions.slice_thickness.html#pulserver.mrd.SequenceDefinitions.slice_thickness" title="pulserver.mrd.SequenceDefinitions.slice_thickness"><code class="xref py py-obj docutils literal notranslate"><span class="pre">slice_thickness</span></code></a></p></td>
 <td><p></p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="pulserver.mrd.SequenceDefinitions.matrix.html#pulserver.mrd.SequenceDefinitions.matrix" title="pulserver.mrd.SequenceDefinitions.matrix"><code class="xref py py-obj docutils literal notranslate"><span class="pre">matrix</span></code></a></p></td>

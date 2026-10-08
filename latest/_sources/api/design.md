@@ -47,5 +47,6 @@ one TR in play order and the protocol entry each instance's amplitude follows
 | {obj}`~pulserver.design.BoolParam` | Checkbox. |
 | {obj}`~pulserver.design.ChoiceParam` | Choice among the members of a `StrEnum`; the argument receives the member. |
 | {obj}`~pulserver.design.StringListParam` | Deprecated: a `ChoiceParam` over an enum built from option strings. |
+| {obj}`~pulserver.design.StatedParam` | Choice the sequence states, bound to no argument, such as a 3D sequence's `imaging_mode`; any other value is refused. |
 | {obj}`~pulserver.design.ConfigParam` | Value declared to the interpreter; not shown or edited. |
 | {obj}`~pulserver.design.Description` | Read-only text row. |

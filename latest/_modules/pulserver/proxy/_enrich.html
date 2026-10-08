@@ -540,10 +540,14 @@
 <span class="sd">        Whether the space holds the subsequence's ``NAV`` readouts.</span>
 <span class="sd">    matrix</span>
 <span class="sd">        ``(x, y, z)`` from ``Matrix``, or ``NavMatrix`` for a navigator;</span>
-<span class="sd">        ``None`` when undefined.</span>
+<span class="sd">        ``None`` when undefined. 1 along z in a slice stack, a file that</span>
+<span class="sd">        writes no ``PAR`` and defines ``SlicePositions`` or writes more than</span>
+<span class="sd">        one ``SLC``: its z counts the slices, each an image of its own.</span>
 <span class="sd">    fov_mm</span>
 <span class="sd">        ``(x, y, z)`` from ``FOV``, or ``NavFOV`` for a navigator, in mm;</span>
-<span class="sd">        ``None`` when undefined.</span>
+<span class="sd">        ``None`` when undefined. In a slice stack, z is one slice's:</span>
+<span class="sd">        ``SliceThickness``, or the file's z shared among its slices when that</span>
+<span class="sd">        is undefined.</span>
 <span class="sd">    trajectory</span>
 <span class="sd">        Whether some readout of the space keeps more than one k axis, which</span>
 <span class="sd">        makes the space non-Cartesian.</span>
@@ -607,6 +611,11 @@
 <span class="sd">        ``float32`` dwell, in µs.</span>
 <span class="sd">    encoding_space : ndarray</span>
 <span class="sd">        ``int32`` index into :attr:`spaces`.</span>
+<span class="sd">    slice_offset_m : ndarray</span>
+<span class="sd">        ``float64`` centre of each readout's slice along the logical slice</span>
+<span class="sd">        axis from the field-of-view centre, in m: the ``SlicePositions`` entry</span>
+<span class="sd">        its ``SLC`` indexes, in a file whose readouts are slices of a stack</span>
+<span class="sd">        (:class:`TableSpace`), and 0 elsewhere.</span>
 <span class="sd">    spaces : tuple of TableSpace</span>
 <span class="sd">        Numbered in chain order: each subsequence's primary space, then its</span>
 <span class="sd">        navigator space when it has ``NAV`` readouts.</span>
@@ -628,6 +637,7 @@
     <span class="n">sample_time_us</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
     <span class="n">encoding_space</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
     <span class="n">num_samples</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+    <span class="n">slice_offset_m</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
     <span class="n">spaces</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">TableSpace</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span>
     <span class="n">sequence_parameters</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">]]</span>
     <span class="n">_files</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">ReadoutTable</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">=</span> <span class="n">dataclasses</span><span class="o">.</span><span class="n">field</span><span class="p">(</span><span class="nb">repr</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
@@ -762,6 +772,7 @@
             <span class="n">sample_time_us</span><span class="o">=</span><span class="n">joined</span><span class="p">(</span><span class="s2">"sample_time_us"</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">),</span>
             <span class="n">encoding_space</span><span class="o">=</span><span class="n">encoding_space</span><span class="p">,</span>
             <span class="n">num_samples</span><span class="o">=</span><span class="n">joined</span><span class="p">(</span><span class="s2">"num_samples"</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">int32</span><span class="p">),</span>
+            <span class="n">slice_offset_m</span><span class="o">=</span><span class="n">joined</span><span class="p">(</span><span class="s2">"slice_offset_m"</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">),</span>
             <span class="n">spaces</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(</span><span class="n">spaces</span><span class="p">),</span>
             <span class="n">sequence_parameters</span><span class="o">=</span><span class="n">parameters</span><span class="p">,</span>
             <span class="n">_files</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(</span><span class="n">files</span><span class="p">),</span>
@@ -907,7 +918,9 @@
 <span class="sd">    ``encoding_space_ref``, and ``center_sample`` unless k does not move</span>
 <span class="sd">    across the readout, in which case the received value stays. A readout</span>
 <span class="sd">    whose k moves gets it as ``traj``, trailing constant axes dropped, unless</span>
-<span class="sd">    it is a Cartesian readout sampled on its flat top alone.</span>
+<span class="sd">    it is a Cartesian readout sampled on its flat top alone. The received</span>
+<span class="sd">    ``position``, the field-of-view centre, is moved along ``slice_dir`` to</span>
+<span class="sd">    the centre of the readout's slice (:attr:`SequenceTable.slice_offset_m`).</span>
 
 <span class="sd">    The samples are left as received, except where</span>
 <span class="sd">    :meth:`SequenceTable.readout_phase_modulation` gives a phase, with the</span>
@@ -942,6 +955,13 @@
         <span class="n">acquisition</span><span class="o">.</span><span class="n">center_sample</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">table</span><span class="o">.</span><span class="n">center_sample</span><span class="p">[</span><span class="n">index</span><span class="p">])</span>
     <span class="n">acquisition</span><span class="o">.</span><span class="n">sample_time_us</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">table</span><span class="o">.</span><span class="n">sample_time_us</span><span class="p">[</span><span class="n">index</span><span class="p">])</span>
     <span class="n">acquisition</span><span class="o">.</span><span class="n">encoding_space_ref</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">table</span><span class="o">.</span><span class="n">encoding_space</span><span class="p">[</span><span class="n">index</span><span class="p">])</span>
+    <span class="n">offset_mm</span> <span class="o">=</span> <span class="mf">1e3</span> <span class="o">*</span> <span class="nb">float</span><span class="p">(</span><span class="n">table</span><span class="o">.</span><span class="n">slice_offset_m</span><span class="p">[</span><span class="n">index</span><span class="p">])</span>
+    <span class="k">if</span> <span class="n">offset_mm</span><span class="p">:</span>
+        <span class="n">acquisition</span><span class="o">.</span><span class="n">position</span><span class="p">[:]</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="nb">float</span><span class="p">(</span><span class="n">acquisition</span><span class="o">.</span><span class="n">position</span><span class="p">[</span><span class="n">axis</span><span class="p">])</span>
+            <span class="o">+</span> <span class="n">offset_mm</span> <span class="o">*</span> <span class="nb">float</span><span class="p">(</span><span class="n">acquisition</span><span class="o">.</span><span class="n">slice_dir</span><span class="p">[</span><span class="n">axis</span><span class="p">])</span>
+            <span class="k">for</span> <span class="n">axis</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span>
+        <span class="p">]</span>
 
     <span class="n">modulation</span> <span class="o">=</span> <span class="n">table</span><span class="o">.</span><span class="n">readout_phase_modulation</span><span class="p">(</span><span class="n">index</span><span class="p">,</span> <span class="n">fov_offset_m</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">modulation</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
@@ -985,21 +1005,23 @@
     <span class="n">local_space</span> <span class="o">=</span> <span class="n">navigator</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">int32</span><span class="p">)</span>
     <span class="n">_mark_boundaries</span><span class="p">(</span><span class="n">flags</span><span class="p">,</span> <span class="n">counters</span><span class="p">,</span> <span class="n">local_space</span><span class="p">,</span> <span class="nb">set</span><span class="p">(</span><span class="n">labels</span><span class="p">))</span>
 
+    <span class="n">stack</span> <span class="o">=</span> <span class="n">_is_slice_stack</span><span class="p">(</span><span class="n">labels</span><span class="p">,</span> <span class="n">definitions</span><span class="p">)</span>
     <span class="n">spaces</span> <span class="o">=</span> <span class="p">[]</span>
     <span class="n">navigates</span> <span class="o">=</span> <span class="nb">bool</span><span class="p">(</span><span class="n">navigator</span><span class="o">.</span><span class="n">any</span><span class="p">())</span>
     <span class="k">for</span> <span class="n">local</span><span class="p">,</span> <span class="n">is_navigator</span> <span class="ow">in</span> <span class="p">((</span><span class="mi">0</span><span class="p">,</span> <span class="kc">False</span><span class="p">),</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="kc">True</span><span class="p">)):</span>
         <span class="k">if</span> <span class="n">is_navigator</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">navigates</span><span class="p">:</span>
             <span class="k">break</span>
+        <span class="n">matrix</span> <span class="o">=</span> <span class="n">definitions</span><span class="o">.</span><span class="n">navigator_matrix</span> <span class="k">if</span> <span class="n">is_navigator</span> <span class="k">else</span> <span class="n">definitions</span><span class="o">.</span><span class="n">matrix</span>
         <span class="n">fov</span> <span class="o">=</span> <span class="n">definitions</span><span class="o">.</span><span class="n">navigator_fov</span> <span class="k">if</span> <span class="n">is_navigator</span> <span class="k">else</span> <span class="n">definitions</span><span class="o">.</span><span class="n">fov</span>
+        <span class="k">if</span> <span class="n">stack</span><span class="p">:</span>
+            <span class="n">matrix</span><span class="p">,</span> <span class="n">fov</span> <span class="o">=</span> <span class="n">_one_slice</span><span class="p">(</span><span class="n">matrix</span><span class="p">,</span> <span class="n">fov</span><span class="p">,</span> <span class="n">definitions</span><span class="o">.</span><span class="n">slice_thickness</span><span class="p">)</span>
         <span class="n">members</span> <span class="o">=</span> <span class="n">local_space</span> <span class="o">==</span> <span class="n">local</span> <span class="k">if</span> <span class="n">navigates</span> <span class="k">else</span> <span class="nb">slice</span><span class="p">(</span><span class="kc">None</span><span class="p">)</span>
         <span class="n">trajectory</span> <span class="o">=</span> <span class="nb">bool</span><span class="p">((</span><span class="n">readouts</span><span class="o">.</span><span class="n">trajectory_dimensions</span><span class="p">[</span><span class="n">members</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">any</span><span class="p">())</span>
         <span class="n">spaces</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
             <span class="n">TableSpace</span><span class="p">(</span>
                 <span class="n">subsequence</span><span class="o">=</span><span class="n">subsequence</span><span class="p">,</span>
                 <span class="n">navigator</span><span class="o">=</span><span class="n">is_navigator</span><span class="p">,</span>
-                <span class="n">matrix</span><span class="o">=</span><span class="n">definitions</span><span class="o">.</span><span class="n">navigator_matrix</span>
-                <span class="k">if</span> <span class="n">is_navigator</span>
-                <span class="k">else</span> <span class="n">definitions</span><span class="o">.</span><span class="n">matrix</span><span class="p">,</span>
+                <span class="n">matrix</span><span class="o">=</span><span class="n">matrix</span><span class="p">,</span>
                 <span class="n">fov_mm</span><span class="o">=</span><span class="kc">None</span> <span class="k">if</span> <span class="n">fov</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="nb">tuple</span><span class="p">(</span><span class="nb">round</span><span class="p">(</span><span class="mf">1e3</span> <span class="o">*</span> <span class="n">v</span><span class="p">,</span> <span class="mi">9</span><span class="p">)</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">fov</span><span class="p">),</span>
                 <span class="n">trajectory</span><span class="o">=</span><span class="n">trajectory</span><span class="p">,</span>
                 <span class="n">centre_line</span><span class="o">=</span><span class="kc">None</span> <span class="k">if</span> <span class="n">is_navigator</span> <span class="k">else</span> <span class="n">definitions</span><span class="o">.</span><span class="n">centre_line</span><span class="p">,</span>
@@ -1027,8 +1049,67 @@
         <span class="s2">"sample_time_us"</span><span class="p">:</span> <span class="mf">1e6</span> <span class="o">*</span> <span class="n">readouts</span><span class="o">.</span><span class="n">dwell</span><span class="p">,</span>
         <span class="s2">"encoding_space"</span><span class="p">:</span> <span class="n">first_space</span> <span class="o">+</span> <span class="n">local_space</span><span class="p">,</span>
         <span class="s2">"num_samples"</span><span class="p">:</span> <span class="n">readouts</span><span class="o">.</span><span class="n">num_samples</span><span class="p">,</span>
+        <span class="s2">"slice_offset_m"</span><span class="p">:</span> <span class="n">_slice_offsets</span><span class="p">(</span><span class="n">labels</span><span class="p">,</span> <span class="n">definitions</span><span class="p">,</span> <span class="n">count</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">stack</span>
+        <span class="k">else</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">count</span><span class="p">),</span>
     <span class="p">}</span>
     <span class="k">return</span> <span class="n">part</span><span class="p">,</span> <span class="n">spaces</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_is_slice_stack</span><span class="p">(</span>
+    <span class="n">labels</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">],</span> <span class="n">definitions</span><span class="p">:</span> <span class="n">SequenceDefinitions</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Whether a subsequence excites its readouts' slices one by one, its ``Matrix`` and ``FOV`` along z stating the stack.</span>
+
+<span class="sd">    So it is when it writes no ``PAR`` and either defines ``SlicePositions``</span>
+<span class="sd">    or writes more than one ``SLC``.</span>
+<span class="sd">    """</span>
+    <span class="k">if</span> <span class="s2">"PAR"</span> <span class="ow">in</span> <span class="n">labels</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">False</span>
+    <span class="n">slices</span> <span class="o">=</span> <span class="n">labels</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"SLC"</span><span class="p">)</span>
+    <span class="n">varies</span> <span class="o">=</span> <span class="n">slices</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">np</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">slices</span><span class="p">)</span><span class="o">.</span><span class="n">size</span> <span class="o">&gt;</span> <span class="mi">1</span>
+    <span class="k">return</span> <span class="nb">bool</span><span class="p">(</span><span class="n">definitions</span><span class="o">.</span><span class="n">slice_positions</span><span class="p">)</span> <span class="ow">or</span> <span class="n">varies</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_one_slice</span><span class="p">(</span>
+    <span class="n">matrix</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">fov</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">thickness</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Return the matrix and field of view of one slice of a stack, in m.</span>
+
+<span class="sd">    One sample along z, over ``thickness`` when the sequence defines it, else</span>
+<span class="sd">    the stack's field of view shared among its ``Matrix`` z slices.</span>
+<span class="sd">    """</span>
+    <span class="n">slices</span> <span class="o">=</span> <span class="mi">1</span> <span class="k">if</span> <span class="n">matrix</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="nb">max</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">matrix</span><span class="p">[</span><span class="mi">2</span><span class="p">]),</span> <span class="mi">1</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">matrix</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">matrix</span> <span class="o">=</span> <span class="p">(</span><span class="n">matrix</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">matrix</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="mi">1</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">fov</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">fov</span> <span class="o">=</span> <span class="p">(</span><span class="n">fov</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">fov</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">fov</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">/</span> <span class="n">slices</span> <span class="k">if</span> <span class="n">thickness</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">thickness</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">matrix</span><span class="p">,</span> <span class="n">fov</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_slice_offsets</span><span class="p">(</span>
+    <span class="n">labels</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">],</span> <span class="n">definitions</span><span class="p">:</span> <span class="n">SequenceDefinitions</span><span class="p">,</span> <span class="n">count</span><span class="p">:</span> <span class="nb">int</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return the ``SlicePositions`` entry each readout's ``SLC`` indexes, in m; 0 without ``SlicePositions``.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If a readout's ``SLC`` indexes no entry.</span>
+<span class="sd">    """</span>
+    <span class="n">positions</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">definitions</span><span class="o">.</span><span class="n">slice_positions</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">positions</span><span class="o">.</span><span class="n">size</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">count</span><span class="p">)</span>
+    <span class="n">slices</span> <span class="o">=</span> <span class="n">labels</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"SLC"</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">count</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int32</span><span class="p">))</span>
+    <span class="n">outside</span> <span class="o">=</span> <span class="p">(</span><span class="n">slices</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span> <span class="o">|</span> <span class="p">(</span><span class="n">slices</span> <span class="o">&gt;=</span> <span class="n">positions</span><span class="o">.</span><span class="n">size</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">outside</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"a readout has SLC=</span><span class="si">{</span><span class="nb">int</span><span class="p">(</span><span class="n">slices</span><span class="p">[</span><span class="n">outside</span><span class="p">][</span><span class="mi">0</span><span class="p">])</span><span class="si">}</span><span class="s2">, and the sequence "</span>
+            <span class="sa">f</span><span class="s2">"defines </span><span class="si">{</span><span class="n">positions</span><span class="o">.</span><span class="n">size</span><span class="si">}</span><span class="s2"> SlicePositions"</span>
+        <span class="p">)</span>
+    <span class="k">return</span> <span class="n">positions</span><span class="p">[</span><span class="n">slices</span><span class="p">]</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_ramp_sampled</span><span class="p">(</span><span class="n">readouts</span><span class="p">:</span> <span class="n">ReadoutTable</span><span class="p">,</span> <span class="n">index</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>

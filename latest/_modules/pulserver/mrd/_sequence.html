@@ -567,6 +567,12 @@
 <span class="sd">        ``kSpaceCenterLine`` and ``kSpaceCenterPartition``: the ``LIN`` and</span>
 <span class="sd">        ``PAR`` counter at which k-space is sampled at its centre; ``None``</span>
 <span class="sd">        when undefined.</span>
+<span class="sd">    slice_positions : tuple of float</span>
+<span class="sd">        ``SlicePositions``: the centre of each slice along the logical slice</span>
+<span class="sd">        axis from the field-of-view centre, in metres, indexed by ``SLC``;</span>
+<span class="sd">        empty when undefined.</span>
+<span class="sd">    slice_thickness : float or None</span>
+<span class="sd">        ``SliceThickness``, in metres; ``None`` when undefined.</span>
 <span class="sd">    """</span>
 
     <span class="n">matrix</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span>
@@ -579,6 +585,8 @@
     <span class="n">flip_angle</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span>
     <span class="n">centre_line</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">centre_partition</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">slice_positions</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">=</span> <span class="p">()</span>
+    <span class="n">slice_thickness</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
 
 <div class="viewcode-block" id="SequenceDefinitions.from_sequence">
 <a class="viewcode-back" href="../../../generated/pulserver.mrd.SequenceDefinitions.from_sequence.html#pulserver.mrd.SequenceDefinitions.from_sequence">[docs]</a>
@@ -609,6 +617,10 @@
             <span class="n">flip_angle</span><span class="o">=</span><span class="n">flip_angle</span><span class="p">,</span>
             <span class="n">centre_line</span><span class="o">=</span><span class="n">_counter</span><span class="p">(</span><span class="n">seq</span><span class="o">.</span><span class="n">get_definition</span><span class="p">(</span><span class="s2">"kSpaceCenterLine"</span><span class="p">)),</span>
             <span class="n">centre_partition</span><span class="o">=</span><span class="n">_counter</span><span class="p">(</span><span class="n">seq</span><span class="o">.</span><span class="n">get_definition</span><span class="p">(</span><span class="s2">"kSpaceCenterPartition"</span><span class="p">)),</span>
+            <span class="n">slice_positions</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(</span><span class="n">_numbers</span><span class="p">(</span><span class="n">seq</span><span class="o">.</span><span class="n">get_definition</span><span class="p">(</span><span class="s2">"SlicePositions"</span><span class="p">))),</span>
+            <span class="n">slice_thickness</span><span class="o">=</span><span class="nb">next</span><span class="p">(</span>
+                <span class="nb">iter</span><span class="p">(</span><span class="n">_numbers</span><span class="p">(</span><span class="n">seq</span><span class="o">.</span><span class="n">get_definition</span><span class="p">(</span><span class="s2">"SliceThickness"</span><span class="p">))),</span> <span class="kc">None</span>
+            <span class="p">),</span>
         <span class="p">)</span></div>
 </div>
 
