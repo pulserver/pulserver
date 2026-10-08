@@ -129,6 +129,20 @@ class StatedParam:
 
 
 @dataclass(frozen=True)
+class AveragesParam:
+    """The number of signal averages, NEX: how many times the main sequence plays, binding no argument.
+
+    Every plugin has it unless it declares its own. The main sequence of a
+    design is played that many times, written into its block table once it
+    is designed (:meth:`pypulseqpp.Sequence.expand_repeats`), each repetition
+    past the first numbered by ``AVG``. It travels as a float, as the
+    interpreter's NEX does, and holds a whole number from 1.
+    """
+
+    range_max: int = 16
+
+
+@dataclass(frozen=True)
 class ConfigParam:
     """A value the sequence declares to the interpreter; never shown or edited."""
 
@@ -149,6 +163,7 @@ Entry = (
     | BoolParam
     | ChoiceParam
     | StatedParam
+    | AveragesParam
     | ConfigParam
     | Description
 )
@@ -210,6 +225,22 @@ def _member(key: ProtocolKey, entry: ChoiceParam, value: Any) -> StrEnum:
         raise ValueError(f"{key}: {value!r} is not one of {options}") from None
 
 
+def _averages(key: ProtocolKey, entry: AveragesParam, value: Any) -> int:
+    """Return the number of averages a value states.
+
+    Raises
+    ------
+    ValueError
+        If it is not a whole number from 1 to the entry's maximum.
+    """
+    count = float(value)
+    if count != round(count) or not 1 <= count <= entry.range_max:
+        raise ValueError(
+            f"{key} is a whole number of averages from 1 to {entry.range_max}, not {value}"
+        )
+    return int(count)
+
+
 def _stated(key: ProtocolKey, entry: StatedParam, value: Any) -> StrEnum:
     """Return the stated member a value names, by option or index.
 
@@ -233,17 +264,9 @@ def _stated(key: ProtocolKey, entry: StatedParam, value: Any) -> StrEnum:
 def _parameter(
     name: ProtocolKey, entry: Entry, defaults: Mapping[str, Any]
 ) -> Parameter:
-    if isinstance(entry, ConfigParam):
-        return Parameter(Kind.CONFIG, entry.value, InputMode.OFF)
-    if isinstance(entry, Description):
-        return Parameter(Kind.DESCRIPTION, entry.text)
-    if isinstance(entry, StatedParam):
-        return Parameter(
-            Kind.STRINGLIST,
-            entry.value,
-            InputMode.DROPDOWN,
-            options=tuple(type(entry.value)),
-        )
+    unbound = _unbound_parameter(entry)
+    if unbound is not None:
+        return unbound
     # An entry that states its default may bind a name the app does not take,
     # for the plugin's own hooks to read.
     if entry.argument not in defaults and getattr(entry, "default", None) is None:
@@ -252,59 +275,9 @@ def _parameter(
         )
     default = defaults.get(entry.argument)
     if isinstance(entry, TimeParam):
-        options = (*entry.presets, *entry.options)
-        if entry.default is not None:
-            value = int(entry.default)
-            if value < 0 and value not in entry.presets:
-                raise ValueError(
-                    f"{name} defaults to preset {value}, which it does not offer"
-                )
-        elif default is None:
-            shortest = [key for key, preset in entry.presets.items() if preset is None]
-            if not shortest:
-                raise ValueError(
-                    f"{name} defaults to None but offers no preset requesting it"
-                )
-            value = shortest[0]
-        else:
-            value = _to_microseconds(default)
-        mode = InputMode.DROPDOWN if options else InputMode.TYPEIN
-        return Parameter(
-            Kind.INT,
-            value,
-            mode,
-            entry.range_min,
-            entry.range_max,
-            entry.range_incr,
-            "us",
-            options,
-        )
-    if isinstance(entry, FloatParam):
-        mode = InputMode.DROPDOWN if entry.options else InputMode.TYPEIN
-        return Parameter(
-            Kind.FLOAT,
-            _to_ui(default, entry.scale)
-            if entry.default is None
-            else _ui_float(entry.default),
-            mode,
-            entry.range_min,
-            entry.range_max,
-            entry.range_incr,
-            entry.unit,
-            entry.options,
-        )
-    if isinstance(entry, IntParam):
-        mode = InputMode.DROPDOWN if entry.options else InputMode.TYPEIN
-        return Parameter(
-            Kind.INT,
-            default if entry.default is None else int(entry.default),
-            mode,
-            entry.range_min,
-            entry.range_max,
-            entry.range_incr,
-            entry.unit,
-            entry.options,
-        )
+        return _time_parameter(name, entry, default)
+    if isinstance(entry, FloatParam | IntParam):
+        return _numeric_parameter(entry, default)
     if isinstance(entry, BoolParam):
         return Parameter(Kind.BOOL, default if entry.default is None else entry.default)
     default = default if entry.default is None else entry.default
@@ -313,6 +286,80 @@ def _parameter(
         _member(name, entry, default),
         InputMode.DROPDOWN,
         options=tuple(entry.choices),
+    )
+
+
+def _unbound_parameter(entry: Entry) -> Parameter | None:
+    """Return the parameter of an entry that binds no argument; ``None`` for one that binds one."""
+    if isinstance(entry, ConfigParam):
+        return Parameter(Kind.CONFIG, entry.value, InputMode.OFF)
+    if isinstance(entry, Description):
+        return Parameter(Kind.DESCRIPTION, entry.text)
+    if isinstance(entry, AveragesParam):
+        return Parameter(
+            Kind.FLOAT, 1.0, InputMode.TYPEIN, 1.0, float(entry.range_max), 1.0, ""
+        )
+    if isinstance(entry, StatedParam):
+        return Parameter(
+            Kind.STRINGLIST,
+            entry.value,
+            InputMode.DROPDOWN,
+            options=tuple(type(entry.value)),
+        )
+    return None
+
+
+def _time_parameter(name: ProtocolKey, entry: TimeParam, default: Any) -> Parameter:
+    options = (*entry.presets, *entry.options)
+    if entry.default is not None:
+        value = int(entry.default)
+        if value < 0 and value not in entry.presets:
+            raise ValueError(
+                f"{name} defaults to preset {value}, which it does not offer"
+            )
+    elif default is None:
+        shortest = [key for key, preset in entry.presets.items() if preset is None]
+        if not shortest:
+            raise ValueError(
+                f"{name} defaults to None but offers no preset requesting it"
+            )
+        value = shortest[0]
+    else:
+        value = _to_microseconds(default)
+    mode = InputMode.DROPDOWN if options else InputMode.TYPEIN
+    return Parameter(
+        Kind.INT,
+        value,
+        mode,
+        entry.range_min,
+        entry.range_max,
+        entry.range_incr,
+        "us",
+        options,
+    )
+
+
+def _numeric_parameter(entry: FloatParam | IntParam, default: Any) -> Parameter:
+    mode = InputMode.DROPDOWN if entry.options else InputMode.TYPEIN
+    if isinstance(entry, FloatParam):
+        kind = Kind.FLOAT
+        value = (
+            _to_ui(default, entry.scale)
+            if entry.default is None
+            else _ui_float(entry.default)
+        )
+    else:
+        kind = Kind.INT
+        value = default if entry.default is None else int(entry.default)
+    return Parameter(
+        kind,
+        value,
+        mode,
+        entry.range_min,
+        entry.range_max,
+        entry.range_incr,
+        entry.unit,
+        entry.options,
     )
 
 
@@ -422,6 +469,8 @@ class Protocol(Mapping[ProtocolKey, Any]):
                 converted[key] = bool(value)
             elif isinstance(entry, StatedParam):
                 converted[key] = _stated(key, entry, value)
+            elif isinstance(entry, AveragesParam):
+                converted[key] = _averages(key, entry, value)
             else:
                 converted[key] = _member(key, entry, value)
         return cls(entries, converted, presets)
@@ -446,6 +495,8 @@ class Protocol(Mapping[ProtocolKey, Any]):
                 wire[key] = int(value)
             elif isinstance(entry, BoolParam):
                 wire[key] = bool(value)
+            elif isinstance(entry, AveragesParam):
+                wire[key] = float(value)
             else:
                 wire[key] = value
         return wire
@@ -494,6 +545,8 @@ class Protocol(Mapping[ProtocolKey, Any]):
                 value = _member(key, entry, value)
             elif isinstance(entry, StatedParam):
                 value = _stated(key, entry, value)
+            elif isinstance(entry, AveragesParam):
+                value = _averages(key, entry, value)
             values[key] = value
             presets.pop(key, None)
         return Protocol(self._entries, values, presets)

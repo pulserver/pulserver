@@ -191,6 +191,7 @@ TE: int|dropdown|8000|1000|80000|10|us|-2
 TR: int|dropdown|250000|1000|5000000|1|us|-1
 fov: float|typein|220.0|50.0|500.0|1.0|mm
 nx: int|typein|128|32|512|2|
+nex: float|typein|1.0|1.0|16.0|1.0|
 fov_offset_x: float|off|0.0|-1000.0|1000.0|0.1|mm
 fov_offset_y: float|off|0.0|-1000.0|1000.0|0.1|mm
 fov_offset_z: float|off|0.0|-1000.0|1000.0|0.1|mm
@@ -211,6 +212,14 @@ The last twelve entries are the prescription, which the interpreter fills from
 the scanner's: the field-of-view offset, which the host applies when it builds
 the IR, and the rotation from the logical to the physical axes, in whose frame
 the host checks the design ({doc}`../explanations/designs`).
+
+`nex` is the number of signal averages, which every plugin lists unless it
+declares its own: the design plays its main sequence that many times, written
+into the block table once the sequence is designed, each repetition past the
+first numbered by `AVG`, and the scan time counts each
+({class}`~pulserver.design.AveragesParam`). A plugin that binds `nex` to an
+argument of its sequence function, as `PulseAcquire` above does, plays its
+averages itself.
 
 {meth}`~pulserver.design.SequencePlugin.validate` evaluates a request under the
 scanner limits and returns the protocol the design plays. Entries the request

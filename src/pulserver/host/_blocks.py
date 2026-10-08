@@ -73,10 +73,31 @@ def parse_import(
     return path, (x, y, z), prescribed_rotation(prescribed)
 
 
+def import_averages(block: str) -> int:
+    """Return how many times an import block plays the chain's main sequence: its ``nex`` line, 1 without one.
+
+    Raises
+    ------
+    ValueError
+        If the ``nex`` line is not a whole number from 1.
+    """
+    for line in block.splitlines():
+        name, _, value = line.partition(": ")
+        if name == "nex":
+            count = float(value)
+            if count != round(count) or count < 1:
+                raise ValueError(
+                    f"nex is a whole number of averages from 1, not {value.strip()}"
+                )
+            return int(count)
+    return 1
+
+
 def format_import(
     path: Path | str,
     fov_offset_mm: tuple[float, float, float] | None = None,
     fov_rotation: np.ndarray | None = None,
+    averages: int = 1,
 ) -> str:
     prescribed = {}
     if fov_offset_mm is not None:
@@ -85,4 +106,6 @@ def format_import(
         matrix = np.asarray(fov_rotation, dtype=float).ravel()
         prescribed.update(zip(FOV_ROTATION, matrix, strict=True))
     lines = [IMPORT_BEGIN, f"file: {path}", *format_prescription(prescribed)]
+    if averages != 1:
+        lines.append(f"nex: {averages}")
     return "\n".join([*lines, IMPORT_END]) + "\n"

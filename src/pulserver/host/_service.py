@@ -38,7 +38,7 @@ from ..protocol import (
     prescribed_offset,
     prescribed_rotation,
 )
-from ._blocks import parse_import
+from ._blocks import import_averages, parse_import
 from ._limits import design_system, split_limits
 from ._push import push as push_design
 from ._store import DesignStore, design_identity
@@ -245,10 +245,12 @@ def import_chain(
     """Reply ``IMPORTED <id>`` for a sequence file, its chain and their IR cache.
 
     The files are identified by their names and contents and the
-    prescription of the import block. A chain already stored is returned;
-    otherwise it is copied, checked and converted as :func:`generate` does,
-    and pushed as :func:`generate` pushes. The first file is also reachable as
-    ``sequence.seq``.
+    prescription and averages of the import block. A chain already stored is
+    returned; otherwise it is copied, its main sequence, the last file, is
+    played as many times as the block's ``nex`` line asks, written into its
+    block table as binary Pulseq, and the chain is checked and converted as
+    :func:`generate` does, and pushed as :func:`generate` pushes. The first
+    file is also reachable as ``sequence.seq``.
 
     Raises
     ------
@@ -258,6 +260,7 @@ def import_chain(
     """
     try:
         first, offset_mm, rotation = parse_import(block)
+        averages = import_averages(block)
     except ValueError as error:
         raise CallError(str(error)) from None
     limits = _read(limits)
@@ -268,6 +271,8 @@ def import_chain(
         "fov_offset_mm": list(offset_mm),
         "fov_rotation": rotation.ravel().tolist(),
     }
+    if averages > 1:
+        values["nex"] = averages
     identity = design_identity("", identified_limits(limits), values)
     found = store.find(identity)
     if found is not None:
@@ -276,6 +281,8 @@ def import_chain(
     try:
         for file in files:
             shutil.copyfile(file, staged / file.name)
+        if averages > 1:
+            _play_averages(staged / files[-1].name, averages)
         entry = staged / _ENTRY
         if files[0].name != _ENTRY:
             entry.symlink_to(files[0].name)
@@ -460,6 +467,13 @@ def _default_rf_layout(
 @lru_cache(maxsize=32)
 def _default_validation(path: str, mtime_ns: int, limits: tuple) -> Validation:  # noqa: ARG001 -- part of the key
     return _validated(path, dict(limits), {})
+
+
+def _play_averages(path: Path, averages: int) -> None:
+    """Rewrite the sequence file at ``path`` as binary Pulseq, played ``averages`` times in its block table."""
+    seq = pp.io.read(str(path))
+    seq.expand_repeats(averages)
+    pp.io.write(seq, str(path), binary=True, remove_duplicates=False)
 
 
 def _chain(first: str) -> list[str]:
