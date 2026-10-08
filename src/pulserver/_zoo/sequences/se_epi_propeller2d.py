@@ -7,7 +7,7 @@ from pypulseqpp.sequences.sequence.se_epi_propeller2D_sequence import (
     se_epi_propeller2d,
 )
 
-from pulserver._zoo._evaluation import achieved, arguments, rf_layout
+from pulserver._zoo._evaluation import achieved, arguments, dummies, rf_layout
 from pulserver._zoo._user import user_entries
 from pulserver.design import (
     Evaluation,
@@ -83,7 +83,7 @@ class SeEpiPropeller2D(SequencePlugin):
         )
         return Evaluation(
             protocol.replace(achieved(self, main) | {UIParam.TR: max(passes)}),
-            (a["n_dummy"] + blades) * sum(passes),
+            (dummies(a, max(passes)) + blades) * sum(passes),
             rf_layout=rf_layout(
                 main, scaled=False, copies=max(sizes), period=max(passes)
             ),

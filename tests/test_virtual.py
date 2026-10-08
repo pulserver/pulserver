@@ -131,16 +131,21 @@ def _fat_saturated_epi(path, system):
     return design
 
 
+def _saturation(design):
+    """The first saturation pulse of ``design``."""
+    return next(
+        block.rf
+        for block in (design.get_block(i) for i in range(1, len(design) + 1))
+        if block.rf is not None and block.rf.use == "saturation"
+    )
+
+
 def _left_by_saturation(design, system, field_t, phantom):
     """The z component the designed saturation pulse, resolved at ``system.B0``, leaves of each shift at ``field_t``.
 
     From pypulseqpp's ``sim_rf`` of the pulse as the design holds it.
     """
-    rf = next(
-        block.rf
-        for block in (design.get_block(i) for i in range(1, len(design) + 1))
-        if block.rf is not None and block.rf.use == "saturation"
-    )
+    rf = _saturation(design)
     frequency, phase = pp.calc_absolute_offsets(rf, system=system)
     resolved = SimpleNamespace(
         t=np.asarray(rf.t),
@@ -357,7 +362,9 @@ def test_fat_saturation_leaves_each_shift_what_its_designed_pulse_leaves_it(tmp_
     left = _left_by_saturation(design, system, system.B0, tissue)
     # Without relaxation, fat keeps the cosine of the flip angle at its
     # resonance, and water, a stopband away, nearly all of its magnetization.
-    assert left[FAT_SHIFT_PPM] == pytest.approx(np.cos(np.radians(110.0)), abs=1e-2)
+    rf = _saturation(design)
+    flip = 2 * np.pi * abs(np.trapezoid(rf.signal, rf.t))
+    assert left[FAT_SHIFT_PPM] == pytest.approx(np.cos(flip), abs=1e-2)
     assert left[0.0] == pytest.approx(1.0, abs=1e-2)
     acquired = acquire(path, tissue, field_t=system.B0)
     ideal = _ideal(path, tissue, field_t=system.B0, longitudinal=left)

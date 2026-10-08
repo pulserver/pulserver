@@ -20,7 +20,7 @@ from pypulseqpp.sequences.sequence.epi3D_sequence import (
     train_lines,
 )
 
-from pulserver._zoo._evaluation import arguments, rf_layout
+from pulserver._zoo._evaluation import arguments, dummies, rf_layout
 from pulserver._zoo._slab import slab
 from pulserver._zoo._user import user_entries
 from pulserver.design import (
@@ -162,8 +162,13 @@ class Epi3D(SequencePlugin):
         # The time series and the reference volume, with the phase encode
         # reversed, each play their dummies first: whole volumes in a series,
         # shots otherwise.
-        dummies = a["n_dummy"] * (volume if a["n_frames"] > 1 else 1)
-        duration = (2 * dummies + (1 + a["n_frames"]) * volume) * shot
+        n_dummy = a["n_dummy"]
+        if n_dummy is None:
+            # As the function plays them: every shot excites the slab.
+            excitations = dummies(a, shot)
+            n_dummy = -(-excitations // volume) if a["n_frames"] > 1 else excitations
+        dummy_shots = n_dummy * (volume if a["n_frames"] > 1 else 1)
+        duration = (2 * dummy_shots + (1 + a["n_frames"]) * volume) * shot
         # An undersampled scan is preceded by a gradient echo at every view
         # of the central rectangle of the phase and partition encodes.
         if ry > 1 or rz > 1 or a["partial_fourier_y"] < 1 or a["partial_fourier_z"] < 1:

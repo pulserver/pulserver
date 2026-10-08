@@ -140,7 +140,7 @@ a plugin's own user entries start at `user12`:
 
 | User entry | Control |
 | --- | --- |
-| `user0` | Dummy scans |
+| `user0` | Dummy scans; −1, the default, plays until the steady state, where the sequence chooses it (bSSFP, MPRAGE, ZTE and FSE count theirs) |
 | `user1` | Partial echo, the fraction of the echo acquired |
 | `user2`, `user3` | Partial Fourier along the phase and the partition encodes |
 | `user4`, `user5` | Calibration (ACS) lines along the phase and the partition encodes |
@@ -189,7 +189,10 @@ repetitions ({ref}`evaluating-a-protocol`). Most call the function with the
 arguments that reduce it to that repetition; `epi3d` and `zte3d` build the
 repetition from the modules their function builds it from. The scan time is the duration of the repetition
 times the number of repetitions the prescription plays, with the slices that
-share a TR counted in the packets the sequence plays them in. The values are
+share a TR counted in the packets the sequence plays them in, and the dummy
+repetitions added: those of `user0`, or, at −1, the count
+{func}`pypulseqpp.sequences.steady_state_dummies` gives for that repetition
+time and flip angle. The values are
 those the main sequence states for the prescription: where the plugin has the
 entry, the echo time and the repetition time in its `TE` and `TR` definitions,
 the receiver bandwidth as the inverse of the dwell time of its first ADC event,
@@ -282,7 +285,7 @@ chain:
 ...         return Evaluation(protocol.replace(achieved), sequences.duration(seq))
 >>> reply = Resolved().validate(system, {"TE": TEPreset.MINIMUM, "nx": 96})
 >>> reply.valid, round(reply.duration, 3), reply.info
-(True, 36.0, '')
+(True, 38.25, '')
 >>> {name: reply.values[name] for name in ("TE", "TR", "fov", "nx")}
 {'TE': 3080, 'TR': 250000, 'fov': 220.0, 'nx': 96}
 
