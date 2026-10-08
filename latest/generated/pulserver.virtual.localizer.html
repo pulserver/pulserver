@@ -547,7 +547,9 @@
 <dd><p>Return the axial, coronal and sagittal images of a phantom’s proton density, as DICOM.</p>
 <p>Each image is the phantom’s proton density in a slab <code class="docutils literal notranslate"><span class="pre">thickness</span></code> thick
 through <code class="docutils literal notranslate"><span class="pre">centre</span></code>, sampled at the centres of <code class="docutils literal notranslate"><span class="pre">matrix</span></code> by <code class="docutils literal notranslate"><span class="pre">matrix</span></code>
-pixels over <code class="docutils literal notranslate"><span class="pre">fov</span></code>, as the phantom’s <code class="docutils literal notranslate"><span class="pre">proton_density</span></code> gives it: the
+pixels over <code class="docutils literal notranslate"><span class="pre">fov</span></code> with pixel <code class="docutils literal notranslate"><span class="pre">matrix</span> <span class="pre">//</span> <span class="pre">2</span></code> on <code class="docutils literal notranslate"><span class="pre">centre</span></code>, where a
+reconstruction’s FFT puts it, as the phantom’s <code class="docutils literal notranslate"><span class="pre">proton_density</span></code> gives
+it: the
 ground truth, with no sequence played. The images carry the geometry of
 the reconstructed ones, so a console plans on them as it plans on a
 scanned localizer. Their read and phase directions along the physical
