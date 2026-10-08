@@ -943,20 +943,51 @@ def _selecting(pulses) -> np.ndarray:
     return gradient
 
 
+def _offsets(pulses) -> np.ndarray:
+    """Return the frequency each pulse selects about, in Hz.
+
+    Its own, except where pulses select by frequency alone under gradients
+    they do not select under: a pulse prescribed off centre advances its
+    frequency by ``g . r0`` to follow its gradient there, which, the gradient
+    dropped, would move its band by as much. Their part ``g . r0``, ``r0``
+    fitted by least squares with a common offset over them, is taken off, and
+    what remains is rounded to a sixteenth of the step of the pulse's profile.
+    """
+    starts = np.array([profile[0][0] for profile in pulses.profiles])
+    offset = pulses.band[:, 0] - starts[pulses.profile]
+    dropped = pulses.gradient.any(axis=1) & ~_selecting(pulses).any(axis=1)
+    if np.count_nonzero(dropped) < 4:
+        return offset
+    gradient = pulses.gradient[dropped]
+    fitted, *_ = np.linalg.lstsq(
+        np.column_stack([gradient, np.ones(len(gradient))]),
+        offset[dropped],
+        rcond=None,
+    )
+    steps = np.array(
+        [
+            (profile[0][1] - profile[0][0]) / 16.0 if profile[0].size > 1 else 1.0
+            for profile in pulses.profiles
+        ]
+    )[pulses.profile[dropped]]
+    offset = offset.copy()
+    # Plus zero, so that no -0.0 keys a selector of its own.
+    offset[dropped] = (
+        steps * np.round((offset[dropped] - gradient @ fitted[:3]) / steps) + 0.0
+    )
+    return offset
+
+
 def _selectors(pulses) -> tuple[np.ndarray, np.ndarray]:
     """Return which selector each pulse is, and each selector's first pulse.
 
     A selector is a gradient, a frequency and a profile, or the trace of a
     pulse under a gradient that changes along one axis.
     """
-    offset = (
-        pulses.band[:, 0]
-        - np.array([profile[0][0] for profile in pulses.profiles])[pulses.profile]
-    )
     keys = np.column_stack(
         [
             _selecting(pulses),
-            np.round(offset, 3),
+            np.round(_offsets(pulses), 3),
             pulses.profile,
             np.round(pulses.direction, 6),
             pulses.trace,
@@ -975,10 +1006,10 @@ def _profiles(entries: _Entries, selectors: np.ndarray, pulses) -> torch.Tensor:
         (entries.positions.shape[0], selectors.size), dtype=torch.int8, device=device
     )
     gradients = _selecting(pulses)
+    offsets = _offsets(pulses)
     for at, pulse in enumerate(selectors):
         detuning, ratio = pulses.profiles[pulses.profile[pulse]]
-        offset = pulses.band[pulse, 0] - detuning[0]
-        field = entries.frequency - float(offset)
+        field = entries.frequency - float(offsets[pulse])
         if pulses.trace[pulse] >= 0:
             along = entries.positions @ torch.as_tensor(
                 pulses.direction[pulse], dtype=torch.float32, device=device

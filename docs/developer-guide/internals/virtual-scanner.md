@@ -81,7 +81,9 @@ and the extent of the tissue. A pulse's selector is its
 gradient, its frequency and its profile, and the direction and samples of a
 profile in both field and position; where the pulses play under more than
 16 distinct gradients, as a ZTE scan's do, every selector selects by frequency
-alone. Under each selector, a cube's flip angle relative to the one on
+alone, about the pulse's frequency less the part $\mathbf{g}\cdot\mathbf{r}_0$
+that follows its gradient to an off-centre prescription, $\mathbf{r}_0$ fitted
+by least squares over those pulses. Under each selector, a cube's flip angle relative to the one on
 resonance is rounded to a level: halving from $2^{-7}$ to $2^{-4}$, then in
 steps of 0.05 from 0.1 to 2. Cubes of the same levels under every selector form
 a group, and the groups that together hold less than $10^{-3}$ of the excited
