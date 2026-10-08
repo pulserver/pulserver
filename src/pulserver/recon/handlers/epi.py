@@ -129,8 +129,8 @@ class EpiRecon(PicsRecon):
     forward-ordered and at the reconstruction matrix when its slice closes.
     The phase-encode-reversed reference volume (``SET`` 1) is reconstructed as
     an image of its own, and when PyHySCO is installed (bartorch's ``pyhysco``
-    extra, GPL-3.0) each later image of the same slice is corrected for
-    susceptibility distortion against it
+    extra, GPL-3.0) each later image of the same slice, or each later volume
+    of a 3D scan, is corrected for susceptibility distortion against it
     (:func:`bartorch.tools.correct_susceptibility`).
     """
 
@@ -154,7 +154,11 @@ class EpiRecon(PicsRecon):
             self.references[int(data.counters.get("slice", 0))] = image
             return image
         reference = self.references.get(int(data.counters.get("slice", 0)))
-        if reference is None or image.ndim != 2:
+        if (
+            reference is None
+            or image.shape != reference.shape
+            or image.ndim not in (2, 3)
+        ):
             return image
         space = data.data.space
         if not space.recon_fov:
@@ -163,33 +167,45 @@ class EpiRecon(PicsRecon):
             1e3 * fov / n
             for fov, n in zip(space.recon_fov, space.recon_matrix, strict=False)
         )
-        return undistorted(image, reference, voxel[-2:])
+        return undistorted(image, reference, voxel[-image.ndim :])
 
 
 PLUGIN = EpiRecon()
 
 
 def undistorted(image, reverse, voxel_size):
-    """Return the ``(phase encode, readout)`` image corrected for susceptibility distortion against its phase-encode-reversed ``reverse``.
+    """Return ``image`` corrected for susceptibility distortion against its phase-encode-reversed ``reverse``.
 
-    PyHySCO corrects volumes, so the pair is passed as three identical
-    slices, which its smoothness penalty leaves uncoupled. ``image`` is
-    returned unchanged when PyHySCO is not installed.
+    A slice is ``(phase encode, readout)`` and a volume ``(partition, phase
+    encode, readout)``, with ``voxel_size`` in mm along the same axes.
+    PyHySCO corrects volumes: a volume is corrected as one, its phase encode
+    first, and a slice as three identical slices, which its smoothness penalty
+    leaves uncoupled. ``image`` is returned unchanged when PyHySCO is not
+    installed.
     """
     import torch
     from bartorch import tools
 
-    def volume(plane):
-        plane = np.ascontiguousarray(plane, dtype=np.float64)
-        return torch.from_numpy(np.repeat(plane[:, :, None], 3, axis=2))
-
+    image = np.asarray(image, dtype=np.float64)
+    reverse = np.asarray(reverse, dtype=np.float64)
+    scale = np.sum(image) / max(np.sum(reverse), 1e-30)
+    if image.ndim == 2:
+        up = np.repeat(image[:, :, None], 3, axis=2)
+        down = np.repeat(reverse[:, :, None], 3, axis=2)
+        voxel = (*voxel_size, 1.0)
+    else:
+        # (partition, phase, readout) to (phase, readout, partition).
+        up, down = image.transpose(1, 2, 0), reverse.transpose(1, 2, 0)
+        voxel = (voxel_size[1], voxel_size[2], voxel_size[0])
     try:
         corrected = tools.correct_susceptibility(
-            volume(image),
-            volume(reverse * (np.sum(image) / max(np.sum(reverse), 1e-30))),
-            voxel_size=(*voxel_size, 1.0),
+            torch.from_numpy(np.ascontiguousarray(up)),
+            torch.from_numpy(np.ascontiguousarray(down * scale)),
+            voxel_size=voxel,
             phase_encoding_axis=0,
         )
     except ImportError:
         return image
-    return np.clip(corrected.blip_up[:, :, 1].cpu().numpy(), 0.0, None)
+    result = corrected.blip_up.cpu().numpy()
+    result = result[:, :, 1] if image.ndim == 2 else result.transpose(2, 0, 1)
+    return np.clip(result, 0.0, None)
