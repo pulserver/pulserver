@@ -117,6 +117,18 @@ class ChoiceParam:
 
 
 @dataclass(frozen=True)
+class StatedParam:
+    """A choice the sequence states, which binds no argument: a 3D sequence's ``imaging_mode`` is ``3d``.
+
+    It is listed as a choice among all the members of its enum, so that the
+    wire carries the value's index among them, as the interpreter reads it
+    once at its start; any other value is refused.
+    """
+
+    value: StrEnum
+
+
+@dataclass(frozen=True)
 class ConfigParam:
     """A value the sequence declares to the interpreter; never shown or edited."""
 
@@ -136,6 +148,7 @@ Entry = (
     | IntParam
     | BoolParam
     | ChoiceParam
+    | StatedParam
     | ConfigParam
     | Description
 )
@@ -197,6 +210,26 @@ def _member(key: ProtocolKey, entry: ChoiceParam, value: Any) -> StrEnum:
         raise ValueError(f"{key}: {value!r} is not one of {options}") from None
 
 
+def _stated(key: ProtocolKey, entry: StatedParam, value: Any) -> StrEnum:
+    """Return the stated member a value names, by option or index.
+
+    Raises
+    ------
+    ValueError
+        If the value names another member, or none.
+    """
+    members = list(type(entry.value))
+    if (
+        isinstance(value, int)
+        and not isinstance(value, bool)
+        and 0 <= value < len(members)
+    ):
+        value = members[value]
+    if value != entry.value:
+        raise ValueError(f"{key} is {entry.value}, not {value}")
+    return entry.value
+
+
 def _parameter(
     name: ProtocolKey, entry: Entry, defaults: Mapping[str, Any]
 ) -> Parameter:
@@ -204,6 +237,13 @@ def _parameter(
         return Parameter(Kind.CONFIG, entry.value, InputMode.OFF)
     if isinstance(entry, Description):
         return Parameter(Kind.DESCRIPTION, entry.text)
+    if isinstance(entry, StatedParam):
+        return Parameter(
+            Kind.STRINGLIST,
+            entry.value,
+            InputMode.DROPDOWN,
+            options=tuple(type(entry.value)),
+        )
     # An entry that states its default may bind a name the app does not take,
     # for the plugin's own hooks to read.
     if entry.argument not in defaults and getattr(entry, "default", None) is None:
@@ -380,6 +420,8 @@ class Protocol(Mapping[ProtocolKey, Any]):
                 converted[key] = int(value)
             elif isinstance(entry, BoolParam):
                 converted[key] = bool(value)
+            elif isinstance(entry, StatedParam):
+                converted[key] = _stated(key, entry, value)
             else:
                 converted[key] = _member(key, entry, value)
         return cls(entries, converted, presets)
@@ -450,6 +492,8 @@ class Protocol(Mapping[ProtocolKey, Any]):
             entry = self._entries.get(key)
             if isinstance(entry, ChoiceParam):
                 value = _member(key, entry, value)
+            elif isinstance(entry, StatedParam):
+                value = _stated(key, entry, value)
             values[key] = value
             presets.pop(key, None)
         return Protocol(self._entries, values, presets)

@@ -13,9 +13,11 @@ from _host import LIMITS, value_block
 from pulserver import _plugins
 from pulserver._zoo import ZOO_PAIRS
 from pulserver._zoo._evaluation import achieved, rf_layout
-from pulserver.design import Protocol, load_plugin
+from pulserver._zoo._slab import slab
+from pulserver.design import Protocol, StatedParam, load_plugin
 from pulserver.host import call
 from pulserver.protocol import (
+    ImagingMode,
     TEPreset,
     TRPreset,
     UIParam,
@@ -857,3 +859,74 @@ def test_the_cine_refuses_respiratory_triggering(zoo):
     validation = zoo["bssfp2d"].validate(SYSTEM, {"trigger_type": "physio1"})
     assert not validation.valid
     assert "respiratory" in validation.info
+
+
+@pytest.mark.parametrize("name", SHIPPED)
+def test_every_shipped_sequence_states_its_imaging_mode_and_refuses_the_other(
+    name, zoo
+):
+    plugin = zoo[name]
+    stated = plugin.protocol[UIParam.IMAGING_MODE]
+    other = next(mode for mode in ImagingMode if mode != stated.value)
+
+    assert isinstance(stated, StatedParam)
+    assert stated.value == (
+        ImagingMode.THREE_D if name.endswith("3d") else ImagingMode.TWO_D
+    )
+    assert "imaging_mode" not in _protocol(plugin).arguments
+    with pytest.raises(ValueError, match=f"imaging_mode is {stated.value}"):
+        _protocol(plugin, {UIParam.IMAGING_MODE: other})
+
+
+TWO_D = [name for name in SHIPPED if name.endswith("2d")]
+SLABS = [name for name in SHIPPED if name.endswith("3d") and name != "zte3d"]
+
+
+@pytest.mark.parametrize("name", TWO_D)
+def test_every_2d_sequence_takes_its_slice_thickness_and_spacing(name, zoo):
+    protocol = zoo[name].protocol
+
+    assert UIParam.SLICE_THICKNESS in protocol and UIParam.SLICE_SPACING in protocol
+
+
+def test_a_slab_sequence_takes_the_thickness_of_a_location_in_place_of_the_slabs():
+    def app(system, *, fov_z=0.128, n_z=64, other=1):
+        return fov_z, n_z, other
+
+    wrapped = slab(app)
+
+    assert inspect.signature(wrapped).parameters["slice_thickness"].default == 0.002
+    assert wrapped(None, n_z=12, slice_thickness=1.5e-3) == (
+        pytest.approx(0.018),
+        12,
+        1,
+    )
+
+
+@pytest.mark.parametrize("name", SLABS)
+def test_every_slab_sequence_is_prescribed_by_its_locations_and_their_thickness(
+    name, zoo
+):
+    plugin = zoo[name]
+    parameters = inspect.signature(plugin.app).parameters
+
+    assert "slice_thickness" in parameters and "fov_z" not in parameters
+    assert (
+        UIParam.SLICE_THICKNESS in plugin.protocol
+        and UIParam.NSLICES in plugin.protocol
+    )
+
+
+def test_a_3d_sequence_achieves_the_thickness_of_one_location_whatever_their_number(
+    zoo,
+):
+    plugin = zoo["gre3d"]
+    for locations in (16, 32):
+        evaluation = plugin.evaluate(
+            SYSTEM,
+            _protocol(
+                plugin,
+                {"nslices": locations, "slice_thickness": 2.0, "nx": 64, "ny": 32},
+            ),
+        )
+        assert evaluation.protocol[UIParam.SLICE_THICKNESS] == pytest.approx(2e-3)

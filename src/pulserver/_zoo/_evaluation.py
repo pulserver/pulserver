@@ -10,8 +10,8 @@ from typing import Any
 import numpy as np
 import pypulseqpp as pp
 
-from ..design import Evaluation, Protocol, RfLayout, SequencePlugin
-from ..protocol import ProtocolKey, UIParam
+from ..design import Evaluation, Protocol, RfLayout, SequencePlugin, StatedParam
+from ..protocol import ImagingMode, ProtocolKey, UIParam
 
 #: Arguments that design one repetition of the scan, and the number of
 #: repetitions the scan plays, from the arguments of the full design.
@@ -36,7 +36,6 @@ _ACHIEVED: dict[ProtocolKey, Callable[[pp.Sequence], float]] = {
     UIParam.TE: lambda main: main.definitions["TE"][0],
     UIParam.TR: lambda main: main.definitions["TR"][0],
     UIParam.BANDWIDTH: _readout_bandwidth,
-    UIParam.SLICE_THICKNESS: lambda main: main.definitions["SliceThickness"][0],
 }
 
 
@@ -61,12 +60,29 @@ def achieved(plugin: SequencePlugin, main: pp.Sequence) -> dict[ProtocolKey, flo
 
     The echo time and the repetition time are the ``TE`` and ``TR``
     definitions of ``main``, the receiver bandwidth the inverse of the dwell
-    time of its first ADC event outside a navigator and the slice thickness its ``SliceThickness``
-    definition.
+    time of its first ADC event outside a navigator. A 2D sequence's slice
+    thickness is its ``SliceThickness`` definition, and the requested one where
+    it states none; a 3D sequence's is its slab, the ``z`` of its ``FOV``
+    definition, over its locations, the ``z`` of its ``Matrix``.
     """
-    return {
+    values = {
         key: read(main) for key, read in _ACHIEVED.items() if key in plugin.protocol
     }
+    if UIParam.SLICE_THICKNESS in plugin.protocol:
+        definitions = main.definitions
+        if three_d(plugin):
+            values[UIParam.SLICE_THICKNESS] = (
+                definitions["FOV"][2] / definitions["Matrix"][2]
+            )
+        elif "SliceThickness" in definitions:
+            values[UIParam.SLICE_THICKNESS] = definitions["SliceThickness"][0]
+    return values
+
+
+def three_d(plugin: SequencePlugin) -> bool:
+    """Whether a plugin states a 3D acquisition."""
+    mode = plugin.protocol.get(UIParam.IMAGING_MODE)
+    return isinstance(mode, StatedParam) and mode.value == ImagingMode.THREE_D
 
 
 def rf_layout(

@@ -5,8 +5,15 @@ import functools
 from pypulseqpp.sequences.sequence.gre_multiecho3D_sequence import gre_multiecho3d
 
 from pulserver._zoo._evaluation import cartesian_3d, evaluation
-from pulserver.design import FloatParam, IntParam, SequencePlugin, TimeParam
-from pulserver.protocol import TEPreset, TRPreset, UIParam
+from pulserver._zoo._slab import slab
+from pulserver.design import (
+    FloatParam,
+    IntParam,
+    SequencePlugin,
+    StatedParam,
+    TimeParam,
+)
+from pulserver.protocol import ImagingMode, TEPreset, TRPreset, UIParam
 
 #: Wave-CAIPI: sinusoidal gradients on the phase- and partition-encoding axes
 #: during each readout, the calibration region acquired first without them.
@@ -18,12 +25,13 @@ WAVE_CYCLES = 8
 
 
 class GreMultiecho3D(SequencePlugin):
-    app = gre_multiecho3d
+    app = slab(gre_multiecho3d)
     if WAVE:
         app = functools.partial(
             app, wave_amplitude=WAVE_AMPLITUDE, wave_cycles=WAVE_CYCLES
         )
     protocol = {
+        UIParam.IMAGING_MODE: StatedParam(ImagingMode.THREE_D),
         UIParam.FLIP: FloatParam(
             "flip_angle_deg", unit="deg", range_min=1.0, range_max=90.0
         ),
@@ -46,6 +54,14 @@ class GreMultiecho3D(SequencePlugin):
         UIParam.NX: IntParam("n_x", range_min=32, range_max=512, range_incr=2),
         UIParam.NY: IntParam("n_y", range_min=32, range_max=512, range_incr=2),
         UIParam.NSLICES: IntParam("n_z", range_min=4, range_max=256),
+        UIParam.SLICE_THICKNESS: FloatParam(
+            "slice_thickness",
+            unit="mm",
+            scale=1e-3,
+            range_min=0.1,
+            range_max=20.0,
+            range_incr=0.1,
+        ),
         UIParam.RY: IntParam("ry", range_min=1, range_max=4),
         UIParam.RZ: IntParam("rz", range_min=1, range_max=4),
     }

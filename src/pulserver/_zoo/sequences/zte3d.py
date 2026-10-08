@@ -18,14 +18,16 @@ from pulserver.design import (
     FloatParam,
     IntParam,
     SequencePlugin,
+    StatedParam,
     TimeParam,
 )
-from pulserver.protocol import TRPreset, UIParam
+from pulserver.protocol import ImagingMode, TRPreset, UIParam
 
 
 class Zte3D(SequencePlugin):
     app = zte3d
     protocol = {
+        UIParam.IMAGING_MODE: StatedParam(ImagingMode.THREE_D),
         UIParam.FLIP: FloatParam(
             "flip_angle_deg", unit="deg", range_min=0.5, range_max=30.0
         ),

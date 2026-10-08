@@ -21,21 +21,24 @@ from pypulseqpp.sequences.sequence.epi3D_sequence import (
 )
 
 from pulserver._zoo._evaluation import arguments, rf_layout
+from pulserver._zoo._slab import slab
 from pulserver.design import (
     Evaluation,
     FloatParam,
     IntParam,
     SequencePlugin,
+    StatedParam,
     TimeParam,
 )
-from pulserver.protocol import TEPreset, TRPreset, UIParam
+from pulserver.protocol import ImagingMode, TEPreset, TRPreset, UIParam
 
 
 class Epi3D(SequencePlugin):
     # Twofold readout oversampling keeps the ramp-sampled flat top within the
     # spacing of the readout field of view, so it can be resampled onto a grid.
-    app = functools.partial(epi3d, readout_oversampling=2.0)
+    app = slab(functools.partial(epi3d, readout_oversampling=2.0))
     protocol = {
+        UIParam.IMAGING_MODE: StatedParam(ImagingMode.THREE_D),
         UIParam.FLIP: FloatParam(
             "flip_angle_deg", unit="deg", range_min=1.0, range_max=90.0
         ),
@@ -64,6 +67,14 @@ class Epi3D(SequencePlugin):
         UIParam.NX: IntParam("n_x", range_min=32, range_max=512, range_incr=2),
         UIParam.NY: IntParam("n_y", range_min=32, range_max=512, range_incr=2),
         UIParam.NSLICES: IntParam("n_z", range_min=4, range_max=128),
+        UIParam.SLICE_THICKNESS: FloatParam(
+            "slice_thickness",
+            unit="mm",
+            scale=1e-3,
+            range_min=0.1,
+            range_max=20.0,
+            range_incr=0.1,
+        ),
         UIParam.NUM_FRAMES: IntParam("n_frames", range_min=1, range_max=1000),
         UIParam.NUM_SHOTS: IntParam("n_shots", range_min=1, range_max=16),
         UIParam.RY: IntParam("ry", range_min=1, range_max=4),
@@ -76,6 +87,7 @@ class Epi3D(SequencePlugin):
         # function builds it from, at its prescription, and the volumes the
         # scan plays are counted from the function's own rules.
         a = arguments(self, protocol)
+        a["fov_z"] = a["n_z"] * a.pop("slice_thickness")
         system = pp.cap_system(system, max_grad=MAX_GRAD, max_slew=MAX_SLEW)
         raster = system.block_duration_raster
         fov = (a["fov_x"], a["fov_y"], a["fov_z"])

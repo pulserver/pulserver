@@ -19,8 +19,17 @@ from pulserver.recon.handlers.pics import PicsRecon
 pytest.importorskip("bartorch")
 
 #: Undersampled by two along both encodes, with a readout long enough that
-#: the wave keeps its amplitude below the slew rate.
-PROTOCOL = {"nx": 32, "ny": 32, "nslices": 16, "Ry": 2, "Rz": 2, "bandwidth": 20000}
+#: the wave keeps its amplitude below the slew rate; 16 locations of 8 mm make
+#: a 128 mm slab.
+PROTOCOL = {
+    "nx": 32,
+    "ny": 32,
+    "nslices": 16,
+    "slice_thickness": 8.0,
+    "Ry": 2,
+    "Rz": 2,
+    "bandwidth": 20000,
+}
 
 #: The wave spreads a voxel over several lines of this small matrix, and the
 #: point-spread function holds the phase at the voxel centres alone, so the
