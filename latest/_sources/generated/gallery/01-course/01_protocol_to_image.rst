@@ -138,6 +138,18 @@ interpreter fills from the scanner's; they are left out of the print.
     slice_spacing: float|typein|0.0|0.0|100.0|0.1|mm
     slice_thickness: float|typein|5.0|1.0|20.0|1.0|mm
     Ry: int|typein|1|1|4|1|
+    enable_saturation_ui: config|1
+    exsat_mask: config|3
+    exsat1_normal_x: float|typein|1.0|-1.0|1.0|0.001|
+    exsat1_normal_y: float|typein|0.0|-1.0|1.0|0.001|
+    exsat1_normal_z: float|typein|0.0|-1.0|1.0|0.001|
+    exsat1_loc: float|typein|150.0|-500.0|500.0|1.0|mm
+    exsat1_thickness: float|typein|40.0|5.0|200.0|1.0|mm
+    exsat2_normal_x: float|typein|0.0|-1.0|1.0|0.001|
+    exsat2_normal_y: float|typein|1.0|-1.0|1.0|0.001|
+    exsat2_normal_z: float|typein|0.0|-1.0|1.0|0.001|
+    exsat2_loc: float|typein|150.0|-500.0|500.0|1.0|mm
+    exsat2_thickness: float|typein|40.0|5.0|200.0|1.0|mm
     user0_name: description|Dummy scans
     user0_value: int|typein|16|0|256|1|
     user1_name: description|Partial echo
@@ -214,7 +226,7 @@ IR cache and stores both as a design. The reply is the design's identifier.
 
  .. code-block:: none
 
-    GENERATED 4152208f8af9e62f79
+    GENERATED 5eaf5537127aae54e7
 
     ['manifest.json', 'resolved.protocol', 'sequence.pseg', 'sequence.seq']
 
@@ -300,7 +312,7 @@ at a time.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.440 seconds)
+   **Total running time of the script:** (0 minutes 0.647 seconds)
 
 
 .. _sphx_glr_download_generated_gallery_01-course_01_protocol_to_image.py:

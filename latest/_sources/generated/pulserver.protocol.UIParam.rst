@@ -14,6 +14,9 @@
    :toctree:
    :nosignatures:
 
+   ~UIParam.exsat_loc
+   ~UIParam.exsat_normal
+   ~UIParam.exsat_thickness
    ~UIParam.user_name
    ~UIParam.user_value
 
@@ -47,6 +50,7 @@
    ~UIParam.FOV_ROTATION_31
    ~UIParam.FOV_ROTATION_32
    ~UIParam.FOV_ROTATION_33
+   ~UIParam.HEART_RATE
    ~UIParam.IMAGING_MODE
    ~UIParam.MULTIBAND
    ~UIParam.NEX
@@ -65,18 +69,6 @@
    ~UIParam.RF_SPOILING
    ~UIParam.RY
    ~UIParam.RZ
-   ~UIParam.SAT_X
-   ~UIParam.SAT_X_LOC1
-   ~UIParam.SAT_X_LOC2
-   ~UIParam.SAT_X_THICKNESS
-   ~UIParam.SAT_Y
-   ~UIParam.SAT_Y_LOC1
-   ~UIParam.SAT_Y_LOC2
-   ~UIParam.SAT_Y_THICKNESS
-   ~UIParam.SAT_Z
-   ~UIParam.SAT_Z_LOC1
-   ~UIParam.SAT_Z_LOC2
-   ~UIParam.SAT_Z_THICKNESS
    ~UIParam.SEQUENCE_TYPE
    ~UIParam.SLICE_SPACING
    ~UIParam.SLICE_THICKNESS

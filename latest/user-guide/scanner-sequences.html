@@ -711,9 +711,16 @@ every <code class="docutils literal notranslate"><span class="pre">--plugins</sp
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">mprage_stack_of_stars3d</span></code>, <code class="docutils literal notranslate"><span class="pre">mprage_stack_of_spirals3d</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">nufft_train</span></code></p></td>
 </tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">epi2d</span></code>, <code class="docutils literal notranslate"><span class="pre">epi3d</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">epi</span></code></p></td>
+</tr>
 </tbody>
 </table>
 </div>
+<p>The pair is what a console reconstructs a shipped sequence with when the scan
+names no reconstruction (<a class="reference internal" href="virtual-scanner.html"><span class="doc">Scanning a phantom without a scanner</span></a>); a scan can name another, and
+the reconstruction client of a scanner names one in its config
+(<a class="reference internal" href="reconstruction-client.html"><span class="doc">Reconstruction clients</span></a>).</p>
 <p>Each shipped plugin also offers, as a named user entry, every one of these
 controls its sequence function takes, at the same user entry in every plugin;
 a plugin’s own user entries start at <code class="docutils literal notranslate"><span class="pre">user12</span></code>:</p>
@@ -745,16 +752,20 @@ a plugin’s own user entries start at <code class="docutils literal notranslate
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">user8</span></code></p></td>
 <td><p>Refocusing flip angle, in degrees</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">epi2d</span></code>, <code class="docutils literal notranslate"><span class="pre">epi3d</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">epi</span></code></p></td>
-</tr>
 </tbody>
 </table>
 </div>
-<p>The pair is what a console reconstructs a shipped sequence with when the scan
-names no reconstruction (<a class="reference internal" href="virtual-scanner.html"><span class="doc">Scanning a phantom without a scanner</span></a>); a scan can name another, and
-the reconstruction client of a scanner names one in its config
-(<a class="reference internal" href="reconstruction-client.html"><span class="doc">Reconstruction clients</span></a>).</p>
+<p>Saturation is set in a plugin’s source, by a module constant, rather than at
+the console. <code class="docutils literal notranslate"><span class="pre">gre2d</span></code> and <code class="docutils literal notranslate"><span class="pre">se2d</span></code> play <code class="docutils literal notranslate"><span class="pre">BANDS</span></code>, two, spatial saturation bands
+before every excitation, each placed graphically as a scanner’s console places
+an explicit band and always on: <code class="docutils literal notranslate"><span class="pre">exsat_mask</span></code> is a configuration the plugin
+declares, bit <code class="docutils literal notranslate"><span class="pre">n</span> <span class="pre">-</span> <span class="pre">1</span></code> set for each band <code class="docutils literal notranslate"><span class="pre">n</span></code> it plays, and <code class="docutils literal notranslate"><span class="pre">exsat&lt;n&gt;_normal_x</span></code>,
+<code class="docutils literal notranslate"><span class="pre">_y</span></code> and <code class="docutils literal notranslate"><span class="pre">_z</span></code>, <code class="docutils literal notranslate"><span class="pre">exsat&lt;n&gt;_loc</span></code> and <code class="docutils literal notranslate"><span class="pre">exsat&lt;n&gt;_thickness</span></code> give each band’s normal
+along the physical axes, its centre’s distance from the isocentre along that
+normal and its thickness, in mm. The field-of-view offset and rotation leave a
+band where it was placed, and a band not yet placed waits 150 mm from the
+isocentre, outside the head. <code class="docutils literal notranslate"><span class="pre">BANDS</span> <span class="pre">=</span> <span class="pre">0</span></code> plays none. <code class="docutils literal notranslate"><span class="pre">epi2d</span></code> saturates fat before
+every shot while <code class="docutils literal notranslate"><span class="pre">FAT_SATURATION</span></code> is <code class="docutils literal notranslate"><span class="pre">True</span></code>.</p>
 <p>Optional features are switched by a module constant of the plugin, off in
 the shipped files; a copy of the file in a <code class="docutils literal notranslate"><span class="pre">--plugins</span></code> directory with the
 constant set replaces the shipped plugin. A switch adds the entries the

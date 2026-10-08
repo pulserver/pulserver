@@ -500,15 +500,36 @@
 <span class="sd">    microseconds. ``TA`` is read-only information.</span>
 <span class="sd">    """</span>
 
-    <span class="n">SAT_X_LOC1</span> <span class="o">=</span> <span class="s2">"sat_x_loc1"</span>
-    <span class="n">SAT_X_LOC2</span> <span class="o">=</span> <span class="s2">"sat_x_loc2"</span>
-    <span class="n">SAT_Y_LOC1</span> <span class="o">=</span> <span class="s2">"sat_y_loc1"</span>
-    <span class="n">SAT_Y_LOC2</span> <span class="o">=</span> <span class="s2">"sat_y_loc2"</span>
-    <span class="n">SAT_Z_LOC1</span> <span class="o">=</span> <span class="s2">"sat_z_loc1"</span>
-    <span class="n">SAT_Z_LOC2</span> <span class="o">=</span> <span class="s2">"sat_z_loc2"</span>
-    <span class="n">SAT_X_THICKNESS</span> <span class="o">=</span> <span class="s2">"sat_x_thickness"</span>
-    <span class="n">SAT_Y_THICKNESS</span> <span class="o">=</span> <span class="s2">"sat_y_thickness"</span>
-    <span class="n">SAT_Z_THICKNESS</span> <span class="o">=</span> <span class="s2">"sat_z_thickness"</span>
+    <span class="n">EXSAT1_NORMAL_X</span> <span class="o">=</span> <span class="s2">"exsat1_normal_x"</span>
+    <span class="n">EXSAT1_NORMAL_Y</span> <span class="o">=</span> <span class="s2">"exsat1_normal_y"</span>
+    <span class="n">EXSAT1_NORMAL_Z</span> <span class="o">=</span> <span class="s2">"exsat1_normal_z"</span>
+    <span class="n">EXSAT2_NORMAL_X</span> <span class="o">=</span> <span class="s2">"exsat2_normal_x"</span>
+    <span class="n">EXSAT2_NORMAL_Y</span> <span class="o">=</span> <span class="s2">"exsat2_normal_y"</span>
+    <span class="n">EXSAT2_NORMAL_Z</span> <span class="o">=</span> <span class="s2">"exsat2_normal_z"</span>
+    <span class="n">EXSAT3_NORMAL_X</span> <span class="o">=</span> <span class="s2">"exsat3_normal_x"</span>
+    <span class="n">EXSAT3_NORMAL_Y</span> <span class="o">=</span> <span class="s2">"exsat3_normal_y"</span>
+    <span class="n">EXSAT3_NORMAL_Z</span> <span class="o">=</span> <span class="s2">"exsat3_normal_z"</span>
+    <span class="n">EXSAT4_NORMAL_X</span> <span class="o">=</span> <span class="s2">"exsat4_normal_x"</span>
+    <span class="n">EXSAT4_NORMAL_Y</span> <span class="o">=</span> <span class="s2">"exsat4_normal_y"</span>
+    <span class="n">EXSAT4_NORMAL_Z</span> <span class="o">=</span> <span class="s2">"exsat4_normal_z"</span>
+    <span class="n">EXSAT5_NORMAL_X</span> <span class="o">=</span> <span class="s2">"exsat5_normal_x"</span>
+    <span class="n">EXSAT5_NORMAL_Y</span> <span class="o">=</span> <span class="s2">"exsat5_normal_y"</span>
+    <span class="n">EXSAT5_NORMAL_Z</span> <span class="o">=</span> <span class="s2">"exsat5_normal_z"</span>
+    <span class="n">EXSAT6_NORMAL_X</span> <span class="o">=</span> <span class="s2">"exsat6_normal_x"</span>
+    <span class="n">EXSAT6_NORMAL_Y</span> <span class="o">=</span> <span class="s2">"exsat6_normal_y"</span>
+    <span class="n">EXSAT6_NORMAL_Z</span> <span class="o">=</span> <span class="s2">"exsat6_normal_z"</span>
+    <span class="n">EXSAT1_LOC</span> <span class="o">=</span> <span class="s2">"exsat1_loc"</span>
+    <span class="n">EXSAT2_LOC</span> <span class="o">=</span> <span class="s2">"exsat2_loc"</span>
+    <span class="n">EXSAT3_LOC</span> <span class="o">=</span> <span class="s2">"exsat3_loc"</span>
+    <span class="n">EXSAT4_LOC</span> <span class="o">=</span> <span class="s2">"exsat4_loc"</span>
+    <span class="n">EXSAT5_LOC</span> <span class="o">=</span> <span class="s2">"exsat5_loc"</span>
+    <span class="n">EXSAT6_LOC</span> <span class="o">=</span> <span class="s2">"exsat6_loc"</span>
+    <span class="n">EXSAT1_THICKNESS</span> <span class="o">=</span> <span class="s2">"exsat1_thickness"</span>
+    <span class="n">EXSAT2_THICKNESS</span> <span class="o">=</span> <span class="s2">"exsat2_thickness"</span>
+    <span class="n">EXSAT3_THICKNESS</span> <span class="o">=</span> <span class="s2">"exsat3_thickness"</span>
+    <span class="n">EXSAT4_THICKNESS</span> <span class="o">=</span> <span class="s2">"exsat4_thickness"</span>
+    <span class="n">EXSAT5_THICKNESS</span> <span class="o">=</span> <span class="s2">"exsat5_thickness"</span>
+    <span class="n">EXSAT6_THICKNESS</span> <span class="o">=</span> <span class="s2">"exsat6_thickness"</span>
 
     <span class="n">DELAY_TIME</span> <span class="o">=</span> <span class="s2">"delay_time"</span>
     <span class="n">TRIGGER_DELAY</span> <span class="o">=</span> <span class="s2">"trigger_delay"</span>
@@ -558,9 +579,7 @@
 <span class="k">class</span><span class="w"> </span><span class="nc">IntKey</span><span class="p">(</span><span class="n">StrEnum</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">"""Keys the interpreter declares as integer."""</span>
 
-    <span class="n">SAT_X</span> <span class="o">=</span> <span class="s2">"sat_x"</span>
-    <span class="n">SAT_Y</span> <span class="o">=</span> <span class="s2">"sat_y"</span>
-    <span class="n">SAT_Z</span> <span class="o">=</span> <span class="s2">"sat_z"</span>
+    <span class="n">HEART_RATE</span> <span class="o">=</span> <span class="s2">"heart_rate"</span>
     <span class="n">NUM_FRAMES</span> <span class="o">=</span> <span class="s2">"num_frames"</span>
     <span class="n">DIFFUSION_DIRECTIONS</span> <span class="o">=</span> <span class="s2">"diffusion_directions"</span>
     <span class="n">NUM_SHOTS</span> <span class="o">=</span> <span class="s2">"num_shots"</span>
@@ -614,7 +633,8 @@
 <span class="sd">    :class:`~pulserver.design.ConfigParam`.</span>
 <span class="sd">    """</span>
 
-    <span class="n">ENABLE_SAR_BURST_MODE</span> <span class="o">=</span> <span class="s2">"enable_sar_burst_mode"</span></div>
+    <span class="n">ENABLE_SAR_BURST_MODE</span> <span class="o">=</span> <span class="s2">"enable_sar_burst_mode"</span>
+    <span class="n">EXSAT_MASK</span> <span class="o">=</span> <span class="s2">"exsat_mask"</span></div>
 
 
 
@@ -740,6 +760,15 @@
 <span class="n">ProtocolKey</span> <span class="o">=</span> <span class="n">FloatKey</span> <span class="o">|</span> <span class="n">IntKey</span> <span class="o">|</span> <span class="n">BoolKey</span> <span class="o">|</span> <span class="n">EnumKey</span> <span class="o">|</span> <span class="n">ConfigKey</span> <span class="o">|</span> <span class="n">UserKey</span> <span class="o">|</span> <span class="n">UserNameKey</span>
 
 
+<span class="c1">#: Explicit saturation bands a protocol can carry, exsat1 to exsat6.</span>
+<span class="n">NUM_EXSAT_BANDS</span> <span class="o">=</span> <span class="mi">6</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_check_band</span><span class="p">(</span><span class="n">n</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="mi">1</span> <span class="o">&lt;=</span> <span class="n">n</span> <span class="o">&lt;=</span> <span class="n">NUM_EXSAT_BANDS</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"saturation bands are numbered 1 to </span><span class="si">{</span><span class="n">NUM_EXSAT_BANDS</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+
+
 <span class="k">def</span><span class="w"> </span><span class="nf">_check_user_index</span><span class="p">(</span><span class="n">n</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
     <span class="k">if</span> <span class="ow">not</span> <span class="mi">0</span> <span class="o">&lt;=</span> <span class="n">n</span> <span class="o">&lt;</span> <span class="n">NUM_USER_ENTRIES</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"user entries are numbered 0 to </span><span class="si">{</span><span class="n">NUM_USER_ENTRIES</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="mi">1</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
@@ -764,15 +793,6 @@
 <span class="sd">    &lt;UserKey.USER3: 'user3_value'&gt;</span>
 <span class="sd">    """</span>
 
-    <span class="n">SAT_X_LOC1</span> <span class="o">=</span> <span class="n">FloatKey</span><span class="o">.</span><span class="n">SAT_X_LOC1</span>
-    <span class="n">SAT_X_LOC2</span> <span class="o">=</span> <span class="n">FloatKey</span><span class="o">.</span><span class="n">SAT_X_LOC2</span>
-    <span class="n">SAT_Y_LOC1</span> <span class="o">=</span> <span class="n">FloatKey</span><span class="o">.</span><span class="n">SAT_Y_LOC1</span>
-    <span class="n">SAT_Y_LOC2</span> <span class="o">=</span> <span class="n">FloatKey</span><span class="o">.</span><span class="n">SAT_Y_LOC2</span>
-    <span class="n">SAT_Z_LOC1</span> <span class="o">=</span> <span class="n">FloatKey</span><span class="o">.</span><span class="n">SAT_Z_LOC1</span>
-    <span class="n">SAT_Z_LOC2</span> <span class="o">=</span> <span class="n">FloatKey</span><span class="o">.</span><span class="n">SAT_Z_LOC2</span>
-    <span class="n">SAT_X_THICKNESS</span> <span class="o">=</span> <span class="n">FloatKey</span><span class="o">.</span><span class="n">SAT_X_THICKNESS</span>
-    <span class="n">SAT_Y_THICKNESS</span> <span class="o">=</span> <span class="n">FloatKey</span><span class="o">.</span><span class="n">SAT_Y_THICKNESS</span>
-    <span class="n">SAT_Z_THICKNESS</span> <span class="o">=</span> <span class="n">FloatKey</span><span class="o">.</span><span class="n">SAT_Z_THICKNESS</span>
     <span class="n">DELAY_TIME</span> <span class="o">=</span> <span class="n">FloatKey</span><span class="o">.</span><span class="n">DELAY_TIME</span>
     <span class="n">TRIGGER_DELAY</span> <span class="o">=</span> <span class="n">FloatKey</span><span class="o">.</span><span class="n">TRIGGER_DELAY</span>
     <span class="n">TRIGGER_WINDOW</span> <span class="o">=</span> <span class="n">FloatKey</span><span class="o">.</span><span class="n">TRIGGER_WINDOW</span>
@@ -807,9 +827,7 @@
     <span class="n">COMPRESSED_SENSING</span> <span class="o">=</span> <span class="n">FloatKey</span><span class="o">.</span><span class="n">COMPRESSED_SENSING</span>
     <span class="n">MULTIBAND</span> <span class="o">=</span> <span class="n">FloatKey</span><span class="o">.</span><span class="n">MULTIBAND</span>
 
-    <span class="n">SAT_X</span> <span class="o">=</span> <span class="n">IntKey</span><span class="o">.</span><span class="n">SAT_X</span>
-    <span class="n">SAT_Y</span> <span class="o">=</span> <span class="n">IntKey</span><span class="o">.</span><span class="n">SAT_Y</span>
-    <span class="n">SAT_Z</span> <span class="o">=</span> <span class="n">IntKey</span><span class="o">.</span><span class="n">SAT_Z</span>
+    <span class="n">HEART_RATE</span> <span class="o">=</span> <span class="n">IntKey</span><span class="o">.</span><span class="n">HEART_RATE</span>
     <span class="n">NUM_FRAMES</span> <span class="o">=</span> <span class="n">IntKey</span><span class="o">.</span><span class="n">NUM_FRAMES</span>
     <span class="n">DIFFUSION_DIRECTIONS</span> <span class="o">=</span> <span class="n">IntKey</span><span class="o">.</span><span class="n">DIFFUSION_DIRECTIONS</span>
     <span class="n">NUM_SHOTS</span> <span class="o">=</span> <span class="n">IntKey</span><span class="o">.</span><span class="n">NUM_SHOTS</span>
@@ -846,6 +864,51 @@
 <span class="sd">        """</span>
         <span class="n">_check_user_index</span><span class="p">(</span><span class="n">n</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">UserKey</span><span class="p">[</span><span class="sa">f</span><span class="s2">"USER</span><span class="si">{</span><span class="n">n</span><span class="si">}</span><span class="s2">"</span><span class="p">]</span></div>
+
+
+<div class="viewcode-block" id="UIParam.exsat_normal">
+<a class="viewcode-back" href="../../../generated/pulserver.protocol.UIParam.exsat_normal.html#pulserver.protocol.UIParam.exsat_normal">[docs]</a>
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">exsat_normal</span><span class="p">(</span><span class="n">n</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">FloatKey</span><span class="p">,</span> <span class="n">FloatKey</span><span class="p">,</span> <span class="n">FloatKey</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""Return the keys of the normal of explicit saturation band ``n``, 1 to 6, along the physical x, y and z axes.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If ``n`` is out of range.</span>
+<span class="sd">        """</span>
+        <span class="n">_check_band</span><span class="p">(</span><span class="n">n</span><span class="p">)</span>
+        <span class="k">return</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">FloatKey</span><span class="p">[</span><span class="sa">f</span><span class="s2">"EXSAT</span><span class="si">{</span><span class="n">n</span><span class="si">}</span><span class="s2">_NORMAL_</span><span class="si">{</span><span class="n">axis</span><span class="si">}</span><span class="s2">"</span><span class="p">]</span> <span class="k">for</span> <span class="n">axis</span> <span class="ow">in</span> <span class="s2">"XYZ"</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="UIParam.exsat_loc">
+<a class="viewcode-back" href="../../../generated/pulserver.protocol.UIParam.exsat_loc.html#pulserver.protocol.UIParam.exsat_loc">[docs]</a>
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">exsat_loc</span><span class="p">(</span><span class="n">n</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">FloatKey</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Return the key of the position of explicit saturation band ``n``, 1 to 6: its centre's distance from the isocentre along its normal, in mm.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If ``n`` is out of range.</span>
+<span class="sd">        """</span>
+        <span class="n">_check_band</span><span class="p">(</span><span class="n">n</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">FloatKey</span><span class="p">[</span><span class="sa">f</span><span class="s2">"EXSAT</span><span class="si">{</span><span class="n">n</span><span class="si">}</span><span class="s2">_LOC"</span><span class="p">]</span></div>
+
+
+<div class="viewcode-block" id="UIParam.exsat_thickness">
+<a class="viewcode-back" href="../../../generated/pulserver.protocol.UIParam.exsat_thickness.html#pulserver.protocol.UIParam.exsat_thickness">[docs]</a>
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">exsat_thickness</span><span class="p">(</span><span class="n">n</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">FloatKey</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Return the key of the thickness of explicit saturation band ``n``, 1 to 6, in mm.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If ``n`` is out of range.</span>
+<span class="sd">        """</span>
+        <span class="n">_check_band</span><span class="p">(</span><span class="n">n</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">FloatKey</span><span class="p">[</span><span class="sa">f</span><span class="s2">"EXSAT</span><span class="si">{</span><span class="n">n</span><span class="si">}</span><span class="s2">_THICKNESS"</span><span class="p">]</span></div>
 
 
 <div class="viewcode-block" id="UIParam.user_name">
