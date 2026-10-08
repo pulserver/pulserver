@@ -111,6 +111,9 @@ class Scan:
         self._turn = None if rotation is None else np.asarray(rotation, dtype=float)
         durations = 1e-6 * self._played["duration_us"].astype(float)
         self._starts = np.concatenate([[0.0], np.cumsum(durations)])
+        # Readouts before each block: one in every block that acquires.
+        reads = (self._played["adc"] != 0).astype(np.int64)
+        self._read_before = np.concatenate([[0], np.cumsum(reads)])
 
     @property
     def duration(self) -> float:
@@ -126,11 +129,16 @@ class Scan:
         sample_rate: float = SAMPLE_RATE,
         channel_weights: Sequence[float] = (1.0, 1.0, 1.0),
         preparing: Callable[[float | None], None] | None = None,
+        heard: Callable[[Chunk], None] | None = None,
     ) -> Iterator[Chunk]:
         """Play the scan in spans of whole blocks; yield each once released.
 
         The spans are simulated in a thread of their own, ahead of their
-        release. The sound is :func:`pypulseqpp.gradient_sound` of the
+        release, a stretch of them at a time: a stretch ends at the first
+        block, ``length`` or more after its start, after which the samples
+        acquired since the start of the scan pass a multiple of ``2**18``, so
+        that each costs about one transform of the images; a stretch is
+        released in spans. The sound is :func:`pypulseqpp.gradient_sound` of the
         gradients along the physical axes, as ``Sequence.sound`` makes it of a
         design: the spans' sounds, joined, are the sound of the whole scan,
         ``floor(duration * sample_rate) + 1`` samples scaled so that the
@@ -139,13 +147,15 @@ class Scan:
         Parameters
         ----------
         length
-            The scan time a span lasts at least, in s, unless it ends the scan.
+            The scan time a span lasts at least, in s, unless it ends the
+            scan's last stretch.
         speed
             How many times as fast as a scanner the scan is played. Its clock
             starts once the simulation, at the rate it has run, stays ahead of
             the clock to the end of the scan, and each span is yielded once the
-            clock has passed its end. A span not yet simulated by then holds
-            the clock until it is. As fast as the spans are simulated when None.
+            clock has passed its end. A stretch not yet simulated by its start
+            holds the clock until it is. As fast as the stretches are
+            simulated when None.
         sound
             Whether the spans carry their sound.
         sample_rate
@@ -155,8 +165,12 @@ class Scan:
         preparing
             Called about twice a second until the clock starts, at a speed,
             with the wall-clock time left before it does, in s, or None before
-            a span of each kind still to come has been simulated. An exception
+            a stretch that acquires has been simulated. An exception
             it raises ends the scan, and is raised where the spans are taken.
+        heard
+            Called with each span as its sound starts to play: at a speed,
+            once the clock reaches the span's start, a span before the span is
+            yielded; without one, just before it is yielded.
 
         Raises
         ------
@@ -167,54 +181,76 @@ class Scan:
             raise ValueError(f"a span lasts a positive time, not {length} s")
         if speed is not None and not speed > 0.0:
             raise ValueError(f"a scan is played at a positive speed, not {speed}")
-        spans = self._spans(length)
+        stretches = self._stretches(length)
         ready: queue.SimpleQueue = queue.SimpleQueue()
         halt = threading.Event()
         worker = threading.Thread(
             target=self._simulate,
-            args=(spans, ready, halt, sound, sample_rate, channel_weights),
+            args=(stretches, length, ready, halt, sound, sample_rate, channel_weights),
             name="pulserver-scan",
             daemon=True,
         )
         worker.start()
         try:
             if speed is None:
-                for _ in spans:
-                    yield _simulated(ready)[0]
+                for _ in stretches:
+                    for span in _simulated(ready)[0]:
+                        if heard is not None:
+                            heard(span)
+                        yield span
             else:
-                samples = [self._adc_samples(first, last) for first, last in spans]
-                stops = [float(self._starts[last]) for _, last in spans]
-                clock = _Clock(stops, samples, speed)
-                yield from clock.release(ready, preparing)
+                samples = [self._adc_samples(*stretch) for stretch in stretches]
+                bounds = [
+                    (float(self._starts[first]), float(self._starts[last]))
+                    for first, last in stretches
+                ]
+                clock = _Clock(bounds, samples, speed)
+                yield from clock.release(ready, preparing, heard)
         finally:
             halt.set()
             worker.join()
 
-    def _spans(self, length: float) -> list[tuple[int, int]]:
-        """Return each span's first block and the block after its last."""
+    def _stretches(self, length: float) -> list[tuple[int, int]]:
+        """Return each stretch's first block and the block after its last."""
         blocks = self._starts.size - 1
-        spans = []
+        stretches = []
         first = 0
         while first < blocks:
-            last = self._span_end(first, length)
-            spans.append((first, last))
+            last = self._stretch_end(first, length)
+            stretches.append((first, last))
             first = last
-        return spans
+        return stretches
+
+    def _pieces(self, first: int, last: int, length: float) -> list[tuple[int, int]]:
+        """Return the spans of a stretch: each at least ``length`` long, the stretch's tail joined to the span before it."""
+        pieces = []
+        at = first
+        while at < last:
+            end = int(np.searchsorted(self._starts, self._starts[at] + length))
+            end = min(max(end, at + 1), last)
+            while end < last and self._starts[end] - self._starts[at] < length:
+                end += 1
+            if self._starts[last] - self._starts[end] < length:
+                end = last
+            pieces.append((at, end))
+            at = end
+        return pieces
 
     def _simulate(
         self,
-        spans: list[tuple[int, int]],
+        stretches: list[tuple[int, int]],
+        length: float,
         ready: queue.SimpleQueue,
         halt: threading.Event,
         sound: bool,
         sample_rate: float,
         channel_weights: Sequence[float],
     ) -> None:
-        """Put each span on ``ready`` once simulated, with the time it was; an error in its place."""
+        """Put the spans of each stretch on ``ready`` once simulated, with the time it was; an error in their place."""
         blocks = self._starts.size - 1
         try:
             peak = self._loudest(sample_rate, channel_weights) if sound else 0.0
-            for first, last in spans:
+            for first, last in stretches:
                 if halt.is_set():
                     return
                 start, stop = float(self._starts[first]), float(self._starts[last])
@@ -225,8 +261,23 @@ class Scan:
                     if sound
                     else np.zeros((2, 0))
                 )
-                chunk = Chunk(start, stop, self._readouts(first, last), audio)
-                ready.put((chunk, time.monotonic()))
+                readouts = self._readouts(first, last)
+                read = self._read_before - self._read_before[first]
+                heard = self._samples(start, stop, False, sample_rate)[0]
+                spans = []
+                for a, b in self._pieces(first, last, length):
+                    begin, end = float(self._starts[a]), float(self._starts[b])
+                    at, count = self._samples(begin, end, b == blocks, sample_rate)
+                    at -= heard
+                    spans.append(
+                        Chunk(
+                            begin,
+                            end,
+                            readouts[read[a] : read[b]],
+                            audio[:, at : at + count] if sound else audio,
+                        )
+                    )
+                ready.put((tuple(spans), time.monotonic()))
         except Exception as error:  # raised again where the spans are taken
             ready.put((error, time.monotonic()))
 
@@ -235,8 +286,8 @@ class Scan:
         acquired = self._played["adc"][first:last].astype(bool)
         return int(self._played["adc_samples"][first:last][acquired].sum())
 
-    def _span_end(self, first: int, length: float) -> int:
-        """Return the block after the last of the span that starts at block ``first``: a span ends where a repetition of a run starts, or outside every run."""
+    def _stretch_end(self, first: int, length: float) -> int:
+        """Return the block after the last of the stretch that starts at block ``first``."""
         blocks = self._starts.size - 1
         last = first + 1
         while last < blocks and self._starts[last] - self._starts[first] < length:
@@ -341,28 +392,34 @@ def _simulated(
 class _Clock:
     """A scan clock that starts once the simulation will stay ahead of it.
 
-    A span's simulation time is estimated from the spans simulated before it:
-    per ADC sample where it acquires, per second of scan time where it does
-    not, each the median of the latest spans of its kind.
+    A stretch's simulation time is estimated from the stretches simulated
+    before it: per ADC sample where it acquires, per second of scan time where
+    it does not, each the median of the latest stretches of its kind. A
+    stretch is due on the clock at its start, where its first span begins.
     """
 
-    def __init__(self, stops: list[float], samples: list[int], speed: float) -> None:
-        self._stops = stops
+    def __init__(
+        self, bounds: list[tuple[float, float]], samples: list[int], speed: float
+    ) -> None:
+        self._starts = [start for start, _ in bounds]
         self._samples = samples
         self._speed = speed
-        self._durations = list(np.diff(stops, prepend=0.0))
+        self._durations = [stop - start for start, stop in bounds]
         self._spent: list[float] = []
 
     def release(
-        self, ready: queue.SimpleQueue, preparing: Callable[[float | None], None] | None
+        self,
+        ready: queue.SimpleQueue,
+        preparing: Callable[[float | None], None] | None,
+        heard: Callable[[Chunk], None] | None = None,
     ) -> Iterator[Chunk]:
-        """Yield each span once the clock has passed its end.
+        """Yield each span once the clock has passed its end, having handed it to ``heard`` once the clock reached its start.
 
         The clock starts once the simulation is estimated to stay ahead of it
-        to the end of the scan; a span simulated after its end on the clock
-        holds the clock until it is.
+        to the end of the scan; a stretch simulated after its start on the
+        clock holds the clock there until it is.
         """
-        simulated: deque[Chunk] = deque()
+        simulated: deque[tuple[Chunk, ...]] = deque()
         last = reported = time.monotonic()
         while True:
             now = time.monotonic()
@@ -373,34 +430,42 @@ class _Clock:
                 preparing(lead)
                 reported = now + _REPORT
             try:
-                chunk, done = _simulated(ready, timeout=_REPORT)
+                spans, done = _simulated(ready, timeout=_REPORT)
             except queue.Empty:
                 continue
             self._spent.append(done - last)
             last = done
-            simulated.append(chunk)
+            simulated.append(spans)
         started = time.monotonic()
-        for stop in self._stops:
+        for start in self._starts:
             if simulated:
-                chunk = simulated.popleft()
+                spans = simulated.popleft()
             else:
-                chunk, _ = _simulated(ready)
-                started += max(0.0, time.monotonic() - started - stop / self._speed)
-            time.sleep(max(0.0, started + stop / self._speed - time.monotonic()))
-            yield chunk
+                spans, _ = _simulated(ready)
+                started += max(0.0, time.monotonic() - started - start / self._speed)
+            for span in spans:
+                if heard is not None:
+                    self._until(started + span.start / self._speed)
+                    heard(span)
+                self._until(started + span.stop / self._speed)
+                yield span
+
+    @staticmethod
+    def _until(moment: float) -> None:
+        time.sleep(max(0.0, moment - time.monotonic()))
 
     def _lead(self, running: float) -> float | None:
         """Return how long the clock must wait to stay behind the simulation, in s.
 
-        ``running`` is the time the span being simulated has taken so far, in
-        s. None where a span still to come is of a kind none has been
-        simulated of.
+        ``running`` is the time the stretch being simulated has taken so far,
+        in s. None where a stretch still to come acquires and none that
+        acquires has been simulated, or where none has been.
         """
         per_sample = self._rate(acquiring=True)
         per_second = self._rate(acquiring=False)
         lead = 0.0
         remaining = -running
-        for k in range(len(self._spent), len(self._stops)):
+        for k in range(len(self._spent), len(self._starts)):
             if self._samples[k] > 0:
                 rate, size = per_sample, self._samples[k]
             else:
@@ -408,21 +473,25 @@ class _Clock:
             if rate is None:
                 return None
             remaining = max(remaining + _MARGIN * rate * size, 0.0)
-            lead = max(lead, remaining - self._stops[k] / self._speed)
+            lead = max(lead, remaining - self._starts[k] / self._speed)
         return lead
 
     def _rate(self, *, acquiring: bool) -> float | None:
-        """Return the median simulation time of the latest spans of a kind; None without one.
+        """Return the median simulation time of the latest stretches of a kind; None without one.
 
-        Per ADC sample for spans that acquire, and per second of scan time for
-        those that do not.
+        Per ADC sample for stretches that acquire, and per second of scan time
+        for those that do not: until one that does not has been simulated, per
+        second of the stretches that acquire, which bounds it.
         """
-        rates = [
-            spent / (self._samples[k] if acquiring else self._durations[k])
-            for k, spent in enumerate(self._spent)
-            if (self._samples[k] > 0) == acquiring and self._durations[k] > 0.0
-        ]
-        return statistics.median(rates[-_RECENT:]) if rates else None
+        for kind in (acquiring, True):
+            rates = [
+                spent / (self._samples[k] if acquiring else self._durations[k])
+                for k, spent in enumerate(self._spent)
+                if (self._samples[k] > 0) == kind and self._durations[k] > 0.0
+            ]
+            if rates:
+                return statistics.median(rates[-_RECENT:])
+        return None
 
 
 def _gradients(played: dict, block: int) -> list[np.ndarray | None]:

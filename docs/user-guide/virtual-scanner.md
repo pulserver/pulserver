@@ -133,12 +133,12 @@ with wave.open("scan.wav", "wb") as audio:
     received = virtual.send(("127.0.0.1", 9002), design, acquired(), config="pics")
 ```
 
-The spans are simulated in a thread of their own, ahead of the clock. At
+The scan is simulated in a thread of its own, ahead of the clock. At
 `speed=1.0` the clock starts once the simulation, at the rate it has run so
 far, stays ahead of it to the end of the scan, which then lasts as long as it
 would on a scanner; `preparing`, when given, receives the time left before the
-clock starts. A span simulated after its end on the clock holds the clock until
-it is. Without `speed`, the spans come as fast as they are simulated.
+clock starts. Where the simulation falls behind the clock, the clock waits for
+it. Without `speed`, the spans come as fast as they are simulated.
 
 ## Scan from the command line
 
@@ -338,7 +338,7 @@ it repeats:
 | `version` | | `image`: the digest of the image the console runs in, named by `PULSERVER_IMAGE` as `<repository>@<digest>`; `latest`: the digest the registry publishes for that repository's `latest` tag; each `null` where it is not known |
 | `list`, `validate`, `generate`, `import` | `plugin`, `block` | `status` and `reply`, as `pulserver design` answers; `design` for a generated or imported design |
 | `exam` | `subject`, `coil` | `localizer`: the axial, coronal and sagittal images of the subject's phantom, as base64 DICOM files |
-| `scan` | `design`, `rotation` (nine elements), `centre_mm`, `sound`, `recon` | at a speed, `preparing` about twice a second until the clock starts, the wall-clock time left in s or `null` before there is an estimate; `clock` and `duration` after each span played, with the span's `sound` when asked, as base64 of 16-bit little-endian stereo samples at `rate` Hz; `dicom` and `name` for each image the reconstruction returns, `text`, then `done` with the status |
+| `scan` | `design`, `rotation` (nine elements), `centre_mm`, `sound`, `recon` | at a speed, `preparing` about twice a second until the clock starts, the wall-clock time left in s or `null` before there is an estimate; `clock` and `duration` after each span played, a span lasting at least a second; when asked, each span's `sound` before its clock, once the clock reaches the span's `start`, as base64 of 16-bit little-endian stereo samples at `rate` Hz; `dicom` and `name` for each image the reconstruction returns, `text`, then `done` with the status |
 | `cancel` | | stops the scan in progress |
 
 The `recon` field of a `scan` names the reconstruction plugin of the scan,

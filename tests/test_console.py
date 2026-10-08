@@ -488,7 +488,9 @@ def test_a_cancelled_scan_stops_and_reports_it(tmp_path, monkeypatch):
     assert len(messages) == 1
 
 
-def test_a_scan_asked_for_its_sound_streams_it_with_its_clock(tmp_path):
+def test_a_scan_asked_for_its_sound_sends_each_spans_sound_as_its_clock_reaches_its_start(
+    tmp_path,
+):
     console = _console(tmp_path)
     design = console.design("generate", "gre2d", _block(TE=5000, nx=32, ny=32))[
         "design"
@@ -503,17 +505,41 @@ def test_a_scan_asked_for_its_sound_streams_it_with_its_clock(tmp_path):
         sound=True,
     )
 
+    heard = [m for m in messages if "sound" in m]
+    clocks = [m for m in messages if "clock" in m]
     samples = np.concatenate(
         [
             np.frombuffer(base64.b64decode(m["sound"]), dtype="<i2").reshape(-1, 2)
-            for m in messages
+            for m in heard
         ]
     )
     assert status == 0
-    assert {m["rate"] for m in messages} == {virtual.SAMPLE_RATE}
-    expected = messages[-1]["duration"] * virtual.SAMPLE_RATE
-    assert abs(len(samples) - expected) <= len(messages)
+    assert {m["rate"] for m in heard} == {virtual.SAMPLE_RATE}
+    # Each span's sound, then its clock: the sound starts where the last clock stood.
+    timed = [m for m in messages if "sound" in m or "clock" in m]
+    assert [("sound" in m) for m in timed] == [True, False] * len(clocks)
+    assert [m["start"] for m in heard] == [0.0, *(m["clock"] for m in clocks[:-1])]
+    expected = clocks[-1]["duration"] * virtual.SAMPLE_RATE
+    assert abs(len(samples) - expected) <= len(heard)
     assert np.abs(samples).max() > 0
+
+
+def test_a_scans_clock_advances_a_second_at_a_time(tmp_path):
+    console = _console(tmp_path)
+    design = console.design("generate", "gre2d", _block(TE=5000, nx=32, ny=32))[
+        "design"
+    ]
+    messages = []
+
+    console.scan(
+        design, rotation=np.eye(3), centre_mm=(0.0, 0.0, 0.0), emit=messages.append
+    )
+
+    clocks = [0.0, *(m["clock"] for m in messages if "clock" in m)]
+    steps = np.diff(clocks)
+    assert len(steps) > 1
+    assert all(step >= 1.0 for step in steps[:-1])
+    assert all(step < 1.5 for step in steps[:-1])
 
 
 def test_a_scan_cancelled_while_it_prepares_stops_before_its_clock_starts(
