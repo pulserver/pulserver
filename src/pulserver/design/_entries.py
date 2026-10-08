@@ -264,6 +264,33 @@ def _stated(key: ProtocolKey, entry: StatedParam, value: Any) -> StrEnum:
 def _parameter(
     name: ProtocolKey, entry: Entry, defaults: Mapping[str, Any]
 ) -> Parameter:
+    unbound = _unbound_parameter(entry)
+    if unbound is not None:
+        return unbound
+    # An entry that states its default may bind a name the app does not take,
+    # for the plugin's own hooks to read.
+    if entry.argument not in defaults and getattr(entry, "default", None) is None:
+        raise ValueError(
+            f"{name} binds {entry.argument!r}, which the app does not take"
+        )
+    default = defaults.get(entry.argument)
+    if isinstance(entry, TimeParam):
+        return _time_parameter(name, entry, default)
+    if isinstance(entry, FloatParam | IntParam):
+        return _numeric_parameter(entry, default)
+    if isinstance(entry, BoolParam):
+        return Parameter(Kind.BOOL, default if entry.default is None else entry.default)
+    default = default if entry.default is None else entry.default
+    return Parameter(
+        Kind.STRINGLIST,
+        _member(name, entry, default),
+        InputMode.DROPDOWN,
+        options=tuple(entry.choices),
+    )
+
+
+def _unbound_parameter(entry: Entry) -> Parameter | None:
+    """Return the parameter of an entry that binds no argument; ``None`` for one that binds one."""
     if isinstance(entry, ConfigParam):
         return Parameter(Kind.CONFIG, entry.value, InputMode.OFF)
     if isinstance(entry, Description):
@@ -279,75 +306,60 @@ def _parameter(
             InputMode.DROPDOWN,
             options=tuple(type(entry.value)),
         )
-    # An entry that states its default may bind a name the app does not take,
-    # for the plugin's own hooks to read.
-    if entry.argument not in defaults and getattr(entry, "default", None) is None:
-        raise ValueError(
-            f"{name} binds {entry.argument!r}, which the app does not take"
-        )
-    default = defaults.get(entry.argument)
-    if isinstance(entry, TimeParam):
-        options = (*entry.presets, *entry.options)
-        if entry.default is not None:
-            value = int(entry.default)
-            if value < 0 and value not in entry.presets:
-                raise ValueError(
-                    f"{name} defaults to preset {value}, which it does not offer"
-                )
-        elif default is None:
-            shortest = [key for key, preset in entry.presets.items() if preset is None]
-            if not shortest:
-                raise ValueError(
-                    f"{name} defaults to None but offers no preset requesting it"
-                )
-            value = shortest[0]
-        else:
-            value = _to_microseconds(default)
-        mode = InputMode.DROPDOWN if options else InputMode.TYPEIN
-        return Parameter(
-            Kind.INT,
-            value,
-            mode,
-            entry.range_min,
-            entry.range_max,
-            entry.range_incr,
-            "us",
-            options,
-        )
+    return None
+
+
+def _time_parameter(name: ProtocolKey, entry: TimeParam, default: Any) -> Parameter:
+    options = (*entry.presets, *entry.options)
+    if entry.default is not None:
+        value = int(entry.default)
+        if value < 0 and value not in entry.presets:
+            raise ValueError(
+                f"{name} defaults to preset {value}, which it does not offer"
+            )
+    elif default is None:
+        shortest = [key for key, preset in entry.presets.items() if preset is None]
+        if not shortest:
+            raise ValueError(
+                f"{name} defaults to None but offers no preset requesting it"
+            )
+        value = shortest[0]
+    else:
+        value = _to_microseconds(default)
+    mode = InputMode.DROPDOWN if options else InputMode.TYPEIN
+    return Parameter(
+        Kind.INT,
+        value,
+        mode,
+        entry.range_min,
+        entry.range_max,
+        entry.range_incr,
+        "us",
+        options,
+    )
+
+
+def _numeric_parameter(entry: FloatParam | IntParam, default: Any) -> Parameter:
+    mode = InputMode.DROPDOWN if entry.options else InputMode.TYPEIN
     if isinstance(entry, FloatParam):
-        mode = InputMode.DROPDOWN if entry.options else InputMode.TYPEIN
-        return Parameter(
-            Kind.FLOAT,
+        kind = Kind.FLOAT
+        value = (
             _to_ui(default, entry.scale)
             if entry.default is None
-            else _ui_float(entry.default),
-            mode,
-            entry.range_min,
-            entry.range_max,
-            entry.range_incr,
-            entry.unit,
-            entry.options,
+            else _ui_float(entry.default)
         )
-    if isinstance(entry, IntParam):
-        mode = InputMode.DROPDOWN if entry.options else InputMode.TYPEIN
-        return Parameter(
-            Kind.INT,
-            default if entry.default is None else int(entry.default),
-            mode,
-            entry.range_min,
-            entry.range_max,
-            entry.range_incr,
-            entry.unit,
-            entry.options,
-        )
-    if isinstance(entry, BoolParam):
-        return Parameter(Kind.BOOL, default if entry.default is None else entry.default)
-    default = default if entry.default is None else entry.default
+    else:
+        kind = Kind.INT
+        value = default if entry.default is None else int(entry.default)
     return Parameter(
-        Kind.STRINGLIST,
-        _member(name, entry, default),
-        InputMode.DROPDOWN,
-        options=tuple(entry.choices),
+        kind,
+        value,
+        mode,
+        entry.range_min,
+        entry.range_max,
+        entry.range_incr,
+        entry.unit,
+        entry.options,
     )
 
 
