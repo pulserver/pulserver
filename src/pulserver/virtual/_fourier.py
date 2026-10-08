@@ -122,7 +122,9 @@ class FourierPlayer:
     Each pulse turns an entry ideally, through its flip angle on resonance
     times the magnitude of the transmit field the entry sees and the pulse's
     own profile at the field the entry sees during it, about its axis turned
-    by the transmit field's phase. Between pulses and readouts, the net moment
+    by the transmit field's phase; a pulse under a gradient that changes along
+    one axis, a spectral-spatial one, by its profile across the field and the
+    position along that axis, simulated over those the entries span. Between pulses and readouts, the net moment
     of the gradients across a voxel shifts the configuration states by one
     order where it dephases by at least :data:`SHIFT_CYCLES` cycles along the
     axes the tissue spans; its part that changes from one repetition to the
@@ -720,6 +722,15 @@ def _voxel(timeline: Timeline, entries: _Entries, spacing: float) -> np.ndarray:
         voxel = np.minimum(voxel, np.where(reach > 0.0, 0.5 / reach, np.inf))
     pulses = timeline.pulses
     for at in np.flatnonzero(pulses.use == _EXCITATION):
+        if pulses.trace[at] >= 0:
+            # The slab a pulse under a changing gradient selects on resonance.
+            width = pulses.traces[pulses.trace[at]].width
+            logical = np.abs(pulses.direction[at] @ timeline.rotation)
+            with np.errstate(divide="ignore", invalid="ignore"):
+                voxel = np.minimum(
+                    voxel, np.where(logical > 1e-12, width / logical, np.inf)
+                )
+            continue
         gradient = pulses.gradient[at] @ timeline.rotation
         detuning, ratio = pulses.profiles[pulses.profile[at]]
         half = detuning[ratio >= 0.5]
@@ -935,13 +946,22 @@ def _selecting(pulses) -> np.ndarray:
 def _selectors(pulses) -> tuple[np.ndarray, np.ndarray]:
     """Return which selector each pulse is, and each selector's first pulse.
 
-    A selector is a gradient, a frequency and a profile.
+    A selector is a gradient, a frequency and a profile, or the trace of a
+    pulse under a gradient that changes along one axis.
     """
     offset = (
         pulses.band[:, 0]
         - np.array([profile[0][0] for profile in pulses.profiles])[pulses.profile]
     )
-    keys = np.column_stack([_selecting(pulses), np.round(offset, 3), pulses.profile])
+    keys = np.column_stack(
+        [
+            _selecting(pulses),
+            np.round(offset, 3),
+            pulses.profile,
+            np.round(pulses.direction, 6),
+            pulses.trace,
+        ]
+    )
     _, selector_of = _rows(keys)
     first = np.full(int(selector_of.max(initial=-1)) + 1, selector_of.size)
     np.minimum.at(first, selector_of, np.arange(selector_of.size))
@@ -959,6 +979,19 @@ def _profiles(entries: _Entries, selectors: np.ndarray, pulses) -> torch.Tensor:
         detuning, ratio = pulses.profiles[pulses.profile[pulse]]
         offset = pulses.band[pulse, 0] - detuning[0]
         field = entries.frequency - float(offset)
+        if pulses.trace[pulse] >= 0:
+            along = entries.positions @ torch.as_tensor(
+                pulses.direction[pulse], dtype=torch.float32, device=device
+            )
+            flip = torch.as_tensor(
+                pulses.traces[pulses.trace[pulse]].ratio(
+                    field.double().cpu().numpy(), along.double().cpu().numpy()
+                ),
+                dtype=torch.float32,
+                device=device,
+            )
+            held[:, at] = _level(flip)
+            continue
         if np.any(gradients[pulse]):
             gradient = torch.as_tensor(
                 pulses.gradient[pulse], dtype=torch.float32, device=device
@@ -973,10 +1006,16 @@ def _profiles(entries: _Entries, selectors: np.ndarray, pulses) -> torch.Tensor:
         upper = table[(index + 1).clamp(max=detuning.size - 1)]
         flip = table[index] + (place - below) * (upper - table[index])
         flip = torch.where(inside, flip, 0.0)
-        levels = torch.as_tensor(_LEVELS, dtype=torch.float32, device=device)
-        nearest = torch.searchsorted(levels[1:] + levels[:-1], 2.0 * flip.contiguous())
-        held[:, at] = nearest.to(torch.int8)
+        held[:, at] = _level(flip)
     return held
+
+
+def _level(flip: torch.Tensor) -> torch.Tensor:
+    """Return the level of :data:`_LEVELS` nearest each flip angle ratio, as ``int8``."""
+    levels = torch.as_tensor(_LEVELS, dtype=torch.float32, device=flip.device)
+    return torch.searchsorted(levels[1:] + levels[:-1], 2.0 * flip.contiguous()).to(
+        torch.int8
+    )
 
 
 def _merged(

@@ -105,8 +105,12 @@ $$
 $$
 
 about its axis turned by the phase of the transmit field $b^+$, relative to
-the pulse's nominal amplitude; a pulse played under no gradient, or under one
-that changes during it, selects by frequency alone. A pulse of phase zero turns
+the pulse's nominal amplitude. A pulse played under a gradient that changes
+along one direction $\hat{\mathbf{n}}$, as a spectral-spatial pulse's
+alternating lobes do, has a profile in both the field and the position along
+it, $P(f_j - f_\mathrm{rf}, \hat{\mathbf{n}}\cdot\mathbf{r}_j)$, simulated
+from its samples under that gradient; a pulse played under no gradient, or
+under one that turns during it, selects by frequency alone. A pulse of phase zero turns
 $+z$ towards $+y$: after a 90° excitation of phase $\phi_e$ the magnetization
 is transverse at the phase $\pi/2 - \phi_e$. Cubes that every pulse turns
 through about the same angle form a group.

@@ -216,7 +216,7 @@ def _saturation(
         )
     b1 = played["rf_waveform_hz"][start:stop].astype(complex)
     b1 = b1.reshape(channels, -1).sum(axis=0)
-    b1, step_us = _on_a_raster(times - float(played["rf_delay_us"][block]), b1)
+    b1, step_us, _ = _on_a_raster(times - float(played["rf_delay_us"][block]), b1)
     detuning = frequencies_hz - float(played["rf_freq_hz"][block])
     return pp.sim_bloch(b1, detuning[:, None], 1e-6 * step_us)[:, 2]
 
