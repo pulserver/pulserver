@@ -1,12 +1,15 @@
 """pypulseqpp's 3D balanced SSFP bound to the scanner UI, its partitions counted by the number of slices."""
 
+import functools
+
 import pypulseqpp as pp
 from pypulseqpp.sequences.sequence.bssfp3D_sequence import bssfp3d
 
 from pulserver._zoo._evaluation import achieved, arguments, rf_layout
 from pulserver._zoo._slab import slab
-from pulserver._zoo._user import user_entries
+from pulserver._zoo._user import OWN, user_entries
 from pulserver.design import (
+    Description,
     Evaluation,
     FloatParam,
     IntParam,
@@ -16,9 +19,14 @@ from pulserver.design import (
 )
 from pulserver.protocol import ImagingMode, TRPreset, UIParam
 
+#: The excitation, one of ``pypulseqpp.sequences.EXCITATIONS``: ``"slab"``
+#: selects the slab, ``"spsp"`` excites water alone in it and
+#: ``"nonselective"`` plays a hard pulse.
+EXCITATION = "nonselective"
+
 
 class Bssfp3D(SequencePlugin):
-    app = slab(bssfp3d)
+    app = functools.partial(slab(bssfp3d), excitation=EXCITATION)
     protocol = {
         UIParam.IMAGING_MODE: StatedParam(ImagingMode.THREE_D),
         UIParam.FLIP: FloatParam(
@@ -49,6 +57,8 @@ class Bssfp3D(SequencePlugin):
         ),
         UIParam.RY: IntParam("ry", range_min=1, range_max=4),
         UIParam.RZ: IntParam("rz", range_min=1, range_max=4),
+        UIParam.user_name(OWN): Description("Phase cycles"),
+        UIParam.user_value(OWN): IntParam("n_phase_cycles", range_min=1, range_max=4),
     }
 
     protocol |= user_entries(app, protocol)

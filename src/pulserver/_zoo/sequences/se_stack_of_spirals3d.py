@@ -23,6 +23,11 @@ from pulserver.protocol import ImagingMode, TEPreset, TRPreset, UIParam
 #: than the centre as a user entry.
 VARIABLE_DENSITY = False
 
+#: The excitation, one of ``pypulseqpp.sequences.EXCITATIONS``: ``"slab"``
+#: selects the slab, ``"spsp"`` excites water alone in it and
+#: ``"nonselective"`` plays a hard pulse.
+EXCITATION = "slab"
+
 
 class SeStackOfSpirals3D(SequencePlugin):
     app = slab(
@@ -31,6 +36,7 @@ class SeStackOfSpirals3D(SequencePlugin):
             density="variable" if VARIABLE_DENSITY else "constant",
         )
     )
+    app = functools.partial(app, excitation=EXCITATION)
     protocol = {
         UIParam.IMAGING_MODE: StatedParam(ImagingMode.THREE_D),
         UIParam.TE: TimeParam(

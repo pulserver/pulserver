@@ -1,5 +1,7 @@
 """pypulseqpp's 2D multi-echo gradient echo bound to the scanner UI."""
 
+import functools
+
 from pypulseqpp.sequences.sequence.gre_multiecho2D_sequence import gre_multiecho2d
 
 from pulserver._zoo._evaluation import cartesian_2d, evaluation
@@ -13,9 +15,15 @@ from pulserver.design import (
 )
 from pulserver.protocol import ImagingMode, TEPreset, TRPreset, UIParam
 
+#: Monopolar echo train, each echo rewound; bipolar, with even echoes read
+#: backwards, otherwise.
+FLYBACK = True
+
 
 class GreMultiecho2D(SequencePlugin):
-    app = shortest_at_zero(gre_multiecho2d, "echo_spacing")
+    app = functools.partial(
+        shortest_at_zero(gre_multiecho2d, "echo_spacing"), flyback=FLYBACK
+    )
     protocol = {
         UIParam.IMAGING_MODE: StatedParam(ImagingMode.TWO_D),
         UIParam.FLIP: FloatParam(
