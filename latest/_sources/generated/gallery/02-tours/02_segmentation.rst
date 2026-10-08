@@ -227,7 +227,7 @@ as the subsequences of one scan.
     ['epi.seq', 'epi_epi_2d.seq']
     subsequence 0: 72 blocks per repetition, 3 repetitions
     subsequence 1: 72 blocks per repetition, 3 repetitions
-    virtual segments over the chain: 2
+    virtual segments over the chain: 3
 
 
 
@@ -243,7 +243,7 @@ above.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.329 seconds)
+   **Total running time of the script:** (0 minutes 0.433 seconds)
 
 
 .. _sphx_glr_download_generated_gallery_02-tours_02_segmentation.py:

@@ -162,7 +162,7 @@ or ``None`` where the scanner's offsets carry the whole phase.
  .. code-block:: none
 
     gradient echo: a phase on 0 of 64 readouts
-    echo planar: a phase on 134 of 134 readouts
+    echo planar: a phase on 133 of 133 readouts
 
 
 
@@ -312,7 +312,7 @@ which needs no new cache.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.363 seconds)
+   **Total running time of the script:** (0 minutes 0.484 seconds)
 
 
 .. _sphx_glr_download_generated_gallery_02-tours_03_fov_offset_enrichment.py:
