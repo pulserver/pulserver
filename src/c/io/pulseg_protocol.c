@@ -86,7 +86,7 @@ static const pulseg_param_entry g_param_table[] = {
     /* Gating */
     {"heart_rate", PULSEG_PARAM_HEART_RATE, PULSEG_PTYPE_INT},
     /* Explicit saturation bands */
-    {"exsat_mask", PULSEG_PARAM_EXSAT_MASK, PULSEG_PTYPE_INT},
+    {"exsat_mask", PULSEG_PARAM_EXSAT_MASK, PULSEG_PTYPE_CONFIG},
     {"exsat1_normal_x", PULSEG_PARAM_EXSAT1_NORMAL_X, PULSEG_PTYPE_FLOAT},
     {"exsat1_normal_y", PULSEG_PARAM_EXSAT1_NORMAL_Y, PULSEG_PTYPE_FLOAT},
     {"exsat1_normal_z", PULSEG_PARAM_EXSAT1_NORMAL_Z, PULSEG_PTYPE_FLOAT},

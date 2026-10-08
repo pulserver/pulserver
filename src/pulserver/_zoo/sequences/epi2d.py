@@ -8,11 +8,8 @@ from pypulseqpp import sequences
 from pypulseqpp.sequences.sequence.epi2D_sequence import epi2d
 
 from pulserver._zoo._evaluation import achieved, arguments, packets, rf_layout
-from pulserver._zoo._saturation import band_arguments, band_entries
 from pulserver._zoo._user import user_entries
 from pulserver.design import (
-    BoolParam,
-    ConfigParam,
     Evaluation,
     FloatParam,
     IntParam,
@@ -31,14 +28,17 @@ from pulserver.protocol import (
 MULTIBAND = False
 
 
-#: Explicit saturation bands the function plays.
-BANDS = 2
+#: Saturate fat before every shot: with the fat shifted many pixels along the
+#: phase encode, an EPI without it shows the scalp over the brain.
+FAT_SATURATION = True
 
 
 class Epi2D(SequencePlugin):
     # Twofold readout oversampling keeps the ramp-sampled flat top within the
     # spacing of the readout field of view, so it can be resampled onto a grid.
-    app = functools.partial(epi2d, readout_oversampling=2.0)
+    app = functools.partial(
+        epi2d, readout_oversampling=2.0, fat_saturation=FAT_SATURATION
+    )
     protocol = {
         UIParam.IMAGING_MODE: StatedParam(ImagingMode.TWO_D),
         UIParam.FLIP: FloatParam(
@@ -83,17 +83,11 @@ class Epi2D(SequencePlugin):
         UIParam.NUM_FRAMES: IntParam("n_frames", range_min=1, range_max=1000),
         UIParam.NUM_SHOTS: IntParam("n_shots", range_min=1, range_max=16),
         UIParam.RY: IntParam("ry", range_min=1, range_max=4),
-        UIParam.FAT_SAT: BoolParam("fat_saturation"),
     }
     if MULTIBAND:
         protocol[UIParam.MULTIBAND] = IntParam("multiband", range_min=1, range_max=8)
-    # Explicit saturation bands, prescribed graphically, at most two of them.
-    protocol |= {UIParam.ENABLE_SATURATION_UI: ConfigParam(1), **band_entries(BANDS)}
 
     protocol |= user_entries(app, protocol)
-
-    def generate(self, system, protocol):
-        return self.app(system, **band_arguments(protocol, BANDS))
 
     def evaluate(self, system, protocol):
         # A cycle plays one shot of every slice group of a packet, and a TR
@@ -117,9 +111,7 @@ class Epi2D(SequencePlugin):
             "n_frames": 1,
             "n_dummy": 0,
         }
-        *calibration, _, volume = self.app(
-            system, **(band_arguments(protocol, BANDS) | one)
-        )
+        *calibration, _, volume = self.app(system, **(protocol.arguments | one))
         n_shots, n_frames = a["n_shots"], a["n_frames"]
         shot = volume.definitions["TR"][0] / n_shots
         sizes, cycles = _cycles(

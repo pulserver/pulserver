@@ -13,12 +13,13 @@ from _host import LIMITS, value_block
 from pulserver import _plugins
 from pulserver._zoo import ZOO_PAIRS
 from pulserver._zoo._evaluation import achieved, rf_layout
-from pulserver._zoo._saturation import band_arguments
+from pulserver._zoo._saturation import explicit_bands
 from pulserver._zoo._slab import slab
 from pulserver._zoo._user import SHARED
 from pulserver.design import Protocol, StatedParam, load_plugin
 from pulserver.host import call
 from pulserver.protocol import (
+    ConfigKey,
     ImagingMode,
     TEPreset,
     TRPreset,
@@ -162,7 +163,8 @@ SCANS = [pytest.param(name, {}, id=name) for name in SHIPPED] + [
         ("epi2d", "packets", {"nslices": 7, "TR": 900000, "Ry": 2, "num_shots": 2}),
         ("epi2d", "frames", {"nslices": 12, "TR": 5000000, "num_frames": 3}),
         ("epi2d", "shortest", {"nslices": 6, "TR": TRPreset.MINIMUM}),
-        ("epi2d", "saturation", {"nslices": 3, "exsat_mask": 3, "exsat2_loc": 60.0}),
+        ("gre2d", "saturation", {"nslices": 3, "exsat2_loc": 60.0}),
+        ("se2d", "saturation", {"nslices": 3, "exsat1_thickness": 30.0}),
         (
             "epi3d",
             "undersampled",
@@ -336,11 +338,14 @@ LARGE = {
 # The RF uses of one TR at the default protocol, in play order, where a TR is
 # not one excitation followed, in a spin echo, by one refocusing pulse; by name.
 TRAINS: dict[str, list[str]] = {
+    "epi2d": ["saturation", "excitation"],
     "epi3d": ["excitation"] * 32,
     "fse3d": ["excitation"] + ["refocusing"] * 45,
+    "gre2d": ["saturation"] * 2 + ["excitation"],
     "mprage3d": ["inversion"] + ["excitation"] * 256,
     "mprage_stack_of_spirals3d": ["inversion"] + ["excitation"] * 16,
     "mprage_stack_of_stars3d": ["inversion"] + ["excitation"] * 403,
+    "se2d": ["saturation"] * 2 + ["excitation", "refocusing"],
 }
 
 # The blocks in the last TR of a design whose last view outlasts the TR it
@@ -795,52 +800,101 @@ def _turned(changes, rotation, offset_mm):
     }
 
 
-def test_epi2d_places_an_explicit_saturation_band_along_its_normal_in_the_logical_frame(
-    zoo,
+def test_the_console_bands_reach_the_sequence_function_as_placed_in_the_physical_frame():
+    def app(
+        *,
+        sat1_normal_x=0.0,
+        sat1_normal_y=0.0,
+        sat1_normal_z=0.0,
+        sat1_position=0.0,
+        sat1_thickness=0.0,
+        n_x=64,
+    ):
+        return locals()
+
+    banded = explicit_bands(app, 1)
+    received = banded(
+        exsat1_normal_x=0.0,
+        exsat1_normal_y=0.6,
+        exsat1_normal_z=0.8,
+        exsat1_loc=-0.03,
+        exsat1_thickness=0.02,
+        n_x=32,
+    )
+
+    assert "sat1_position" not in inspect.signature(banded).parameters
+    assert received == {
+        "sat1_normal_x": 0.0,
+        "sat1_normal_y": 0.6,
+        "sat1_normal_z": 0.8,
+        "sat1_position": -0.03,
+        "sat1_thickness": 0.02,
+        "n_x": 32,
+    }
+
+
+BANDED = ["gre2d", "se2d"]
+
+
+@pytest.mark.parametrize("name", BANDED)
+def test_a_banded_sequence_declares_every_band_it_plays_on(name, zoo):
+    listing = zoo[name].listing()
+
+    assert listing[ConfigKey.EXSAT_MASK].value == 3
+    assert not listing[ConfigKey.EXSAT_MASK].editable
+    assert UIParam.exsat_loc(2) in listing and UIParam.exsat_loc(3) not in listing
+
+
+def _saturations(seq):
+    return [
+        seq.get_block(index).rf
+        for index in seq.block_events
+        if (rf := seq.get_block(index).rf) is not None and rf.use == "saturation"
+    ]
+
+
+@pytest.mark.parametrize("name", BANDED)
+def test_every_band_is_played_before_every_excitation_exempt_from_the_prescription(
+    name, zoo
 ):
-    # Logical readout along physical y, phase along physical z, slice along x.
-    rotation = np.array([[0.0, 0.0, 1.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]])
-    changes = {
-        "exsat_mask": 2,
+    plugin = zoo[name]
+    request = {
+        "nx": 64,
+        "ny": 32,
         "exsat2_normal_x": 0.0,
         "exsat2_normal_y": 1.0,
         "exsat2_normal_z": 0.0,
         "exsat2_loc": 30.0,
         "exsat2_thickness": 20.0,
     }
-    arguments = band_arguments(
-        _protocol(zoo["epi2d"], _turned(changes, rotation, (10.0, 0.0, 0.0))), 2
-    )
-
-    # Physical y is the logical readout, offset 10 mm along it.
-    normal = [arguments[f"sat1_normal_{axis}"] for axis in "xyz"]
-    np.testing.assert_allclose(normal, rotation[1])
-    assert arguments["sat1_position"] == pytest.approx(20e-3)
-    assert arguments["sat1_thickness"] == pytest.approx(20e-3)
-    assert "sat2_thickness" not in arguments
-    assert not any(name.startswith("exsat") for name in arguments)
-
-
-def test_an_oblique_band_keeps_its_normal_through_the_prescription(zoo):
-    rotation = np.array([[0.0, -1.0, 0.0], [1.0, 0.0, 0.0], [0.0, 0.0, 1.0]])
-    changes = {
-        "exsat_mask": 1,
-        "exsat1_normal_x": 0.0,
-        "exsat1_normal_y": 3.0,
-        "exsat1_normal_z": 4.0,
+    main = _main(plugin, _protocol(plugin, request))
+    pulses = [
+        index
+        for index in main.block_events
+        if (rf := main.get_block(index).rf) is not None and rf.use == "saturation"
+    ]
+    exempt = {
+        (label.label, int(label.value))
+        for index in pulses
+        for label in main.get_block(index).label or ()
     }
-    arguments = band_arguments(
-        _protocol(zoo["epi2d"], _turned(changes, rotation, (0.0, 0.0, 0.0))), 2
+
+    assert len(pulses) == 2 * _excitations(main)
+    # A 3 ms sinc of time-bandwidth 4 over 20 mm, centred 30 mm along y.
+    assert main.get_block(pulses[1]).rf.freq_offset == pytest.approx(
+        4.0 / (3e-3 * 20e-3) * 30e-3, rel=1e-6
     )
-
-    logical = [arguments[f"sat1_normal_{axis}"] for axis in "xyz"]
-    np.testing.assert_allclose(rotation @ logical, [0.0, 0.6, 0.8], atol=1e-12)
+    assert {("NOPOS", 1), ("NOROT", 1)} <= exempt
 
 
-def test_epi2d_refuses_more_saturation_bands_than_it_plays(zoo):
-    validation = zoo["epi2d"].validate(SYSTEM, {"exsat_mask": 7})
-    assert not validation.valid
-    assert "at most 2" in validation.info
+def test_the_2d_epi_saturates_fat_and_plays_no_band(zoo):
+    plugin = zoo["epi2d"]
+    *_, main = plugin.generate(SYSTEM, _protocol(plugin, {"nx": 64, "ny": 64}))
+
+    assert ConfigKey.EXSAT_MASK not in plugin.protocol
+    assert UIParam.FAT_SAT not in plugin.protocol
+    assert len(_saturations(main)) > 0
+    assert all(rf.freq_ppm != 0.0 for rf in _saturations(main))
 
 
 def test_a_cine_is_gated_at_the_heart_rate_asked_for(zoo):

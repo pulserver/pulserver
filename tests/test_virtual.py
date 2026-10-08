@@ -435,7 +435,7 @@ def test_a_readout_before_the_first_excitation_acquires_nothing(tmp_path):
 
 def test_a_saturation_band_selected_in_space_is_refused(tmp_path):
     system = pp.Opts(B0=3.0)
-    band = sequences.FatSaturation(system, thickness_m=0.05)
+    band = sequences.SpatialSaturation(system, (0, 0, 1), 0.0, 0.05)
     rf = pp.make_block_pulse(np.pi / 2, duration=0.5e-3, system=system)
     adc = pp.make_adc(num_samples=64, duration=3.2e-3, system=system)
     seq = pp.Sequence(system)
