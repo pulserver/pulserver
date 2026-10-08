@@ -110,7 +110,6 @@ class FloatKey(StrEnum):
 class IntKey(StrEnum):
     """Keys the interpreter declares as integer."""
 
-    EXSAT_MASK = "exsat_mask"
     HEART_RATE = "heart_rate"
     NUM_FRAMES = "num_frames"
     DIFFUSION_DIRECTIONS = "diffusion_directions"
@@ -157,6 +156,7 @@ class ConfigKey(StrEnum):
     """
 
     ENABLE_SAR_BURST_MODE = "enable_sar_burst_mode"
+    EXSAT_MASK = "exsat_mask"
 
 
 class UserKey(StrEnum):
@@ -340,7 +340,6 @@ class UIParam:
     COMPRESSED_SENSING = FloatKey.COMPRESSED_SENSING
     MULTIBAND = FloatKey.MULTIBAND
 
-    EXSAT_MASK = IntKey.EXSAT_MASK
     HEART_RATE = IntKey.HEART_RATE
     NUM_FRAMES = IntKey.NUM_FRAMES
     DIFFUSION_DIRECTIONS = IntKey.DIFFUSION_DIRECTIONS
