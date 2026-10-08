@@ -91,11 +91,11 @@ def test_a_scan_played_at_a_speed_yields_each_span_once_its_clock_passes_it(
         assert chunk.sound.shape == (2, 0)
 
 
-#: Played at a third of a scanner's speed, a span of the gradient echo lasts
-#: long enough on the wall clock that a clock held back by the simulation
-#: lags by far more than a shared runner's sleeps overshoot, ``JITTER``.
+#: Played at a third of a scanner's speed, the gradient echo lasts more than
+#: a second on the wall clock, and a held stretch holds the clock 2 s: both far
+#: more than a shared runner's sleeps overshoot, ``JITTER``.
 SPEED = 1.0 / 3.0
-JITTER = 0.25
+JITTER = 0.5
 
 
 def _slowed(scan, seconds_per_sample, seconds_per_second=0.01, held=None):
