@@ -98,6 +98,12 @@ class SequenceDefinitions:
         ``kSpaceCenterLine`` and ``kSpaceCenterPartition``: the ``LIN`` and
         ``PAR`` counter at which k-space is sampled at its centre; ``None``
         when undefined.
+    slice_positions : tuple of float
+        ``SlicePositions``: the centre of each slice along the logical slice
+        axis from the field-of-view centre, in metres, indexed by ``SLC``;
+        empty when undefined.
+    slice_thickness : float or None
+        ``SliceThickness``, in metres; ``None`` when undefined.
     """
 
     matrix: tuple[int, int, int] | None
@@ -110,6 +116,8 @@ class SequenceDefinitions:
     flip_angle: tuple[float, ...]
     centre_line: int | None = None
     centre_partition: int | None = None
+    slice_positions: tuple[float, ...] = ()
+    slice_thickness: float | None = None
 
     @classmethod
     def from_sequence(cls, seq: Any) -> SequenceDefinitions:
@@ -138,6 +146,10 @@ class SequenceDefinitions:
             flip_angle=flip_angle,
             centre_line=_counter(seq.get_definition("kSpaceCenterLine")),
             centre_partition=_counter(seq.get_definition("kSpaceCenterPartition")),
+            slice_positions=tuple(_numbers(seq.get_definition("SlicePositions"))),
+            slice_thickness=next(
+                iter(_numbers(seq.get_definition("SliceThickness"))), None
+            ),
         )
 
 

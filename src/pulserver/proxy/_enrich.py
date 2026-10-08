@@ -74,10 +74,14 @@ class TableSpace:
         Whether the space holds the subsequence's ``NAV`` readouts.
     matrix
         ``(x, y, z)`` from ``Matrix``, or ``NavMatrix`` for a navigator;
-        ``None`` when undefined.
+        ``None`` when undefined. 1 along z in a slice stack, a file that
+        writes no ``PAR`` and defines ``SlicePositions`` or writes more than
+        one ``SLC``: its z counts the slices, each an image of its own.
     fov_mm
         ``(x, y, z)`` from ``FOV``, or ``NavFOV`` for a navigator, in mm;
-        ``None`` when undefined.
+        ``None`` when undefined. In a slice stack, z is one slice's:
+        ``SliceThickness``, or the file's z shared among its slices when that
+        is undefined.
     trajectory
         Whether some readout of the space keeps more than one k axis, which
         makes the space non-Cartesian.
@@ -138,6 +142,11 @@ class SequenceTable:
         ``float32`` dwell, in µs.
     encoding_space : ndarray
         ``int32`` index into :attr:`spaces`.
+    slice_offset_m : ndarray
+        ``float64`` centre of each readout's slice along the logical slice
+        axis from the field-of-view centre, in m: the ``SlicePositions`` entry
+        its ``SLC`` indexes, in a file whose readouts are slices of a stack
+        (:class:`TableSpace`), and 0 elsewhere.
     spaces : tuple of TableSpace
         Numbered in chain order: each subsequence's primary space, then its
         navigator space when it has ``NAV`` readouts.
@@ -159,6 +168,7 @@ class SequenceTable:
     sample_time_us: np.ndarray
     encoding_space: np.ndarray
     num_samples: np.ndarray
+    slice_offset_m: np.ndarray
     spaces: tuple[TableSpace, ...]
     sequence_parameters: dict[str, list[float]]
     _files: tuple[ReadoutTable, ...] = dataclasses.field(repr=False)
@@ -285,6 +295,7 @@ class SequenceTable:
             sample_time_us=joined("sample_time_us", np.float32),
             encoding_space=encoding_space,
             num_samples=joined("num_samples", np.int32),
+            slice_offset_m=joined("slice_offset_m", np.float64),
             spaces=tuple(spaces),
             sequence_parameters=parameters,
             _files=tuple(files),
@@ -423,7 +434,9 @@ def enrich_acquisition(
     ``encoding_space_ref``, and ``center_sample`` unless k does not move
     across the readout, in which case the received value stays. A readout
     whose k moves gets it as ``traj``, trailing constant axes dropped, unless
-    it is a Cartesian readout sampled on its flat top alone.
+    it is a Cartesian readout sampled on its flat top alone. The received
+    ``position``, the field-of-view centre, is moved along ``slice_dir`` to
+    the centre of the readout's slice (:attr:`SequenceTable.slice_offset_m`).
 
     The samples are left as received, except where
     :meth:`SequenceTable.readout_phase_modulation` gives a phase, with the
@@ -458,6 +471,13 @@ def enrich_acquisition(
         acquisition.center_sample = int(table.center_sample[index])
     acquisition.sample_time_us = float(table.sample_time_us[index])
     acquisition.encoding_space_ref = int(table.encoding_space[index])
+    offset_mm = 1e3 * float(table.slice_offset_m[index])
+    if offset_mm:
+        acquisition.position[:] = [
+            float(acquisition.position[axis])
+            + offset_mm * float(acquisition.slice_dir[axis])
+            for axis in range(3)
+        ]
 
     modulation = table.readout_phase_modulation(index, fov_offset_m)
     if modulation is not None:
@@ -500,21 +520,23 @@ def _map_readouts(
     local_space = navigator.astype(np.int32)
     _mark_boundaries(flags, counters, local_space, set(labels))
 
+    stack = _is_slice_stack(labels, definitions)
     spaces = []
     navigates = bool(navigator.any())
     for local, is_navigator in ((0, False), (1, True)):
         if is_navigator and not navigates:
             break
+        matrix = definitions.navigator_matrix if is_navigator else definitions.matrix
         fov = definitions.navigator_fov if is_navigator else definitions.fov
+        if stack:
+            matrix, fov = _one_slice(matrix, fov, definitions.slice_thickness)
         members = local_space == local if navigates else slice(None)
         trajectory = bool((readouts.trajectory_dimensions[members] > 1).any())
         spaces.append(
             TableSpace(
                 subsequence=subsequence,
                 navigator=is_navigator,
-                matrix=definitions.navigator_matrix
-                if is_navigator
-                else definitions.matrix,
+                matrix=matrix,
                 fov_mm=None if fov is None else tuple(round(1e3 * v, 9) for v in fov),
                 trajectory=trajectory,
                 centre_line=None if is_navigator else definitions.centre_line,
@@ -542,8 +564,67 @@ def _map_readouts(
         "sample_time_us": 1e6 * readouts.dwell,
         "encoding_space": first_space + local_space,
         "num_samples": readouts.num_samples,
+        "slice_offset_m": _slice_offsets(labels, definitions, count)
+        if stack
+        else np.zeros(count),
     }
     return part, spaces
+
+
+def _is_slice_stack(
+    labels: dict[str, np.ndarray], definitions: SequenceDefinitions
+) -> bool:
+    """Whether a subsequence excites its readouts' slices one by one, its ``Matrix`` and ``FOV`` along z stating the stack.
+
+    So it is when it writes no ``PAR`` and either defines ``SlicePositions``
+    or writes more than one ``SLC``.
+    """
+    if "PAR" in labels:
+        return False
+    slices = labels.get("SLC")
+    varies = slices is not None and np.unique(slices).size > 1
+    return bool(definitions.slice_positions) or varies
+
+
+def _one_slice(
+    matrix: tuple[int, int, int] | None,
+    fov: tuple[float, float, float] | None,
+    thickness: float | None,
+) -> tuple[tuple[int, int, int] | None, tuple[float, float, float] | None]:
+    """Return the matrix and field of view of one slice of a stack, in m.
+
+    One sample along z, over ``thickness`` when the sequence defines it, else
+    the stack's field of view shared among its ``Matrix`` z slices.
+    """
+    slices = 1 if matrix is None else max(int(matrix[2]), 1)
+    if matrix is not None:
+        matrix = (matrix[0], matrix[1], 1)
+    if fov is not None:
+        fov = (fov[0], fov[1], fov[2] / slices if thickness is None else thickness)
+    return matrix, fov
+
+
+def _slice_offsets(
+    labels: dict[str, np.ndarray], definitions: SequenceDefinitions, count: int
+) -> np.ndarray:
+    """Return the ``SlicePositions`` entry each readout's ``SLC`` indexes, in m; 0 without ``SlicePositions``.
+
+    Raises
+    ------
+    ValueError
+        If a readout's ``SLC`` indexes no entry.
+    """
+    positions = np.asarray(definitions.slice_positions, dtype=np.float64)
+    if not positions.size:
+        return np.zeros(count)
+    slices = labels.get("SLC", np.zeros(count, dtype=np.int32))
+    outside = (slices < 0) | (slices >= positions.size)
+    if outside.any():
+        raise ValueError(
+            f"a readout has SLC={int(slices[outside][0])}, and the sequence "
+            f"defines {positions.size} SlicePositions"
+        )
+    return positions[slices]
 
 
 def _ramp_sampled(readouts: ReadoutTable, index: int) -> bool:

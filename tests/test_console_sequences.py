@@ -185,3 +185,53 @@ def test_pics_images_the_vials_from_half_the_phase_encodes(tmp_path, reference):
     (image,) = _images(_console(tmp_path), "gre2d", {**SMALL, "Ry": 2})
 
     assert _correlation(reference, image.astype(float)) > AGREEMENT
+
+
+@pytest.mark.parametrize("name", ["gre2d", "gre_radial2d"])
+def test_a_multi_slice_2d_scan_returns_one_image_per_slice_along_the_slice_normal(
+    tmp_path, name
+):
+    pytest.importorskip("bartorch")
+    console = _console(tmp_path)
+    angle = np.deg2rad(20.0)
+    rotation = np.array(
+        [
+            [1.0, 0.0, 0.0],
+            [0.0, np.cos(angle), -np.sin(angle)],
+            [0.0, np.sin(angle), np.cos(angle)],
+        ]
+    )
+    prescribed = {
+        **SMALL,
+        **SMALLER.get(name, {}),
+        **dict(zip(FOV_ROTATION, rotation.ravel().tolist(), strict=True)),
+        "nslices": 3,
+        "slice_thickness": 4.0,
+    }
+    reply = console.design("generate", name, _prescription(**prescribed))
+    assert "design" in reply, reply
+    console.exam("vials")
+    messages = []
+    status = console.scan(
+        reply["design"],
+        rotation=rotation,
+        centre_mm=(0.0, 0.0, 10.0),
+        emit=messages.append,
+    )
+    assert status == 0, messages[-1:]
+    images = [
+        pydicom.dcmread(io.BytesIO(base64.b64decode(m["dicom"])))
+        for m in messages
+        if "dicom" in m
+    ]
+
+    assert len(images) == 3
+    for image in images:
+        assert image.pixel_array.ndim == 2
+    row, column = np.reshape(images[0].ImageOrientationPatient, (2, 3))
+    normal = np.cross(row, column)
+    heights = sorted(
+        float(np.dot(image.ImagePositionPatient, normal)) for image in images
+    )
+    np.testing.assert_allclose(np.diff(heights), 4.0, atol=1e-3)
+    assert np.mean(heights) == pytest.approx(np.dot((0.0, 0.0, 10.0), normal), abs=1e-3)

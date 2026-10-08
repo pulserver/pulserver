@@ -14,7 +14,7 @@ from .._buffers import ReconBuffer, ReconData
 from .._correct import gradient_unwarped, states_gradient_coefficients
 from ..gadgets import Prewhiten
 from ..plugin import ReconContext, ReconPlugin, ReconResult
-from .pics import averaged
+from .pics import averaged, wavelet_axes
 
 
 class NufftRecon(ReconPlugin):
@@ -30,7 +30,8 @@ class NufftRecon(ReconPlugin):
     calibration k-space only. The image minimises
     ``|D (F S x - y)|^2 + lambda |W x|_1`` over them (``bart pics -t -p D
     -R W``), ``F`` bartorch's NUFFT, ``W`` the wavelet transform over the
-    spatial axes the trajectory encodes and ``D`` the square root of the
+    spatial axes the trajectory encodes of at least
+    ``WAVELET_MIN_POINTS`` points and ``D`` the square root of the
     trajectory's Pipe-Menon density compensation
     (:func:`bartorch.estimate_density`), which preconditions the solve
     (Baron et al., Magn Reson Med 2018); the step is the reciprocal of the largest eigenvalue of the
@@ -170,6 +171,7 @@ class NufftRecon(ReconPlugin):
             else _volume_maps(samples, points, volume)
         )
         grid = tuple(maps.shape[-axes:])
+        encoded = wavelet_axes(grid, tuple(range(-1, -axes - 1, -1)))
         density = bartorch.estimate_density(
             points[..., :axes].reshape(-1, axes), grid
         ).reshape(points.shape[:-1])
@@ -178,7 +180,7 @@ class NufftRecon(ReconPlugin):
             maps,
             traj=points,
             pattern=density.sqrt(),
-            regularizers=priors.Wavelet(tuple(range(-1, -axes - 1, -1)), self.wavelet),
+            regularizers=priors.Wavelet(encoded, self.wavelet),
             maxiter=self.iterations,
             eigen_step=True,
         )
@@ -224,8 +226,8 @@ def _by_shots(
     the boolean ``([partitions,] shots)`` is true for each shot a readout was
     placed at. Shots run segment by segment, in the order of the buffer's axes.
     A partition axis along which readouts were placed at one position only is
-    not a stack and is dropped: the header of a multi-slice 2D scan counts its
-    slices as partitions.
+    not a stack and is dropped: the header lays one out along the ``Matrix`` z
+    of a trajectory that encodes kz itself and writes no ``PAR``.
     """
     axes = list(buffer.axes[1:-1])
     kspace, mask = averaged(buffer), buffer.mask

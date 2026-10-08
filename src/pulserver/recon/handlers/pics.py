@@ -14,6 +14,11 @@ from .._correct import gradient_unwarped, states_gradient_coefficients
 from ..gadgets import AsymmetricEcho, Prewhiten, RemoveReadoutOversampling
 from ..plugin import ReconContext, ReconPlugin, ReconResult
 
+#: Fewest points along an axis that BART's wavelet, ``dau2`` as
+#: :class:`bartorch.priors.Wavelet` takes it by default, decomposes: the
+#: coarsest scale of a shorter axis is never reached, and the process dies.
+WAVELET_MIN_POINTS = 4
+
 
 class PicsRecon(ReconPlugin):
     """Image of each slice, contrast, cardiac phase, set and repetition of a Cartesian scan, a ``pics`` solve made as each closes.
@@ -42,8 +47,9 @@ class PicsRecon(ReconPlugin):
     imaging readouts makes no image; its maps are stored for the later units
     of its slice. The image minimises ``|P F S x - y|^2 + lambda |W x|_1``
     over the maps (``bart pics -R W``), ``W`` the wavelet transform over the
-    encoded axes. An encoded axis is partial Fourier where the lines missing
-    at one end outnumber the widest gap between sampled lines, and
+    encoded axes of at least ``WAVELET_MIN_POINTS`` points. An encoded axis is
+    partial Fourier where the lines missing at one end outnumber the widest gap
+    between sampled lines, and
     :func:`bartorch.apps.partial_fourier` completes the image along it
     (``bart homodyne -I -C``). bartorch is imported when the first unit is
     reconstructed, which the ``coils`` extra installs.
@@ -109,7 +115,7 @@ class PicsRecon(ReconPlugin):
         )
         maps = coil_maps(context, data, estimate=apps.nlinv_maps, required=False)
         maps = apps.nlinv_maps(volume) if maps is None else maps.reshape(volume.shape)
-        encoded = (-1, -2) if volume.shape[1] == 1 else (-1, -2, -3)
+        encoded = wavelet_axes(volume.shape[1:], (-1, -2, -3))
         image = apps.pics(
             volume,
             maps,
@@ -190,12 +196,18 @@ class PicsRecon(ReconPlugin):
         measured = tensor(wave)
         scaling = optim.data_scaling(measured, A=encoding)
         solve = optim.FISTA(
-            priors.Wavelet((-1, -2, -3), self.wavelet), maxiter=self.iterations
+            priors.Wavelet(wavelet_axes(shape, (-1, -2, -3)), self.wavelet),
+            maxiter=self.iterations,
         )
         return solve(measured * (1.0 / scaling), encoding).abs().cpu().numpy()
 
 
 PLUGIN = PicsRecon()
+
+
+def wavelet_axes(shape: tuple[int, ...], axes: tuple[int, ...]) -> tuple[int, ...]:
+    """Return the ``axes`` of an image of ``shape`` with at least ``WAVELET_MIN_POINTS`` points."""
+    return tuple(axis for axis in axes if shape[axis] >= WAVELET_MIN_POINTS)
 
 
 def averaged(buffer: ReconBuffer) -> np.ndarray:
