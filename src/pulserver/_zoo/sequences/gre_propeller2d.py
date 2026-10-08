@@ -3,6 +3,7 @@
 from pypulseqpp.sequences.sequence.gre_propeller2D_sequence import gre_propeller2d
 
 from pulserver._zoo._evaluation import evaluation, propeller_2d
+from pulserver._zoo._user import user_entries
 from pulserver.design import (
     FloatParam,
     IntParam,
@@ -48,6 +49,8 @@ class GrePropeller2D(SequencePlugin):
         ),
         UIParam.RY: IntParam("ry", range_min=1, range_max=4),
     }
+
+    protocol |= user_entries(app, protocol)
 
     def evaluate(self, system, protocol):
         return evaluation(self, system, protocol, propeller_2d)

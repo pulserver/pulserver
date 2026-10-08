@@ -3,6 +3,7 @@
 from pypulseqpp.sequences.sequence.se2D_sequence import se2d
 
 from pulserver._zoo._evaluation import cartesian_2d, evaluation
+from pulserver._zoo._user import user_entries
 from pulserver.design import (
     FloatParam,
     IntParam,
@@ -55,6 +56,8 @@ class Se2D(SequencePlugin):
         ),
         UIParam.RY: IntParam("ry", range_min=1, range_max=4),
     }
+
+    protocol |= user_entries(app, protocol)
 
     def evaluate(self, system, protocol):
         return evaluation(self, system, protocol, cartesian_2d)

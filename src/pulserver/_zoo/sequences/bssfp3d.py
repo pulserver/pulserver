@@ -5,6 +5,7 @@ from pypulseqpp.sequences.sequence.bssfp3D_sequence import bssfp3d
 
 from pulserver._zoo._evaluation import achieved, arguments, rf_layout
 from pulserver._zoo._slab import slab
+from pulserver._zoo._user import user_entries
 from pulserver.design import (
     Evaluation,
     FloatParam,
@@ -49,6 +50,8 @@ class Bssfp3D(SequencePlugin):
         UIParam.RY: IntParam("ry", range_min=1, range_max=4),
         UIParam.RZ: IntParam("rz", range_min=1, range_max=4),
     }
+
+    protocol |= user_entries(app, protocol)
 
     def evaluate(self, system, protocol):
         # Each phase cycle is a catalyst, which plays the half flip, and one

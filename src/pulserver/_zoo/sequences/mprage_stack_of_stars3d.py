@@ -8,6 +8,7 @@ from pypulseqpp.sequences.sequence.mprage_stack_of_stars3D_sequence import (
 
 from pulserver._zoo._inversion import inversion_train, shots_of_stars
 from pulserver._zoo._slab import slab
+from pulserver._zoo._user import shortest_at_zero, user_entries
 from pulserver.design import (
     FloatParam,
     IntParam,
@@ -21,7 +22,10 @@ from pulserver.protocol import ImagingMode, TEPreset, TRPreset, UIParam
 class MprageStackOfStars3D(SequencePlugin):
     # Every partition plays the same in-plane readouts, so that the
     # reconstruction can Fourier transform along the partitions first.
-    app = slab(functools.partial(mprage_stack_of_stars3d, partition_angle_shift="none"))
+    app = shortest_at_zero(
+        slab(functools.partial(mprage_stack_of_stars3d, partition_angle_shift="none")),
+        "esp",
+    )
     protocol = {
         UIParam.IMAGING_MODE: StatedParam(ImagingMode.THREE_D),
         UIParam.FLIP: FloatParam(
@@ -56,6 +60,8 @@ class MprageStackOfStars3D(SequencePlugin):
         UIParam.RY: IntParam("ry", range_min=1, range_max=4),
         UIParam.RZ: IntParam("rz", range_min=1, range_max=4),
     }
+
+    protocol |= user_entries(app, protocol)
 
     def evaluate(self, system, protocol):
         return inversion_train(self, system, protocol, shots_of_stars)

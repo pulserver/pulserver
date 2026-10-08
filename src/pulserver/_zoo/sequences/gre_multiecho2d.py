@@ -3,6 +3,7 @@
 from pypulseqpp.sequences.sequence.gre_multiecho2D_sequence import gre_multiecho2d
 
 from pulserver._zoo._evaluation import cartesian_2d, evaluation
+from pulserver._zoo._user import shortest_at_zero, user_entries
 from pulserver.design import (
     FloatParam,
     IntParam,
@@ -14,7 +15,7 @@ from pulserver.protocol import ImagingMode, TEPreset, TRPreset, UIParam
 
 
 class GreMultiecho2D(SequencePlugin):
-    app = gre_multiecho2d
+    app = shortest_at_zero(gre_multiecho2d, "echo_spacing")
     protocol = {
         UIParam.IMAGING_MODE: StatedParam(ImagingMode.TWO_D),
         UIParam.FLIP: FloatParam(
@@ -52,6 +53,8 @@ class GreMultiecho2D(SequencePlugin):
         ),
         UIParam.RY: IntParam("ry", range_min=1, range_max=4),
     }
+
+    protocol |= user_entries(app, protocol)
 
     def evaluate(self, system, protocol):
         return evaluation(self, system, protocol, cartesian_2d)

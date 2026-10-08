@@ -13,6 +13,7 @@ from pypulseqpp.sequences.sequence.zte3D_sequence import (
 )
 
 from pulserver._zoo._evaluation import achieved, arguments, rf_layout
+from pulserver._zoo._user import user_entries
 from pulserver.design import (
     Evaluation,
     FloatParam,
@@ -43,6 +44,8 @@ class Zte3D(SequencePlugin):
         UIParam.NX: IntParam("n", range_min=32, range_max=512, range_incr=2),
         UIParam.RY: IntParam("r", range_min=1, range_max=8),
     }
+
+    protocol |= user_entries(app, protocol)
 
     def evaluate(self, system, protocol):
         # A TR is one view: a pulse on the held gradient, then the readout,

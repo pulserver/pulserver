@@ -6,6 +6,7 @@ from pypulseqpp.sequences.sequence.gre_stack_of_blades3D_sequence import (
 
 from pulserver._zoo._evaluation import evaluation, stack_of_blades
 from pulserver._zoo._slab import slab
+from pulserver._zoo._user import user_entries
 from pulserver.design import (
     FloatParam,
     IntParam,
@@ -48,6 +49,8 @@ class GreStackOfBlades3D(SequencePlugin):
         UIParam.ETL: IntParam("blade_width", range_min=4, range_max=128, range_incr=2),
         UIParam.RZ: IntParam("rz", range_min=1, range_max=4),
     }
+
+    protocol |= user_entries(app, protocol)
 
     def evaluate(self, system, protocol):
         return evaluation(self, system, protocol, stack_of_blades)
