@@ -394,8 +394,10 @@ class MrdDicomBuilder:
         written to a private tag.
 
         ``PixelSpacing`` is the row spacing, along ``phase_dir``, then the column
-        spacing, along ``read_dir``. MRD's ``position`` is the image centre;
-        ``ImagePositionPatient`` is the centre of the first pixel.
+        spacing, along ``read_dir``. MRD's ``position`` is the centre of pixel
+        ``n // 2`` along each in-plane axis, where an FFT places the
+        field-of-view centre; ``ImagePositionPatient`` is the centre of the
+        first pixel.
 
         Raises
         ------
@@ -563,8 +565,8 @@ class MrdDicomBuilder:
         dicomDset.SliceThickness = round(mrdImg.field_of_view[2], 6)
         first_pixel = (
             np.asarray(mrdImg.position, dtype=float)
-            - (columns - 1) / 2 * column_spacing * np.asarray(mrdImg.read_dir, float)
-            - (rows - 1) / 2 * row_spacing * np.asarray(mrdImg.phase_dir, float)
+            - (columns // 2) * column_spacing * np.asarray(mrdImg.read_dir, float)
+            - (rows // 2) * row_spacing * np.asarray(mrdImg.phase_dir, float)
         )
         dicomDset.ImagePositionPatient = [round(float(v), 6) for v in first_pixel]
         dicomDset.ImageOrientationPatient = [

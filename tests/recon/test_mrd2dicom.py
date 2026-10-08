@@ -793,7 +793,7 @@ def test_pixel_spacing_is_the_row_spacing_then_the_column_spacing(parsed_mrd_hea
 
 
 def test_the_image_position_is_the_centre_of_the_first_pixel(parsed_mrd_header):
-    """MRD places the image centre; DICOM places the first transmitted pixel."""
+    """MRD places pixel n // 2, where an FFT puts the centre; DICOM places the first transmitted pixel."""
     image = _placed_image(
         (10.0, 20.0, 30.0), (0.0, 1.0, 0.0), (-1.0, 0.0, 0.0), (240.0, 120.0, 5.0)
     )
@@ -801,8 +801,8 @@ def test_the_image_position_is_the_centre_of_the_first_pixel(parsed_mrd_header):
     column, row = 240.0 / 8, 120.0 / 6
     expected = (
         np.array([10.0, 20.0, 30.0])
-        - 3.5 * column * np.array([0.0, 1.0, 0.0])
-        - 2.5 * row * np.array([-1.0, 0.0, 0.0])
+        - 4 * column * np.array([0.0, 1.0, 0.0])
+        - 3 * row * np.array([-1.0, 0.0, 0.0])
     )
     np.testing.assert_allclose([float(v) for v in dicom.ImagePositionPatient], expected)
 
