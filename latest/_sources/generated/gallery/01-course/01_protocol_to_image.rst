@@ -138,6 +138,7 @@ interpreter fills from the scanner's; they are left out of the print.
     slice_spacing: float|typein|0.0|0.0|100.0|0.1|mm
     slice_thickness: float|typein|5.0|1.0|20.0|1.0|mm
     Ry: int|typein|1|1|4|1|
+    nex: float|typein|1.0|1.0|16.0|1.0|
 
 
 
@@ -203,7 +204,7 @@ IR cache and stores both as a design. The reply is the design's identifier.
 
  .. code-block:: none
 
-    GENERATED 91a9852a834fd68bd4
+    GENERATED 4554846dab465a198f
 
     ['manifest.json', 'resolved.protocol', 'sequence.pseg', 'sequence.seq']
 
@@ -289,7 +290,7 @@ at a time.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.465 seconds)
+   **Total running time of the script:** (0 minutes 0.569 seconds)
 
 
 .. _sphx_glr_download_generated_gallery_01-course_01_protocol_to_image.py:

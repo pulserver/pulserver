@@ -610,6 +610,23 @@
 
 
 
+<div class="viewcode-block" id="AveragesParam">
+<a class="viewcode-back" href="../../../generated/pulserver.design.AveragesParam.html#pulserver.design.AveragesParam">[docs]</a>
+<span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">AveragesParam</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""The number of signal averages, NEX: how many times the main sequence plays, binding no argument.</span>
+
+<span class="sd">    Every plugin has it unless it declares its own. The main sequence of a</span>
+<span class="sd">    design is played that many times, written into its block table once it</span>
+<span class="sd">    is designed (:meth:`pypulseqpp.Sequence.expand_repeats`), each repetition</span>
+<span class="sd">    past the first numbered by ``AVG``. It travels as a float, as the</span>
+<span class="sd">    interpreter's NEX does, and holds a whole number from 1.</span>
+<span class="sd">    """</span>
+
+    <span class="n">range_max</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">16</span></div>
+
+
+
 <div class="viewcode-block" id="ConfigParam">
 <a class="viewcode-back" href="../../../generated/pulserver.design.ConfigParam.html#pulserver.design.ConfigParam">[docs]</a>
 <span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
@@ -637,6 +654,7 @@
     <span class="o">|</span> <span class="n">BoolParam</span>
     <span class="o">|</span> <span class="n">ChoiceParam</span>
     <span class="o">|</span> <span class="n">StatedParam</span>
+    <span class="o">|</span> <span class="n">AveragesParam</span>
     <span class="o">|</span> <span class="n">ConfigParam</span>
     <span class="o">|</span> <span class="n">Description</span>
 <span class="p">)</span>
@@ -701,6 +719,22 @@
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">value</span><span class="si">!r}</span><span class="s2"> is not one of </span><span class="si">{</span><span class="n">options</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="kc">None</span>
 
 
+<span class="k">def</span><span class="w"> </span><span class="nf">_averages</span><span class="p">(</span><span class="n">key</span><span class="p">:</span> <span class="n">ProtocolKey</span><span class="p">,</span> <span class="n">entry</span><span class="p">:</span> <span class="n">AveragesParam</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return the number of averages a value states.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If it is not a whole number from 1 to the entry's maximum.</span>
+<span class="sd">    """</span>
+    <span class="n">count</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">count</span> <span class="o">!=</span> <span class="nb">round</span><span class="p">(</span><span class="n">count</span><span class="p">)</span> <span class="ow">or</span> <span class="ow">not</span> <span class="mi">1</span> <span class="o">&lt;=</span> <span class="n">count</span> <span class="o">&lt;=</span> <span class="n">entry</span><span class="o">.</span><span class="n">range_max</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2"> is a whole number of averages from 1 to </span><span class="si">{</span><span class="n">entry</span><span class="o">.</span><span class="n">range_max</span><span class="si">}</span><span class="s2">, not </span><span class="si">{</span><span class="n">value</span><span class="si">}</span><span class="s2">"</span>
+        <span class="p">)</span>
+    <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="n">count</span><span class="p">)</span>
+
+
 <span class="k">def</span><span class="w"> </span><span class="nf">_stated</span><span class="p">(</span><span class="n">key</span><span class="p">:</span> <span class="n">ProtocolKey</span><span class="p">,</span> <span class="n">entry</span><span class="p">:</span> <span class="n">StatedParam</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">StrEnum</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Return the stated member a value names, by option or index.</span>
 
@@ -724,17 +758,9 @@
 <span class="k">def</span><span class="w"> </span><span class="nf">_parameter</span><span class="p">(</span>
     <span class="n">name</span><span class="p">:</span> <span class="n">ProtocolKey</span><span class="p">,</span> <span class="n">entry</span><span class="p">:</span> <span class="n">Entry</span><span class="p">,</span> <span class="n">defaults</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Parameter</span><span class="p">:</span>
-    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">entry</span><span class="p">,</span> <span class="n">ConfigParam</span><span class="p">):</span>
-        <span class="k">return</span> <span class="n">Parameter</span><span class="p">(</span><span class="n">Kind</span><span class="o">.</span><span class="n">CONFIG</span><span class="p">,</span> <span class="n">entry</span><span class="o">.</span><span class="n">value</span><span class="p">,</span> <span class="n">InputMode</span><span class="o">.</span><span class="n">OFF</span><span class="p">)</span>
-    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">entry</span><span class="p">,</span> <span class="n">Description</span><span class="p">):</span>
-        <span class="k">return</span> <span class="n">Parameter</span><span class="p">(</span><span class="n">Kind</span><span class="o">.</span><span class="n">DESCRIPTION</span><span class="p">,</span> <span class="n">entry</span><span class="o">.</span><span class="n">text</span><span class="p">)</span>
-    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">entry</span><span class="p">,</span> <span class="n">StatedParam</span><span class="p">):</span>
-        <span class="k">return</span> <span class="n">Parameter</span><span class="p">(</span>
-            <span class="n">Kind</span><span class="o">.</span><span class="n">STRINGLIST</span><span class="p">,</span>
-            <span class="n">entry</span><span class="o">.</span><span class="n">value</span><span class="p">,</span>
-            <span class="n">InputMode</span><span class="o">.</span><span class="n">DROPDOWN</span><span class="p">,</span>
-            <span class="n">options</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(</span><span class="nb">type</span><span class="p">(</span><span class="n">entry</span><span class="o">.</span><span class="n">value</span><span class="p">)),</span>
-        <span class="p">)</span>
+    <span class="n">unbound</span> <span class="o">=</span> <span class="n">_unbound_parameter</span><span class="p">(</span><span class="n">entry</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">unbound</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">unbound</span>
     <span class="c1"># An entry that states its default may bind a name the app does not take,</span>
     <span class="c1"># for the plugin's own hooks to read.</span>
     <span class="k">if</span> <span class="n">entry</span><span class="o">.</span><span class="n">argument</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">defaults</span> <span class="ow">and</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">entry</span><span class="p">,</span> <span class="s2">"default"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
@@ -743,59 +769,9 @@
         <span class="p">)</span>
     <span class="n">default</span> <span class="o">=</span> <span class="n">defaults</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">entry</span><span class="o">.</span><span class="n">argument</span><span class="p">)</span>
     <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">entry</span><span class="p">,</span> <span class="n">TimeParam</span><span class="p">):</span>
-        <span class="n">options</span> <span class="o">=</span> <span class="p">(</span><span class="o">*</span><span class="n">entry</span><span class="o">.</span><span class="n">presets</span><span class="p">,</span> <span class="o">*</span><span class="n">entry</span><span class="o">.</span><span class="n">options</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">entry</span><span class="o">.</span><span class="n">default</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">value</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">entry</span><span class="o">.</span><span class="n">default</span><span class="p">)</span>
-            <span class="k">if</span> <span class="n">value</span> <span class="o">&lt;</span> <span class="mi">0</span> <span class="ow">and</span> <span class="n">value</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">entry</span><span class="o">.</span><span class="n">presets</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                    <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2"> defaults to preset </span><span class="si">{</span><span class="n">value</span><span class="si">}</span><span class="s2">, which it does not offer"</span>
-                <span class="p">)</span>
-        <span class="k">elif</span> <span class="n">default</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">shortest</span> <span class="o">=</span> <span class="p">[</span><span class="n">key</span> <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">preset</span> <span class="ow">in</span> <span class="n">entry</span><span class="o">.</span><span class="n">presets</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">preset</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">]</span>
-            <span class="k">if</span> <span class="ow">not</span> <span class="n">shortest</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                    <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2"> defaults to None but offers no preset requesting it"</span>
-                <span class="p">)</span>
-            <span class="n">value</span> <span class="o">=</span> <span class="n">shortest</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="n">value</span> <span class="o">=</span> <span class="n">_to_microseconds</span><span class="p">(</span><span class="n">default</span><span class="p">)</span>
-        <span class="n">mode</span> <span class="o">=</span> <span class="n">InputMode</span><span class="o">.</span><span class="n">DROPDOWN</span> <span class="k">if</span> <span class="n">options</span> <span class="k">else</span> <span class="n">InputMode</span><span class="o">.</span><span class="n">TYPEIN</span>
-        <span class="k">return</span> <span class="n">Parameter</span><span class="p">(</span>
-            <span class="n">Kind</span><span class="o">.</span><span class="n">INT</span><span class="p">,</span>
-            <span class="n">value</span><span class="p">,</span>
-            <span class="n">mode</span><span class="p">,</span>
-            <span class="n">entry</span><span class="o">.</span><span class="n">range_min</span><span class="p">,</span>
-            <span class="n">entry</span><span class="o">.</span><span class="n">range_max</span><span class="p">,</span>
-            <span class="n">entry</span><span class="o">.</span><span class="n">range_incr</span><span class="p">,</span>
-            <span class="s2">"us"</span><span class="p">,</span>
-            <span class="n">options</span><span class="p">,</span>
-        <span class="p">)</span>
-    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">entry</span><span class="p">,</span> <span class="n">FloatParam</span><span class="p">):</span>
-        <span class="n">mode</span> <span class="o">=</span> <span class="n">InputMode</span><span class="o">.</span><span class="n">DROPDOWN</span> <span class="k">if</span> <span class="n">entry</span><span class="o">.</span><span class="n">options</span> <span class="k">else</span> <span class="n">InputMode</span><span class="o">.</span><span class="n">TYPEIN</span>
-        <span class="k">return</span> <span class="n">Parameter</span><span class="p">(</span>
-            <span class="n">Kind</span><span class="o">.</span><span class="n">FLOAT</span><span class="p">,</span>
-            <span class="n">_to_ui</span><span class="p">(</span><span class="n">default</span><span class="p">,</span> <span class="n">entry</span><span class="o">.</span><span class="n">scale</span><span class="p">)</span>
-            <span class="k">if</span> <span class="n">entry</span><span class="o">.</span><span class="n">default</span> <span class="ow">is</span> <span class="kc">None</span>
-            <span class="k">else</span> <span class="n">_ui_float</span><span class="p">(</span><span class="n">entry</span><span class="o">.</span><span class="n">default</span><span class="p">),</span>
-            <span class="n">mode</span><span class="p">,</span>
-            <span class="n">entry</span><span class="o">.</span><span class="n">range_min</span><span class="p">,</span>
-            <span class="n">entry</span><span class="o">.</span><span class="n">range_max</span><span class="p">,</span>
-            <span class="n">entry</span><span class="o">.</span><span class="n">range_incr</span><span class="p">,</span>
-            <span class="n">entry</span><span class="o">.</span><span class="n">unit</span><span class="p">,</span>
-            <span class="n">entry</span><span class="o">.</span><span class="n">options</span><span class="p">,</span>
-        <span class="p">)</span>
-    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">entry</span><span class="p">,</span> <span class="n">IntParam</span><span class="p">):</span>
-        <span class="n">mode</span> <span class="o">=</span> <span class="n">InputMode</span><span class="o">.</span><span class="n">DROPDOWN</span> <span class="k">if</span> <span class="n">entry</span><span class="o">.</span><span class="n">options</span> <span class="k">else</span> <span class="n">InputMode</span><span class="o">.</span><span class="n">TYPEIN</span>
-        <span class="k">return</span> <span class="n">Parameter</span><span class="p">(</span>
-            <span class="n">Kind</span><span class="o">.</span><span class="n">INT</span><span class="p">,</span>
-            <span class="n">default</span> <span class="k">if</span> <span class="n">entry</span><span class="o">.</span><span class="n">default</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="nb">int</span><span class="p">(</span><span class="n">entry</span><span class="o">.</span><span class="n">default</span><span class="p">),</span>
-            <span class="n">mode</span><span class="p">,</span>
-            <span class="n">entry</span><span class="o">.</span><span class="n">range_min</span><span class="p">,</span>
-            <span class="n">entry</span><span class="o">.</span><span class="n">range_max</span><span class="p">,</span>
-            <span class="n">entry</span><span class="o">.</span><span class="n">range_incr</span><span class="p">,</span>
-            <span class="n">entry</span><span class="o">.</span><span class="n">unit</span><span class="p">,</span>
-            <span class="n">entry</span><span class="o">.</span><span class="n">options</span><span class="p">,</span>
-        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">_time_parameter</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">entry</span><span class="p">,</span> <span class="n">default</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">entry</span><span class="p">,</span> <span class="n">FloatParam</span> <span class="o">|</span> <span class="n">IntParam</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">_numeric_parameter</span><span class="p">(</span><span class="n">entry</span><span class="p">,</span> <span class="n">default</span><span class="p">)</span>
     <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">entry</span><span class="p">,</span> <span class="n">BoolParam</span><span class="p">):</span>
         <span class="k">return</span> <span class="n">Parameter</span><span class="p">(</span><span class="n">Kind</span><span class="o">.</span><span class="n">BOOL</span><span class="p">,</span> <span class="n">default</span> <span class="k">if</span> <span class="n">entry</span><span class="o">.</span><span class="n">default</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">entry</span><span class="o">.</span><span class="n">default</span><span class="p">)</span>
     <span class="n">default</span> <span class="o">=</span> <span class="n">default</span> <span class="k">if</span> <span class="n">entry</span><span class="o">.</span><span class="n">default</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">entry</span><span class="o">.</span><span class="n">default</span>
@@ -804,6 +780,80 @@
         <span class="n">_member</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">entry</span><span class="p">,</span> <span class="n">default</span><span class="p">),</span>
         <span class="n">InputMode</span><span class="o">.</span><span class="n">DROPDOWN</span><span class="p">,</span>
         <span class="n">options</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(</span><span class="n">entry</span><span class="o">.</span><span class="n">choices</span><span class="p">),</span>
+    <span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_unbound_parameter</span><span class="p">(</span><span class="n">entry</span><span class="p">:</span> <span class="n">Entry</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Parameter</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return the parameter of an entry that binds no argument; ``None`` for one that binds one."""</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">entry</span><span class="p">,</span> <span class="n">ConfigParam</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">Parameter</span><span class="p">(</span><span class="n">Kind</span><span class="o">.</span><span class="n">CONFIG</span><span class="p">,</span> <span class="n">entry</span><span class="o">.</span><span class="n">value</span><span class="p">,</span> <span class="n">InputMode</span><span class="o">.</span><span class="n">OFF</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">entry</span><span class="p">,</span> <span class="n">Description</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">Parameter</span><span class="p">(</span><span class="n">Kind</span><span class="o">.</span><span class="n">DESCRIPTION</span><span class="p">,</span> <span class="n">entry</span><span class="o">.</span><span class="n">text</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">entry</span><span class="p">,</span> <span class="n">AveragesParam</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">Parameter</span><span class="p">(</span>
+            <span class="n">Kind</span><span class="o">.</span><span class="n">FLOAT</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="n">InputMode</span><span class="o">.</span><span class="n">TYPEIN</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="nb">float</span><span class="p">(</span><span class="n">entry</span><span class="o">.</span><span class="n">range_max</span><span class="p">),</span> <span class="mf">1.0</span><span class="p">,</span> <span class="s2">""</span>
+        <span class="p">)</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">entry</span><span class="p">,</span> <span class="n">StatedParam</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">Parameter</span><span class="p">(</span>
+            <span class="n">Kind</span><span class="o">.</span><span class="n">STRINGLIST</span><span class="p">,</span>
+            <span class="n">entry</span><span class="o">.</span><span class="n">value</span><span class="p">,</span>
+            <span class="n">InputMode</span><span class="o">.</span><span class="n">DROPDOWN</span><span class="p">,</span>
+            <span class="n">options</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(</span><span class="nb">type</span><span class="p">(</span><span class="n">entry</span><span class="o">.</span><span class="n">value</span><span class="p">)),</span>
+        <span class="p">)</span>
+    <span class="k">return</span> <span class="kc">None</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_time_parameter</span><span class="p">(</span><span class="n">name</span><span class="p">:</span> <span class="n">ProtocolKey</span><span class="p">,</span> <span class="n">entry</span><span class="p">:</span> <span class="n">TimeParam</span><span class="p">,</span> <span class="n">default</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Parameter</span><span class="p">:</span>
+    <span class="n">options</span> <span class="o">=</span> <span class="p">(</span><span class="o">*</span><span class="n">entry</span><span class="o">.</span><span class="n">presets</span><span class="p">,</span> <span class="o">*</span><span class="n">entry</span><span class="o">.</span><span class="n">options</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">entry</span><span class="o">.</span><span class="n">default</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">value</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">entry</span><span class="o">.</span><span class="n">default</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">value</span> <span class="o">&lt;</span> <span class="mi">0</span> <span class="ow">and</span> <span class="n">value</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">entry</span><span class="o">.</span><span class="n">presets</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2"> defaults to preset </span><span class="si">{</span><span class="n">value</span><span class="si">}</span><span class="s2">, which it does not offer"</span>
+            <span class="p">)</span>
+    <span class="k">elif</span> <span class="n">default</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">shortest</span> <span class="o">=</span> <span class="p">[</span><span class="n">key</span> <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">preset</span> <span class="ow">in</span> <span class="n">entry</span><span class="o">.</span><span class="n">presets</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">preset</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">]</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">shortest</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2"> defaults to None but offers no preset requesting it"</span>
+            <span class="p">)</span>
+        <span class="n">value</span> <span class="o">=</span> <span class="n">shortest</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">value</span> <span class="o">=</span> <span class="n">_to_microseconds</span><span class="p">(</span><span class="n">default</span><span class="p">)</span>
+    <span class="n">mode</span> <span class="o">=</span> <span class="n">InputMode</span><span class="o">.</span><span class="n">DROPDOWN</span> <span class="k">if</span> <span class="n">options</span> <span class="k">else</span> <span class="n">InputMode</span><span class="o">.</span><span class="n">TYPEIN</span>
+    <span class="k">return</span> <span class="n">Parameter</span><span class="p">(</span>
+        <span class="n">Kind</span><span class="o">.</span><span class="n">INT</span><span class="p">,</span>
+        <span class="n">value</span><span class="p">,</span>
+        <span class="n">mode</span><span class="p">,</span>
+        <span class="n">entry</span><span class="o">.</span><span class="n">range_min</span><span class="p">,</span>
+        <span class="n">entry</span><span class="o">.</span><span class="n">range_max</span><span class="p">,</span>
+        <span class="n">entry</span><span class="o">.</span><span class="n">range_incr</span><span class="p">,</span>
+        <span class="s2">"us"</span><span class="p">,</span>
+        <span class="n">options</span><span class="p">,</span>
+    <span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_numeric_parameter</span><span class="p">(</span><span class="n">entry</span><span class="p">:</span> <span class="n">FloatParam</span> <span class="o">|</span> <span class="n">IntParam</span><span class="p">,</span> <span class="n">default</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Parameter</span><span class="p">:</span>
+    <span class="n">mode</span> <span class="o">=</span> <span class="n">InputMode</span><span class="o">.</span><span class="n">DROPDOWN</span> <span class="k">if</span> <span class="n">entry</span><span class="o">.</span><span class="n">options</span> <span class="k">else</span> <span class="n">InputMode</span><span class="o">.</span><span class="n">TYPEIN</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">entry</span><span class="p">,</span> <span class="n">FloatParam</span><span class="p">):</span>
+        <span class="n">kind</span> <span class="o">=</span> <span class="n">Kind</span><span class="o">.</span><span class="n">FLOAT</span>
+        <span class="n">value</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">_to_ui</span><span class="p">(</span><span class="n">default</span><span class="p">,</span> <span class="n">entry</span><span class="o">.</span><span class="n">scale</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">entry</span><span class="o">.</span><span class="n">default</span> <span class="ow">is</span> <span class="kc">None</span>
+            <span class="k">else</span> <span class="n">_ui_float</span><span class="p">(</span><span class="n">entry</span><span class="o">.</span><span class="n">default</span><span class="p">)</span>
+        <span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">kind</span> <span class="o">=</span> <span class="n">Kind</span><span class="o">.</span><span class="n">INT</span>
+        <span class="n">value</span> <span class="o">=</span> <span class="n">default</span> <span class="k">if</span> <span class="n">entry</span><span class="o">.</span><span class="n">default</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="nb">int</span><span class="p">(</span><span class="n">entry</span><span class="o">.</span><span class="n">default</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">Parameter</span><span class="p">(</span>
+        <span class="n">kind</span><span class="p">,</span>
+        <span class="n">value</span><span class="p">,</span>
+        <span class="n">mode</span><span class="p">,</span>
+        <span class="n">entry</span><span class="o">.</span><span class="n">range_min</span><span class="p">,</span>
+        <span class="n">entry</span><span class="o">.</span><span class="n">range_max</span><span class="p">,</span>
+        <span class="n">entry</span><span class="o">.</span><span class="n">range_incr</span><span class="p">,</span>
+        <span class="n">entry</span><span class="o">.</span><span class="n">unit</span><span class="p">,</span>
+        <span class="n">entry</span><span class="o">.</span><span class="n">options</span><span class="p">,</span>
     <span class="p">)</span>
 
 
@@ -917,6 +967,8 @@
                 <span class="n">converted</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="nb">bool</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
             <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">entry</span><span class="p">,</span> <span class="n">StatedParam</span><span class="p">):</span>
                 <span class="n">converted</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">_stated</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">entry</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">entry</span><span class="p">,</span> <span class="n">AveragesParam</span><span class="p">):</span>
+                <span class="n">converted</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">_averages</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">entry</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="n">converted</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">_member</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">entry</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
         <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="n">entries</span><span class="p">,</span> <span class="n">converted</span><span class="p">,</span> <span class="n">presets</span><span class="p">)</span></div>
@@ -944,6 +996,8 @@
                 <span class="n">wire</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
             <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">entry</span><span class="p">,</span> <span class="n">BoolParam</span><span class="p">):</span>
                 <span class="n">wire</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="nb">bool</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">entry</span><span class="p">,</span> <span class="n">AveragesParam</span><span class="p">):</span>
+                <span class="n">wire</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="n">wire</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
         <span class="k">return</span> <span class="n">wire</span></div>
@@ -998,6 +1052,8 @@
                 <span class="n">value</span> <span class="o">=</span> <span class="n">_member</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">entry</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
             <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">entry</span><span class="p">,</span> <span class="n">StatedParam</span><span class="p">):</span>
                 <span class="n">value</span> <span class="o">=</span> <span class="n">_stated</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">entry</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">entry</span><span class="p">,</span> <span class="n">AveragesParam</span><span class="p">):</span>
+                <span class="n">value</span> <span class="o">=</span> <span class="n">_averages</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">entry</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
             <span class="n">values</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
             <span class="n">presets</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">Protocol</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_entries</span><span class="p">,</span> <span class="n">values</span><span class="p">,</span> <span class="n">presets</span><span class="p">)</span></div>

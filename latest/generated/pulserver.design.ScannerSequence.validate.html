@@ -551,7 +551,8 @@ prescription rotation is checked to be orthonormal, and <a class="reference inte
 runs; nothing is generated. This is the one boundary between a request
 and the code of a plugin.</p>
 <p>A valid reply carries the evaluated protocol, the duration of the
-evaluation, <code class="docutils literal notranslate"><span class="pre">None</span></code> where it is <code class="docutils literal notranslate"><span class="pre">0.0</span></code>, its note and its RF layout,
+evaluation times the protocol’s averages (<code class="docutils literal notranslate"><span class="pre">nex</span></code>), <code class="docutils literal notranslate"><span class="pre">None</span></code> where it
+is <code class="docutils literal notranslate"><span class="pre">0.0</span></code>, its note and its RF layout,
 <code class="docutils literal notranslate"><span class="pre">None</span></code> where it states none or plays no RF. An exception raised by
 any of these steps makes the reply invalid, carrying the request, and
 is logged with its traceback. A control of the RF layout that is not an

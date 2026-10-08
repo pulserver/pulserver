@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>SequencePlugin.validate &#8212; pulserver documentation</title>
+    <title>AveragesParam &#8212; pulserver documentation</title>
   
   
   
@@ -52,7 +52,7 @@
     <script src="../_static/copybutton.js?v=f281be69"></script>
     <script src="../_static/sg-tags.js?v=d80f6fa4"></script>
     <script src="../_static/scripts/sphinx-book-theme.js?v=fab101a9"></script>
-    <script>DOCUMENTATION_OPTIONS.pagename = 'generated/pulserver.design.SequencePlugin.validate';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'generated/pulserver.design.AveragesParam';</script>
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
@@ -61,7 +61,7 @@
             true;
         </script>
     <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
-    <link rel="canonical" href="https://pulserver.github.io/pulserver/latest/generated/pulserver.design.SequencePlugin.validate.html" />
+    <link rel="canonical" href="https://pulserver.github.io/pulserver/latest/generated/pulserver.design.AveragesParam.html" />
     <link rel="icon" href="../_static/pulserver-mark.svg"/>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
@@ -387,7 +387,7 @@
       
       
       
-      <li><a href="https://github.com/pulserver/pulserver/edit/main/docs/generated/pulserver.design.SequencePlugin.validate.rst" target="_blank"
+      <li><a href="https://github.com/pulserver/pulserver/edit/main/docs/generated/pulserver.design.AveragesParam.rst" target="_blank"
    class="btn btn-sm btn-source-edit-button dropdown-item"
    title="Suggest edit"
    data-bs-placement="left" data-bs-toggle="tooltip"
@@ -404,7 +404,7 @@
       
       
       
-      <li><a href="https://github.com/pulserver/pulserver/issues/new?title=Issue%20on%20page%20%2Fgenerated/pulserver.design.SequencePlugin.validate.html&body=Your%20issue%20content%20here." target="_blank"
+      <li><a href="https://github.com/pulserver/pulserver/issues/new?title=Issue%20on%20page%20%2Fgenerated/pulserver.design.AveragesParam.html&body=Your%20issue%20content%20here." target="_blank"
    class="btn btn-sm btn-source-issues-button dropdown-item"
    title="Open an issue"
    data-bs-placement="left" data-bs-toggle="tooltip"
@@ -434,7 +434,7 @@
       
       
       
-      <li><a href="../_sources/generated/pulserver.design.SequencePlugin.validate.rst" target="_blank"
+      <li><a href="../_sources/generated/pulserver.design.AveragesParam.rst" target="_blank"
    class="btn btn-sm btn-download-source-button dropdown-item"
    title="Download source file"
    data-bs-placement="left" data-bs-toggle="tooltip"
@@ -517,7 +517,7 @@
               
 
 <div id="jb-print-docs-body" class="onlyprint">
-    <h1>SequencePlugin.validate</h1>
+    <h1>AveragesParam</h1>
     <!-- Table of contents -->
     <div id="print-main-content">
         <div id="jb-print-toc">
@@ -527,7 +527,7 @@
             </div>
             <nav aria-label="Page">
                 <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.design.SequencePlugin.validate"><code class="docutils literal notranslate"><span class="pre">SequencePlugin.validate()</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.design.AveragesParam"><code class="docutils literal notranslate"><span class="pre">AveragesParam</span></code></a></li>
 </ul>
             </nav>
         </div>
@@ -539,41 +539,29 @@
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <section id="sequenceplugin-validate">
-<h1>SequencePlugin.validate<a class="headerlink" href="#sequenceplugin-validate" title="Link to this heading">#</a></h1>
-<dl class="py method">
-<dt class="sig sig-object py" id="pulserver.design.SequencePlugin.validate">
-<span class="sig-prename descclassname"><span class="pre">SequencePlugin.</span></span><span class="sig-name descname"><span class="pre">validate</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pulserver/design/_plugin.html#SequencePlugin.validate"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.design.SequencePlugin.validate" title="Link to this definition">#</a></dt>
-<dd><p>Return the validation of a request, as the wire carries it.</p>
-<p>The request is in wire values, completed with the initial values of the
-entries it omits. It is converted to a <a class="reference internal" href="pulserver.design.Protocol.html#pulserver.design.Protocol" title="pulserver.design.Protocol"><code class="xref py py-class docutils literal notranslate"><span class="pre">Protocol</span></code></a>, its
-prescription rotation is checked to be orthonormal, and <a class="reference internal" href="pulserver.design.SequencePlugin.evaluate.html#pulserver.design.SequencePlugin.evaluate" title="pulserver.design.SequencePlugin.evaluate"><code class="xref py py-meth docutils literal notranslate"><span class="pre">evaluate()</span></code></a>
-runs; nothing is generated. This is the one boundary between a request
-and the code of a plugin.</p>
-<p>A valid reply carries the evaluated protocol, the duration of the
-evaluation times the protocol’s averages (<code class="docutils literal notranslate"><span class="pre">nex</span></code>), <code class="docutils literal notranslate"><span class="pre">None</span></code> where it
-is <code class="docutils literal notranslate"><span class="pre">0.0</span></code>, its note and its RF layout,
-<code class="docutils literal notranslate"><span class="pre">None</span></code> where it states none or plays no RF. An exception raised by
-any of these steps makes the reply invalid, carrying the request, and
-is logged with its traceback. A control of the RF layout that is not an
-entry of <a class="reference internal" href="pulserver.design.SequencePlugin.protocol.html#pulserver.design.SequencePlugin.protocol" title="pulserver.design.SequencePlugin.protocol"><code class="xref py py-attr docutils literal notranslate"><span class="pre">protocol</span></code></a>, or whose value in the evaluated protocol is
-not positive, is a <code class="docutils literal notranslate"><span class="pre">ValueError</span></code> naming it. <code class="docutils literal notranslate"><span class="pre">ValueError</span></code> and
-<code class="docutils literal notranslate"><span class="pre">AssertionError</span></code>, which pypulseqpp and PyPulseq raise for a protocol
-they cannot realize, are logged at WARNING and the message is the
-reply’s <code class="docutils literal notranslate"><span class="pre">info</span></code>. Any other exception is logged at ERROR, and the
-<code class="docutils literal notranslate"><span class="pre">info</span></code> is <code class="docutils literal notranslate"><span class="pre">&quot;&lt;ExceptionType&gt;</span> <span class="pre">in</span> <span class="pre">&lt;Plugin&gt;.evaluate&quot;</span></code>.</p>
-<p><code class="docutils literal notranslate"><span class="pre">exam</span></code>, the directory of the current exam’s cache, is passed to
-<a class="reference internal" href="pulserver.design.SequencePlugin.evaluate.html#pulserver.design.SequencePlugin.evaluate" title="pulserver.design.SequencePlugin.evaluate"><code class="xref py py-meth docutils literal notranslate"><span class="pre">evaluate()</span></code></a> as its <code class="docutils literal notranslate"><span class="pre">exam</span></code> argument where it takes one, and read
-with <a class="reference internal" href="pulserver.design.load_exam.html#pulserver.design.load_exam" title="pulserver.design.load_exam"><code class="xref py py-func docutils literal notranslate"><span class="pre">load_exam()</span></code></a>.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Raises<span class="colon">:</span></dt>
-<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If the declared entries are inconsistent with the sequence function, as
-    <a class="reference internal" href="pulserver.design.SequencePlugin.listing.html#pulserver.design.SequencePlugin.listing" title="pulserver.design.SequencePlugin.listing"><code class="xref py py-meth docutils literal notranslate"><span class="pre">listing()</span></code></a> reports; this is a defect of the plugin and not of
-    the request.</p>
-</dd>
-</dl>
+  <section id="averagesparam">
+<h1>AveragesParam<a class="headerlink" href="#averagesparam" title="Link to this heading">#</a></h1>
+<dl class="py class">
+<dt class="sig sig-object py" id="pulserver.design.AveragesParam">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">pulserver.design.</span></span><span class="sig-name descname"><span class="pre">AveragesParam</span></span><a class="reference internal" href="../_modules/pulserver/design/_entries.html#AveragesParam"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.design.AveragesParam" title="Link to this definition">#</a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/builtins/functions.html#object" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
+<p>The number of signal averages, NEX: how many times the main sequence plays, binding no argument.</p>
+<p>Every plugin has it unless it declares its own. The main sequence of a
+design is played that many times, written into its block table once it
+is designed (<a class="reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.Sequence.expand_repeats.html#pypulseqpp.Sequence.expand_repeats" title="(in pypulseqpp latest)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">pypulseqpp.Sequence.expand_repeats()</span></code></a>), each repetition
+past the first numbered by <code class="docutils literal notranslate"><span class="pre">AVG</span></code>. It travels as a float, as the
+interpreter’s NEX does, and holds a whole number from 1.</p>
 </dd></dl>
 
+<p class="rubric">Attributes</p>
+<div class="pst-scrollable-table-container"><table class="autosummary longtable table">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.design.AveragesParam.range_max.html#pulserver.design.AveragesParam.range_max" title="pulserver.design.AveragesParam.range_max"><code class="xref py py-obj docutils literal notranslate"><span class="pre">range_max</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</div>
 </section>
 
 
@@ -605,7 +593,7 @@ with <a class="reference internal" href="pulserver.design.load_exam.html#pulserv
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.design.SequencePlugin.validate"><code class="docutils literal notranslate"><span class="pre">SequencePlugin.validate()</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.design.AveragesParam"><code class="docutils literal notranslate"><span class="pre">AveragesParam</span></code></a></li>
 </ul>
   </nav></div>
 

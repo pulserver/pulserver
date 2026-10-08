@@ -502,7 +502,7 @@
     <span class="n">prescribed_offset</span><span class="p">,</span>
     <span class="n">prescribed_rotation</span><span class="p">,</span>
 <span class="p">)</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">._blocks</span><span class="w"> </span><span class="kn">import</span> <span class="n">parse_import</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">._blocks</span><span class="w"> </span><span class="kn">import</span> <span class="n">import_averages</span><span class="p">,</span> <span class="n">parse_import</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">._limits</span><span class="w"> </span><span class="kn">import</span> <span class="n">design_system</span><span class="p">,</span> <span class="n">split_limits</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">._push</span><span class="w"> </span><span class="kn">import</span> <span class="n">push</span> <span class="k">as</span> <span class="n">push_design</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">._store</span><span class="w"> </span><span class="kn">import</span> <span class="n">DesignStore</span><span class="p">,</span> <span class="n">design_identity</span>
@@ -709,10 +709,12 @@
 <span class="w">    </span><span class="sd">"""Reply ``IMPORTED &lt;id&gt;`` for a sequence file, its chain and their IR cache.</span>
 
 <span class="sd">    The files are identified by their names and contents and the</span>
-<span class="sd">    prescription of the import block. A chain already stored is returned;</span>
-<span class="sd">    otherwise it is copied, checked and converted as :func:`generate` does,</span>
-<span class="sd">    and pushed as :func:`generate` pushes. The first file is also reachable as</span>
-<span class="sd">    ``sequence.seq``.</span>
+<span class="sd">    prescription and averages of the import block. A chain already stored is</span>
+<span class="sd">    returned; otherwise it is copied, its main sequence, the last file, is</span>
+<span class="sd">    played as many times as the block's ``nex`` line asks, written into its</span>
+<span class="sd">    block table as binary Pulseq, and the chain is checked and converted as</span>
+<span class="sd">    :func:`generate` does, and pushed as :func:`generate` pushes. The first</span>
+<span class="sd">    file is also reachable as ``sequence.seq``.</span>
 
 <span class="sd">    Raises</span>
 <span class="sd">    ------</span>
@@ -722,6 +724,7 @@
 <span class="sd">    """</span>
     <span class="k">try</span><span class="p">:</span>
         <span class="n">first</span><span class="p">,</span> <span class="n">offset_mm</span><span class="p">,</span> <span class="n">rotation</span> <span class="o">=</span> <span class="n">parse_import</span><span class="p">(</span><span class="n">block</span><span class="p">)</span>
+        <span class="n">averages</span> <span class="o">=</span> <span class="n">import_averages</span><span class="p">(</span><span class="n">block</span><span class="p">)</span>
     <span class="k">except</span> <span class="ne">ValueError</span> <span class="k">as</span> <span class="n">error</span><span class="p">:</span>
         <span class="k">raise</span> <span class="n">CallError</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">error</span><span class="p">))</span> <span class="kn">from</span><span class="w"> </span><span class="kc">None</span>
     <span class="n">limits</span> <span class="o">=</span> <span class="n">_read</span><span class="p">(</span><span class="n">limits</span><span class="p">)</span>
@@ -732,6 +735,8 @@
         <span class="s2">"fov_offset_mm"</span><span class="p">:</span> <span class="nb">list</span><span class="p">(</span><span class="n">offset_mm</span><span class="p">),</span>
         <span class="s2">"fov_rotation"</span><span class="p">:</span> <span class="n">rotation</span><span class="o">.</span><span class="n">ravel</span><span class="p">()</span><span class="o">.</span><span class="n">tolist</span><span class="p">(),</span>
     <span class="p">}</span>
+    <span class="k">if</span> <span class="n">averages</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="n">values</span><span class="p">[</span><span class="s2">"nex"</span><span class="p">]</span> <span class="o">=</span> <span class="n">averages</span>
     <span class="n">identity</span> <span class="o">=</span> <span class="n">design_identity</span><span class="p">(</span><span class="s2">""</span><span class="p">,</span> <span class="n">identified_limits</span><span class="p">(</span><span class="n">limits</span><span class="p">),</span> <span class="n">values</span><span class="p">)</span>
     <span class="n">found</span> <span class="o">=</span> <span class="n">store</span><span class="o">.</span><span class="n">find</span><span class="p">(</span><span class="n">identity</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">found</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
@@ -740,6 +745,8 @@
     <span class="k">try</span><span class="p">:</span>
         <span class="k">for</span> <span class="n">file</span> <span class="ow">in</span> <span class="n">files</span><span class="p">:</span>
             <span class="n">shutil</span><span class="o">.</span><span class="n">copyfile</span><span class="p">(</span><span class="n">file</span><span class="p">,</span> <span class="n">staged</span> <span class="o">/</span> <span class="n">file</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">averages</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">_play_averages</span><span class="p">(</span><span class="n">staged</span> <span class="o">/</span> <span class="n">files</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">averages</span><span class="p">)</span>
         <span class="n">entry</span> <span class="o">=</span> <span class="n">staged</span> <span class="o">/</span> <span class="n">_ENTRY</span>
         <span class="k">if</span> <span class="n">files</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">name</span> <span class="o">!=</span> <span class="n">_ENTRY</span><span class="p">:</span>
             <span class="n">entry</span><span class="o">.</span><span class="n">symlink_to</span><span class="p">(</span><span class="n">files</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
@@ -927,6 +934,13 @@
 <span class="nd">@lru_cache</span><span class="p">(</span><span class="n">maxsize</span><span class="o">=</span><span class="mi">32</span><span class="p">)</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">_default_validation</span><span class="p">(</span><span class="n">path</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">mtime_ns</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">limits</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Validation</span><span class="p">:</span>  <span class="c1"># noqa: ARG001 -- part of the key</span>
     <span class="k">return</span> <span class="n">_validated</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="nb">dict</span><span class="p">(</span><span class="n">limits</span><span class="p">),</span> <span class="p">{})</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_play_averages</span><span class="p">(</span><span class="n">path</span><span class="p">:</span> <span class="n">Path</span><span class="p">,</span> <span class="n">averages</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Rewrite the sequence file at ``path`` as binary Pulseq, played ``averages`` times in its block table."""</span>
+    <span class="n">seq</span> <span class="o">=</span> <span class="n">pp</span><span class="o">.</span><span class="n">io</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">path</span><span class="p">))</span>
+    <span class="n">seq</span><span class="o">.</span><span class="n">expand_repeats</span><span class="p">(</span><span class="n">averages</span><span class="p">)</span>
+    <span class="n">pp</span><span class="o">.</span><span class="n">io</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">seq</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">path</span><span class="p">),</span> <span class="n">binary</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">remove_duplicates</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_chain</span><span class="p">(</span><span class="n">first</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>

@@ -807,6 +807,7 @@ schema, as the <code class="docutils literal notranslate"><span class="pre">list
 <span class="go">TR: int|dropdown|250000|1000|5000000|1|us|-1</span>
 <span class="go">fov: float|typein|220.0|50.0|500.0|1.0|mm</span>
 <span class="go">nx: int|typein|128|32|512|2|</span>
+<span class="go">nex: float|typein|1.0|1.0|16.0|1.0|</span>
 <span class="go">fov_offset_x: float|off|0.0|-1000.0|1000.0|0.1|mm</span>
 <span class="go">fov_offset_y: float|off|0.0|-1000.0|1000.0|0.1|mm</span>
 <span class="go">fov_offset_z: float|off|0.0|-1000.0|1000.0|0.1|mm</span>
@@ -827,6 +828,13 @@ schema, as the <code class="docutils literal notranslate"><span class="pre">list
 the scanner’s: the field-of-view offset, which the host applies when it builds
 the IR, and the rotation from the logical to the physical axes, in whose frame
 the host checks the design (<a class="reference internal" href="../explanations/designs.html"><span class="doc">Designs and the design store</span></a>).</p>
+<p><code class="docutils literal notranslate"><span class="pre">nex</span></code> is the number of signal averages, which every plugin lists unless it
+declares its own: the design plays its main sequence that many times, written
+into the block table once the sequence is designed, each repetition past the
+first numbered by <code class="docutils literal notranslate"><span class="pre">AVG</span></code>, and the scan time counts each
+(<a class="reference internal" href="../generated/pulserver.design.AveragesParam.html#pulserver.design.AveragesParam" title="pulserver.design.AveragesParam"><code class="xref py py-class docutils literal notranslate"><span class="pre">AveragesParam</span></code></a>). A plugin that binds <code class="docutils literal notranslate"><span class="pre">nex</span></code> to an
+argument of its sequence function, as <code class="docutils literal notranslate"><span class="pre">PulseAcquire</span></code> above does, plays its
+averages itself.</p>
 <p><a class="reference internal" href="../generated/pulserver.design.SequencePlugin.validate.html#pulserver.design.SequencePlugin.validate" title="pulserver.design.SequencePlugin.validate"><code class="xref py py-meth docutils literal notranslate"><span class="pre">validate()</span></code></a> evaluates a request under the
 scanner limits and returns the protocol the design plays. Entries the request
 omits keep their initial values. The default evaluation of a sequence function

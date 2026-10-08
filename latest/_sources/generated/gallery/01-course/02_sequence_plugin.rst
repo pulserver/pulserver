@@ -143,6 +143,7 @@ of that one TR, its excitation's amplitude proportional to the flip angle.
     fov: float|typein|220.0|50.0|500.0|1.0|mm
     nx: int|typein|128|32|512|2|
     ny: int|typein|128|32|512|2|
+    nex: float|typein|1.0|1.0|16.0|1.0|
     fov_offset_x: float|off|0.0|-1000.0|1000.0|0.1|mm
     fov_offset_y: float|off|0.0|-1000.0|1000.0|0.1|mm
     fov_offset_z: float|off|0.0|-1000.0|1000.0|0.1|mm
@@ -296,7 +297,7 @@ the design and store it.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.054 seconds)
+   **Total running time of the script:** (0 minutes 0.066 seconds)
 
 
 .. _sphx_glr_download_generated_gallery_01-course_02_sequence_plugin.py:

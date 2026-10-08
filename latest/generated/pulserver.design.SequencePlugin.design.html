@@ -551,6 +551,11 @@ written into <code class="docutils literal notranslate"><span class="pre">direct
 as it stands: a request that evaluates to other values is designed
 from the values it was given, so a design that is a function of the
 evaluated protocol is made from <code class="docutils literal notranslate"><span class="pre">validate(...).values</span></code>.</p>
+<p>The main sequence, the last of a chain, is played as many times as
+the protocol’s averages (<code class="docutils literal notranslate"><span class="pre">nex</span></code>) ask, written into its block table
+after it is deduplicated (<a class="reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.Sequence.expand_repeats.html#pypulseqpp.Sequence.expand_repeats" title="(in pypulseqpp latest)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">pypulseqpp.Sequence.expand_repeats()</span></code></a>),
+each repetition past the first numbered by <code class="docutils literal notranslate"><span class="pre">AVG</span></code>; one average writes
+it as designed.</p>
 <p>The first file is <code class="docutils literal notranslate"><span class="pre">sequence.seq</span></code>. Each later file of a chain is
 <code class="docutils literal notranslate"><span class="pre">sequence_prescan&lt;n&gt;.seq</span></code>, <code class="docutils literal notranslate"><span class="pre">n</span></code> counting from 2, or
 <code class="docutils literal notranslate"><span class="pre">sequence_main.seq</span></code> for the last, and each file names the next as its

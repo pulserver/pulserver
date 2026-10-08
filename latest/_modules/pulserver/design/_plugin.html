@@ -490,11 +490,12 @@
     <span class="n">Kind</span><span class="p">,</span>
     <span class="n">Parameter</span><span class="p">,</span>
     <span class="n">ProtocolKey</span><span class="p">,</span>
+    <span class="n">UIParam</span><span class="p">,</span>
     <span class="n">Validation</span><span class="p">,</span>
     <span class="n">prescribed_rotation</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..protocol._keys</span><span class="w"> </span><span class="kn">import</span> <span class="n">WIRE_NAMES</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">._entries</span><span class="w"> </span><span class="kn">import</span> <span class="n">Entry</span><span class="p">,</span> <span class="n">Protocol</span><span class="p">,</span> <span class="n">_parameter</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">._entries</span><span class="w"> </span><span class="kn">import</span> <span class="n">AveragesParam</span><span class="p">,</span> <span class="n">Entry</span><span class="p">,</span> <span class="n">Protocol</span><span class="p">,</span> <span class="n">_parameter</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">._rf</span><span class="w"> </span><span class="kn">import</span> <span class="n">RfLayout</span>
 
 <span class="n">_log</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="s2">"pulserver.design"</span><span class="p">)</span>
@@ -676,6 +677,7 @@
                 <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="bp">cls</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> binds the prescription entries </span><span class="si">{</span><span class="n">reserved</span><span class="si">}</span><span class="s2">, which "</span>
                 <span class="s2">"pulserver applies when it builds the IR"</span>
             <span class="p">)</span>
+        <span class="n">keyed</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="n">UIParam</span><span class="o">.</span><span class="n">NEX</span><span class="p">,</span> <span class="n">AveragesParam</span><span class="p">())</span>
         <span class="bp">cls</span><span class="o">.</span><span class="n">protocol</span> <span class="o">=</span> <span class="n">keyed</span>
         <span class="k">if</span> <span class="s2">"ui"</span> <span class="ow">in</span> <span class="n">declared</span><span class="p">:</span>
             <span class="bp">cls</span><span class="o">.</span><span class="n">ui</span> <span class="o">=</span> <span class="n">keyed</span>
@@ -783,7 +785,8 @@
 <span class="sd">        and the code of a plugin.</span>
 
 <span class="sd">        A valid reply carries the evaluated protocol, the duration of the</span>
-<span class="sd">        evaluation, ``None`` where it is ``0.0``, its note and its RF layout,</span>
+<span class="sd">        evaluation times the protocol's averages (``nex``), ``None`` where it</span>
+<span class="sd">        is ``0.0``, its note and its RF layout,</span>
 <span class="sd">        ``None`` where it states none or plays no RF. An exception raised by</span>
 <span class="sd">        any of these steps makes the reply invalid, carrying the request, and</span>
 <span class="sd">        is logged with its traceback. A control of the RF layout that is not an</span>
@@ -826,6 +829,12 @@
 <span class="sd">        from the values it was given, so a design that is a function of the</span>
 <span class="sd">        evaluated protocol is made from ``validate(...).values``.</span>
 
+<span class="sd">        The main sequence, the last of a chain, is played as many times as</span>
+<span class="sd">        the protocol's averages (``nex``) ask, written into its block table</span>
+<span class="sd">        after it is deduplicated (:meth:`pypulseqpp.Sequence.expand_repeats`),</span>
+<span class="sd">        each repetition past the first numbered by ``AVG``; one average writes</span>
+<span class="sd">        it as designed.</span>
+
 <span class="sd">        The first file is ``sequence.seq``. Each later file of a chain is</span>
 <span class="sd">        ``sequence_prescan&lt;n&gt;.seq``, ``n`` counting from 2, or</span>
 <span class="sd">        ``sequence_main.seq`` for the last, and each file names the next as its</span>
@@ -862,7 +871,9 @@
         <span class="k">if</span> <span class="n">protocol</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">return</span> <span class="n">validation</span><span class="p">,</span> <span class="p">[],</span> <span class="p">[]</span>
         <span class="n">built</span> <span class="o">=</span> <span class="n">_hook</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">generate</span><span class="p">,</span> <span class="n">system</span><span class="p">,</span> <span class="n">protocol</span><span class="p">,</span> <span class="n">exam</span><span class="p">)</span>
-        <span class="n">paths</span> <span class="o">=</span> <span class="n">_write</span><span class="p">(</span><span class="n">built</span><span class="p">,</span> <span class="n">Path</span><span class="p">(</span><span class="n">directory</span><span class="p">)</span> <span class="o">/</span> <span class="n">_FIRST_FILE</span><span class="p">)</span>
+        <span class="n">paths</span> <span class="o">=</span> <span class="n">_write</span><span class="p">(</span>
+            <span class="n">built</span><span class="p">,</span> <span class="n">Path</span><span class="p">(</span><span class="n">directory</span><span class="p">)</span> <span class="o">/</span> <span class="n">_FIRST_FILE</span><span class="p">,</span> <span class="n">_averages</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">protocol</span><span class="p">,</span> <span class="n">protocol</span><span class="p">)</span>
+        <span class="p">)</span>
         <span class="n">chain</span> <span class="o">=</span> <span class="p">[</span><span class="n">built</span><span class="p">]</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">built</span><span class="p">,</span> <span class="n">pp</span><span class="o">.</span><span class="n">Sequence</span><span class="p">)</span> <span class="k">else</span> <span class="n">built</span>
         <span class="k">return</span> <span class="n">validation</span><span class="p">,</span> <span class="n">paths</span><span class="p">,</span> <span class="nb">list</span><span class="p">(</span><span class="nb">zip</span><span class="p">(</span><span class="nb">map</span><span class="p">(</span><span class="n">Path</span><span class="p">,</span> <span class="n">paths</span><span class="p">),</span> <span class="n">chain</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span>
 
@@ -900,7 +911,9 @@
                 <span class="n">evaluation</span> <span class="o">=</span> <span class="n">Evaluation</span><span class="p">(</span><span class="n">protocol</span><span class="p">)</span>
             <span class="n">layout</span> <span class="o">=</span> <span class="n">_stated_layout</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">protocol</span><span class="p">,</span> <span class="n">evaluation</span><span class="p">)</span>
             <span class="n">wire</span> <span class="o">=</span> <span class="n">evaluation</span><span class="o">.</span><span class="n">protocol</span><span class="o">.</span><span class="n">to_wire</span><span class="p">()</span>
-            <span class="n">duration</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">evaluation</span><span class="o">.</span><span class="n">duration</span><span class="p">)</span>
+            <span class="n">duration</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">evaluation</span><span class="o">.</span><span class="n">duration</span><span class="p">)</span> <span class="o">*</span> <span class="n">_averages</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">protocol</span><span class="p">,</span> <span class="n">evaluation</span><span class="o">.</span><span class="n">protocol</span>
+            <span class="p">)</span>
             <span class="n">info</span> <span class="o">=</span> <span class="n">evaluation</span><span class="o">.</span><span class="n">info</span>
         <span class="k">except</span> <span class="n">_INFEASIBLE</span> <span class="k">as</span> <span class="n">error</span><span class="p">:</span>
             <span class="n">message</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">error</span><span class="p">)</span> <span class="ow">or</span> <span class="nb">type</span><span class="p">(</span><span class="n">error</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span>
@@ -1003,10 +1016,23 @@
     <span class="k">return</span> <span class="n">layout</span> <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">layout</span><span class="o">.</span><span class="n">instances</span><span class="o">.</span><span class="n">definition</span><span class="p">)</span> <span class="k">else</span> <span class="kc">None</span>
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_write</span><span class="p">(</span><span class="n">built</span><span class="p">:</span> <span class="n">pp</span><span class="o">.</span><span class="n">Sequence</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="n">pp</span><span class="o">.</span><span class="n">Sequence</span><span class="p">],</span> <span class="n">first</span><span class="p">:</span> <span class="n">Path</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_averages</span><span class="p">(</span><span class="n">entries</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="n">ProtocolKey</span><span class="p">,</span> <span class="n">Entry</span><span class="p">],</span> <span class="n">protocol</span><span class="p">:</span> <span class="n">Protocol</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return how many times the design plays its main sequence: the averages of an :class:`AveragesParam`, else 1.</span>
+
+<span class="sd">    A plugin that binds NEX to an argument of its own plays its averages itself.</span>
+<span class="sd">    """</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">entries</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">UIParam</span><span class="o">.</span><span class="n">NEX</span><span class="p">),</span> <span class="n">AveragesParam</span><span class="p">):</span>
+        <span class="k">return</span> <span class="mi">1</span>
+    <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="n">protocol</span><span class="p">[</span><span class="n">UIParam</span><span class="o">.</span><span class="n">NEX</span><span class="p">])</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_write</span><span class="p">(</span>
+    <span class="n">built</span><span class="p">:</span> <span class="n">pp</span><span class="o">.</span><span class="n">Sequence</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="n">pp</span><span class="o">.</span><span class="n">Sequence</span><span class="p">],</span> <span class="n">first</span><span class="p">:</span> <span class="n">Path</span><span class="p">,</span> <span class="n">averages</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
 <span class="w">    </span><span class="sd">"""Write a sequence or a chain of them as signed binary Pulseq; return the paths in play order.</span>
 
-<span class="sd">    Each sequence is deduplicated in place before it is written.</span>
+<span class="sd">    Each sequence is deduplicated in place before it is written, and the main</span>
+<span class="sd">    sequence, the last, then played ``averages`` times in its block table.</span>
 <span class="sd">    """</span>
     <span class="n">chain</span> <span class="o">=</span> <span class="p">[</span><span class="n">built</span><span class="p">]</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">built</span><span class="p">,</span> <span class="n">pp</span><span class="o">.</span><span class="n">Sequence</span><span class="p">)</span> <span class="k">else</span> <span class="n">built</span>
     <span class="k">if</span> <span class="p">(</span>
@@ -1026,6 +1052,8 @@
         <span class="k">if</span> <span class="n">following</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">seq</span><span class="o">.</span><span class="n">set_definition</span><span class="p">(</span><span class="n">key</span><span class="o">=</span><span class="s2">"NextSequence"</span><span class="p">,</span> <span class="n">value</span><span class="o">=</span><span class="n">following</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
         <span class="n">seq</span><span class="o">.</span><span class="n">remove_duplicates</span><span class="p">(</span><span class="n">in_place</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">following</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">averages</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">seq</span><span class="o">.</span><span class="n">expand_repeats</span><span class="p">(</span><span class="n">averages</span><span class="p">)</span>
         <span class="n">pp</span><span class="o">.</span><span class="n">io</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">seq</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">path</span><span class="p">),</span> <span class="n">binary</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">remove_duplicates</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
     <span class="k">return</span> <span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">path</span><span class="p">)</span> <span class="k">for</span> <span class="n">path</span> <span class="ow">in</span> <span class="n">paths</span><span class="p">]</span>
 

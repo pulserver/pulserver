@@ -124,6 +124,7 @@ of its ADC event. The reply carries those values and the scan time.
     bandwidth: float|typein|250000.0|1000.0|1000000.0|1.0|Hz
     fov: float|typein|220.0|50.0|500.0|1.0|mm
     nx: int|typein|128|32|512|2|
+    nex: float|typein|1.0|1.0|16.0|1.0|
     fov_offset_x: float|off|0.0|-1000.0|1000.0|0.1|mm
     fov_offset_y: float|off|0.0|-1000.0|1000.0|0.1|mm
     fov_offset_z: float|off|0.0|-1000.0|1000.0|0.1|mm
@@ -348,6 +349,7 @@ which is what lets a design be identified by its resolved protocol
     bandwidth: 133333.0
     fov: 220.0
     nx: 192
+    nex: 1.0
     True scan time 36.0 s
 
 
@@ -356,7 +358,7 @@ which is what lets a design be identified by its resolved protocol
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 3.704 seconds)
+   **Total running time of the script:** (0 minutes 4.423 seconds)
 
 
 .. _sphx_glr_download_generated_gallery_02-tours_01_protocol_resolution.py:

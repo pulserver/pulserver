@@ -318,7 +318,7 @@ acquisition on the virtual scanner.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.538 seconds)
+   **Total running time of the script:** (0 minutes 0.759 seconds)
 
 
 .. _sphx_glr_download_generated_gallery_01-course_04_reconstruction_plugin.py:
