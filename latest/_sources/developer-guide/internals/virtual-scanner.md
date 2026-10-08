@@ -233,15 +233,16 @@ design, or by the rounding of the text format.
   last; a cube lattice finer than the image grid is read through the cubes'
   spectrum; and a group of flip angles holding too little of the density joins
   the nearest one the same pulses turn.
-- Played in spans, the scan of every fixture plays each block once: the
-  spans' readouts are those of the whole scan, and the sound of a single-file
-  fixture, joined across its spans, is `Sequence.sound` of its design as the
-  checks turn it, under an axial, an oblique and a reflected prescription. A
-  span played at a speed is released once the clock has passed it, and a
-  series streamed readout by readout is reconstructed as the same series sent
-  whole. A scan simulated twice as slowly as it plays starts its clock late
-  enough that no span holds it; a span simulated after its time holds the
-  clock, and the spans after it keep its pace.
+- Played in spans, a gradient echo and an EPI play each block once: the
+  spans' readouts are those of the whole scan, and their sound, joined across
+  spans and stretches, is `Sequence.sound` of the design as the checks turn it,
+  under an axial, an oblique and a reflected prescription. A scan simulated in
+  one stretch is released in spans of the length asked for. A span played at a
+  speed is released once the clock has passed it, and a series streamed
+  readout by readout is reconstructed as the same series sent whole. A scan
+  simulated twice as slowly as it plays starts its clock late enough that no
+  span holds it; a stretch simulated after its time holds the clock, and the
+  spans after it keep its pace.
 - `pulserver scan` records the series the virtual scanner acquires of an
   imported file, sample for sample, and streams a generated design to a
   reconstruction proxy, whose image carries the prescribed centre and
@@ -295,28 +296,34 @@ the magnet's field.
 A scanner acquires in real time: each readout reaches the reconstruction once
 the scanner has played it, and the gradients sound as they play.
 {class}`~pulserver.virtual.Scan` acquires the cache by the Fourier engine
-against a scan clock, the sum of the durations of the blocks played, in spans
-of whole blocks that last at least the length asked for and end at the first
-block after which the samples acquired since the start of the scan pass a
-multiple of $2^{18}$, or at the end of the scan. The engine is built when the scan is, before its first span. Each span
-carries the readouts of its blocks, as {func}`~pulserver.virtual.simulate`
-returns them, and the sound of the gradients
-it plays. At a speed, a span is released once the wall clock, running that many
-times as fast as the scan, has passed its end, so that a reconstruction
-receives the readouts at the rate a scanner acquires them;
-{func}`~pulserver.virtual.send` sends each readout as it is released.
+against a scan clock, the sum of the durations of the blocks played, and
+releases it in spans of whole blocks that last at least the length asked for.
+The engine is built when the scan is, before its first span. Each span carries
+the readouts of its blocks, as {func}`~pulserver.virtual.simulate` returns
+them, and the sound of the gradients it plays. At a speed, a span is released
+once the wall clock, running that many times as fast as the scan, has passed
+its end, so that a reconstruction receives the readouts at the rate a scanner
+acquires them; {func}`~pulserver.virtual.send` sends each readout as it is
+released.
 
-The spans are simulated in a thread of their own, ahead of their release, and
-the clock starts once the simulation will stay ahead of it to the end of the
-scan. A span's simulation time is estimated from the spans simulated before it:
-per ADC sample for a span that acquires, since the transforms of its samples
-dominate it, and per second of scan time for one that does not, such as a train of
-dummy excitations. Where the simulation runs faster than the scan, the clock
-starts once a span of each kind has been simulated; where it runs slower, as
-for a head received by many coils on a CPU, most of the scan is simulated
-before the clock starts and the rest while it runs. A
-span simulated after its end on the clock, where the estimate fell short,
-holds the clock until it is, and the spans after it keep the scanner's pace.
+The scan is simulated in a thread of its own, ahead of its release, a stretch
+at a time: a stretch lasts at least the length asked for and ends at the first
+block after which the samples acquired since the start of the scan pass a
+multiple of $2^{18}$, or at the end of the scan, so that each costs about one
+transform of the images. A stretch is released in spans, the last of which
+takes the stretch's tail shorter than the length asked for. The clock starts
+once the simulation will stay ahead of it to the end of the scan: each stretch
+is due on the clock at its start. A stretch's simulation time is estimated
+from the stretches simulated before it: per ADC sample for a stretch that
+acquires, since the transforms of its samples dominate it, and per second of
+scan time for one that does not, such as a train of dummy excitations, at the
+rate of the stretches that acquire until one that does not has been
+simulated. Where the simulation runs faster than the scan, the clock starts
+once the first stretch that acquires has been simulated; where it runs slower,
+as for a head received by many coils on a CPU, most of the scan is simulated
+before the clock starts and the rest while it runs. A stretch simulated after
+its start on the clock, where the estimate fell short, holds the clock there
+until it is, and the spans after it keep the scanner's pace.
 
 The sound is MATLAB Pulseq's, from `pypulseqpp.gradient_sound`: the gradients
 along the physical axes, the x axis on the left channel, the y axis on the

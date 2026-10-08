@@ -545,12 +545,14 @@
 <dt class="sig sig-object py" id="pulserver.virtual.Console.scan">
 <span class="sig-prename descclassname"><span class="pre">Console.</span></span><span class="sig-name descname"><span class="pre">scan</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pulserver/virtual/_console.html#Console.scan"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.virtual.Console.scan" title="Link to this definition">#</a></dt>
 <dd><p>Scan a stored design on the exam’s phantom; return the reconstruction’s status.</p>
-<p><code class="docutils literal notranslate"><span class="pre">emit</span></code> receives the scan clock after each span played, as
-<code class="docutils literal notranslate"><span class="pre">{&quot;clock&quot;:</span> <span class="pre">s,</span> <span class="pre">&quot;duration&quot;:</span> <span class="pre">s}</span></code>, then the reconstruction’s images as
-DICOM, <code class="docutils literal notranslate"><span class="pre">{&quot;dicom&quot;:</span> <span class="pre">base64,</span> <span class="pre">&quot;name&quot;:</span> <span class="pre">file</span> <span class="pre">name}</span></code>, converting those it
-returns as MRD, and its texts as <code class="docutils literal notranslate"><span class="pre">{&quot;text&quot;:</span> <span class="pre">...}</span></code>. With
-<code class="docutils literal notranslate"><span class="pre">sound</span></code>, each clock also carries the span’s sound as <code class="docutils literal notranslate"><span class="pre">sound</span></code>,
-base64 of 16-bit little-endian stereo samples at <code class="docutils literal notranslate"><span class="pre">rate</span></code> Hz. At a
+<p><code class="docutils literal notranslate"><span class="pre">emit</span></code> receives the scan clock after each span played, a span
+lasting at least <code class="xref py py-data docutils literal notranslate"><span class="pre">_SPAN</span></code>, as <code class="docutils literal notranslate"><span class="pre">{&quot;clock&quot;:</span> <span class="pre">s,</span> <span class="pre">&quot;duration&quot;:</span> <span class="pre">s}</span></code>,
+then the reconstruction’s images as DICOM, <code class="docutils literal notranslate"><span class="pre">{&quot;dicom&quot;:</span> <span class="pre">base64,</span>
+<span class="pre">&quot;name&quot;:</span> <span class="pre">file</span> <span class="pre">name}</span></code>, converting those it returns as MRD, and its
+texts as <code class="docutils literal notranslate"><span class="pre">{&quot;text&quot;:</span> <span class="pre">...}</span></code>. With <code class="docutils literal notranslate"><span class="pre">sound</span></code>, each span’s sound comes
+before its clock, once the clock reaches the span’s start, as
+<code class="docutils literal notranslate"><span class="pre">{&quot;sound&quot;:</span> <span class="pre">base64,</span> <span class="pre">&quot;rate&quot;:</span> <span class="pre">Hz,</span> <span class="pre">&quot;start&quot;:</span> <span class="pre">s}</span></code>: 16-bit little-endian
+stereo samples, the first at <code class="docutils literal notranslate"><span class="pre">start</span></code> on the scan clock. At a
 speed, the scan is simulated ahead of its clock, and until the clock
 starts <code class="docutils literal notranslate"><span class="pre">emit</span></code> receives <code class="docutils literal notranslate"><span class="pre">{&quot;preparing&quot;:</span> <span class="pre">s}</span></code> about twice a second,
 with the wall-clock time left before it does, or <code class="docutils literal notranslate"><span class="pre">null</span></code> before there

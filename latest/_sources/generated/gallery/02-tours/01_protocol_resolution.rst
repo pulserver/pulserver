@@ -356,7 +356,7 @@ which is what lets a design be identified by its resolved protocol
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 4.412 seconds)
+   **Total running time of the script:** (0 minutes 4.526 seconds)
 
 
 .. _sphx_glr_download_generated_gallery_02-tours_01_protocol_resolution.py:

@@ -769,12 +769,14 @@
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">"""Scan a stored design on the exam's phantom; return the reconstruction's status.</span>
 
-<span class="sd">        ``emit`` receives the scan clock after each span played, as</span>
-<span class="sd">        ``{"clock": s, "duration": s}``, then the reconstruction's images as</span>
-<span class="sd">        DICOM, ``{"dicom": base64, "name": file name}``, converting those it</span>
-<span class="sd">        returns as MRD, and its texts as ``{"text": ...}``. With</span>
-<span class="sd">        ``sound``, each clock also carries the span's sound as ``sound``,</span>
-<span class="sd">        base64 of 16-bit little-endian stereo samples at ``rate`` Hz. At a</span>
+<span class="sd">        ``emit`` receives the scan clock after each span played, a span</span>
+<span class="sd">        lasting at least :data:`_SPAN`, as ``{"clock": s, "duration": s}``,</span>
+<span class="sd">        then the reconstruction's images as DICOM, ``{"dicom": base64,</span>
+<span class="sd">        "name": file name}``, converting those it returns as MRD, and its</span>
+<span class="sd">        texts as ``{"text": ...}``. With ``sound``, each span's sound comes</span>
+<span class="sd">        before its clock, once the clock reaches the span's start, as</span>
+<span class="sd">        ``{"sound": base64, "rate": Hz, "start": s}``: 16-bit little-endian</span>
+<span class="sd">        stereo samples, the first at ``start`` on the scan clock. At a</span>
 <span class="sd">        speed, the scan is simulated ahead of its clock, and until the clock</span>
 <span class="sd">        starts ``emit`` receives ``{"preparing": s}`` about twice a second,</span>
 <span class="sd">        with the wall-clock time left before it does, or ``null`` before there</span>
@@ -919,9 +921,23 @@
                 <span class="k">raise</span> <span class="n">_Cancelled</span>
             <span class="n">emit</span><span class="p">({</span><span class="s2">"preparing"</span><span class="p">:</span> <span class="n">left</span><span class="p">})</span>
 
+        <span class="k">def</span><span class="w"> </span><span class="nf">heard</span><span class="p">(</span><span class="n">chunk</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">samples</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">round</span><span class="p">(</span><span class="mi">32767</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">clip</span><span class="p">(</span><span class="n">chunk</span><span class="o">.</span><span class="n">sound</span><span class="o">.</span><span class="n">T</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">))</span>
+            <span class="n">emit</span><span class="p">(</span>
+                <span class="p">{</span>
+                    <span class="s2">"sound"</span><span class="p">:</span> <span class="n">base64</span><span class="o">.</span><span class="n">b64encode</span><span class="p">(</span><span class="n">samples</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="s2">"&lt;i2"</span><span class="p">)</span><span class="o">.</span><span class="n">tobytes</span><span class="p">())</span><span class="o">.</span><span class="n">decode</span><span class="p">(),</span>
+                    <span class="s2">"rate"</span><span class="p">:</span> <span class="n">SAMPLE_RATE</span><span class="p">,</span>
+                    <span class="s2">"start"</span><span class="p">:</span> <span class="n">chunk</span><span class="o">.</span><span class="n">start</span><span class="p">,</span>
+                <span class="p">}</span>
+            <span class="p">)</span>
+
         <span class="k">def</span><span class="w"> </span><span class="nf">played</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]:</span>
             <span class="n">chunks</span> <span class="o">=</span> <span class="n">scan</span><span class="o">.</span><span class="n">chunks</span><span class="p">(</span>
-                <span class="mf">0.1</span><span class="p">,</span> <span class="n">speed</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">speed</span><span class="p">,</span> <span class="n">sound</span><span class="o">=</span><span class="n">sound</span><span class="p">,</span> <span class="n">preparing</span><span class="o">=</span><span class="n">preparing</span>
+                <span class="n">_SPAN</span><span class="p">,</span>
+                <span class="n">speed</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">speed</span><span class="p">,</span>
+                <span class="n">sound</span><span class="o">=</span><span class="n">sound</span><span class="p">,</span>
+                <span class="n">preparing</span><span class="o">=</span><span class="n">preparing</span><span class="p">,</span>
+                <span class="n">heard</span><span class="o">=</span><span class="n">heard</span> <span class="k">if</span> <span class="n">sound</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
             <span class="p">)</span>
             <span class="k">try</span><span class="p">:</span>
                 <span class="k">with</span> <span class="n">contextlib</span><span class="o">.</span><span class="n">closing</span><span class="p">(</span><span class="n">chunks</span><span class="p">):</span>
@@ -933,14 +949,7 @@
             <span class="k">for</span> <span class="n">chunk</span> <span class="ow">in</span> <span class="n">chunks</span><span class="p">:</span>
                 <span class="k">if</span> <span class="n">cancelled</span><span class="p">():</span>
                     <span class="k">raise</span> <span class="n">_Cancelled</span>
-                <span class="n">clock</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"clock"</span><span class="p">:</span> <span class="n">chunk</span><span class="o">.</span><span class="n">stop</span><span class="p">,</span> <span class="s2">"duration"</span><span class="p">:</span> <span class="n">scan</span><span class="o">.</span><span class="n">duration</span><span class="p">}</span>
-                <span class="k">if</span> <span class="n">sound</span><span class="p">:</span>
-                    <span class="n">samples</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">round</span><span class="p">(</span><span class="mi">32767</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">clip</span><span class="p">(</span><span class="n">chunk</span><span class="o">.</span><span class="n">sound</span><span class="o">.</span><span class="n">T</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">))</span>
-                    <span class="n">clock</span><span class="p">[</span><span class="s2">"sound"</span><span class="p">]</span> <span class="o">=</span> <span class="n">base64</span><span class="o">.</span><span class="n">b64encode</span><span class="p">(</span>
-                        <span class="n">samples</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="s2">"&lt;i2"</span><span class="p">)</span><span class="o">.</span><span class="n">tobytes</span><span class="p">()</span>
-                    <span class="p">)</span><span class="o">.</span><span class="n">decode</span><span class="p">()</span>
-                    <span class="n">clock</span><span class="p">[</span><span class="s2">"rate"</span><span class="p">]</span> <span class="o">=</span> <span class="n">SAMPLE_RATE</span>
-                <span class="n">emit</span><span class="p">(</span><span class="n">clock</span><span class="p">)</span>
+                <span class="n">emit</span><span class="p">({</span><span class="s2">"clock"</span><span class="p">:</span> <span class="n">chunk</span><span class="o">.</span><span class="n">stop</span><span class="p">,</span> <span class="s2">"duration"</span><span class="p">:</span> <span class="n">scan</span><span class="o">.</span><span class="n">duration</span><span class="p">})</span>
                 <span class="k">yield from</span> <span class="n">chunk</span><span class="o">.</span><span class="n">readouts</span>
 
         <span class="c1"># Closed however the scan ends, which stops its simulation.</span>
@@ -1072,6 +1081,11 @@
             <span class="n">reply</span><span class="p">({</span><span class="s2">"error"</span><span class="p">:</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">error</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">error</span><span class="si">}</span><span class="s2">"</span><span class="p">})</span></div>
 </div>
 
+
+
+<span class="c1">#: The scan time a span of a console's scan lasts at least, in s: its clock</span>
+<span class="c1">#: advances, and its sound is sent, a span at a time.</span>
+<span class="n">_SPAN</span> <span class="o">=</span> <span class="mf">1.0</span>
 
 
 <span class="k">class</span><span class="w"> </span><span class="nc">_Cancelled</span><span class="p">(</span><span class="ne">Exception</span><span class="p">):</span>

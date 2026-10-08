@@ -546,7 +546,11 @@
 <span class="sig-prename descclassname"><span class="pre">Scan.</span></span><span class="sig-name descname"><span class="pre">chunks</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pulserver/virtual/_stream.html#Scan.chunks"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.virtual.Scan.chunks" title="Link to this definition">#</a></dt>
 <dd><p>Play the scan in spans of whole blocks; yield each once released.</p>
 <p>The spans are simulated in a thread of their own, ahead of their
-release. The sound is <a class="reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.gradient_sound.html#pypulseqpp.gradient_sound" title="(in pypulseqpp latest)"><code class="xref py py-func docutils literal notranslate"><span class="pre">pypulseqpp.gradient_sound()</span></code></a> of the
+release, a stretch of them at a time: a stretch ends at the first
+block, <code class="docutils literal notranslate"><span class="pre">length</span></code> or more after its start, after which the samples
+acquired since the start of the scan pass a multiple of <code class="docutils literal notranslate"><span class="pre">2**18</span></code>, so
+that each costs about one transform of the images; a stretch is
+released in spans. The sound is <a class="reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.gradient_sound.html#pypulseqpp.gradient_sound" title="(in pypulseqpp latest)"><code class="xref py py-func docutils literal notranslate"><span class="pre">pypulseqpp.gradient_sound()</span></code></a> of the
 gradients along the physical axes, as <code class="docutils literal notranslate"><span class="pre">Sequence.sound</span></code> makes it of a
 design: the spans’ sounds, joined, are the sound of the whole scan,
 <code class="docutils literal notranslate"><span class="pre">floor(duration</span> <span class="pre">*</span> <span class="pre">sample_rate)</span> <span class="pre">+</span> <span class="pre">1</span></code> samples scaled so that the
@@ -554,19 +558,24 @@ loudest is 0.95.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>length</strong> – The scan time a span lasts at least, in s, unless it ends the scan.</p></li>
+<li><p><strong>length</strong> – The scan time a span lasts at least, in s, unless it ends the
+scan’s last stretch.</p></li>
 <li><p><strong>speed</strong> – How many times as fast as a scanner the scan is played. Its clock
 starts once the simulation, at the rate it has run, stays ahead of
 the clock to the end of the scan, and each span is yielded once the
-clock has passed its end. A span not yet simulated by then holds
-the clock until it is. As fast as the spans are simulated when None.</p></li>
+clock has passed its end. A stretch not yet simulated by its start
+holds the clock until it is. As fast as the stretches are
+simulated when None.</p></li>
 <li><p><strong>sound</strong> – Whether the spans carry their sound.</p></li>
 <li><p><strong>sample_rate</strong> – Audio sample rate, in Hz.</p></li>
 <li><p><strong>channel_weights</strong> – Weights of the x, y and z axes in the sound.</p></li>
 <li><p><strong>preparing</strong> – Called about twice a second until the clock starts, at a speed,
 with the wall-clock time left before it does, in s, or None before
-a span of each kind still to come has been simulated. An exception
+a stretch that acquires has been simulated. An exception
 it raises ends the scan, and is raised where the spans are taken.</p></li>
+<li><p><strong>heard</strong> – Called with each span as its sound starts to play: at a speed,
+once the clock reaches the span’s start, a span before the span is
+yielded; without one, just before it is yielded.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Raises<span class="colon">:</span></dt>
