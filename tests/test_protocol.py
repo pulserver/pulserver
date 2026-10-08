@@ -80,6 +80,7 @@ TYPED_LISTING = block(
         "user0_name: description|Thickness",
         "user0_value: float|typein|5.0|1.0|50.0|1.0|mm",
         "enable_sar_burst_mode: config|1",
+        "nex: float|typein|1.0|1.0|16.0|1.0|",
         *PRESCRIPTION_LISTING,
     ]
 )
@@ -91,6 +92,7 @@ TYPED_VALUES = block(
         "nx: 6",
         "FatSat: true",
         "user0_value: 7.5",
+        "nex: 1.0",
         *PRESCRIPTION_VALUES,
     ]
 )
@@ -102,6 +104,7 @@ TYPED_INVALID_VALUES = block(
         "nx: 4",
         "FatSat: false",
         "user0_value: 5.0",
+        "nex: 1.0",
         *PRESCRIPTION_VALUES,
     ]
 )
@@ -120,6 +123,7 @@ GRE2D_LISTING = block(
         "slice_spacing: float|typein|0.0|0.0|100.0|0.1|mm",
         "slice_thickness: float|typein|5.0|1.0|20.0|1.0|mm",
         "Ry: int|typein|1|1|4|1|",
+        "nex: float|typein|1.0|1.0|16.0|1.0|",
         *PRESCRIPTION_LISTING,
     ]
 )

@@ -26,11 +26,12 @@ from ..protocol import (
     Kind,
     Parameter,
     ProtocolKey,
+    UIParam,
     Validation,
     prescribed_rotation,
 )
 from ..protocol._keys import WIRE_NAMES
-from ._entries import Entry, Protocol, _parameter
+from ._entries import AveragesParam, Entry, Protocol, _parameter
 from ._rf import RfLayout
 
 _log = logging.getLogger("pulserver.design")
@@ -207,6 +208,7 @@ class SequencePlugin:
                 f"{cls.__name__} binds the prescription entries {reserved}, which "
                 "pulserver applies when it builds the IR"
             )
+        keyed.setdefault(UIParam.NEX, AveragesParam())
         cls.protocol = keyed
         if "ui" in declared:
             cls.ui = keyed
@@ -303,7 +305,8 @@ class SequencePlugin:
         and the code of a plugin.
 
         A valid reply carries the evaluated protocol, the duration of the
-        evaluation, ``None`` where it is ``0.0``, its note and its RF layout,
+        evaluation times the protocol's averages (``nex``), ``None`` where it
+        is ``0.0``, its note and its RF layout,
         ``None`` where it states none or plays no RF. An exception raised by
         any of these steps makes the reply invalid, carrying the request, and
         is logged with its traceback. A control of the RF layout that is not an
@@ -343,6 +346,12 @@ class SequencePlugin:
         from the values it was given, so a design that is a function of the
         evaluated protocol is made from ``validate(...).values``.
 
+        The main sequence, the last of a chain, is played as many times as
+        the protocol's averages (``nex``) ask, written into its block table
+        after it is deduplicated (:meth:`pypulseqpp.Sequence.expand_repeats`),
+        each repetition past the first numbered by ``AVG``; one average writes
+        it as designed.
+
         The first file is ``sequence.seq``. Each later file of a chain is
         ``sequence_prescan<n>.seq``, ``n`` counting from 2, or
         ``sequence_main.seq`` for the last, and each file names the next as its
@@ -378,7 +387,9 @@ class SequencePlugin:
         if protocol is None:
             return validation, [], []
         built = _hook(self.generate, system, protocol, exam)
-        paths = _write(built, Path(directory) / _FIRST_FILE)
+        paths = _write(
+            built, Path(directory) / _FIRST_FILE, _averages(self.protocol, protocol)
+        )
         chain = [built] if isinstance(built, pp.Sequence) else built
         return validation, paths, list(zip(map(Path, paths), chain, strict=True))
 
@@ -416,7 +427,9 @@ class SequencePlugin:
                 evaluation = Evaluation(protocol)
             layout = _stated_layout(self.protocol, evaluation)
             wire = evaluation.protocol.to_wire()
-            duration = float(evaluation.duration)
+            duration = float(evaluation.duration) * _averages(
+                self.protocol, evaluation.protocol
+            )
             info = evaluation.info
         except _INFEASIBLE as error:
             message = str(error) or type(error).__name__
@@ -512,10 +525,23 @@ def _stated_layout(
     return layout if len(layout.instances.definition) else None
 
 
-def _write(built: pp.Sequence | list[pp.Sequence], first: Path) -> list[str]:
+def _averages(entries: Mapping[ProtocolKey, Entry], protocol: Protocol) -> int:
+    """Return how many times the design plays its main sequence: the averages of an :class:`AveragesParam`, else 1.
+
+    A plugin that binds NEX to an argument of its own plays its averages itself.
+    """
+    if not isinstance(entries.get(UIParam.NEX), AveragesParam):
+        return 1
+    return int(protocol[UIParam.NEX])
+
+
+def _write(
+    built: pp.Sequence | list[pp.Sequence], first: Path, averages: int = 1
+) -> list[str]:
     """Write a sequence or a chain of them as signed binary Pulseq; return the paths in play order.
 
-    Each sequence is deduplicated in place before it is written.
+    Each sequence is deduplicated in place before it is written, and the main
+    sequence, the last, then played ``averages`` times in its block table.
     """
     chain = [built] if isinstance(built, pp.Sequence) else built
     if (
@@ -535,6 +561,8 @@ def _write(built: pp.Sequence | list[pp.Sequence], first: Path) -> list[str]:
         if following is not None:
             seq.set_definition(key="NextSequence", value=following.name)
         seq.remove_duplicates(in_place=True)
+        if following is None and averages > 1:
+            seq.expand_repeats(averages)
         pp.io.write(seq, str(path), binary=True, remove_duplicates=False)
     return [str(path) for path in paths]
 

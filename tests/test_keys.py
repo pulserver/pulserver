@@ -106,15 +106,16 @@ def test_a_scanner_sequence_stores_its_entries_under_key_members():
             UIParam.user_value(0): IntParam("n_y"),
         }
 
-    assert [type(key) for key in Keyed.protocol] == [IntKey, UserKey]
-    assert list(Keyed.protocol) == ["nx", "user0_value"]
+    # nex, the averages every plugin lists, follows the declared entries.
+    assert [type(key) for key in Keyed.protocol] == [IntKey, UserKey, FloatKey]
+    assert list(Keyed.protocol) == ["nx", "user0_value", "nex"]
 
 
 def test_a_plain_string_naming_an_entry_is_stored_as_its_member():
     class Plain(SequencePlugin):
         protocol = {"nx": IntParam("n_x"), "user0_name": IntParam("n_y")}
 
-    assert [type(key) for key in Plain.protocol] == [IntKey, UserNameKey]
+    assert [type(key) for key in Plain.protocol] == [IntKey, UserNameKey, FloatKey]
     assert Plain.protocol[IntKey.NX] == IntParam("n_x")
 
 
