@@ -11,45 +11,58 @@ from ..design import Description, FloatParam, IntParam
 from ..design._entries import Entry
 from ..protocol import ProtocolKey, UIParam
 
-#: Each shared control: the argument it binds, its name and its entry, at the
-#: user CV of its place here.
-SHARED: tuple[tuple[str, str, Callable[[], Entry]], ...] = (
-    ("n_dummy", "Dummy scans", lambda: IntParam("n_dummy", range_min=0, range_max=256)),
+#: Each shared control: the arguments it binds, whichever a sequence function
+#: takes, its name and its entry for that argument, at the user CV of its place
+#: here.
+SHARED: tuple[tuple[tuple[str, ...], str, Callable[[str], Entry]], ...] = (
     (
-        "partial_fourier_x",
+        ("n_dummy",),
+        "Dummy scans",
+        lambda argument: IntParam(argument, range_min=0, range_max=256),
+    ),
+    (
+        ("partial_fourier_x",),
         "Partial echo",
-        lambda: FloatParam(
-            "partial_fourier_x", range_min=0.75, range_max=1.0, range_incr=0.01
+        lambda argument: FloatParam(
+            argument, range_min=0.75, range_max=1.0, range_incr=0.01
         ),
     ),
     (
-        "partial_fourier_y",
+        ("partial_fourier_y",),
         "Partial Fourier y",
-        lambda: FloatParam(
-            "partial_fourier_y", range_min=0.75, range_max=1.0, range_incr=0.01
+        lambda argument: FloatParam(
+            argument, range_min=0.75, range_max=1.0, range_incr=0.01
         ),
     ),
     (
-        "partial_fourier_z",
+        ("partial_fourier_z",),
         "Partial Fourier z",
-        lambda: FloatParam(
-            "partial_fourier_z", range_min=0.75, range_max=1.0, range_incr=0.01
+        lambda argument: FloatParam(
+            argument, range_min=0.75, range_max=1.0, range_incr=0.01
         ),
     ),
-    ("n_acs_y", "ACS lines y", lambda: IntParam("n_acs_y", range_min=0, range_max=128)),
-    ("n_acs_z", "ACS lines z", lambda: IntParam("n_acs_z", range_min=0, range_max=128)),
     (
-        "readout_oversampling",
+        ("n_acs_y",),
+        "ACS lines y",
+        lambda argument: IntParam(argument, range_min=0, range_max=128),
+    ),
+    (
+        ("n_acs_z",),
+        "ACS lines z",
+        lambda argument: IntParam(argument, range_min=0, range_max=128),
+    ),
+    (
+        ("readout_oversampling",),
         "Readout oversampling",
-        lambda: FloatParam(
-            "readout_oversampling", range_min=1.0, range_max=4.0, range_incr=0.1
+        lambda argument: FloatParam(
+            argument, range_min=1.0, range_max=4.0, range_incr=0.1
         ),
     ),
     (
-        "esp",
+        ("esp", "echo_spacing"),
         "Echo spacing, 0 the shortest",
-        lambda: FloatParam(
-            "esp",
+        lambda argument: FloatParam(
+            argument,
             unit="ms",
             scale=1e-3,
             range_min=0.0,
@@ -58,10 +71,10 @@ SHARED: tuple[tuple[str, str, Callable[[], Entry]], ...] = (
         ),
     ),
     (
-        "refocusing_angle_deg",
+        ("refocusing_angle_deg",),
         "Refocusing flip",
-        lambda: FloatParam(
-            "refocusing_angle_deg", unit="deg", range_min=60.0, range_max=180.0
+        lambda argument: FloatParam(
+            argument, unit="deg", range_min=60.0, range_max=180.0
         ),
     ),
 )
@@ -77,10 +90,12 @@ def user_entries(
     taken = inspect.signature(app).parameters
     bound = {getattr(entry, "argument", None) for entry in protocol.values()}
     entries: dict[ProtocolKey, Entry] = {}
-    for index, (argument, name, entry) in enumerate(SHARED):
-        if argument in taken and argument not in bound:
-            entries[UIParam.user_name(index)] = Description(name)
-            entries[UIParam.user_value(index)] = entry()
+    for index, (arguments, name, entry) in enumerate(SHARED):
+        for argument in arguments:
+            if argument in taken and argument not in bound:
+                entries[UIParam.user_name(index)] = Description(name)
+                entries[UIParam.user_value(index)] = entry(argument)
+                break
     return entries
 
 

@@ -943,11 +943,12 @@ def test_every_shared_control_a_sequence_takes_is_named_at_its_own_user_cv(name,
         if not key.startswith("user")
     }
 
-    for index, (argument, label, _) in enumerate(SHARED):
+    for index, (arguments, label, _) in enumerate(SHARED):
+        free = [a for a in arguments if a in taken and a not in bound]
         listed = UIParam.user_value(index) in plugin.protocol
-        assert listed == (argument in taken and argument not in bound), argument
+        assert listed == bool(free), arguments
         if listed:
-            assert plugin.protocol[UIParam.user_value(index)].argument == argument
+            assert plugin.protocol[UIParam.user_value(index)].argument == free[0]
             assert plugin.protocol[UIParam.user_name(index)].text == label
 
 
@@ -976,3 +977,25 @@ def test_an_echo_spacing_of_zero_is_the_shortest_one(zoo):
     )
 
     assert shortest.definitions["EchoSpacing"][0] > 0.0
+
+
+@pytest.mark.parametrize("name", ["gre_multiecho2d", "gre_multiecho3d"])
+def test_a_multi_echo_gradient_echo_spaces_its_echoes_by_the_shared_echo_spacing(
+    name, zoo
+):
+    plugin = zoo[name]
+    request = {"nx": 64, "ny": 32, "nslices": 8, "num_echoes": 3}
+
+    def echo_times(spacing_ms):
+        designed = plugin.app(
+            SYSTEM, **_protocol(plugin, request | {"user7_value": spacing_ms}).arguments
+        )
+        main = designed if isinstance(designed, pp.Sequence) else designed[-1]
+        return np.asarray(main.definitions["TE"])
+
+    shortest, spaced = echo_times(0.0), echo_times(10.0)
+
+    assert UIParam.TE2 not in plugin.protocol
+    assert len(spaced) == 3
+    assert np.diff(spaced) == pytest.approx(10e-3, abs=1e-5)
+    assert np.diff(shortest).max() < 10e-3

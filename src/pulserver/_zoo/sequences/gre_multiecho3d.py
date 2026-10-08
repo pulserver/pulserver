@@ -6,7 +6,7 @@ from pypulseqpp.sequences.sequence.gre_multiecho3D_sequence import gre_multiecho
 
 from pulserver._zoo._evaluation import cartesian_3d, evaluation
 from pulserver._zoo._slab import slab
-from pulserver._zoo._user import user_entries
+from pulserver._zoo._user import shortest_at_zero, user_entries
 from pulserver.design import (
     FloatParam,
     IntParam,
@@ -26,7 +26,7 @@ WAVE_CYCLES = 8
 
 
 class GreMultiecho3D(SequencePlugin):
-    app = slab(gre_multiecho3d)
+    app = shortest_at_zero(slab(gre_multiecho3d), "echo_spacing")
     if WAVE:
         app = functools.partial(
             app, wave_amplitude=WAVE_AMPLITUDE, wave_cycles=WAVE_CYCLES
