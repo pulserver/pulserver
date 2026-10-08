@@ -9,6 +9,7 @@ from typing import Any
 
 import numpy as np
 import pypulseqpp as pp
+from pypulseqpp import sequences
 
 from ..design import Evaluation, Protocol, RfLayout, SequencePlugin, StatedParam
 from ..protocol import ImagingMode, ProtocolKey, UIParam
@@ -158,8 +159,9 @@ def evaluation(
 
     ``repetition`` gives the arguments that design one repetition, its view
     the first of the scan and no dummy before it, and the number of
-    repetitions the scan plays. The entries the design achieves are read from
-    it, and the RF layout is its first TR.
+    repetitions the scan acquires; the dummies are played before them
+    (:func:`dummies`). The entries the design achieves are read from it, and
+    the RF layout is its first TR.
 
     A sequence with slices is designed for one slice at the shortest TR,
     which is one shot, and the TR and the scan time follow from the packets
@@ -176,9 +178,10 @@ def evaluation(
     scaled = UIParam.FLIP in plugin.protocol
     if "n_slices" not in a:
         main = plugin.app(system, **(protocol.arguments | one))
+        duration = main.duration()[0]
         return Evaluation(
             protocol.replace(achieved(plugin, main)),
-            repetitions * main.duration()[0],
+            (dummies(a, duration) + repetitions) * duration,
             rf_layout=rf_layout(main, scaled),
         )
     one |= {"n_slices": 1, "tr": None}
@@ -196,8 +199,23 @@ def evaluation(
         values[UIParam.TR] = max(cycles)
     return Evaluation(
         protocol.replace(values),
-        repetitions * sum(cycles),
+        (dummies(a, max(cycles)) + repetitions) * sum(cycles),
         rf_layout=rf_layout(main, scaled, copies=max(sizes), period=max(cycles)),
+    )
+
+
+def dummies(a: dict[str, Any], repetition_s: float) -> int:
+    """Return the dummy repetitions the sequence function plays before acquiring.
+
+    Its ``n_dummy``, or where that is ``None`` as many as bring its steady
+    state within 1 % at a repetition every ``repetition_s``
+    (:func:`pypulseqpp.sequences.steady_state_dummies`), at its flip angle or,
+    without one, a spin echo's 90 degrees.
+    """
+    if a.get("n_dummy") is not None:
+        return int(a["n_dummy"])
+    return sequences.steady_state_dummies(
+        repetition_s, float(a.get("flip_angle_deg", 90.0))
     )
 
 
@@ -214,13 +232,13 @@ def _views(n: int, acceleration: int, n_acs: int, partial_fourier: float) -> int
 
 
 def cartesian_2d(a: dict[str, Any]) -> tuple[dict[str, Any], int]:
-    """One line of a 2D Cartesian scan, and its dummies and lines."""
+    """One line of a 2D Cartesian scan, and its lines."""
     lines = _views(a["n_y"], a["ry"], a["n_acs_y"], a["partial_fourier_y"])
-    return {"n_dummy": 0, "ry": a["n_y"], "n_acs_y": 0}, a["n_dummy"] + lines
+    return {"n_dummy": 0, "ry": a["n_y"], "n_acs_y": 0}, lines
 
 
 def cartesian_3d(a: dict[str, Any]) -> tuple[dict[str, Any], int]:
-    """One view of a 3D Cartesian scan, and its dummies and views.
+    """One view of a 3D Cartesian scan, and its views.
 
     Under the wave the views include the wave-free calibration region.
     """
@@ -235,7 +253,7 @@ def cartesian_3d(a: dict[str, Any]) -> tuple[dict[str, Any], int]:
     )
     one = {"n_dummy": 0, "ry": a["n_y"], "rz": a["n_z"], "n_acs_y": 0, "n_acs_z": 0}
     references = len(calibrating) if waved(a) else 0
-    return one, a["n_dummy"] + references + len(calibrating) + len(imaging)
+    return one, references + len(calibrating) + len(imaging)
 
 
 def _nyquist_spokes(n: int) -> int:
@@ -244,7 +262,7 @@ def _nyquist_spokes(n: int) -> int:
 
 
 def propeller_2d(a: dict[str, Any]) -> tuple[dict[str, Any], int]:
-    """One line of one blade of a 2D PROPELLER scan, and its dummies and lines.
+    """One line of one blade of a 2D PROPELLER scan, and its lines.
 
     A blade is ``blade_width`` lines and the Nyquist set is
     ``ceil(pi * n / (2 * blade_width))`` blades, so a blade of one line has
@@ -253,33 +271,33 @@ def propeller_2d(a: dict[str, Any]) -> tuple[dict[str, Any], int]:
     blades = math.ceil(math.pi * a["n"] / (2 * a["blade_width"]))
     lines = len(range(0, blades, a["ry"])) * a["blade_width"]
     one = {"n_dummy": 0, "blade_width": 1, "ry": _nyquist_spokes(a["n"])}
-    return one, a["n_dummy"] + lines
+    return one, lines
 
 
 def radial_2d(a: dict[str, Any]) -> tuple[dict[str, Any], int]:
-    """One spoke of a 2D radial scan, and its dummies and spokes."""
+    """One spoke of a 2D radial scan, and its spokes."""
     nyquist = _nyquist_spokes(a["n"])
     spokes = len(range(0, nyquist, a["ry"]))
-    return {"n_dummy": 0, "ry": nyquist}, a["n_dummy"] + spokes
+    return {"n_dummy": 0, "ry": nyquist}, spokes
 
 
 def spiral_2d(a: dict[str, Any]) -> tuple[dict[str, Any], int]:
-    """One interleaf of a 2D spiral scan, and its dummies and interleaves."""
+    """One interleaf of a 2D spiral scan, and its interleaves."""
     interleaves = len(range(0, a["n_shots"], a["ry"]))
-    return {"n_dummy": 0, "ry": a["n_shots"]}, a["n_dummy"] + interleaves
+    return {"n_dummy": 0, "ry": a["n_shots"]}, interleaves
 
 
 def stack_of_stars(a: dict[str, Any]) -> tuple[dict[str, Any], int]:
-    """One spoke at one partition of a stack of stars, and its dummies and views."""
+    """One spoke at one partition of a stack of stars, and its views."""
     nyquist = _nyquist_spokes(a["n"])
     spokes = len(range(0, nyquist, a["ry"]))
     partitions = _views(a["n_z"], a["rz"], a["n_acs_z"], a["partial_fourier_z"])
     one = {"n_dummy": 0, "ry": nyquist, "rz": a["n_z"], "n_acs_z": 0}
-    return one, a["n_dummy"] + spokes * partitions
+    return one, spokes * partitions
 
 
 def stack_of_blades(a: dict[str, Any]) -> tuple[dict[str, Any], int]:
-    """One line of one blade at one partition of a stack of blades, and its dummies and views.
+    """One line of one blade at one partition of a stack of blades, and its views.
 
     The scan plays every ``ry``-th blade of the Nyquist set of ``ceil(pi n /
     (2 blade_width))``, each of its ``blade_width`` lines at every acquired
@@ -296,12 +314,12 @@ def stack_of_blades(a: dict[str, Any]) -> tuple[dict[str, Any], int]:
         "n_acs_z": 0,
         "blade_width": 1,
     }
-    return one, a["n_dummy"] + blades * width * partitions
+    return one, blades * width * partitions
 
 
 def stack_of_spirals(a: dict[str, Any]) -> tuple[dict[str, Any], int]:
-    """One interleaf at one partition of a stack of spirals, and its dummies and views."""
+    """One interleaf at one partition of a stack of spirals, and its views."""
     interleaves = len(range(0, a["n_shots"], a["ry"]))
     partitions = _views(a["n_z"], a["rz"], a["n_acs_z"], a["partial_fourier_z"])
     one = {"n_dummy": 0, "ry": a["n_shots"], "rz": a["n_z"], "n_acs_z": 0}
-    return one, a["n_dummy"] + interleaves * partitions
+    return one, interleaves * partitions

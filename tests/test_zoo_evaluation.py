@@ -1040,12 +1040,18 @@ def test_every_shared_control_a_sequence_takes_is_named_at_its_own_user_cv(name,
         if not key.startswith("user")
     }
 
-    for index, (arguments, label, _) in enumerate(SHARED):
+    for index, (arguments, label, factory) in enumerate(SHARED):
         free = [a for a in arguments if a in taken and a not in bound]
         listed = UIParam.user_value(index) in plugin.protocol
         assert listed == bool(free), arguments
         if listed:
-            assert plugin.protocol[UIParam.user_value(index)].argument == free[0]
+            entry = plugin.protocol[UIParam.user_value(index)]
+            assert entry.argument == free[0]
+            # A sequence without an automatic value loses the label's mention of it.
+            if getattr(factory(free[0]), "automatic", None) != getattr(
+                entry, "automatic", None
+            ):
+                label = label.split(",")[0]
             assert plugin.protocol[UIParam.user_name(index)].text == label
 
 
@@ -1063,6 +1069,21 @@ def test_a_dummy_scan_count_set_through_its_user_cv_reaches_the_design(zoo):
     ]
 
     assert lengths[1] > lengths[0]
+
+
+def test_a_dummy_scan_count_of_minus_one_plays_until_the_steady_state(zoo):
+    plugin = zoo["gre2d"]
+    protocol = _protocol(plugin, {"nx": 32, "ny": 32, "user0_value": -1})
+
+    assert plugin.listing()[UIParam.user_value(0)].value == -1
+    assert protocol.arguments["n_dummy"] is None
+    assert protocol.to_wire()[UIParam.user_value(0)] == -1
+
+
+def test_a_sequence_that_counts_its_own_dummies_offers_no_steady_state_choice(zoo):
+    entry = zoo["bssfp2d"].protocol.get(UIParam.user_value(0))
+
+    assert entry is None or entry.automatic is None
 
 
 def test_an_echo_spacing_of_zero_is_the_shortest_one(zoo):

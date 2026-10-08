@@ -84,7 +84,8 @@ class Bssfp2D(SequencePlugin):
         # Each slice plays its own train: the half-angle pulse, then one TR per
         # repetition. The design of one line plays one repetition of one slice.
         a = arguments(self, protocol)
-        one, repetitions = cartesian_2d(a)
+        one, lines = cartesian_2d(a)
+        repetitions = a["n_dummy"] + lines
         line = self.app(system, **(_ungated(protocol) | one | {"n_slices": 1}))
         tr = line.definitions["TR"][0]
         once = line.duration()[0]

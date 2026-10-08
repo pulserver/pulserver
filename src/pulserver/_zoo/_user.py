@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import functools
 import inspect
 from collections.abc import Callable, Mapping
@@ -17,8 +18,8 @@ from ..protocol import ProtocolKey, UIParam
 SHARED: tuple[tuple[tuple[str, ...], str, Callable[[str], Entry]], ...] = (
     (
         ("n_dummy",),
-        "Dummy scans",
-        lambda argument: IntParam(argument, range_min=0, range_max=256),
+        "Dummy scans, -1 until steady state",
+        lambda argument: IntParam(argument, range_min=-1, range_max=4096, automatic=-1),
     ),
     (
         ("partial_fourier_x",),
@@ -93,8 +94,17 @@ def user_entries(
     for index, (arguments, name, entry) in enumerate(SHARED):
         for argument in arguments:
             if argument in taken and argument not in bound:
+                made = entry(argument)
+                # A function that takes no None has no choice of its own.
+                if getattr(made, "automatic", None) is not None and (
+                    taken[argument].default is not None
+                ):
+                    made = dataclasses.replace(
+                        made, automatic=None, range_min=made.automatic + 1
+                    )
+                    name = name.split(",")[0]
                 entries[UIParam.user_name(index)] = Description(name)
-                entries[UIParam.user_value(index)] = entry(argument)
+                entries[UIParam.user_value(index)] = made
                 break
     return entries
 

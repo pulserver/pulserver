@@ -7,7 +7,13 @@ import pypulseqpp as pp
 from pypulseqpp import sequences
 from pypulseqpp.sequences.sequence.epi2D_sequence import epi2d
 
-from pulserver._zoo._evaluation import achieved, arguments, packets, rf_layout
+from pulserver._zoo._evaluation import (
+    achieved,
+    arguments,
+    dummies,
+    packets,
+    rf_layout,
+)
 from pulserver._zoo._user import user_entries
 from pulserver.design import (
     Evaluation,
@@ -119,8 +125,13 @@ class Epi2D(SequencePlugin):
         )
         # The reference volume and the time series each play their dummy
         # cycles first, packet by packet.
-        dummies = a["n_dummy"] * (n_shots if n_frames > 1 else 1)
-        played = 2 * dummies + (1 + n_frames) * n_shots
+        n_dummy = a["n_dummy"]
+        if n_dummy is None:
+            # As the function plays them: a slice is excited once a cycle.
+            excitations = dummies(a, max(cycles))
+            n_dummy = -(-excitations // n_shots) if n_frames > 1 else excitations
+        dummy_cycles = n_dummy * (n_shots if n_frames > 1 else 1)
+        played = 2 * dummy_cycles + (1 + n_frames) * n_shots
         tr = n_shots * max(cycles)
         return Evaluation(
             protocol.replace(achieved(self, volume) | {UIParam.TR: tr}),
