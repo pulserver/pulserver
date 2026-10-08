@@ -286,12 +286,14 @@ class Console:
     ) -> int:
         """Scan a stored design on the exam's phantom; return the reconstruction's status.
 
-        ``emit`` receives the scan clock after each span played, as
-        ``{"clock": s, "duration": s}``, then the reconstruction's images as
-        DICOM, ``{"dicom": base64, "name": file name}``, converting those it
-        returns as MRD, and its texts as ``{"text": ...}``. With
-        ``sound``, each clock also carries the span's sound as ``sound``,
-        base64 of 16-bit little-endian stereo samples at ``rate`` Hz. At a
+        ``emit`` receives the scan clock after each span played, a span
+        lasting at least :data:`_SPAN`, as ``{"clock": s, "duration": s}``,
+        then the reconstruction's images as DICOM, ``{"dicom": base64,
+        "name": file name}``, converting those it returns as MRD, and its
+        texts as ``{"text": ...}``. With ``sound``, each span's sound comes
+        before its clock, once the clock reaches the span's start, as
+        ``{"sound": base64, "rate": Hz, "start": s}``: 16-bit little-endian
+        stereo samples, the first at ``start`` on the scan clock. At a
         speed, the scan is simulated ahead of its clock, and until the clock
         starts ``emit`` receives ``{"preparing": s}`` about twice a second,
         with the wall-clock time left before it does, or ``null`` before there
@@ -435,9 +437,23 @@ class Console:
                 raise _Cancelled
             emit({"preparing": left})
 
+        def heard(chunk: Any) -> None:
+            samples = np.round(32767 * np.clip(chunk.sound.T, -1.0, 1.0))
+            emit(
+                {
+                    "sound": base64.b64encode(samples.astype("<i2").tobytes()).decode(),
+                    "rate": SAMPLE_RATE,
+                    "start": chunk.start,
+                }
+            )
+
         def played() -> Iterator[np.ndarray]:
             chunks = scan.chunks(
-                0.1, speed=self.speed, sound=sound, preparing=preparing
+                _SPAN,
+                speed=self.speed,
+                sound=sound,
+                preparing=preparing,
+                heard=heard if sound else None,
             )
             try:
                 with contextlib.closing(chunks):
@@ -449,14 +465,7 @@ class Console:
             for chunk in chunks:
                 if cancelled():
                     raise _Cancelled
-                clock = {"clock": chunk.stop, "duration": scan.duration}
-                if sound:
-                    samples = np.round(32767 * np.clip(chunk.sound.T, -1.0, 1.0))
-                    clock["sound"] = base64.b64encode(
-                        samples.astype("<i2").tobytes()
-                    ).decode()
-                    clock["rate"] = SAMPLE_RATE
-                emit(clock)
+                emit({"clock": chunk.stop, "duration": scan.duration})
                 yield from chunk.readouts
 
         # Closed however the scan ends, which stops its simulation.
@@ -584,6 +593,11 @@ class Console:
                 reply({"error": f"unknown call {call!r}"})
         except Exception as error:
             reply({"error": f"{type(error).__name__}: {error}"})
+
+
+#: The scan time a span of a console's scan lasts at least, in s: its clock
+#: advances, and its sound is sent, a span at a time.
+_SPAN = 1.0
 
 
 class _Cancelled(Exception):
