@@ -486,8 +486,8 @@
         <span class="fm">__format__</span> <span class="o">=</span> <span class="nb">str</span><span class="o">.</span><span class="fm">__format__</span>
 
 
-<span class="c1"># user0_value .. user18_value and user0_name .. user18_name.</span>
-<span class="n">NUM_USER_ENTRIES</span> <span class="o">=</span> <span class="mi">19</span>
+<span class="c1"># user0_value .. user45_value and user0_name .. user45_name.</span>
+<span class="n">NUM_USER_ENTRIES</span> <span class="o">=</span> <span class="mi">46</span>
 
 
 <div class="viewcode-block" id="FloatKey">
@@ -621,7 +621,7 @@
 <div class="viewcode-block" id="UserKey">
 <a class="viewcode-back" href="../../../generated/pulserver.protocol.UserKey.html#pulserver.protocol.UserKey">[docs]</a>
 <span class="k">class</span><span class="w"> </span><span class="nc">UserKey</span><span class="p">(</span><span class="n">StrEnum</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">"""Keys of the float user entries, ``user0_value`` to ``user18_value``.</span>
+<span class="w">    </span><span class="sd">"""Keys of the float user entries, ``user0_value`` to ``user45_value``.</span>
 
 <span class="sd">    ``UserKey.USER3`` is ``UIParam.user_value(3)``. The entry is a</span>
 <span class="sd">    :class:`~pulserver.design.FloatParam`; the description naming it is bound</span>
@@ -646,14 +646,41 @@
     <span class="n">USER15</span> <span class="o">=</span> <span class="s2">"user15_value"</span>
     <span class="n">USER16</span> <span class="o">=</span> <span class="s2">"user16_value"</span>
     <span class="n">USER17</span> <span class="o">=</span> <span class="s2">"user17_value"</span>
-    <span class="n">USER18</span> <span class="o">=</span> <span class="s2">"user18_value"</span></div>
+    <span class="n">USER18</span> <span class="o">=</span> <span class="s2">"user18_value"</span>
+    <span class="n">USER19</span> <span class="o">=</span> <span class="s2">"user19_value"</span>
+    <span class="n">USER20</span> <span class="o">=</span> <span class="s2">"user20_value"</span>
+    <span class="n">USER21</span> <span class="o">=</span> <span class="s2">"user21_value"</span>
+    <span class="n">USER22</span> <span class="o">=</span> <span class="s2">"user22_value"</span>
+    <span class="n">USER23</span> <span class="o">=</span> <span class="s2">"user23_value"</span>
+    <span class="n">USER24</span> <span class="o">=</span> <span class="s2">"user24_value"</span>
+    <span class="n">USER25</span> <span class="o">=</span> <span class="s2">"user25_value"</span>
+    <span class="n">USER26</span> <span class="o">=</span> <span class="s2">"user26_value"</span>
+    <span class="n">USER27</span> <span class="o">=</span> <span class="s2">"user27_value"</span>
+    <span class="n">USER28</span> <span class="o">=</span> <span class="s2">"user28_value"</span>
+    <span class="n">USER29</span> <span class="o">=</span> <span class="s2">"user29_value"</span>
+    <span class="n">USER30</span> <span class="o">=</span> <span class="s2">"user30_value"</span>
+    <span class="n">USER31</span> <span class="o">=</span> <span class="s2">"user31_value"</span>
+    <span class="n">USER32</span> <span class="o">=</span> <span class="s2">"user32_value"</span>
+    <span class="n">USER33</span> <span class="o">=</span> <span class="s2">"user33_value"</span>
+    <span class="n">USER34</span> <span class="o">=</span> <span class="s2">"user34_value"</span>
+    <span class="n">USER35</span> <span class="o">=</span> <span class="s2">"user35_value"</span>
+    <span class="n">USER36</span> <span class="o">=</span> <span class="s2">"user36_value"</span>
+    <span class="n">USER37</span> <span class="o">=</span> <span class="s2">"user37_value"</span>
+    <span class="n">USER38</span> <span class="o">=</span> <span class="s2">"user38_value"</span>
+    <span class="n">USER39</span> <span class="o">=</span> <span class="s2">"user39_value"</span>
+    <span class="n">USER40</span> <span class="o">=</span> <span class="s2">"user40_value"</span>
+    <span class="n">USER41</span> <span class="o">=</span> <span class="s2">"user41_value"</span>
+    <span class="n">USER42</span> <span class="o">=</span> <span class="s2">"user42_value"</span>
+    <span class="n">USER43</span> <span class="o">=</span> <span class="s2">"user43_value"</span>
+    <span class="n">USER44</span> <span class="o">=</span> <span class="s2">"user44_value"</span>
+    <span class="n">USER45</span> <span class="o">=</span> <span class="s2">"user45_value"</span></div>
 
 
 
 <div class="viewcode-block" id="UserNameKey">
 <a class="viewcode-back" href="../../../generated/pulserver.protocol.UserNameKey.html#pulserver.protocol.UserNameKey">[docs]</a>
 <span class="k">class</span><span class="w"> </span><span class="nc">UserNameKey</span><span class="p">(</span><span class="n">StrEnum</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">"""Keys of the descriptions naming the user entries, ``user0_name`` to ``user18_name``.</span>
+<span class="w">    </span><span class="sd">"""Keys of the descriptions naming the user entries, ``user0_name`` to ``user45_name``.</span>
 
 <span class="sd">    ``UserNameKey.USER3`` is ``UIParam.user_name(3)``. The entry is a</span>
 <span class="sd">    :class:`~pulserver.design.Description`.</span>
@@ -677,7 +704,34 @@
     <span class="n">USER15</span> <span class="o">=</span> <span class="s2">"user15_name"</span>
     <span class="n">USER16</span> <span class="o">=</span> <span class="s2">"user16_name"</span>
     <span class="n">USER17</span> <span class="o">=</span> <span class="s2">"user17_name"</span>
-    <span class="n">USER18</span> <span class="o">=</span> <span class="s2">"user18_name"</span></div>
+    <span class="n">USER18</span> <span class="o">=</span> <span class="s2">"user18_name"</span>
+    <span class="n">USER19</span> <span class="o">=</span> <span class="s2">"user19_name"</span>
+    <span class="n">USER20</span> <span class="o">=</span> <span class="s2">"user20_name"</span>
+    <span class="n">USER21</span> <span class="o">=</span> <span class="s2">"user21_name"</span>
+    <span class="n">USER22</span> <span class="o">=</span> <span class="s2">"user22_name"</span>
+    <span class="n">USER23</span> <span class="o">=</span> <span class="s2">"user23_name"</span>
+    <span class="n">USER24</span> <span class="o">=</span> <span class="s2">"user24_name"</span>
+    <span class="n">USER25</span> <span class="o">=</span> <span class="s2">"user25_name"</span>
+    <span class="n">USER26</span> <span class="o">=</span> <span class="s2">"user26_name"</span>
+    <span class="n">USER27</span> <span class="o">=</span> <span class="s2">"user27_name"</span>
+    <span class="n">USER28</span> <span class="o">=</span> <span class="s2">"user28_name"</span>
+    <span class="n">USER29</span> <span class="o">=</span> <span class="s2">"user29_name"</span>
+    <span class="n">USER30</span> <span class="o">=</span> <span class="s2">"user30_name"</span>
+    <span class="n">USER31</span> <span class="o">=</span> <span class="s2">"user31_name"</span>
+    <span class="n">USER32</span> <span class="o">=</span> <span class="s2">"user32_name"</span>
+    <span class="n">USER33</span> <span class="o">=</span> <span class="s2">"user33_name"</span>
+    <span class="n">USER34</span> <span class="o">=</span> <span class="s2">"user34_name"</span>
+    <span class="n">USER35</span> <span class="o">=</span> <span class="s2">"user35_name"</span>
+    <span class="n">USER36</span> <span class="o">=</span> <span class="s2">"user36_name"</span>
+    <span class="n">USER37</span> <span class="o">=</span> <span class="s2">"user37_name"</span>
+    <span class="n">USER38</span> <span class="o">=</span> <span class="s2">"user38_name"</span>
+    <span class="n">USER39</span> <span class="o">=</span> <span class="s2">"user39_name"</span>
+    <span class="n">USER40</span> <span class="o">=</span> <span class="s2">"user40_name"</span>
+    <span class="n">USER41</span> <span class="o">=</span> <span class="s2">"user41_name"</span>
+    <span class="n">USER42</span> <span class="o">=</span> <span class="s2">"user42_name"</span>
+    <span class="n">USER43</span> <span class="o">=</span> <span class="s2">"user43_name"</span>
+    <span class="n">USER44</span> <span class="o">=</span> <span class="s2">"user44_name"</span>
+    <span class="n">USER45</span> <span class="o">=</span> <span class="s2">"user45_name"</span></div>
 
 
 
@@ -783,7 +837,7 @@
 <a class="viewcode-back" href="../../../generated/pulserver.protocol.UIParam.user_value.html#pulserver.protocol.UIParam.user_value">[docs]</a>
     <span class="nd">@staticmethod</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">user_value</span><span class="p">(</span><span class="n">n</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">UserKey</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""Return the key of float user entry ``n``, 0 to 18.</span>
+<span class="w">        </span><span class="sd">"""Return the key of float user entry ``n``, 0 to 45.</span>
 
 <span class="sd">        Raises</span>
 <span class="sd">        ------</span>
@@ -798,7 +852,7 @@
 <a class="viewcode-back" href="../../../generated/pulserver.protocol.UIParam.user_name.html#pulserver.protocol.UIParam.user_name">[docs]</a>
     <span class="nd">@staticmethod</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">user_name</span><span class="p">(</span><span class="n">n</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">UserNameKey</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""Return the key of the description naming user entry ``n``, 0 to 18.</span>
+<span class="w">        </span><span class="sd">"""Return the key of the description naming user entry ``n``, 0 to 45.</span>
 
 <span class="sd">        Raises</span>
 <span class="sd">        ------</span>

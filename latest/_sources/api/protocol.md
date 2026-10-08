@@ -42,8 +42,8 @@ protocol stay members until a wire block formats them.
 | {obj}`~pulserver.protocol.BoolKey` | Keys declared as boolean. |
 | {obj}`~pulserver.protocol.EnumKey` | Keys declared as string lists. |
 | {obj}`~pulserver.protocol.ConfigKey` | Keys the sequence declares to the interpreter rather than shows. |
-| {obj}`~pulserver.protocol.UserKey` | Keys of the float user entries, `user0_value` to `user18_value`. |
-| {obj}`~pulserver.protocol.UserNameKey` | Keys of the descriptions naming the user entries, `user0_name` to `user18_name`. |
+| {obj}`~pulserver.protocol.UserKey` | Keys of the float user entries, `user0_value` to `user45_value`. |
+| {obj}`~pulserver.protocol.UserNameKey` | Keys of the descriptions naming the user entries, `user0_name` to `user45_name`. |
 | {obj}`~pulserver.protocol.SequenceType` | Options of `sequence_type`. |
 | {obj}`~pulserver.protocol.ImagingMode` | Options of `imaging_mode`. |
 | {obj}`~pulserver.protocol.PreparationType` | Options of `preparation_type`. |
