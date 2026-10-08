@@ -22,8 +22,8 @@ def _pixels(dataset):
 
 
 def _points(centre, read, phase):
-    """The physical point at the centre of each pixel of an image, ``(rows, columns, 3)``."""
-    offsets = (np.arange(MATRIX) - 0.5 * (MATRIX - 1)) * PIXEL
+    """The physical point at the centre of each pixel of an image, ``(rows, columns, 3)``: pixel ``MATRIX // 2`` on ``centre``."""
+    offsets = (np.arange(MATRIX) - MATRIX // 2) * PIXEL
     rows, columns = np.meshgrid(offsets, offsets, indexing="ij")
     return (
         np.asarray(centre)
@@ -60,7 +60,7 @@ def test_each_plane_carries_its_orientation_and_the_centre_of_its_first_pixel(pl
     np.testing.assert_allclose(
         [float(v) for v in dataset.ImageOrientationPatient], [*read, *phase]
     )
-    first = 1e3 * (np.asarray(centre) - 0.5 * (FOV - PIXEL) * (read + phase))
+    first = 1e3 * (np.asarray(centre) - MATRIX // 2 * PIXEL * (read + phase))
     np.testing.assert_allclose(
         [float(v) for v in dataset.ImagePositionPatient], first, atol=1e-6
     )
@@ -85,14 +85,16 @@ def test_the_planes_are_the_radiological_views_of_a_head_first_supine_subject():
 
 def test_a_disc_shows_its_face_in_its_own_plane_and_its_section_across_it():
     centre = (0.03, -0.02, 0.0)
+    # A radius no pixel centre lies on, so no pixel is decided by rounding.
+    radius = 0.0105
 
-    images = dict(zip(PLANES, _scan(_disc(centre), centre), strict=True))
+    images = dict(zip(PLANES, _scan(_disc(centre, radius), centre), strict=True))
 
     for plane, dataset in images.items():
         points = _points(centre, *PLANES[plane])
         radial = np.hypot(points[..., 0] - centre[0], points[..., 1] - centre[1])
         expected = np.where(
-            (radial <= 0.01) & (np.abs(points[..., 2]) <= 0.5 * THICKNESS), 2.0, 0.0
+            (radial <= radius) & (np.abs(points[..., 2]) <= 0.5 * THICKNESS), 2.0, 0.0
         )
         np.testing.assert_allclose(_pixels(dataset), expected, atol=2.0 / 1000)
     assert np.count_nonzero(_pixels(images["axial"]) > 1.0) > np.count_nonzero(
@@ -108,8 +110,8 @@ def test_a_turned_and_moved_phantom_is_drawn_where_it_lies():
     axial = _pixels(_scan(phantom, lies_at)[0])
 
     rows, columns = np.nonzero(axial > 1.0)
-    assert math.isclose(rows.mean(), 0.5 * (MATRIX - 1), abs_tol=0.5)
-    assert math.isclose(columns.mean(), 0.5 * (MATRIX - 1), abs_tol=0.5)
+    assert math.isclose(rows.mean(), MATRIX // 2, abs_tol=0.5)
+    assert math.isclose(columns.mean(), MATRIX // 2, abs_tol=0.5)
 
 
 @pytest.fixture

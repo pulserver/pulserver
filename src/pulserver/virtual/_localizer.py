@@ -36,7 +36,9 @@ def localizer(
 
     Each image is the phantom's proton density in a slab ``thickness`` thick
     through ``centre``, sampled at the centres of ``matrix`` by ``matrix``
-    pixels over ``fov``, as the phantom's ``proton_density`` gives it: the
+    pixels over ``fov`` with pixel ``matrix // 2`` on ``centre``, where a
+    reconstruction's FFT puts it, as the phantom's ``proton_density`` gives
+    it: the
     ground truth, with no sequence played. The images carry the geometry of
     the reconstructed ones, so a console plans on them as it plans on a
     scanned localizer. Their read and phase directions along the physical
@@ -74,7 +76,7 @@ def localizer(
     )
     convert = MrdDicomBuilder(header)
     centre = np.asarray(centre, dtype=float)
-    offsets = (np.arange(matrix) - 0.5 * (matrix - 1)) * fov / matrix
+    offsets = (np.arange(matrix) - matrix // 2) * fov / matrix
     rows, columns = np.meshgrid(offsets, offsets, indexing="ij")
     images = []
     for index, (read, phase) in enumerate(PLANES.values()):
