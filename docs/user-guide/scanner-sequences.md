@@ -141,6 +141,13 @@ a plugin's own user entries start at `user12`:
 | `user6` | Readout oversampling |
 | `user7` | Echo spacing, in ms; 0 the shortest |
 | `user8` | Refocusing flip angle, in degrees |
+
+A sequence that plays saturation bands offers them as explicit bands, prescribed
+graphically as a scanner's console prescribes them: `exsat_mask` turns band `n`,
+1 to 6, on with its bit `n - 1`, and `exsat<n>_normal_x`, `_y` and `_z`,
+`exsat<n>_loc` and `exsat<n>_thickness` give its normal along the physical axes,
+its centre's distance from the isocentre along that normal and its thickness, in
+mm. `epi2d` plays two.
 | `epi2d`, `epi3d` | `epi` |
 
 The pair is what a console reconstructs a shipped sequence with when the scan

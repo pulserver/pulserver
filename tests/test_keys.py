@@ -80,10 +80,36 @@ def test_every_key_enum_is_a_protocol_key():
 
 
 def test_ui_param_carries_every_typed_key():
+    accessors = {
+        "user_value",
+        "user_name",
+        "exsat_normal",
+        "exsat_loc",
+        "exsat_thickness",
+    }
     members = {
-        value for name, value in vars(UIParam).items() if not name.startswith("_")
-    } - {UIParam.__dict__["user_value"], UIParam.__dict__["user_name"]}
-    assert members == {*FloatKey, *IntKey, *BoolKey, *EnumKey}
+        value
+        for name, value in vars(UIParam).items()
+        if not name.startswith("_") and name not in accessors
+    }
+    # Each saturation band's keys are reached through its number.
+    banded = {
+        key
+        for n in range(1, 7)
+        for key in (
+            *UIParam.exsat_normal(n),
+            UIParam.exsat_loc(n),
+            UIParam.exsat_thickness(n),
+        )
+    }
+    assert members | banded == {*FloatKey, *IntKey, *BoolKey, *EnumKey}
+    assert not members & banded
+
+
+@pytest.mark.parametrize("n", [0, 7])
+def test_a_saturation_band_outside_the_six_is_refused(n):
+    with pytest.raises(ValueError, match="numbered 1 to 6"):
+        UIParam.exsat_loc(n)
 
 
 @pytest.mark.parametrize("n", [-1, NUM_USER_ENTRIES])

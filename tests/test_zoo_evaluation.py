@@ -13,6 +13,7 @@ from _host import LIMITS, value_block
 from pulserver import _plugins
 from pulserver._zoo import ZOO_PAIRS
 from pulserver._zoo._evaluation import achieved, rf_layout
+from pulserver._zoo._saturation import band_arguments
 from pulserver._zoo._slab import slab
 from pulserver._zoo._user import SHARED
 from pulserver.design import Protocol, StatedParam, load_plugin
@@ -161,7 +162,7 @@ SCANS = [pytest.param(name, {}, id=name) for name in SHIPPED] + [
         ("epi2d", "packets", {"nslices": 7, "TR": 900000, "Ry": 2, "num_shots": 2}),
         ("epi2d", "frames", {"nslices": 12, "TR": 5000000, "num_frames": 3}),
         ("epi2d", "shortest", {"nslices": 6, "TR": TRPreset.MINIMUM}),
-        ("epi2d", "saturation", {"nslices": 3, "sat_x": 3, "sat_x_loc2": 60.0}),
+        ("epi2d", "saturation", {"nslices": 3, "exsat_mask": 3, "exsat2_loc": 60.0}),
         (
             "epi3d",
             "undersampled",
@@ -784,20 +785,32 @@ def test_a_sequence_with_navigators_asks_for_motion_correction(zoo, name):
     assert ZOO_PAIRS[TOGGLED[name][0]] == "pmc"
 
 
-def test_epi2d_places_a_scanner_saturation_band_on_its_physical_axis(zoo):
+def _turned(changes, rotation, offset_mm):
     from pulserver.protocol import FOV_OFFSET, FOV_ROTATION
 
-    _bands = inspect.getmodule(type(zoo["epi2d"]))._bands
+    return {
+        **changes,
+        **dict(zip(FOV_ROTATION, np.asarray(rotation).ravel(), strict=True)),
+        **dict(zip(FOV_OFFSET, offset_mm, strict=True)),
+    }
+
+
+def test_epi2d_places_an_explicit_saturation_band_along_its_normal_in_the_logical_frame(
+    zoo,
+):
     # Logical readout along physical y, phase along physical z, slice along x.
     rotation = np.array([[0.0, 0.0, 1.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]])
     changes = {
-        "sat_y": 2,
-        "sat_y_loc2": 30.0,
-        "sat_y_thickness": 20.0,
-        **dict(zip(FOV_ROTATION, rotation.ravel(), strict=True)),
-        **dict(zip(FOV_OFFSET, (10.0, 0.0, 0.0), strict=True)),
+        "exsat_mask": 2,
+        "exsat2_normal_x": 0.0,
+        "exsat2_normal_y": 1.0,
+        "exsat2_normal_z": 0.0,
+        "exsat2_loc": 30.0,
+        "exsat2_thickness": 20.0,
     }
-    arguments = _bands(_protocol(zoo["epi2d"], changes))
+    arguments = band_arguments(
+        _protocol(zoo["epi2d"], _turned(changes, rotation, (10.0, 0.0, 0.0))), 2
+    )
 
     # Physical y is the logical readout, offset 10 mm along it.
     normal = [arguments[f"sat1_normal_{axis}"] for axis in "xyz"]
@@ -805,13 +818,36 @@ def test_epi2d_places_a_scanner_saturation_band_on_its_physical_axis(zoo):
     assert arguments["sat1_position"] == pytest.approx(20e-3)
     assert arguments["sat1_thickness"] == pytest.approx(20e-3)
     assert "sat2_thickness" not in arguments
-    assert not any(name.startswith("sat_") for name in arguments)
+    assert not any(name.startswith("exsat") for name in arguments)
+
+
+def test_an_oblique_band_keeps_its_normal_through_the_prescription(zoo):
+    rotation = np.array([[0.0, -1.0, 0.0], [1.0, 0.0, 0.0], [0.0, 0.0, 1.0]])
+    changes = {
+        "exsat_mask": 1,
+        "exsat1_normal_x": 0.0,
+        "exsat1_normal_y": 3.0,
+        "exsat1_normal_z": 4.0,
+    }
+    arguments = band_arguments(
+        _protocol(zoo["epi2d"], _turned(changes, rotation, (0.0, 0.0, 0.0))), 2
+    )
+
+    logical = [arguments[f"sat1_normal_{axis}"] for axis in "xyz"]
+    np.testing.assert_allclose(rotation @ logical, [0.0, 0.6, 0.8], atol=1e-12)
 
 
 def test_epi2d_refuses_more_saturation_bands_than_it_plays(zoo):
-    validation = zoo["epi2d"].validate(SYSTEM, {"sat_x": 3, "sat_z": 1})
+    validation = zoo["epi2d"].validate(SYSTEM, {"exsat_mask": 7})
     assert not validation.valid
     assert "at most 2" in validation.info
+
+
+def test_a_cine_is_gated_at_the_heart_rate_asked_for(zoo):
+    plugin = zoo["bssfp2d"]
+
+    assert plugin.listing()[UIParam.HEART_RATE].value == 60
+    assert _protocol(plugin, {"heart_rate": 80}).arguments["heart_rate_bpm"] == 80
 
 
 @pytest.mark.parametrize(

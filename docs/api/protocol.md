@@ -36,7 +36,7 @@ protocol stay members until a wire block formats them.
 | Object | Description |
 | --- | --- |
 | {obj}`~pulserver.protocol.ProtocolKey` | A key of the protocol: a member of any of the key enums below. |
-| {obj}`~pulserver.protocol.UIParam` | Collects the keys of every UI control, and returns the user-entry keys. |
+| {obj}`~pulserver.protocol.UIParam` | Collects the keys of every UI control, and returns the keys of the user entries and of the six explicit saturation bands, `exsat1` to `exsat6`. |
 | {obj}`~pulserver.protocol.FloatKey` | Keys declared as float. |
 | {obj}`~pulserver.protocol.IntKey` | Keys declared as integer. |
 | {obj}`~pulserver.protocol.BoolKey` | Keys declared as boolean. |
