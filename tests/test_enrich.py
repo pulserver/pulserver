@@ -275,9 +275,9 @@ def test_the_header_describes_each_encoding_space():
     enrich_header(enriched, table)
     encoding = enriched.encoding[0]
     size = encoding.encodedSpace.matrixSize
-    assert (size.x, size.y, size.z) == (64, 8, 3)
+    assert (size.x, size.y, size.z) == (64, 8, 1)
     fov = encoding.reconSpace.fieldOfView_mm
-    assert (fov.x, fov.y, fov.z) == pytest.approx((220.0, 220.0, 15.0))
+    assert (fov.x, fov.y, fov.z) == pytest.approx((220.0, 220.0, 4.83375))
     assert encoding.encodingLimits.slice.maximum == 2
     assert encoding.encodingLimits.kspace_encoding_step_1.maximum == 7
     assert pytest.approx([30.0]) == enriched.sequenceParameters.TR
@@ -286,6 +286,88 @@ def test_the_header_describes_each_encoding_space():
     space = EncodingSpace.from_header(reparsed)
     assert space.loops == ("slice",)
     assert space.phase_encodes == 8
+
+
+def stack_of_slices(tmp_path, positions=(-0.005, 0.0, 0.005), slices=3, **labels):
+    """Two lines of each of ``slices`` slices, the design stating a stack of them as pypulseqpp's 2D sequences do."""
+    seq = pp.Sequence(pp.Opts())
+    for slc in range(slices):
+        for lin in range(2):
+            add_readout(
+                seq,
+                pp.make_label("SLC", "SET", slc),
+                pp.make_label("LIN", "SET", lin),
+                *(pp.make_label(name, "SET", value) for name, value in labels.items()),
+            )
+    seq.set_definition("Matrix", [SAMPLES, 2, slices])
+    seq.set_definition("FOV", [0.22, 0.22, 0.012])
+    if positions:
+        seq.set_definition("SlicePositions", list(positions))
+    return written(seq, tmp_path)
+
+
+def test_the_slices_of_a_2d_design_reach_the_reconstruction_as_slices_not_partitions():
+    table = fixture("gre_2d_3sl.seq")
+    enriched = header()
+    enrich_header(enriched, table)
+    received = acquisitions(table)
+    for index, acquisition in enumerate(received):
+        enrich_acquisition(acquisition, table, index)
+
+    space = EncodingSpace.from_header(enriched, loops=("average",))
+    assert space.partitions == 1
+    assert space.axes == ("coil", "phase_encode", "readout")
+    labels = reference("gre_2d_3sl.seq").evaluate_labels(evolution="adc")
+    assert [a.idx.slice for a in received] == labels["SLC"].tolist()
+    assert {a.idx.kspace_encode_step_2 for a in received} == {0}
+
+
+def test_a_stack_without_a_slice_thickness_shares_its_field_of_view_among_its_slices(
+    tmp_path,
+):
+    encoding = enriched_encoding(stack_of_slices(tmp_path))
+
+    assert encoding.encodedSpace.matrixSize.z == 1
+    assert encoding.reconSpace.fieldOfView_mm.z == pytest.approx(4.0)
+
+
+def test_slices_without_slice_positions_are_still_a_stack(tmp_path):
+    table = stack_of_slices(tmp_path, positions=())
+
+    assert enriched_encoding(table).encodedSpace.matrixSize.z == 1
+    assert not table.slice_offset_m.any()
+
+
+def test_a_design_that_encodes_partitions_keeps_its_matrix_along_z(tmp_path):
+    table = stack_of_slices(tmp_path, positions=(), PAR=1)
+
+    assert enriched_encoding(table).encodedSpace.matrixSize.z == 3
+
+
+def test_each_readout_of_a_stack_is_positioned_at_its_slice_along_slice_dir(tmp_path):
+    table = stack_of_slices(tmp_path)
+    angle = np.deg2rad(20.0)
+    normal = (0.0, -np.sin(angle), np.cos(angle))
+    centre = (1.0, 2.0, 3.0)
+
+    received = acquisitions(table)
+    for index, acquisition in enumerate(received):
+        acquisition.position[:] = centre
+        acquisition.slice_dir[:] = normal
+        enrich_acquisition(acquisition, table, index)
+
+    for acquisition in received:
+        offset_mm = 5.0 * (acquisition.idx.slice - 1)
+        np.testing.assert_allclose(
+            acquisition.position,
+            np.add(centre, offset_mm * np.asarray(normal)),
+            atol=1e-5,
+        )
+
+
+def test_a_slice_counter_beyond_the_slice_positions_is_refused(tmp_path):
+    with pytest.raises(ValueError, match="SlicePositions"):
+        stack_of_slices(tmp_path, positions=(-0.005, 0.005))
 
 
 def test_the_header_lists_every_flip_angle_the_sequence_plays():

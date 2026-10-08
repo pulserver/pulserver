@@ -270,3 +270,27 @@ def test_contrasts_that_are_images_reconstruct_to_one_image_each(device):
     for image, kspace in zip(images, echoes, strict=True):
         _, (expected,) = reconstruct(stream(kspace, range(MATRIX)), device=device)
         assert relative_difference(image, expected) < 1e-4
+
+
+@pytest.mark.parametrize("partitions", [2, 3])
+def test_a_volume_of_fewer_partitions_than_the_wavelet_needs_reconstructs(
+    device, partitions
+):
+    kspace = vials()[:, None] * (1.0 + np.arange(partitions))[:, None, None]
+    kspace = np.fft.fftshift(
+        np.fft.fft(np.fft.ifftshift(kspace, axes=1), axis=1, norm="ortho"), axes=1
+    )
+    acquisitions = []
+    for partition in range(partitions):
+        last = LAST if partition == partitions - 1 else ()
+        acquisitions += readouts(kspace[:, partition], partition=partition, last=last)
+
+    _, (image,) = reconstruct(
+        acquisitions,
+        calibration_header(COILS, MATRIX, partitions=partitions),
+        device=device,
+    )
+
+    assert image.shape == (partitions, MATRIX, MATRIX)
+    assert np.isfinite(image).all()
+    assert image.max() > 0

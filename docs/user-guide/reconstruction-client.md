@@ -47,7 +47,7 @@ connection, so the client can finish sending and read the reason.
 | `fov_offset_mm`, a `userParameterString` | Optional | The position of the field-of-view centre, three millimetres along the logical readout, phase and slice axes separated by spaces; a difference from the offset the design was converted at is applied to the samples as a receive phase. Without it, the converted offset |
 | `subjectInformation`, `studyInformation`, `measurementInformation`, `acquisitionSystemInformation` | Optional | Copied into the DICOM datasets; `relativeTablePosition` is not |
 | `measurementInformation.measurementID` | A non-negative integer when `systemVendor` names GE | The DICOM series number on a GE system |
-| `encoding` | Optional | Replaced by one encoding space per subsequence, and one more for the navigator readouts of a subsequence that has them. The reconstruction space is the sequence's matrix size and field of view; the encoded space of a Cartesian space has the readout widened to the full echo, oversampling included, and its field of view in proportion. The encoding limits are the extremes of the counters the readouts reach, centred on the k-space centre line and partition the sequence defines. A matrix size or field of view the sequence does not define is kept from the client's encoding at the same index |
+| `encoding` | Optional | Replaced by one encoding space per subsequence, and one more for the navigator readouts of a subsequence that has them. The reconstruction space is the sequence's matrix size and field of view, one slice deep for a stack of 2D slices; the encoded space of a Cartesian space has the readout widened to the full echo, oversampling included, and its field of view in proportion. The encoding limits are the extremes of the counters the readouts reach, centred on the k-space centre line and partition the sequence defines. A matrix size or field of view the sequence does not define is kept from the client's encoding at the same index |
 | `sequenceParameters` | Optional | TR, TE, TI and flip angles replaced by those the sequence defines; TR and TE it does not define are measured by pypulseqpp's `test_report_dict`, flip angles it does not define are the distinct values of `rf_flip_angles` |
 
 A header that the ISMRMRD schema does not accept, or that names no design of
@@ -68,7 +68,8 @@ noise scans and navigators included, and no other.
 | `idx`, `sample_time_us`, `encoding_space_ref` | Any value | Replaced |
 | `center_sample` | Any value | Replaced, except on a readout whose k-space location does not change |
 | `trajectory_dimensions`, `traj` | Any value | Replaced on a readout whose k-space location changes, in 1/m along the sequence's gradient axes |
-| `measurement_uid`, `position`, `read_dir`, `phase_dir`, `slice_dir`, `patient_table_position`, `acquisition_time_stamp`, `physiology_time_stamp`, `user_int`, `user_float` | The scanner's values, as MRD defines them | Passed on unchanged; an image takes them from its reference acquisition |
+| `position` | The prescribed field-of-view centre, in mm from isocentre | Moved along `slice_dir` to the centre of the readout's slice, for a stack of 2D slices whose sequence defines `SlicePositions`; an image takes it from its reference acquisition |
+| `measurement_uid`, `read_dir`, `phase_dir`, `slice_dir`, `patient_table_position`, `acquisition_time_stamp`, `physiology_time_stamp`, `user_int`, `user_float` | The scanner's values, as MRD defines them | Passed on unchanged; an image takes them from its reference acquisition |
 
 A series is refused, and its reconstruction stopped, when an acquisition has a
 sample count other than its readout's, when the scan counters skip or repeat
