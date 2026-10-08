@@ -129,6 +129,20 @@ class StatedParam:
 
 
 @dataclass(frozen=True)
+class AveragesParam:
+    """The number of signal averages, NEX: how many times the main sequence plays, binding no argument.
+
+    Every plugin has it unless it declares its own. The main sequence of a
+    design is played that many times, written into its block table once it
+    is designed (:meth:`pypulseqpp.Sequence.expand_repeats`), each repetition
+    past the first numbered by ``AVG``. It travels as a float, as the
+    interpreter's NEX does, and holds a whole number from 1.
+    """
+
+    range_max: int = 16
+
+
+@dataclass(frozen=True)
 class ConfigParam:
     """A value the sequence declares to the interpreter; never shown or edited."""
 
@@ -149,6 +163,7 @@ Entry = (
     | BoolParam
     | ChoiceParam
     | StatedParam
+    | AveragesParam
     | ConfigParam
     | Description
 )
@@ -210,6 +225,22 @@ def _member(key: ProtocolKey, entry: ChoiceParam, value: Any) -> StrEnum:
         raise ValueError(f"{key}: {value!r} is not one of {options}") from None
 
 
+def _averages(key: ProtocolKey, entry: AveragesParam, value: Any) -> int:
+    """Return the number of averages a value states.
+
+    Raises
+    ------
+    ValueError
+        If it is not a whole number from 1 to the entry's maximum.
+    """
+    count = float(value)
+    if count != round(count) or not 1 <= count <= entry.range_max:
+        raise ValueError(
+            f"{key} is a whole number of averages from 1 to {entry.range_max}, not {value}"
+        )
+    return int(count)
+
+
 def _stated(key: ProtocolKey, entry: StatedParam, value: Any) -> StrEnum:
     """Return the stated member a value names, by option or index.
 
@@ -237,6 +268,10 @@ def _parameter(
         return Parameter(Kind.CONFIG, entry.value, InputMode.OFF)
     if isinstance(entry, Description):
         return Parameter(Kind.DESCRIPTION, entry.text)
+    if isinstance(entry, AveragesParam):
+        return Parameter(
+            Kind.FLOAT, 1.0, InputMode.TYPEIN, 1.0, float(entry.range_max), 1.0, ""
+        )
     if isinstance(entry, StatedParam):
         return Parameter(
             Kind.STRINGLIST,
@@ -422,6 +457,8 @@ class Protocol(Mapping[ProtocolKey, Any]):
                 converted[key] = bool(value)
             elif isinstance(entry, StatedParam):
                 converted[key] = _stated(key, entry, value)
+            elif isinstance(entry, AveragesParam):
+                converted[key] = _averages(key, entry, value)
             else:
                 converted[key] = _member(key, entry, value)
         return cls(entries, converted, presets)
@@ -446,6 +483,8 @@ class Protocol(Mapping[ProtocolKey, Any]):
                 wire[key] = int(value)
             elif isinstance(entry, BoolParam):
                 wire[key] = bool(value)
+            elif isinstance(entry, AveragesParam):
+                wire[key] = float(value)
             else:
                 wire[key] = value
         return wire
@@ -494,6 +533,8 @@ class Protocol(Mapping[ProtocolKey, Any]):
                 value = _member(key, entry, value)
             elif isinstance(entry, StatedParam):
                 value = _stated(key, entry, value)
+            elif isinstance(entry, AveragesParam):
+                value = _averages(key, entry, value)
             values[key] = value
             presets.pop(key, None)
         return Protocol(self._entries, values, presets)

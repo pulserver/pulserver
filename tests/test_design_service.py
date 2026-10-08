@@ -221,11 +221,13 @@ def validate(plugins, plugin, values, limits=LIMITS):
     )
 
 
-def imported(store, path, offset_mm=None, rotation=None, limits=FIXTURE_LIMITS):
+def imported(
+    store, path, offset_mm=None, rotation=None, limits=FIXTURE_LIMITS, averages=1
+):
     return service.call(
         "import",
         limits=limits,
-        block=format_import(path, offset_mm, rotation),
+        block=format_import(path, offset_mm, rotation, averages),
         store=store,
     )
 
@@ -635,6 +637,33 @@ def test_importing_the_same_files_at_the_same_prescription_is_one_design(store):
     np.testing.assert_allclose(
         np.reshape(store.manifest(turned)["fov_rotation"], (3, 3)), quarter, atol=1e-12
     )
+
+
+def test_an_import_plays_its_main_sequence_as_many_times_as_its_averages(store):
+    path = FIXTURES / "dedup_gre_pair.seq"
+    once = generated(imported(store, path))
+    twice = generated(imported(store, path, averages=2))
+    chain = ["dedup_gre_pair.seq", "dedup_gre_pair_b.seq"]
+
+    single = [pp.io.read(store.directory(once) / name) for name in chain]
+    double = [pp.io.read(store.directory(twice) / name) for name in chain]
+
+    assert twice != once
+    assert len(double[0].libraries().block_durations) == len(
+        single[0].libraries().block_durations
+    )
+    assert double[1].duration()[0] == pytest.approx(
+        2 * single[1].duration()[0], rel=1e-6
+    )
+    assert set(double[1].evaluate_labels(evolution="adc")["AVG"]) == {0, 1}
+
+
+def test_an_import_of_a_fractional_number_of_averages_is_refused(store):
+    status, reply = imported(store, FIXTURES / "dedup_gre_pair.seq", averages=1.5)
+
+    assert status == 1
+    assert "whole number of averages" in reply
+    assert list(store) == []
 
 
 def test_an_import_beyond_the_scanner_limits_is_refused(store):

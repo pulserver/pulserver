@@ -10,6 +10,7 @@ import pytest
 
 from pulserver import _plugins
 from pulserver.design import (
+    AveragesParam,
     Evaluation,
     IntParam,
     Protocol,
@@ -309,7 +310,7 @@ def test_a_ui_declaration_warns_and_is_the_protocol(calls):
             ui = ENTRIES
 
     assert warned[0].filename == __file__
-    assert Declared.protocol == Declared.ui == ENTRIES
+    assert Declared.protocol == Declared.ui == {**ENTRIES, UIParam.NEX: AveragesParam()}
     assert list(Declared().listing())[:2] == [UIParam.TE, UIParam.NX]
 
 
@@ -361,3 +362,98 @@ def test_a_shipped_or_test_plugin_declares_no_deprecated_name(path):
 
     assert isinstance(plugin, SequencePlugin)
     assert not {"ui", "recon", "follows"} & set(vars(type(plugin)))
+
+
+def _prepared(system, nx=3):
+    """A delay played once before ``nx`` delays that play on every average."""
+    seq = pp.Sequence(system)
+    seq.add_block(pp.make_delay(1e-3), pp.make_label("ONCE", "SET", 1))
+    seq.add_block(pp.make_delay(2e-3), pp.make_label("ONCE", "SET", 0))
+    for _ in range(nx - 1):
+        seq.add_block(pp.make_delay(2e-3))
+    return seq
+
+
+def test_every_plugin_offers_its_averages_unless_it_declares_them(calls):
+    listing = _plugin(_delays(calls)).listing()
+
+    assert listing[UIParam.NEX].value == 1.0
+    assert listing[UIParam.NEX].editable
+
+
+def test_a_fractional_number_of_averages_is_refused(calls):
+    reply = _plugin(_delays(calls)).validate(SYSTEM, {UIParam.NEX: 1.5})
+
+    assert not reply.valid
+    assert "whole number of averages" in reply.info
+
+
+def test_the_averages_play_the_main_sequence_again_numbered_by_avg(tmp_path):
+    plugin = type(
+        "Prepared",
+        (SequencePlugin,),
+        {"app": _prepared, "protocol": {UIParam.NX: IntParam("nx", range_max=9)}},
+    )()
+
+    reply, paths = plugin.design(SYSTEM, {UIParam.NEX: 3.0}, tmp_path)
+
+    seq = pp.io.read(paths[-1])
+    assert reply.valid
+    assert list(seq.libraries().block_durations * 1e3) == pytest.approx(
+        [1, 2, 2, 2, 2, 2, 2, 2, 2, 2]
+    )
+    assert list(seq.evaluate_labels(evolution="blocks")["AVG"]) == [
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        1,
+        2,
+        2,
+        2,
+    ]
+
+
+def test_one_average_writes_the_main_sequence_as_designed(tmp_path):
+    plugin = type(
+        "Prepared",
+        (SequencePlugin,),
+        {"app": _prepared, "protocol": {UIParam.NX: IntParam("nx", range_max=9)}},
+    )()
+
+    _, paths = plugin.design(SYSTEM, {}, tmp_path)
+
+    seq = pp.io.read(paths[-1])
+    assert list(seq.libraries().block_durations * 1e3) == pytest.approx([1, 2, 2, 2])
+    assert "AVG" not in seq.evaluate_labels(evolution="blocks")
+
+
+def test_the_averages_repeat_the_main_sequence_and_not_its_prescans(tmp_path):
+    def chain(system, nx=2):
+        return [_sequence(system, 1e-3, 2), _sequence(system, 2e-3, nx)]
+
+    plugin = type(
+        "Chained",
+        (SequencePlugin,),
+        {"app": chain, "protocol": {UIParam.NX: IntParam("nx", range_max=9)}},
+    )()
+
+    _, paths = plugin.design(SYSTEM, {UIParam.NEX: 2.0}, tmp_path)
+
+    assert [len(pp.io.read(path).libraries().block_durations) for path in paths] == [
+        2,
+        4,
+    ]
+
+
+def test_the_scan_time_counts_every_average():
+    class Timed(SequencePlugin):
+        app = staticmethod(_prepared)
+        protocol = {UIParam.NX: IntParam("nx", range_max=9)}
+
+        def evaluate(self, system, protocol):
+            return Evaluation(protocol, 1.5)
+
+    assert Timed().validate(SYSTEM, {UIParam.NEX: 4.0}).duration == 6.0

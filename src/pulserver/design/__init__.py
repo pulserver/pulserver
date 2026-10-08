@@ -4,6 +4,7 @@
 # imports from one module. Documented with :mod:`pulserver.protocol`.
 from ..protocol import TEPreset, TRPreset, UIParam
 from ._entries import (
+    AveragesParam,
     BoolParam,
     ChoiceParam,
     ConfigParam,
@@ -25,6 +26,7 @@ from ._plugin import (
 from ._rf import RfControl, RfLayout
 
 __all__ = [
+    "AveragesParam",
     "BoolParam",
     "ChoiceParam",
     "ConfigParam",
