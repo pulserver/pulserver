@@ -156,7 +156,8 @@ declares, bit `n - 1` set for each band `n` it plays, and `exsat<n>_normal_x`,
 `_y` and `_z`, `exsat<n>_loc` and `exsat<n>_thickness` give each band's normal
 along the physical axes, its centre's distance from the isocentre along that
 normal and its thickness, in mm. The field-of-view offset and rotation leave a
-band where it was placed. `BANDS = 0` plays none. `epi2d` saturates fat before
+band where it was placed, and a band not yet placed waits 150 mm from the
+isocentre, outside the head. `BANDS = 0` plays none. `epi2d` saturates fat before
 every shot while `FAT_SATURATION` is `True`.
 
 Optional features are switched by a module constant of the plugin, off in

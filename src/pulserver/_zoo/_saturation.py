@@ -14,8 +14,9 @@ from ..protocol import ConfigKey, ProtocolKey, UIParam
 #: The normal each band starts with, along the physical axes, before the console turns it.
 _NORMALS = ((1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0)) * 2
 
-#: A band's starting position and thickness, in mm.
-_POSITION_MM, _THICKNESS_MM = 0.0, 40.0
+#: A band's starting position and thickness, in mm: outside a head's field of
+#: view, so a band the operator has not yet placed saturates nothing imaged.
+_POSITION_MM, _THICKNESS_MM = 150.0, 40.0
 
 
 def band_entries(count: int) -> dict[ProtocolKey, Entry]:
