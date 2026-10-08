@@ -8,6 +8,7 @@ from pypulseqpp.sequences.sequence.se_epi_propeller2D_sequence import (
 )
 
 from pulserver._zoo._evaluation import achieved, arguments, rf_layout
+from pulserver._zoo._user import user_entries
 from pulserver.design import (
     Evaluation,
     FloatParam,
@@ -62,6 +63,8 @@ class SeEpiPropeller2D(SequencePlugin):
             range_incr=0.1,
         ),
     }
+
+    protocol |= user_entries(app, protocol)
 
     def evaluate(self, system, protocol):
         # One TR of the scan is a shot: an excitation, a refocusing pulse and

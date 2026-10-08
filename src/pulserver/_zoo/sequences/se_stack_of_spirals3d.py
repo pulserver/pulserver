@@ -8,6 +8,7 @@ from pypulseqpp.sequences.sequence.se_stack_of_spirals3D_sequence import (
 
 from pulserver._zoo._evaluation import evaluation, stack_of_spirals
 from pulserver._zoo._slab import slab
+from pulserver._zoo._user import OWN, user_entries
 from pulserver.design import (
     Description,
     FloatParam,
@@ -67,11 +68,13 @@ class SeStackOfSpirals3D(SequencePlugin):
     }
     if VARIABLE_DENSITY:
         protocol |= {
-            UIParam.user_name(0): Description("Periphery undersampling"),
-            UIParam.user_value(0): FloatParam(
+            UIParam.user_name(OWN): Description("Periphery undersampling"),
+            UIParam.user_value(OWN): FloatParam(
                 "periphery_undersampling", range_min=1.0, range_max=8.0, range_incr=0.1
             ),
         }
+
+    protocol |= user_entries(app, protocol)
 
     def evaluate(self, system, protocol):
         return evaluation(self, system, protocol, stack_of_spirals)

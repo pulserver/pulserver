@@ -6,6 +6,7 @@ import pypulseqpp as pp
 from pypulseqpp.sequences.sequence.bssfp2D_sequence import MAX_SLICE_DURATION, bssfp2d
 
 from pulserver._zoo._evaluation import achieved, arguments, cartesian_2d, rf_layout
+from pulserver._zoo._user import user_entries
 from pulserver.design import (
     ChoiceParam,
     Evaluation,
@@ -70,6 +71,8 @@ class Bssfp2D(SequencePlugin):
             "trigger_delay", unit="ms", scale=1e-3, range_min=0.0, range_max=2000.0
         ),
     }
+
+    protocol |= user_entries(app, protocol)
 
     def generate(self, system, protocol):
         return self.app(system, **_gated(self, system, protocol))

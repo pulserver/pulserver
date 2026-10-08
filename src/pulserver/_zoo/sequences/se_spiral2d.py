@@ -5,6 +5,7 @@ import functools
 from pypulseqpp.sequences.sequence.se_spiral2D_sequence import se_spiral2d
 
 from pulserver._zoo._evaluation import evaluation, spiral_2d
+from pulserver._zoo._user import OWN, user_entries
 from pulserver.design import (
     Description,
     FloatParam,
@@ -63,11 +64,13 @@ class SeSpiral2D(SequencePlugin):
     }
     if VARIABLE_DENSITY:
         protocol |= {
-            UIParam.user_name(0): Description("Periphery undersampling"),
-            UIParam.user_value(0): FloatParam(
+            UIParam.user_name(OWN): Description("Periphery undersampling"),
+            UIParam.user_value(OWN): FloatParam(
                 "periphery_undersampling", range_min=1.0, range_max=8.0, range_incr=0.1
             ),
         }
+
+    protocol |= user_entries(app, protocol)
 
     def evaluate(self, system, protocol):
         return evaluation(self, system, protocol, spiral_2d)

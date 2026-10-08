@@ -3,6 +3,7 @@
 from pypulseqpp.sequences.sequence.se_radial2D_sequence import se_radial2d
 
 from pulserver._zoo._evaluation import evaluation, radial_2d
+from pulserver._zoo._user import user_entries
 from pulserver.design import (
     FloatParam,
     IntParam,
@@ -51,6 +52,8 @@ class SeRadial2D(SequencePlugin):
             "slice_thickness", unit="mm", scale=1e-3, range_min=1.0, range_max=20.0
         ),
     }
+
+    protocol |= user_entries(app, protocol)
 
     def evaluate(self, system, protocol):
         return evaluation(self, system, protocol, radial_2d)

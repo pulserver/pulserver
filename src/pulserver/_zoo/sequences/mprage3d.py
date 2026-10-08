@@ -9,6 +9,7 @@ from pypulseqpp.sequences.sequence.mprage3D_sequence import mprage3d
 from pulserver._zoo._evaluation import achieved, arguments, rf_layout, waved
 from pulserver._zoo._pmc import navigated
 from pulserver._zoo._slab import slab
+from pulserver._zoo._user import shortest_at_zero, user_entries
 from pulserver.design import (
     Evaluation,
     FloatParam,
@@ -33,7 +34,11 @@ WAVE_CYCLES = 8
 
 
 class Mprage3D(SequencePlugin):
-    app = navigated(slab(mprage3d)) if NAVIGATOR else slab(mprage3d)
+    app = (
+        navigated(shortest_at_zero(slab(mprage3d), "esp"))
+        if NAVIGATOR
+        else shortest_at_zero(slab(mprage3d), "esp")
+    )
     if WAVE:
         app = functools.partial(
             app, wave_amplitude=WAVE_AMPLITUDE, wave_cycles=WAVE_CYCLES
@@ -76,6 +81,8 @@ class Mprage3D(SequencePlugin):
         UIParam.RY: IntParam("ry", range_min=1, range_max=4),
         UIParam.RZ: IntParam("rz", range_min=1, range_max=4),
     }
+
+    protocol |= user_entries(app, protocol)
 
     def evaluate(self, system, protocol):
         # A TR is one inversion shot: the inversion, then one excitation per

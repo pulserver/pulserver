@@ -127,6 +127,20 @@ every `--plugins` directory, so a file of the same name there replaces it:
 | `gre_radial2d`, `gre_spiral2d`, `se_radial2d`, `se_spiral2d`, `gre_propeller2d`, `se_propeller2d`, `se_epi_propeller2d`, `zte3d` | `nufft` |
 | `gre_stack_of_stars3d`, `gre_stack_of_spirals3d`, `gre_stack_of_blades3d`, `se_stack_of_stars3d`, `se_stack_of_spirals3d`, `se_stack_of_blades3d` | `nufft` |
 | `mprage_stack_of_stars3d`, `mprage_stack_of_spirals3d` | `nufft_train` |
+
+Each shipped plugin also offers, as a named user entry, every one of these
+controls its sequence function takes, at the same user entry in every plugin;
+a plugin's own user entries start at `user12`:
+
+| User entry | Control |
+| --- | --- |
+| `user0` | Dummy scans |
+| `user1` | Partial echo, the fraction of the echo acquired |
+| `user2`, `user3` | Partial Fourier along the phase and the partition encodes |
+| `user4`, `user5` | Calibration (ACS) lines along the phase and the partition encodes |
+| `user6` | Readout oversampling |
+| `user7` | Echo spacing, in ms; 0 the shortest |
+| `user8` | Refocusing flip angle, in degrees |
 | `epi2d`, `epi3d` | `epi` |
 
 The pair is what a console reconstructs a shipped sequence with when the scan

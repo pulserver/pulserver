@@ -6,6 +6,7 @@ from pypulseqpp.sequences.sequence.se_stack_of_stars3D_sequence import (
 
 from pulserver._zoo._evaluation import evaluation, stack_of_stars
 from pulserver._zoo._slab import slab
+from pulserver._zoo._user import user_entries
 from pulserver.design import (
     FloatParam,
     IntParam,
@@ -52,6 +53,8 @@ class SeStackOfStars3D(SequencePlugin):
         UIParam.RY: IntParam("ry", range_min=1, range_max=4),
         UIParam.RZ: IntParam("rz", range_min=1, range_max=4),
     }
+
+    protocol |= user_entries(app, protocol)
 
     def evaluate(self, system, protocol):
         return evaluation(self, system, protocol, stack_of_stars)

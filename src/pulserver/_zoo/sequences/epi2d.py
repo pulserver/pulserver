@@ -9,6 +9,7 @@ from pypulseqpp import sequences
 from pypulseqpp.sequences.sequence.epi2D_sequence import epi2d
 
 from pulserver._zoo._evaluation import achieved, arguments, packets, rf_layout
+from pulserver._zoo._user import user_entries
 from pulserver.design import (
     BoolParam,
     ConfigParam,
@@ -117,6 +118,8 @@ class Epi2D(SequencePlugin):
         protocol[UIParam.MULTIBAND] = IntParam("multiband", range_min=1, range_max=8)
     # Saturation bands on the scanner's physical axes, at most two of them.
     protocol |= {UIParam.ENABLE_SATURATION_UI: ConfigParam(1), **_SATURATION}
+
+    protocol |= user_entries(app, protocol)
 
     def generate(self, system, protocol):
         return self.app(system, **_bands(protocol))

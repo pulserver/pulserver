@@ -14,6 +14,7 @@ from pulserver import _plugins
 from pulserver._zoo import ZOO_PAIRS
 from pulserver._zoo._evaluation import achieved, rf_layout
 from pulserver._zoo._slab import slab
+from pulserver._zoo._user import SHARED
 from pulserver.design import Protocol, StatedParam, load_plugin
 from pulserver.host import call
 from pulserver.protocol import (
@@ -124,8 +125,8 @@ SCANS = [pytest.param(name, {}, id=name) for name in SHIPPED] + [
                 "nx": 64,
                 "ny": 32,
                 "TR": 1000000,
-                "user0_value": 1500.0,
-                "user1_value": 14,
+                "user12_value": 1500.0,
+                "user13_value": 14,
             },
         ),
         (
@@ -151,11 +152,11 @@ SCANS = [pytest.param(name, {}, id=name) for name in SHIPPED] + [
             "wave",
             {"nslices": 24, "nx": 64, "ny": 32, "etl": 16, "Ry": 2, "Rz": 2},
         ),
-        ("gre_spiral2d+VARIABLE_DENSITY", "variable", {"user0_value": 3.0}),
+        ("gre_spiral2d+VARIABLE_DENSITY", "variable", {"user12_value": 3.0}),
         (
             "mprage_stack_of_spirals3d+VARIABLE_DENSITY",
             "variable",
-            {"nslices": 16, "user0_value": 1.5},
+            {"nslices": 16, "user12_value": 1.5},
         ),
         ("epi2d", "packets", {"nslices": 7, "TR": 900000, "Ry": 2, "num_shots": 2}),
         ("epi2d", "frames", {"nslices": 12, "TR": 5000000, "num_frames": 3}),
@@ -930,3 +931,48 @@ def test_a_3d_sequence_achieves_the_thickness_of_one_location_whatever_their_num
             ),
         )
         assert evaluation.protocol[UIParam.SLICE_THICKNESS] == pytest.approx(2e-3)
+
+
+@pytest.mark.parametrize("name", SHIPPED)
+def test_every_shared_control_a_sequence_takes_is_named_at_its_own_user_cv(name, zoo):
+    plugin = zoo[name]
+    taken = inspect.signature(plugin.app).parameters
+    bound = {
+        getattr(entry, "argument", None)
+        for key, entry in plugin.protocol.items()
+        if not key.startswith("user")
+    }
+
+    for index, (argument, label, _) in enumerate(SHARED):
+        listed = UIParam.user_value(index) in plugin.protocol
+        assert listed == (argument in taken and argument not in bound), argument
+        if listed:
+            assert plugin.protocol[UIParam.user_value(index)].argument == argument
+            assert plugin.protocol[UIParam.user_name(index)].text == label
+
+
+def test_a_dummy_scan_count_set_through_its_user_cv_reaches_the_design(zoo):
+    plugin = zoo["gre2d"]
+    request = {"nx": 32, "ny": 32}
+
+    lengths = [
+        len(
+            plugin.app(
+                SYSTEM, **_protocol(plugin, request | {"user0_value": n}).arguments
+            ).block_events
+        )
+        for n in (0, 8)
+    ]
+
+    assert lengths[1] > lengths[0]
+
+
+def test_an_echo_spacing_of_zero_is_the_shortest_one(zoo):
+    plugin = zoo["fse3d"]
+    request = {"nx": 64, "ny": 32, "nslices": 16, "etl": 16}
+
+    shortest = plugin.app(
+        SYSTEM, **_protocol(plugin, request | {"user7_value": 0.0}).arguments
+    )
+
+    assert shortest.definitions["EchoSpacing"][0] > 0.0

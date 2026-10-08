@@ -8,6 +8,7 @@ from pypulseqpp.sequences.sequence.fse3D_sequence import fse3d, shot_parameters
 from pulserver._zoo._evaluation import achieved, arguments, rf_layout, waved
 from pulserver._zoo._pmc import navigated
 from pulserver._zoo._slab import slab
+from pulserver._zoo._user import OWN, shortest_at_zero, user_entries
 from pulserver.design import (
     Description,
     Evaluation,
@@ -46,7 +47,11 @@ if OPTIMIZED or DUAL_REGION:
 
 
 class Fse3D(SequencePlugin):
-    app = navigated(slab(fse3d)) if NAVIGATOR else slab(fse3d)
+    app = (
+        navigated(shortest_at_zero(slab(fse3d), "esp"))
+        if NAVIGATOR
+        else shortest_at_zero(slab(fse3d), "esp")
+    )
     if OPTIMIZED or DUAL_REGION:
         app = functools.partial(app, flip_modulation="optimized")
     if WAVE:
@@ -98,8 +103,8 @@ class Fse3D(SequencePlugin):
         )
     if DUAL_REGION:
         protocol |= {
-            UIParam.user_name(0): Description("TR at the periphery"),
-            UIParam.user_value(0): FloatParam(
+            UIParam.user_name(OWN): Description("TR at the periphery"),
+            UIParam.user_value(OWN): FloatParam(
                 "tr_periphery",
                 unit="ms",
                 scale=1e-3,
@@ -107,11 +112,13 @@ class Fse3D(SequencePlugin):
                 range_max=10_000.0,
                 default=1800.0,
             ),
-            UIParam.user_name(1): Description("ETL at the periphery"),
-            UIParam.user_value(1): IntParam(
+            UIParam.user_name(OWN + 1): Description("ETL at the periphery"),
+            UIParam.user_value(OWN + 1): IntParam(
                 "etl_periphery", range_min=1, range_max=256, default=45
             ),
         }
+
+    protocol |= user_entries(app, protocol)
 
     def evaluate(self, system, protocol):
         # A TR is one echo train. The design of the centre view plays one

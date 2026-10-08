@@ -6,6 +6,7 @@ from pypulseqpp.sequences.sequence.gre_multiecho3D_sequence import gre_multiecho
 
 from pulserver._zoo._evaluation import cartesian_3d, evaluation
 from pulserver._zoo._slab import slab
+from pulserver._zoo._user import user_entries
 from pulserver.design import (
     FloatParam,
     IntParam,
@@ -65,6 +66,8 @@ class GreMultiecho3D(SequencePlugin):
         UIParam.RY: IntParam("ry", range_min=1, range_max=4),
         UIParam.RZ: IntParam("rz", range_min=1, range_max=4),
     }
+
+    protocol |= user_entries(app, protocol)
 
     def evaluate(self, system, protocol):
         return evaluation(self, system, protocol, cartesian_3d)
