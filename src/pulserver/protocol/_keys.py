@@ -22,8 +22,8 @@ else:
         __format__ = str.__format__
 
 
-# user0_value .. user18_value and user0_name .. user18_name.
-NUM_USER_ENTRIES = 19
+# user0_value .. user45_value and user0_name .. user45_name.
+NUM_USER_ENTRIES = 46
 
 
 class FloatKey(StrEnum):
@@ -140,7 +140,7 @@ class ConfigKey(StrEnum):
 
 
 class UserKey(StrEnum):
-    """Keys of the float user entries, ``user0_value`` to ``user18_value``.
+    """Keys of the float user entries, ``user0_value`` to ``user45_value``.
 
     ``UserKey.USER3`` is ``UIParam.user_value(3)``. The entry is a
     :class:`~pulserver.design.FloatParam`; the description naming it is bound
@@ -166,10 +166,37 @@ class UserKey(StrEnum):
     USER16 = "user16_value"
     USER17 = "user17_value"
     USER18 = "user18_value"
+    USER19 = "user19_value"
+    USER20 = "user20_value"
+    USER21 = "user21_value"
+    USER22 = "user22_value"
+    USER23 = "user23_value"
+    USER24 = "user24_value"
+    USER25 = "user25_value"
+    USER26 = "user26_value"
+    USER27 = "user27_value"
+    USER28 = "user28_value"
+    USER29 = "user29_value"
+    USER30 = "user30_value"
+    USER31 = "user31_value"
+    USER32 = "user32_value"
+    USER33 = "user33_value"
+    USER34 = "user34_value"
+    USER35 = "user35_value"
+    USER36 = "user36_value"
+    USER37 = "user37_value"
+    USER38 = "user38_value"
+    USER39 = "user39_value"
+    USER40 = "user40_value"
+    USER41 = "user41_value"
+    USER42 = "user42_value"
+    USER43 = "user43_value"
+    USER44 = "user44_value"
+    USER45 = "user45_value"
 
 
 class UserNameKey(StrEnum):
-    """Keys of the descriptions naming the user entries, ``user0_name`` to ``user18_name``.
+    """Keys of the descriptions naming the user entries, ``user0_name`` to ``user45_name``.
 
     ``UserNameKey.USER3`` is ``UIParam.user_name(3)``. The entry is a
     :class:`~pulserver.design.Description`.
@@ -194,6 +221,33 @@ class UserNameKey(StrEnum):
     USER16 = "user16_name"
     USER17 = "user17_name"
     USER18 = "user18_name"
+    USER19 = "user19_name"
+    USER20 = "user20_name"
+    USER21 = "user21_name"
+    USER22 = "user22_name"
+    USER23 = "user23_name"
+    USER24 = "user24_name"
+    USER25 = "user25_name"
+    USER26 = "user26_name"
+    USER27 = "user27_name"
+    USER28 = "user28_name"
+    USER29 = "user29_name"
+    USER30 = "user30_name"
+    USER31 = "user31_name"
+    USER32 = "user32_name"
+    USER33 = "user33_name"
+    USER34 = "user34_name"
+    USER35 = "user35_name"
+    USER36 = "user36_name"
+    USER37 = "user37_name"
+    USER38 = "user38_name"
+    USER39 = "user39_name"
+    USER40 = "user40_name"
+    USER41 = "user41_name"
+    USER42 = "user42_name"
+    USER43 = "user43_name"
+    USER44 = "user44_name"
+    USER45 = "user45_name"
 
 
 #: A key of the protocol: the wire name of any entry the interpreter knows,
@@ -294,7 +348,7 @@ class UIParam:
 
     @staticmethod
     def user_value(n: int) -> UserKey:
-        """Return the key of float user entry ``n``, 0 to 18.
+        """Return the key of float user entry ``n``, 0 to 45.
 
         Raises
         ------
@@ -306,7 +360,7 @@ class UIParam:
 
     @staticmethod
     def user_name(n: int) -> UserNameKey:
-        """Return the key of the description naming user entry ``n``, 0 to 18.
+        """Return the key of the description naming user entry ``n``, 0 to 45.
 
         Raises
         ------
