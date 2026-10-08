@@ -24,7 +24,7 @@ extern "C"
 #endif
 
     /* ================================================================== */
-    /*  Parameter IDs  (mirror Python UIParam enum + User1..19)           */
+    /*  Parameter IDs  (mirror Python UIParam enum + User1..46)           */
     /*                                                                    */
     /*  Expressed as #define + typedef rather than C enum for              */
     /*  compatibility with sequence toolchains that reject C enums.       */
@@ -72,74 +72,128 @@ extern "C"
 #define PULSEG_PARAM_USER17 30
 #define PULSEG_PARAM_USER18 31
 #define PULSEG_PARAM_USER19 32
+#define PULSEG_PARAM_USER20 33
+#define PULSEG_PARAM_USER21 34
+#define PULSEG_PARAM_USER22 35
+#define PULSEG_PARAM_USER23 36
+#define PULSEG_PARAM_USER24 37
+#define PULSEG_PARAM_USER25 38
+#define PULSEG_PARAM_USER26 39
+#define PULSEG_PARAM_USER27 40
+#define PULSEG_PARAM_USER28 41
+#define PULSEG_PARAM_USER29 42
+#define PULSEG_PARAM_USER30 43
+#define PULSEG_PARAM_USER31 44
+#define PULSEG_PARAM_USER32 45
+#define PULSEG_PARAM_USER33 46
+#define PULSEG_PARAM_USER34 47
+#define PULSEG_PARAM_USER35 48
+#define PULSEG_PARAM_USER36 49
+#define PULSEG_PARAM_USER37 50
+#define PULSEG_PARAM_USER38 51
+#define PULSEG_PARAM_USER39 52
+#define PULSEG_PARAM_USER40 53
+#define PULSEG_PARAM_USER41 54
+#define PULSEG_PARAM_USER42 55
+#define PULSEG_PARAM_USER43 56
+#define PULSEG_PARAM_USER44 57
+#define PULSEG_PARAM_USER45 58
+#define PULSEG_PARAM_USER46 59
 /* --- Extended timing --- */
-#define PULSEG_PARAM_TE2 33
-#define PULSEG_PARAM_TRECOVERY 34
+#define PULSEG_PARAM_TE2 60
+#define PULSEG_PARAM_TRECOVERY 61
 /* --- Extended spatial --- */
-#define PULSEG_PARAM_PHASE_FOV 35
-#define PULSEG_PARAM_SLICE_SPACING 36
-#define PULSEG_PARAM_NY 37
-#define PULSEG_PARAM_NUM_SLABS 38
-#define PULSEG_PARAM_OVERLAP_LOCS 39
+#define PULSEG_PARAM_PHASE_FOV 62
+#define PULSEG_PARAM_SLICE_SPACING 63
+#define PULSEG_PARAM_NY 64
+#define PULSEG_PARAM_NUM_SLABS 65
+#define PULSEG_PARAM_OVERLAP_LOCS 66
 /* --- Acquisition --- */
-#define PULSEG_PARAM_NEX 40
-#define PULSEG_PARAM_NUM_SHOTS 41
-#define PULSEG_PARAM_ETL 42
+#define PULSEG_PARAM_NEX 67
+#define PULSEG_PARAM_NUM_SHOTS 68
+#define PULSEG_PARAM_ETL 69
 /* --- Enum / stringlist --- */
-#define PULSEG_PARAM_SEQUENCE_TYPE 43
-#define PULSEG_PARAM_IMAGING_MODE 44
-#define PULSEG_PARAM_PREP_TYPE 45
-#define PULSEG_PARAM_TRIGGER_TYPE 46
+#define PULSEG_PARAM_SEQUENCE_TYPE 70
+#define PULSEG_PARAM_IMAGING_MODE 71
+#define PULSEG_PARAM_PREP_TYPE 72
+#define PULSEG_PARAM_TRIGGER_TYPE 73
 /* --- Extended flags --- */
-#define PULSEG_PARAM_SWAP_PF 47
-#define PULSEG_PARAM_ENABLE_SAT_UI 48
-#define PULSEG_PARAM_RECORD_PHYSIO 49
+#define PULSEG_PARAM_SWAP_PF 74
+#define PULSEG_PARAM_ENABLE_SAT_UI 75
+#define PULSEG_PARAM_RECORD_PHYSIO 76
 /* --- Acceleration --- */
-#define PULSEG_PARAM_RY 50
-#define PULSEG_PARAM_RZ 51
-#define PULSEG_PARAM_COMPRESSED_SENS 52
-#define PULSEG_PARAM_MULTIBAND 53
+#define PULSEG_PARAM_RY 77
+#define PULSEG_PARAM_RZ 78
+#define PULSEG_PARAM_COMPRESSED_SENS 79
+#define PULSEG_PARAM_MULTIBAND 80
 /* --- Cine / trigger --- */
-#define PULSEG_PARAM_NUM_FRAMES 54
-#define PULSEG_PARAM_DELAY_TIME 55
-#define PULSEG_PARAM_TRIGGER_DELAY 56
-#define PULSEG_PARAM_TRIGGER_WINDOW 57
+#define PULSEG_PARAM_NUM_FRAMES 81
+#define PULSEG_PARAM_DELAY_TIME 82
+#define PULSEG_PARAM_TRIGGER_DELAY 83
+#define PULSEG_PARAM_TRIGGER_WINDOW 84
 /* --- Diffusion --- */
-#define PULSEG_PARAM_DIFF_BVALUES 58
-#define PULSEG_PARAM_DIFF_DIRECTIONS 59
+#define PULSEG_PARAM_DIFF_BVALUES 85
+#define PULSEG_PARAM_DIFF_DIRECTIONS 86
 /* --- Saturation bands --- */
-#define PULSEG_PARAM_SAT_X 60
-#define PULSEG_PARAM_SAT_Y 61
-#define PULSEG_PARAM_SAT_Z 62
-#define PULSEG_PARAM_SAT_X_LOC1 63
-#define PULSEG_PARAM_SAT_X_LOC2 64
-#define PULSEG_PARAM_SAT_Y_LOC1 65
-#define PULSEG_PARAM_SAT_Y_LOC2 66
-#define PULSEG_PARAM_SAT_Z_LOC1 67
-#define PULSEG_PARAM_SAT_Z_LOC2 68
-#define PULSEG_PARAM_SAT_X_THICK 69
-#define PULSEG_PARAM_SAT_Y_THICK 70
-#define PULSEG_PARAM_SAT_Z_THICK 71
-/* User parameter name labels (description type; one per USER1..USER19 slot) */
-#define PULSEG_PARAM_USER1_NAME 72
-#define PULSEG_PARAM_USER2_NAME 73
-#define PULSEG_PARAM_USER3_NAME 74
-#define PULSEG_PARAM_USER4_NAME 75
-#define PULSEG_PARAM_USER5_NAME 76
-#define PULSEG_PARAM_USER6_NAME 77
-#define PULSEG_PARAM_USER7_NAME 78
-#define PULSEG_PARAM_USER8_NAME 79
-#define PULSEG_PARAM_USER9_NAME 80
-#define PULSEG_PARAM_USER10_NAME 81
-#define PULSEG_PARAM_USER11_NAME 82
-#define PULSEG_PARAM_USER12_NAME 83
-#define PULSEG_PARAM_USER13_NAME 84
-#define PULSEG_PARAM_USER14_NAME 85
-#define PULSEG_PARAM_USER15_NAME 86
-#define PULSEG_PARAM_USER16_NAME 87
-#define PULSEG_PARAM_USER17_NAME 88
-#define PULSEG_PARAM_USER18_NAME 89
-#define PULSEG_PARAM_USER19_NAME 90
+#define PULSEG_PARAM_SAT_X 87
+#define PULSEG_PARAM_SAT_Y 88
+#define PULSEG_PARAM_SAT_Z 89
+#define PULSEG_PARAM_SAT_X_LOC1 90
+#define PULSEG_PARAM_SAT_X_LOC2 91
+#define PULSEG_PARAM_SAT_Y_LOC1 92
+#define PULSEG_PARAM_SAT_Y_LOC2 93
+#define PULSEG_PARAM_SAT_Z_LOC1 94
+#define PULSEG_PARAM_SAT_Z_LOC2 95
+#define PULSEG_PARAM_SAT_X_THICK 96
+#define PULSEG_PARAM_SAT_Y_THICK 97
+#define PULSEG_PARAM_SAT_Z_THICK 98
+/* User parameter name labels (description type; one per USER1..USER46 slot) */
+#define PULSEG_PARAM_USER1_NAME 99
+#define PULSEG_PARAM_USER2_NAME 100
+#define PULSEG_PARAM_USER3_NAME 101
+#define PULSEG_PARAM_USER4_NAME 102
+#define PULSEG_PARAM_USER5_NAME 103
+#define PULSEG_PARAM_USER6_NAME 104
+#define PULSEG_PARAM_USER7_NAME 105
+#define PULSEG_PARAM_USER8_NAME 106
+#define PULSEG_PARAM_USER9_NAME 107
+#define PULSEG_PARAM_USER10_NAME 108
+#define PULSEG_PARAM_USER11_NAME 109
+#define PULSEG_PARAM_USER12_NAME 110
+#define PULSEG_PARAM_USER13_NAME 111
+#define PULSEG_PARAM_USER14_NAME 112
+#define PULSEG_PARAM_USER15_NAME 113
+#define PULSEG_PARAM_USER16_NAME 114
+#define PULSEG_PARAM_USER17_NAME 115
+#define PULSEG_PARAM_USER18_NAME 116
+#define PULSEG_PARAM_USER19_NAME 117
+#define PULSEG_PARAM_USER20_NAME 118
+#define PULSEG_PARAM_USER21_NAME 119
+#define PULSEG_PARAM_USER22_NAME 120
+#define PULSEG_PARAM_USER23_NAME 121
+#define PULSEG_PARAM_USER24_NAME 122
+#define PULSEG_PARAM_USER25_NAME 123
+#define PULSEG_PARAM_USER26_NAME 124
+#define PULSEG_PARAM_USER27_NAME 125
+#define PULSEG_PARAM_USER28_NAME 126
+#define PULSEG_PARAM_USER29_NAME 127
+#define PULSEG_PARAM_USER30_NAME 128
+#define PULSEG_PARAM_USER31_NAME 129
+#define PULSEG_PARAM_USER32_NAME 130
+#define PULSEG_PARAM_USER33_NAME 131
+#define PULSEG_PARAM_USER34_NAME 132
+#define PULSEG_PARAM_USER35_NAME 133
+#define PULSEG_PARAM_USER36_NAME 134
+#define PULSEG_PARAM_USER37_NAME 135
+#define PULSEG_PARAM_USER38_NAME 136
+#define PULSEG_PARAM_USER39_NAME 137
+#define PULSEG_PARAM_USER40_NAME 138
+#define PULSEG_PARAM_USER41_NAME 139
+#define PULSEG_PARAM_USER42_NAME 140
+#define PULSEG_PARAM_USER43_NAME 141
+#define PULSEG_PARAM_USER44_NAME 142
+#define PULSEG_PARAM_USER45_NAME 143
+#define PULSEG_PARAM_USER46_NAME 144
 /* --- FOV offset ---
  * The prescribed field-of-view offset, in millimetres along the logical
  * readout, phase-encoding and slice axes.
@@ -147,14 +201,14 @@ extern "C"
  * protocol; the host applies the offset to the logical-frame design as RF and
  * ADC frequency and phase when it builds the IR, so the cache is played
  * through the prescription's rotation matrix alone. */
-#define PULSEG_PARAM_FOV_OFFSET_X 91
-#define PULSEG_PARAM_FOV_OFFSET_Y 92
-#define PULSEG_PARAM_FOV_OFFSET_Z 93
+#define PULSEG_PARAM_FOV_OFFSET_X 145
+#define PULSEG_PARAM_FOV_OFFSET_Y 146
+#define PULSEG_PARAM_FOV_OFFSET_Z 147
 /* --- Configuration (PULSEG_PTYPE_CONFIG; see below) --- */
 /* The scan's request to be costed against the scanner's SAR burst limits
  * rather than its continuous ones.  A request, not a setting: the vendor
  * layer offers it to the scanner, which grants or refuses it. */
-#define PULSEG_PARAM_ENABLE_SAR_BURST 94
+#define PULSEG_PARAM_ENABLE_SAR_BURST 148
 /* --- FOV orientation ---
  * The prescription's rotation from the logical readout, phase-encoding and
  * slice axes to the physical x, y and z gradient axes, element (i, j) as
@@ -164,16 +218,16 @@ extern "C"
  * prescription and sends them with the protocol, identity when it has none.
  * The host checks the design's gradients in the physical frame this rotation
  * gives; the cache itself is played through the scanner's rotation matrix. */
-#define PULSEG_PARAM_FOV_ROTATION_11 95
-#define PULSEG_PARAM_FOV_ROTATION_12 96
-#define PULSEG_PARAM_FOV_ROTATION_13 97
-#define PULSEG_PARAM_FOV_ROTATION_21 98
-#define PULSEG_PARAM_FOV_ROTATION_22 99
-#define PULSEG_PARAM_FOV_ROTATION_23 100
-#define PULSEG_PARAM_FOV_ROTATION_31 101
-#define PULSEG_PARAM_FOV_ROTATION_32 102
-#define PULSEG_PARAM_FOV_ROTATION_33 103
-#define PULSEG_PARAM_COUNT 104 /* sentinel */
+#define PULSEG_PARAM_FOV_ROTATION_11 149
+#define PULSEG_PARAM_FOV_ROTATION_12 150
+#define PULSEG_PARAM_FOV_ROTATION_13 151
+#define PULSEG_PARAM_FOV_ROTATION_21 152
+#define PULSEG_PARAM_FOV_ROTATION_22 153
+#define PULSEG_PARAM_FOV_ROTATION_23 154
+#define PULSEG_PARAM_FOV_ROTATION_31 155
+#define PULSEG_PARAM_FOV_ROTATION_32 156
+#define PULSEG_PARAM_FOV_ROTATION_33 157
+#define PULSEG_PARAM_COUNT 158 /* sentinel */
 
     /* ================================================================== */
     /*  Parameter types                                                   */
