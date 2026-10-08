@@ -70,6 +70,9 @@ class Bssfp2D(SequencePlugin):
         UIParam.TRIGGER_DELAY: FloatParam(
             "trigger_delay", unit="ms", scale=1e-3, range_min=0.0, range_max=2000.0
         ),
+        UIParam.HEART_RATE: IntParam(
+            "heart_rate_bpm", unit="bpm", range_min=30, range_max=200, default=60
+        ),
     }
 
     protocol |= user_entries(app, protocol)

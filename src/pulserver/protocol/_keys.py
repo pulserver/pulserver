@@ -34,15 +34,36 @@ class FloatKey(StrEnum):
     microseconds. ``TA`` is read-only information.
     """
 
-    SAT_X_LOC1 = "sat_x_loc1"
-    SAT_X_LOC2 = "sat_x_loc2"
-    SAT_Y_LOC1 = "sat_y_loc1"
-    SAT_Y_LOC2 = "sat_y_loc2"
-    SAT_Z_LOC1 = "sat_z_loc1"
-    SAT_Z_LOC2 = "sat_z_loc2"
-    SAT_X_THICKNESS = "sat_x_thickness"
-    SAT_Y_THICKNESS = "sat_y_thickness"
-    SAT_Z_THICKNESS = "sat_z_thickness"
+    EXSAT1_NORMAL_X = "exsat1_normal_x"
+    EXSAT1_NORMAL_Y = "exsat1_normal_y"
+    EXSAT1_NORMAL_Z = "exsat1_normal_z"
+    EXSAT2_NORMAL_X = "exsat2_normal_x"
+    EXSAT2_NORMAL_Y = "exsat2_normal_y"
+    EXSAT2_NORMAL_Z = "exsat2_normal_z"
+    EXSAT3_NORMAL_X = "exsat3_normal_x"
+    EXSAT3_NORMAL_Y = "exsat3_normal_y"
+    EXSAT3_NORMAL_Z = "exsat3_normal_z"
+    EXSAT4_NORMAL_X = "exsat4_normal_x"
+    EXSAT4_NORMAL_Y = "exsat4_normal_y"
+    EXSAT4_NORMAL_Z = "exsat4_normal_z"
+    EXSAT5_NORMAL_X = "exsat5_normal_x"
+    EXSAT5_NORMAL_Y = "exsat5_normal_y"
+    EXSAT5_NORMAL_Z = "exsat5_normal_z"
+    EXSAT6_NORMAL_X = "exsat6_normal_x"
+    EXSAT6_NORMAL_Y = "exsat6_normal_y"
+    EXSAT6_NORMAL_Z = "exsat6_normal_z"
+    EXSAT1_LOC = "exsat1_loc"
+    EXSAT2_LOC = "exsat2_loc"
+    EXSAT3_LOC = "exsat3_loc"
+    EXSAT4_LOC = "exsat4_loc"
+    EXSAT5_LOC = "exsat5_loc"
+    EXSAT6_LOC = "exsat6_loc"
+    EXSAT1_THICKNESS = "exsat1_thickness"
+    EXSAT2_THICKNESS = "exsat2_thickness"
+    EXSAT3_THICKNESS = "exsat3_thickness"
+    EXSAT4_THICKNESS = "exsat4_thickness"
+    EXSAT5_THICKNESS = "exsat5_thickness"
+    EXSAT6_THICKNESS = "exsat6_thickness"
 
     DELAY_TIME = "delay_time"
     TRIGGER_DELAY = "trigger_delay"
@@ -89,9 +110,7 @@ class FloatKey(StrEnum):
 class IntKey(StrEnum):
     """Keys the interpreter declares as integer."""
 
-    SAT_X = "sat_x"
-    SAT_Y = "sat_y"
-    SAT_Z = "sat_z"
+    HEART_RATE = "heart_rate"
     NUM_FRAMES = "num_frames"
     DIFFUSION_DIRECTIONS = "diffusion_directions"
     NUM_SHOTS = "num_shots"
@@ -137,6 +156,7 @@ class ConfigKey(StrEnum):
     """
 
     ENABLE_SAR_BURST_MODE = "enable_sar_burst_mode"
+    EXSAT_MASK = "exsat_mask"
 
 
 class UserKey(StrEnum):
@@ -255,6 +275,15 @@ class UserNameKey(StrEnum):
 ProtocolKey = FloatKey | IntKey | BoolKey | EnumKey | ConfigKey | UserKey | UserNameKey
 
 
+#: Explicit saturation bands a protocol can carry, exsat1 to exsat6.
+NUM_EXSAT_BANDS = 6
+
+
+def _check_band(n: int) -> None:
+    if not 1 <= n <= NUM_EXSAT_BANDS:
+        raise ValueError(f"saturation bands are numbered 1 to {NUM_EXSAT_BANDS}")
+
+
 def _check_user_index(n: int) -> None:
     if not 0 <= n < NUM_USER_ENTRIES:
         raise ValueError(f"user entries are numbered 0 to {NUM_USER_ENTRIES - 1}")
@@ -277,15 +306,6 @@ class UIParam:
     <UserKey.USER3: 'user3_value'>
     """
 
-    SAT_X_LOC1 = FloatKey.SAT_X_LOC1
-    SAT_X_LOC2 = FloatKey.SAT_X_LOC2
-    SAT_Y_LOC1 = FloatKey.SAT_Y_LOC1
-    SAT_Y_LOC2 = FloatKey.SAT_Y_LOC2
-    SAT_Z_LOC1 = FloatKey.SAT_Z_LOC1
-    SAT_Z_LOC2 = FloatKey.SAT_Z_LOC2
-    SAT_X_THICKNESS = FloatKey.SAT_X_THICKNESS
-    SAT_Y_THICKNESS = FloatKey.SAT_Y_THICKNESS
-    SAT_Z_THICKNESS = FloatKey.SAT_Z_THICKNESS
     DELAY_TIME = FloatKey.DELAY_TIME
     TRIGGER_DELAY = FloatKey.TRIGGER_DELAY
     TRIGGER_WINDOW = FloatKey.TRIGGER_WINDOW
@@ -320,9 +340,7 @@ class UIParam:
     COMPRESSED_SENSING = FloatKey.COMPRESSED_SENSING
     MULTIBAND = FloatKey.MULTIBAND
 
-    SAT_X = IntKey.SAT_X
-    SAT_Y = IntKey.SAT_Y
-    SAT_Z = IntKey.SAT_Z
+    HEART_RATE = IntKey.HEART_RATE
     NUM_FRAMES = IntKey.NUM_FRAMES
     DIFFUSION_DIRECTIONS = IntKey.DIFFUSION_DIRECTIONS
     NUM_SHOTS = IntKey.NUM_SHOTS
@@ -357,6 +375,42 @@ class UIParam:
         """
         _check_user_index(n)
         return UserKey[f"USER{n}"]
+
+    @staticmethod
+    def exsat_normal(n: int) -> tuple[FloatKey, FloatKey, FloatKey]:
+        """Return the keys of the normal of explicit saturation band ``n``, 1 to 6, along the physical x, y and z axes.
+
+        Raises
+        ------
+        ValueError
+            If ``n`` is out of range.
+        """
+        _check_band(n)
+        return tuple(FloatKey[f"EXSAT{n}_NORMAL_{axis}"] for axis in "XYZ")
+
+    @staticmethod
+    def exsat_loc(n: int) -> FloatKey:
+        """Return the key of the position of explicit saturation band ``n``, 1 to 6: its centre's distance from the isocentre along its normal, in mm.
+
+        Raises
+        ------
+        ValueError
+            If ``n`` is out of range.
+        """
+        _check_band(n)
+        return FloatKey[f"EXSAT{n}_LOC"]
+
+    @staticmethod
+    def exsat_thickness(n: int) -> FloatKey:
+        """Return the key of the thickness of explicit saturation band ``n``, 1 to 6, in mm.
+
+        Raises
+        ------
+        ValueError
+            If ``n`` is out of range.
+        """
+        _check_band(n)
+        return FloatKey[f"EXSAT{n}_THICKNESS"]
 
     @staticmethod
     def user_name(n: int) -> UserNameKey:

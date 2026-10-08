@@ -3,6 +3,7 @@
 from pypulseqpp.sequences.sequence.gre2D_sequence import gre2d
 
 from pulserver._zoo._evaluation import cartesian_2d, evaluation
+from pulserver._zoo._saturation import band_entries, explicit_bands
 from pulserver._zoo._user import user_entries
 from pulserver.design import (
     FloatParam,
@@ -13,9 +14,13 @@ from pulserver.design import (
 )
 from pulserver.protocol import ImagingMode, TEPreset, TRPreset, UIParam
 
+#: Explicit saturation bands the sequence plays, prescribed on the console's
+#: graphic Rx and always on; 0 plays none.
+BANDS = 2
+
 
 class Gre2D(SequencePlugin):
-    app = gre2d
+    app = explicit_bands(gre2d, BANDS) if BANDS else gre2d
     protocol = {
         UIParam.IMAGING_MODE: StatedParam(ImagingMode.TWO_D),
         UIParam.FLIP: FloatParam(
@@ -60,6 +65,9 @@ class Gre2D(SequencePlugin):
         ),
         UIParam.RY: IntParam("ry", range_min=1, range_max=4),
     }
+
+    if BANDS:
+        protocol |= band_entries(BANDS)
 
     protocol |= user_entries(app, protocol)
 

@@ -127,6 +127,12 @@ every `--plugins` directory, so a file of the same name there replaces it:
 | `gre_radial2d`, `gre_spiral2d`, `se_radial2d`, `se_spiral2d`, `gre_propeller2d`, `se_propeller2d`, `se_epi_propeller2d`, `zte3d` | `nufft` |
 | `gre_stack_of_stars3d`, `gre_stack_of_spirals3d`, `gre_stack_of_blades3d`, `se_stack_of_stars3d`, `se_stack_of_spirals3d`, `se_stack_of_blades3d` | `nufft` |
 | `mprage_stack_of_stars3d`, `mprage_stack_of_spirals3d` | `nufft_train` |
+| `epi2d`, `epi3d` | `epi` |
+
+The pair is what a console reconstructs a shipped sequence with when the scan
+names no reconstruction ({doc}`virtual-scanner`); a scan can name another, and
+the reconstruction client of a scanner names one in its config
+({doc}`reconstruction-client`).
 
 Each shipped plugin also offers, as a named user entry, every one of these
 controls its sequence function takes, at the same user entry in every plugin;
@@ -141,12 +147,18 @@ a plugin's own user entries start at `user12`:
 | `user6` | Readout oversampling |
 | `user7` | Echo spacing, in ms; 0 the shortest |
 | `user8` | Refocusing flip angle, in degrees |
-| `epi2d`, `epi3d` | `epi` |
 
-The pair is what a console reconstructs a shipped sequence with when the scan
-names no reconstruction ({doc}`virtual-scanner`); a scan can name another, and
-the reconstruction client of a scanner names one in its config
-({doc}`reconstruction-client`).
+Saturation is set in a plugin's source, by a module constant, rather than at
+the console. `gre2d` and `se2d` play `BANDS`, two, spatial saturation bands
+before every excitation, each placed graphically as a scanner's console places
+an explicit band and always on: `exsat_mask` is a configuration the plugin
+declares, bit `n - 1` set for each band `n` it plays, and `exsat<n>_normal_x`,
+`_y` and `_z`, `exsat<n>_loc` and `exsat<n>_thickness` give each band's normal
+along the physical axes, its centre's distance from the isocentre along that
+normal and its thickness, in mm. The field-of-view offset and rotation leave a
+band where it was placed, and a band not yet placed waits 150 mm from the
+isocentre, outside the head. `BANDS = 0` plays none. `epi2d` saturates fat before
+every shot while `FAT_SATURATION` is `True`.
 
 Optional features are switched by a module constant of the plugin, off in
 the shipped files; a copy of the file in a `--plugins` directory with the
