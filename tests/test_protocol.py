@@ -107,6 +107,7 @@ TYPED_INVALID_VALUES = block(
 )
 GRE2D_LISTING = block(
     [
+        "imaging_mode: stringlist|0|2d|3d",
         "flip: float|typein|12.0|1.0|90.0|1.0|deg",
         "TE: int|dropdown|8000|1000|80000|10|us|-2|5000|8000",
         "TR: int|dropdown|250000|1000|5000000|1|us|-1",
@@ -116,6 +117,7 @@ GRE2D_LISTING = block(
         "nx: int|typein|128|32|512|2|",
         "ny: int|typein|128|32|512|2|",
         "nslices: int|typein|1|1|64|1|",
+        "slice_spacing: float|typein|0.0|0.0|100.0|0.1|mm",
         "slice_thickness: float|typein|5.0|1.0|20.0|1.0|mm",
         "Ry: int|typein|1|1|4|1|",
         *PRESCRIPTION_LISTING,

@@ -11,6 +11,7 @@ from ._entries import (
     FloatParam,
     IntParam,
     Protocol,
+    StatedParam,
     StringListParam,
     TimeParam,
 )
@@ -36,6 +37,7 @@ __all__ = [
     "RfLayout",
     "ScannerSequence",
     "SequencePlugin",
+    "StatedParam",
     "StringListParam",
     "TimeParam",
     "load_exam",

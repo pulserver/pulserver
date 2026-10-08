@@ -3,13 +3,20 @@
 from pypulseqpp.sequences.sequence.se_propeller2D_sequence import se_propeller2d
 
 from pulserver._zoo._evaluation import evaluation, propeller_2d
-from pulserver.design import FloatParam, IntParam, SequencePlugin, TimeParam
-from pulserver.protocol import TEPreset, TRPreset, UIParam
+from pulserver.design import (
+    FloatParam,
+    IntParam,
+    SequencePlugin,
+    StatedParam,
+    TimeParam,
+)
+from pulserver.protocol import ImagingMode, TEPreset, TRPreset, UIParam
 
 
 class SePropeller2D(SequencePlugin):
     app = se_propeller2d
     protocol = {
+        UIParam.IMAGING_MODE: StatedParam(ImagingMode.TWO_D),
         UIParam.TE: TimeParam(
             "te",
             range_min=2000,
@@ -31,6 +38,15 @@ class SePropeller2D(SequencePlugin):
         ),
         UIParam.NX: IntParam("n", range_min=32, range_max=512, range_incr=2),
         UIParam.NSLICES: IntParam("n_slices", range_min=1, range_max=64),
+        UIParam.SLICE_SPACING: FloatParam(
+            "slice_spacing",
+            unit="mm",
+            scale=1e-3,
+            range_min=0.0,
+            range_max=100.0,
+            range_incr=0.1,
+        ),
+        UIParam.ETL: IntParam("blade_width", range_min=4, range_max=128, range_incr=2),
         UIParam.SLICE_THICKNESS: FloatParam(
             "slice_thickness", unit="mm", scale=1e-3, range_min=1.0, range_max=20.0
         ),

@@ -7,14 +7,16 @@ from pypulseqpp.sequences.sequence.se_stack_of_spirals3D_sequence import (
 )
 
 from pulserver._zoo._evaluation import evaluation, stack_of_spirals
+from pulserver._zoo._slab import slab
 from pulserver.design import (
     Description,
     FloatParam,
     IntParam,
     SequencePlugin,
+    StatedParam,
     TimeParam,
 )
-from pulserver.protocol import TEPreset, TRPreset, UIParam
+from pulserver.protocol import ImagingMode, TEPreset, TRPreset, UIParam
 
 #: Variable-density spirals: adds how much sparser the periphery is sampled
 #: than the centre as a user entry.
@@ -22,10 +24,14 @@ VARIABLE_DENSITY = False
 
 
 class SeStackOfSpirals3D(SequencePlugin):
-    app = functools.partial(
-        se_stack_of_spirals3d, density="variable" if VARIABLE_DENSITY else "constant"
+    app = slab(
+        functools.partial(
+            se_stack_of_spirals3d,
+            density="variable" if VARIABLE_DENSITY else "constant",
+        )
     )
     protocol = {
+        UIParam.IMAGING_MODE: StatedParam(ImagingMode.THREE_D),
         UIParam.TE: TimeParam(
             "te",
             range_min=2000,
@@ -48,6 +54,16 @@ class SeStackOfSpirals3D(SequencePlugin):
         UIParam.NX: IntParam("n", range_min=32, range_max=512, range_incr=2),
         UIParam.NUM_SHOTS: IntParam("n_shots", range_min=1, range_max=128),
         UIParam.NSLICES: IntParam("n_z", range_min=4, range_max=256),
+        UIParam.SLICE_THICKNESS: FloatParam(
+            "slice_thickness",
+            unit="mm",
+            scale=1e-3,
+            range_min=0.1,
+            range_max=20.0,
+            range_incr=0.1,
+        ),
+        UIParam.RY: IntParam("ry", range_min=1, range_max=4),
+        UIParam.RZ: IntParam("rz", range_min=1, range_max=4),
     }
     if VARIABLE_DENSITY:
         protocol |= {

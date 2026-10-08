@@ -10,9 +10,10 @@ from pulserver.design import (
     FloatParam,
     IntParam,
     SequencePlugin,
+    StatedParam,
     TimeParam,
 )
-from pulserver.protocol import TEPreset, TRPreset, UIParam
+from pulserver.protocol import ImagingMode, TEPreset, TRPreset, UIParam
 
 #: Variable-density spirals: adds how much sparser the periphery is sampled
 #: than the centre as a user entry.
@@ -24,6 +25,7 @@ class GreSpiral2D(SequencePlugin):
         gre_spiral2d, density="variable" if VARIABLE_DENSITY else "constant"
     )
     protocol = {
+        UIParam.IMAGING_MODE: StatedParam(ImagingMode.TWO_D),
         UIParam.FLIP: FloatParam(
             "flip_angle_deg", unit="deg", range_min=1.0, range_max=90.0
         ),
@@ -42,6 +44,15 @@ class GreSpiral2D(SequencePlugin):
         UIParam.NX: IntParam("n", range_min=32, range_max=512, range_incr=2),
         UIParam.NUM_SHOTS: IntParam("n_shots", range_min=1, range_max=128),
         UIParam.NSLICES: IntParam("n_slices", range_min=1, range_max=64),
+        UIParam.SLICE_SPACING: FloatParam(
+            "slice_spacing",
+            unit="mm",
+            scale=1e-3,
+            range_min=0.0,
+            range_max=100.0,
+            range_incr=0.1,
+        ),
+        UIParam.RY: IntParam("ry", range_min=1, range_max=4),
         UIParam.SLICE_THICKNESS: FloatParam(
             "slice_thickness", unit="mm", scale=1e-3, range_min=1.0, range_max=20.0
         ),

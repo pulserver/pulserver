@@ -4,19 +4,22 @@ import pypulseqpp as pp
 from pypulseqpp.sequences.sequence.bssfp3D_sequence import bssfp3d
 
 from pulserver._zoo._evaluation import achieved, arguments, rf_layout
+from pulserver._zoo._slab import slab
 from pulserver.design import (
     Evaluation,
     FloatParam,
     IntParam,
     SequencePlugin,
+    StatedParam,
     TimeParam,
 )
-from pulserver.protocol import TRPreset, UIParam
+from pulserver.protocol import ImagingMode, TRPreset, UIParam
 
 
 class Bssfp3D(SequencePlugin):
-    app = bssfp3d
+    app = slab(bssfp3d)
     protocol = {
+        UIParam.IMAGING_MODE: StatedParam(ImagingMode.THREE_D),
         UIParam.FLIP: FloatParam(
             "flip_angle_deg", unit="deg", range_min=1.0, range_max=90.0
         ),
@@ -35,6 +38,14 @@ class Bssfp3D(SequencePlugin):
         UIParam.NX: IntParam("n_x", range_min=32, range_max=512, range_incr=2),
         UIParam.NY: IntParam("n_y", range_min=32, range_max=512, range_incr=2),
         UIParam.NSLICES: IntParam("n_z", range_min=4, range_max=256),
+        UIParam.SLICE_THICKNESS: FloatParam(
+            "slice_thickness",
+            unit="mm",
+            scale=1e-3,
+            range_min=0.1,
+            range_max=20.0,
+            range_incr=0.1,
+        ),
         UIParam.RY: IntParam("ry", range_min=1, range_max=4),
         UIParam.RZ: IntParam("rz", range_min=1, range_max=4),
     }
