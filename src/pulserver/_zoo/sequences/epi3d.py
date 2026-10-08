@@ -33,11 +33,18 @@ from pulserver.design import (
 )
 from pulserver.protocol import ImagingMode, TEPreset, TRPreset, UIParam
 
+#: The slab's excitation, one of ``sequences.EXCITATIONS``. ``"spsp"`` excites
+#: water alone, which keeps fat, shifted many pixels along the phase encode,
+#: out of the image without a fat saturation pulse.
+EXCITATION = "spsp"
+
 
 class Epi3D(SequencePlugin):
     # Twofold readout oversampling keeps the ramp-sampled flat top within the
     # spacing of the readout field of view, so it can be resampled onto a grid.
-    app = slab(functools.partial(epi3d, readout_oversampling=2.0))
+    app = slab(
+        functools.partial(epi3d, readout_oversampling=2.0, excitation=EXCITATION)
+    )
     protocol = {
         UIParam.IMAGING_MODE: StatedParam(ImagingMode.THREE_D),
         UIParam.FLIP: FloatParam(
