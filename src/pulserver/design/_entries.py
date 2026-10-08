@@ -76,7 +76,9 @@ class IntParam:
     """An integer UI entry bound to an argument of the sequence function; a dropdown when it has options.
 
     ``default`` is the value the protocol starts at; ``None`` starts it at the
-    sequence function's default.
+    sequence function's default. ``automatic`` is the value a console sends
+    for the sequence function's own choice, which the function takes as
+    ``None``: where its default is ``None``, the protocol starts at it.
     """
 
     argument: str
@@ -86,6 +88,7 @@ class IntParam:
     range_incr: int = 1
     options: tuple[int, ...] = ()
     default: int | None = None
+    automatic: int | None = None
 
 
 @dataclass(frozen=True)
@@ -351,6 +354,8 @@ def _numeric_parameter(entry: FloatParam | IntParam, default: Any) -> Parameter:
     else:
         kind = Kind.INT
         value = default if entry.default is None else int(entry.default)
+        if value is None:
+            value = entry.automatic
     return Parameter(
         kind,
         value,
@@ -464,7 +469,10 @@ class Protocol(Mapping[ProtocolKey, Any]):
             elif isinstance(entry, FloatParam):
                 converted[key] = _to_si(value, entry.scale)
             elif isinstance(entry, IntParam):
-                converted[key] = int(value)
+                automatic = (
+                    entry.automatic is not None and int(value) == entry.automatic
+                )
+                converted[key] = None if automatic else int(value)
             elif isinstance(entry, BoolParam):
                 converted[key] = bool(value)
             elif isinstance(entry, StatedParam):
@@ -492,7 +500,7 @@ class Protocol(Mapping[ProtocolKey, Any]):
             elif isinstance(entry, FloatParam):
                 wire[key] = _to_ui(value, entry.scale)
             elif isinstance(entry, IntParam):
-                wire[key] = int(value)
+                wire[key] = entry.automatic if value is None else int(value)
             elif isinstance(entry, BoolParam):
                 wire[key] = bool(value)
             elif isinstance(entry, AveragesParam):
