@@ -55,8 +55,15 @@ through, over the angle on resonance, at detunings $1/(16T)$ apart within
 $\pm 64/T$ of its frequency, for a pulse of duration $T$, cut where it falls
 below $1/128$. Pulses of the same samples at the same amplitude share one
 profile. A pulse plays under the gradient read at five points of its duration
-when the gradient changes by less than $10^{-6}$ of its largest axis, and
-under none otherwise.
+when the gradient changes by less than $10^{-6}$ of its largest axis. A
+gradient that changes but keeps one direction across the pulse's raster, as
+the alternating lobes of a spectral-spatial pulse do, gives the pulse a profile
+across both the field and the position along that direction: a Bloch
+simulation of its samples under that gradient, over the box of fields and
+positions the tissue's cubes span, at 8 points per resolution ($1/T$ in
+frequency, the inverse of the span of its excitation k-space in position), at
+most 256 along either, read bilinearly. A pulse under a gradient that turns
+selects by frequency alone.
 
 Each readout's echo is the sample at which the pathway it reads passes nearest
 the centre of k-space, found first among 64 samples spread over the window
@@ -69,8 +76,10 @@ across a voxel reads the free induction.
 
 The voxel along each logical axis is the smallest of $1/(2k_\mathrm{max})$,
 the full width at half maximum of each excitation's profile over its gradient
-along that axis, and the extent of the tissue. A pulse's selector is its
-gradient, its frequency and its profile; where the pulses play under more than
+along that axis (on resonance across the position, for a profile in both),
+and the extent of the tissue. A pulse's selector is its
+gradient, its frequency and its profile, and the direction and samples of a
+profile in both field and position; where the pulses play under more than
 16 distinct gradients, as a ZTE scan's do, every selector selects by frequency
 alone. Under each selector, a cube's flip angle relative to the one on
 resonance is rounded to a level: halving from $2^{-7}$ to $2^{-4}$, then in

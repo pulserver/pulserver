@@ -4,6 +4,7 @@ from __future__ import annotations
 
 __all__ = ["Timeline"]
 
+import functools
 import math
 from dataclasses import dataclass
 from pathlib import Path
@@ -32,6 +33,13 @@ _IN_BAND = 1.0 / 128.0
 # at which it is held, and the fractions of the pulse it is read at.
 _HELD = 1e-6
 _HELD_AT = (0.0, 0.25, 0.5, 0.75, 1.0)
+
+# Points per resolution, in frequency and in position, at which the flip angle
+# of a pulse under a changing gradient is simulated; the most along either,
+# and positions simulated together.
+_TRACED_POINTS = 8.0
+_TRACED_MOST = 256
+_TRACED_CHUNK = 1024
 
 # Pathways a readout may read: the free induction, and the echoes of the
 # intervals one and two before.
@@ -72,7 +80,16 @@ class Pulses:
     profiles
         Per profile, ``(detuning, ratio)``: detunings from the pulse's
         frequency, in Hz, and the angle it turns the magnetization at rest
-        through at each, over the one on resonance.
+        through at each, over the one on resonance; at the isocentre, for a
+        pulse under a changing gradient.
+    direction
+        ``(n, 3)`` the physical axis along which the gradient it plays under
+        changes, a unit vector; zero where it plays under none, a held one,
+        or one that turns.
+    trace
+        ``(n,)`` which of ``traces`` it plays, -1 where ``direction`` is zero.
+    traces
+        The pulses played under a gradient that changes along one axis.
     """
 
     block: np.ndarray
@@ -84,6 +101,114 @@ class Pulses:
     band: np.ndarray
     profile: np.ndarray
     profiles: tuple[tuple[np.ndarray, np.ndarray], ...]
+    direction: np.ndarray
+    trace: np.ndarray
+    traces: tuple[Trace, ...]
+
+
+@dataclass(frozen=True)
+class Trace:
+    """A pulse played under a gradient that changes along one axis, a spectral-spatial one among them, on a uniform raster.
+
+    Attributes
+    ----------
+    b1
+        ``(T,)`` the pulse's field, complex, in Hz.
+    along
+        ``(T,)`` the gradient along the axis, in Hz/m.
+    dt
+        The raster, in s.
+    """
+
+    b1: np.ndarray
+    along: np.ndarray
+    dt: float
+
+    def ratio(self, field_hz: np.ndarray, position_m: np.ndarray) -> np.ndarray:
+        """Return the angle the pulse turns the magnetization at rest through at fields from its frequency and positions along its axis, over the one at zero of both; zero below ``_IN_BAND`` of it.
+
+        Read bilinearly off a Bloch simulation across the box the points span,
+        at ``_TRACED_POINTS`` per resolution: the inverse of the pulse's
+        duration in frequency, and of the span of its excitation k-space in
+        position.
+        """
+        field_hz = np.asarray(field_hz, dtype=np.float64).reshape(-1)
+        position_m = np.asarray(position_m, dtype=np.float64).reshape(-1)
+        if not field_hz.size:
+            return np.zeros(0)
+        reach = self._reach()
+        axes = (
+            _grid(field_hz, 1.0 / (self.dt * self.b1.size)),
+            _grid(position_m, 1.0 / reach if reach > 0.0 else math.inf),
+        )
+        field, position = (a.ravel() for a in np.meshgrid(*axes, indexing="ij"))
+        table = self._tipped(field, position).reshape(axes[0].size, -1)
+        return _bilinear(axes, table, (field_hz, position_m))
+
+    @functools.cached_property
+    def width(self) -> float:
+        """Return the full width at half maximum of the slab the pulse selects on its frequency, in m; infinite where its gradient moves through no k-space."""
+        reach = self._reach()
+        if reach <= 0.0:
+            return math.inf
+        half = math.ceil(_PROFILE_REACH * _TRACED_POINTS)
+        position = (np.arange(-half, half + 1) / _TRACED_POINTS) / reach
+        ratio = self._tipped(np.zeros_like(position), position)
+        inside = position[ratio >= 0.5]
+        return float(inside[-1] - inside[0]) if inside.size else 0.0
+
+    def _reach(self) -> float:
+        """Return the span of the pulse's excitation k-space along its axis, in 1/m."""
+        return float(np.ptp(np.cumsum(self.along) * self.dt))
+
+    def _tipped(self, field_hz: np.ndarray, position_m: np.ndarray) -> np.ndarray:
+        """Return the angle the pulse turns the magnetization at rest through at each field and position, over the one at zero of both; zero below ``_IN_BAND`` of it."""
+        points = np.column_stack([np.append(field_hz, 0.0), np.append(position_m, 0.0)])
+        tipped = np.concatenate(
+            [
+                np.arccos(
+                    np.clip(
+                        pp.sim_bloch(
+                            self.b1, chunk[:, :1] + chunk[:, 1:] * self.along, self.dt
+                        )[:, 2],
+                        -1.0,
+                        1.0,
+                    )
+                )
+                for chunk in np.array_split(points, -(-len(points) // _TRACED_CHUNK))
+            ]
+        )
+        ratio = tipped[:-1] / max(float(tipped[-1]), 1e-12)
+        return np.where(ratio < _IN_BAND, 0.0, ratio)
+
+
+def _grid(values: np.ndarray, resolution: float) -> np.ndarray:
+    """Return points spanning ``values`` at ``_TRACED_POINTS`` per ``resolution``, at most ``_TRACED_MOST``."""
+    low, high = float(values.min()), float(values.max())
+    count = math.ceil((high - low) * _TRACED_POINTS / resolution) + 1
+    return np.linspace(low, high, max(1, min(_TRACED_MOST, count)))
+
+
+def _bilinear(
+    axes: tuple[np.ndarray, np.ndarray],
+    table: np.ndarray,
+    points: tuple[np.ndarray, np.ndarray],
+) -> np.ndarray:
+    """Return ``table``, sampled on the grid ``axes``, interpolated bilinearly at ``points`` within it."""
+    corners = []
+    for grid, values in zip(axes, points, strict=True):
+        if grid.size == 1:
+            below = np.zeros(values.size, dtype=np.int64)
+            weight = np.zeros(values.size)
+        else:
+            place = (values - grid[0]) / (grid[1] - grid[0])
+            below = np.clip(np.floor(place).astype(np.int64), 0, grid.size - 2)
+            weight = np.clip(place - below, 0.0, 1.0)
+        corners.append((below, np.minimum(below + 1, grid.size - 1), weight))
+    (f0, f1, wf), (s0, s1, ws) = corners
+    return (1.0 - wf) * ((1.0 - ws) * table[f0, s0] + ws * table[f0, s1]) + wf * (
+        (1.0 - ws) * table[f1, s0] + ws * table[f1, s1]
+    )
 
 
 @dataclass(frozen=True)
@@ -397,6 +522,25 @@ class Timeline:
         kind_of = profile_of[kind_of]
         low = np.array([profile[0][0] for profile in profiles])[kind_of]
         high = np.array([profile[0][-1] for profile in profiles])[kind_of]
+        gradient, changing = self._held(blocks)
+        # A pulse under a gradient that changes along one axis selects across
+        # field and position along it.
+        direction = np.zeros((blocks.size, 3))
+        trace = np.full(blocks.size, -1, dtype=np.int64)
+        traced: dict[bytes, int] = {}
+        directions: list[np.ndarray] = []
+        traces: list[Trace] = []
+        for at in np.flatnonzero(changing):
+            key = keys[at].tobytes() + self._gradient_key(int(blocks[at]))
+            if key not in traced:
+                found = self._trace(int(blocks[at]))
+                traced[key] = -1 if found is None else len(traces)
+                if found is not None:
+                    directions.append(found[0])
+                    traces.append(found[1])
+            trace[at] = traced[key]
+            if trace[at] >= 0:
+                direction[at] = directions[trace[at]]
         offset = played["rf_freq_hz"][blocks].astype(np.float64)
         centre = played["rf_center_us"][blocks].astype(np.float64)
         phase = (
@@ -410,14 +554,17 @@ class Timeline:
             use=played["rf_use"][blocks].astype(np.int64),
             flip=flips,
             phase=phase,
-            gradient=self._held(blocks),
+            gradient=gradient,
             band=np.column_stack([low + offset, high + offset]),
             profile=kind_of,
             profiles=profiles,
+            direction=direction,
+            trace=trace,
+            traces=tuple(traces),
         )
 
-    def _held(self, blocks: np.ndarray) -> np.ndarray:
-        """Return the gradient each block's pulse plays under along the physical axes, in Hz/m, ``(n, 3)``; zero where it changes during the pulse."""
+    def _held(self, blocks: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        """Return the gradient each block's pulse plays under along the physical axes, in Hz/m, ``(n, 3)``, zero where it changes during the pulse; and where it does."""
         played = self.played
         span = self._prepared["rf_span"][self._position[blocks]]
         channels = np.maximum(played["rf_channels"][blocks], 1)
@@ -434,7 +581,37 @@ class Timeline:
         held = np.where((changing | (largest == 0.0))[:, None], 0.0, values[:, 0])
         turned = played["rotate"][blocks] != 0
         held[turned] = held[turned] @ self.rotation.T
-        return held
+        return held, changing & (largest > 0.0)
+
+    def _gradient_key(self, block: int) -> bytes:
+        """Return the bytes of a block's gradients and whether they turn with the prescription."""
+        played = self.played
+        return b"|".join(
+            played["gradient_time_us"][start:stop].tobytes()
+            + played["gradient_waveform_hz_per_m"][start:stop].tobytes()
+            for start, stop in played["gradient_span"][block]
+        ) + bytes([int(played["rotate"][block] != 0)])
+
+    def _trace(self, block: int) -> tuple[np.ndarray, Trace] | None:
+        """Return the physical axis along which the gradient changes during a block's pulse, and the pulse on its raster; ``None`` where the gradient turns."""
+        played = self.played
+        b1, step_us, since_us = _raster(
+            self._prepared,
+            int(self._position[block]),
+            float(played["rf_amp_hz"][block]),
+            int(played["rf_channels"][block]),
+            float(played["rf_delay_us"][block]),
+        )
+        values = self._values(np.full(b1.size, block), since_us)
+        if played["rotate"][block] != 0:
+            values = values @ self.rotation.T
+        size = np.linalg.norm(values, axis=1)
+        axis = values[int(np.argmax(size))] / size.max()
+        axis = axis * np.sign(axis[int(np.argmax(np.abs(axis)))])
+        along = values @ axis
+        if np.abs(values - along[:, None] * axis).max() > _HELD * size.max():
+            return None
+        return axis, Trace(b1, along, 1e-6 * step_us)
 
     def _values(self, block: np.ndarray, since_us: np.ndarray) -> np.ndarray:
         """Return each axis's gradient at times from block starts, in the frame each block plays in, ``(n, 3)`` in Hz/m."""
@@ -627,16 +804,7 @@ def _turn(
         ``_IN_BAND`` of the angle it does on resonance, side lobes included,
         and that angle's ratio at each.
     """
-    start, stop = prepared["rf_span"][at]
-    channels = max(channels, 1)
-    times = prepared["rf_time_us"][start:stop].astype(float).reshape(channels, -1)[0]
-    b1 = amplitude * (
-        prepared["rf_waveform_hz"][start:stop]
-        .astype(complex)
-        .reshape(channels, -1)
-        .sum(axis=0)
-    )
-    b1, step_us = _on_a_raster(times - delay_us, b1)
+    b1, step_us, _ = _raster(prepared, at, amplitude, channels, delay_us)
     dt = 1e-6 * step_us
     turned = pp.sim_bloch(b1, np.zeros((3, 1)), dt, initial=np.eye(3)).T
     flip = float(np.arccos(np.clip(0.5 * (np.trace(turned) - 1.0), -1.0, 1.0)))
@@ -666,8 +834,27 @@ def _turn(
     return flip, axis, (detunings[low : high + 1], ratio[low : high + 1])
 
 
-def _on_a_raster(times_us: np.ndarray, b1: np.ndarray) -> tuple[np.ndarray, float]:
-    """Return an RF pulse's samples on a uniform raster, and the raster in µs.
+def _raster(
+    prepared: dict, at: int, amplitude: float, channels: int, delay_us: float
+) -> tuple[np.ndarray, float, np.ndarray]:
+    """Return the field the pulse prepared position ``at`` plays at ``amplitude``, its channels summed, on a uniform raster; the raster, and its samples' times from the block's start, in µs."""
+    start, stop = prepared["rf_span"][at]
+    channels = max(channels, 1)
+    times = prepared["rf_time_us"][start:stop].astype(float).reshape(channels, -1)[0]
+    b1 = amplitude * (
+        prepared["rf_waveform_hz"][start:stop]
+        .astype(complex)
+        .reshape(channels, -1)
+        .sum(axis=0)
+    )
+    b1, step_us, since_us = _on_a_raster(times - delay_us, b1)
+    return b1, step_us, since_us + delay_us
+
+
+def _on_a_raster(
+    times_us: np.ndarray, b1: np.ndarray
+) -> tuple[np.ndarray, float, np.ndarray]:
+    """Return an RF pulse's samples on a uniform raster, the raster in µs, and the samples' times.
 
     ``times_us`` are from the pulse's start. Samples at the middles of equal
     intervals from the start, as a pulse on the RF raster holds them, are
@@ -677,12 +864,14 @@ def _on_a_raster(times_us: np.ndarray, b1: np.ndarray) -> tuple[np.ndarray, floa
     """
     steps = np.diff(times_us)
     if not steps.size:
-        return b1, 2.0 * float(times_us[0])
+        return b1, 2.0 * float(times_us[0]), times_us
     if np.allclose(steps, steps[0]) and np.isclose(times_us[0], 0.5 * steps[0]):
-        return b1, float(steps[0])
+        return b1, float(steps[0]), times_us
     step = min(1.0, float(steps[steps > 0].min()))
     count = max(1, round((times_us[-1] - times_us[0]) / step))
     grid = times_us[0] + step * (np.arange(count) + 0.5)
-    return np.interp(grid, times_us, b1.real) + 1j * np.interp(
-        grid, times_us, b1.imag
-    ), step
+    return (
+        np.interp(grid, times_us, b1.real) + 1j * np.interp(grid, times_us, b1.imag),
+        step,
+        grid,
+    )

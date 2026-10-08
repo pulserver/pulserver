@@ -11,6 +11,7 @@ import torch
 from _analytic import trajectory
 from _virtual import ORIENTATIONS
 from bartorch import linop
+from pypulseqpp import sequences
 from pypulseqpp.sequences.preparation.fatsat import FAT_SHIFT_PPM
 
 from pulserver import ir, virtual
@@ -167,6 +168,40 @@ def test_a_pulse_played_without_a_gradient_selects_by_frequency(converted):
     assert not pulses.gradient[saturation].any()
     assert (flips["water"] == 0).all()
     assert (flips["fat"] > 0).all()
+
+
+def test_a_spectral_spatial_pulse_selects_by_frequency_and_by_position_along_its_slab(
+    tmp_path,
+):
+    path = tmp_path / "spsp.seq"
+    slab = 0.04
+    main = sequences.epi3D_sequence(
+        n_x=32, n_y=16, n_z=8, fov_z=slab, n_dummy=0, excitation="spsp"
+    )[-1]
+    sequences.write(path, main)
+    ir.convert(path, SYSTEM)
+    pulses = Timeline(path).pulses
+    excitation = pulses.use == 1
+    _, selectors = _fourier._selectors(pulses)
+    column = np.flatnonzero(selectors == np.flatnonzero(excitation)[0])
+
+    def flip(z, shift_ppm=0.0):
+        phantom = virtual.Phantom(
+            [virtual.Ellipse((0.0, 0.0, z), (0.02, 0.02), shift_ppm=shift_ppm)]
+        )
+        entries = _fourier._Entries.of(phantom.tissue(2e-3, field_t=3.0), "cpu")
+        levels = _fourier._profiles(entries, selectors, pulses)[:, column]
+        return _fourier._LEVELS[levels.long().cpu().numpy()].mean()
+
+    assert (pulses.trace[excitation] >= 0).all()
+    np.testing.assert_allclose(
+        np.abs(pulses.direction[excitation]), [[0, 0, 1]] * excitation.sum(), atol=1e-6
+    )
+    assert flip(0.0) == pytest.approx(1.0, abs=0.05)
+    assert flip(0.0, FAT_SHIFT_PPM) < 0.05
+    assert flip(slab) == 0.0
+    trace = pulses.traces[pulses.trace[excitation][0]]
+    assert trace.width == pytest.approx(slab, rel=0.25)
 
 
 @pytest.mark.parametrize("name", AGREEMENT)
