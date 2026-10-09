@@ -8,11 +8,11 @@
 - Timing, gradient amplitude and slew rate are always checked. PNS, mechanical
   resonance and sound pressure are checked when the scanner sends a model for
   them.
-- A design with a problem is refused: nothing is stored, and the operator
-  reads the problems.
-- SAR is not checked on the host. pulserver computes, for each subsequence,
-  its RF energy relative to a reference pulse, and the interpreter computes
-  SAR and heating from it.
+- A sequence raising a safety check violation is refused: nothing is stored,
+  and the operator reads the violations.
+- SAR, RF coil heating and gradient heating are computed on the scanner by the
+  vendor's routines. pulserver computes their inputs and passes them on, as a
+  product sequence does; for pTx this includes SAR ratios from VOPs.
 ```
 
 Your sequence function designs a scan. pulserver checks it before the scanner
@@ -28,12 +28,9 @@ patient safety.
 
 ## What pulserver does
 
-Each capability names the code that does the work and the test that holds it,
-by the sentence its name spells and its file under `tests/`.
-
 :::{container} capabilities
 
-- **Checks every file of a `NextSequence` chain before it is stored.** A design with a problem is refused, nothing is stored, and the reply lists the problems.
+- **Checks every file of a `NextSequence` chain before it is stored.** A sequence raising a safety check violation is refused, nothing is stored, and the reply lists the violations.
 
   Code: {func}`~pulserver.ir.check`, called by the design calls. Tests: *a design beyond the scanner limits is refused and stores nothing* (`test_design_service.py`); *an import beyond the scanner limits is refused* (`test_design_service.py`).
 - **Rotates each file to the prescription before checking.** The rotation is composed after each block's own rotation.
@@ -48,6 +45,9 @@ by the sentence its name spells and its file under `tests/`.
 - **Designs under per-logical-axis design limits and checks against the gradient coil's per-physical-axis limits.**
 
   Code: `design_max_grad`, `design_max_slew` in the call's limits. Test: *an oblique design is held under the design limits and checked against the scanner's* (`test_design_service.py`).
+- **Checks that each raster of the file (RF, gradient, ADC, block duration) and the scanner's are integer multiples of each other.** The vendor's instruction generation then plays the file's waveforms on the scanner's rasters, by decimation or piecewise-constant interpolation.
+
+  Code: `check_raster_times` in `src/cpp/ir/dedup.cpp`, run by {func}`~pulserver.ir.convert`. Test: *a file raster converts only as an integer multiple of the scanner's* (`test_ir.py`).
 - **Checks timing, including gradient continuity, dead times and ringdown, on the rasters the file declares.**
 
   Code: `pypulseqpp.check_timing`. Test: *a dead time the file does not leave is a timing problem* (`test_ir.py`).
@@ -63,7 +63,7 @@ by the sentence its name spells and its file under `tests/`.
 - **Computes the sound pressure level of each file's loudest repetition and holds it to 140 dB peak and 99 dB(A) average (IEC 60601-2-33).** The levels are written into the cache.
 
   Code: `CheckLimits(acoustic=...)`, {func}`~pulserver.ir.spl_levels`, {class}`~pulserver.ir.SplLevels`. Tests: *a repetition too loud on the physical axis it plays on is refused* (`test_ir_checks.py`); *the levels the cache carries are those the check holds to its limits* (`test_ir_checks.py`).
-- **Computes each subsequence's SAR ratios against a reference pulse and writes them into the cache.** Nothing is refused on SAR.
+- **For pTx, computes each subsequence's SAR ratios from the VOPs against a reference pulse and writes them into the cache.** They are inputs to the vendor's SAR routine; nothing is refused on them here.
 
   Code: {func}`~pulserver.ir.sar_ratios`, {class}`~pulserver.ir.SarRatio`. Tests: *a repetition's SAR is measured against the same repetition of reference pulses* (`test_ir_checks.py`); *the checks apply no SAR limit* (`test_ir_checks.py`).
 - **Plays the reference pulse in the coil's default channel weights, and applies the VOP file's safety factor to local SAR only.**
@@ -81,15 +81,20 @@ by the sentence its name spells and its file under `tests/`.
 
 :::
 
-## What it does not do
+## What the scanner does
 
-- **No SAR limit on the host.** The interpreter computes SAR and RF and
-  gradient heating under its own calibration of the transmit chain. pulserver
-  supplies the ratios that relate each pulse to a reference pulse.
-- **No resampling.** The waveforms are checked on the rasters the file
-  declares, not on the scanner's.
-- **No statement about safety.** A design that passes has passed these
-  estimates under the limits the scanner sent, and nothing more.
+- **SAR, RF coil heating and gradient heating.** These are computed on the
+  scanner by the vendor's proprietary routines, under the scanner's own
+  calibration. The interpreter feeds them the inputs pulserver computes, as a
+  product sequence does: the RF pulses and gradients of each subsequence, and
+  for pTx the SAR ratios described below.
+- **Resampling onto the scanner's rasters.** The vendor's instruction
+  generation decimates a waveform on a finer raster and holds the samples of
+  one on a coarser raster, which is why pulserver requires the rasters to be
+  integer multiples of each other.
+
+A sequence that passes has passed these estimates under the limits the scanner
+sent, and nothing more.
 
 ## How it works
 
@@ -97,18 +102,18 @@ by the sentence its name spells and its file under `tests/`.
 :figclass: only-light
 
 A design made under the design limits is rotated to the prescription and
-checked on the physical axes. A design with a problem is refused; one without
-is converted into the IR cache, which carries its sound pressure levels and SAR
-ratios to the interpreter.
+checked on the physical axes. A sequence raising a violation is refused; one
+without is converted into the IR cache, which carries its sound pressure
+levels and SAR ratios to the interpreter.
 ```
 
 ```{figure} ../_static/safety-dark.svg
 :figclass: only-dark
 
 A design made under the design limits is rotated to the prescription and
-checked on the physical axes. A design with a problem is refused; one without
-is converted into the IR cache, which carries its sound pressure levels and SAR
-ratios to the interpreter.
+checked on the physical axes. A sequence raising a violation is refused; one
+without is converted into the IR cache, which carries its sound pressure
+levels and SAR ratios to the interpreter.
 ```
 
 ### The physical frame
@@ -147,9 +152,11 @@ function carries -1.
 
 ### SAR against a reference pulse
 
-The interpreter computes SAR under its own calibration, which covers a pulse
-played in the coil's default channel weights. With virtual observation points
-(VOPs), pulserver relates every pulse of a subsequence to such a pulse, the
+VOPs are used only for pTx: a multichannel transmit coil is connected, and
+the file contains RF shim events or multichannel RF waveforms. The interpreter
+then sends the coil's virtual observation points (VOPs). The vendor's SAR
+routine is calibrated for a pulse played in the coil's default channel weights,
+so pulserver relates every pulse of a subsequence to such a pulse, the
 *reference pulse*: hard, 180° and 1 ms, in the default channel weights.
 
 The energy a pulse deposits at VOP $v$ is
@@ -193,41 +200,9 @@ rests on the interpreter's head SAR for the reference not falling below the
 true one, and on the VOPs and the safety factor bounding peak local SAR.
 
 The cache carries the two terms of each subsequence in its
-`pulseg_subseq_info`, zero without VOPs or without RF. The interpreter charges
-each pulse of the subsequence the time of a reference pulse times the larger of
-the two.
-
-## The words to use
-
-Problem
-: One line of {func}`~pulserver.ir.check`'s output. A design with one is
-  *refused*.
-
-Scanner limits, `system`
-: The gradient coil's amplitude and slew rate per physical axis, with the dead
-  times and ringdown time.
-
-Design limits
-: `design_max_grad` and `design_max_slew`: the limits per logical axis a
-  sequence is designed under.
-
-Physical axes, logical axes
-: The gradient coils' axes, and the axes of the prescription. The prescription
-  rotation maps the second onto the first.
-
-Nerve model, PNS response
-: The gradient coil's PNS model, chronaxie or SAFE, and the response it
-  predicts as a fraction of its threshold.
-
-Forbidden band
-: A frequency band of mechanical resonance of a physical axis.
-
-Reference pulse, SAR ratio
-: The hard 180° 1 ms pulse in the default channel weights, and
-  $r_{\mathrm{local}}$ and $r_{\mathrm{head}}$ against it.
-
-A design that passes is *accepted*. It is never called safe, validated,
-compliant or approved.
+`pulseg_subseq_info`, zero without VOPs or without RF. The interpreter passes
+each pulse of the subsequence to the vendor's SAR routine as a reference pulse
+lasting the reference pulse's time times the larger of the two.
 
 ## See it run
 

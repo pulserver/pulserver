@@ -392,7 +392,7 @@ def safety(theme: str) -> str:
                 _box("a", 40 + 187 * i, 210, 170, 70, *lines)
                 for i, lines in enumerate(checks)
             ),
-            _arrow(250, 280, 250, 337, "a problem", "left"),
+            _arrow(250, 280, 250, 337, "a violation", "left"),
             _arrow(750, 280, 750, 337, "none"),
             _box(
                 "box",
@@ -401,7 +401,7 @@ def safety(theme: str) -> str:
                 420,
                 85,
                 "Refused: no design stored,",
-                "the operator reads the problems",
+                "the operator reads the violations",
             ),
             _box(
                 "box",
@@ -413,7 +413,7 @@ def safety(theme: str) -> str:
                 "pressure levels and SAR ratios",
             ),
             _arrow(750, 425, 750, 467, "loads"),
-            _box("core", 540, 470, 420, 60, "Interpreter: SAR, heating"),
+            _box("core", 540, 470, 420, 60, "Vendor routines: SAR, heating"),
         )
     )
     return _svg(
@@ -422,9 +422,9 @@ def safety(theme: str) -> str:
         "A sequence designed under per-axis design limits is rotated to the "
         "prescription and checked on the physical axes for timing, gradient and "
         "slew rate, PNS, mechanical resonance and sound pressure; a design with "
-        "a problem is refused and not stored, one without is converted to the "
+        "a violation is refused and not stored, one without is converted to the "
         "IR cache, which carries its sound pressure levels and SAR ratios to "
-        "the interpreter, which computes SAR and heating",
+        "the interpreter, whose vendor routines compute SAR and heating",
         body,
         theme,
     )
