@@ -40,7 +40,9 @@ class NufftRecon(ReconPlugin):
     :meth:`~pulserver.recon.ReconBuffer.grid_trajectory` scales to the image
     grid. The readouts of a unit are its shots, whichever segment (a PROPELLER
     blade) and line they carry, and one solve takes them all; a shot at which
-    no readout was placed is not a sample. A stack of blades, spokes or spirals
+    no readout was placed is not a sample, nor is a sample past the image
+    matrix, ``|k| > N / 2`` along an axis of ``N`` points, as the corners of a
+    PROPELLER blade are: the solve is on the matrix's own grid. A stack of blades, spokes or spirals
     is Fourier transformed along its partitions first and fitted partition by
     partition. A trajectory that encodes kz, with no partitions, is one
     three-dimensional solve, its maps fitted as ``bart nlinv -m 1 -t`` fits
@@ -140,7 +142,11 @@ class NufftRecon(ReconPlugin):
                 continue
             if not shots.all():
                 samples, points = samples[:, shots], points[shots]
-            image = self._solved(samples, points, device, volume)
+            image = self._solved(samples, points, device, extent)
+            if image.shape != tuple(extent):
+                raise ValueError(
+                    f"the solve's grid {image.shape} is not the image matrix {extent}"
+                )
             images.append(np.array(center_crop(image, extent)))
         return np.stack(images) if len(images) > 1 else images[0]
 
@@ -149,17 +155,19 @@ class NufftRecon(ReconPlugin):
         samples: np.ndarray,
         points: np.ndarray,
         device: str | None,
-        volume: tuple[int, ...] | None = None,
+        shape: tuple[int, ...],
     ) -> np.ndarray:
         """Return the magnitude image of ``(coils, shots, samples)`` k-space and its ``(shots, samples, 3)`` trajectory.
 
-        The image is a plane on the grid the trajectory spans, or the
-        ``(z, y, x)`` matrix ``volume`` when it is given.
+        The image is the ``(y, x)`` plane or the ``(z, y, x)`` volume ``shape``,
+        from the samples the matrix holds (:func:`_within`).
         """
         import bartorch
         import torch
         from bartorch import apps, priors
 
+        samples, points = _within(samples, points, shape)
+        volume = tuple(shape) if len(shape) == 3 else None
         samples = torch.from_numpy(
             np.ascontiguousarray(samples, dtype=np.complex64)
         ).to(device)
@@ -185,6 +193,24 @@ class NufftRecon(ReconPlugin):
             eigen_step=True,
         )
         return image.abs().cpu().numpy().reshape(maps.shape[-axes:])
+
+
+def _within(
+    samples: np.ndarray, points: np.ndarray, extent: tuple[int, ...]
+) -> tuple[np.ndarray, np.ndarray]:
+    """Return the samples of ``(coils, shots, samples)`` k-space inside the ellipse the image matrix holds, with their ``(shots, samples, 3)`` points; as one shot where any lies outside.
+
+    Along an axis of ``N`` points the matrix holds ``|k| <= N / 2``. A sample
+    beyond it, as the corners of a PROPELLER blade are, would grow the grid
+    bartorch sizes to the farthest sample, and the image cropped from that
+    grid to the matrix would be magnified by the ratio of the two.
+    """
+    axes = len(extent)
+    half = 0.5 * np.asarray(extent[::-1], dtype=np.float64)
+    inside = np.square(points[..., :axes] / half).sum(axis=-1) <= 1.0 + 1e-6
+    if inside.all():
+        return samples, points
+    return samples[:, inside][:, None], points[inside][None]
 
 
 def _volume_maps(
