@@ -430,6 +430,136 @@ def safety(theme: str) -> str:
     )
 
 
+def session(theme: str) -> str:
+    """Draw a series streamed to the proxy, enriched, and reconstructed or forwarded."""
+    body = "\n".join(
+        (
+            ARROW_HEAD,
+            _box("box", 40, 20, 280, 70, "Reconstruction client", "streams MRD"),
+            _arrow(320, 55, 377, 55),
+            _box(
+                "core",
+                380,
+                20,
+                580,
+                70,
+                "Proxy: refuse or enrich",
+                "from the design the header names",
+            ),
+            _arrow(500, 90, 500, 137, "a free slot"),
+            _arrow(840, 90, 840, 137, "--forward"),
+            _box("box", 40, 140, 300, 70, "Queue on disk", "while every slot is busy"),
+            _arrow(340, 175, 377, 175),
+            _box("a", 380, 140, 300, 70, "Worker process", "runs your recon plugin"),
+            _box("a", 720, 140, 240, 70, "Reconstruction", "server"),
+            _arrow(530, 210, 530, 257, "images, DICOM, text"),
+            _arrow(840, 210, 840, 257),
+            _box(
+                "box", 380, 260, 580, 60, "Relayed to the client as they are produced"
+            ),
+        )
+    )
+    return _svg(
+        "0 0 1000 340",
+        "A reconstruction session",
+        "The scanner's client streams MRD to the proxy, which refuses or enriches "
+        "the series from its design; a worker runs the recon plugin when a slot "
+        "is free, a queue on disk holds the series otherwise, or the proxy "
+        "forwards it to a reconstruction server; images return to the client",
+        body,
+        theme,
+    )
+
+
+def context(theme: str) -> str:
+    """Draw the series of an exam sharing calibration through the exam cache."""
+    series = (
+        ("Noise series", "publishes the whitening"),
+        ("Calibration series", "publishes coil maps"),
+        ("Imaging series", "reads both"),
+    )
+    body = "\n".join(
+        (
+            ARROW_HEAD,
+            *(
+                _box("a", 40 + 320 * i, 20, 280, 70, *lines)
+                for i, lines in enumerate(series)
+            ),
+            _arrow(180, 90, 180, 137, "stores"),
+            _arrow(500, 90, 500, 137, "stores"),
+            _arrow(820, 137, 820, 90, "reads"),
+            _box(
+                "core",
+                40,
+                140,
+                920,
+                60,
+                "Exam cache: noise covariance, coil maps, B0 and B1 maps",
+            ),
+            _arrow(250, 200, 250, 277, "every field equal"),
+            _arrow(750, 200, 750, 277, "a field differs"),
+            _box("box", 40, 280, 420, 70, "Maps reused", "as measured"),
+            _box(
+                "box",
+                540,
+                280,
+                420,
+                70,
+                "Refused, naming the field;",
+                "nothing resampled",
+            ),
+        )
+    )
+    return _svg(
+        "0 0 1000 370",
+        "Calibration shared across an exam",
+        "A noise series and a calibration series store their whitening and coil "
+        "maps in the exam cache; an imaging series reads them, and stored maps "
+        "are reused only when every recorded field equals the unit's, otherwise "
+        "refused with the differing field named, and never resampled",
+        body,
+        theme,
+    )
+
+
+def virtual(theme: str) -> str:
+    """Draw the virtual scanner's stand-ins between pulserver's production code."""
+    body = "\n".join(
+        (
+            ARROW_HEAD,
+            _box("box", 40, 20, 280, 70, "Design calls", "pulserver"),
+            _arrow(320, 55, 377, 55),
+            _box("a", 380, 20, 280, 70, "Virtual interpreter", "plays the IR cache"),
+            _arrow(660, 55, 717, 55),
+            _box("a", 720, 20, 240, 70, "Fourier engine", "EPG + NUFFT"),
+            _arrow(840, 210, 840, 93, "tissue"),
+            _box("a", 720, 210, 240, 70, "Phantom, coils,", "motion, GIRF"),
+            _arrow(730, 90, 640, 207, "samples", "left"),
+            _box("a", 380, 210, 280, 70, "Virtual client", "sends as the scanner does"),
+            _arrow(380, 245, 323, 245),
+            _box("box", 40, 210, 280, 70, "Proxy and your", "recon plugin"),
+            _box(
+                "core",
+                40,
+                310,
+                920,
+                50,
+                "Stand-ins (shaded) replace the scanner; everything else is production code",
+            ),
+        )
+    )
+    return _svg(
+        "0 0 1000 380",
+        "The virtual scanner",
+        "The design calls write the IR cache, which a virtual interpreter plays "
+        "through the C library; the Fourier engine acquires a phantom with coils "
+        "along the played waveforms, and a virtual client streams MRD to the "
+        "proxy and the recon plugin, which are production code",
+        body,
+        theme,
+    )
+
+
 #: Every image written, by the stem of its file.
 ARTWORK = {
     "pulserver-logo": logo,
@@ -438,6 +568,9 @@ ARTWORK = {
     "pulseg": pulseg,
     "repetition": repetition,
     "safety": safety,
+    "session": session,
+    "context": context,
+    "virtual": virtual,
 }
 
 

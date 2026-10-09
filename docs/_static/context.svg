@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 370" role="img" aria-labelledby="t d">
+<title id="t">Calibration shared across an exam</title><desc id="d">A noise series and a calibration series store their whitening and coil maps in the exam cache; an imaging series reads them, and stored maps are reused only when every recorded field equals the unit's, otherwise refused with the differing field named, and never resampled</desc>
+<style>
+.box{fill:#eef4fa;stroke:#2b76ad;stroke-width:2}
+.core{fill:#2b76ad;stroke:#174b70;stroke-width:2}
+.a{fill:#fdf6e6;stroke:#ffb91f;stroke-width:2}
+.txt{font:22px Arial,sans-serif;fill:#173042}
+.white{font:23px Arial,sans-serif;fill:#ffffff;font-weight:bold}
+.small{font:18px Arial,sans-serif;fill:#173042}
+.label{font:16px Arial,sans-serif;fill:#657786}
+.arrow{stroke:#657786;stroke-width:3;marker-end:url(#m)}
+.head{fill:#657786}
+.ink{fill:none;stroke:#12212b;stroke-width:5;stroke-linejoin:miter;stroke-linecap:butt}
+.blue{fill:#3a77a8}
+.amber{fill:#ffbe2e}
+.word{fill:#356a57}
+.orange{fill:#ffa00f}
+.unit{stroke:#2a2a2a;stroke-width:4}
+.trace{fill:none;stroke:#2a2a2a;stroke-width:4;stroke-linejoin:round;stroke-linecap:round}
+.title{font:bold 20px Arial,sans-serif;fill:#173042}
+.wave{fill:none;stroke:#3a77a8;stroke-width:3;stroke-linejoin:round}
+.rf{fill:none;stroke:#ffbe2e;stroke-width:3;stroke-linejoin:round}
+.adc{fill:#ffbe2e}
+.base{fill:none;stroke:#657786;stroke-width:1.5}
+.bracket{fill:none;stroke:#657786;stroke-width:2}
+</style>
+<defs><marker id="m" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><path class="head" d="M0,0 L0,6 L9,3 z"/></marker></defs>
+<rect class="a" x="40" y="20" rx="12" width="280" height="70"/><text class="small" x="180" y="49.5" text-anchor="middle">Noise series</text><text class="small" x="180" y="74.5" text-anchor="middle">publishes the whitening</text>
+<rect class="a" x="360" y="20" rx="12" width="280" height="70"/><text class="small" x="500" y="49.5" text-anchor="middle">Calibration series</text><text class="small" x="500" y="74.5" text-anchor="middle">publishes coil maps</text>
+<rect class="a" x="680" y="20" rx="12" width="280" height="70"/><text class="small" x="820" y="49.5" text-anchor="middle">Imaging series</text><text class="small" x="820" y="74.5" text-anchor="middle">reads both</text>
+<line class="arrow" x1="180" y1="90" x2="180" y2="137"/><text class="label" x="190" y="118.5">stores</text>
+<line class="arrow" x1="500" y1="90" x2="500" y2="137"/><text class="label" x="510" y="118.5">stores</text>
+<line class="arrow" x1="820" y1="137" x2="820" y2="90"/><text class="label" x="830" y="118.5">reads</text>
+<rect class="core" x="40" y="140" rx="12" width="920" height="60"/><text class="white" x="500" y="177" text-anchor="middle">Exam cache: noise covariance, coil maps, B0 and B1 maps</text>
+<line class="arrow" x1="250" y1="200" x2="250" y2="277"/><text class="label" x="260" y="243.5">every field equal</text>
+<line class="arrow" x1="750" y1="200" x2="750" y2="277"/><text class="label" x="760" y="243.5">a field differs</text>
+<rect class="box" x="40" y="280" rx="12" width="420" height="70"/><text class="txt" x="250" y="309.5" text-anchor="middle">Maps reused</text><text class="txt" x="250" y="334.5" text-anchor="middle">as measured</text>
+<rect class="box" x="540" y="280" rx="12" width="420" height="70"/><text class="txt" x="750" y="309.5" text-anchor="middle">Refused, naming the field;</text><text class="txt" x="750" y="334.5" text-anchor="middle">nothing resampled</text>
+</svg>

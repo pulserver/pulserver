@@ -210,7 +210,7 @@ transformed with an FFT before the in-plane NUFFT.
 a complex torch tensor `(coils, [z,] y, x)` on `context.device`. They are
 estimated by the function the plugin passes, from the unit's calibration
 k-space `data.ref`, or taken from the maps the stream or the exam holds
-({doc}`../explanations/calibration` states the order and the conditions for
+({doc}`../developer-guide/internals/calibration` states the order and the conditions for
 reuse). {class}`~pulserver.recon.Prewhiten` is a gadget and
 {class}`~pulserver.recon.CoilCompression` a step called from `recon`. All three
 need bartorch, which the `coils` extra installs.

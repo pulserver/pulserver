@@ -3,255 +3,108 @@
 ```{admonition} TL;DR
 :class: tldr
 
-- The virtual scanner replaces the scanner and nothing else: the design calls,
-  the IR, the proxy and the reconstruction plugins it drives are the
-  production code.
-- It plays the IR cache through the C library's playout stages, integrates
-  the played gradients into the k-space trajectory under the prescription's
-  rotation, and acquires a phantom's tissue along it with the Fourier engine:
-  extended phase graphs of each class of tissue over the pulses and gradient
-  moments the cache plays, and the images their signals weight encoded along
-  the trajectory by a NUFFT.
-- The playout demodulates by the ADC frequency and phase offsets; the cache
-  carries no phase modulation, and the reconstruction proxy applies the rest of
-  the field-of-view phase.
+- The virtual scanner replaces the scanner and its interpreter, and nothing else: design calls, IR, proxy and plugins are production code.
+- It plays the IR cache through the C library and acquires a phantom with the Fourier engine: extended phase graphs per tissue class, encoded by a NUFFT.
+- Diffusion, rigid motion and a gradient impulse response are modelled where a scan needs them.
 ```
 
-The IR, the raw-data header contract and the reconstruction path are tested
-against data a scanner acquires. Data sampled at the k-space locations the
-enrichment computes cannot test the enrichment, and a design compared only
-with itself cannot test the IR. The virtual scanner stands in for the scanner
-and nothing else: the design calls, the IR, the reconstruction proxy and the
-reconstruction plugins it drives are the production code. Its data are
-acquired of a phantom's tissue along the trajectory the cache plays, under the
-pulses and gradients the cache plays, and sent as the scanner's
-reconstruction client sends them. A browser build of its console is published
-at <https://pulserver.github.io/MaRGE/>.
+Data sampled where the enrichment says k-space lies cannot test the
+enrichment, and a design compared with itself cannot test the IR. So the
+virtual scanner acquires a phantom along the trajectory the cache plays, under
+the pulses the cache plays, and sends the readouts as a scanner's client does.
+Lesson 6 of the {doc}`Course <../examples/course>` runs a sequence on it; a
+browser build of its console is at <https://pulserver.github.io/MaRGE/>.
 
-## Stand-ins
+## What pulserver does
 
-| Stand-in | Replaces | Built from | Exercises |
-| --- | --- | --- | --- |
-| Design call | The interpreter host process's call | `pulserver design generate`, or {func}`~pulserver.host.call` | Request and reply blocks, presets, design errors, check failures |
-| Virtual interpreter | The playout | The C library's two playout stages over a recording backend, {func}`~pulserver.ir.playout` | Segmentation, the events each segment position is prepared with, the registers the scan loop sets on each block, the rotation and trigger of each segment instance, the waves and the waveform memory they are loaded into |
-| Physics | Magnet, coils and subject | {class}`~pulserver.virtual.Phantom`, {class}`~pulserver.virtual.Tissue`, {func}`~pulserver.virtual.simulate` | The trajectory the enrichment has to state, the demodulation of the prescription, the timing of every echo, the RF frequencies ppm offsets resolve to, and the flip angle, phase and band of every RF pulse, the gradient moments and the receiver phase the cache plays |
-| Scan clock | The scanner's acquisition in real time, and its gradient coils' sound | {class}`~pulserver.virtual.Scan` | The rate at which readouts reach the reconstruction; the sound of the gradients the cache plays |
-| Reconstruction client | The scanner's reconstruction client | {func}`~pulserver.virtual.send` | The header and acquisition contract of {doc}`../user-guide/reconstruction-client` |
+:::{container} capabilities
 
-## Played trajectory
+- **Plays the IR cache through the C library's playout stages, as an interpreter does.**
 
-{func}`~pulserver.ir.playout` plays the cache through the two stages of a
-playout ({doc}`../developer-guide/internals/ir-cache`) and, with `waveforms`,
-returns the gradients and the RF pulse each block plays, as the scan loop sets
-them; {doc}`../developer-guide/internals/virtual-scanner` states which
-prepared events and waves they are taken from.
+  Code: {func}`~pulserver.ir.playout`. Tests: *the played trajectory is the one each file designs turned as it is checked*; *the prescription turns a block after its own rotation unless it is labelled norot* (`test_virtual.py`); *every shipped sequence plays its design turned as it is checked* (`test_virtual_sequences.py`).
+- **Acquires along the played trajectory, so the trajectory enrichment states is tested against it.**
 
-The virtual scanner integrates those gradients into the k-space location
-$\mathbf{k}$ of every ADC sample, in 1/m along the physical axes. The rotation $R$ of the prescription, from logical to physical axes, is
-not in the cache ({doc}`scanner-representation`): the virtual interpreter is given it, as a
-playout is, and turns each block's gradients, which carry the block's own
-rotation, by $R$, except in the segment instances whose blocks are labelled
-`NOROT`, which play as the cache holds them. This is the frame
-{func}`~pulserver.ir.check` checks in. Under
-the identity the physical axes are the logical ones. An excitation returns
-$\mathbf{k}$ to zero, and a refocusing pulse negates it, at the RF centre the
-design records, which the cache carries for each RF event with its use; each
-file of a chain starts from zero. The test suite holds this trajectory to the
-one each file designs, turned as `pypulseqpp.TransformFOV` turns it for the
-checks, and the trajectory of the identity to the one the enrichment states.
+  Code: {func}`~pulserver.virtual.simulate`. Tests: *the enrichment states the trajectory the scanner plays*; *a virtual scan reconstructs the phantom where it is prescribed* (`test_virtual.py`).
+- **Simulates each tissue class with extended phase graphs, and encodes the images they weight by a NUFFT.**
 
-## Signal model
+  Code: {class}`~pulserver.virtual.FourierPlayer`. Tests: *the fourier engine acquires what a bloch simulation does of a phantom filling its slices*; *the fourier engine acquires what a bloch simulation does of an unspoiled steady state*; *each readout reads the pathway that passes the centre during it* (`test_virtual_fourier.py`).
+- **Plays each RF pulse with the flip angle, phase and profile a Bloch simulation of its waveform gives, including spectral-spatial selection.**
 
-The Fourier engine ({class}`~pulserver.virtual.FourierPlayer`) acquires a
-phantom's tissue under the pulses, gradients and readouts the cache plays. It
-separates what happens to the magnetization of each kind of tissue over time,
-which extended phase graphs give, from where that tissue is, which the
-trajectory encodes.
+  Code: {class}`~pulserver.virtual.FourierPlayer`. Tests: *a pulse played without a gradient selects by frequency*; *a spectral spatial pulse selects by frequency and by position along its slab* (`test_virtual_fourier.py`); *fat saturation leaves each shift what its designed pulse leaves it* (`test_virtual.py`).
+- **Places an object at the prescription, so a field-of-view offset is tested end to end.**
 
-### Tissue
+  Code: {class}`~pulserver.virtual.Phantom`. Tests: *an object posed as prescribed is acquired as at the isocentre* (`test_virtual.py`); *every shipped sequence scans an object posed as prescribed as at the isocentre* (`test_virtual_sequences.py`).
+- **Models chemical shift and off-resonance at the magnet's field.**
 
-The phantom lies in the physical frame, where a rotation and a position place
-it ({class}`~pulserver.virtual.Phantom`).
-{meth}`~pulserver.virtual.Phantom.tissue` samples it as cubes of uniform
-magnetization ({class}`~pulserver.virtual.Tissue`), $\Delta$ wide along the
-axes the phantom spans: a square in the plane of a phantom of ellipses, a
-cube of BrainWeb's head. Each cube $j$ holds a proton density $\rho_j$,
-relaxation times $T_{1,j}$, $T_{2,j}$ and $T'_{2,j}$, and a frequency $f_j$
-from the scanner's centre frequency: its chemical shift $\sigma$, in ppm from
-water, resolved at the magnet's field $B_0$ with pypulseqpp's default
-$\gamma$, in Hz/T, plus the precession in the field $\Delta B_j$, in T, the
-subject adds and an off-resonance $\Delta f$ common to every cube,
+  Code: {class}`~pulserver.virtual.Tissue`. Tests: *fat precesses at its chemical shift at the field of the magnet*; *off resonance accrues from the excitation and refocuses at the echo* (`test_virtual.py`).
+- **Receives with the scanner's coils, the body coil or BART's head-array models, with the default shim on transmit.**
 
-$$
-f_j = 10^{-6}\sigma_j\gamma B_0 + \gamma\,\Delta B_j + \Delta f .
-$$
+  Code: {obj}`~pulserver.virtual.COILS`. Tests: *the body coil is one channel of unit sensitivity each way*; *receive sensitivities have a root sum of squares of one at the isocentre*; *a pulse without an rf shim plays its amplitude at the isocentre through the default shim* (`test_virtual_coils.py`).
+- **Scans BrainWeb's head, with relaxation at the field and the field its susceptibility adds.**
 
-Cubes of the same $T_1$, $T_2$ and $T'_2$ form a class of tissue.
+  Code: {class}`~pulserver.virtual.Phantom`. Tests: *each tissue relaxes at 1 5 t as brainweb s simulator gives it*; *each entry precesses at the mean field its head adds over its cube* (`test_virtual_brainweb.py`).
+- **Adds diffusion, rigid motion and a gradient impulse response.**
 
-### RF pulses
+  Code: {class}`~pulserver.virtual.RigidMotion`, {class}`~pulserver.virtual.Girf`. Tests: *a diffusing tissue loses exp minus b d of its echo to the lobes*; *a subject held in a pose acquires what a phantom placed in it does*; *a delaying girf plays the moment its delay later* (`test_virtual_fourier.py`).
+- **Releases readouts in real time and plays the sound of the gradients.**
 
-Each RF pulse turns the magnetization as a rotation at its centre. On
-resonance, its flip angle $\alpha$ and the phase of the axis it turns about
-are those of pypulseqpp's relaxation-free Bloch simulation
-(`pypulseqpp.sim_bloch`) of the waveform the cache plays, the phase taken at
-the pulse's centre: its phase offset plus its frequency offset times the time
-since the pulse began. Its profile $P(\delta)$ is the angle the same
-simulation tips magnetization at rest through at a detuning $\delta$ from the
-pulse's frequency, over the angle on resonance. A pulse played under a
-gradient $\mathbf{g}$, in Hz/m, held during it turns cube $j$ through
+  Code: {class}`~pulserver.virtual.Scan`. Tests: *a scan played at a speed yields each span once its clock passes it*; *the spans of a scan sound as its design sounds* (`test_virtual_clock.py`).
+- **Runs a console that makes only the design calls a scanner makes, and returns DICOM.**
 
-$$
-\alpha_j = \alpha\,|b^+(\mathbf{r}_j)|\,P(\mathbf{g}\cdot\mathbf{r}_j + f_j - f_\mathrm{rf}),
-$$
+  Code: `pulserver.virtual` console. Tests: *a console makes only the design calls*; *a scan streams its clock and returns the reconstruction as dicom* (`test_console.py`).
+- **Exports a cache as Pulseq 1.5.1 for an external Bloch simulator.**
 
-about its axis turned by the phase of the transmit field $b^+$, relative to
-the pulse's nominal amplitude. A pulse played under a gradient that changes
-along one direction $\hat{\mathbf{n}}$, as a spectral-spatial pulse's
-alternating lobes do, has a profile in both the field and the position along
-it, $P(f_j - f_\mathrm{rf}, \hat{\mathbf{n}}\cdot\mathbf{r}_j)$, simulated
-from its samples under that gradient; a pulse played under no gradient, or
-under one that turns during it, selects by frequency alone. A pulse of phase zero turns
-$+z$ towards $+y$: after a 90° excitation of phase $\phi_e$ the magnetization
-is transverse at the phase $\pi/2 - \phi_e$. Cubes that every pulse turns
-through about the same angle form a group.
+  Code: `pulserver.virtual` export. Test: *every shipped sequence exports the trajectory its cache plays* (`test_virtual_export.py`).
 
-### Configuration states
+:::
 
-Between two events, the net moment $\Delta\mathbf{m}$ of the gradients, in
-1/m, dephases a voxel $\mathbf{v}$ by $\Delta\mathbf{m}\cdot\mathbf{v}$ cycles
-along the axes the tissue spans. The voxel is the resolution the widest $k$
-reaches along each logical axis, the thickness of the slab an excitation
-selects along an axis $k$ does not move along, and the tissue's extent where
-neither bounds it. An interval that dephases the voxel by half a cycle or more
-shifts the configuration states by one order: the magnetization of the
-voxel is then described by its dephased pathways rather than by the
-magnetization of each position in it, as extended phase graphs describe it
-(Weigel, J Magn Reson Imaging 41:266, 2015,
-doi:[10.1002/jmri.24619](https://doi.org/10.1002/jmri.24619)). A phase
-encoding that the intervals between two pulses sum to zero is balanced and
-shifts nothing; a moment that changes from one repetition to the next and is
-not cancelled, as a radial readout's turned prephaser is not, counts. A
-readout reads the pathway that passes the centre of k-space during it: the
-free induction, or the echo of an earlier interval, as an SSFP-echo readout
-reads one. Its echo is the sample at which that pathway passes nearest the
-centre.
+## What is not modelled
 
-The excitations under one selection, one gradient, frequency and profile, and
-the readouts that follow them form a station.
-For each station, the stream of its events, the pulses that act on its groups
-and its readouts with the shifts between them, is simulated by blochsim's
-extended phase graphs for each class of tissue, at the frequencies and
-transmit-field magnitudes the cubes interpolate between. The frequency enters
-the states only where an interval between two pulses shifts nothing, as in a
-balanced or a refocused sequence; elsewhere it turns the samples alone.
+- **RF pulses** act at their centre, without relaxation, as ideal rotations; the phase a selective pulse leaves across its slab is left out.
+- **pTx pulses** sum their channels at unit, in-phase sensitivity.
+- **Coil models** are BART's, not electromagnetic simulations, unless a console is given field maps.
 
-### Temporal and readout bases
+## How it works
 
-At each readout's echo, the signals of a station's groups and classes across
-its readouts are spanned by a few temporal terms $u_p$. Across the readout,
-from the echo at $\tau = 0$, a cube decays as $e^{-\tau/T_2}$, dephases as
-$e^{-|t_u|/T'_2}$, with $t_u$ the time the magnetization has gone
-unrefocused, and precesses as $e^{-2\pi i f_j\tau}$, or as
-$e^{-2\pi i f_j t_u}$ where the frequency does not enter the states; those
-factors are
-spanned by a few terms $v_q$ of the samples' times. Each cube weighs every
-pair $(u_p, v_q)$, and the weights of all cubes are spanned by fewer
-combinations of the pairs, the terms $t$. Each term is an image
-$m_t(\mathbf{r})$, the cubes' weights in it times their density, so that coil
-$c$, of receive sensitivity $s_c(\mathbf{r})$, receives at sample $n$
+```{figure} ../_static/virtual.svg
+:figclass: only-light
+
+The stand-ins between pulserver's production code: interpreter, physics and client.
+```
+
+```{figure} ../_static/virtual-dark.svg
+:figclass: only-dark
+
+The stand-ins between pulserver's production code: interpreter, physics and client.
+```
+
+### Played trajectory
+
+The virtual interpreter plays the cache and integrates the gradients into k,
+in 1/m along the physical axes, turned by the prescription except in `NOROT`
+blocks. An excitation resets k and a refocusing pulse negates it, at the RF
+centre the design records.
+
+### The Fourier engine
+
+What happens to the magnetization over time is separated from where the tissue
+is. Each class of tissue (equal $T_1$, $T_2$, $T'_2$) is simulated by
+blochsim's extended phase graphs over the pulses and gradient moments the cache
+plays; the images those signals weight are encoded along the trajectory by
+bartorch's NUFFT, one per coil:
 
 $$
 S_c(n) = e^{i\psi_n} \sum_t w_t(n) \int s_c(\mathbf{r})\, m_t(\mathbf{r})\,
-e^{-2\pi i\,\mathbf{k}(n)\cdot\mathbf{r}}\, d\mathbf{r},
+e^{-2\pi i\,\mathbf{k}(n)\cdot\mathbf{r}}\, d\mathbf{r}.
 $$
 
-with $w_t(n)$ the term's temporal and readout factor at the sample and
-$\psi_n$ the phase the pulses left, which the receiver phase demodulates. The
-images lie on a grid along the logical axes the trajectory encodes, at the
-resolution its widest $k$ reaches, over the cubes the station excites; each
-cube is uniform over its width, so its transform weighs every sample. Each
-image times each coil's sensitivity is transformed to the samples by
-bartorch's NUFFT. The spacing of the tissue sets how closely the cubes follow
-the object; the resolution of the images is the trajectory's whatever it is.
+A few terms $t$ span the signals of every class and cube, so the number of
+transforms is set by the terms, not by the tissue. The playout then demodulates by the
+ADC offsets, as the scanner does. The full model is in
+{doc}`../developer-guide/internals/virtual-scanner`.
 
-### Demodulation and the field-of-view offset
+## See it run
 
-The playout demodulates $S_c$ by $\exp(i\theta(t))$, where the receiver phase
-$\theta$ is the ADC phase offset at the ADC's start, advancing at its
-frequency offset. The cache carries no ADC phase modulation: the
-reconstruction proxy applies it to the received samples
-({doc}`raw-data`).
-
-These are the conventions under which the field-of-view translation applied
-when the IR is built ({doc}`scanner-representation`) recentres an object. Where every block
-is turned by $R$, $\mathbf{k}$ is $R\mathbf{k}_L$, with $\mathbf{k}_L$ its
-value along the logical axes. An object displaced to the prescribed centre
-$R\mathbf{d}$, for the offset $\mathbf{d}$ along the logical axes, gains the
-phase $-2\pi\,(R\mathbf{d})\cdot(R\mathbf{k}_L) = -2\pi\,\mathbf{d}\cdot\mathbf{k}_L$,
-which the demodulation removes where the readout gradient holds one value
-across the sampling window; under one that varies, the demodulation removes
-the line through the window centre and the proxy the rest. An object turned by $R$ presents at
-$R\mathbf{k}_L$ its own transform at $\mathbf{k}_L$. An object posed at the
-prescribed centre, its axes turned by $R$, is therefore acquired as the same
-object at the isocentre under the identity, a reflection in $R$ included.
-
-### Diffusion, motion and the gradient response
-
-A tissue class with a diffusion coefficient $D$ loses $e^{-bD}$ of its signal
-at each readout, where $b = (2\pi)^2\int |\mathbf{k}(t)|^2\,dt$ is integrated
-since the last excitation over the moment measured from the readout's origins,
-so a refocusing pulse mirrors it. Diffusion is isotropic. It is left out where
-no class diffuses, or where the largest $b$ of the scan times the largest $D$
-is below a hundredth.
-
-A subject in rigid motion, {class}`~pulserver.virtual.RigidMotion`, is held in
-the pose it has at each readout's echo for the whole readout. The pose turns
-the readout's k-space and shifts its phase, as a phantom placed in that pose
-would be acquired; the coils, the transmit field and the relaxation move with
-the object.
-
-A gradient impulse response, {class}`~pulserver.virtual.Girf`, filters the
-moment the gradients play on each physical axis, so the trajectory, the
-origins and the dephasing all follow the filtered gradients.
-
-### What is not modelled
-
-A pulse acts at its centre, with no
-relaxation during it, and turns each cube by an ideal rotation, so the phase a
-selective pulse leaves across its slab beyond that rotation is left out. The
-channels of a pTx pulse are summed, as at unit, in-phase sensitivity. A
-readout before the first excitation of its file acquires zeros.
-
-## Coils and the subject's field
-
-A phantom is received by coils of its own. Its tissue can be sampled in one of
-the scanner's {obj}`~pulserver.virtual.COILS` instead, fixed in the physical frame, each a transmit coil and a receive coil,
-named `transmit/receive`: the body coil both ways, taken to be one channel of
-unit sensitivity each way; the body coil transmitting to a 48-channel receive
-head array, `body/head48`; and an 8-channel head coil for parallel transmission
-with a 32-channel receive head array, `head8/head32`. The head coils'
-sensitivities are BART's coil models rather than electromagnetic simulations:
-the 8-channel coil is `HEAD_2D_8CH`, constant along $z$, and the arrays are the
-first 48 and 32 channels of `HEAD_3D_64CH`, each sampled by bartorch over a cube
-25.6 cm wide about the isocentre and interpolated linearly between the samples.
-The receive sensitivities $s_c$ have a root sum of squares of 1 at the
-isocentre. The transmit sensitivities $s^+_c$ are the complex conjugates of the
-8-channel coil's receive sensitivities, the quasi-static limit of reciprocity;
-the models show none of the dielectric effects of a wavelength comparable to
-the head.
-
-A pulse plays on every transmit channel, weighted by the coil's default shim,
-the unit weights that bring the channels into phase at the isocentre, where the
-pulse then has its nominal amplitude: each cube sees the transmit field
-$b^+(\mathbf{r}) = \sum_c w_c\,s^+_c(\mathbf{r})$, for the weights $w_c$.
-
-A console given field maps takes the coils, and the subject's field, from
-electromagnetic and susceptibility models of BrainWeb's head instead
-({doc}`../developer-guide/internals/virtual-scanner`).
-
-## See also
-
-* {doc}`scanner-representation` — the IR and its prescription.
-* {doc}`../user-guide/reconstruction-client` — the stream the virtual reconstruction client sends.
-* {doc}`../api/virtual` — the phantom, the Fourier engine, the scan clock, the client and the export.
-* {doc}`../developer-guide/internals/virtual-scanner` — the played waveforms, the Fourier engine's streams, bases and grids, external simulators, coils from field maps, the scan clock and the sound.
+- {doc}`../generated/gallery/01-course/06_testing_on_the_virtual_scanner`: a sequence played and reconstructed on the virtual scanner.
+- {doc}`../api/virtual`: the phantom, the Fourier engine, the scan clock, the client and the export.
+- {doc}`../developer-guide/internals/virtual-scanner`: the signal model, its streams, bases and grids, and what a run establishes.

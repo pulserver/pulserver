@@ -17,7 +17,7 @@ is described in {doc}`../user-guide/reconstruction-plugins`. The image a
 {class}`ReconResult` becomes takes its geometry from its unit and its values
 from its array, as {doc}`../explanations/reconstruction` states. Coil
 sensitivity maps, noise prewhitening and coil compression are the subject of
-{doc}`../explanations/calibration`.
+{doc}`../developer-guide/internals/calibration`.
 
 ## Plugin
 
