@@ -10,7 +10,7 @@ import pypulseqpp as pp
 import pytest
 import torch
 from _analytic import trajectory
-from _virtual import ORIENTATIONS
+from _virtual import OFFSET, ORIENTATIONS
 from bartorch import linop
 from pypulseqpp import sequences
 from pypulseqpp.sequences.preparation.fatsat import FAT_SHIFT_PPM
@@ -169,6 +169,34 @@ def test_pulses_off_centre_under_more_gradients_than_select_share_a_selector(car
     assert selectors.size == 1
     step = (detuning[1] - detuning[0]) / 16.0
     np.testing.assert_allclose(_fourier._offsets(pulses), carrier, atol=step / 2)
+
+
+def test_a_zte_off_centre_acquires_what_one_at_the_isocentre_does_of_the_object_moved_back(
+    converted, tmp_path
+):
+    # Off centre every spoke's pulse follows the precession at the centre in
+    # phase; played in the isocentre's frame, an unspoiled ZTE lost its signal.
+    shutil.copy(FIXTURES / "zte_3d.seq", tmp_path / "zte_3d.seq")
+    ir.convert(tmp_path / "zte_3d.seq", SYSTEM, fov_offset=OFFSET)
+
+    def disks(centre):
+        return virtual.Phantom(
+            [
+                virtual.Ellipse((centre[0], centre[1], z), (0.03, 0.03))
+                for z in np.arange(-0.03, 0.0301, 0.004)
+            ]
+        ).tissue(4e-3, field_t=3.0)
+
+    shifted = np.stack(
+        virtual.simulate(
+            tmp_path / "zte_3d.seq", disks(np.zeros(3)), centre=OFFSET, device="cpu"
+        )
+    )
+    centred = np.stack(
+        virtual.simulate(converted / "zte_3d.seq", disks(-OFFSET), device="cpu")
+    )
+
+    assert np.linalg.norm(shifted - centred) < 0.05 * np.linalg.norm(centred)
 
 
 def test_a_pulse_played_without_a_gradient_selects_by_frequency(converted):

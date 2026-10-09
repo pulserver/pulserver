@@ -156,6 +156,10 @@ class FourierPlayer:
     rotation
         ``(3, 3)`` rotation of the prescription from logical to physical axes;
         the identity by default.
+    centre
+        ``(3,)`` the prescription's centre along the physical axes, in m, the
+        isocentre by default: the place the stream of events is played in the
+        frame of (:func:`_framed`).
     device
         Where the simulation runs; a card where there is one by default.
     tolerance
@@ -179,6 +183,7 @@ class FourierPlayer:
         cache_ext: str = ".pseg",
         *,
         rotation: np.ndarray | None = None,
+        centre: np.ndarray | None = None,
         device: torch.device | str | None = None,
         tolerance: float = TOLERANCE,
         motion: RigidMotion | None = None,
@@ -191,6 +196,7 @@ class FourierPlayer:
             seq_path, cache_ext, rotation=rotation, device=self.device, girf=girf
         )
         self.played = timeline.played
+        self._phases = _framed(timeline, centre)
         self._tolerance = tolerance
         self._coils = tissue.coils
         pulses = timeline.pulses
@@ -285,6 +291,7 @@ class FourierPlayer:
             selector_of,
             (self._groups[members] > 0).any(axis=0),
             readouts,
+            self._phases,
         )
         settle_us = min(
             1e6 * float(held.t1[atoms].max()) * math.log(1.0 / _SETTLED),
@@ -547,6 +554,7 @@ def simulate(
     cache_ext: str = ".pseg",
     *,
     rotation: np.ndarray | None = None,
+    centre: np.ndarray | None = None,
     device: torch.device | str | None = None,
     motion: RigidMotion | None = None,
     girf: Girf | None = None,
@@ -562,6 +570,7 @@ def simulate(
         tissue,
         cache_ext,
         rotation=rotation,
+        centre=centre,
         device=device,
         motion=motion,
         girf=girf,
@@ -1262,7 +1271,36 @@ class _Stream:
         )
 
 
-def _stream(timeline, events, shifted, selector_of, acting, readouts) -> _Stream:
+def _framed(
+    timeline: Timeline, centre: np.ndarray | None
+) -> tuple[np.ndarray, np.ndarray]:
+    """Return each pulse's phase and each readout's receiver phase at its echo, in the frame of the prescription's centre.
+
+    A scanner playing a prescription centred at ``centre`` advances each
+    pulse's phase by ``2 pi m . centre``, ``m`` the moment of the gradients
+    from the start of the scan, in step with the magnetization there, and its
+    receivers with it. The stream of events takes a moment that dephases less
+    than a voxel as balanced, which holds at one place; taking off each pulse
+    its own ``2 pi m . centre``, and off each readout that of the pulse before
+    it, moves that place to the centre, and keeps what each readout encodes
+    of it.
+    """
+    pulses, readouts = timeline.pulses, timeline.readouts
+    if centre is None or not np.any(centre) or not pulses.block.size:
+        return pulses.phase, readouts.receiver
+    moment = timeline.moment(
+        pulses.block, pulses.time_us - timeline.starts_us[pulses.block]
+    )
+    taken = 2.0 * math.pi * (moment @ timeline.rotation.T) @ np.asarray(centre, float)
+    before = np.searchsorted(pulses.time_us, readouts.echo_us, side="right") - 1
+    return pulses.phase - taken, readouts.receiver - np.where(
+        before >= 0, taken[np.maximum(before, 0)], 0.0
+    )
+
+
+def _stream(
+    timeline, events, shifted, selector_of, acting, readouts, phases
+) -> _Stream:
     """Return the pulses that act on a station's groups, under the selectors ``acting`` marks, and its ``readouts``.
 
     Between two of them, the states shift by as many orders as the interval
@@ -1316,8 +1354,8 @@ def _stream(timeline, events, shifted, selector_of, acting, readouts) -> _Stream
         use=np.where(is_pulse, pulses.use[rf], 0),
         phase=np.where(
             is_pulse,
-            pulses.phase[rf],
-            timeline.readouts.receiver[np.maximum(readout, 0)],
+            phases[0][rf],
+            phases[1][np.maximum(readout, 0)],
         ),
         orders=orders,
         shift_us=shift_us,

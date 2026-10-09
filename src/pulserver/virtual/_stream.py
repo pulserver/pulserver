@@ -77,6 +77,9 @@ class Scan:
     rotation
         ``(3, 3)`` rotation of the prescription from logical to physical axes,
         a reflection included; the identity by default.
+    centre
+        ``(3,)`` the prescription's centre along the physical axes, in m; the
+        isocentre by default.
     device
         Where the Fourier engine runs, as
         :class:`~pulserver.virtual.FourierPlayer` takes it.
@@ -92,6 +95,7 @@ class Scan:
         cache_ext: str = ".pseg",
         *,
         rotation: np.ndarray | None = None,
+        centre: np.ndarray | None = None,
         device: str | None = None,
         motion: RigidMotion | None = None,
         girf: Girf | None = None,
@@ -103,6 +107,7 @@ class Scan:
             tissue,
             cache_ext,
             rotation=rotation,
+            centre=centre,
             device=device,
             motion=motion,
             girf=girf,
