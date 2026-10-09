@@ -1,18 +1,27 @@
 # Course
 
-The shortest path from a protocol to a reconstructed image through pulserver,
-one stage of a scan per lesson, read in order. The first lesson runs a whole
-scan on the virtual scanner; the next three follow the data through the
-scanner sequence, the scanner representation and the reconstruction. The
-fifth is optional.
+Six lessons that take you from a scan run with the shipped plugins to a scan
+run with your own sequence and your own reconstruction. They follow the steps
+of a scan in order, so read them in order.
 
-| Lesson | What it teaches |
+You need nothing installed: every lesson has an *Open in Colab* button that
+runs it in your browser. The scanner is the virtual scanner throughout, so
+everything you see is computed by the code on the page.
+
+| Lesson | The question it answers |
 | --- | --- |
-| {doc}`/generated/gallery/01-course/01_protocol_to_image` | A scan from protocol to image in one process: the design calls, an exam and a scan on the virtual scanner. |
-| {doc}`/generated/gallery/01-course/02_sequence_plugin` | A scanner sequence: entries, presets, an evaluation of one repetition with its RF layout, validation and design. |
-| {doc}`/generated/gallery/01-course/03_scanner_representation` | Conversion into the IR cache: the repetition, virtual segments, the execution stream and the grouping rule. |
-| {doc}`/generated/gallery/01-course/04_reconstruction_plugin` | Enrichment of a recorded series from its design, and a reconstruction plugin run on it offline. |
-| {doc}`/generated/gallery/01-course/05_testing_on_the_virtual_scanner` | Optional: the contrast of a scan on the Fourier engine against the closed-form steady state, and the check of a cache against its sequence. |
+| {doc}`1. Your first scan </generated/gallery/01-course/01_protocol_to_image>` | What does pulserver do, end to end? |
+| {doc}`2. Your sequence in the scanner UI </generated/gallery/01-course/02_sequence_plugin>` | How does my sequence show up for the operator, and what happens when they edit it? |
+| {doc}`3. What the scanner plays </generated/gallery/01-course/03_scanner_representation>` | What happens to my sequence before it reaches the scanner? |
+| {doc}`4. What your recon receives </generated/gallery/01-course/04_reconstruction_plugin>` | What does the raw data look like when it reaches my plugin? |
+| 5. Your recon plugin | How do I turn those readouts into images? |
+| {doc}`6. Test your pair on the virtual scanner </generated/gallery/01-course/05_testing_on_the_virtual_scanner>` | Do my sequence and my recon work together, with real contrast? |
+
+By the end you have two files, a sequence plugin and a recon plugin, that run
+unchanged on a real scanner through its interpreter
+({doc}`/user-guide/running`).
+
+If you know Gadgetron, lessons 4 and 5 map each of its pieces to pulserver's.
 
 ```{toctree}
 :hidden:

@@ -1,46 +1,55 @@
 """
-===========================
-1. From protocol to image
-===========================
+==================
+1. Your first scan
+==================
 
-A scan through pulserver passes four stages: a scanner sequence resolves the
-protocol the operator edits and designs the sequence, the design is converted
-into the representation the scanner plays, the scanner plays it, and the raw
-data are enriched from the sequence and reconstructed. This lesson runs all
-four in one process, on the virtual scanner, and returns an image.
+In this lesson you run a whole scan without writing any plugin. You use a
+sequence and a reconstruction that ship with pulserver (``gre2d``, a 2D
+gradient echo, and ``pics``, a compressed-sensing reconstruction with BART),
+and the virtual scanner plays the sequence on a phantom. You will do what a
+scanner does: ask for the protocol, edit it, start the scan and get the image
+back.
+
+Every step you run here is one step of the README's *How it works*. The rest
+of the course opens them one at a time, and replaces the shipped plugins with
+your own.
 
 **Learning objectives**
 
-- List the protocol of a shipped scanner sequence, edit it, validate it and
-  generate a design, as an interpreter does through the design calls.
-- Start an exam on a phantom and scan a stored design on it.
-- Name the four stages a scan passes, and the lesson of this course that
-  treats each.
+- Run the six steps of a scan in one notebook.
+- See what the operator sees: the protocol, and what pulserver sends back
+  after an edit.
+- Know which lesson of the course covers each step.
 
-The next lesson writes the scanner sequence this lesson takes from the shipped
-plugins.
+Next: :doc:`02_sequence_plugin`, where you write the sequence plugin yourself.
 """
 
 # sphinx_gallery_start_ignore
-import matplotlib
+import logging
 
-matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+
+# The vials exam has no noise scan; the reconstruction's note about it is not
+# part of the lesson.
+logging.disable(logging.WARNING)
 # sphinx_gallery_end_ignore
 # %%
-# A console in one process
-# ------------------------
+# A scanner in your notebook
+# --------------------------
 #
-# :class:`~pulserver.virtual.Console` answers what a scanner console asks of
-# pulserver: the design calls, an exam on a subject, and a scan. It is given
-# the scanner limits as the ``[Limits]`` block an interpreter sends, and a
-# design store, here a temporary directory. With ``recon_plugins`` it
-# reconstructs each scan in this process, as the reconstruction proxy would.
-# An empty list of plugin directories leaves the shipped plugins, which are
-# found by name.
+# A :class:`~pulserver.virtual.Console` stands in for the scanner: it makes
+# the same calls a scanner makes, plays the sequence on a phantom, and
+# reconstructs in this process instead of in a separate reconstruction server.
+#
+# It needs two things. The **limits** are the scanner's hardware: field
+# strength, maximum gradient amplitude and slew rate, written as the text block
+# a scanner sends. The **store** is the folder where finished sequences are
+# kept.
 import tempfile
 from pathlib import Path
 
 import numpy as np
+from figure_style import MUTED, PAGE_WIDTH, SERIES
 
 from pulserver import virtual
 
@@ -56,30 +65,27 @@ store = Path(tempfile.mkdtemp())
 console = virtual.Console(plugins=[], limits=limits, store=store, recon_plugins=[])
 
 # %%
-# The protocol
-# ------------
+# Step 1: the protocol
+# --------------------
 #
-# The ``list`` call returns the protocol of the shipped ``gre2d``, pypulseqpp's
-# 2D gradient echo bound to the scanner UI: each entry's value, range and
-# unit, in the text block the interpreter reads. The block ends with the
-# prescription entries, the field-of-view offset and rotation, which the
-# interpreter fills from the scanner's; they are left out of the print.
-from pulserver.protocol import (
-    UIParam,
-    format_values,
-    parse_listing,
-    parse_validation,
-)
+# When the operator opens a sequence, the scanner asks pulserver which
+# parameters to show. This is the reply for ``gre2d``: one line per parameter,
+# with its type, current value, range and unit. The scanner builds its UI from
+# it.
+from pulserver.protocol import UIParam, format_values, parse_listing, parse_validation
 
 listing = console.design("list", "gre2d")["reply"]
 block = listing[listing.index("[Protocol]") :]
-print(block[: block.index("fov_offset_x")])
+print("\n".join(block.splitlines()[:12]) + "\n...")
 
 # %%
-# An edit is a value block sent back. The matrix is reduced to 64 by 64, and
-# the ``validate`` call resolves the request: it designs the sequence under the
-# limits and replies with the protocol the design achieves and the scan time.
-# The entries the design changed are printed beside the values requested.
+# Step 2: an edit
+# ---------------
+#
+# The operator changes the matrix to 64 by 64. The scanner sends the new values
+# back, and pulserver asks the sequence what it can achieve with them. The
+# reply says whether the protocol is valid, the scan time, and any value the
+# sequence had to change: here the receiver bandwidth.
 entries = parse_listing(block)
 values = {key: entry.value for key, entry in entries.items()}
 values.update({UIParam.NX: 64, UIParam.NY: 64})
@@ -94,28 +100,36 @@ for key, value in validation.values.items():
         print(f"{key}: requested {values[key]}, achieved {value}")
 
 # %%
-# The ``generate`` call designs the sequence, checks it, converts it into the
-# IR cache and stores both as a design. The reply is the design's identifier.
+# Step 3: the sequence for the scanner
+# ------------------------------------
+#
+# The operator presses *Scan*. pulserver designs the whole sequence, checks it
+# against the limits, converts it into the cache the scanner plays and keeps
+# both in the store under one identifier.
 generated = console.design("generate", "gre2d", request)
 design = generated["design"]
 print(generated["reply"])
 print(sorted(path.name for path in (store / design).iterdir()))
 
 # %%
-# The scan
-# --------
+# Steps 4 to 6: scan and reconstruct
+# ----------------------------------
 #
-# An exam names its subject and coil: here the vials phantom, seven water vials
-# and one fat vial, in the body coil, which transmits and receives on one
-# channel. The scan plays the stored design on the phantom's tissue with the
-# virtual scanner's Fourier engine, sends the raw data to the reconstruction,
-# here ``pics``, and receives the images as DICOM.
+# An exam puts a subject in the scanner. Here it is a phantom of eight vials,
+# seven of water with different T1 and T2 and one of fat, in the body coil.
+# The exam returns a localizer, a quick image of the phantom, as the scanner
+# would.
+#
+# The scan then plays the stored sequence on the phantom, pulserver labels the
+# raw data from the sequence, and ``pics`` reconstructs it. The images come
+# back as DICOM, as they would on the console.
 import base64
 import io
 
 import pydicom
 
-console.exam("vials", coil="body")
+localizer = [pydicom.dcmread(io.BytesIO(f)) for f in console.exam("vials", coil="body")]
+
 received = []
 status = console.scan(
     design,
@@ -132,30 +146,93 @@ images = [
 print(f"status {status}, {len(images)} image of {images[0].pixel_array.shape}")
 
 # sphinx_gallery_start_ignore
-import matplotlib.pyplot as plt
-from figure_style import PAGE_WIDTH
-
-fig, ax = plt.subplots(figsize=(0.5 * PAGE_WIDTH, 0.5 * PAGE_WIDTH))
-ax.imshow(images[0].pixel_array)
-ax.set_axis_off()
+fig, axes = plt.subplots(1, 2, figsize=(0.8 * PAGE_WIDTH, 0.42 * PAGE_WIDTH))
+for ax, image, title in zip(
+    axes,
+    (localizer[0], images[0]),
+    ("the phantom (localizer)", "your scan: gre2d + pics"),
+    strict=True,
+):
+    # Both drawn in millimetres from the image position, so the two fields of
+    # view line up.
+    x0, y0 = (float(v) for v in image.ImagePositionPatient[:2])
+    dy, dx = (float(v) for v in image.PixelSpacing)
+    extent = (x0, x0 + image.Columns * dx, y0 + image.Rows * dy, y0)
+    ax.imshow(image.pixel_array, cmap="gray", extent=extent)
+    ax.set_xlim(-128, 128)
+    ax.set_ylim(128, -128)
+    ax.set_title(title)
+    ax.set_axis_off()
 plt.show()
 # sphinx_gallery_end_ignore
 
 # %%
-# The four stages
-# ---------------
+# The localizer is drawn from the phantom's geometry. Your image is
+# reconstructed from raw data the virtual scanner simulated, at the 64 x 64
+# matrix you set. Both are drawn on the same millimetre scale: your image
+# covers the protocol's 220 mm field of view, the localizer a wider one.
 #
-# The image is the end of four stages, which the rest of the course takes one
-# at a time.
+# What you just ran
+# -----------------
 #
-# 1. **Design.** The scanner sequence binds a pypulseqpp sequence function to
-#    the protocol entries and resolves each request
-#    (:doc:`02_sequence_plugin`).
-# 2. **Scanner representation.** The design is converted into base blocks,
-#    virtual segments and an execution stream, the IR cache the interpreter
-#    loads (:doc:`03_scanner_representation`).
-# 3. **Playout.** The interpreter plays the cache; here the virtual scanner
-#    plays it on a phantom (:doc:`/explanations/virtual-scanner`).
-# 4. **Reconstruction.** The raw data are enriched from the sequence that
-#    played them and reconstructed by a reconstruction plugin
-#    (:doc:`04_reconstruction_plugin`).
+# Each call above was one step of a scan. The rest of the course opens them in
+# the same order:
+
+# sphinx_gallery_start_ignore
+from matplotlib.patches import FancyBboxPatch
+
+steps = [
+    ("1. protocol", "list", "lesson 2"),
+    ("2. edit", "validate", "lesson 2"),
+    ("3. checks +\nconversion", "generate", "lesson 3"),
+    ("4. scanner\nplays", "scan", "lesson 6"),
+    ("5. raw data\nlabelled", "scan", "lesson 4"),
+    ("6. recon", "scan", "lesson 5"),
+]
+fig, ax = plt.subplots(figsize=(PAGE_WIDTH, 1.9))
+ax.set_xlim(0, 6 * 17)
+ax.set_ylim(0, 22)
+ax.set_axis_off()
+for i, (title, call, lesson) in enumerate(steps):
+    x = i * 17 + 1
+    colour = SERIES[0] if i < 3 else SERIES[2]
+    ax.add_patch(
+        FancyBboxPatch(
+            (x, 6),
+            14,
+            13,
+            boxstyle="round,pad=0.3,rounding_size=1.2",
+            fc=colour + "1f",
+            ec=colour,
+            lw=1.2,
+        )
+    )
+    ax.text(x + 7, 15.5, title, ha="center", va="top", fontsize=10, color=colour)
+    ax.text(x + 7, 8, call, ha="center", fontsize=8.5, color=MUTED, family="monospace")
+    ax.text(x + 7, 1.5, lesson, ha="center", fontsize=9.5, color=MUTED, style="italic")
+    if i < 5:
+        ax.annotate(
+            "",
+            (x + 16.3, 12.5),
+            (x + 14.7, 12.5),
+            arrowprops={"arrowstyle": "-|>", "color": MUTED},
+        )
+plt.show()
+# sphinx_gallery_end_ignore
+
+# %%
+# - Lesson 2 replaces the shipped ``gre2d`` plugin with your own: steps 1 and 2.
+# - Lesson 3 looks inside what ``generate`` produced: step 3.
+# - Lessons 4 and 5 follow the raw data into a reconstruction plugin you write:
+#   steps 5 and 6.
+# - Lesson 6 puts your two plugins together on the virtual scanner: step 4.
+#
+# As a spec
+# ---------
+#
+# What this lesson did, stated the way you would ask an agent for it:
+#
+#    *On pulserver's virtual console at 3 T (40 mT/m, 150 T/m/s), list the
+#    shipped* ``gre2d`` *protocol, set a 64 x 64 matrix, generate the design,
+#    and scan it on the vials phantom in the body coil with the* ``pics``
+#    *reconstruction. Show the localizer next to the image.*

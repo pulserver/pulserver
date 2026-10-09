@@ -29,3 +29,13 @@ section#homepage > h1 {
 .admonition.tldr > .admonition-title { background-color: var(--pst-color-primary-bg); }
 .admonition.tldr > .admonition-title::after { color: var(--pst-color-primary); }
 .admonition.tldr ul { margin-bottom: 0; }
+
+/* The Open in Colab badge under an example's title. */
+img.colab-badge {
+  margin: 0.25rem 0 1rem;
+}
+@media print {
+  img.colab-badge {
+    display: none;
+  }
+}

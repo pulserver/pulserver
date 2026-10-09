@@ -14,6 +14,7 @@ from sphinx_gallery.sorting import ExplicitOrder
 # path the build was started from.
 sys.path.insert(0, str(Path(__file__).parent))
 
+import colab  # noqa: E402
 from figure_style import gallery_house_style  # noqa: E402
 
 project = "pulserver"
@@ -260,6 +261,17 @@ def _write_api_object_index(app) -> None:
     write(app.srcdir)
 
 
+def _colab_badge(_app, docname, source) -> None:
+    """Put the *Open in Colab* badge under an example page's title."""
+    source[0] = colab.with_badge(source[0], docname, DOCS_RELEASE)
+
+
+def _colab_notebooks(app, exception) -> None:
+    """Write the Colab copies of the gallery notebooks into the built site."""
+    if exception is None and app.builder.format == "html":
+        colab.write(Path(app.srcdir), Path(app.outdir), DOCS_RELEASE)
+
+
 def setup(app):
     """Install the filter ahead of Sphinx's own, which count the warning."""
     _hide_ignored_code_from_the_page_only()
@@ -267,6 +279,8 @@ def setup(app):
     app.connect("autodoc-process-signature", _compact_signature)
     app.connect("source-read", _local_readme_assets)
     app.connect("include-read", _included_readme_assets)
+    app.connect("source-read", _colab_badge)
+    app.connect("build-finished", _colab_notebooks)
     # Ahead of autosummary's own handler, which reads the sources for the
     # objects it writes stubs for: a page written after it would only be read
     # on the next build, and its stubs would be a build behind the templates.
