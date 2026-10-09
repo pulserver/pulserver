@@ -98,7 +98,8 @@ class Bssfp2D(SequencePlugin):
             if gating == "prospective":
                 train = len(segments) * rr
             else:
-                cycles = sum(max(1, round(rr / (n * tr))) * n for n in segments)
+                per_segment = max(1, round(rr / (g["views_per_segment"] * tr)))
+                cycles = per_segment * sum(segments)
                 train = once + (a["n_dummy"] + cycles - 1) * tr
         if train > MAX_SLICE_DURATION:
             raise ValueError(
