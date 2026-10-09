@@ -1148,4 +1148,3 @@ def test_a_multi_echo_gradient_echo_spaces_its_echoes_by_the_shared_echo_spacing
     assert len(spaced) == 3
     assert np.diff(spaced) == pytest.approx(10e-3, abs=1e-5)
     assert np.diff(shortest).max() < 10e-3
-

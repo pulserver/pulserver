@@ -167,7 +167,7 @@ module constants too, set to the function's default unless stated:
 
 | Plugin | Constant | Choice |
 | --- | --- | --- |
-| 3D Cartesian, stack and MPRAGE plugins | `EXCITATION` | `"slab"`, `"spsp"` (water alone) or `"nonselective"`; `bssfp3d` ships `"nonselective"`, `epi3d` `"spsp"` |
+| 3D Cartesian, stack and MPRAGE plugins | `EXCITATION` | `"slab"`, `"spsp"` (water alone) or `"nonselective"`; `epi3d` ships `"spsp"` |
 | `gre3d`, `se3d`, `gre_multiecho3d` | `ELLIPTICAL` | Only the phase encodes inside the ky-kz ellipse |
 | `gre_multiecho2d`, `gre_multiecho3d` | `FLYBACK` | Monopolar echoes; `False` reads even echoes backwards |
 | `fse3d` | `ORDERING` | `"radial"`, or `"shuffling"`: Poisson-disc views in random order |

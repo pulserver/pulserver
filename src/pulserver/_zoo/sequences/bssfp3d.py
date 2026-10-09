@@ -22,7 +22,7 @@ from pulserver.protocol import ImagingMode, TRPreset, UIParam
 #: The excitation, one of ``pypulseqpp.sequences.EXCITATIONS``: ``"slab"``
 #: selects the slab, ``"spsp"`` excites water alone in it and
 #: ``"nonselective"`` plays a hard pulse.
-EXCITATION = "nonselective"
+EXCITATION = "slab"
 
 
 class Bssfp3D(SequencePlugin):
