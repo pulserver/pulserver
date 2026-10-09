@@ -111,6 +111,18 @@ the narrower of the width over which the phase changes by 0.3 rad over the
 longest time from an excitation to an echo and a 32nd of the inverse of the
 shortest such interval, and lies between 0.5 Hz and 16 Hz.
 
+The stream is played in the frame of the prescription's centre $\mathbf{r}_0$.
+Off centre, the scanner advances each pulse's phase by
+$2\pi\,\mathbf{m}\cdot\mathbf{r}_0$, $\mathbf{m}$ the moment of the gradients
+from the start of the scan, in step with the magnetization at $\mathbf{r}_0$,
+and each receiver with it. A stream whose shifts take a moment as balanced
+holds that moment balanced at one place; each pulse's phase less its own
+$2\pi\,\mathbf{m}\cdot\mathbf{r}_0$, and each readout's less that of the
+pulse before it, puts the place at $\mathbf{r}_0$ and keeps what the readout
+encodes of it. In the frame of the isocentre, an unspoiled ZTE 25 mm off
+centre took these phases as a cycle of its pulses' phases and kept a
+thousandth of its signal.
+
 A stream whose pulses recur, with the same phase increments, times and
 shifts, every $q$ of them, plays its first periods until the deviation from
 the periodic state, which relaxation contracts by at least

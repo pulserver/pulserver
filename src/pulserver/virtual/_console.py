@@ -426,6 +426,7 @@ class Console:
             DesignStore(self.store).directory(design) / "sequence.seq",
             tissue,
             rotation=rotation,
+            centre=1e-3 * np.asarray(centre_mm, dtype=float),
             device=self.device,
             motion=self.motion,
             girf=self.girf,
