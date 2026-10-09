@@ -10,7 +10,7 @@ rest of the documentation assumes.
 | {doc}`architecture` | The two services beside the scanner, what each one does, and the design store they share: how a design is identified, stored, pushed and found again. |
 | {doc}`protocol` | How a prescription edited in the scanner UI is resolved into the protocol a sequence plays, and the units and precision it is exchanged in. |
 | {doc}`safety-checks` | What pulserver checks before a design is stored, what it leaves to the scanner, and the SAR ratios it computes against a reference pulse. |
-| {doc}`scanner-representation` | The base blocks, virtual segments and execution stream a scanner interpreter plays, and how pulserver derives them from a Pulseq sequence. |
+| {doc}`scanner-representation` | How pulserver converts a Pulseq chain into the base blocks, virtual segments and segment instances the scanner plays, and what the interpreter does with them. |
 | {doc}`virtual-scanner` | The stand-ins that replace the scanner in tests: the playout, the Fourier engine's signal model and the reconstruction client. |
 | {doc}`reconstruction` | Enrichment of the raw data from the sequence that played it, and the routing of each series to a reconstruction. |
 | {doc}`calibration` | Coil sensitivity maps, noise prewhitening and coil compression as transforms of the receive channels, and the conditions under which sensitivity maps are reused. |
