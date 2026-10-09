@@ -18,6 +18,11 @@ from pulserver.design import (
 )
 from pulserver.protocol import ImagingMode, TEPreset, TRPreset, UIParam
 
+#: The excitation, one of ``pypulseqpp.sequences.EXCITATIONS``: ``"slab"``
+#: selects the slab, ``"spsp"`` excites water alone in it and
+#: ``"nonselective"`` plays a hard pulse.
+EXCITATION = "slab"
+
 
 class MprageStackOfStars3D(SequencePlugin):
     # Every partition plays the same in-plane readouts, so that the
@@ -26,6 +31,7 @@ class MprageStackOfStars3D(SequencePlugin):
         slab(functools.partial(mprage_stack_of_stars3d, partition_angle_shift="none")),
         "esp",
     )
+    app = functools.partial(app, excitation=EXCITATION)
     protocol = {
         UIParam.IMAGING_MODE: StatedParam(ImagingMode.THREE_D),
         UIParam.FLIP: FloatParam(

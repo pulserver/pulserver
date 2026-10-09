@@ -3,6 +3,7 @@
 import functools
 import importlib.util
 import inspect
+import re
 from types import SimpleNamespace
 
 import numpy as np
@@ -199,6 +200,27 @@ SCANS = [pytest.param(name, {}, id=name) for name in SHIPPED] + [
         ),
         ("gre3d", "partitions", {"nslices": 16, "TR": 20000, "nx": 64, "ny": 32}),
         (
+            "gre3d",
+            "caipi",
+            {"nslices": 16, "ny": 32, "Ry": 2, "Rz": 2, "user9_value": 1},
+        ),
+        ("bssfp3d", "phase-cycles", {"nslices": 8, "ny": 32, "user12_value": 2}),
+        ("gre_stack_of_blades3d", "undersampled", {"nslices": 8, "Ry": 2}),
+        ("gre_multiecho2d+BIPOLAR", "bipolar", {"num_echoes": 3}),
+        (
+            "gre_multiecho3d+BIPOLAR",
+            "bipolar",
+            {"nslices": 8, "ny": 32, "num_echoes": 3},
+        ),
+        ("gre3d+SPSP", "spsp", {"nslices": 16, "ny": 32}),
+        ("gre3d+CARTESIAN", "cartesian", {"nslices": 16, "ny": 32}),
+        (
+            "fse3d+SHUFFLING",
+            "shuffling",
+            {"nslices": 16, "etl": 10, "nx": 64, "ny": 32},
+        ),
+        ("zte3d+MERIDIAN", "meridian", {"nx": 64}),
+        (
             "gre_multiecho2d",
             "shortest",
             {"nslices": 9, "TR": TRPreset.MINIMUM, "num_echoes": 6, "ny": 48},
@@ -373,22 +395,31 @@ TOGGLED = {
         "mprage_stack_of_spirals3d",
         "VARIABLE_DENSITY",
     ),
+    "gre_multiecho2d+BIPOLAR": ("gre_multiecho2d", "FLYBACK", "False"),
+    "gre_multiecho3d+BIPOLAR": ("gre_multiecho3d", "FLYBACK", "False"),
+    "gre3d+SPSP": ("gre3d", "EXCITATION", '"spsp"'),
+    "gre3d+CARTESIAN": ("gre3d", "ELLIPTICAL", "False"),
+    "fse3d+SHUFFLING": ("fse3d", "ORDERING", '"shuffling"'),
+    "zte3d+MERIDIAN": ("zte3d", "SCHEME", '"meridian"'),
 }
 
 
 @pytest.fixture(scope="module")
 def zoo(tmp_path_factory):
-    """The shipped scanner sequences by name, and those of ``TOGGLED`` as a copy of the file with the constant set."""
+    """The shipped scanner sequences by name, and those of ``TOGGLED`` as a copy of the file with the constant set, to ``True`` unless a value is given."""
     plugins = {name: load_plugin(_plugins.SEQUENCES / f"{name}.py") for name in SHIPPED}
-    for key, (name, constant) in TOGGLED.items():
+    for key, (name, constant, *value) in TOGGLED.items():
         if key in OPTIMIZED and importlib.util.find_spec("blochsim") is None:
             continue
         source = (_plugins.SEQUENCES / f"{name}.py").read_text()
-        assert f"\n{constant} = False\n" in source
-        path = tmp_path_factory.mktemp(key.replace("+", "-")) / f"{name}.py"
-        path.write_text(
-            source.replace(f"\n{constant} = False\n", f"\n{constant} = True\n")
+        toggled, count = re.subn(
+            rf"\n{constant} = [^\n]+\n",
+            f"\n{constant} = {(value or ['True'])[0]}\n",
+            source,
         )
+        assert count == 1
+        path = tmp_path_factory.mktemp(key.replace("+", "-")) / f"{name}.py"
+        path.write_text(toggled)
         plugins[key] = load_plugin(path)
     return plugins
 

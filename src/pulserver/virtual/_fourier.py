@@ -203,17 +203,12 @@ class FourierPlayer:
         shifted = _shifted(timeline, events, voxel, spanned)
         self._poses = None if motion is None else _poses(timeline, motion, self.device)
         selector_of, selectors = _selectors(pulses)
-        profiles = _profiles(everything, selectors, pulses)
-        excitations = torch.as_tensor(
-            np.unique(selector_of[pulses.use == _EXCITATION]), device=self.device
+        excitations = np.unique(selector_of[pulses.use == _EXCITATION])
+        self._entries, groups, group_of = _grouped(
+            everything, selectors, pulses, excitations
         )
-        excited = (profiles[:, excitations] > 0).any(dim=1)
-        self._entries = everything.subset(torch.nonzero(excited).reshape(-1))
-        groups, group_of = _merged(
-            *torch.unique(profiles[excited], dim=0, return_inverse=True),
-            self._entries.density,
-        )
-        del everything, profiles, excited
+        groups, group_of = _merged(groups, group_of, self._entries.density)
+        del everything
         self._groups = groups.cpu().numpy()
         self._group_of = group_of
         self._stations, self._station_of = _stations(timeline, selector_of)
@@ -1001,44 +996,84 @@ def _selectors(pulses) -> tuple[np.ndarray, np.ndarray]:
 
 def _profiles(entries: _Entries, selectors: np.ndarray, pulses) -> torch.Tensor:
     """Return the level of :data:`_LEVELS` nearest each entry's flip angle under each selector, over the one on resonance; zero outside its band, ``(entries, selectors)``."""
-    device = entries.positions.device
     held = torch.zeros(
-        (entries.positions.shape[0], selectors.size), dtype=torch.int8, device=device
+        (entries.positions.shape[0], selectors.size),
+        dtype=torch.int8,
+        device=entries.positions.device,
     )
     gradients = _selecting(pulses)
     offsets = _offsets(pulses)
     for at, pulse in enumerate(selectors):
-        detuning, ratio = pulses.profiles[pulses.profile[pulse]]
-        field = entries.frequency - float(offsets[pulse])
-        if pulses.trace[pulse] >= 0:
-            along = entries.positions @ torch.as_tensor(
-                pulses.direction[pulse], dtype=torch.float32, device=device
-            )
-            flip = torch.as_tensor(
-                pulses.traces[pulses.trace[pulse]].ratio(
-                    field.double().cpu().numpy(), along.double().cpu().numpy()
-                ),
-                dtype=torch.float32,
-                device=device,
-            )
-            held[:, at] = _level(flip)
-            continue
-        if np.any(gradients[pulse]):
-            gradient = torch.as_tensor(
-                pulses.gradient[pulse], dtype=torch.float32, device=device
-            )
-            field = field + entries.positions @ gradient
-        step = float(detuning[1] - detuning[0]) if detuning.size > 1 else 1.0
-        place = (field - float(detuning[0])) / step
-        below = torch.floor(place)
-        inside = (below >= 0) & (below < detuning.size - 1)
-        index = below.clamp(0, max(detuning.size - 2, 0)).long()
-        table = torch.as_tensor(ratio, dtype=torch.float32, device=device)
-        upper = table[(index + 1).clamp(max=detuning.size - 1)]
-        flip = table[index] + (place - below) * (upper - table[index])
-        flip = torch.where(inside, flip, 0.0)
-        held[:, at] = _level(flip)
+        held[:, at] = _profile(entries, pulse, pulses, gradients, offsets)
     return held
+
+
+def _grouped(
+    entries: _Entries, selectors: np.ndarray, pulses, excitations: np.ndarray
+) -> tuple[_Entries, torch.Tensor, torch.Tensor]:
+    """Return the entries the selectors ``excitations`` turn, the distinct rows of their :func:`_profiles` in ascending order, and each one's row.
+
+    The rows are told apart one selector at a time, so that no table of every
+    entry under every selector is held.
+    """
+    gradients = _selecting(pulses)
+    offsets = _offsets(pulses)
+    excited = torch.zeros(
+        entries.positions.shape[0], dtype=torch.bool, device=entries.positions.device
+    )
+    for at in excitations:
+        excited |= _profile(entries, selectors[at], pulses, gradients, offsets) > 0
+    entries = entries.subset(torch.nonzero(excited).reshape(-1))
+    count = entries.positions.shape[0]
+    row_of = torch.zeros(count, dtype=torch.int64, device=excited.device)
+    for pulse in selectors:
+        level = _profile(entries, pulse, pulses, gradients, offsets).long()
+        row_of = torch.unique(row_of * _LEVELS.size + level, return_inverse=True)[1]
+    rows = int(row_of.max()) + 1 if count else 0
+    first = torch.full((rows,), count, dtype=torch.int64, device=excited.device)
+    first.scatter_reduce_(
+        0, row_of, torch.arange(count, device=excited.device), reduce="amin"
+    )
+    return entries, _profiles(entries.subset(first), selectors, pulses), row_of
+
+
+def _profile(
+    entries: _Entries,
+    pulse: int,
+    pulses,
+    gradients: np.ndarray,
+    offsets: np.ndarray,
+) -> torch.Tensor:
+    """Return :func:`_profiles` under the selector whose first pulse is ``pulse``, ``(entries,)``."""
+    device = entries.positions.device
+    detuning, ratio = pulses.profiles[pulses.profile[pulse]]
+    field = entries.frequency - float(offsets[pulse])
+    if pulses.trace[pulse] >= 0:
+        along = entries.positions @ torch.as_tensor(
+            pulses.direction[pulse], dtype=torch.float32, device=device
+        )
+        flip = torch.as_tensor(
+            pulses.traces[pulses.trace[pulse]].ratio(
+                field.double().cpu().numpy(), along.double().cpu().numpy()
+            ),
+            dtype=torch.float32,
+            device=device,
+        )
+        return _level(flip)
+    if np.any(gradients[pulse]):
+        gradient = torch.as_tensor(
+            pulses.gradient[pulse], dtype=torch.float32, device=device
+        )
+        field = field + entries.positions @ gradient
+    step = float(detuning[1] - detuning[0]) if detuning.size > 1 else 1.0
+    place = (field - float(detuning[0])) / step
+    below = torch.floor(place)
+    inside = (below >= 0) & (below < detuning.size - 1)
+    index = below.clamp(0, max(detuning.size - 2, 0)).long()
+    table = torch.as_tensor(ratio, dtype=torch.float32, device=device)
+    upper = table[(index + 1).clamp(max=detuning.size - 1)]
+    flip = table[index] + (place - below) * (upper - table[index])
+    return _level(torch.where(inside, flip, 0.0))
 
 
 def _level(flip: torch.Tensor) -> torch.Tensor:
