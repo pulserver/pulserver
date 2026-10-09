@@ -98,6 +98,7 @@ received = [
 dataset.close()
 
 
+# sphinx_gallery_start_ignore
 def describe(acquisition):
     """The fields of an acquisition header a reconstruction sorts by."""
     flags = [
@@ -111,6 +112,8 @@ def describe(acquisition):
         f"echo sample {acquisition.center_sample}, flags {flags}"
     )
 
+
+# sphinx_gallery_end_ignore
 
 matrix = header.encoding[0].encodedSpace.matrixSize
 print(f"header: encoded matrix {matrix.x} x {matrix.y}")

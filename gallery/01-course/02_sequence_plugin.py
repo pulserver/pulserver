@@ -111,11 +111,14 @@ class Gre(SequencePlugin):
     }
 
 
+# sphinx_gallery_start_ignore
 def ui(plugin):
     """Print the parameters the operator sees, as the scanner receives them."""
     listing = format_listing(plugin.listing())
     print("\n".join(line for line in listing.splitlines() if "|off|" not in line))
 
+
+# sphinx_gallery_end_ignore
 
 ui(Gre())
 
@@ -386,7 +389,7 @@ ax.set_xlim(bandwidths[0] / 1e3, bandwidths[-1] / 1e3)
 ax.set_ylim(0, 10)
 ax.text(140, 1.6, "TE refused", color=MUTED, ha="center")
 ax.text(140, 6.5, "TE accepted", color=MUTED, ha="center")
-ax.legend(frameon=False, loc="upper right")
+ax.legend(loc="upper left", bbox_to_anchor=(1.01, 1))
 plt.show()
 # sphinx_gallery_end_ignore
 

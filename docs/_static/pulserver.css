@@ -39,3 +39,9 @@ img.colab-badge {
     display: none;
   }
 }
+
+/* A text block is a spec to paste into an agent: its copy button is shown
+   without hovering, which a touch screen cannot do. */
+div.highlight-text .copybtn {
+  opacity: 1;
+}

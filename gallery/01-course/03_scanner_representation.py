@@ -114,7 +114,7 @@ for ax, limit, label in zip(
     ax.axhline(limit, color=MUTED, ls="--", lw=1)
     ax.set_ylabel(label)
 axes[0].axhline(-40, color=MUTED, ls="--", lw=1)
-axes[0].legend(frameon=False, ncol=3, loc="lower right")
+axes[0].legend(loc="upper left", bbox_to_anchor=(1.01, 1))
 axes[2].set_xlabel("time in the TR (ms)")
 axes[2].set_xlim(0, 12)
 plt.show()
@@ -148,7 +148,7 @@ ax.axhline(100, color=MUTED, ls="--", lw=1)
 ax.set_xlim(0, 12)
 ax.set_xlabel("time in the TR (ms)")
 ax.set_ylabel("PNS (%)")
-ax.legend(frameon=False)
+ax.legend(loc="upper left", bbox_to_anchor=(1.01, 1))
 plt.show()
 # sphinx_gallery_end_ignore
 
@@ -222,32 +222,47 @@ plt.show()
 # What changes from one TR to the next
 # ------------------------------------
 #
-# If every TR plays the same segments, where is the phase encoding? Each time
-# a segment is played it carries its own values: gradient amplitudes, RF and
-# ADC phases. :func:`~pulserver.ir.play` walks the cache with the same C
-# library the scanner links, one entry per block played, so you can read them:
+# If every TR plays the same segments, where is the phase encoding? The
+# scanner prepares a segment's timing and waveform shapes once. Each time it
+# plays the segment, the *instance* sets everything else:
+#
+# - the amplitude of each gradient, and its rotation;
+# - another gradient waveform in place of the prepared one, provided its
+#   timing is the same;
+# - the RF amplitude, its phase and frequency offsets, and the shim of each
+#   transmit channel;
+# - the ADC phase and frequency offsets, or no acquisition at all;
+# - whether it waits for a trigger, and the digital outputs.
+#
+# :func:`~pulserver.ir.play` walks the cache with the same C library the
+# scanner links, one entry per block played, so you can read these values:
 gy = played["gradient_hz_per_m"][:, 1].reshape(-1, blocks)
 phase_encoding = np.abs(gy).max(axis=0).argmax()
 rf_phase = played["rf_phase_rad"].reshape(-1, blocks)[:, 0]
+acquires = played["adc"].reshape(-1, blocks).any(axis=1)
 
 # sphinx_gallery_start_ignore
-fig, (top, bottom) = plt.subplots(
-    2, 1, figsize=(PAGE_WIDTH, 0.45 * PAGE_WIDTH), sharex=True
+fig, (top, middle, bottom) = plt.subplots(
+    3, 1, figsize=(PAGE_WIDTH, 0.6 * PAGE_WIDTH), sharex=True
 )
 top.plot(gy[:, phase_encoding] / GAMMA * 1e3, ".", ms=4, color=SERIES[0])
 top.set_ylabel("phase encoding\n(mT/m)")
-bottom.plot(np.degrees(rf_phase) % 360, ".", ms=4, color=SERIES[2])
-bottom.set_ylabel("RF phase (deg)")
+middle.plot(np.degrees(rf_phase) % 360, ".", ms=4, color=SERIES[2])
+middle.set_ylabel("RF phase\n(deg)")
+bottom.step(np.arange(len(acquires)), acquires, where="mid", color=SERIES[1])
+bottom.set_yticks([0, 1], ["off", "on"])
+bottom.set_ylabel("ADC")
 bottom.set_xlabel("TR")
 plt.show()
 # sphinx_gallery_end_ignore
 
 # %%
-# The first TRs are the dummy TRs, with no phase encoding; then the
-# phase-encoding amplitude steps through the 64 lines. The RF phase follows
-# the quadratic schedule of RF spoiling, its increment growing by 117° per TR.
-# The scanner prepares the waveforms of segment 0 once and only changes these
-# numbers, which is why a scan of any length loads quickly.
+# The first TRs are the dummy TRs: the same segment, with no phase encoding
+# and the ADC off. Then the phase-encoding amplitude steps through the 64
+# lines. The RF phase follows the quadratic schedule of RF spoiling, its
+# increment growing by 117° per TR. The scanner prepares segment 0 once and
+# only changes these numbers, which is why a scan of any length loads
+# quickly.
 #
 # Where the segment boundaries fall can be tuned to the scanner's interpreter;
 # :doc:`/explanations/scanner-representation` explains the model.

@@ -199,7 +199,8 @@ class PicsRecon(ReconPlugin):
             priors.Wavelet(wavelet_axes(shape, (-1, -2, -3)), self.wavelet),
             maxiter=self.iterations,
         )
-        return solve(measured * (1.0 / scaling), encoding).abs().cpu().numpy()
+        image = scaling * solve(measured * (1.0 / scaling), encoding)
+        return image.abs().cpu().numpy()
 
 
 PLUGIN = PicsRecon()

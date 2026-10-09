@@ -38,14 +38,14 @@ logging.disable(logging.WARNING)
 # ----------
 #
 # As in lesson 4, the virtual scanner records ``gre2d`` at 64 by 64 on a
-# four-coil phantom. This time there are two series: one fully sampled, and
-# one that acquires every second line (``Ry`` of 2) plus 24 calibration lines
-# at the centre of k-space, half the scan time.
+# four-coil phantom (the code is in the notebook). This time there are two
+# series, ``full`` and ``undersampled``: one fully sampled, and one that
+# acquires every second line (``Ry`` of 2) plus 24 calibration lines at the
+# centre of k-space, half the scan time.
+
+# sphinx_gallery_start_ignore
 import tempfile
 from pathlib import Path
-
-import ismrmrd
-import numpy as np
 
 from pulserver import virtual
 from pulserver.protocol import UIParam, format_values, parse_listing
@@ -87,6 +87,7 @@ def record(ry):
 
 full = record(1)
 undersampled = record(2)
+# sphinx_gallery_end_ignore
 
 # %%
 # A Fourier transform
@@ -96,18 +97,22 @@ undersampled = record(2)
 #
 # - A gadget pulserver ships, :class:`~pulserver.recon.RemoveReadoutOversampling`,
 #   halves each readout as it arrives, so k-space reaches ``recon`` at the
-#   image's 64 samples instead of 128.
+#   image's 64 samples instead of 128. It crops with bartorch's
+#   :func:`bartorch.remove_readout_oversampling`.
 # - ``recon`` transforms each coil to an image, combines the coils as the root
 #   sum of squares, and returns it in a :class:`~pulserver.recon.ReconResult`.
 #
 # You return the pixels only. pulserver writes the rest of the image: its
 # position, orientation and field of view from the sequence and the scanner,
 # its series and slice numbers, and the DICOM the console receives.
+import ismrmrd
+import numpy as np
+
 from pulserver import recon
 from pulserver.mrd import AcquisitionFlag
 
 
-class Fft(recon.ReconPlugin):
+class FFT(recon.ReconPlugin):
     def __init__(self):
         super().__init__(
             gadgets=[recon.RemoveReadoutOversampling()],
@@ -130,8 +135,8 @@ def reconstruct(plugin, series):
     return np.squeeze(images[0].data)
 
 
-fft_full = reconstruct(Fft(), full)
-fft_undersampled = reconstruct(Fft(), undersampled)
+fft_full = reconstruct(FFT(), full)
+fft_undersampled = reconstruct(FFT(), undersampled)
 
 # %%
 # Compressed sensing with bartorch
@@ -147,13 +152,13 @@ fft_undersampled = reconstruct(Fft(), undersampled)
 # bartorch takes arrays in BART's order, coils then z, y and x, so the
 # k-space of a 2D slice gets a z axis of length one, ``[:, None]``.
 #
-# Only ``recon`` changes. Subclassing ``Fft`` keeps its gadget and trigger:
+# Only ``recon`` changes. Subclassing ``FFT`` keeps its gadget and trigger:
 import bartorch.tools as bt
 import torch
 from bartorch import apps, priors
 
 
-class Pics(Fft):
+class Pics(FFT):
     def recon(self, context, branch, data):  # noqa: ARG002
         kspace = torch.from_numpy(data.data.kspace)[:, None]  # (coils, z, y, x)
         maps = bt.ecalib(kspace, maps=1)
@@ -170,7 +175,7 @@ fig, axes = plt.subplots(1, 3, figsize=(PAGE_WIDTH, 0.37 * PAGE_WIDTH))
 for ax, image, title in zip(
     axes,
     (fft_full, fft_undersampled, pics_undersampled),
-    ("Fft, fully sampled", "Fft, every second line", "Pics, every second line"),
+    ("FFT, fully sampled", "FFT, every second line", "Pics, every second line"),
     strict=True,
 ):
     ax.imshow(image, cmap="gray")

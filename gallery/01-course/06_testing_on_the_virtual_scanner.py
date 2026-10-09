@@ -148,7 +148,7 @@ entries = parse_listing(block)
 # estimates coil maps, which needs more than one receive coil, so the exam
 # puts the phantom in the body coil to transmit and a 48-channel head coil to
 # receive.
-console.exam("vials", coil="body/head48")
+localizer = console.exam("vials", coil="body/head48")  # DICOM files
 
 # %%
 # A flip-angle series
@@ -200,7 +200,35 @@ def scan(flip):
 images = {flip: scan(flip) for flip in FLIPS}
 te = images[FLIPS[0]][1]  # the minimum TE, the same for every flip angle
 
+# sphinx_gallery_start_ignore
+from figure_style import MUTED, PAGE_WIDTH, SERIES
+
+
+def pixels(image):
+    """The pixel values in the units the reconstruction returned them in."""
+    slope = float(image.RescaleSlope)
+    return image.pixel_array * slope + float(image.RescaleIntercept)
+
+
+peak = max(pixels(image).max() for image, _ in images.values())
+fig, axes = plt.subplots(1, len(FLIPS), figsize=(PAGE_WIDTH, 0.3 * PAGE_WIDTH))
+for ax, (flip, (image, _)) in zip(axes, images.items(), strict=True):
+    x0, y0 = (float(v) for v in image.ImagePositionPatient[:2])
+    dy, dx = (float(v) for v in image.PixelSpacing)
+    extent = (x0, x0 + image.Columns * dx, y0 + image.Rows * dy, y0)
+    ax.imshow(pixels(image), cmap="gray", extent=extent, vmin=0, vmax=peak)
+    ax.set_xlim(-75, 75)
+    ax.set_ylim(75, -75)
+    ax.set_title(f"{flip}°")
+    ax.set_axis_off()
+plt.show()
+# sphinx_gallery_end_ignore
+
 # %%
+# The four images are drawn on one grey scale. At 5° all the water vials are
+# dim and alike; as the flip angle grows, the vials of short T1 brighten and
+# those of long T1 fade.
+#
 # Against the physics
 # -------------------
 #
@@ -219,8 +247,6 @@ te = images[FLIPS[0]][1]  # the minimum TE, the same for every flip angle
 TR = 0.05
 t1 = np.geomspace(0.3, 2.0, 7)  # the vials' T1 and T2, in s
 t2 = np.geomspace(0.04, 0.3, 7)
-angles = 2 * np.pi * np.arange(7) / 7  # the vials sit 45 mm from the centre
-centres_mm = 45 * np.stack([np.cos(angles), np.sin(angles)], axis=1)
 
 
 def steady_state(flip_deg, t1, t2):
@@ -229,129 +255,58 @@ def steady_state(flip_deg, t1, t2):
     return np.sin(alpha) * (1 - e1) / (1 - np.cos(alpha) * e1) * np.exp(-te / t2)
 
 
-def pixels(image):
-    """The pixel values in the units the reconstruction returned them in."""
-    slope = float(image.RescaleSlope)
-    return image.pixel_array * slope + float(image.RescaleIntercept)
+# sphinx_gallery_start_ignore
+angles = 2 * np.pi * np.arange(7) / 7  # the vials sit 45 mm from the centre
+centres_mm = 45 * np.stack([np.cos(angles), np.sin(angles)], axis=1)
 
 
 def vial_means(image):
     """The mean of each water vial, within 9 mm of its centre."""
     x0, y0 = (float(v) for v in image.ImagePositionPatient[:2])
     dy, dx = (float(v) for v in image.PixelSpacing)
-    x = x0 + dx * np.arange(image.Columns)
-    y = y0 + dy * np.arange(image.Rows)
-    xx, yy = np.meshgrid(x, y)
+    xx, yy = np.meshgrid(
+        x0 + dx * np.arange(image.Columns), y0 + dy * np.arange(image.Rows)
+    )
     values = pixels(image)
     return [values[np.hypot(xx - cx, yy - cy) < 9].mean() for cx, cy in centres_mm]
 
 
-def compare():
-    """Vial means and the closed form, with one scale fitted to all of them."""
-    measured = np.array([vial_means(images[flip][0]) for flip in FLIPS])
-    model = np.array([steady_state(flip, t1, t2) for flip in FLIPS])
-    scale = (measured * model).sum() / (model**2).sum()
-    return measured, scale
+measured = np.array([vial_means(images[flip][0]) for flip in FLIPS])
+model = np.array([steady_state(flip, t1, t2) for flip in FLIPS])
+scale = (measured * model).sum() / (model**2).sum()
 
-
-# sphinx_gallery_start_ignore
-from figure_style import MUTED, PAGE_WIDTH
-
-
-def plot_comparison(measured, scale):
-    curve = np.linspace(1, 70, 200)
-    cmap = plt.get_cmap("viridis")
-    _, ax = plt.subplots(figsize=(PAGE_WIDTH, 0.5 * PAGE_WIDTH))
-    for vial in range(7):
-        colour = cmap(vial / 6)
-        ax.plot(
-            curve,
-            scale * steady_state(curve, t1[vial], t2[vial]),
-            color=colour,
-            lw=1.2,
-            label=f"T1 {t1[vial] * 1e3:.0f} ms",
-        )
-        ax.plot(FLIPS, measured[:, vial], "o", color=colour, ms=5)
-    ax.set_xlabel("flip angle (°)")
-    ax.set_ylabel("vial signal (data units)")
-    ax.set_xlim(0, 70)
-    ax.set_ylim(0, None)
-    ax.legend(frameon=False, ncol=2, fontsize="small", loc="upper right")
-    ax.set_title("lines: closed form    points: your images", color=MUTED)
-    plt.show()
-
-
-plot_comparison(*compare())
-# sphinx_gallery_end_ignore
-
-# %%
-# The points do not follow the curves. Within each scan the order of the
-# vials is right, but every vial is brighter at 5° than at 30°, where the
-# closed form says the vials of short T1 should be three times brighter.
-#
-# The cause is in your recon plugin. Like BART's ``pics``, ``apps.pics``
-# divides the k-space by a scaling it estimates from each scan, so that one
-# regularization weight suits every scan, and returns the image in those
-# units. Each image is then on a scale of its own: fine to look at, wrong for
-# a series you compare, such as the variable flip angles of a T1 map.
-#
-# Your turn: fix the plugin
-# -------------------------
-#
-# Estimate the scaling yourself, hand it to ``pics``, and multiply the image
-# back by it. The image is then in the units of the data, whatever the scan.
-# The proxy reads the plugin file again for every series, so editing it is
-# all it takes:
-recon_file = work / "recon" / "my_pics.py"
-recon_file.write_text(
-    recon_file.read_text()
-    .replace(
-        "from bartorch import apps, priors", "from bartorch import apps, optim, priors"
+curve = np.linspace(1, 70, 200)
+_, ax = plt.subplots(figsize=(PAGE_WIDTH, 0.5 * PAGE_WIDTH))
+for vial in range(7):
+    colour = SERIES[vial]
+    ax.plot(
+        curve,
+        scale * steady_state(curve, t1[vial], t2[vial]),
+        color=colour,
+        lw=1.2,
+        label=f"T1 {t1[vial] * 1e3:.0f} ms",
     )
-    .replace(
-        "        image = apps.pics(kspace, maps, regularizers=priors.Wavelet((-1, -2), 0.005))",
-        "        scaling = optim.data_scaling(kspace)\n"
-        "        image = scaling * apps.pics(\n"
-        "            kspace, maps, regularizers=priors.Wavelet((-1, -2), 0.005), scaling=scaling\n"
-        "        )",
-    )
-)
-print(recon_file.read_text())
-
-# %%
-# ``data_scaling`` is the estimate ``pics`` makes for itself. Now scan the
-# series again:
-images = {flip: scan(flip) for flip in FLIPS}
-
-# sphinx_gallery_start_ignore
-peak = max(pixels(image).max() for image, _ in images.values())
-fig, axes = plt.subplots(1, len(FLIPS), figsize=(PAGE_WIDTH, 0.3 * PAGE_WIDTH))
-for ax, (flip, (image, _)) in zip(axes, images.items(), strict=True):
-    x0, y0 = (float(v) for v in image.ImagePositionPatient[:2])
-    dy, dx = (float(v) for v in image.PixelSpacing)
-    extent = (x0, x0 + image.Columns * dx, y0 + image.Rows * dy, y0)
-    ax.imshow(pixels(image), cmap="gray", extent=extent, vmin=0, vmax=peak)
-    ax.set_xlim(-75, 75)
-    ax.set_ylim(75, -75)
-    ax.set_title(f"{flip}°")
-    ax.set_axis_off()
+    ax.plot(FLIPS, measured[:, vial], "o", color=colour, ms=5)
+ax.set_xlabel("flip angle (°)")
+ax.set_ylabel("vial signal (data units)")
+ax.set_xlim(0, 70)
+ax.set_ylim(0, None)
+ax.legend(loc="upper left", bbox_to_anchor=(1.01, 1))
+ax.set_title("lines: closed form    points: your images", color=MUTED)
 plt.show()
-plot_comparison(*compare())
 # sphinx_gallery_end_ignore
 
 # %%
-# The four images are now drawn on one grey scale, and the contrast shows:
-# at 5° all the water vials are dim and alike; as the flip angle grows, the
-# vials of short T1 brighten and those of long T1 fade, each peaking at its
-# own Ernst angle. The points follow the closed form for all seven vials with
-# one shared scale. What remains, largest for the vials of long T2, is most
-# likely the spoiling: a 117° RF phase increment does not remove the
-# transverse magnetization completely, and the closed form assumes it does.
+# Each vial peaks at its own Ernst angle, and the measured points follow the
+# closed form for all seven vials with one shared scale. What remains,
+# largest for the vials of long T2, is most likely the spoiling: a 117° RF
+# phase increment does not remove the transverse magnetization completely,
+# and the closed form assumes it does.
 #
-# That agreement tests the whole chain at once: the flip angle and the
-# timing your sequence plugin designed, the conversion to the scanner's
-# cache, the labels that sorted the raw data, and your reconstruction. A
-# wrong unit in a ``TimeParam`` would break it as surely as the scaling did.
+# That agreement tests the whole chain at once: the flip angle and the timing
+# your sequence plugin designed, the conversion to the scanner's cache, the
+# labels that sorted the raw data, and your reconstruction. A wrong unit in a
+# ``TimeParam``, or a recon that scaled each scan differently, would break it.
 #
 # The virtual scanner is a model, so passing this test does not make the
 # sequence safe to run on a person; it tells you that the pair does what you
@@ -362,10 +317,10 @@ plot_comparison(*compare())
 # ------------
 #
 # The same two folders are what pulserver is pointed at on a scanner: the
-# design service takes the folder of sequence plugins and the
-# reconstruction proxy the folder of recon plugins. Nothing in the files
-# changes. :doc:`/user-guide/virtual-scanner` runs the same console from the
-# command line, with MaRGE's interface in front of it.
+# design service takes the folder of sequence plugins and the reconstruction
+# proxy the folder of recon plugins. Nothing in the files changes.
+# :doc:`/user-guide/virtual-scanner` runs the same console from the command
+# line, with MaRGE's interface in front of it.
 #
 # This is the end of the course. The Tours take each piece further.
 #
@@ -382,6 +337,4 @@ plot_comparison(*compare())
 #    and scan my_gre with recon my_pics at a TR of 50 ms, the minimum TE and
 #    flip angles of 5, 15, 30 and 60 degrees. Compare the mean of each water
 #    vial with the closed-form spoiled gradient echo signal for its T1 and T2,
-#    with one least-squares scale for all vials and scans. If the scans do not
-#    share a scale, make the plugin return pics's image multiplied back by
-#    the data scaling it passes to pics, and scan again.
+#    with one least-squares scale for all vials and scans.
