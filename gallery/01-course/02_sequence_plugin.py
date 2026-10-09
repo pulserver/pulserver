@@ -1,160 +1,372 @@
 """
-======================================
-2. A scanner sequence and its protocol
-======================================
+==================================
+2. Your sequence in the scanner UI
+==================================
 
-A scanner sequence binds a pypulseqpp sequence function to the entries of the
-scanner protocol. The operator edits the entries; pulserver converts their
-values into the function's arguments, evaluates the protocol under the scanner
-limits, and returns the protocol the design achieves. The previous lesson used
-the shipped ``gre2d``; this lesson writes one like it.
+In lesson 1 the operator edited the protocol of ``gre2d``, and pulserver
+answered every edit with the TE, the TR and the scan time. Both the protocol
+and the answers came from a plugin: a short Python class wrapped around a
+sequence function. In this lesson you write that plugin yourself, one piece at
+a time, and after each piece you look at what changed for the operator.
 
 **Learning objectives**
 
-- Declare a :class:`~pulserver.design.SequencePlugin`: the sequence function
-  and the entries that bind its arguments, with their units and presets.
-- Write an evaluation that designs one repetition of the scan and reads back
-  the values the design achieves, the scan time and the RF of one TR.
-- Validate requests, including a preset and a prescription the design
-  refuses, and write the design.
+- Turn a sequence function into a plugin the scanner UI can show.
+- Choose the parameters the operator edits, with their units and ranges.
+- Write an ``evaluate`` that tells the operator what the protocol achieves, and
+  refuses what your sequence cannot play.
+- Expose one more parameter, and watch the minimum TE follow it.
 
-The next lesson converts a design into the representation the scanner plays.
+Previous: :doc:`01_protocol_to_image`. Next: :doc:`03_scanner_representation`,
+where you look at what pulserver makes of your sequence before the scanner
+plays it.
 """
 
 # sphinx_gallery_start_ignore
 import logging
 
-import matplotlib
+import matplotlib.pyplot as plt
 
-matplotlib.use("Agg")
 # validate logs a refused request with its traceback; the page prints the reply.
 logging.disable(logging.WARNING)
 # sphinx_gallery_end_ignore
 # %%
-# Entries
-# -------
+# Your sequence
+# -------------
 #
-# Each entry of :attr:`~pulserver.design.SequencePlugin.protocol` maps a
-# protocol key, which names a parameter of the scanner UI, to a keyword
-# argument of the sequence function. A :class:`~pulserver.design.TimeParam`
-# is exchanged in integer microseconds and given to the function in seconds;
-# its *Minimum* preset passes ``None``, for which ``gre2d`` designs its
-# shortest time. A :class:`~pulserver.design.FloatParam` carries a unit and a
-# scale, here mm on the UI and m for the function. Entries a protocol leaves
-# out keep the function's defaults.
+# A sequence is a Python function. It takes the scanner's limits and keyword
+# arguments, and returns a Pulseq sequence. ``gre2d``, the one you scanned in
+# lesson 1, is such a function from pypulseqpp; any function you write in the
+# same shape works the same way.
 #
-# :meth:`~pulserver.design.SequencePlugin.evaluate` answers every edit, so it
-# designs one repetition, a single phase-encoding line without dummy scans,
-# rather than the scan. The echo time and the repetition time are the ``TE``
-# and ``TR`` definitions the design records; the scan time is the repetition
-# time times the lines and dummy scans the scan plays. The RF layout is the RF
-# of that one TR, its excitation's amplitude proportional to the flip angle.
-import inspect
-
+# The limits are a :class:`pypulseqpp.Opts`, the ``system`` object of Pulseq
+# and PyPulseq: field strength, gradient amplitude and slew rate, raster
+# times. On a scanner pulserver builds it from what the scanner sends; here you
+# build it yourself.
+#
+# Here is one TR of ``gre2d``, designed with the shortest TE and TR its readout
+# allows (``te=None``, ``tr=None``):
 import pypulseqpp as pp
 from pypulseqpp.sequences.sequence.gre2D_sequence import gre2d
 
-from pulserver.design import (
-    Evaluation,
-    FloatParam,
-    IntParam,
-    RfLayout,
-    SequencePlugin,
-    TimeParam,
+system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
+
+seq = gre2d(system, n_y=8, n_dummy=0, te=None, tr=None)
+seq.paper_plot()
+
+# sphinx_gallery_start_ignore
+from figure_style import MUTED, PAGE_WIDTH, SERIES
+
+ax = plt.gca()
+ax.figure.set_size_inches(PAGE_WIDTH, 0.45 * PAGE_WIDTH)
+excitation = seq.get_block(1).rf
+start = excitation.delay + excitation.center
+te = seq.definitions["TE"][0]
+ax.annotate(
+    "",
+    (start + te, 9.9),
+    (start, 9.9),
+    arrowprops={"arrowstyle": "<->", "color": SERIES[0]},
 )
-from pulserver.protocol import TEPreset, TRPreset, UIParam, format_listing
+ax.text(start + te / 2, 10.05, "TE", ha="center", va="bottom", color=SERIES[0])
+for t in (start, start + te):
+    ax.axvline(t, color=SERIES[0], lw=0.6, ls=":")
+plt.show()
+# sphinx_gallery_end_ignore
+
+# %%
+# Each TR excites the slice, encodes one phase-encoding line, and reads out
+# one echo. The scan repeats it once per line (128 by default), after a few
+# dummy TRs that bring the magnetization to its steady state.
+#
+# The smallest plugin
+# -------------------
+#
+# A plugin is a class with two attributes. ``app`` is your sequence function.
+# ``protocol`` says which of its arguments the operator can edit: each entry
+# maps a parameter of the scanner UI to an argument of your function.
+#
+# Start with one entry, the flip angle:
+from pulserver.design import FloatParam, IntParam, SequencePlugin, TimeParam
+from pulserver.protocol import UIParam, format_listing
 
 
-class Gre2D(SequencePlugin):
+class Gre(SequencePlugin):
     app = gre2d
     protocol = {
         UIParam.FLIP: FloatParam(
-            "flip_angle_deg", unit="deg", range_min=1.0, range_max=90.0
+            "flip_angle_deg", unit="deg", range_min=1, range_max=90
+        ),
+    }
+
+
+def ui(plugin):
+    """Print the parameters the operator sees, as the scanner receives them."""
+    listing = format_listing(plugin.listing())
+    print("\n".join(line for line in listing.splitlines() if "|off|" not in line))
+
+
+ui(Gre())
+
+# %%
+# This is what the scanner receives when the operator opens your sequence: one
+# line per parameter with its type, current value, range, step and unit. The
+# current value, 12 degrees, is the default of ``gre2d``'s
+# ``flip_angle_deg``. ``nex``, the number of averages, is added by pulserver,
+# which plays the sequence that many times. Every other argument of ``gre2d``
+# keeps its default and is out of the operator's reach.
+#
+# Units and ranges
+# ----------------
+#
+# The scanner works in its own units, your function in SI. Each entry
+# converts between the two. A :class:`~pulserver.design.TimeParam` is integer
+# microseconds on the scanner and seconds in your function. A
+# :class:`~pulserver.design.FloatParam` takes a ``unit`` and a ``scale``, for
+# example millimetres on the scanner and metres in your function
+# (``scale=1e-3``). The range is what the operator is allowed to type.
+#
+# Add the echo time, the repetition time and the number of phase-encoding
+# lines:
+
+
+class Gre(SequencePlugin):
+    app = gre2d
+    protocol = {
+        UIParam.FLIP: FloatParam(
+            "flip_angle_deg", unit="deg", range_min=1, range_max=90
+        ),
+        UIParam.TE: TimeParam("te", range_min=1000, range_max=80000),
+        UIParam.TR: TimeParam("tr", range_min=1000, range_max=5_000_000),
+        UIParam.NY: IntParam("n_y", range_min=32, range_max=512, range_incr=2),
+    }
+
+
+plugin = Gre()
+ui(plugin)
+
+# %%
+# What the operator gets back
+# ---------------------------
+#
+# Every time the operator changes a value, the scanner sends the protocol to
+# pulserver, and pulserver calls your plugin's ``validate``. Here the operator
+# types a TE of 2 ms (2000 µs):
+validation = plugin.validate(system, {UIParam.TE: 2000})
+print(f"valid: {validation.valid}, scan time: {validation.duration}")
+
+# %%
+# The protocol is accepted, with no scan time. Your plugin has not told
+# pulserver anything about the sequence yet, so pulserver accepts every value
+# inside the ranges. The problem shows up only when the operator presses
+# *Scan*, and pulserver designs the whole sequence:
+import tempfile
+from pathlib import Path
+
+try:
+    plugin.design(system, validation.values, Path(tempfile.mkdtemp()))
+except ValueError as error:
+    print(error)
+
+# %%
+# ``gre2d`` cannot reach a 2 ms echo time with this readout. The operator
+# finds out after having set up the whole exam. The next step makes them find
+# out while typing.
+#
+# Your evaluate
+# -------------
+#
+# ``evaluate`` is the method pulserver calls on every edit. It receives the
+# scanner limits and the protocol the operator typed, and returns an
+# :class:`~pulserver.design.Evaluation`: the protocol as your sequence will
+# play it, and the scan time. If the protocol is impossible, raise an
+# exception; its message is what the operator reads.
+#
+# It runs on every keystroke, so it has to be fast: a few tens of
+# milliseconds. Designing the whole scan is too slow, but ``gre2d`` designs one
+# TR quickly, so this ``evaluate`` designs a single phase-encoding line
+# (``ry=n_y`` keeps one line in every ``n_y``) and reads the TE and TR it
+# achieved. The scan time is one TR per line, plus the dummy TRs ``gre2d``
+# plays before them.
+#
+# A *preset* adds a choice to the parameter's menu. ``TEPreset.MINIMUM`` lets
+# the operator ask for the shortest TE; your function receives ``None`` for
+# it, which ``gre2d`` reads as "as short as possible". On the wire a preset is
+# a negative code (``TEPreset.MINIMUM.value``, -2), which the scanner shows as
+# *Minimum* in the TE menu.
+from pypulseqpp.sequences import steady_state_dummies
+
+from pulserver.design import Evaluation
+from pulserver.protocol import TEPreset
+
+
+class Gre(SequencePlugin):
+    app = gre2d
+    protocol = {
+        UIParam.FLIP: FloatParam(
+            "flip_angle_deg", unit="deg", range_min=1, range_max=90
         ),
         UIParam.TE: TimeParam(
             "te", range_min=1000, range_max=80000, presets={TEPreset.MINIMUM: None}
         ),
-        UIParam.TR: TimeParam(
-            "tr", range_min=1000, range_max=5_000_000, presets={TRPreset.MINIMUM: None}
-        ),
-        UIParam.FOV: FloatParam(
-            "fov_x", unit="mm", scale=1e-3, range_min=50.0, range_max=500.0
-        ),
-        UIParam.NX: IntParam("n_x", range_min=32, range_max=512, range_incr=2),
+        UIParam.TR: TimeParam("tr", range_min=1000, range_max=5_000_000),
         UIParam.NY: IntParam("n_y", range_min=32, range_max=512, range_incr=2),
     }
 
     def evaluate(self, system, protocol):
-        bound = inspect.signature(self.app).bind_partial(system, **protocol.arguments)
-        bound.apply_defaults()
-        a = bound.arguments
-        one = self.app(
-            system,
-            **(protocol.arguments | {"n_dummy": 0, "ry": a["n_y"], "n_acs_y": 0}),
-        )
-        tr = one.definitions["TR"][0]
-        achieved = {UIParam.TE: one.definitions["TE"][0], UIParam.TR: tr}
+        # what your function receives: SI units, presets resolved
+        a = protocol.arguments
+        one_line = self.app(system, **a, ry=a["n_y"], n_acs_y=0, n_dummy=0)
+        te = one_line.definitions["TE"][0]
+        tr = one_line.definitions["TR"][0]
+        dummies = steady_state_dummies(tr, a["flip_angle_deg"])
         return Evaluation(
-            protocol.replace(achieved),
-            duration=tr * (a["n_dummy"] + a["n_y"]),
-            rf_layout=RfLayout.of(one, UIParam.FLIP, period=tr),
+            protocol.replace({UIParam.TE: te, UIParam.TR: tr}),
+            duration=(dummies + a["n_y"]) * tr,
         )
 
 
-plugin = Gre2D()
-print(format_listing(plugin.listing()), end="")
+plugin = Gre()
 
 # %%
-# Validation
-# ----------
+# The same three edits, now answered by your ``evaluate``:
+for typed, value in (
+    ("8 ms", 8000),
+    ("2 ms", 2000),
+    ("Minimum", TEPreset.MINIMUM.value),
+):
+    validation = plugin.validate(system, {UIParam.TE: value})
+    if validation.valid:
+        te = validation.values[UIParam.TE] / 1e3
+        print(f"{typed}: valid, TE {te} ms, scan time {validation.duration:.1f} s")
+    else:
+        print(f"{typed}: refused, {validation.info}")
+
+# %%
+# The 2 ms echo time is refused while the operator types it, with the reason
+# ``gre2d`` gave. *Minimum* comes back as the 3.4 ms the readout allows, and
+# that is the value the operator sees.
 #
-# A request is a mapping of protocol keys to wire values; the entries it
-# leaves out take their initial values. Here the echo and repetition times
-# request the *Minimum* preset, sent as its negative value, and the reply
-# holds the times the design achieved.
-system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
-
-shortest = plugin.validate(
-    system,
-    {
-        UIParam.TE: TEPreset.MINIMUM.value,
-        UIParam.TR: TRPreset.MINIMUM.value,
-        UIParam.NY: 64,
-    },
-)
-print(f"valid: {shortest.valid}, scan time {shortest.duration:.2f} s")
-print(f"TE {shortest.values[UIParam.TE]} us, TR {shortest.values[UIParam.TR]} us")
-
-# %%
-# The RF layout states the definitions and the instances of one TR, from which
-# a scanner estimates the RF of a prescription without designing it.
-layout = shortest.rf_layout
-print(
-    f"{len(layout.instances.definitions)} RF definition, {len(layout.control)} instance per TR of {layout.period * 1e3:.2f} ms, controlled by {layout.control}"
-)
-
-# %%
-# A prescription the sequence function cannot realize is invalid. The reply
-# carries the request unchanged and, as its note, the error the design raised.
-refused = plugin.validate(system, {UIParam.TE: 1000})
-print(f"valid: {refused.valid}")
-print(refused.info)
-
-# %%
-# Design
-# ------
+# How much work ``evaluate`` does is your choice. Designing one TR is the
+# simplest way to be right. A sequence whose timing is easy to compute can
+# return the TE and TR from block durations without designing anything, and
+# one that cannot design a short piece of itself can accept the typed values
+# and only report the scan time.
 #
-# :meth:`~pulserver.design.SequencePlugin.design` evaluates a request and
-# writes the sequence of the requested protocol as signed binary Pulseq,
-# designing the whole scan with :meth:`~pulserver.design.SequencePlugin.generate`.
-# The design calls of the previous lesson do the same, then check and convert
-# the design and store it.
-import tempfile
-from pathlib import Path
+# Your turn: expose the receiver bandwidth
+# ----------------------------------------
+#
+# The shortest echo time depends on how long the readout lasts, and that is
+# set by the receiver bandwidth. ``gre2d`` takes it as
+# ``readout_bandwidth_hz``, but the operator cannot change it yet. Exposing it
+# is one more entry; ``evaluate`` stays as it is, because it already designs
+# whatever the operator typed.
 
-directory = Path(tempfile.mkdtemp())
-validation, paths = plugin.design(system, shortest.values, directory)
-print([Path(path).name for path in paths])
-written = pp.Sequence()
-written.read(paths[0])
-print(f"{written.num_blocks} blocks")
+
+class GreBandwidth(Gre):
+    protocol = Gre.protocol | {
+        UIParam.BANDWIDTH: FloatParam(
+            "readout_bandwidth_hz", unit="Hz", range_min=1e3, range_max=1e6
+        ),
+    }
+
+
+plugin = GreBandwidth()
+ui(plugin)
+
+# %%
+# Now ask for the *Minimum* TE at a range of bandwidths, as an operator
+# trading signal-to-noise for echo time would:
+import numpy as np
+
+bandwidths = np.arange(20e3, 251e3, 2.5e3)
+minimum_te = [
+    plugin.validate(
+        system, {UIParam.BANDWIDTH: bw, UIParam.TE: TEPreset.MINIMUM.value}
+    ).values[UIParam.TE]
+    / 1e3
+    for bw in bandwidths
+]
+
+# sphinx_gallery_start_ignore
+fig, ax = plt.subplots(figsize=(0.75 * PAGE_WIDTH, 0.42 * PAGE_WIDTH))
+ax.fill_between(
+    bandwidths / 1e3,
+    0,
+    minimum_te,
+    step="post",
+    color=MUTED,
+    alpha=0.18,
+    lw=0,
+    label="refused",
+)
+ax.step(
+    bandwidths / 1e3,
+    minimum_te,
+    where="post",
+    color=SERIES[0],
+    lw=1.8,
+    label="Minimum TE",
+)
+ax.set_xlabel("receiver bandwidth typed (kHz)")
+ax.set_ylabel("TE (ms)")
+ax.set_xlim(bandwidths[0] / 1e3, bandwidths[-1] / 1e3)
+ax.set_ylim(0, 10)
+ax.text(140, 1.6, "TE refused", color=MUTED, ha="center")
+ax.text(140, 6.5, "TE accepted", color=MUTED, ha="center")
+ax.legend(frameon=False, loc="upper right")
+plt.show()
+# sphinx_gallery_end_ignore
+
+# %%
+# Below the curve the operator's TE is refused, above it accepted, and the
+# *Minimum* preset sits on it. Lowering the bandwidth lengthens the readout and
+# pushes the minimum TE up.
+#
+# The curve is a staircase because ``gre2d`` does not play every bandwidth it
+# is asked for. Here its readout uses dwell times that are whole multiples of
+# 10 µs, so it plays 100, 50, 33, 25 or 20 kHz, and a typed bandwidth is
+# replaced by one of them; nothing faster than 100 kHz is played. The
+# shipped ``gre2d`` plugin reports the bandwidth it plays back to the
+# operator, as you saw in lesson 1. Your ``evaluate`` could do the same by
+# reading the dwell time of the ADC event in ``one_line``.
+#
+# In a file
+# ---------
+#
+# On a scanner, a plugin is a ``.py`` file in a folder pulserver is pointed
+# at, and its file name is the name the operator picks. The class is all the
+# file needs:
+#
+# .. code-block:: python
+#
+#    # sequences/my_gre.py
+#    from pypulseqpp.sequences.sequence.gre2D_sequence import gre2d
+#
+#    from pulserver.design import Evaluation, FloatParam, SequencePlugin, TimeParam
+#    from pulserver.protocol import TEPreset, UIParam
+#
+#
+#    class Gre(SequencePlugin):
+#        app = gre2d
+#        protocol = {...}
+#
+#        def evaluate(self, system, protocol):
+#            ...
+#
+# Lesson 6 loads your file into the virtual scanner and scans with it.
+#
+# As a spec
+# ---------
+#
+# What this lesson built, stated the way you would ask an agent for it:
+#
+# .. code-block:: text
+#
+#    Write a pulserver SequencePlugin for pypulseqpp's gre2d. Let the operator
+#    edit the flip angle (1-90 deg), TE (1-80 ms, with a Minimum preset), TR
+#    (1 ms-5 s), the phase-encoding lines (32-512, even) and the receiver
+#    bandwidth (1 kHz-1 MHz). In evaluate, design a single phase-encoding
+#    line, report the TE and TR it achieves, and estimate the scan time as one
+#    TR per line plus the steady-state dummies. Refuse a TE the readout cannot
+#    reach, with gre2d's own message.

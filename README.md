@@ -67,12 +67,16 @@ from pulserver.design import Evaluation, FloatParam, SequencePlugin, TimeParam, 
 class Gre(SequencePlugin):
     app = gre2d
     protocol = {
-        UIParam.TE: TimeParam("te", range_min=2000, range_max=20000),  # µs on the UI, s for gre2d
-        UIParam.FLIP: FloatParam("flip_angle_deg", unit="deg", range_min=1, range_max=90),
+        # µs on the scanner, s for gre2d
+        UIParam.TE: TimeParam("te", range_min=2000, range_max=20000),
+        UIParam.FLIP: FloatParam(
+            "flip_angle_deg", unit="deg", range_min=1, range_max=90
+        ),
     }
 
     def evaluate(self, system, protocol):
-        one_line = self.app(system, **protocol.arguments, ry=128, n_acs_y=0, n_dummy=0)  # one line of 128
+        a = protocol.arguments  # SI units, as gre2d takes them
+        one_line = self.app(system, **a, ry=128, n_acs_y=0, n_dummy=0)  # one line
         return Evaluation(protocol.replace({UIParam.TE: one_line.definitions["TE"][0]}))
 ```
 

@@ -49,7 +49,6 @@ import tempfile
 from pathlib import Path
 
 import numpy as np
-from figure_style import MUTED, PAGE_WIDTH, SERIES
 
 from pulserver import virtual
 
@@ -146,6 +145,8 @@ images = [
 print(f"status {status}, {len(images)} image of {images[0].pixel_array.shape}")
 
 # sphinx_gallery_start_ignore
+from figure_style import MUTED, PAGE_WIDTH, SERIES
+
 fig, axes = plt.subplots(1, 2, figsize=(0.8 * PAGE_WIDTH, 0.42 * PAGE_WIDTH))
 for ax, image, title in zip(
     axes,
@@ -232,7 +233,9 @@ plt.show()
 #
 # What this lesson did, stated the way you would ask an agent for it:
 #
-#    *On pulserver's virtual console at 3 T (40 mT/m, 150 T/m/s), list the
-#    shipped* ``gre2d`` *protocol, set a 64 x 64 matrix, generate the design,
-#    and scan it on the vials phantom in the body coil with the* ``pics``
-#    *reconstruction. Show the localizer next to the image.*
+# .. code-block:: text
+#
+#    On pulserver's virtual console at 3 T (40 mT/m, 150 T/m/s), list the
+#    shipped gre2d protocol, set a 64 x 64 matrix, generate the design, and
+#    scan it on the vials phantom in the body coil with the pics
+#    reconstruction. Show the localizer next to the image.
