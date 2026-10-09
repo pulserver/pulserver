@@ -66,3 +66,21 @@ div.highlight-text .copybtn {
   text-align: left;
   color: var(--pst-color-text-muted);
 }
+
+/* The capability list reads as a checklist until its evidence is asked for. */
+.bd-article .capabilities.collapsed li > p + p {
+  display: none;
+}
+.bd-article .capabilities.collapsed li {
+  margin-bottom: 0.2em;
+}
+.capabilities-toggle {
+  font-size: 0.85em;
+  padding: 0.2em 0.7em;
+  margin-bottom: 0.6em;
+  border: 1px solid var(--pst-color-border);
+  border-radius: 4px;
+  background: var(--pst-color-surface);
+  color: var(--pst-color-text-base);
+  cursor: pointer;
+}

@@ -180,7 +180,7 @@ The playout demodulates $S_c$ by $\exp(i\theta(t))$, where the receiver phase
 $\theta$ is the ADC phase offset at the ADC's start, advancing at its
 frequency offset. The cache carries no ADC phase modulation: the
 reconstruction proxy applies it to the received samples
-({doc}`reconstruction`).
+({doc}`raw-data`).
 
 These are the conventions under which the field-of-view translation applied
 when the IR is built ({doc}`scanner-representation`) recentres an object. Where every block

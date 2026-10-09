@@ -361,4 +361,5 @@ html_title = "pulserver documentation"
 # these copies by the handlers above.
 html_static_path = ["_static"]
 html_css_files = ["pulserver.css"]
+html_js_files = ["capabilities.js"]
 html_favicon = "_static/pulserver-mark.svg"

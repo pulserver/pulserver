@@ -7,7 +7,7 @@ per connection as MRD messages, and reads what the reconstruction returns on
 the same connection.
 
 The proxy replaces the encoding counters, flags, encoding spaces and trajectory
-of the series with those the sequence states ({doc}`../explanations/reconstruction`).
+of the series with those the sequence states ({doc}`../explanations/raw-data`).
 The client therefore sends what the scanner measured, the identity of the
 design the series was played from and the reconstruction plugin to run, and
 leaves the Pulseq structure of the scan to the proxy.
@@ -79,6 +79,7 @@ when the stream carries more or fewer acquisitions than the chain plays.
 ## See also
 
 * {doc}`running` — starting the proxy.
-* {doc}`../explanations/reconstruction` — enrichment and routing.
+* {doc}`../explanations/raw-data` — enrichment.
+* {doc}`../explanations/reconstruction` — reconstruction units and routing.
 * {doc}`../explanations/architecture` — the design store and the identifier of a design.
 * {class}`~pulserver.proxy.ReconProxy` — the proxy.
