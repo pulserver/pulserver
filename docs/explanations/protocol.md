@@ -3,24 +3,78 @@
 ```{admonition} TL;DR
 :class: tldr
 
-- The value the scanner shows after an edit is the value the design achieves,
-  not the value requested: a request is completed with initial values,
-  evaluated under the scanner limits and returned as resolved.
-- An evaluation may state an RF layout of one TR, from which a scanner
-  estimates the RF of a prescription without designing it.
-- Times travel as integer microseconds and other floats at six significant
-  digits, so a resolved protocol sent back resolves to itself.
+- After every edit, the scanner shows the value the design achieves, not the
+  value the operator typed. pulserver completes the request, has your plugin
+  evaluate it, and replies with the resolved protocol and the scan time.
+- What `evaluate` reports is up to your plugin. The shipped plugins design one
+  repetition and extrapolate the scan time, so a reply stays within a few tens
+  of milliseconds.
+- Times travel as integer microseconds and other values at six significant
+  digits, so a resolved protocol sent back resolves to itself, and to the same
+  design.
 ```
 
 An operator prescribes an acquisition by editing protocol entries in the
-scanner UI: echo time, repetition time, field of view, matrix size, receiver
-bandwidth. A requested value is not always achievable exactly. An echo time
-shorter than the readout permits is infeasible, a receiver bandwidth is
-realized on the ADC raster, and a request for the shortest echo time has no
-numeric value until the sequence is designed. The value the scanner shows after
-an edit is therefore the value the design achieves, not the value requested.
+scanner UI: echo time, repetition time, field of view, matrix, receiver
+bandwidth. A requested value is not always achievable. An echo time shorter
+than the readout permits is infeasible, a bandwidth is realized on the ADC
+raster, and *Minimum* has no number until the sequence is designed. So every
+edit is answered by your plugin, and the scanner shows what the sequence will
+actually play.
 
-## Resolution
+Lesson 2 of the {doc}`Course <../examples/course>` writes such a plugin, one
+entry at a time. This page states what pulserver guarantees around it.
+
+## What pulserver does
+
+:::{container} capabilities
+
+- **Lists the protocol a plugin declares, in the grammar the interpreter parses.** Times are listed in integer microseconds, presets as negative codes.
+
+  Code: `pulserver design list`, {mod}`pulserver.protocol`. Tests: *every listed line matches the interpreter grammar* (`test_wire.py`); *a time is listed in integer microseconds* (`test_resolution.py`).
+- **Completes a request with the initial values of the entries it omits.** An entry's own default takes the place of the sequence function's.
+
+  Code: {meth}`~pulserver.design.SequencePlugin.validate`. Test: *an entry's default is the protocol's initial value in place of the app's* (`test_resolution.py`).
+- **Resolves a request through your `evaluate` and replies with the values the design achieves.** *Minimum* resolves to the designed time.
+
+  Code: {meth}`~pulserver.design.SequencePlugin.evaluate`, {class}`~pulserver.design.Evaluation`. Tests: *a minimum request resolves to the designed value* (`test_resolution.py`); *a valid reply carries the protocol duration and note of the evaluation* (`test_sequence_plugin.py`).
+- **Refuses an infeasible request with the message of the error your sequence raised.** PyPulseq's feasibility assertions count as such errors, and a request naming an undeclared entry is refused by name.
+
+  Code: {meth}`~pulserver.design.SequencePlugin.validate`. Tests: *an infeasible protocol is invalid with the design error as info*; *a request for an undeclared entry is invalid and names it* (`test_resolution.py`); *a pypulseq feasibility assertion is an expected rejection* (`test_sequence_plugin.py`).
+- **Resolves a resolved protocol to itself.** The values survive storage in the scanner's float32 parameters.
+
+  Code: {class}`~pulserver.design.Protocol`. Tests: *resolving a resolved protocol changes nothing*; *a resolved protocol survives cv storage* (`test_resolution.py`); *a float is carried to six significant digits and a time to a microsecond* (`test_protocol.py`).
+- **Converts between wire units and the sequence function's SI arguments in one place.**
+
+  Code: {meth}`~pulserver.design.Protocol.from_wire`, {meth}`~pulserver.design.Protocol.to_wire`. Tests: *a protocol holds the values in the units of the application arguments*; *a protocol converts back to the wire values it was made from* (`test_protocol.py`).
+- **Carries the prescription (field-of-view offset and rotation) through resolution unchanged, and binds it to no argument.** A rotation that is not orthonormal is invalid.
+
+  Code: {mod}`pulserver.protocol`. Tests: *the prescription travels through resolution unchanged*; *a sequence plugin may not bind a prescription entry*; *a request whose rotation is not orthonormal is invalid* (`test_resolution.py`).
+- **Adds the number of averages to every plugin, and plays the main sequence that many times.** The prescans are played once.
+
+  Code: {class}`~pulserver.design.SequencePlugin`. Tests: *every plugin offers its averages unless it declares them*; *the averages repeat the main sequence and not its prescans*; *the scan time counts every average* (`test_sequence_plugin.py`).
+- **Replies, when asked, with the RF layout of one TR, from which the scanner estimates the RF of a prescription without designing it.**
+
+  Code: {class}`~pulserver.design.RfLayout`. Tests: *a gre layout is one excitation and lists one definition whatever the matrix*; *a validated amplitude times the listed peak is the peak the instance plays*; *the rf layout is sent only when asked* (`test_rf_layout.py`).
+- **Ships evaluations that design at most two TRs, however large the prescription.**
+
+  Code: the shipped plugins, `src/pulserver/_zoo/sequences/`. Tests: *a zoo evaluation designs two trs at most however large the prescription*; *an evaluation states the values and the scan time of the design* (`test_zoo_evaluation.py`).
+
+:::
+
+## What the scanner and your plugin do
+
+- **Your plugin decides what `evaluate` reports.** It can design one TR,
+  compute times from block durations, or accept a requested value it knows
+  to be feasible. pulserver passes the result on as it is. The default
+  evaluation accepts the protocol unchanged and builds nothing.
+- **The interpreter draws the UI**, converts the microseconds it stores to the
+  milliseconds the operator types, and fills the prescription entries from the
+  scanner's own prescription.
+
+## How it works
+
+### Resolution
 
 A scanner sequence ({class}`~pulserver.design.SequencePlugin`) maps each
 interpreter parameter name to a keyword argument of its sequence function, a function that
@@ -65,22 +119,10 @@ the physical axes in the nine `fov_rotation_ij`, identity by default.
 Resolution returns them unchanged, and a rotation that is not orthonormal is
 invalid. The host applies the offset to the designed sequence when it builds
 the IR, and checks the design in the physical frame of the rotation
-({doc}`architecture`). A scanner sequence cannot bind them to an argument.
-
-A request the evaluation rejects is invalid, and the reply carries the request
-unchanged. A `ValueError` or an `AssertionError`, which pypulseqpp and PyPulseq
-raise for an event or a timing they cannot realize, is reported by its
-message, which the interpreter shows to the operator. Any other exception also
-makes the request invalid, and the message names only its type. A request that
-names an entry the protocol does not declare is invalid, and the message names
-the entry.
-
-A valid reply carries the resolved values, a note, and the scan time in
-seconds the evaluation states. An evaluation that states no scan time, `0.0`, is
-valid, and the reply reports the scan time as unknown.
+({doc}`safety-checks`). A scanner sequence cannot bind them to an argument.
 
 (rf-layout)=
-## RF layout
+### RF layout
 
 The RF a protocol plays depends on the protocol. An evaluation may state it as
 an {class}`~pulserver.design.RfLayout`, from which a scanner estimates the RF of
@@ -125,7 +167,7 @@ The layout is an estimate for the prescription. An evaluation that states none
 states no estimate and is valid, and what the scanner checks before the scan is
 the stored design ({doc}`architecture`).
 
-## Keys and values
+### Keys and values
 
 The keys of a protocol are members of the key enums of
 {mod}`pulserver.protocol`, of which {data}`~pulserver.protocol.ProtocolKey` is
@@ -149,7 +191,7 @@ to {meth}`~pulserver.design.SequencePlugin.validate` as a mapping.
 {func}`~pulserver.design.StringListParam`, which builds the enum from option
 strings, is deprecated: declare the enum and use `ChoiceParam`.
 
-## Presets
+### Presets
 
 A preset is a negative value of a time entry that the UI shows as a word, such
 as *Minimum* for the echo time ({class}`~pulserver.protocol.TEPreset`,
@@ -161,7 +203,7 @@ evaluation records the time the design achieved, the reply carries it in place
 of the preset. A time showing a preset holds what the preset requests in a
 protocol, and {meth}`~pulserver.design.Protocol.preset` returns the preset.
 
-## Units and precision
+### Units and precision
 
 The interpreter stores protocol values in scanner parameters. Time parameters
 hold integer microseconds, so time entries are exchanged in integer
@@ -178,8 +220,9 @@ protocol. This property is what allows a design to be identified by its
 resolved protocol ({doc}`architecture`): an operator who reopens a protocol and
 generates it again obtains the same design.
 
-## See also
+## See it run
 
+* {doc}`../generated/gallery/01-course/02_sequence_plugin` — a plugin written one entry at a time, and its `evaluate`.
 * {doc}`../user-guide/scanner-sequences` — writing a scanner sequence.
 * {doc}`../api/design` — the scanner-sequence interface and its UI entries.
 * {doc}`../api/protocol` — protocol entries and wire blocks.
