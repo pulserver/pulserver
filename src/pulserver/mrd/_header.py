@@ -134,8 +134,9 @@ class EncodingSpace:
         a non-Cartesian space ``phase_encodes`` is the ``kspace_encoding_step_1``
         limit, which counts views, or the encoded matrix when no limit is stated;
         its ``partitions`` is the larger of the encoded matrix and the
-        ``kspace_encoding_step_2`` limit, a stack being Cartesian along z, and no
-        counter is shifted. ``recon_matrix`` and ``recon_fov`` fall back to the
+        ``kspace_encoding_step_2`` limit, a stack being Cartesian along z, or one
+        where that limit states a single partition, as for a trajectory that
+        encodes kz itself, and no counter is shifted. ``recon_matrix`` and ``recon_fov`` fall back to the
         encoded space when the header has no ``reconSpace``.
 
         Parameters
@@ -182,7 +183,8 @@ class EncodingSpace:
             phase_encodes, partitions = int(encoded.y), int(encoded.z)
         else:
             phase_encodes = _limit(limits, "kspace_encoding_step_1") or int(encoded.y)
-            partitions = max(_limit(limits, "kspace_encoding_step_2"), int(encoded.z))
+            stated = _limit(limits, "kspace_encoding_step_2")
+            partitions = 1 if stated == 1 else max(stated, int(encoded.z))
 
         return cls(
             index=index,
