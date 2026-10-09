@@ -3,6 +3,7 @@
 import itertools
 import shutil
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import pypulseqpp as pp
@@ -143,6 +144,31 @@ def test_each_slice_is_a_station_of_its_own_readouts(converted):
 
     assert len(stations) == 3
     assert (np.bincount(station_of[station_of >= 0]) > 0).sum() == 3
+
+
+@pytest.mark.parametrize("carrier", [0.0, -440.0])
+def test_pulses_off_centre_under_more_gradients_than_select_share_a_selector(carrier):
+    # A ZTE-like shell: a pulse per spoke, its frequency following its
+    # gradient to a centre off the isocentre, over a common carrier.
+    rng = np.random.default_rng(0)
+    directions = rng.normal(size=(200, 3))
+    gradient = 1e5 * directions / np.linalg.norm(directions, axis=1, keepdims=True)
+    offset = gradient @ np.array([0.025, -0.01, 0.005]) + carrier
+    detuning = np.linspace(-5e4, 5e4, 17)
+    pulses = SimpleNamespace(
+        gradient=gradient,
+        band=np.column_stack([detuning[0] + offset, detuning[-1] + offset]),
+        profiles=((detuning, np.ones_like(detuning)),),
+        profile=np.zeros(len(offset), dtype=np.int64),
+        direction=np.zeros((len(offset), 3)),
+        trace=np.full(len(offset), -1),
+    )
+
+    _, selectors = _fourier._selectors(pulses)
+
+    assert selectors.size == 1
+    step = (detuning[1] - detuning[0]) / 16.0
+    np.testing.assert_allclose(_fourier._offsets(pulses), carrier, atol=step / 2)
 
 
 def test_a_pulse_played_without_a_gradient_selects_by_frequency(converted):
