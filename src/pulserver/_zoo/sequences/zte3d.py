@@ -1,5 +1,6 @@
 """pypulseqpp's 3D zero echo time bound to the scanner UI."""
 
+import functools
 import math
 
 import numpy as np
@@ -24,9 +25,12 @@ from pulserver.design import (
 )
 from pulserver.protocol import ImagingMode, TRPreset, UIParam
 
+#: Order of the spokes over the sphere, ``"spiral"`` or ``"meridian"``.
+SCHEME = "spiral"
+
 
 class Zte3D(SequencePlugin):
-    app = zte3d
+    app = functools.partial(zte3d, scheme=SCHEME)
     protocol = {
         UIParam.IMAGING_MODE: StatedParam(ImagingMode.THREE_D),
         UIParam.FLIP: FloatParam(

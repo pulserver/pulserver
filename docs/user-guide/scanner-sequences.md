@@ -147,6 +147,7 @@ a plugin's own user entries start at `user12`:
 | `user6` | Readout oversampling |
 | `user7` | Echo spacing, in ms; 0 the shortest |
 | `user8` | Refocusing flip angle, in degrees |
+| `user9` | CAIPIRINHA shift, in partitions per acquired line |
 
 Saturation is set in a plugin's source, by a module constant, rather than at
 the console. `gre2d` and `se2d` play `BANDS`, two, spatial saturation bands
@@ -160,6 +161,20 @@ band where it was placed, and a band not yet placed waits 150 mm from the
 isocentre, outside the head. `BANDS = 0` plays none. `epi2d` saturates fat before
 every shot while `FAT_SATURATION` is `True`, and `epi3d` excites water alone
 with a spectral-spatial pulse while `EXCITATION` is `"spsp"`.
+
+Other choices of a sequence function that a console has no entry for are
+module constants too, set to the function's default unless stated:
+
+| Plugin | Constant | Choice |
+| --- | --- | --- |
+| 3D Cartesian, stack and MPRAGE plugins | `EXCITATION` | `"slab"`, `"spsp"` (water alone) or `"nonselective"`; `epi3d` ships `"spsp"` |
+| `gre3d`, `se3d`, `gre_multiecho3d` | `ELLIPTICAL` | Only the phase encodes inside the ky-kz ellipse |
+| `gre_multiecho2d`, `gre_multiecho3d` | `FLYBACK` | Monopolar echoes; `False` reads even echoes backwards |
+| `fse3d` | `ORDERING` | `"radial"`, or `"shuffling"`: Poisson-disc views in random order |
+| `zte3d` | `SCHEME` | Spokes ordered `"spiral"` or `"meridian"` |
+
+`bssfp3d` takes its number of phase cycles, each a train with its own RF phase
+increment, as user entry 12.
 
 Optional features are switched by a module constant of the plugin, off in
 the shipped files; a copy of the file in a `--plugins` directory with the
@@ -177,7 +192,7 @@ feature needs, a scanner entry where there is one and a user entry otherwise:
 
 A 3D sequence takes its number of partitions from the number of slices. `Ry`
 undersamples the phase encode of the Cartesian sequences, the blades of
-`gre_propeller2d` and `se_propeller2d` and the shells of `zte3d`, and `Rz` the
+`gre_propeller2d`, `se_propeller2d` and the stacks of blades and the shells of `zte3d`, and `Rz` the
 partition encode of the 3D Cartesian ones. The `ETL` of `se_epi_propeller2d` is
 its blade width, and the MPRAGE sequences take their inversion time as
 `prep_time`.

@@ -3,7 +3,11 @@
 import functools
 
 import pypulseqpp as pp
-from pypulseqpp.sequences.sequence.fse3D_sequence import fse3d, shot_parameters
+from pypulseqpp.sequences.sequence.fse3D_sequence import (
+    SHUFFLE_SEED,
+    fse3d,
+    shot_parameters,
+)
 
 from pulserver._zoo._evaluation import achieved, arguments, rf_layout, waved
 from pulserver._zoo._pmc import navigated
@@ -45,6 +49,14 @@ WAVE_CYCLES = 8
 if OPTIMIZED or DUAL_REGION:
     import blochsim  # noqa: F401  the trains are designed with it
 
+#: The excitation, one of ``pypulseqpp.sequences.EXCITATIONS``: ``"slab"``
+#: selects the slab, ``"spsp"`` excites water alone in it and
+#: ``"nonselective"`` plays a hard pulse.
+EXCITATION = "slab"
+
+#: Order of the views across shots, ``"radial"`` or ``"shuffling"``.
+ORDERING = "radial"
+
 
 class Fse3D(SequencePlugin):
     app = (
@@ -58,6 +70,7 @@ class Fse3D(SequencePlugin):
         app = functools.partial(
             app, wave_amplitude=WAVE_AMPLITUDE, wave_cycles=WAVE_CYCLES
         )
+    app = functools.partial(app, excitation=EXCITATION, ordering=ORDERING)
     protocol = {
         UIParam.IMAGING_MODE: StatedParam(ImagingMode.THREE_D),
         UIParam.TE: TimeParam(
@@ -142,6 +155,8 @@ class Fse3D(SequencePlugin):
             partial_fourier=(a["partial_fourier_y"], a["partial_fourier_z"]),
             elliptical=True,
             elliptical_acs=a["elliptical_acs"],
+            sampling="poisson" if a["ordering"] == "shuffling" else "lattice",
+            seed=SHUFFLE_SEED,
         )
         # Each train lasts its own TR, a cubic step from the centre's to the
         # periphery's; dummies and, under the wave, the wave-free trains of

@@ -24,6 +24,14 @@ WAVE_AMPLITUDE = 6e-3
 #: Wave periods across the sampling window.
 WAVE_CYCLES = 8
 
+#: The excitation, one of ``pypulseqpp.sequences.EXCITATIONS``: ``"slab"``
+#: selects the slab, ``"spsp"`` excites water alone in it and
+#: ``"nonselective"`` plays a hard pulse.
+EXCITATION = "slab"
+
+#: Sample only the phase encodes inside the ky-kz ellipse.
+ELLIPTICAL = True
+
 
 class Gre3D(SequencePlugin):
     app = slab(gre3d)
@@ -31,6 +39,7 @@ class Gre3D(SequencePlugin):
         app = functools.partial(
             app, wave_amplitude=WAVE_AMPLITUDE, wave_cycles=WAVE_CYCLES
         )
+    app = functools.partial(app, excitation=EXCITATION, elliptical_sampling=ELLIPTICAL)
     protocol = {
         UIParam.IMAGING_MODE: StatedParam(ImagingMode.THREE_D),
         UIParam.FLIP: FloatParam(

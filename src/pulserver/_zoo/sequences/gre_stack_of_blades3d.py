@@ -1,5 +1,7 @@
 """pypulseqpp's stack-of-blades gradient echo bound to the scanner UI, its partitions counted by the number of slices."""
 
+import functools
+
 from pypulseqpp.sequences.sequence.gre_stack_of_blades3D_sequence import (
     gre_stack_of_blades3d,
 )
@@ -16,9 +18,14 @@ from pulserver.design import (
 )
 from pulserver.protocol import ImagingMode, TEPreset, TRPreset, UIParam
 
+#: The excitation, one of ``pypulseqpp.sequences.EXCITATIONS``: ``"slab"``
+#: selects the slab, ``"spsp"`` excites water alone in it and
+#: ``"nonselective"`` plays a hard pulse.
+EXCITATION = "slab"
+
 
 class GreStackOfBlades3D(SequencePlugin):
-    app = slab(gre_stack_of_blades3d)
+    app = functools.partial(slab(gre_stack_of_blades3d), excitation=EXCITATION)
     protocol = {
         UIParam.IMAGING_MODE: StatedParam(ImagingMode.THREE_D),
         UIParam.FLIP: FloatParam(
@@ -47,6 +54,7 @@ class GreStackOfBlades3D(SequencePlugin):
             range_incr=0.1,
         ),
         UIParam.ETL: IntParam("blade_width", range_min=4, range_max=128, range_incr=2),
+        UIParam.RY: IntParam("ry", range_min=1, range_max=4),
         UIParam.RZ: IntParam("rz", range_min=1, range_max=4),
     }
 

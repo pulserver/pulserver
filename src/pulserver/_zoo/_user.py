@@ -78,6 +78,11 @@ SHARED: tuple[tuple[tuple[str, ...], str, Callable[[str], Entry]], ...] = (
             argument, unit="deg", range_min=60.0, range_max=180.0
         ),
     ),
+    (
+        ("caipi_shift",),
+        "CAIPI shift",
+        lambda argument: IntParam(argument, range_min=0, range_max=3),
+    ),
 )
 
 #: The first user CV a plugin's own controls take, after the shared ones.

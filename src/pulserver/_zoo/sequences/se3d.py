@@ -1,5 +1,7 @@
 """pypulseqpp's 3D spin echo bound to the scanner UI, its partitions counted by the number of slices."""
 
+import functools
+
 from pypulseqpp.sequences.sequence.se3D_sequence import se3d
 
 from pulserver._zoo._evaluation import cartesian_3d, evaluation
@@ -14,9 +16,19 @@ from pulserver.design import (
 )
 from pulserver.protocol import ImagingMode, TEPreset, TRPreset, UIParam
 
+#: The excitation, one of ``pypulseqpp.sequences.EXCITATIONS``: ``"slab"``
+#: selects the slab, ``"spsp"`` excites water alone in it and
+#: ``"nonselective"`` plays a hard pulse.
+EXCITATION = "slab"
+
+#: Sample only the phase encodes inside the ky-kz ellipse.
+ELLIPTICAL = True
+
 
 class Se3D(SequencePlugin):
-    app = slab(se3d)
+    app = functools.partial(
+        slab(se3d), excitation=EXCITATION, elliptical_sampling=ELLIPTICAL
+    )
     protocol = {
         UIParam.IMAGING_MODE: StatedParam(ImagingMode.THREE_D),
         UIParam.TE: TimeParam(

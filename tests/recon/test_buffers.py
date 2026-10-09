@@ -178,6 +178,28 @@ def test_a_non_cartesian_space_is_sized_by_its_views_not_its_matrix(n_views):
     assert radial.phase_encodes == n_views
 
 
+def test_a_non_cartesian_volume_stating_one_partition_lays_out_none():
+    """A trajectory that encodes kz itself writes no partition counter, so its
+    matrix z is not a stack."""
+    kooshball = EncodingSpace.from_header(
+        header(
+            space(
+                x=64,
+                y=64,
+                z=64,
+                trajectory="radial",
+                kspace_encoding_step_1=200,
+                kspace_encoding_step_2=1,
+            )
+        )
+    )
+    stack = EncodingSpace.from_header(
+        header(space(x=64, y=64, z=16, trajectory="radial", kspace_encoding_step_1=8))
+    )
+    assert kooshball.partitions == 1
+    assert stack.partitions == 16
+
+
 def test_a_cartesian_space_keeps_its_grid_however_few_lines_were_taken():
     """The counterpart: an undersampled grid is still the whole grid, and the
     limit counts only what the scan acquired."""

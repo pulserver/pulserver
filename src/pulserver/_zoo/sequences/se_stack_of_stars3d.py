@@ -1,5 +1,7 @@
 """pypulseqpp's stack-of-stars spin echo bound to the scanner UI, its partitions counted by the number of slices."""
 
+import functools
+
 from pypulseqpp.sequences.sequence.se_stack_of_stars3D_sequence import (
     se_stack_of_stars3d,
 )
@@ -16,9 +18,14 @@ from pulserver.design import (
 )
 from pulserver.protocol import ImagingMode, TEPreset, TRPreset, UIParam
 
+#: The excitation, one of ``pypulseqpp.sequences.EXCITATIONS``: ``"slab"``
+#: selects the slab, ``"spsp"`` excites water alone in it and
+#: ``"nonselective"`` plays a hard pulse.
+EXCITATION = "slab"
+
 
 class SeStackOfStars3D(SequencePlugin):
-    app = slab(se_stack_of_stars3d)
+    app = functools.partial(slab(se_stack_of_stars3d), excitation=EXCITATION)
     protocol = {
         UIParam.IMAGING_MODE: StatedParam(ImagingMode.THREE_D),
         UIParam.TE: TimeParam(
