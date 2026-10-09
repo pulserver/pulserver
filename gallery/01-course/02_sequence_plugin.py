@@ -83,10 +83,21 @@ plt.show()
 # -------------------
 #
 # A plugin is a class with two attributes. ``app`` is your sequence function.
-# ``protocol`` says which of its arguments the operator can edit: each entry
-# maps a parameter of the scanner UI to an argument of your function.
+# ``protocol`` says which of its arguments the operator can edit. It is a
+# dictionary, and each item pairs two things pulserver gives you:
 #
-# Start with one entry, the flip angle:
+# - the **key** is a button of the scanner UI, a member of
+#   :class:`~pulserver.protocol.UIParam` such as ``UIParam.FLIP`` or
+#   ``UIParam.TE``. The set of buttons is fixed: they are the parameters the
+#   scanner's interpreter knows how to show.
+# - the **value** says how that button drives your function: which argument
+#   it sets (``"flip_angle_deg"``), its unit and the range the operator may
+#   type. It is one of the ``*Param`` classes of :mod:`pulserver.design`,
+#   chosen by the kind of number: :class:`~pulserver.design.FloatParam`,
+#   :class:`~pulserver.design.IntParam`, :class:`~pulserver.design.TimeParam`
+#   and a few more.
+#
+# Start with one item, the flip angle:
 from pulserver.design import FloatParam, IntParam, SequencePlugin, TimeParam
 from pulserver.protocol import UIParam, format_listing
 
@@ -108,6 +119,56 @@ def ui(plugin):
 
 ui(Gre())
 
+# sphinx_gallery_start_ignore
+from matplotlib.patches import FancyBboxPatch
+
+boxes = [
+    ("key: the button", "UIParam.FLIP", "flip, on the scanner UI", SERIES[0]),
+    (
+        "value: how it maps",
+        'FloatParam(\n  "flip_angle_deg",\n  unit="deg", 1 to 90)',
+        "checked against the range",
+        SERIES[1],
+    ),
+    (
+        "your function",
+        "gre2d(system,\n  flip_angle_deg=...)",
+        "called by pulserver",
+        SERIES[2],
+    ),
+]
+fig, ax = plt.subplots(figsize=(PAGE_WIDTH, 2.0))
+ax.set_xlim(0, 100)
+ax.set_ylim(0, 20)
+ax.set_axis_off()
+for i, (title, code, note, colour) in enumerate(boxes):
+    x = 1 + 34 * i
+    ax.add_patch(
+        FancyBboxPatch(
+            (x, 3),
+            29,
+            14,
+            boxstyle="round,pad=0.3,rounding_size=1.2",
+            fc=colour + "1f",
+            ec=colour,
+            lw=1.2,
+        )
+    )
+    ax.text(x + 14.5, 15, title, ha="center", va="top", color=colour)
+    ax.text(
+        x + 14.5, 9.5, code, ha="center", va="center", family="monospace", fontsize=9.5
+    )
+    ax.text(x + 14.5, 4.2, note, ha="center", color=MUTED, fontsize=9, style="italic")
+    if i < 2:
+        ax.annotate(
+            "",
+            (x + 33.5, 10),
+            (x + 30.5, 10),
+            arrowprops={"arrowstyle": "-|>", "color": MUTED},
+        )
+plt.show()
+# sphinx_gallery_end_ignore
+
 # %%
 # This is what the scanner receives when the operator opens your sequence: one
 # line per parameter with its type, current value, range, step and unit. The
@@ -120,8 +181,11 @@ ui(Gre())
 # ----------------
 #
 # The scanner works in its own units, your function in SI. Each entry
-# converts between the two. A :class:`~pulserver.design.TimeParam` is integer
-# microseconds on the scanner and seconds in your function. A
+# converts between the two. A :class:`~pulserver.design.TimeParam` is in
+# seconds in your function and in integer microseconds between pulserver and
+# the scanner, the unit GE stores times in; the operator sees and types
+# milliseconds, and the scanner's interpreter converts. So ``range_min=1000``
+# below is 1 ms on the UI. A
 # :class:`~pulserver.design.FloatParam` takes a ``unit`` and a ``scale``, for
 # example millimetres on the scanner and metres in your function
 # (``scale=1e-3``). The range is what the operator is allowed to type.
@@ -151,7 +215,7 @@ ui(plugin)
 #
 # Every time the operator changes a value, the scanner sends the protocol to
 # pulserver, and pulserver calls your plugin's ``validate``. Here the operator
-# types a TE of 2 ms (2000 µs):
+# types a TE of 2 ms, which reaches pulserver as 2000 µs:
 validation = plugin.validate(system, {UIParam.TE: 2000})
 print(f"valid: {validation.valid}, scan time: {validation.duration}")
 
@@ -184,10 +248,16 @@ except ValueError as error:
 #
 # It runs on every keystroke, so it has to be fast: a few tens of
 # milliseconds. Designing the whole scan is too slow, but ``gre2d`` designs one
-# TR quickly, so this ``evaluate`` designs a single phase-encoding line
-# (``ry=n_y`` keeps one line in every ``n_y``) and reads the TE and TR it
-# achieved. The scan time is one TR per line, plus the dummy TRs ``gre2d``
-# plays before them.
+# TR quickly, so this ``evaluate`` designs a single phase-encoding line and
+# reads the TE and TR it achieved. The scan time is one TR per line, plus the
+# dummy TRs ``gre2d`` plays before them.
+#
+# ``protocol.arguments`` is what your function receives: one item per entry,
+# in SI units, with presets resolved. Arguments without an entry, such as
+# ``ry``, are not in it and keep ``gre2d``'s defaults. To design one line,
+# ``evaluate`` overrides three of them with the ``|`` of two dictionaries,
+# which also wins over an entry the operator edits: ``ry=n_y`` keeps one line
+# in every ``n_y``, and the calibration lines and dummy TRs are dropped.
 #
 # A *preset* adds a choice to the parameter's menu. ``TEPreset.MINIMUM`` lets
 # the operator ask for the shortest TE; your function receives ``None`` for
@@ -214,15 +284,16 @@ class Gre(SequencePlugin):
     }
 
     def evaluate(self, system, protocol):
-        # what your function receives: SI units, presets resolved
-        a = protocol.arguments
-        one_line = self.app(system, **a, ry=a["n_y"], n_acs_y=0, n_dummy=0)
-        te = one_line.definitions["TE"][0]
-        tr = one_line.definitions["TR"][0]
-        dummies = steady_state_dummies(tr, a["flip_angle_deg"])
+        arguments = protocol.arguments
+        n_y = arguments["n_y"]
+        one_line = arguments | {"ry": n_y, "n_acs_y": 0, "n_dummy": 0}
+        seq = self.app(system, **one_line)
+        te = seq.definitions["TE"][0]
+        tr = seq.definitions["TR"][0]
+        dummies = steady_state_dummies(tr, arguments["flip_angle_deg"])
         return Evaluation(
             protocol.replace({UIParam.TE: te, UIParam.TR: tr}),
-            duration=(dummies + a["n_y"]) * tr,
+            duration=(dummies + n_y) * tr,
         )
 
 
@@ -247,11 +318,12 @@ for typed, value in (
 # ``gre2d`` gave. *Minimum* comes back as the 3.4 ms the readout allows, and
 # that is the value the operator sees.
 #
-# How much work ``evaluate`` does is your choice. Designing one TR is the
-# simplest way to be right. A sequence whose timing is easy to compute can
-# return the TE and TR from block durations without designing anything, and
-# one that cannot design a short piece of itself can accept the typed values
-# and only report the scan time.
+# What ``evaluate`` reports is your plugin's responsibility: pulserver passes
+# it on to the operator as it is. Designing one TR is the simplest way to be
+# right. A sequence whose timing is easy to compute can return the TE and TR
+# from block durations without designing anything, and one that cannot design
+# a short piece of itself can accept the typed values and only report the scan
+# time.
 #
 # Your turn: expose the receiver bandwidth
 # ----------------------------------------
@@ -329,7 +401,7 @@ plt.show()
 # replaced by one of them; nothing faster than 100 kHz is played. The
 # shipped ``gre2d`` plugin reports the bandwidth it plays back to the
 # operator, as you saw in lesson 1. Your ``evaluate`` could do the same by
-# reading the dwell time of the ADC event in ``one_line``.
+# reading the dwell time of the ADC event in ``seq``.
 #
 # In a file
 # ---------

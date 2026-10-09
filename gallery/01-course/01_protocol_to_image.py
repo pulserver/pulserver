@@ -41,10 +41,11 @@ logging.disable(logging.WARNING)
 # the same calls a scanner makes, plays the sequence on a phantom, and
 # reconstructs in this process instead of in a separate reconstruction server.
 #
-# It needs two things. The **limits** are the scanner's hardware: field
-# strength, maximum gradient amplitude and slew rate, written as the text block
-# a scanner sends. The **store** is the folder where finished sequences are
-# kept.
+# It needs two things. The **system** is the scanner's hardware: field
+# strength, maximum gradient amplitude and slew rate. These are the arguments
+# of Pulseq's ``system`` object (:class:`pypulseqpp.Opts`), written as the text
+# block a scanner sends; raster times and dead times you leave out take their
+# defaults. The **store** is the folder where finished sequences are kept.
 import tempfile
 from pathlib import Path
 
@@ -52,7 +53,7 @@ import numpy as np
 
 from pulserver import virtual
 
-limits = """[Limits]
+system = """[Limits]
 B0: 3.0
 max_grad: 40
 grad_unit: mT/m
@@ -61,7 +62,7 @@ slew_unit: T/m/s
 [Limits End]
 """
 store = Path(tempfile.mkdtemp())
-console = virtual.Console(plugins=[], limits=limits, store=store, recon_plugins=[])
+console = virtual.Console(plugins=[], limits=system, store=store, recon_plugins=[])
 
 # %%
 # Step 1: the protocol

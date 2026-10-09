@@ -67,7 +67,7 @@ from pulserver.design import Evaluation, FloatParam, SequencePlugin, TimeParam, 
 class Gre(SequencePlugin):
     app = gre2d
     protocol = {
-        # µs on the scanner, s for gre2d
+        # ms on the scanner UI, µs on the wire, s for gre2d
         UIParam.TE: TimeParam("te", range_min=2000, range_max=20000),
         UIParam.FLIP: FloatParam(
             "flip_angle_deg", unit="deg", range_min=1, range_max=90
@@ -75,13 +75,15 @@ class Gre(SequencePlugin):
     }
 
     def evaluate(self, system, protocol):
-        a = protocol.arguments  # SI units, as gre2d takes them
-        one_line = self.app(system, **a, ry=128, n_acs_y=0, n_dummy=0)  # one line
-        return Evaluation(protocol.replace({UIParam.TE: one_line.definitions["TE"][0]}))
+        arguments = protocol.arguments  # SI units, as gre2d takes them
+        one_line = arguments | {"ry": 128, "n_acs_y": 0, "n_dummy": 0}  # one TR
+        seq = self.app(system, **one_line)
+        return Evaluation(protocol.replace({UIParam.TE: seq.definitions["TE"][0]}))
 ```
 
-- `protocol` maps each scanner parameter to an argument of your function.
-  Parameters you leave out keep the function's defaults.
+- `protocol` maps each scanner UI button (a `UIParam` key) to the argument of
+  your function it sets, with its unit and range (a `*Param` value).
+  Arguments you leave out keep the function's defaults.
 - `evaluate` runs on every edit, so keep it fast. Here it designs one line
   and reads back the TE; it could equally compute the TR from block durations,
   or accept the requested TR when it is feasible. To refuse a value, raise;
@@ -141,10 +143,10 @@ your recon, through exactly the path a real scan takes:
 
 ```bash
 pip install pulserver bartorch
-printf '[Limits]\nB0: 3.0\n[Limits End]\n' > limits.txt
+printf '[Limits]\nB0: 3.0\n[Limits End]\n' > system.txt
 pulserver proxy --store designs --port 9002 --plugins recon &
 pulserver scan --plugins sequences --plugin gre --reconstruction pics \
-  --limits limits.txt --store designs --recon 127.0.0.1:9002 --output images
+  --limits system.txt --store designs --recon 127.0.0.1:9002 --output images
 ```
 
 Or skip the install and try it in your browser:
