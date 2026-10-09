@@ -45,3 +45,16 @@ img.colab-badge {
 div.highlight-text .copybtn {
   opacity: 1;
 }
+
+/* Body text is justified, with hyphenation to keep the word spacing even.
+   Table cells and admonition titles stay left-aligned. */
+.bd-article p,
+.bd-article li {
+  text-align: justify;
+  hyphens: auto;
+}
+.bd-article td p,
+.bd-article th p,
+.bd-article .admonition-title {
+  text-align: left;
+}
