@@ -40,7 +40,7 @@ logging.disable(logging.WARNING)
 # A series from the virtual scanner
 # ---------------------------------
 #
-# First, some raw data. The console generates ``gre2d`` at 64 by 64, as in
+# The console generates ``gre2d`` at 64 by 64, as in
 # lesson 1. :func:`~pulserver.virtual.simulate` plays it on a phantom of two
 # ellipses seen by four coils, and :func:`~pulserver.virtual.record` writes
 # what the scanner would send: an MRD file whose header names the design, and
@@ -129,7 +129,7 @@ print("readout 64:", describe(received[-1]))
 # What pulserver fills in
 # -----------------------
 #
-# Your sequence does know. Its *labels*, the ``pp.make_label`` events of
+# The sequence carries this information. Its *labels*, the ``pp.make_label`` events of
 # Pulseq (``LIN``, ``SLC``, ...), say which line and slice each readout
 # encodes, and its definitions give the matrix and the field of view.
 # pulserver's reconstruction proxy finds the design the header names and
@@ -285,8 +285,8 @@ plt.show()
 #
 # The difference is where the counters come from. In Gadgetron the scanner's
 # own sequence writes them; here pulserver writes them from your Pulseq
-# labels, so a sequence labelled correctly is a sequence whose data sorts
-# itself.
+# labels, and the sorting needs no sequence-specific code in the
+# reconstruction.
 #
 # As a spec
 # ---------

@@ -4,8 +4,8 @@
 ==========================================
 
 You now have a sequence plugin (lesson 2) and a recon plugin (lesson 5). On a
-scanner they are two files in two folders, and the operator uses them without
-knowing they are yours. In this lesson you put them in those files, load them
+scanner they are two files in two folders, and the operator uses them like
+any shipped sequence and reconstruction. In this lesson you put them in those files, load them
 into the virtual scanner as a scanner would, and scan with them. Then you
 check the images against the physics: if the flip angle, the timing or the
 reconstruction were wrong, the contrast would show it.
@@ -308,9 +308,9 @@ plt.show()
 # labels that sorted the raw data, and your reconstruction. A wrong unit in a
 # ``TimeParam``, or a recon that scaled each scan differently, would break it.
 #
-# The virtual scanner is a model, so passing this test does not make the
-# sequence safe to run on a person; it tells you that the pair does what you
-# designed before a scanner is involved. :doc:`/explanations/virtual-scanner`
+# The virtual scanner is a model. The agreement shows that the pair behaves
+# as designed before a scanner is involved; it does not establish scanner or
+# patient safety. :doc:`/explanations/virtual-scanner`
 # describes what it models.
 #
 # On a scanner

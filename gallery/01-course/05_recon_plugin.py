@@ -145,7 +145,7 @@ fft_undersampled = reconstruct(FFT(), undersampled)
 # The undersampled series cannot be reconstructed by a Fourier transform:
 # half the lines are missing, and the image folds onto itself. ``pics``,
 # BART's parallel-imaging compressed-sensing solver, fills them in from the
-# coil sensitivities and a sparsity prior. With bartorch it is three lines:
+# coil sensitivities and a sparsity prior. In bartorch this takes two calls:
 # estimate the coil maps with ESPIRiT (``ecalib``) from the calibration lines,
 # then solve with a wavelet regularizer.
 #

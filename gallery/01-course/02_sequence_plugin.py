@@ -186,8 +186,8 @@ plt.show()
 # The scanner works in its own units, your function in SI. Each entry
 # converts between the two. A :class:`~pulserver.design.TimeParam` is in
 # seconds in your function and in integer microseconds between pulserver and
-# the scanner, the unit GE stores times in; the operator sees and types
-# milliseconds, and the scanner's interpreter converts. So ``range_min=1000``
+# the scanner; the operator sees and types milliseconds, and the scanner's
+# interpreter converts. So ``range_min=1000``
 # below is 1 ms on the UI. A
 # :class:`~pulserver.design.FloatParam` takes a ``unit`` and a ``scale``, for
 # example millimetres on the scanner and metres in your function
@@ -236,9 +236,9 @@ except ValueError as error:
     print(error)
 
 # %%
-# ``gre2d`` cannot reach a 2 ms echo time with this readout. The operator
-# finds out after having set up the whole exam. The next step makes them find
-# out while typing.
+# ``gre2d`` cannot reach a 2 ms echo time with this readout, and the operator
+# learns it only after setting up the whole exam. An ``evaluate`` reports it
+# while the value is edited.
 #
 # Your evaluate
 # -------------
@@ -322,14 +322,14 @@ for typed, value in (
 # that is the value the operator sees.
 #
 # What ``evaluate`` reports is your plugin's responsibility: pulserver passes
-# it on to the operator as it is. Designing one TR is the simplest way to be
-# right. A sequence whose timing is easy to compute can return the TE and TR
+# it on to the operator as it is. Designing one TR is the simplest way to
+# report correct values. A sequence whose timing is easy to compute can return the TE and TR
 # from block durations without designing anything, and one that cannot design
 # a short piece of itself can accept the typed values and only report the scan
 # time.
 #
-# Your turn: expose the receiver bandwidth
-# ----------------------------------------
+# Exercise: expose the receiver bandwidth
+# ---------------------------------------
 #
 # The shortest echo time depends on how long the readout lasts, and that is
 # set by the receiver bandwidth. ``gre2d`` takes it as

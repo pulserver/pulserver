@@ -126,8 +126,8 @@ plt.show()
 # Designing under gentler limits
 # ------------------------------
 #
-# The fix is in the design, not in the check: design the sequence with a
-# lower slew rate, and check it against the same scanner. A scanner can send
+# The remedy is a change of design, not of the check: design the sequence
+# with a lower slew rate, and check it against the same scanner. A scanner can send
 # such design limits with its own (``design_max_slew``), and pulserver then
 # hands your sequence function the gentler ``system``.
 gentle = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=100, slew_unit="T/m/s")
@@ -224,8 +224,8 @@ plt.show()
 # What changes from one TR to the next
 # ------------------------------------
 #
-# If every TR plays the same segments, where is the phase encoding? The
-# scanner prepares a segment's timing and waveform shapes once. Each time it
+# Every TR plays the same segments, and what differs between TRs, such as the
+# phase encoding, is carried by the segment instances. The scanner prepares a segment's timing and waveform shapes once. Each time it
 # plays the segment, the *instance* sets everything else:
 #
 # - the amplitude of each gradient, and its rotation;
@@ -263,8 +263,8 @@ plt.show()
 # and the ADC off. Then the phase-encoding amplitude steps through the 64
 # lines. The RF phase follows the quadratic schedule of RF spoiling, its
 # increment growing by 117° per TR. The scanner prepares segment 0 once and
-# only changes these numbers, which is why a scan of any length loads
-# quickly.
+# only changes these numbers, so its preparation does not grow with the
+# length of the scan.
 #
 # Where the segment boundaries fall can be tuned to the scanner's interpreter;
 # :doc:`/explanations/scanner-representation` explains the model.

@@ -15,7 +15,7 @@ come back to the console. Sequences are exchanged as Pulseq, so any tool that
 writes a `.seq` file (pypulseqpp, MATLAB Pulseq, BART's `seq`...) can provide
 one; pypulseqpp is the one pulserver uses natively.
 
-You write two small Python plugins, one that designs the sequence and one that
+You write two Python plugins, one that designs the sequence and one that
 reconstructs it. pulserver does everything in between: it answers the scanner
 UI, checks the sequence, converts it into the form the scanner plays, and
 routes the raw data back to your reconstruction.
@@ -113,10 +113,10 @@ from pulserver import recon
 
 class Pics(recon.ReconPlugin):
     def recon(self, context, branch, data):
-        kspace = torch.from_numpy(data.data.kspace)  # (coils, y, x)
+        kspace = torch.from_numpy(data.data.kspace)[:, None]  # (coils, z, y, x)
         maps = bt.ecalib(kspace, maps=1)
         image = apps.pics(kspace, maps, regularizers=priors.Wavelet((-1, -2), 0.005))
-        return recon.ReconResult(image.abs().numpy())
+        return recon.ReconResult(image.abs().squeeze(0).numpy())
 
 
 PLUGIN = Pics()
@@ -128,8 +128,8 @@ PLUGIN = Pics()
   `triggers={"imaging": AcquisitionFlag.LAST_IN_SLICE}` to reconstruct slice
   by slice.
 - The flags and counters come from the labels in your sequence
-  (`pp.make_label`, as in PyPulseq). Label it right and every readout lands in
-  place.
+  (`pp.make_label`, as in PyPulseq), so a correctly labelled sequence needs no
+  sorting code in the reconstruction.
 - Return a `ReconResult`; pulserver writes the image header (position,
   orientation, field of view) from the sequence and the scanner.
 
@@ -166,7 +166,7 @@ scanner's own routines.
 ## Learn more
 
 - [Course](https://pulserver.github.io/pulserver/stable/examples/course.html):
-  five lessons from a protocol to an image.
+  six lessons from a protocol to an image.
 - [Documentation](https://pulserver.github.io/pulserver/stable/), for every
   option and API detail.
 
