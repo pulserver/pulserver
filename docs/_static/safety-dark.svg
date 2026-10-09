@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 550" role="img" aria-labelledby="t d">
+<title id="t">Checks before a design is stored</title><desc id="d">A sequence designed under per-axis design limits is rotated to the prescription and checked on the physical axes for timing, gradient and slew rate, PNS, mechanical resonance and sound pressure; a design with a problem is refused and not stored, one without is converted to the IR cache, which carries its sound pressure levels and SAR ratios to the interpreter, which computes SAR and heating</desc>
+<style>
+.box{fill:#13293a;stroke:#5b9bd0;stroke-width:2}
+.core{fill:#2b76ad;stroke:#8fc3e8;stroke-width:2}
+.a{fill:#2a2415;stroke:#ffbe2e;stroke-width:2}
+.txt{font:22px Arial,sans-serif;fill:#dce7f0}
+.white{font:23px Arial,sans-serif;fill:#ffffff;font-weight:bold}
+.small{font:18px Arial,sans-serif;fill:#dce7f0}
+.label{font:16px Arial,sans-serif;fill:#93a7b5}
+.arrow{stroke:#93a7b5;stroke-width:3;marker-end:url(#m)}
+.head{fill:#93a7b5}
+.ink{fill:none;stroke:#e8eef3;stroke-width:5;stroke-linejoin:miter;stroke-linecap:butt}
+.blue{fill:#5b9bd0}
+.amber{fill:#ffbe2e}
+.word{fill:#79bba4}
+.orange{fill:#ffa00f}
+.unit{stroke:#e6ece9;stroke-width:4}
+.trace{fill:none;stroke:#e6ece9;stroke-width:4;stroke-linejoin:round;stroke-linecap:round}
+.title{font:bold 20px Arial,sans-serif;fill:#dce7f0}
+.wave{fill:none;stroke:#5b9bd0;stroke-width:3;stroke-linejoin:round}
+.rf{fill:none;stroke:#ffbe2e;stroke-width:3;stroke-linejoin:round}
+.adc{fill:#ffbe2e}
+.base{fill:none;stroke:#93a7b5;stroke-width:1.5}
+.bracket{fill:none;stroke:#93a7b5;stroke-width:2}
+</style>
+<defs><marker id="m" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><path class="head" d="M0,0 L0,6 L9,3 z"/></marker></defs>
+<rect class="box" x="170" y="20" rx="12" width="660" height="70"/><text class="txt" x="500" y="49.5" text-anchor="middle">Your sequence function</text><text class="txt" x="500" y="74.5" text-anchor="middle">designed under the design limits, per logical axis</text>
+<line class="arrow" x1="500" y1="90" x2="500" y2="137"/><text class="label" x="510" y="118.5">rotated to the prescription</text>
+<rect class="core" x="40" y="140" rx="12" width="920" height="56"/><text class="white" x="500" y="175" text-anchor="middle">Checks on the physical axes, as the scanner plays the scan</text>
+<rect class="a" x="40" y="210" rx="12" width="170" height="70"/><text class="small" x="125" y="239.5" text-anchor="middle">timing,</text><text class="small" x="125" y="264.5" text-anchor="middle">continuity</text>
+<rect class="a" x="227" y="210" rx="12" width="170" height="70"/><text class="small" x="312" y="239.5" text-anchor="middle">gradient,</text><text class="small" x="312" y="264.5" text-anchor="middle">slew rate</text>
+<rect class="a" x="414" y="210" rx="12" width="170" height="70"/><text class="small" x="499" y="252" text-anchor="middle">PNS</text>
+<rect class="a" x="601" y="210" rx="12" width="170" height="70"/><text class="small" x="686" y="239.5" text-anchor="middle">mechanical</text><text class="small" x="686" y="264.5" text-anchor="middle">resonance</text>
+<rect class="a" x="788" y="210" rx="12" width="170" height="70"/><text class="small" x="873" y="239.5" text-anchor="middle">sound</text><text class="small" x="873" y="264.5" text-anchor="middle">pressure</text>
+<line class="arrow" x1="250" y1="280" x2="250" y2="337"/><text class="label" x="240" y="313.5" text-anchor="end">a problem</text>
+<line class="arrow" x1="750" y1="280" x2="750" y2="337"/><text class="label" x="760" y="313.5">none</text>
+<rect class="box" x="40" y="340" rx="12" width="420" height="85"/><text class="txt" x="250" y="377" text-anchor="middle">Refused: no design stored,</text><text class="txt" x="250" y="402" text-anchor="middle">the operator reads the problems</text>
+<rect class="box" x="540" y="340" rx="12" width="420" height="85"/><text class="txt" x="750" y="377" text-anchor="middle">IR cache, with the sound</text><text class="txt" x="750" y="402" text-anchor="middle">pressure levels and SAR ratios</text>
+<line class="arrow" x1="750" y1="425" x2="750" y2="467"/><text class="label" x="760" y="451">loads</text>
+<rect class="core" x="540" y="470" rx="12" width="420" height="60"/><text class="white" x="750" y="507" text-anchor="middle">Interpreter: SAR, heating</text>
+</svg>

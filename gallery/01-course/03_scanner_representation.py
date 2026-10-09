@@ -75,6 +75,8 @@ print("\n".join(problems) or "no problems")
 # %%
 # The design is refused. On a scanner this message is what the operator reads
 # instead of a scan starting, and nothing is played.
+# :doc:`/explanations/safety-checks` lists every check and what each one
+# needs from the scanner.
 #
 # The figure shows why. Over the first 12 ms of a TR, the gradients stay
 # within 40 mT/m and the slew rate within 150 T/m/s, but the slice rephaser

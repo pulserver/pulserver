@@ -58,3 +58,11 @@ div.highlight-text .copybtn {
 .bd-article .admonition-title {
   text-align: left;
 }
+
+/* A capability's code and test, under its statement. */
+.bd-article .capabilities li > p + p {
+  margin-top: -0.6em;
+  font-size: 0.9em;
+  text-align: left;
+  color: var(--pst-color-text-muted);
+}
