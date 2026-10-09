@@ -946,10 +946,13 @@ def test_a_cine_is_gated_at_the_heart_rate_asked_for(zoo):
     ("name", "gating"),
     [("bssfp2d", "prospective"), ("bssfp2d+RETROSPECTIVE", "retrospective")],
 )
-def test_an_ecg_trigger_gates_the_cine_with_a_segment_per_heartbeat(zoo, name, gating):
+@pytest.mark.parametrize("ry", [2, 3])  # Ry 3 leaves a shorter last segment
+def test_an_ecg_trigger_gates_the_cine_with_a_segment_per_heartbeat(
+    zoo, name, gating, ry
+):
     plugin = zoo[name]
     module = SimpleNamespace(**type(plugin).generate.__globals__)
-    changes = {"trigger_type": "physio2", "Ry": 2, "num_frames": 20}
+    changes = {"trigger_type": "physio2", "Ry": ry, "num_frames": 20}
     protocol = _protocol(plugin, changes)
 
     evaluation = plugin.evaluate(SYSTEM, protocol)
