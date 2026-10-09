@@ -14,7 +14,7 @@ import numpy as np
 import pytest
 
 from pulserver import recon
-from pulserver.recon.handlers.nufft import NufftRecon
+from pulserver.recon.handlers.nufft import NufftRecon, _within
 
 MATRIX, FOV_MM, COILS, SAMPLES, LINES = 16, 220.0, 2, 24, 4
 
@@ -157,6 +157,20 @@ def test_the_readouts_of_every_segment_are_shots_of_one_solve_in_segment_order()
         trajectory[..., :2], points.reshape(-1, SAMPLES, 2), atol=1e-5
     )
     assert not trajectory[..., 2].any()
+
+
+def test_the_corners_of_blades_past_the_matrix_are_not_samples_of_the_solve():
+    points = np.zeros((3 * LINES, SAMPLES, 3), dtype=np.float32)
+    points[..., :2] = blades(3).reshape(-1, SAMPLES, 2)
+    data = noise(COILS, 3 * LINES, SAMPLES)
+    radius = np.linalg.norm(points[..., :2], axis=-1)
+
+    samples, kept = _within(data, points, (MATRIX, MATRIX))
+
+    inside = radius <= MATRIX / 2
+    assert not inside.all()
+    np.testing.assert_array_equal(samples, data[:, inside][:, None])
+    np.testing.assert_array_equal(kept, points[inside][None])
 
 
 def test_a_unit_closes_with_the_last_readout_of_its_last_segment():
