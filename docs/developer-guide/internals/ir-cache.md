@@ -44,7 +44,7 @@ the stated position at the centre of its field of view. A chain whose stored
 modulation does not hold one phase per ADC sample is refused. The rotation of the prescription is not applied
 to the cache: the scanner plays it through its rotation matrix, composed after
 each block's own rotation. Two offsets make two caches of one design, and two
-designs ({doc}`../../explanations/designs`).
+designs ({doc}`../../explanations/architecture`).
 
 ## Conversion passes
 

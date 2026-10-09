@@ -206,7 +206,7 @@ print(reply.info)
 # A valid reply carries the resolved protocol at the precision a scanner
 # parameter stores. Sending it back resolves to the same protocol,
 # which is what lets a design be identified by its resolved protocol
-# (:doc:`/explanations/designs`).
+# (:doc:`/explanations/architecture`).
 
 first = gre.validate(system, {"TE": TEPreset.MINIMUM, "nx": 192, "bandwidth": 150e3})
 again = gre.validate(system, first.values)

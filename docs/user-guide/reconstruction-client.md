@@ -80,5 +80,5 @@ when the stream carries more or fewer acquisitions than the chain plays.
 
 * {doc}`running` — starting the proxy.
 * {doc}`../explanations/reconstruction` — enrichment and routing.
-* {doc}`../explanations/designs` — the design store and the identifier of a design.
+* {doc}`../explanations/architecture` — the design store and the identifier of a design.
 * {class}`~pulserver.proxy.ReconProxy` — the proxy.

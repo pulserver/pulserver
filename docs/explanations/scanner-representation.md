@@ -148,7 +148,7 @@ varies across the window, the reconstruction proxy applies the remaining phase
 from the trajectory, and from the header's `fov_offset_mm` when it states
 another position ({doc}`reconstruction`). The prescription's rotation is not
 applied to the cache: the scanner composes it after each block's own rotation.
-Two offsets give two caches, and two designs ({doc}`designs`).
+Two offsets give two caches, and two designs ({doc}`architecture`).
 
 ## See also
 

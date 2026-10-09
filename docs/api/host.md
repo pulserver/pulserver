@@ -11,7 +11,7 @@ An interpreter host process lists, validates, generates and imports through
 the `pulserver design` command, or `python -m pulserver.host`, answered in its
 own process or in a warm server's; the calls, their replies and the store are
 described in {doc}`../user-guide/running`, and the identity of a design in
-{doc}`../explanations/designs`.
+{doc}`../explanations/architecture`.
 
 ## Calls
 

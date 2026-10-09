@@ -9,7 +9,7 @@ and returns the images. When the two run on different computers, either the
 store is a directory both can reach, or the proxy keeps a store of its own and
 its design intake receives each design the design calls push to it. The store
 and the identity of a design are described in
-{doc}`../explanations/designs`. Where the reconstructions run on a computer of
+{doc}`../explanations/architecture`. Where the reconstructions run on a computer of
 their own, a reconstruction server runs there and the proxy forwards each
 series to it.
 
@@ -97,7 +97,7 @@ wave is held at once on the gradient raster of the chain's first file, and a
 playout that holds them otherwise refuses the cache.
 
 A generated design and an imported chain are checked against the limits before
-their IR cache is written ({doc}`../explanations/designs`), so the limits
+their IR cache is written ({doc}`../explanations/architecture`), so the limits
 include the RF and ADC dead times, the RF ringdown time and the ADC sample
 divisor of the scanner; `pypulseqpp.Opts` sets the dead times to zero and the
 divisor to four when they are left out.
@@ -120,12 +120,13 @@ limits as `generate`. An imported chain is not designed, and is checked against
 `max_grad` and `max_slew` alone.
 
 The limits also carry what the host checks besides the gradient limits and
-rasters, the scanner's nerve model and its forbidden gradient bands, and, where
-SAR is computed from virtual observation points, the VOPs. A check whose limits
-are left out is not run. No SAR limit is checked on the host: it writes into
-the cache each subsequence's SAR at the VOPs relative to a reference pulse
-({doc}`../explanations/designs`), and the interpreter computes the SAR and
-the gradient heating.
+rasters: the scanner's nerve model and its forbidden gradient bands, which a
+scanner always sends, the gradient coil's acoustic transfer function where the
+scanner has one, and, for pTx, the VOPs. A check whose limits are left out is
+not run. For pTx the host writes into the cache each subsequence's SAR at the
+VOPs relative to a reference pulse ({doc}`../explanations/safety-checks`); the
+vendor's routines on the scanner compute SAR and RF and gradient heating from
+these inputs.
 
 | Limit | Meaning |
 | --- | --- |
@@ -395,6 +396,6 @@ one is built beside a copy and discarded.
 ## See also
 
 * {doc}`../explanations/architecture` — the services and what passes between them.
-* {doc}`../explanations/designs` — the design store and the identity of a design.
+* {doc}`../explanations/architecture` — the design store and the identity of a design.
 * {doc}`reconstruction-client` — the MRD stream of a series.
 * {doc}`../api/host` and {doc}`../api/proxy` — the design calls, the proxy and the reconstruction server.

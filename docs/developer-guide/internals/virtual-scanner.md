@@ -302,7 +302,7 @@ hertz of a pulse's amplitude with which the channels' fields reach that
 amplitude at the isocentre, $2 / (\gamma \sum_c |B^-_c(\mathbf{0})|)$ in the
 maps' unit of drive, and the head and local SAR limits of IEC 60601-2-33's
 normal operating mode. The IR cache then reports each subsequence's SAR against
-the reference pulse in that coil ({doc}`../../explanations/designs`).
+the reference pulse in that coil ({doc}`../../explanations/safety-checks`).
 
 {class}`~pulserver.virtual.BrainWeb` carries the field its own susceptibility
 adds to $B_0$. Its head is water, of volume susceptibility $-9.05$ ppm, in air

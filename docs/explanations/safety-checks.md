@@ -212,6 +212,6 @@ lasting the reference pulse's time times the larger of the two.
 - {doc}`../generated/gallery/01-course/03_scanner_representation`: a design
   refused on PNS, and the same design accepted when made at a lower slew rate.
 - {doc}`../user-guide/running`: the `[Limits]` keys an interpreter sends.
-- {doc}`designs`: what is stored once a design passes.
+- {doc}`architecture`: what is stored once a design passes.
 - {doc}`../api/ir`: {func}`~pulserver.ir.check`, {class}`~pulserver.ir.CheckLimits`
   and {func}`~pulserver.ir.sar_ratios`.

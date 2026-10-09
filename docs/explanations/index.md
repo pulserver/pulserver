@@ -7,9 +7,8 @@ rest of the documentation assumes.
 
 | Explanation | What it covers |
 | --- | --- |
-| {doc}`architecture` | The four layers of an acquisition through pulserver, the service each machine runs, and the representation exchanged at each boundary. |
+| {doc}`architecture` | The two services beside the scanner, what each one does, and the design store they share: how a design is identified, stored, pushed and found again. |
 | {doc}`protocol` | How a prescription edited in the scanner UI is resolved into the protocol a sequence plays, and the units and precision it is exchanged in. |
-| {doc}`designs` | The identity of a design, the design store, and how the reconstruction side finds a design. |
 | {doc}`safety-checks` | What pulserver checks before a design is stored, what it leaves to the scanner, and the SAR ratios it computes against a reference pulse. |
 | {doc}`scanner-representation` | The base blocks, virtual segments and execution stream a scanner interpreter plays, and how pulserver derives them from a Pulseq sequence. |
 | {doc}`virtual-scanner` | The stand-ins that replace the scanner in tests: the playout, the Fourier engine's signal model and the reconstruction client. |
@@ -25,7 +24,6 @@ buffers and workers, and the virtual scanner's Fourier engine -- is in
 
 architecture
 protocol
-designs
 safety-checks
 scanner-representation
 virtual-scanner

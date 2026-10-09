@@ -44,7 +44,7 @@ the logical frame.
 ## Enrichment
 
 The header names the design the series was acquired with
-({doc}`designs`). The proxy reads that design's sequence chain and tabulates
+({doc}`architecture`). The proxy reads that design's sequence chain and tabulates
 its readouts in play order ({class}`~pulserver.proxy.SequenceTable`). The table
 is applied to the stream as follows.
 

@@ -65,7 +65,7 @@ the physical axes in the nine `fov_rotation_ij`, identity by default.
 Resolution returns them unchanged, and a rotation that is not orthonormal is
 invalid. The host applies the offset to the designed sequence when it builds
 the IR, and checks the design in the physical frame of the rotation
-({doc}`designs`). A scanner sequence cannot bind them to an argument.
+({doc}`architecture`). A scanner sequence cannot bind them to an argument.
 
 A request the evaluation rejects is invalid, and the reply carries the request
 unchanged. A `ValueError` or an `AssertionError`, which pypulseqpp and PyPulseq
@@ -123,7 +123,7 @@ not, and a protocol that adds a preparation pulse does.
 
 The layout is an estimate for the prescription. An evaluation that states none
 states no estimate and is valid, and what the scanner checks before the scan is
-the stored design ({doc}`designs`).
+the stored design ({doc}`architecture`).
 
 ## Keys and values
 
@@ -175,7 +175,7 @@ shown in mm and designed in m.
 Resolved values are reported at the precision in which they are stored.
 Consequently, sending a resolved protocol back unchanged resolves to the same
 protocol. This property is what allows a design to be identified by its
-resolved protocol ({doc}`designs`): an operator who reopens a protocol and
+resolved protocol ({doc}`architecture`): an operator who reopens a protocol and
 generates it again obtains the same design.
 
 ## See also
