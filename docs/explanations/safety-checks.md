@@ -5,9 +5,9 @@
 
 - Before a design is stored, pulserver checks it as the scanner will play it:
   rotated to the prescription, on the physical gradient axes.
-- Timing, gradient amplitude and slew rate are always checked. PNS, mechanical
-  resonance and sound pressure are checked when the scanner sends a model for
-  them.
+- On a scanner every check is mandatory: timing, gradient amplitude and slew
+  rate, PNS and mechanical resonance. Sound pressure is the one optional check,
+  run when the scanner has an acoustic model of its gradient coil.
 - A sequence raising a safety check violation is refused: nothing is stored,
   and the operator reads the violations.
 - SAR, RF coil heating and gradient heating are computed on the scanner by the
@@ -137,8 +137,11 @@ then be refused.
 The interpreter sends its limits with every design call, as a `[Limits]` block
 ({doc}`../user-guide/running`). The gradient limits, dead times and ringdown
 time make up `system`. Keys that start with `pns_`, `forbidden_band_`, `vop_`
-and `acoustic_` make up the {class}`~pulserver.ir.CheckLimits`. A check whose
-model is not sent is left out: without a nerve model there is no PNS check.
+and `acoustic_` make up the {class}`~pulserver.ir.CheckLimits`. A scanner's
+interpreter always sends the nerve model and the forbidden bands, and the VOPs
+for pTx; the acoustic transfer function is sent only where the scanner has one.
+Called directly, as in the Course and on the virtual scanner,
+{func}`~pulserver.ir.check` leaves out a check whose model it is not given.
 
 ### Sound pressure
 

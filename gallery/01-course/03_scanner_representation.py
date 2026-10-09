@@ -57,8 +57,9 @@ print(f"{seq.num_blocks} blocks, {seq.duration()[0]:.2f} s")
 #
 # - the timing: every block on its raster, dead times respected;
 # - the gradient amplitude and the slew rate against ``system``;
-# - peripheral nerve stimulation (PNS), mechanical resonances and acoustic
-#   noise, when the scanner states a model for them.
+# - peripheral nerve stimulation (PNS) and mechanical resonances, under the
+#   models every scanner sends;
+# - acoustic noise, when the scanner has a model of it.
 #
 # The PNS model belongs to the gradient coil, and the scanner sends it with
 # its limits. Here is an example rheobase-chronaxie model:
