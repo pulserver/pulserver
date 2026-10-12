@@ -127,7 +127,10 @@ design is not a `.seq` file, and the IR cache is not the design of record.
 
 ## 2. Register
 
-Write dry, declarative technical prose.
+Write direct technical prose for an MR scientist. Address the reader as
+"you" where they act (write a plugin, run a scan), lead with what they get,
+and keep each sentence to one claim. Technical, not cumbersome: a short plain
+sentence in the field's vocabulary is preferred to a long precise-sounding one.
 
 **No personification.** A server does not decide, a design does not know, a
 proxy does not wait for anything it is not blocked on, a plugin does not ask.

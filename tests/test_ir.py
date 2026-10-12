@@ -857,6 +857,21 @@ def test_a_dead_time_the_file_does_not_leave_is_a_timing_problem():
     assert "more errors" in problem
 
 
+@pytest.mark.parametrize(("raster", "converts"), [(20e-6, True), (15e-6, False)])
+def test_a_file_raster_converts_only_as_an_integer_multiple_of_the_scanners(
+    tmp_path, raster, converts
+):
+    on_file = pp.Opts(grad_raster_time=raster, block_duration_raster=raster)
+    seq = pp.Sequence(on_file)
+    seq.add_block(pp.make_trapezoid("x", area=100, system=on_file))
+    seq.write(tmp_path / "raster.seq")
+    if converts:
+        convert(tmp_path / "raster.seq", SYSTEM)
+    else:
+        with pytest.raises(ValueError, match="not integer multiples"):
+            convert(tmp_path / "raster.seq", SYSTEM)
+
+
 def test_each_problem_of_a_chain_names_its_file():
     weak = pp.Opts(max_grad=5.0, grad_unit="mT/m", max_slew=170.0, slew_unit="T/m/s")
     problems = ir.check(FIXTURES / "dedup_gre_pair.seq", weak)

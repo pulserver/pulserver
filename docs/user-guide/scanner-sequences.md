@@ -256,7 +256,7 @@ fov_rotation_33: float|off|1.0|-1.0|1.0|1e-06|
 The last twelve entries are the prescription, which the interpreter fills from
 the scanner's: the field-of-view offset, which the host applies when it builds
 the IR, and the rotation from the logical to the physical axes, in whose frame
-the host checks the design ({doc}`../explanations/designs`).
+the host checks the design ({doc}`../explanations/architecture`).
 
 `nex` is the number of signal averages, which every plugin lists unless it
 declares its own: the design plays its main sequence that many times, written
@@ -328,7 +328,7 @@ reply reports the scan time as unknown.
 as signed binary Pulseq, prescans first, and returns the written paths. The first file
 is `sequence.seq`, and each file names the next as its `NextSequence`
 definition. The `generate` design call converts the design to the IR cache and
-stores it ({doc}`../explanations/designs`).
+stores it ({doc}`../explanations/architecture`).
 
 (evaluating-a-protocol)=
 ## Evaluating a protocol

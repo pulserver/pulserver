@@ -12,11 +12,12 @@ The shortest path from a protocol to a reconstructed image, read in order.
 
 | Lesson | What it teaches |
 | --- | --- |
-| {doc}`/generated/gallery/01-course/01_protocol_to_image` | A whole scan on the virtual scanner, from the protocol to the image. |
-| {doc}`/generated/gallery/01-course/02_sequence_plugin` | A scanner sequence and the protocol it resolves. |
-| {doc}`/generated/gallery/01-course/03_scanner_representation` | The repetition, virtual segments and execution stream of a design. |
-| {doc}`/generated/gallery/01-course/04_reconstruction_plugin` | Enrichment of a series and a reconstruction plugin. |
-| {doc}`/generated/gallery/01-course/05_testing_on_the_virtual_scanner` | Optional: the Fourier engine's contrast and the conversion check. |
+| {doc}`/generated/gallery/01-course/01_protocol_to_image` | Your first scan: a whole scan on the virtual scanner, from the protocol to the image. |
+| {doc}`/generated/gallery/01-course/02_sequence_plugin` | Your sequence in the scanner UI: a sequence plugin and its `evaluate`. |
+| {doc}`/generated/gallery/01-course/03_scanner_representation` | What the scanner plays: the checks, the segments and what changes from one TR to the next. |
+| {doc}`/generated/gallery/01-course/04_reconstruction_plugin` | What your recon receives: the raw data before and after pulserver labels it. |
+| {doc}`/generated/gallery/01-course/05_recon_plugin` | Your recon plugin: a Fourier transform, then `pics` with bartorch. |
+| {doc}`/generated/gallery/01-course/06_testing_on_the_virtual_scanner` | Test your pair on the virtual scanner: a flip-angle series against the closed form. |
 
 ## Tours
 

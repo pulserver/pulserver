@@ -16,7 +16,7 @@ field-of-view offset in the protocol block ({doc}`running`):
 
 ```bash
 printf '[Protocol]\nTE: 5000\nnx: 64\nny: 64\nfov_offset_x: 20.0\n[Protocol End]\n' \
-  | pulserver design generate --plugins sequences --plugin gre2d --limits limits.txt --store designs
+  | pulserver design generate --plugins sequences --plugin gre2d --limits system.txt --store designs
 ```
 
 The reply is `GENERATED <id>`.
@@ -148,11 +148,11 @@ plays its IR cache on a phantom's tissue with the Fourier engine, and writes
 the series to an ISMRMRD file, streams it to a reconstruction proxy, or both:
 
 ```bash
-pulserver scan --seq sequence.seq --limits limits.txt \
+pulserver scan --seq sequence.seq --limits system.txt \
   --orientation coronal --center 10 -5 3 --mrd raw.h5 --sound scan.wav
 
 pulserver scan --plugins sequences --plugin gre2d --protocol protocol.txt \
-  --limits limits.txt --store designs --recon 127.0.0.1:9002 --output images
+  --limits system.txt --store designs --recon 127.0.0.1:9002 --output images
 ```
 
 The design call's reply, `IMPORTED <id>` or `GENERATED <id>`, or its `ERROR`
@@ -262,7 +262,7 @@ calls on the interpreter's text blocks, an exam on a subject, and scans of the
 designs it generates, played on the subject's phantom:
 
 ```bash
-pulserver console --plugins sequences --limits limits.txt --store designs \
+pulserver console --plugins sequences --limits system.txt --store designs \
   --recon 127.0.0.1:9002 --port 8765
 ```
 

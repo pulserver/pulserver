@@ -261,8 +261,11 @@ above govern docstrings.
 | `docs/misc/` | Licensing, related projects, contributors | |
 
 The prose style of one type is not carried into another. An explanation page
-proceeds from the concept to its model, its consequences and the software
-abstraction, and ends with a *See also* list. Explanations are conceptual:
+is a TL;DR, a short introduction, *Capabilities* (a list, one
+bold line each, with its code and tests behind a toggle), *Division of
+responsibility* (what the scanner or the engines do), *Method* (a figure and
+a few short subsections) and *Examples*; every heading names a concept; `docs/developer-guide/documentation.md` states the layout.
+Explanations are conceptual:
 implementation design, file layouts, tolerances and test inventories go to
 `docs/developer-guide/internals/`. The explanations are one flat list, in the
 order of the data flow.
@@ -285,7 +288,8 @@ table and a Tours table, which `tests/test_docs.py` holds to the gallery.
 
 An explanation page with more than one `##` section opens with a TL;DR
 admonition (```` ```{admonition} TL;DR ```` with `:class: tldr`) directly
-under its title, stating only what the page establishes; landing, API and
+under its title, at most three one-line bullets stating only what the page
+establishes; landing, API and
 example pages have none, and `tests/test_docs.py` holds both.
 
 Figures take their typography, size and layout from `docs/figure_style.py`,
