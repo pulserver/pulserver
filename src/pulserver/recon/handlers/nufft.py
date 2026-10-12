@@ -54,7 +54,7 @@ class NufftRecon(ReconPlugin):
     A unit closes as that of
     :class:`~pulserver.recon.handlers.pics.PicsRecon` does, and also once the
     last readout of each of its segments has arrived. bartorch is imported when
-    the first image is made, which the ``coils`` extra installs.
+    the first image is made.
 
     Parameters
     ----------

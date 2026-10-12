@@ -71,7 +71,7 @@ class BrainWeb:
     The fuzzy tissue model of BrainWeb's normal brain (Collins et al., IEEE
     Trans Med Imaging 17:463, 1998) gives each 1 mm voxel the fraction of it
     each tissue class fills. brainweb-dl downloads it on first use into its
-    cache, which the ``brainweb`` extra installs. The brain is oriented as a subject
+    cache. The brain is oriented as a subject
     lying head first and supine, with the origin of its MNI coordinates, the
     anterior commissure, at the isocentre: the physical x axis points to the
     subject's left, y posterior and z superior. Each tissue class relaxes with
@@ -148,17 +148,11 @@ class BrainWeb:
 
         Raises
         ------
-        ImportError
-            If brainweb-dl is not installed.
         ValueError
             If the model does not hold one fraction per tissue class.
         """
-        try:
-            import brainweb_dl
-        except ImportError as error:
-            raise ImportError(
-                "BrainWeb is downloaded by brainweb-dl: pip install 'pulserver[brainweb]'"
-            ) from error
+        import brainweb_dl
+
         # C order, as every sampling of the model reshapes it: brainweb-dl
         # returns the NIfTI file's Fortran order.
         fractions = np.ascontiguousarray(

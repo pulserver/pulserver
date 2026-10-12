@@ -50,7 +50,7 @@ class Coil:
     -S`` selects them, or the file of the coil's field maps :func:`coils`
     reads; a side without either is one channel of unit sensitivity
     everywhere, as a body coil is taken to be. A model is sampled by bartorch
-    on first use, which the ``coils`` extra installs, over :data:`MODEL_FOV`
+    on first use, over :data:`MODEL_FOV`
     along the physical axes; ``HEAD_2D_8CH`` is constant along z. Either is
     interpolated linearly.
 
@@ -246,12 +246,8 @@ def _sampled(model: str, channels: int) -> np.ndarray:
     Sample ``i`` along an axis lies at ``(i - n // 2) / n`` of the model's
     field of view, as BART's ``phantom`` places it.
     """
-    try:
-        from bartorch.tools import phantom
-    except ImportError as error:
-        raise ImportError(
-            "BART's coil models are sampled by bartorch: pip install 'pulserver[coils]'"
-        ) from error
+    from bartorch.tools import phantom
+
     three = model == "HEAD_3D_64CH"
     maps = phantom((_SAMPLES,) * (3 if three else 2), S=channels, coil=model)
     return np.asarray(maps.cpu().numpy(), dtype=np.complex64).reshape(

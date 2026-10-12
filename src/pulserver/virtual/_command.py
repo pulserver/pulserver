@@ -92,7 +92,7 @@ def _parser() -> argparse.ArgumentParser:
         "--phantom",
         type=Path,
         help="JSON file of the phantom's ellipses, or brainweb for BrainWeb's "
-        "normal brain (the brainweb extra); vials of several T1 and T2 without one",
+        "normal brain; vials of several T1 and T2 without one",
     )
     parser.add_argument(
         "--spacing",

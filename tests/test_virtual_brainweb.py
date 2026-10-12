@@ -170,12 +170,6 @@ def test_a_model_of_other_tissues_is_refused(monkeypatch):
         virtual.BrainWeb().tissue(field_t=3.0)
 
 
-def test_without_brainweb_dl_the_brain_names_the_extra_that_downloads_it(monkeypatch):
-    monkeypatch.setitem(sys.modules, "brainweb_dl", None)
-    with pytest.raises(ImportError, match=r"pulserver\[brainweb\]"):
-        virtual.BrainWeb().tissue(field_t=3.0)
-
-
 def test_the_scan_command_scans_brainweb_by_name():
     args = argparse.Namespace(phantom=Path("brainweb"), coils=3, coil=None)
 

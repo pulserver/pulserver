@@ -1,7 +1,5 @@
 """The virtual scanner's coils: their channels, their scaling at the isocentre, BART's models and field maps."""
 
-import sys
-
 import numpy as np
 import pypulseqpp as pp
 import pytest
@@ -154,17 +152,6 @@ def test_a_phantom_scanned_with_a_coil_takes_its_sensitivities_where_it_lies(
 def test_a_phantom_received_by_coils_of_its_own_is_not_scanned_with_a_coil():
     with pytest.raises(ValueError, match="coils of its own"):
         phantom(coils=2).tissue(2e-3, coil=virtual.COILS["body/head48"])
-
-
-def test_without_bartorch_a_head_coil_names_the_extra_that_samples_its_model(
-    monkeypatch,
-):
-    monkeypatch.setitem(sys.modules, "bartorch", None)
-    monkeypatch.setitem(sys.modules, "bartorch.tools", None)
-    _coils._receive.cache_clear()
-
-    with pytest.raises(ImportError, match=r"pulserver\[coils\]"):
-        virtual.COILS["body/head48"].receive(ISOCENTRE)
 
 
 @pytest.mark.parametrize("name", ["body/head48", "head8/head32"])
