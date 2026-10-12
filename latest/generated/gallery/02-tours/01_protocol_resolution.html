@@ -37,7 +37,7 @@
     <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-binder.css?v=f4aeca0c" />
     <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
     <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
-    <link rel="stylesheet" type="text/css" href="../../../_static/pulserver.css?v=e08ae8f3" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/pulserver.css?v=6854ff42" />
   
   <!-- So that users can add custom icons -->
   <script defer src="../../../_static/scripts/fontawesome.js?digest=90905a2f556bf617f1a9"></script>
@@ -61,6 +61,7 @@
             true;
         </script>
     <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
+    <script src="../../../_static/capabilities.js?v=421ebb92"></script>
     <link rel="canonical" href="https://pulserver.github.io/pulserver/latest/generated/gallery/02-tours/01_protocol_resolution.html" />
     <link rel="icon" href="../../../_static/pulserver-mark.svg"/>
     <link rel="index" title="Index" href="../../../genindex.html" />
@@ -256,9 +257,11 @@
 <li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/documentation.html">Documentation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/terminology.html">Terminology and conventions</a></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../../../developer-guide/internals/index.html">Internals</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/calibration.html">Calibration, noise and coil compression</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/ir-cache.html">IR cache</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/protocol-wire.html">Protocol text blocks</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/reconstruction-proxy.html">Reconstruction proxy</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/sar-ratios.html">SAR ratios against a reference pulse</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
@@ -271,20 +274,22 @@
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../explanations/index.html">Explanations</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="../../../explanations/architecture.html">Architecture</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../explanations/protocol.html">Protocol resolution</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../explanations/designs.html">Designs and the design store</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../explanations/scanner-representation.html">Scanner representation (PulSeg)</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../explanations/virtual-scanner.html">The virtual scanner</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../explanations/reconstruction.html">Raw-data enrichment and routing</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../explanations/calibration.html">Calibration, noise and coil compression</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/safety-checks.html">Safety checks</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/scanner-representation.html">PulSeg representation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/raw-data.html">MRD enrichment</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/reconstruction-session.html">Reconstruction session</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/reconstruction.html">Reconstruction plugins and calibration context</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 current active has-children"><a class="reference internal" href="../../../examples/index.html">Examples</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
 <li class="toctree-l2 has-children"><a class="reference internal" href="../../../examples/course.html">Course</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l3"><a class="reference internal" href="../01-course/01_protocol_to_image.html">1. From protocol to image</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../01-course/02_sequence_plugin.html">2. A scanner sequence and its protocol</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../01-course/03_scanner_representation.html">3. Scanner representation</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../01-course/04_reconstruction_plugin.html">4. A reconstruction plugin</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../01-course/05_testing_on_the_virtual_scanner.html">5. Testing on the virtual scanner</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../01-course/01_protocol_to_image.html">1. Your first scan</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../01-course/02_sequence_plugin.html">2. Your sequence in the scanner UI</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../01-course/03_scanner_representation.html">3. What the scanner plays</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../01-course/04_reconstruction_plugin.html">4. What your recon receives</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../01-course/05_recon_plugin.html">5. Your recon plugin</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../01-course/06_testing_on_the_virtual_scanner.html">6. Test your pair on the virtual scanner</a></li>
 </ul>
 </details></li>
 <li class="toctree-l2 current active has-children"><a class="reference internal" href="../../../examples/tours.html">Tours</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
@@ -529,7 +534,7 @@
             </div>
             <nav aria-label="Page">
                 <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#scanner-sequence">Scanner sequence</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#the-plugin">The plugin</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#receiver-bandwidth">Receiver bandwidth</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#shortest-echo-time">Shortest echo time</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#infeasible-requests-and-repeated-resolution">Infeasible requests and repeated resolution</a></li>
@@ -551,26 +556,29 @@ to download the full example code.</p>
 </div>
 <section class="sphx-glr-example-title" id="protocol-resolution-for-a-2d-gradient-echo">
 <span id="sphx-glr-generated-gallery-02-tours-01-protocol-resolution-py"></span><h1>Protocol resolution for a 2D gradient echo<a class="headerlink" href="#protocol-resolution-for-a-2d-gradient-echo" title="Link to this heading">#</a></h1>
-<p>This Tour resolves prescriptions of a two-dimensional gradient echo the way a
-design call does for the scanner UI, and shows what the resolved protocol
-depends on: the receiver bandwidth a readout realizes on the sampling rasters,
-and the shortest echo time the readout admits.</p>
+<a class="reference external image-reference" href="https://colab.research.google.com/github/pulserver/pulserver/blob/gh-pages/latest/_colab/02-tours/01_protocol_resolution.ipynb"><img alt="Open in Colab" class="colab-badge" src="https://colab.research.google.com/assets/colab-badge.svg" />
+</a>
+<p>In this Tour you resolve prescriptions of a 2D gradient echo the way a design
+call does for the scanner UI. You see two things the resolved protocol depends
+on: the receiver bandwidth the readout realizes on the sampling rasters, and
+the shortest echo time the readout admits.</p>
 <p><strong>Prerequisites:</strong> lessons 1 and 2 of the <a class="reference internal" href="../../../examples/course.html"><span class="doc">course</span></a>.</p>
-<p>A request is resolved by evaluating the protocol under the scanner limits and
-reading back the values the design achieved
+<p>pulserver resolves a request by evaluating the protocol under the scanner
+limits and reading back the values the design achieved
 (<a class="reference internal" href="../../../explanations/protocol.html"><span class="doc">Protocol resolution</span></a>). The sequence is pypulseqpp’s <code class="docutils literal notranslate"><span class="pre">gre2d</span></code>, bound
-to five protocol entries. Its evaluation designs the whole scan, which keeps
-the binding short; the shipped plugins, and lesson 2, design one repetition
-instead, so that the time an edit takes does not grow with the matrix.</p>
-<section id="scanner-sequence">
-<h2>Scanner sequence<a class="headerlink" href="#scanner-sequence" title="Link to this heading">#</a></h2>
-<p>The binding maps interpreter parameter names to keyword arguments of the
-sequence function. Times are exchanged in integer microseconds, the field of view in
-mm, and the <em>Minimum</em> preset of TE and TR requests the shortest time the
-design admits. The evaluation designs the sequence and reads back the echo
-time and the repetition time, which the sequence records as its <code class="docutils literal notranslate"><span class="pre">TE</span></code> and
-<code class="docutils literal notranslate"><span class="pre">TR</span></code> definitions, and the receiver bandwidth, the inverse of the dwell time
-of its ADC event. The reply carries those values and the scan time.</p>
+to five protocol entries. To keep the plugin short, its <code class="docutils literal notranslate"><span class="pre">evaluate</span></code> designs
+the whole scan. The shipped plugins, and lesson 2, design one repetition, so
+the time an edit takes does not grow with the matrix.</p>
+<section id="the-plugin">
+<h2>The plugin<a class="headerlink" href="#the-plugin" title="Link to this heading">#</a></h2>
+<p>The plugin maps the interpreter’s parameter names to keyword arguments of
+<code class="docutils literal notranslate"><span class="pre">gre2d</span></code>. Times are exchanged in integer microseconds and the field of view
+in mm. The <em>Minimum</em> preset of TE and TR asks for the shortest time the
+design admits.</p>
+<p><code class="docutils literal notranslate"><span class="pre">evaluate</span></code> designs the sequence and reads back three values: the echo time
+and the repetition time, from the sequence’s <code class="docutils literal notranslate"><span class="pre">TE</span></code> and <code class="docutils literal notranslate"><span class="pre">TR</span></code> definitions,
+and the receiver bandwidth, the inverse of the dwell time of its ADC event.
+The reply carries these values and the scan time.</p>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span><span class="w">
 </span><span class="kn">import</span><span class="w"> </span><span class="nn">pypulseqpp</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pp</span><span class="w">
 </span><span class="kn">from</span><span class="w"> </span><span class="nn">figure_style</span><span class="w"> </span><span class="kn">import</span> <a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="str"><span class="n">MUTED</span></a><span class="p">,</span> <a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="float"><span class="n">PAGE_WIDTH</span></a><span class="w">
@@ -641,8 +649,8 @@ fov_rotation_33: float|off|1.0|-1.0|1.0|1e-06|
 [Protocol End]
 </pre></div>
 </div>
-<p>The scanner limits are those an interpreter host process sends with each
-call. The rasters are stated explicitly because the achieved bandwidth
+<p>These are the scanner limits the interpreter’s host process sends with each
+call. You state the rasters explicitly, because the achieved bandwidth
 depends on them.</p>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><a class="sphx-glr-backref-module-pypulseqpp sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.Opts.html#pypulseqpp.Opts" title="pypulseqpp.Opts"><span class="n">system</span></a> <span class="o">=</span> <a class="sphx-glr-backref-module-pypulseqpp sphx-glr-backref-type-py-class reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.Opts.html#pypulseqpp.Opts" title="pypulseqpp.Opts"><span class="n">pp</span><span class="o">.</span><span class="n">Opts</span></a><span class="p">(</span><span class="w">
 </span>    <span class="n">max_grad</span><span class="o">=</span><span class="mi">40</span><span class="p">,</span><span class="w">
@@ -656,18 +664,17 @@ depends on them.</p>
 </section>
 <section id="receiver-bandwidth">
 <h2>Receiver bandwidth<a class="headerlink" href="#receiver-bandwidth" title="Link to this heading">#</a></h2>
-<p>The readout samples at a dwell time that is a multiple of the ADC raster,
-and its duration, the number of samples times the dwell time, must be a
-whole number of gradient raster periods. The dwell time is the first that
-satisfies both, searched upward from the requested one, and the achieved
-bandwidth is its reciprocal: a request between two achievable bandwidths
-resolves to the lower of them. With twofold readout
-oversampling, a 64-column matrix is read with 128 samples and a 100-column
-matrix with 200.</p>
-<p>For 128 samples, a duration that is a multiple of 10 µs requires a dwell
-time that is a multiple of 2.5 µs, so only 400, 200, 133, 100, 80 kHz and so
-on are achievable. For 200 samples, every multiple of the 100 ns ADC raster
-is achievable.</p>
+<p>The readout samples at a dwell time that is a multiple of the ADC raster.
+Its duration, the number of samples times the dwell time, must be a whole
+number of gradient raster periods. The dwell time is the first one that
+satisfies both, searched upward from the requested one. The achieved
+bandwidth is its reciprocal, so a request between two achievable bandwidths
+resolves to the lower one.</p>
+<p>With twofold readout oversampling, a 64-column matrix is read with 128
+samples and a 100-column matrix with 200. For 128 samples, a duration that is
+a multiple of 10 µs needs a dwell time that is a multiple of 2.5 µs, so only
+400, 200, 133, 100, 80 kHz and so on are achievable. For 200 samples, every
+multiple of the 100 ns ADC raster is achievable.</p>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><a class="sphx-glr-backref-module-numpy sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="numpy.ndarray"><span class="n">requested</span></a> <span class="o">=</span> <a class="sphx-glr-backref-module-numpy sphx-glr-backref-type-py-function reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.linspace.html#numpy.linspace" title="numpy.linspace"><span class="n">np</span><span class="o">.</span><span class="n">linspace</span></a><span class="p">(</span><span class="mf">60e3</span><span class="p">,</span> <span class="mf">300e3</span><span class="p">,</span> <span class="mi">121</span><span class="p">)</span><span class="w">
 </span><a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict" title="dict"><span class="n">achieved</span></a> <span class="o">=</span> <span class="p">{</span><span class="w">
 </span>    <a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="int"><span class="n">nx</span></a><span class="p">:</span> <span class="p">[</span><span class="w">
@@ -678,7 +685,7 @@ is achievable.</p>
 </span><span class="p">}</span><span class="w">
 </span></pre></div></div>
 <img src="../../../_images/sphx_glr_01_protocol_resolution_001.png" srcset="../../../_images/sphx_glr_01_protocol_resolution_001.png" alt="01 protocol resolution" class = "sphx-glr-single-img"/><p>The reply always carries the achieved value, so the scanner UI shows the
-bandwidth that will be played rather than the one typed in.</p>
+bandwidth that is played, not the one typed in.</p>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><span class="k">for</span> <a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="float"><span class="n">bw</span></a> <span class="ow">in</span> <span class="p">(</span><span class="mf">150e3</span><span class="p">,</span> <span class="mf">190e3</span><span class="p">)</span><span class="p">:</span><span class="w">
 </span>    <a class="sphx-glr-backref-module-pulserver-protocol sphx-glr-backref-type-py-class sphx-glr-backref-instance reference internal" href="../../pulserver.protocol.Validation.html#pulserver.protocol.Validation" title="pulserver.protocol.Validation"><span class="n">reply</span></a> <span class="o">=</span> <a class="sphx-glr-backref-module-pulserver-design sphx-glr-backref-type-py-method reference internal" href="../../pulserver.design.SequencePlugin.validate.html#pulserver.design.SequencePlugin.validate" title="pulserver.design.SequencePlugin.validate"><span class="n">gre</span><span class="o">.</span><span class="n">validate</span></a><span class="p">(</span><a class="sphx-glr-backref-module-pypulseqpp sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.Opts.html#pypulseqpp.Opts" title="pypulseqpp.Opts"><span class="n">system</span></a><span class="p">,</span> <span class="p">{</span><span class="s2">&quot;</span><span class="s2">nx</span><span class="s2">&quot;</span><span class="p">:</span> <span class="mi">64</span><span class="p">,</span> <span class="s2">&quot;</span><span class="s2">bandwidth</span><span class="s2">&quot;</span><span class="p">:</span> <a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="float"><span class="n">bw</span></a><span class="p">}</span><span class="p">)</span><span class="w">
 </span>    <span class="nb">print</span><span class="p">(</span><span class="w">
@@ -692,12 +699,12 @@ requested  190.0 kHz -&gt; achieved  133.3 kHz
 </section>
 <section id="shortest-echo-time">
 <h2>Shortest echo time<a class="headerlink" href="#shortest-echo-time" title="Link to this heading">#</a></h2>
-<p>The <em>Minimum</em> preset of TE is resolved to the echo time of the design, in
-integer microseconds. The echo is placed after the excitation, the
-slice-selection rephaser and the readout prewinder, and before it the
-readout acquires half of its samples. The shortest echo time therefore grows
-with the number of samples and with the dwell time, that is, with matrix size
-and inversely with bandwidth.</p>
+<p>The <em>Minimum</em> preset of TE resolves to the echo time of the design, in
+integer microseconds. Before the echo come the excitation, the
+slice-selection rephaser, the readout prewinder and the first half of the
+readout’s samples. The shortest echo time therefore grows with the number of
+samples and with the dwell time: with the matrix size, and inversely with
+the bandwidth.</p>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><a class="sphx-glr-backref-module-numpy sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="numpy.ndarray"><span class="n">matrices</span></a> <span class="o">=</span> <a class="sphx-glr-backref-module-numpy sphx-glr-backref-type-py-function reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.arange.html#numpy.arange" title="numpy.arange"><span class="n">np</span><span class="o">.</span><span class="n">arange</span></a><span class="p">(</span><span class="mi">64</span><span class="p">,</span> <span class="mi">385</span><span class="p">,</span> <span class="mi">32</span><span class="p">)</span><span class="w">
 </span><a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#tuple" title="tuple"><span class="n">bandwidths</span></a> <span class="o">=</span> <span class="p">(</span><span class="mf">100e3</span><span class="p">,</span> <span class="mf">200e3</span><span class="p">,</span> <span class="mf">400e3</span><span class="p">)</span><span class="w">
 </span><a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict" title="dict"><span class="n">minimum_te</span></a> <span class="o">=</span> <span class="p">{</span><span class="w">
@@ -714,8 +721,8 @@ and inversely with bandwidth.</p>
 <section id="infeasible-requests-and-repeated-resolution">
 <h2>Infeasible requests and repeated resolution<a class="headerlink" href="#infeasible-requests-and-repeated-resolution" title="Link to this heading">#</a></h2>
 <p>A prescription the design cannot realize is invalid. The reply carries the
-request unchanged and the message of the error the design raised, which the
-interpreter shows to the operator.</p>
+request unchanged and the message of the error the design raised. The
+interpreter shows that message to the operator.</p>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><a class="sphx-glr-backref-module-pulserver-protocol sphx-glr-backref-type-py-class sphx-glr-backref-instance reference internal" href="../../pulserver.protocol.Validation.html#pulserver.protocol.Validation" title="pulserver.protocol.Validation"><span class="n">reply</span></a> <span class="o">=</span> <a class="sphx-glr-backref-module-pulserver-design sphx-glr-backref-type-py-method reference internal" href="../../pulserver.design.SequencePlugin.validate.html#pulserver.design.SequencePlugin.validate" title="pulserver.design.SequencePlugin.validate"><span class="n">gre</span><span class="o">.</span><span class="n">validate</span></a><span class="p">(</span><a class="sphx-glr-backref-module-pypulseqpp sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.Opts.html#pypulseqpp.Opts" title="pypulseqpp.Opts"><span class="n">system</span></a><span class="p">,</span> <span class="p">{</span><span class="s2">&quot;</span><span class="s2">TE</span><span class="s2">&quot;</span><span class="p">:</span> <span class="mi">1500</span><span class="p">,</span> <span class="s2">&quot;</span><span class="s2">nx</span><span class="s2">&quot;</span><span class="p">:</span> <span class="mi">256</span><span class="p">}</span><span class="p">)</span><span class="w">
 </span><span class="nb">print</span><span class="p">(</span><a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="bool"><span class="n">reply</span><span class="o">.</span><span class="n">valid</span></a><span class="p">)</span><span class="w">
 </span><span class="nb">print</span><span class="p">(</span><a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="str"><span class="n">reply</span><span class="o">.</span><span class="n">info</span></a><span class="p">)</span><span class="w">
@@ -725,9 +732,9 @@ the requested TE of 1.500 ms is shorter than the 3.550 ms this readout can achie
 </pre></div>
 </div>
 <p>A valid reply carries the resolved protocol at the precision a scanner
-parameter stores. Sending it back resolves to the same protocol,
-which is what lets a design be identified by its resolved protocol
-(<a class="reference internal" href="../../../explanations/designs.html"><span class="doc">Designs and the design store</span></a>).</p>
+parameter stores. Sending it back resolves to the same protocol, so a design
+can be identified by its resolved protocol
+(<a class="reference internal" href="../../../explanations/architecture.html"><span class="doc">Architecture</span></a>).</p>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><a class="sphx-glr-backref-module-pulserver-protocol sphx-glr-backref-type-py-class sphx-glr-backref-instance reference internal" href="../../pulserver.protocol.Validation.html#pulserver.protocol.Validation" title="pulserver.protocol.Validation"><span class="n">first</span></a> <span class="o">=</span> <a class="sphx-glr-backref-module-pulserver-design sphx-glr-backref-type-py-method reference internal" href="../../pulserver.design.SequencePlugin.validate.html#pulserver.design.SequencePlugin.validate" title="pulserver.design.SequencePlugin.validate"><span class="n">gre</span><span class="o">.</span><span class="n">validate</span></a><span class="p">(</span><a class="sphx-glr-backref-module-pypulseqpp sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.Opts.html#pypulseqpp.Opts" title="pypulseqpp.Opts"><span class="n">system</span></a><span class="p">,</span> <span class="p">{</span><span class="s2">&quot;</span><span class="s2">TE</span><span class="s2">&quot;</span><span class="p">:</span> <a class="sphx-glr-backref-module-pulserver-protocol sphx-glr-backref-type-py-class sphx-glr-backref-instance reference internal" href="../../pulserver.protocol.TEPreset.html#pulserver.protocol.TEPreset" title="pulserver.protocol.TEPreset"><span class="n">TEPreset</span><span class="o">.</span><span class="n">MINIMUM</span></a><span class="p">,</span> <span class="s2">&quot;</span><span class="s2">nx</span><span class="s2">&quot;</span><span class="p">:</span> <span class="mi">192</span><span class="p">,</span> <span class="s2">&quot;</span><span class="s2">bandwidth</span><span class="s2">&quot;</span><span class="p">:</span> <span class="mf">150e3</span><span class="p">}</span><span class="p">)</span><span class="w">
 </span><a class="sphx-glr-backref-module-pulserver-protocol sphx-glr-backref-type-py-class sphx-glr-backref-instance reference internal" href="../../pulserver.protocol.Validation.html#pulserver.protocol.Validation" title="pulserver.protocol.Validation"><span class="n">again</span></a> <span class="o">=</span> <a class="sphx-glr-backref-module-pulserver-design sphx-glr-backref-type-py-method reference internal" href="../../pulserver.design.SequencePlugin.validate.html#pulserver.design.SequencePlugin.validate" title="pulserver.design.SequencePlugin.validate"><span class="n">gre</span><span class="o">.</span><span class="n">validate</span></a><span class="p">(</span><a class="sphx-glr-backref-module-pypulseqpp sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.Opts.html#pypulseqpp.Opts" title="pypulseqpp.Opts"><span class="n">system</span></a><span class="p">,</span> <a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict" title="dict"><span class="n">first</span><span class="o">.</span><span class="n">values</span></a><span class="p">)</span><span class="w">
 </span><span class="k">for</span> <a class="sphx-glr-backref-module-pulserver-protocol sphx-glr-backref-type-py-class sphx-glr-backref-instance reference internal" href="../../pulserver.protocol.FloatKey.html#pulserver.protocol.FloatKey" title="pulserver.protocol.FloatKey"><span class="n">key</span></a> <span class="ow">in</span> <a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict" title="dict"><span class="n">gre</span><span class="o">.</span><span class="n">protocol</span></a><span class="p">:</span><span class="w">
@@ -740,10 +747,10 @@ bandwidth: 133333.0
 fov: 220.0
 nx: 192
 nex: 1.0
-True scan time 36.0 s
+True scan time 38.2 s
 </pre></div>
 </div>
-<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 4.334 seconds)</p>
+<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 5.395 seconds)</p>
 <div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-generated-gallery-02-tours-01-protocol-resolution-py">
 <div class="sphx-glr-download sphx-glr-download-jupyter docutils container">
 <p><a class="reference download internal" download="" href="../../../_downloads/ecb77ca40173858189900e492b80a4b3/01_protocol_resolution.ipynb"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Jupyter</span> <span class="pre">notebook:</span> <span class="pre">01_protocol_resolution.ipynb</span></code></a></p>
@@ -806,7 +813,7 @@ True scan time 36.0 s
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#scanner-sequence">Scanner sequence</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#the-plugin">The plugin</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#receiver-bandwidth">Receiver bandwidth</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#shortest-echo-time">Shortest echo time</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#infeasible-requests-and-repeated-resolution">Infeasible requests and repeated resolution</a></li>

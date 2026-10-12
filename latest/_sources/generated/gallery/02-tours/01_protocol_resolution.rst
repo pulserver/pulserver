@@ -22,19 +22,19 @@
 Protocol resolution for a 2D gradient echo
 ==========================================
 
-This Tour resolves prescriptions of a two-dimensional gradient echo the way a
-design call does for the scanner UI, and shows what the resolved protocol
-depends on: the receiver bandwidth a readout realizes on the sampling rasters,
-and the shortest echo time the readout admits.
+In this Tour you resolve prescriptions of a 2D gradient echo the way a design
+call does for the scanner UI. You see two things the resolved protocol depends
+on: the receiver bandwidth the readout realizes on the sampling rasters, and
+the shortest echo time the readout admits.
 
 **Prerequisites:** lessons 1 and 2 of the :doc:`course </examples/course>`.
 
-A request is resolved by evaluating the protocol under the scanner limits and
-reading back the values the design achieved
+pulserver resolves a request by evaluating the protocol under the scanner
+limits and reading back the values the design achieved
 (:doc:`/explanations/protocol`). The sequence is pypulseqpp's ``gre2d``, bound
-to five protocol entries. Its evaluation designs the whole scan, which keeps
-the binding short; the shipped plugins, and lesson 2, design one repetition
-instead, so that the time an edit takes does not grow with the matrix.
+to five protocol entries. To keep the plugin short, its ``evaluate`` designs
+the whole scan. The shipped plugins, and lesson 2, design one repetition, so
+the time an edit takes does not grow with the matrix.
 
 .. GENERATED FROM PYTHON SOURCE LINES 20-28
 
@@ -45,20 +45,22 @@ instead, so that the time an edit takes does not grow with the matrix.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 29-39
+.. GENERATED FROM PYTHON SOURCE LINES 29-41
 
-Scanner sequence
-----------------
+The plugin
+----------
 
-The binding maps interpreter parameter names to keyword arguments of the
-sequence function. Times are exchanged in integer microseconds, the field of view in
-mm, and the *Minimum* preset of TE and TR requests the shortest time the
-design admits. The evaluation designs the sequence and reads back the echo
-time and the repetition time, which the sequence records as its ``TE`` and
-``TR`` definitions, and the receiver bandwidth, the inverse of the dwell time
-of its ADC event. The reply carries those values and the scan time.
+The plugin maps the interpreter's parameter names to keyword arguments of
+``gre2d``. Times are exchanged in integer microseconds and the field of view
+in mm. The *Minimum* preset of TE and TR asks for the shortest time the
+design admits.
 
-.. GENERATED FROM PYTHON SOURCE LINES 39-87
+``evaluate`` designs the sequence and reads back three values: the echo time
+and the repetition time, from the sequence's ``TE`` and ``TR`` definitions,
+and the receiver bandwidth, the inverse of the dwell time of its ADC event.
+The reply carries these values and the scan time.
+
+.. GENERATED FROM PYTHON SOURCE LINES 41-89
 
 .. code-block:: Python
 
@@ -142,13 +144,13 @@ of its ADC event. The reply carries those values and the scan time.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 88-91
+.. GENERATED FROM PYTHON SOURCE LINES 90-93
 
-The scanner limits are those an interpreter host process sends with each
-call. The rasters are stated explicitly because the achieved bandwidth
+These are the scanner limits the interpreter's host process sends with each
+call. You state the rasters explicitly, because the achieved bandwidth
 depends on them.
 
-.. GENERATED FROM PYTHON SOURCE LINES 91-101
+.. GENERATED FROM PYTHON SOURCE LINES 93-103
 
 .. code-block:: Python
 
@@ -169,26 +171,25 @@ depends on them.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 102-118
+.. GENERATED FROM PYTHON SOURCE LINES 104-119
 
 Receiver bandwidth
 ------------------
 
-The readout samples at a dwell time that is a multiple of the ADC raster,
-and its duration, the number of samples times the dwell time, must be a
-whole number of gradient raster periods. The dwell time is the first that
-satisfies both, searched upward from the requested one, and the achieved
-bandwidth is its reciprocal: a request between two achievable bandwidths
-resolves to the lower of them. With twofold readout
-oversampling, a 64-column matrix is read with 128 samples and a 100-column
-matrix with 200.
+The readout samples at a dwell time that is a multiple of the ADC raster.
+Its duration, the number of samples times the dwell time, must be a whole
+number of gradient raster periods. The dwell time is the first one that
+satisfies both, searched upward from the requested one. The achieved
+bandwidth is its reciprocal, so a request between two achievable bandwidths
+resolves to the lower one.
 
-For 128 samples, a duration that is a multiple of 10 µs requires a dwell
-time that is a multiple of 2.5 µs, so only 400, 200, 133, 100, 80 kHz and so
-on are achievable. For 200 samples, every multiple of the 100 ns ADC raster
-is achievable.
+With twofold readout oversampling, a 64-column matrix is read with 128
+samples and a 100-column matrix with 200. For 128 samples, a duration that is
+a multiple of 10 µs needs a dwell time that is a multiple of 2.5 µs, so only
+400, 200, 133, 100, 80 kHz and so on are achievable. For 200 samples, every
+multiple of the 100 ns ADC raster is achievable.
 
-.. GENERATED FROM PYTHON SOURCE LINES 118-144
+.. GENERATED FROM PYTHON SOURCE LINES 119-145
 
 .. code-block:: Python
 
@@ -215,12 +216,12 @@ is achievable.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 145-147
+.. GENERATED FROM PYTHON SOURCE LINES 146-148
 
 The reply always carries the achieved value, so the scanner UI shows the
-bandwidth that will be played rather than the one typed in.
+bandwidth that is played, not the one typed in.
 
-.. GENERATED FROM PYTHON SOURCE LINES 147-154
+.. GENERATED FROM PYTHON SOURCE LINES 148-155
 
 .. code-block:: Python
 
@@ -245,19 +246,19 @@ bandwidth that will be played rather than the one typed in.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 155-164
+.. GENERATED FROM PYTHON SOURCE LINES 156-165
 
 Shortest echo time
 ------------------
 
-The *Minimum* preset of TE is resolved to the echo time of the design, in
-integer microseconds. The echo is placed after the excitation, the
-slice-selection rephaser and the readout prewinder, and before it the
-readout acquires half of its samples. The shortest echo time therefore grows
-with the number of samples and with the dwell time, that is, with matrix size
-and inversely with bandwidth.
+The *Minimum* preset of TE resolves to the echo time of the design, in
+integer microseconds. Before the echo come the excitation, the
+slice-selection rephaser, the readout prewinder and the first half of the
+readout's samples. The shortest echo time therefore grows with the number of
+samples and with the dwell time: with the matrix size, and inversely with
+the bandwidth.
 
-.. GENERATED FROM PYTHON SOURCE LINES 164-193
+.. GENERATED FROM PYTHON SOURCE LINES 165-194
 
 .. code-block:: Python
 
@@ -287,16 +288,16 @@ and inversely with bandwidth.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 194-200
+.. GENERATED FROM PYTHON SOURCE LINES 195-201
 
 Infeasible requests and repeated resolution
 -------------------------------------------
 
 A prescription the design cannot realize is invalid. The reply carries the
-request unchanged and the message of the error the design raised, which the
-interpreter shows to the operator.
+request unchanged and the message of the error the design raised. The
+interpreter shows that message to the operator.
 
-.. GENERATED FROM PYTHON SOURCE LINES 200-205
+.. GENERATED FROM PYTHON SOURCE LINES 201-206
 
 .. code-block:: Python
 
@@ -319,14 +320,14 @@ interpreter shows to the operator.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 206-210
+.. GENERATED FROM PYTHON SOURCE LINES 207-211
 
 A valid reply carries the resolved protocol at the precision a scanner
-parameter stores. Sending it back resolves to the same protocol,
-which is what lets a design be identified by its resolved protocol
-(:doc:`/explanations/designs`).
+parameter stores. Sending it back resolves to the same protocol, so a design
+can be identified by its resolved protocol
+(:doc:`/explanations/architecture`).
 
-.. GENERATED FROM PYTHON SOURCE LINES 210-216
+.. GENERATED FROM PYTHON SOURCE LINES 211-217
 
 .. code-block:: Python
 
@@ -350,7 +351,7 @@ which is what lets a design be identified by its resolved protocol
     fov: 220.0
     nx: 192
     nex: 1.0
-    True scan time 36.0 s
+    True scan time 38.2 s
 
 
 
@@ -358,7 +359,7 @@ which is what lets a design be identified by its resolved protocol
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 4.334 seconds)
+   **Total running time of the script:** (0 minutes 5.395 seconds)
 
 
 .. _sphx_glr_download_generated_gallery_02-tours_01_protocol_resolution.py:

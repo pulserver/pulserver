@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>Scanner representation (PulSeg) &#8212; pulserver documentation</title>
+    <title>PulSeg representation &#8212; pulserver documentation</title>
   
   
   
@@ -37,7 +37,7 @@
     <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-binder.css?v=f4aeca0c" />
     <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-dataframe.css?v=2082cf3c" />
     <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
-    <link rel="stylesheet" type="text/css" href="../_static/pulserver.css?v=e08ae8f3" />
+    <link rel="stylesheet" type="text/css" href="../_static/pulserver.css?v=6854ff42" />
   
   <!-- So that users can add custom icons -->
   <script defer src="../_static/scripts/fontawesome.js?digest=90905a2f556bf617f1a9"></script>
@@ -63,12 +63,13 @@
             true;
         </script>
     <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
+    <script src="../_static/capabilities.js?v=421ebb92"></script>
     <link rel="canonical" href="https://pulserver.github.io/pulserver/latest/explanations/scanner-representation.html" />
     <link rel="icon" href="../_static/pulserver-mark.svg"/>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="The virtual scanner" href="virtual-scanner.html" />
-    <link rel="prev" title="Designs and the design store" href="designs.html" />
+    <link rel="next" title="MRD enrichment" href="raw-data.html" />
+    <link rel="prev" title="Safety checks" href="safety-checks.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   <meta name="docsearch:version" content="latest" />
@@ -258,9 +259,11 @@
 <li class="toctree-l2"><a class="reference internal" href="../developer-guide/documentation.html">Documentation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../developer-guide/terminology.html">Terminology and conventions</a></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../developer-guide/internals/index.html">Internals</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/calibration.html">Calibration, noise and coil compression</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/ir-cache.html">IR cache</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/protocol-wire.html">Protocol text blocks</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/reconstruction-proxy.html">Reconstruction proxy</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/sar-ratios.html">SAR ratios against a reference pulse</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
@@ -273,20 +276,22 @@
 <li class="toctree-l1 current active has-children"><a class="reference internal" href="index.html">Explanations</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
 <li class="toctree-l2"><a class="reference internal" href="architecture.html">Architecture</a></li>
 <li class="toctree-l2"><a class="reference internal" href="protocol.html">Protocol resolution</a></li>
-<li class="toctree-l2"><a class="reference internal" href="designs.html">Designs and the design store</a></li>
-<li class="toctree-l2 current active"><a class="current reference internal" href="#">Scanner representation (PulSeg)</a></li>
-<li class="toctree-l2"><a class="reference internal" href="virtual-scanner.html">The virtual scanner</a></li>
-<li class="toctree-l2"><a class="reference internal" href="reconstruction.html">Raw-data enrichment and routing</a></li>
-<li class="toctree-l2"><a class="reference internal" href="calibration.html">Calibration, noise and coil compression</a></li>
+<li class="toctree-l2"><a class="reference internal" href="safety-checks.html">Safety checks</a></li>
+<li class="toctree-l2 current active"><a class="current reference internal" href="#">PulSeg representation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="raw-data.html">MRD enrichment</a></li>
+<li class="toctree-l2"><a class="reference internal" href="reconstruction-session.html">Reconstruction session</a></li>
+<li class="toctree-l2"><a class="reference internal" href="reconstruction.html">Reconstruction plugins and calibration context</a></li>
+<li class="toctree-l2"><a class="reference internal" href="virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../examples/index.html">Examples</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../examples/course.html">Course</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/01_protocol_to_image.html">1. From protocol to image</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/02_sequence_plugin.html">2. A scanner sequence and its protocol</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/03_scanner_representation.html">3. Scanner representation</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/04_reconstruction_plugin.html">4. A reconstruction plugin</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/05_testing_on_the_virtual_scanner.html">5. Testing on the virtual scanner</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/01_protocol_to_image.html">1. Your first scan</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/02_sequence_plugin.html">2. Your sequence in the scanner UI</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/03_scanner_representation.html">3. What the scanner plays</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/04_reconstruction_plugin.html">4. What your recon receives</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/05_recon_plugin.html">5. Your recon plugin</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/06_testing_on_the_virtual_scanner.html">6. Test your pair on the virtual scanner</a></li>
 </ul>
 </details></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../examples/tours.html">Tours</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -521,7 +526,7 @@
               
 
 <div id="jb-print-docs-body" class="onlyprint">
-    <h1>Scanner representation (PulSeg)</h1>
+    <h1>PulSeg representation</h1>
     <!-- Table of contents -->
     <div id="print-main-content">
         <div id="jb-print-toc">
@@ -531,13 +536,18 @@
             </div>
             <nav aria-label="Page">
                 <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pulseq-input">Pulseq input</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#the-pulseg-model">The PulSeg model</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#repetition-and-virtual-segments">Repetition and virtual segments</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#non-periodic-sequences">Non-periodic sequences</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#differences-from-pulseg-2-1-alpha">Differences from PulSeg 2.1-alpha</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#field-of-view-offset">Field-of-view offset</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#see-also">See also</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#capabilities">Capabilities</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#division-of-responsibility">Division of responsibility</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#method">Method</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#the-pulseg-model">The PulSeg model</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#repetition-detection">Repetition detection</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#segmentation-rules">Segmentation rules</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#vendor-configuration">Vendor configuration</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#field-of-view-offset">Field-of-view offset</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#differences-from-pulseg-2-1-alpha">Differences from PulSeg 2.1-alpha</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#examples">Examples</a></li>
 </ul>
             </nav>
         </div>
@@ -549,134 +559,182 @@
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <section class="tex2jax_ignore mathjax_ignore" id="scanner-representation-pulseg">
-<h1>Scanner representation (PulSeg)<a class="headerlink" href="#scanner-representation-pulseg" title="Link to this heading">#</a></h1>
+  <section class="tex2jax_ignore mathjax_ignore" id="pulseg-representation">
+<h1>PulSeg representation<a class="headerlink" href="#pulseg-representation" title="Link to this heading">#</a></h1>
 <div class="tldr admonition">
 <p class="admonition-title">TL;DR</p>
 <ul class="simple">
-<li><p>A scanner interpreter plays a sequence as an execution stream of segment
-instances. Each instance plays a virtual segment, an ordered list of base
-blocks, with its own amplitude scales, RF and ADC phase and frequency,
-rotation and block durations.</p></li>
-<li><p>pulserver computes this representation on the host from a Pulseq chain and
-writes it into the IR cache beside the sequence file.</p></li>
-<li><p>When a sequence repeats, conversion uses the repetition pypulseqpp reports,
-finds the virtual segments inside it at near-zero gradients, and stores the
-stream’s segment IDs once per period. A sequence that does not repeat is one
-repetition, refused above 15 s.</p></li>
-<li><p>The terms are PulSeg’s. Segment boundaries, the meaning of <code class="docutils literal notranslate"><span class="pre">TRID</span></code> and the use
-of periodicity are pulserver’s own.</p></li>
+<li><p>Each Pulseq file becomes an IR cache in PulSeg’s terms: base blocks, virtual segments prepared once, and a stream of segment instances.</p></li>
+<li><p>The repetition is pypulseqpp’s period of the block table; segments are cut within it where the gradients are near zero, under a grouping each vendor can set.</p></li>
+<li><p>The interpreter reads the cache through a C89 library pulserver ships.</p></li>
 </ul>
 </div>
-<p>PulSeg provides the conceptual IR model used by pulserver. pulserver adapts and
-extends that model for scanner execution, including automatic discovery of
-periodicity and segment boundaries.</p>
-<section id="pulseq-input">
-<h2>Pulseq input<a class="headerlink" href="#pulseq-input" title="Link to this heading">#</a></h2>
-<p>A Pulseq sequence is an ordered list of blocks whose RF, gradient and ADC
-events reference shared libraries; pypulseqpp’s
-<a class="reference external" href="https://pulserver.github.io/pypulseqpp/latest/explanations/pulseq-representation.html">Pulseq representation</a>
-page states the format. <a class="reference internal" href="../generated/pulserver.ir.convert.html#pulserver.ir.convert" title="pulserver.ir.convert"><code class="xref py py-func docutils literal notranslate"><span class="pre">convert()</span></code></a> reads the
-<code class="docutils literal notranslate"><span class="pre">NextSequence</span></code> chain starting at a sequence file with <code class="docutils literal notranslate"><span class="pre">pypulseqpp.Sequence</span></code>.
-Each file of the chain is a subsequence of one scan, played in order, such as
-a prescan followed by the imaging sequence, and is converted on its own.</p>
+<p>A scanner plays faster and loads less when it prepares each distinct piece of
+the sequence once and then only updates amplitudes, phases and rotations.
+pulserver finds those pieces in each file of a <code class="docutils literal notranslate"><span class="pre">NextSequence</span></code> chain, in the
+terms of PulSeg 2.1-alpha (<a class="reference external" href="https://github.com/HarmonizedMRI/pulseg">HarmonizedMRI/pulseg</a>).
+Lesson 3 of the <a class="reference internal" href="../examples/course.html"><span class="doc">Course</span></a> converts <code class="docutils literal notranslate"><span class="pre">gre2d</span></code> and looks at
+its segments.</p>
+<section id="capabilities">
+<h2>Capabilities<a class="headerlink" href="#capabilities" title="Link to this heading">#</a></h2>
+<div class="capabilities docutils container">
+<ul>
+<li><p><strong>Converts a text or binary Pulseq chain into an IR cache that plays every block as designed.</strong></p>
+<p>Code: <a class="reference internal" href="../generated/pulserver.ir.convert.html#pulserver.ir.convert" title="pulserver.ir.convert"><code class="xref py py-func docutils literal notranslate"><span class="pre">convert()</span></code></a>. Tests: <em>a converted cache reads back as the sequence it came from</em>; <em>the scanner plays every block as its file designs it</em>; <em>a binary file segments into the scan its text does</em>; <em>a chain plays its prescan file then its scan</em> (<code class="docutils literal notranslate"><span class="pre">test_ir.py</span></code>).</p>
+</li>
+<li><p><strong>Takes the repetition pypulseqpp reports, and segments within it.</strong></p>
+<p>Code: <code class="docutils literal notranslate"><span class="pre">src/cpp/ir/structure.cpp</span></code>. Tests: <em>the ir segments the repetition pypulseqpp finds</em>; <em>a hyper tr declared as pypulseqpp writes it is the repeating unit</em> (<code class="docutils literal notranslate"><span class="pre">test_ir_repetition.py</span></code>).</p>
+</li>
+<li><p><strong>Treats a sequence that does not repeat as one repetition, and refuses one longer than 15 s.</strong></p>
+<p>Code: <code class="docutils literal notranslate"><span class="pre">SINGLE_TR_MAX_DURATION_US</span></code>. Tests: <em>a sequence that does not repeat is one repetition</em>; <em>a sequence that does not repeat is refused past 15 s</em> (<code class="docutils literal notranslate"><span class="pre">test_ir_repetition.py</span></code>).</p>
+</li>
+<li><p><strong>Cuts virtual segments only where every gradient is near zero, under a tunable grouping.</strong></p>
+<p>Code: <a class="reference internal" href="../generated/pulserver.ir.Grouping.html#pulserver.ir.Grouping" title="pulserver.ir.Grouping"><code class="xref py py-class docutils literal notranslate"><span class="pre">Grouping</span></code></a>. Tests: <em>the default grouping is what a conversion does unasked</em>; <em>a grouping moves the boundaries and not the gradient</em> (<code class="docutils literal notranslate"><span class="pre">test_ir_grouping.py</span></code>); <em>a gradient its file ends live may not end the repetition</em> (<code class="docutils literal notranslate"><span class="pre">test_ir.py</span></code>).</p>
+</li>
+<li><p><strong>Converts under the grouping and number formats a vendor file states.</strong></p>
+<p>Code: <a class="reference internal" href="../generated/pulserver.ir.read_vendor.html#pulserver.ir.read_vendor" title="pulserver.ir.read_vendor"><code class="xref py py-func docutils literal notranslate"><span class="pre">read_vendor()</span></code></a>, <code class="docutils literal notranslate"><span class="pre">ir_vendor_file</span></code>. Tests: <em>a design is converted under the vendor file its limits name</em>; <em>an unreadable vendor file is refused and stores nothing</em> (<code class="docutils literal notranslate"><span class="pre">test_design_service.py</span></code>); <em>a vendor file stating anything else is refused</em> (<code class="docutils literal notranslate"><span class="pre">test_ir_vendor.py</span></code>).</p>
+</li>
+<li><p><strong>Gives repetitions that differ in pulses, timing or arbitrary gradients their own segment variant.</strong></p>
+<p>Code: <code class="docutils literal notranslate"><span class="pre">src/cpp/ir/</span></code>. Tests: <em>repetitions that play different pulses each play their own</em>; <em>repetitions whose gradients differ in timing each play their own</em> (<code class="docutils literal notranslate"><span class="pre">test_ir_segments.py</span></code>).</p>
+</li>
+<li><p><strong>Streams waves through waveform memory, and refuses a conversion whose waves cannot load in time.</strong></p>
+<p>Code: <a class="reference internal" href="../generated/pulserver.ir.WaveBudget.html#pulserver.ir.WaveBudget" title="pulserver.ir.WaveBudget"><code class="xref py py-class docutils literal notranslate"><span class="pre">WaveBudget</span></code></a>. Tests: <em>waves that do not fit at once stream through a ring of slots per position</em>; <em>an instance that cannot load while the one before it plays is refused</em> (<code class="docutils literal notranslate"><span class="pre">test_ir_waves.py</span></code>).</p>
+</li>
+<li><p><strong>Sets triggers, digital outputs and the <code class="docutils literal notranslate"><span class="pre">NOROT</span></code> exemption per block, as the labels state.</strong></p>
+<p>Code: <code class="docutils literal notranslate"><span class="pre">src/cpp/ir/</span></code>. Tests: <em>the scan waits for a cardiac trigger without driving an output</em>; <em>the scan pulses each output and leaves norot blocks unrotated</em> (<code class="docutils literal notranslate"><span class="pre">test_ir_playout.py</span></code>).</p>
+</li>
+<li><p><strong>Moves the design to the field-of-view offset with RF and ADC frequency and phase offsets alone.</strong></p>
+<p>Code: <a class="reference internal" href="../generated/pulserver.ir.prescribe.html#pulserver.ir.prescribe" title="pulserver.ir.prescribe"><code class="xref py py-func docutils literal notranslate"><span class="pre">prescribe()</span></code></a>. Tests: <em>a prescribed offset moves every readout of a file by one frequency</em>; <em>a prescribed slice offset moves every excitation by one frequency</em> (<code class="docutils literal notranslate"><span class="pre">test_ir.py</span></code>).</p>
+</li>
+<li><p><strong>Writes the sound pressure levels and SAR ratios of each subsequence into the cache.</strong></p>
+<p>Code: <a class="reference internal" href="../generated/pulserver.ir.convert.html#pulserver.ir.convert" title="pulserver.ir.convert"><code class="xref py py-func docutils literal notranslate"><span class="pre">convert()</span></code></a>. Tests: <em>each file of a chain carries its sound pressure levels into the cache</em>; <em>each file of a chain carries its sar ratios into the cache</em> (<code class="docutils literal notranslate"><span class="pre">test_ir.py</span></code>).</p>
+</li>
+<li><p><strong>Ships the C89 reader and playout the interpreter links, tested 32-bit and vendor-tagged.</strong></p>
+<p>Code: <code class="docutils literal notranslate"><span class="pre">src/c/</span></code>, <a class="reference internal" href="../generated/pulserver.ir.play.html#pulserver.ir.play" title="pulserver.ir.play"><code class="xref py py-func docutils literal notranslate"><span class="pre">play()</span></code></a>. Tests: <em>a vendor cache written here loads in the scanner reader</em>; <em>a reader built for another vendor refuses the cache</em> (<code class="docutils literal notranslate"><span class="pre">test_ir.py</span></code>).</p>
+</li>
+</ul>
+</div>
 </section>
+<section id="division-of-responsibility">
+<h2>Division of responsibility<a class="headerlink" href="#division-of-responsibility" title="Link to this heading">#</a></h2>
+<ul class="simple">
+<li><p><strong>Prepares each virtual segment once and plays its instances</strong>, loading waves into waveform memory on the cache’s schedule.</p></li>
+<li><p><strong>Generates the scanner’s instructions</strong>, resampling waveforms onto the scanner’s rasters (<a class="reference internal" href="safety-checks.html"><span class="doc">Safety checks</span></a>).</p></li>
+<li><p><strong>Applies the prescription’s rotation</strong>, after each block’s own.</p></li>
+</ul>
+</section>
+<section id="method">
+<h2>Method<a class="headerlink" href="#method" title="Link to this heading">#</a></h2>
 <section id="the-pulseg-model">
-<h2>The PulSeg model<a class="headerlink" href="#the-pulseg-model" title="Link to this heading">#</a></h2>
+<h3>The PulSeg model<a class="headerlink" href="#the-pulseg-model" title="Link to this heading">#</a></h3>
 <figure class="only-light align-default" id="id1">
 <img alt="../_images/pulseg.svg" src="../_images/pulseg.svg" />
 <figcaption>
-<p><span class="caption-text">Base blocks with normalised waveforms; virtual segments as ordered lists of
-base-block IDs; the execution stream as segment instances, each holding the
-parameters of one occurrence.</span><a class="headerlink" href="#id1" title="Link to this image">#</a></p>
+<p><span class="caption-text">Base blocks, virtual segments and the execution stream of segment instances.</span><a class="headerlink" href="#id1" title="Link to this image">#</a></p>
 </figcaption>
 </figure>
 <figure class="only-dark align-default" id="id2">
 <img alt="../_images/pulseg-dark.svg" src="../_images/pulseg-dark.svg" />
 <figcaption>
-<p><span class="caption-text">Base blocks with normalised waveforms; virtual segments as ordered lists of
-base-block IDs; the execution stream as segment instances, each holding the
-parameters of one occurrence.</span><a class="headerlink" href="#id2" title="Link to this image">#</a></p>
+<p><span class="caption-text">Base blocks, virtual segments and the execution stream of segment instances.</span><a class="headerlink" href="#id2" title="Link to this image">#</a></p>
 </figcaption>
 </figure>
-<p>The model is that of the PulSeg specification, version 2.1-alpha, sections 2
-and 3 (<a class="reference external" href="https://github.com/HarmonizedMRI/pulseg">HarmonizedMRI/pulseg</a>).</p>
 <ul class="simple">
-<li><p>A <strong>base block</strong> is a Pulseq block whose waveform amplitudes are normalised:
-it fixes the shapes and timing of its events but not their amplitudes.
-Equal base blocks are stored once.</p></li>
-<li><p>A <strong>virtual segment</strong> is an ordered list of base-block IDs, a reusable
-structural unit such as an excitation and readout or a preparation module.
-It need not be periodic.</p></li>
-<li><p>A <strong>segment instance</strong> is one occurrence of a virtual segment in the scan.
-It holds the concrete execution parameters: the amplitude scale of each
-waveform, the RF and ADC phase and frequency offsets, the rotation and the
-block durations.</p></li>
-<li><p>The <strong>execution stream</strong> is the ordered list of segment instances, and it
-defines the scan.</p></li>
+<li><p>A <strong>base block</strong> fixes the shapes and timing of its events at normalised amplitude; equal ones are stored once.</p></li>
+<li><p>A <strong>virtual segment</strong> is an ordered list of base blocks, such as an excitation and readout.</p></li>
+<li><p>A <strong>segment instance</strong> is one occurrence of a segment: gradient scales and rotation, swapped gradient waveforms, RF amplitude, offsets and shim, ADC offsets or no acquisition, triggers, outputs and block durations.</p></li>
+<li><p>The <strong>execution stream</strong> is the ordered list of instances, and it is the whole scan.</p></li>
 </ul>
-<p>The physical gradient an instance plays is the base block’s normalised
-waveform <span class="math notranslate nohighlight">\(\hat{g}(t)\)</span> scaled and rotated,</p>
-<div class="math notranslate nohighlight">
-\[
-\mathbf{g}(t) = R\, s\, \hat{\mathbf{g}}(t),
-\]</div>
-<p>with <span class="math notranslate nohighlight">\(s\)</span> the instance’s amplitude scale and <span class="math notranslate nohighlight">\(R\)</span> its rotation. A scanner
-prepares each virtual segment once, with its waveforms in waveform memory, and
-plays every instance of it by updating these parameters. Every block of the
-sequence is kept, in order, so the stream reproduces the sequence it was
-converted from.</p>
+<p>An instance plays <span class="math notranslate nohighlight">\(\mathbf{g}(t) = R\, s\, \hat{\mathbf{g}}(t)\)</span>: the base
+block’s normalised waveform, scaled by <span class="math notranslate nohighlight">\(s\)</span> and rotated by <span class="math notranslate nohighlight">\(R\)</span>.</p>
 </section>
-<section id="repetition-and-virtual-segments">
-<h2>Repetition and virtual segments<a class="headerlink" href="#repetition-and-virtual-segments" title="Link to this heading">#</a></h2>
-<p>The cost of preparing the scan, and the size of the tables an interpreter
-loads, grow with the number of distinct virtual segments and with how
-irregular the stream is. Most sequences play one block pattern many times with
-new amplitudes and phases, and conversion exploits that.</p>
-<p>The repetition of a subsequence is the period <code class="docutils literal notranslate"><span class="pre">pypulseqpp.Sequence.repetition</span></code>
-reports, starting at the first block; conversion does not search for one of its
-own. The virtual segments are cut from that repetition at the block boundaries
-the <a class="reference internal" href="../generated/pulserver.ir.Grouping.html#pulserver.ir.Grouping" title="pulserver.ir.Grouping"><code class="xref py py-class docutils literal notranslate"><span class="pre">Grouping</span></code></a> admits:</p>
-<ul class="simple">
-<li><p>a boundary may fall only where every gradient is within
-<code class="docutils literal notranslate"><span class="pre">boundary_gradient_hz_per_m</span></code> of zero, 100 Hz/m by default;</p></li>
-<li><p>a boundary must fall where the <code class="docutils literal notranslate"><span class="pre">NOROT</span></code> or <code class="docutils literal notranslate"><span class="pre">PMC</span></code> label changes, since the
-interpreter sets one prescription rotation per segment instance, and
-conversion fails when such a change falls under a gradient;</p></li>
-<li><p>navigator readouts, pure delays at the edge of a segment, and runs that play
-other RF or ADC events are split off as virtual segments of their own,
-according to the grouping, with at most 64 variants of a segment.</p></li>
-</ul>
-<p>The virtual segments are then tiled over the execution stream. The sequence of
-segment IDs is run-length encoded over one period, the shortest that the
-whole stream is measured to repeat with; each instance keeps its own
-parameters.</p>
+<section id="repetition-detection">
+<h3>Repetition detection<a class="headerlink" href="#repetition-detection" title="Link to this heading">#</a></h3>
+<p>The repetition, the TR the scanner prepares for, is what
+<code class="docutils literal notranslate"><span class="pre">pypulseqpp.Sequence.repetition</span></code> reports for each file of the chain. It starts
+at the first block and is the first of these that applies:</p>
+<ol class="arabic simple">
+<li><p>A <code class="docutils literal notranslate"><span class="pre">TRSize</span></code> definition in the file, when it is shorter than the sequence,
+divides it and the blocks repeat it. This is how you declare a hyper-TR.</p></li>
+<li><p>The shortest period of the block definitions that every later block
+repeats, the last copy possibly cut short.</p></li>
+<li><p>The shortest period dividing the sequence over which blocks match in
+duration and in the channels they play, so that shots with their own
+pulses or gradient shapes still repeat.</p></li>
+<li><p>Otherwise the whole file is one repetition, refused above 15 s.</p></li>
+</ol>
+<p>A slice played with its own preparation and dummy shots is therefore one
+repetition, and a block played once makes the whole file one. The segment IDs
+of the execution stream are then run-length encoded over the shortest period
+the whole stream repeats with.</p>
 <figure class="only-light align-default" id="id3">
 <img alt="../_images/repetition.svg" src="../_images/repetition.svg" />
 <figcaption>
-<p><span class="caption-text">One repetition of three virtual segments, played N times: the segment IDs are
-stored once per period, and each instance keeps its own parameters.</span><a class="headerlink" href="#id3" title="Link to this image">#</a></p>
+<p><span class="caption-text">One repetition of three segments played N times: IDs stored once, parameters per instance.</span><a class="headerlink" href="#id3" title="Link to this image">#</a></p>
 </figcaption>
 </figure>
 <figure class="only-dark align-default" id="id4">
 <img alt="../_images/repetition-dark.svg" src="../_images/repetition-dark.svg" />
 <figcaption>
-<p><span class="caption-text">One repetition of three virtual segments, played N times: the segment IDs are
-stored once per period, and each instance keeps its own parameters.</span><a class="headerlink" href="#id4" title="Link to this image">#</a></p>
+<p><span class="caption-text">One repetition of three segments played N times: IDs stored once, parameters per instance.</span><a class="headerlink" href="#id4" title="Link to this image">#</a></p>
 </figcaption>
 </figure>
 </section>
-<section id="non-periodic-sequences">
-<h2>Non-periodic sequences<a class="headerlink" href="#non-periodic-sequences" title="Link to this heading">#</a></h2>
-<p>A subsequence that does not repeat is one repetition, the whole subsequence.
-It is segmented under the same grouping, its stream is still complete, and its
-segment IDs are run-length encoded without a period. Conversion refuses a
-single repetition longer than 15 s (<code class="docutils literal notranslate"><span class="pre">SINGLE_TR_MAX_DURATION_US</span></code> in
-<code class="docutils literal notranslate"><span class="pre">src/cpp/ir/structure.cpp</span></code>). The limit belongs to pulserver’s playout memory
-model, not to PulSeg.</p>
+<section id="segmentation-rules">
+<h3>Segmentation rules<a class="headerlink" href="#segmentation-rules" title="Link to this heading">#</a></h3>
+<p>Within the repetition, a <a class="reference internal" href="../generated/pulserver.ir.Grouping.html#pulserver.ir.Grouping" title="pulserver.ir.Grouping"><code class="xref py py-class docutils literal notranslate"><span class="pre">Grouping</span></code></a> decides where one
+virtual segment ends and the next begins:</p>
+<ul class="simple">
+<li><p>a boundary <strong>may</strong> fall between two blocks only where every gradient is
+within <code class="docutils literal notranslate"><span class="pre">boundary_gradient_hz_per_m</span></code> of zero at the join (100 Hz/m);</p></li>
+<li><p>a boundary <strong>must</strong> fall where the <code class="docutils literal notranslate"><span class="pre">NOROT</span></code> or <code class="docutils literal notranslate"><span class="pre">PMC</span></code> label changes, since the
+scanner sets one prescription rotation per segment instance; a change under
+a gradient is refused;</p></li>
+<li><p>a boundary is <strong>added</strong> around navigator readouts (<code class="docutils literal notranslate"><span class="pre">split_navigators</span></code>),
+around pure delays at a segment’s edge (<code class="docutils literal notranslate"><span class="pre">split_edge_delays</span></code>), and between
+runs that play other RF or ADC events (<code class="docutils literal notranslate"><span class="pre">split_by_pulses</span></code>,
+<code class="docutils literal notranslate"><span class="pre">split_by_readouts</span></code>).</p></li>
+</ul>
+<p>A repetition whose pulses, timing or arbitrary gradients differ from the
+first plays its own variant of a segment, up to 64 per segment.</p>
+</section>
+<section id="vendor-configuration">
+<h3>Vendor configuration<a class="headerlink" href="#vendor-configuration" title="Link to this heading">#</a></h3>
+<p>The grouping and the number formats the cache is written in are the
+interpreter’s, not the sequence’s. An interpreter states them in a vendor file
+and names it with <code class="docutils literal notranslate"><span class="pre">ir_vendor_file</span></code> in the limits it sends
+(<a class="reference internal" href="../user-guide/running.html"><span class="doc">Running the services</span></a>):</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>[Grouping]
+boundary_gradient_hz_per_m: 100
+split_by_pulses: true
+split_by_readouts: true
+split_navigators: true
+split_edge_delays: true
+[Grouping End]
+[VendorProfile]
+grad_sample: float32 0
+...
+[VendorProfile End]
+</pre></div>
+</div>
+<p>A sequencer that can start a segment under a gradient states a large
+<code class="docutils literal notranslate"><span class="pre">boundary_gradient_hz_per_m</span></code>; one that inserts switching time at every
+boundary sets <code class="docutils literal notranslate"><span class="pre">split_edge_delays:</span> <span class="pre">false</span></code> to keep segments few. The
+<code class="docutils literal notranslate"><span class="pre">[VendorProfile]</span></code> block gives each waveform and amplitude as a float or as an
+integer with its step, so a sequencer that plays integers converts nothing
+while it plays. The <code class="docutils literal notranslate"><span class="pre">ir_wave_</span></code> limits state the waveform memory the waves are
+laid out for (<a class="reference internal" href="../generated/pulserver.ir.WaveBudget.html#pulserver.ir.WaveBudget" title="pulserver.ir.WaveBudget"><code class="xref py py-class docutils literal notranslate"><span class="pre">WaveBudget</span></code></a>). Every field must be stated,
+and <a class="reference internal" href="../generated/pulserver.ir.read_vendor.html#pulserver.ir.read_vendor" title="pulserver.ir.read_vendor"><code class="xref py py-func docutils literal notranslate"><span class="pre">read_vendor()</span></code></a> refuses a file that leaves one out.</p>
+</section>
+<section id="field-of-view-offset">
+<h3>Field-of-view offset<a class="headerlink" href="#field-of-view-offset" title="Link to this heading">#</a></h3>
+<p>The offset is applied by <a class="reference internal" href="../generated/pulserver.ir.prescribe.html#pulserver.ir.prescribe" title="pulserver.ir.prescribe"><code class="xref py py-func docutils literal notranslate"><span class="pre">prescribe()</span></code></a> as RF and ADC
+frequency and phase offsets at the middle of each window; the remaining phase
+under a varying readout gradient is applied by the proxy (<a class="reference internal" href="raw-data.html"><span class="doc">MRD enrichment</span></a>).
+Two offsets give two caches, and two designs.</p>
 </section>
 <section id="differences-from-pulseg-2-1-alpha">
-<h2>Differences from PulSeg 2.1-alpha<a class="headerlink" href="#differences-from-pulseg-2-1-alpha" title="Link to this heading">#</a></h2>
+<h3>Differences from PulSeg 2.1-alpha<a class="headerlink" href="#differences-from-pulseg-2-1-alpha" title="Link to this heading">#</a></h3>
 <div class="pst-scrollable-table-container"><table class="table">
 <thead>
 <tr class="row-odd"><th class="head"><p>Aspect</p></th>
@@ -705,29 +763,17 @@ model, not to PulSeg.</p>
 </table>
 </div>
 </section>
-<section id="field-of-view-offset">
-<h2>Field-of-view offset<a class="headerlink" href="#field-of-view-offset" title="Link to this heading">#</a></h2>
-<p>A pypulseqpp sequence is written in the logical frame, about the isocentre.
-<a class="reference internal" href="../generated/pulserver.ir.prescribe.html#pulserver.ir.prescribe" title="pulserver.ir.prescribe"><code class="xref py py-func docutils literal notranslate"><span class="pre">prescribe()</span></code></a> moves every file of the chain to the
-prescribed field-of-view offset before conversion, without changing a
-gradient: each RF pulse and ADC event receives the frequency and phase
-offsets the offset requires, taken for a readout at the middle of its sampling
-window. The cache keeps no ADC phase modulation, so where a readout gradient
-varies across the window, the reconstruction proxy applies the remaining phase
-from the trajectory, and from the header’s <code class="docutils literal notranslate"><span class="pre">fov_offset_mm</span></code> when it states
-another position (<a class="reference internal" href="reconstruction.html"><span class="doc">Raw-data enrichment and routing</span></a>). The prescription’s rotation is not
-applied to the cache: the scanner composes it after each block’s own rotation.
-Two offsets give two caches, and two designs (<a class="reference internal" href="designs.html"><span class="doc">Designs and the design store</span></a>).</p>
 </section>
-<section id="see-also">
-<h2>See also<a class="headerlink" href="#see-also" title="Link to this heading">#</a></h2>
+<section id="examples">
+<h2>Examples<a class="headerlink" href="#examples" title="Link to this heading">#</a></h2>
 <ul class="simple">
-<li><p><a class="reference internal" href="../developer-guide/internals/ir-cache.html"><span class="doc">IR cache</span></a> — the conversion passes, waves,
+<li><p><a class="reference internal" href="../generated/gallery/01-course/03_scanner_representation.html"><span class="doc">3. What the scanner plays</span></a>: <code class="docutils literal notranslate"><span class="pre">gre2d</span></code>
+converted, its segments, and what changes from one TR to the next.</p></li>
+<li><p><a class="reference internal" href="../generated/gallery/02-tours/02_segmentation.html"><span class="doc">Segmentation of a sequence for the scanner</span></a>: the segmentation of the
+shipped sequences.</p></li>
+<li><p><a class="reference internal" href="../developer-guide/internals/ir-cache.html"><span class="doc">IR cache</span></a>: the conversion passes, waves,
 the two stages of a playout and the cache file.</p></li>
-<li><p><a class="reference internal" href="../api/ir.html"><span class="doc">IR conversion</span></a> — the conversion interface.</p></li>
-<li><p><a class="reference internal" href="protocol.html"><span class="doc">Protocol resolution</span></a> — the protocol entries the offset arrives in.</p></li>
-<li><p><a class="reference internal" href="../generated/gallery/02-tours/02_segmentation.html"><span class="doc">Segmentation of a sequence for the scanner</span></a> — the segmentation of
-shipped sequences, executed.</p></li>
+<li><p><a class="reference internal" href="../api/ir.html"><span class="doc">IR conversion</span></a>: the conversion interface.</p></li>
 </ul>
 </section>
 </section>
@@ -744,20 +790,20 @@ shipped sequences, executed.</p></li>
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="designs.html"
+       href="safety-checks.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">Designs and the design store</p>
+        <p class="prev-next-title">Safety checks</p>
       </div>
     </a>
     <a class="right-next"
-       href="virtual-scanner.html"
+       href="raw-data.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">The virtual scanner</p>
+        <p class="prev-next-title">MRD enrichment</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -779,13 +825,18 @@ shipped sequences, executed.</p></li>
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pulseq-input">Pulseq input</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#the-pulseg-model">The PulSeg model</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#repetition-and-virtual-segments">Repetition and virtual segments</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#non-periodic-sequences">Non-periodic sequences</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#differences-from-pulseg-2-1-alpha">Differences from PulSeg 2.1-alpha</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#field-of-view-offset">Field-of-view offset</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#see-also">See also</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#capabilities">Capabilities</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#division-of-responsibility">Division of responsibility</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#method">Method</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#the-pulseg-model">The PulSeg model</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#repetition-detection">Repetition detection</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#segmentation-rules">Segmentation rules</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#vendor-configuration">Vendor configuration</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#field-of-view-offset">Field-of-view offset</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#differences-from-pulseg-2-1-alpha">Differences from PulSeg 2.1-alpha</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#examples">Examples</a></li>
 </ul>
   </nav></div>
 

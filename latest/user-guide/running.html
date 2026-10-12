@@ -37,7 +37,7 @@
     <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-binder.css?v=f4aeca0c" />
     <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-dataframe.css?v=2082cf3c" />
     <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
-    <link rel="stylesheet" type="text/css" href="../_static/pulserver.css?v=e08ae8f3" />
+    <link rel="stylesheet" type="text/css" href="../_static/pulserver.css?v=6854ff42" />
   
   <!-- So that users can add custom icons -->
   <script defer src="../_static/scripts/fontawesome.js?digest=90905a2f556bf617f1a9"></script>
@@ -61,6 +61,7 @@
             true;
         </script>
     <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
+    <script src="../_static/capabilities.js?v=421ebb92"></script>
     <link rel="canonical" href="https://pulserver.github.io/pulserver/latest/user-guide/running.html" />
     <link rel="icon" href="../_static/pulserver-mark.svg"/>
     <link rel="index" title="Index" href="../genindex.html" />
@@ -256,9 +257,11 @@
 <li class="toctree-l2"><a class="reference internal" href="../developer-guide/documentation.html">Documentation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../developer-guide/terminology.html">Terminology and conventions</a></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../developer-guide/internals/index.html">Internals</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/calibration.html">Calibration, noise and coil compression</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/ir-cache.html">IR cache</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/protocol-wire.html">Protocol text blocks</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/reconstruction-proxy.html">Reconstruction proxy</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/sar-ratios.html">SAR ratios against a reference pulse</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
@@ -271,20 +274,22 @@
 <li class="toctree-l1 has-children"><a class="reference internal" href="../explanations/index.html">Explanations</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="../explanations/architecture.html">Architecture</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../explanations/protocol.html">Protocol resolution</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../explanations/designs.html">Designs and the design store</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../explanations/scanner-representation.html">Scanner representation (PulSeg)</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../explanations/virtual-scanner.html">The virtual scanner</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../explanations/reconstruction.html">Raw-data enrichment and routing</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../explanations/calibration.html">Calibration, noise and coil compression</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../explanations/safety-checks.html">Safety checks</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../explanations/scanner-representation.html">PulSeg representation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../explanations/raw-data.html">MRD enrichment</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../explanations/reconstruction-session.html">Reconstruction session</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../explanations/reconstruction.html">Reconstruction plugins and calibration context</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../explanations/virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../examples/index.html">Examples</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../examples/course.html">Course</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/01_protocol_to_image.html">1. From protocol to image</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/02_sequence_plugin.html">2. A scanner sequence and its protocol</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/03_scanner_representation.html">3. Scanner representation</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/04_reconstruction_plugin.html">4. A reconstruction plugin</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/05_testing_on_the_virtual_scanner.html">5. Testing on the virtual scanner</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/01_protocol_to_image.html">1. Your first scan</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/02_sequence_plugin.html">2. Your sequence in the scanner UI</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/03_scanner_representation.html">3. What the scanner plays</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/04_reconstruction_plugin.html">4. What your recon receives</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/05_recon_plugin.html">5. Your recon plugin</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/06_testing_on_the_virtual_scanner.html">6. Test your pair on the virtual scanner</a></li>
 </ul>
 </details></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../examples/tours.html">Tours</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -562,7 +567,7 @@ and returns the images. When the two run on different computers, either the
 store is a directory both can reach, or the proxy keeps a store of its own and
 its design intake receives each design the design calls push to it. The store
 and the identity of a design are described in
-<a class="reference internal" href="../explanations/designs.html"><span class="doc">Designs and the design store</span></a>. Where the reconstructions run on a computer of
+<a class="reference internal" href="../explanations/architecture.html"><span class="doc">Architecture</span></a>. Where the reconstructions run on a computer of
 their own, a reconstruction server runs there and the proxy forwards each
 series to it.</p>
 <section id="design-calls">
@@ -685,7 +690,7 @@ the cache lays the waves out for (<a class="reference internal" href="../generat
 wave is held at once on the gradient raster of the chain’s first file, and a
 playout that holds them otherwise refuses the cache.</p>
 <p>A generated design and an imported chain are checked against the limits before
-their IR cache is written (<a class="reference internal" href="../explanations/designs.html"><span class="doc">Designs and the design store</span></a>), so the limits
+their IR cache is written (<a class="reference internal" href="../explanations/architecture.html"><span class="doc">Architecture</span></a>), so the limits
 include the RF and ADC dead times, the RF ringdown time and the ADC sample
 divisor of the scanner; <code class="docutils literal notranslate"><span class="pre">pypulseqpp.Opts</span></code> sets the dead times to zero and the
 divisor to four when they are left out.</p>
@@ -716,12 +721,13 @@ one left out is the scanner’s, and <code class="docutils literal notranslate">
 limits as <code class="docutils literal notranslate"><span class="pre">generate</span></code>. An imported chain is not designed, and is checked against
 <code class="docutils literal notranslate"><span class="pre">max_grad</span></code> and <code class="docutils literal notranslate"><span class="pre">max_slew</span></code> alone.</p>
 <p>The limits also carry what the host checks besides the gradient limits and
-rasters, the scanner’s nerve model and its forbidden gradient bands, and, where
-SAR is computed from virtual observation points, the VOPs. A check whose limits
-are left out is not run. No SAR limit is checked on the host: it writes into
-the cache each subsequence’s SAR at the VOPs relative to a reference pulse
-(<a class="reference internal" href="../explanations/designs.html"><span class="doc">Designs and the design store</span></a>), and the interpreter computes the SAR and
-the gradient heating.</p>
+rasters: the scanner’s nerve model and its forbidden gradient bands, which a
+scanner always sends, the gradient coil’s acoustic transfer function where the
+scanner has one, and, for pTx, the VOPs. A check whose limits are left out is
+not run. For pTx the host writes into the cache each subsequence’s SAR at the
+VOPs relative to a reference pulse (<a class="reference internal" href="../explanations/safety-checks.html"><span class="doc">Safety checks</span></a>); the
+vendor’s routines on the scanner compute SAR and RF and gradient heating from
+these inputs.</p>
 <div class="pst-scrollable-table-container"><table class="table">
 <thead>
 <tr class="row-odd"><th class="head"><p>Limit</p></th>
@@ -1063,7 +1069,7 @@ one is built beside a copy and discarded.</p>
 <h2>See also<a class="headerlink" href="#see-also" title="Link to this heading">#</a></h2>
 <ul class="simple">
 <li><p><a class="reference internal" href="../explanations/architecture.html"><span class="doc">Architecture</span></a> — the services and what passes between them.</p></li>
-<li><p><a class="reference internal" href="../explanations/designs.html"><span class="doc">Designs and the design store</span></a> — the design store and the identity of a design.</p></li>
+<li><p><a class="reference internal" href="../explanations/architecture.html"><span class="doc">Architecture</span></a> — the design store and the identity of a design.</p></li>
 <li><p><a class="reference internal" href="reconstruction-client.html"><span class="doc">Reconstruction clients</span></a> — the MRD stream of a series.</p></li>
 <li><p><a class="reference internal" href="../api/host.html"><span class="doc">Design calls</span></a> and <a class="reference internal" href="../api/proxy.html"><span class="doc">Reconstruction proxy</span></a> — the design calls, the proxy and the reconstruction server.</p></li>
 </ul>

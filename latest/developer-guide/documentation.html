@@ -37,7 +37,7 @@
     <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-binder.css?v=f4aeca0c" />
     <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-dataframe.css?v=2082cf3c" />
     <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
-    <link rel="stylesheet" type="text/css" href="../_static/pulserver.css?v=e08ae8f3" />
+    <link rel="stylesheet" type="text/css" href="../_static/pulserver.css?v=6854ff42" />
   
   <!-- So that users can add custom icons -->
   <script defer src="../_static/scripts/fontawesome.js?digest=90905a2f556bf617f1a9"></script>
@@ -63,6 +63,7 @@
             true;
         </script>
     <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
+    <script src="../_static/capabilities.js?v=421ebb92"></script>
     <link rel="canonical" href="https://pulserver.github.io/pulserver/latest/developer-guide/documentation.html" />
     <link rel="icon" href="../_static/pulserver-mark.svg"/>
     <link rel="index" title="Index" href="../genindex.html" />
@@ -258,9 +259,11 @@
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">Documentation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="terminology.html">Terminology and conventions</a></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="internals/index.html">Internals</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="internals/calibration.html">Calibration, noise and coil compression</a></li>
 <li class="toctree-l3"><a class="reference internal" href="internals/ir-cache.html">IR cache</a></li>
 <li class="toctree-l3"><a class="reference internal" href="internals/protocol-wire.html">Protocol text blocks</a></li>
 <li class="toctree-l3"><a class="reference internal" href="internals/reconstruction-proxy.html">Reconstruction proxy</a></li>
+<li class="toctree-l3"><a class="reference internal" href="internals/sar-ratios.html">SAR ratios against a reference pulse</a></li>
 <li class="toctree-l3"><a class="reference internal" href="internals/virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
@@ -273,20 +276,22 @@
 <li class="toctree-l1 has-children"><a class="reference internal" href="../explanations/index.html">Explanations</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="../explanations/architecture.html">Architecture</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../explanations/protocol.html">Protocol resolution</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../explanations/designs.html">Designs and the design store</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../explanations/scanner-representation.html">Scanner representation (PulSeg)</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../explanations/virtual-scanner.html">The virtual scanner</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../explanations/reconstruction.html">Raw-data enrichment and routing</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../explanations/calibration.html">Calibration, noise and coil compression</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../explanations/safety-checks.html">Safety checks</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../explanations/scanner-representation.html">PulSeg representation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../explanations/raw-data.html">MRD enrichment</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../explanations/reconstruction-session.html">Reconstruction session</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../explanations/reconstruction.html">Reconstruction plugins and calibration context</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../explanations/virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../examples/index.html">Examples</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../examples/course.html">Course</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/01_protocol_to_image.html">1. From protocol to image</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/02_sequence_plugin.html">2. A scanner sequence and its protocol</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/03_scanner_representation.html">3. Scanner representation</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/04_reconstruction_plugin.html">4. A reconstruction plugin</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/05_testing_on_the_virtual_scanner.html">5. Testing on the virtual scanner</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/01_protocol_to_image.html">1. Your first scan</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/02_sequence_plugin.html">2. Your sequence in the scanner UI</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/03_scanner_representation.html">3. What the scanner plays</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/04_reconstruction_plugin.html">4. What your recon receives</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/05_recon_plugin.html">5. Your recon plugin</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/06_testing_on_the_virtual_scanner.html">6. Test your pair on the virtual scanner</a></li>
 </ul>
 </details></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../examples/tours.html">Tours</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -932,17 +937,20 @@ A = PFS,
 <p>Pyxu’s conceptual introductions to inverse problems and proximal optimization, and MRI-NUFFT’s discussion of non-uniform sampling and its operators, are useful models for the desired depth and register.</p>
 <p>This is the appropriate place for material that would be too pedagogical for API reference or too general for an example. Implementation design — file layouts, memory budgets, tolerances, the inventory of what the test suite establishes — is not explanation; it belongs to the developer guide’s internals pages.</p>
 <p>An explanation page has one obvious purpose and, where appropriate, a strong conceptual anchor: a figure, a table, an equation, or a similarly compact device that carries the concept. A figure is never required for its own sake.</p>
-<p>An explanation page with more than one <code class="docutils literal notranslate"><span class="pre">##</span></code> section opens with a <strong>TL;DR</strong> block directly under its title: a short list of the page’s conclusions, each stated as the page states it, with no claim the page does not support. It lets a reader decide whether the page answers their question. A page of a single section may omit it. Landing pages, API reference pages and gallery examples have none.</p>
+<p>An explanation page opens with a <strong>TL;DR</strong> block directly under its title: at most three one-line bullets, each a conclusion the page supports. Landing pages, API reference pages and gallery examples have none.</p>
 <section id="organization-of-an-explanatory-page">
 <h4>Organization of an explanatory page<a class="headerlink" href="#organization-of-an-explanatory-page" title="Link to this heading">#</a></h4>
-<p>An explanatory page is usually clearest in this order:</p>
+<p>An explanation page has these sections, in this order. Every heading, the page title included, names a concept as a textbook would (<em>Segmentation rules</em>, not <em>How we cut segments</em>):</p>
 <ol class="arabic simple">
-<li><p><strong>The concept or problem.</strong> What physical, mathematical, or computational situation is being described, in standard terminology.</p></li>
-<li><p><strong>The formal model or criterion.</strong> The equation, definition, or decision rule that makes the concept precise, with its symbols, units, and assumptions stated.</p></li>
-<li><p><strong>Consequences and trade-offs.</strong> What the model implies for the quantities a user controls, including limiting cases and what is given up to gain something else.</p></li>
-<li><p><strong>The software abstraction.</strong> How the library represents the concept, and which interface corresponds to which part of the model.</p></li>
+<li><p><strong>TL;DR.</strong></p></li>
+<li><p><strong>Introduction.</strong> Three to five lines in the second person: the problem, and the Course lesson that shows it.</p></li>
+<li><p><strong>Capabilities.</strong> A <code class="docutils literal notranslate"><span class="pre">:::{container}</span> <span class="pre">capabilities</span></code> list, one bold line per capability. Under each, a muted line names the code and the tests that hold it (<code class="docutils literal notranslate"><span class="pre">Code:</span> <span class="pre">…</span> <span class="pre">Tests:</span> <span class="pre">*sentence</span> <span class="pre">of</span> <span class="pre">the</span> <span class="pre">test</span> <span class="pre">name*</span> <span class="pre">(file)</span></code>); the page hides these lines behind one toggle, so the list reads as claims and the evidence stays one click away.</p></li>
+<li><p><strong>Division of responsibility.</strong> Two or three one-line bullets for what the scanner, the engines or the reader’s plugin do instead.</p></li>
+<li><p><strong>Method.</strong> A figure, drawn by <code class="docutils literal notranslate"><span class="pre">scripts/make_artwork.py</span></code> in a light and a dark variant, and at most a few short subsections giving the model or rule. Derivations, rule tables and implementation design go to the developer guide’s internals pages and are linked, not repeated.</p></li>
+<li><p><strong>Examples.</strong> Links to the gallery, the user guide and the API.</p></li>
 </ol>
-<p>The order matters: a page that opens with the class name and works outward teaches the interface rather than the subject. Sections need not carry these four labels, and a short page may cover several in one section, but a page that never reaches the formal model is under-specified, and one that never reaches the software abstraction belongs somewhere other than this project’s documentation.</p>
+<p>A capability is stated as the reader observes it, and every capability names a test; a claim no test holds is not listed.</p>
+<p>The concept-named heading rule covers explanation, reference and Tour headings. Two kinds of heading keep the reader’s voice: Course lesson titles, and the README’s <em>How it works</em>, <em>Learn more</em> and <em>How to cite</em>.</p>
 <p>Explanatory documentation may:</p>
 <ul class="simple">
 <li><p>introduce terminology to readers outside the immediate specialty;</p></li>
@@ -1098,7 +1106,7 @@ what the solver applies to the penalty</p>
 </section>
 <section id="prose">
 <h3>Prose<a class="headerlink" href="#prose" title="Link to this heading">#</a></h3>
-<p>Prefer precise, declarative scientific prose.</p>
+<p>Prefer precise, direct technical prose, addressing the reader as “you” where they act.</p>
 <p>Complete sentences are generally preferable to rhetorical fragments. Concision is desirable when it does not remove relevant information.</p>
 <p>Avoid:</p>
 <ul class="simple">
@@ -1329,7 +1337,8 @@ Spatial axis along which the finite difference is evaluated.</p>
 <li><p>Does the depth remain relevant to the software?</p></li>
 <li><p>Does the page reach a formal model or criterion, and then the software abstraction?</p></li>
 <li><p>Are mechanisms and trade-offs stated explicitly rather than compressed into a rhetorical sentence?</p></li>
-<li><p>Does the page open with a TL;DR that states only what the page establishes?</p></li>
+<li><p>Does the page open with a TL;DR of at most three one-line bullets that the page supports?</p></li>
+<li><p>Does every listed capability name the code and a test that holds it?</p></li>
 <li><p>Has implementation design been left to the internals pages?</p></li>
 </ul>
 </section>

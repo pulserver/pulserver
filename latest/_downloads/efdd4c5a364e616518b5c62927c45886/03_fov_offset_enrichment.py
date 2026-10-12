@@ -3,19 +3,19 @@ r"""
 Field-of-view offset and the proxy phase
 ========================================
 
-This Tour moves the field of view of two designs away from the isocentre and
-shows where the phase of the offset is applied: by the scanner, as the
-frequency and phase offsets of each readout, and by the reconstruction proxy,
-for the part those offsets cannot carry when the readout gradient varies
-during sampling.
+In this Tour you move the field of view of two designs away from the
+isocentre and see where the phase of the offset is applied. The scanner
+applies it as the frequency and phase offsets of each readout. The
+reconstruction proxy applies the part those offsets cannot carry when the
+readout gradient varies during sampling.
 
 **Prerequisites:** lessons 3 and 4 of the :doc:`course </examples/course>`.
 
 An object at :math:`\mathbf{d}` adds the phase
-:math:`-2\pi\,\mathbf{d}\cdot\mathbf{k}(t)` to each sample. Under a
-readout gradient that holds one value, :math:`\mathbf{k}(t)` is linear in time
-and the phase is a frequency and a phase offset. On a ramp-sampled readout it
-is not, and the IR cache carries no ADC phase modulation for the rest
+:math:`-2\pi\,\mathbf{d}\cdot\mathbf{k}(t)` to each sample. Under a constant
+readout gradient, :math:`\mathbf{k}(t)` is linear in time and the phase is a
+frequency and a phase offset. On a ramp-sampled readout it is not linear, and
+the IR cache carries no ADC phase modulation for the remainder
 (:doc:`/explanations/reconstruction`).
 """
 
@@ -28,10 +28,11 @@ matplotlib.use("Agg")
 # Two designs at an offset
 # ------------------------
 #
-# A 2D gradient echo, which samples the flat top of its readout gradient, and
-# a 2D echo planar sequence, whose trains are ramp sampled, are converted at
-# the prescribed offset :math:`\mathbf{d} = (30, -50, 0)` mm along the logical
-# readout, phase-encoding and slice axes, and again at the isocentre.
+# The two designs are a 2D gradient echo, which samples the flat top of its
+# readout gradient, and a 2D echo planar sequence, whose trains are ramp
+# sampled. You convert each at the prescribed offset
+# :math:`\mathbf{d} = (30, -50, 0)` mm along the logical readout,
+# phase-encoding and slice axes, and again at the isocentre.
 import tempfile
 from pathlib import Path
 
@@ -63,11 +64,11 @@ for name, chain in designs.items():
 # Acquisitions
 # ------------
 #
-# The phantom, sampled as tissue on a 2 mm grid, is acquired by the Fourier
-# engine twice per design: placed at :math:`\mathbf{d}` and played from the
-# cache converted at the offset, and placed at the isocentre and played from
-# the cache converted there. Under the identity rotation the physical axes are
-# the logical ones.
+# The Fourier engine acquires the phantom, sampled as tissue on a 2 mm grid,
+# twice per design: placed at :math:`\mathbf{d}` and played from the cache
+# converted at the offset, and placed at the isocentre and played from the
+# cache converted there. Under the identity rotation the physical axes are the
+# logical ones.
 ellipses = [
     virtual.Ellipse((0.0, 0.0, 0.0), (0.06, 0.04), t1=1.0, t2=0.1),
     virtual.Ellipse((0.02, 0.01, 0.0), (0.015, 0.015), intensity=-0.5, t1=1.0, t2=0.1),
@@ -88,8 +89,8 @@ readouts = {
 # ---------------
 #
 # :class:`~pulserver.proxy.SequenceTable`, read at the offset the cache was
-# converted at, gives the phase the proxy applies to each readout, in rad,
-# or ``None`` where the scanner's offsets carry the whole phase.
+# converted at, gives the phase the proxy applies to each readout, in rad. It
+# gives ``None`` where the scanner's offsets carry the whole phase.
 tables = {
     name: SequenceTable.read(files[name, "offset"], fov_offset_m=offset)
     for name in designs
@@ -102,9 +103,9 @@ for name, table in tables.items():
 # %%
 # On the echo planar readouts the phase is the curvature of
 # :math:`2\pi\,\mathbf{d}\cdot\mathbf{k}(t)` about the line through the
-# middle of the sampling window, which the scanner's frequency and phase
-# offsets play. The imaging readouts are those of the encoding space of the
-# main subsequence that is not the navigators'.
+# middle of the sampling window. The scanner's frequency and phase offsets play
+# that line. The imaging readouts are those of the main subsequence's encoding
+# space that is not the navigators'.
 table = tables["echo planar"]
 main = max(index for index, space in enumerate(table.spaces) if not space.navigator)
 imaging = np.flatnonzero(table.encoding_space == main)
@@ -122,9 +123,9 @@ plt.show()
 # sphinx_gallery_end_ignore
 
 # %%
-# With the proxy phase applied, the samples of the object at the offset are
+# With the proxy phase applied, the samples of the object at the offset match
 # those of the object at the isocentre, to the tolerance of the Fourier
-# engine's bases; as received, the echo planar samples are not.
+# engine's bases. As received, the echo planar samples do not.
 
 
 def agreement(name, corrected):
@@ -151,11 +152,11 @@ for name in designs:
 # Images
 # ------
 #
-# The echo planar lines are gridded along the readout from the k-space of
-# their samples, placed by their encoding counters, and Fourier transformed.
-# The differences from the image at the isocentre show what the phase the
-# proxy applies removes. The arcs at the sides of the reference come from the
-# linear interpolation of the gridding, which the three images share.
+# You grid the echo planar lines along the readout from the k-space of their
+# samples, place them by their encoding counters, and Fourier transform them.
+# The differences from the image at the isocentre show what the proxy phase
+# removes. The arcs at the sides of the reference come from the linear
+# interpolation of the gridding, which all three images share.
 
 
 def image(samples, table):
@@ -200,9 +201,9 @@ plt.show()
 # sphinx_gallery_end_ignore
 
 # %%
-# The differences are drawn at a fifth of the reference's scale. A header that
-# states the object at another position, ``fov_offset_mm``, makes the proxy
-# apply :math:`2\pi\,\Delta\mathbf{d}\cdot\mathbf{k}(t)` in full for the
+# The differences are drawn at a fifth of the reference's scale. When a header
+# states the object at another position, ``fov_offset_mm``, the proxy applies
+# :math:`2\pi\,\Delta\mathbf{d}\cdot\mathbf{k}(t)` in full for the
 # difference, as
-# :meth:`~pulserver.proxy.SequenceTable.readout_phase_modulation` states,
-# which needs no new cache.
+# :meth:`~pulserver.proxy.SequenceTable.readout_phase_modulation` states. This
+# needs no new cache.

@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>The virtual scanner &#8212; pulserver documentation</title>
+    <title>Virtual scanner &#8212; pulserver documentation</title>
   
   
   
@@ -37,7 +37,7 @@
     <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-binder.css?v=f4aeca0c" />
     <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-dataframe.css?v=2082cf3c" />
     <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
-    <link rel="stylesheet" type="text/css" href="../_static/pulserver.css?v=e08ae8f3" />
+    <link rel="stylesheet" type="text/css" href="../_static/pulserver.css?v=6854ff42" />
   
   <!-- So that users can add custom icons -->
   <script defer src="../_static/scripts/fontawesome.js?digest=90905a2f556bf617f1a9"></script>
@@ -63,12 +63,13 @@
             true;
         </script>
     <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
+    <script src="../_static/capabilities.js?v=421ebb92"></script>
     <link rel="canonical" href="https://pulserver.github.io/pulserver/latest/explanations/virtual-scanner.html" />
     <link rel="icon" href="../_static/pulserver-mark.svg"/>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Raw-data enrichment and routing" href="reconstruction.html" />
-    <link rel="prev" title="Scanner representation (PulSeg)" href="scanner-representation.html" />
+    <link rel="next" title="Examples" href="../examples/index.html" />
+    <link rel="prev" title="Reconstruction plugins and calibration context" href="reconstruction.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   <meta name="docsearch:version" content="latest" />
@@ -258,9 +259,11 @@
 <li class="toctree-l2"><a class="reference internal" href="../developer-guide/documentation.html">Documentation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../developer-guide/terminology.html">Terminology and conventions</a></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../developer-guide/internals/index.html">Internals</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/calibration.html">Calibration, noise and coil compression</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/ir-cache.html">IR cache</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/protocol-wire.html">Protocol text blocks</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/reconstruction-proxy.html">Reconstruction proxy</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/sar-ratios.html">SAR ratios against a reference pulse</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
@@ -273,20 +276,22 @@
 <li class="toctree-l1 current active has-children"><a class="reference internal" href="index.html">Explanations</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
 <li class="toctree-l2"><a class="reference internal" href="architecture.html">Architecture</a></li>
 <li class="toctree-l2"><a class="reference internal" href="protocol.html">Protocol resolution</a></li>
-<li class="toctree-l2"><a class="reference internal" href="designs.html">Designs and the design store</a></li>
-<li class="toctree-l2"><a class="reference internal" href="scanner-representation.html">Scanner representation (PulSeg)</a></li>
-<li class="toctree-l2 current active"><a class="current reference internal" href="#">The virtual scanner</a></li>
-<li class="toctree-l2"><a class="reference internal" href="reconstruction.html">Raw-data enrichment and routing</a></li>
-<li class="toctree-l2"><a class="reference internal" href="calibration.html">Calibration, noise and coil compression</a></li>
+<li class="toctree-l2"><a class="reference internal" href="safety-checks.html">Safety checks</a></li>
+<li class="toctree-l2"><a class="reference internal" href="scanner-representation.html">PulSeg representation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="raw-data.html">MRD enrichment</a></li>
+<li class="toctree-l2"><a class="reference internal" href="reconstruction-session.html">Reconstruction session</a></li>
+<li class="toctree-l2"><a class="reference internal" href="reconstruction.html">Reconstruction plugins and calibration context</a></li>
+<li class="toctree-l2 current active"><a class="current reference internal" href="#">Virtual scanner</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../examples/index.html">Examples</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../examples/course.html">Course</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/01_protocol_to_image.html">1. From protocol to image</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/02_sequence_plugin.html">2. A scanner sequence and its protocol</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/03_scanner_representation.html">3. Scanner representation</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/04_reconstruction_plugin.html">4. A reconstruction plugin</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/05_testing_on_the_virtual_scanner.html">5. Testing on the virtual scanner</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/01_protocol_to_image.html">1. Your first scan</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/02_sequence_plugin.html">2. Your sequence in the scanner UI</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/03_scanner_representation.html">3. What the scanner plays</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/04_reconstruction_plugin.html">4. What your recon receives</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/05_recon_plugin.html">5. Your recon plugin</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/06_testing_on_the_virtual_scanner.html">6. Test your pair on the virtual scanner</a></li>
 </ul>
 </details></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../examples/tours.html">Tours</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -521,7 +526,7 @@
               
 
 <div id="jb-print-docs-body" class="onlyprint">
-    <h1>The virtual scanner</h1>
+    <h1>Virtual scanner</h1>
     <!-- Table of contents -->
     <div id="print-main-content">
         <div id="jb-print-toc">
@@ -531,20 +536,14 @@
             </div>
             <nav aria-label="Page">
                 <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#stand-ins">Stand-ins</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#played-trajectory">Played trajectory</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#signal-model">Signal model</a><ul class="nav section-nav flex-column">
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#tissue">Tissue</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#rf-pulses">RF pulses</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#configuration-states">Configuration states</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#temporal-and-readout-bases">Temporal and readout bases</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#demodulation-and-the-field-of-view-offset">Demodulation and the field-of-view offset</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#diffusion-motion-and-the-gradient-response">Diffusion, motion and the gradient response</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#what-is-not-modelled">What is not modelled</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#capabilities">Capabilities</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#limitations">Limitations</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#method">Method</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#played-trajectory">Played trajectory</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#fourier-engine">Fourier engine</a></li>
 </ul>
 </li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#coils-and-the-subject-s-field">Coils and the subject’s field</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#see-also">See also</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#examples">Examples</a></li>
 </ul>
             </nav>
         </div>
@@ -556,279 +555,118 @@
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <section class="tex2jax_ignore mathjax_ignore" id="the-virtual-scanner">
-<h1>The virtual scanner<a class="headerlink" href="#the-virtual-scanner" title="Link to this heading">#</a></h1>
+  <section class="tex2jax_ignore mathjax_ignore" id="virtual-scanner">
+<h1>Virtual scanner<a class="headerlink" href="#virtual-scanner" title="Link to this heading">#</a></h1>
 <div class="tldr admonition">
 <p class="admonition-title">TL;DR</p>
 <ul class="simple">
-<li><p>The virtual scanner replaces the scanner and nothing else: the design calls,
-the IR, the proxy and the reconstruction plugins it drives are the
-production code.</p></li>
-<li><p>It plays the IR cache through the C library’s playout stages, integrates
-the played gradients into the k-space trajectory under the prescription’s
-rotation, and acquires a phantom’s tissue along it with the Fourier engine:
-extended phase graphs of each class of tissue over the pulses and gradient
-moments the cache plays, and the images their signals weight encoded along
-the trajectory by a NUFFT.</p></li>
-<li><p>The playout demodulates by the ADC frequency and phase offsets; the cache
-carries no phase modulation, and the reconstruction proxy applies the rest of
-the field-of-view phase.</p></li>
+<li><p>The virtual scanner replaces the scanner and its interpreter, and nothing else: design calls, IR, proxy and plugins are production code.</p></li>
+<li><p>It plays the IR cache through the C library and acquires a phantom with the Fourier engine: extended phase graphs per tissue class, encoded by a NUFFT.</p></li>
+<li><p>Diffusion, rigid motion and a gradient impulse response are modelled where a scan needs them.</p></li>
 </ul>
 </div>
-<p>The IR, the raw-data header contract and the reconstruction path are tested
-against data a scanner acquires. Data sampled at the k-space locations the
-enrichment computes cannot test the enrichment, and a design compared only
-with itself cannot test the IR. The virtual scanner stands in for the scanner
-and nothing else: the design calls, the IR, the reconstruction proxy and the
-reconstruction plugins it drives are the production code. Its data are
-acquired of a phantom’s tissue along the trajectory the cache plays, under the
-pulses and gradients the cache plays, and sent as the scanner’s
-reconstruction client sends them. A browser build of its console is published
-at <a class="reference external" href="https://pulserver.github.io/MaRGE/">https://pulserver.github.io/MaRGE/</a>.</p>
-<section id="stand-ins">
-<h2>Stand-ins<a class="headerlink" href="#stand-ins" title="Link to this heading">#</a></h2>
-<div class="pst-scrollable-table-container"><table class="table">
-<thead>
-<tr class="row-odd"><th class="head"><p>Stand-in</p></th>
-<th class="head"><p>Replaces</p></th>
-<th class="head"><p>Built from</p></th>
-<th class="head"><p>Exercises</p></th>
-</tr>
-</thead>
-<tbody>
-<tr class="row-even"><td><p>Design call</p></td>
-<td><p>The interpreter host process’s call</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">pulserver</span> <span class="pre">design</span> <span class="pre">generate</span></code>, or <a class="reference internal" href="../generated/pulserver.host.call.html#pulserver.host.call" title="pulserver.host.call"><code class="xref py py-func docutils literal notranslate"><span class="pre">call()</span></code></a></p></td>
-<td><p>Request and reply blocks, presets, design errors, check failures</p></td>
-</tr>
-<tr class="row-odd"><td><p>Virtual interpreter</p></td>
-<td><p>The playout</p></td>
-<td><p>The C library’s two playout stages over a recording backend, <a class="reference internal" href="../generated/pulserver.ir.playout.html#pulserver.ir.playout" title="pulserver.ir.playout"><code class="xref py py-func docutils literal notranslate"><span class="pre">playout()</span></code></a></p></td>
-<td><p>Segmentation, the events each segment position is prepared with, the registers the scan loop sets on each block, the rotation and trigger of each segment instance, the waves and the waveform memory they are loaded into</p></td>
-</tr>
-<tr class="row-even"><td><p>Physics</p></td>
-<td><p>Magnet, coils and subject</p></td>
-<td><p><a class="reference internal" href="../generated/pulserver.virtual.Phantom.html#pulserver.virtual.Phantom" title="pulserver.virtual.Phantom"><code class="xref py py-class docutils literal notranslate"><span class="pre">Phantom</span></code></a>, <a class="reference internal" href="../generated/pulserver.virtual.Tissue.html#pulserver.virtual.Tissue" title="pulserver.virtual.Tissue"><code class="xref py py-class docutils literal notranslate"><span class="pre">Tissue</span></code></a>, <a class="reference internal" href="../generated/pulserver.virtual.simulate.html#pulserver.virtual.simulate" title="pulserver.virtual.simulate"><code class="xref py py-func docutils literal notranslate"><span class="pre">simulate()</span></code></a></p></td>
-<td><p>The trajectory the enrichment has to state, the demodulation of the prescription, the timing of every echo, the RF frequencies ppm offsets resolve to, and the flip angle, phase and band of every RF pulse, the gradient moments and the receiver phase the cache plays</p></td>
-</tr>
-<tr class="row-odd"><td><p>Scan clock</p></td>
-<td><p>The scanner’s acquisition in real time, and its gradient coils’ sound</p></td>
-<td><p><a class="reference internal" href="../generated/pulserver.virtual.Scan.html#pulserver.virtual.Scan" title="pulserver.virtual.Scan"><code class="xref py py-class docutils literal notranslate"><span class="pre">Scan</span></code></a></p></td>
-<td><p>The rate at which readouts reach the reconstruction; the sound of the gradients the cache plays</p></td>
-</tr>
-<tr class="row-even"><td><p>Reconstruction client</p></td>
-<td><p>The scanner’s reconstruction client</p></td>
-<td><p><a class="reference internal" href="../generated/pulserver.virtual.send.html#pulserver.virtual.send" title="pulserver.virtual.send"><code class="xref py py-func docutils literal notranslate"><span class="pre">send()</span></code></a></p></td>
-<td><p>The header and acquisition contract of <a class="reference internal" href="../user-guide/reconstruction-client.html"><span class="doc">Reconstruction clients</span></a></p></td>
-</tr>
-</tbody>
-</table>
+<p>Data sampled where the enrichment says k-space lies cannot test the
+enrichment, and a design compared with itself cannot test the IR. So the
+virtual scanner acquires a phantom along the trajectory the cache plays, under
+the pulses the cache plays, and sends the readouts as a scanner’s client does.
+Lesson 6 of the <a class="reference internal" href="../examples/course.html"><span class="doc">Course</span></a> runs a sequence on it; a
+browser build of its console is at <a class="reference external" href="https://pulserver.github.io/MaRGE/">https://pulserver.github.io/MaRGE/</a>.</p>
+<section id="capabilities">
+<h2>Capabilities<a class="headerlink" href="#capabilities" title="Link to this heading">#</a></h2>
+<div class="capabilities docutils container">
+<ul>
+<li><p><strong>Plays the IR cache through the C library’s playout stages, as an interpreter does.</strong></p>
+<p>Code: <a class="reference internal" href="../generated/pulserver.ir.playout.html#pulserver.ir.playout" title="pulserver.ir.playout"><code class="xref py py-func docutils literal notranslate"><span class="pre">playout()</span></code></a>. Tests: <em>the played trajectory is the one each file designs turned as it is checked</em>; <em>the prescription turns a block after its own rotation unless it is labelled norot</em> (<code class="docutils literal notranslate"><span class="pre">test_virtual.py</span></code>); <em>every shipped sequence plays its design turned as it is checked</em> (<code class="docutils literal notranslate"><span class="pre">test_virtual_sequences.py</span></code>).</p>
+</li>
+<li><p><strong>Acquires along the played trajectory, so the trajectory enrichment states is tested against it.</strong></p>
+<p>Code: <a class="reference internal" href="../generated/pulserver.virtual.simulate.html#pulserver.virtual.simulate" title="pulserver.virtual.simulate"><code class="xref py py-func docutils literal notranslate"><span class="pre">simulate()</span></code></a>. Tests: <em>the enrichment states the trajectory the scanner plays</em>; <em>a virtual scan reconstructs the phantom where it is prescribed</em> (<code class="docutils literal notranslate"><span class="pre">test_virtual.py</span></code>).</p>
+</li>
+<li><p><strong>Simulates each tissue class with extended phase graphs, and encodes the images they weight by a NUFFT.</strong></p>
+<p>Code: <a class="reference internal" href="../generated/pulserver.virtual.FourierPlayer.html#pulserver.virtual.FourierPlayer" title="pulserver.virtual.FourierPlayer"><code class="xref py py-class docutils literal notranslate"><span class="pre">FourierPlayer</span></code></a>. Tests: <em>the fourier engine acquires what a bloch simulation does of a phantom filling its slices</em>; <em>the fourier engine acquires what a bloch simulation does of an unspoiled steady state</em>; <em>each readout reads the pathway that passes the centre during it</em> (<code class="docutils literal notranslate"><span class="pre">test_virtual_fourier.py</span></code>).</p>
+</li>
+<li><p><strong>Plays each RF pulse with the flip angle, phase and profile a Bloch simulation of its waveform gives, including spectral-spatial selection.</strong></p>
+<p>Code: <a class="reference internal" href="../generated/pulserver.virtual.FourierPlayer.html#pulserver.virtual.FourierPlayer" title="pulserver.virtual.FourierPlayer"><code class="xref py py-class docutils literal notranslate"><span class="pre">FourierPlayer</span></code></a>. Tests: <em>a pulse played without a gradient selects by frequency</em>; <em>a spectral spatial pulse selects by frequency and by position along its slab</em> (<code class="docutils literal notranslate"><span class="pre">test_virtual_fourier.py</span></code>); <em>fat saturation leaves each shift what its designed pulse leaves it</em> (<code class="docutils literal notranslate"><span class="pre">test_virtual.py</span></code>).</p>
+</li>
+<li><p><strong>Places an object at the prescription, so a field-of-view offset is tested end to end.</strong></p>
+<p>Code: <a class="reference internal" href="../generated/pulserver.virtual.Phantom.html#pulserver.virtual.Phantom" title="pulserver.virtual.Phantom"><code class="xref py py-class docutils literal notranslate"><span class="pre">Phantom</span></code></a>. Tests: <em>an object posed as prescribed is acquired as at the isocentre</em> (<code class="docutils literal notranslate"><span class="pre">test_virtual.py</span></code>); <em>every shipped sequence scans an object posed as prescribed as at the isocentre</em> (<code class="docutils literal notranslate"><span class="pre">test_virtual_sequences.py</span></code>).</p>
+</li>
+<li><p><strong>Models chemical shift and off-resonance at the magnet’s field.</strong></p>
+<p>Code: <a class="reference internal" href="../generated/pulserver.virtual.Tissue.html#pulserver.virtual.Tissue" title="pulserver.virtual.Tissue"><code class="xref py py-class docutils literal notranslate"><span class="pre">Tissue</span></code></a>. Tests: <em>fat precesses at its chemical shift at the field of the magnet</em>; <em>off resonance accrues from the excitation and refocuses at the echo</em> (<code class="docutils literal notranslate"><span class="pre">test_virtual.py</span></code>).</p>
+</li>
+<li><p><strong>Receives with the scanner’s coils, the body coil or BART’s head-array models, with the default shim on transmit.</strong></p>
+<p>Code: <a class="reference internal" href="../generated/pulserver.virtual.COILS.html#pulserver.virtual.COILS" title="pulserver.virtual.COILS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">COILS</span></code></a>. Tests: <em>the body coil is one channel of unit sensitivity each way</em>; <em>receive sensitivities have a root sum of squares of one at the isocentre</em>; <em>a pulse without an rf shim plays its amplitude at the isocentre through the default shim</em> (<code class="docutils literal notranslate"><span class="pre">test_virtual_coils.py</span></code>).</p>
+</li>
+<li><p><strong>Scans BrainWeb’s head, with relaxation at the field and the field its susceptibility adds.</strong></p>
+<p>Code: <a class="reference internal" href="../generated/pulserver.virtual.Phantom.html#pulserver.virtual.Phantom" title="pulserver.virtual.Phantom"><code class="xref py py-class docutils literal notranslate"><span class="pre">Phantom</span></code></a>. Tests: <em>each tissue relaxes at 1 5 t as brainweb s simulator gives it</em>; <em>each entry precesses at the mean field its head adds over its cube</em> (<code class="docutils literal notranslate"><span class="pre">test_virtual_brainweb.py</span></code>).</p>
+</li>
+<li><p><strong>Adds diffusion, rigid motion and a gradient impulse response.</strong></p>
+<p>Code: <a class="reference internal" href="../generated/pulserver.virtual.RigidMotion.html#pulserver.virtual.RigidMotion" title="pulserver.virtual.RigidMotion"><code class="xref py py-class docutils literal notranslate"><span class="pre">RigidMotion</span></code></a>, <a class="reference internal" href="../generated/pulserver.virtual.Girf.html#pulserver.virtual.Girf" title="pulserver.virtual.Girf"><code class="xref py py-class docutils literal notranslate"><span class="pre">Girf</span></code></a>. Tests: <em>a diffusing tissue loses exp minus b d of its echo to the lobes</em>; <em>a subject held in a pose acquires what a phantom placed in it does</em>; <em>a delaying girf plays the moment its delay later</em> (<code class="docutils literal notranslate"><span class="pre">test_virtual_fourier.py</span></code>).</p>
+</li>
+<li><p><strong>Releases readouts in real time and plays the sound of the gradients.</strong></p>
+<p>Code: <a class="reference internal" href="../generated/pulserver.virtual.Scan.html#pulserver.virtual.Scan" title="pulserver.virtual.Scan"><code class="xref py py-class docutils literal notranslate"><span class="pre">Scan</span></code></a>. Tests: <em>a scan played at a speed yields each span once its clock passes it</em>; <em>the spans of a scan sound as its design sounds</em> (<code class="docutils literal notranslate"><span class="pre">test_virtual_clock.py</span></code>).</p>
+</li>
+<li><p><strong>Runs a console that makes only the design calls a scanner makes, and returns DICOM.</strong></p>
+<p>Code: <code class="docutils literal notranslate"><span class="pre">pulserver.virtual</span></code> console. Tests: <em>a console makes only the design calls</em>; <em>a scan streams its clock and returns the reconstruction as dicom</em> (<code class="docutils literal notranslate"><span class="pre">test_console.py</span></code>).</p>
+</li>
+<li><p><strong>Exports a cache as Pulseq 1.5.1 for an external Bloch simulator.</strong></p>
+<p>Code: <code class="docutils literal notranslate"><span class="pre">pulserver.virtual</span></code> export. Test: <em>every shipped sequence exports the trajectory its cache plays</em> (<code class="docutils literal notranslate"><span class="pre">test_virtual_export.py</span></code>).</p>
+</li>
+</ul>
 </div>
 </section>
+<section id="limitations">
+<h2>Limitations<a class="headerlink" href="#limitations" title="Link to this heading">#</a></h2>
+<ul class="simple">
+<li><p><strong>RF pulses</strong> act at their centre, without relaxation, as ideal rotations; the phase a selective pulse leaves across its slab is left out.</p></li>
+<li><p><strong>pTx pulses</strong> sum their channels at unit, in-phase sensitivity.</p></li>
+<li><p><strong>Coil models</strong> are BART’s, not electromagnetic simulations, unless a console is given field maps.</p></li>
+</ul>
+</section>
+<section id="method">
+<h2>Method<a class="headerlink" href="#method" title="Link to this heading">#</a></h2>
+<figure class="only-light align-default" id="id1">
+<img alt="../_images/virtual.svg" src="../_images/virtual.svg" />
+<figcaption>
+<p><span class="caption-text">The stand-ins between pulserver’s production code: interpreter, physics and client.</span><a class="headerlink" href="#id1" title="Link to this image">#</a></p>
+</figcaption>
+</figure>
+<figure class="only-dark align-default" id="id2">
+<img alt="../_images/virtual-dark.svg" src="../_images/virtual-dark.svg" />
+<figcaption>
+<p><span class="caption-text">The stand-ins between pulserver’s production code: interpreter, physics and client.</span><a class="headerlink" href="#id2" title="Link to this image">#</a></p>
+</figcaption>
+</figure>
 <section id="played-trajectory">
-<h2>Played trajectory<a class="headerlink" href="#played-trajectory" title="Link to this heading">#</a></h2>
-<p><a class="reference internal" href="../generated/pulserver.ir.playout.html#pulserver.ir.playout" title="pulserver.ir.playout"><code class="xref py py-func docutils literal notranslate"><span class="pre">playout()</span></code></a> plays the cache through the two stages of a
-playout (<a class="reference internal" href="../developer-guide/internals/ir-cache.html"><span class="doc">IR cache</span></a>) and, with <code class="docutils literal notranslate"><span class="pre">waveforms</span></code>,
-returns the gradients and the RF pulse each block plays, as the scan loop sets
-them; <a class="reference internal" href="../developer-guide/internals/virtual-scanner.html"><span class="doc">Virtual scanner</span></a> states which
-prepared events and waves they are taken from.</p>
-<p>The virtual scanner integrates those gradients into the k-space location
-<span class="math notranslate nohighlight">\(\mathbf{k}\)</span> of every ADC sample, in 1/m along the physical axes. The rotation <span class="math notranslate nohighlight">\(R\)</span> of the prescription, from logical to physical axes, is
-not in the cache (<a class="reference internal" href="scanner-representation.html"><span class="doc">Scanner representation (PulSeg)</span></a>): the virtual interpreter is given it, as a
-playout is, and turns each block’s gradients, which carry the block’s own
-rotation, by <span class="math notranslate nohighlight">\(R\)</span>, except in the segment instances whose blocks are labelled
-<code class="docutils literal notranslate"><span class="pre">NOROT</span></code>, which play as the cache holds them. This is the frame
-<a class="reference internal" href="../generated/pulserver.ir.check.html#pulserver.ir.check" title="pulserver.ir.check"><code class="xref py py-func docutils literal notranslate"><span class="pre">check()</span></code></a> checks in. Under
-the identity the physical axes are the logical ones. An excitation returns
-<span class="math notranslate nohighlight">\(\mathbf{k}\)</span> to zero, and a refocusing pulse negates it, at the RF centre the
-design records, which the cache carries for each RF event with its use; each
-file of a chain starts from zero. The test suite holds this trajectory to the
-one each file designs, turned as <code class="docutils literal notranslate"><span class="pre">pypulseqpp.TransformFOV</span></code> turns it for the
-checks, and the trajectory of the identity to the one the enrichment states.</p>
+<h3>Played trajectory<a class="headerlink" href="#played-trajectory" title="Link to this heading">#</a></h3>
+<p>The virtual interpreter plays the cache and integrates the gradients into k,
+in 1/m along the physical axes, turned by the prescription except in <code class="docutils literal notranslate"><span class="pre">NOROT</span></code>
+blocks. An excitation resets k and a refocusing pulse negates it, at the RF
+centre the design records.</p>
 </section>
-<section id="signal-model">
-<h2>Signal model<a class="headerlink" href="#signal-model" title="Link to this heading">#</a></h2>
-<p>The Fourier engine (<a class="reference internal" href="../generated/pulserver.virtual.FourierPlayer.html#pulserver.virtual.FourierPlayer" title="pulserver.virtual.FourierPlayer"><code class="xref py py-class docutils literal notranslate"><span class="pre">FourierPlayer</span></code></a>) acquires a
-phantom’s tissue under the pulses, gradients and readouts the cache plays. It
-separates what happens to the magnetization of each kind of tissue over time,
-which extended phase graphs give, from where that tissue is, which the
-trajectory encodes.</p>
-<section id="tissue">
-<h3>Tissue<a class="headerlink" href="#tissue" title="Link to this heading">#</a></h3>
-<p>The phantom lies in the physical frame, where a rotation and a position place
-it (<a class="reference internal" href="../generated/pulserver.virtual.Phantom.html#pulserver.virtual.Phantom" title="pulserver.virtual.Phantom"><code class="xref py py-class docutils literal notranslate"><span class="pre">Phantom</span></code></a>).
-<a class="reference internal" href="../generated/pulserver.virtual.Phantom.tissue.html#pulserver.virtual.Phantom.tissue" title="pulserver.virtual.Phantom.tissue"><code class="xref py py-meth docutils literal notranslate"><span class="pre">tissue()</span></code></a> samples it as cubes of uniform
-magnetization (<a class="reference internal" href="../generated/pulserver.virtual.Tissue.html#pulserver.virtual.Tissue" title="pulserver.virtual.Tissue"><code class="xref py py-class docutils literal notranslate"><span class="pre">Tissue</span></code></a>), <span class="math notranslate nohighlight">\(\Delta\)</span> wide along the
-axes the phantom spans: a square in the plane of a phantom of ellipses, a
-cube of BrainWeb’s head. Each cube <span class="math notranslate nohighlight">\(j\)</span> holds a proton density <span class="math notranslate nohighlight">\(\rho_j\)</span>,
-relaxation times <span class="math notranslate nohighlight">\(T_{1,j}\)</span>, <span class="math notranslate nohighlight">\(T_{2,j}\)</span> and <span class="math notranslate nohighlight">\(T'_{2,j}\)</span>, and a frequency <span class="math notranslate nohighlight">\(f_j\)</span>
-from the scanner’s centre frequency: its chemical shift <span class="math notranslate nohighlight">\(\sigma\)</span>, in ppm from
-water, resolved at the magnet’s field <span class="math notranslate nohighlight">\(B_0\)</span> with pypulseqpp’s default
-<span class="math notranslate nohighlight">\(\gamma\)</span>, in Hz/T, plus the precession in the field <span class="math notranslate nohighlight">\(\Delta B_j\)</span>, in T, the
-subject adds and an off-resonance <span class="math notranslate nohighlight">\(\Delta f\)</span> common to every cube,</p>
-<div class="math notranslate nohighlight">
-\[
-f_j = 10^{-6}\sigma_j\gamma B_0 + \gamma\,\Delta B_j + \Delta f .
-\]</div>
-<p>Cubes of the same <span class="math notranslate nohighlight">\(T_1\)</span>, <span class="math notranslate nohighlight">\(T_2\)</span> and <span class="math notranslate nohighlight">\(T'_2\)</span> form a class of tissue.</p>
-</section>
-<section id="rf-pulses">
-<h3>RF pulses<a class="headerlink" href="#rf-pulses" title="Link to this heading">#</a></h3>
-<p>Each RF pulse turns the magnetization as a rotation at its centre. On
-resonance, its flip angle <span class="math notranslate nohighlight">\(\alpha\)</span> and the phase of the axis it turns about
-are those of pypulseqpp’s relaxation-free Bloch simulation
-(<code class="docutils literal notranslate"><span class="pre">pypulseqpp.sim_bloch</span></code>) of the waveform the cache plays, the phase taken at
-the pulse’s centre: its phase offset plus its frequency offset times the time
-since the pulse began. Its profile <span class="math notranslate nohighlight">\(P(\delta)\)</span> is the angle the same
-simulation tips magnetization at rest through at a detuning <span class="math notranslate nohighlight">\(\delta\)</span> from the
-pulse’s frequency, over the angle on resonance. A pulse played under a
-gradient <span class="math notranslate nohighlight">\(\mathbf{g}\)</span>, in Hz/m, held during it turns cube <span class="math notranslate nohighlight">\(j\)</span> through</p>
-<div class="math notranslate nohighlight">
-\[
-\alpha_j = \alpha\,|b^+(\mathbf{r}_j)|\,P(\mathbf{g}\cdot\mathbf{r}_j + f_j - f_\mathrm{rf}),
-\]</div>
-<p>about its axis turned by the phase of the transmit field <span class="math notranslate nohighlight">\(b^+\)</span>, relative to
-the pulse’s nominal amplitude; a pulse played under no gradient, or under one
-that changes during it, selects by frequency alone. A pulse of phase zero turns
-<span class="math notranslate nohighlight">\(+z\)</span> towards <span class="math notranslate nohighlight">\(+y\)</span>: after a 90° excitation of phase <span class="math notranslate nohighlight">\(\phi_e\)</span> the magnetization
-is transverse at the phase <span class="math notranslate nohighlight">\(\pi/2 - \phi_e\)</span>. Cubes that every pulse turns
-through about the same angle form a group.</p>
-</section>
-<section id="configuration-states">
-<h3>Configuration states<a class="headerlink" href="#configuration-states" title="Link to this heading">#</a></h3>
-<p>Between two events, the net moment <span class="math notranslate nohighlight">\(\Delta\mathbf{m}\)</span> of the gradients, in
-1/m, dephases a voxel <span class="math notranslate nohighlight">\(\mathbf{v}\)</span> by <span class="math notranslate nohighlight">\(\Delta\mathbf{m}\cdot\mathbf{v}\)</span> cycles
-along the axes the tissue spans. The voxel is the resolution the widest <span class="math notranslate nohighlight">\(k\)</span>
-reaches along each logical axis, the thickness of the slab an excitation
-selects along an axis <span class="math notranslate nohighlight">\(k\)</span> does not move along, and the tissue’s extent where
-neither bounds it. An interval that dephases the voxel by half a cycle or more
-shifts the configuration states by one order: the magnetization of the
-voxel is then described by its dephased pathways rather than by the
-magnetization of each position in it, as extended phase graphs describe it
-(Weigel, J Magn Reson Imaging 41:266, 2015,
-doi:<a class="reference external" href="https://doi.org/10.1002/jmri.24619">10.1002/jmri.24619</a>). A phase
-encoding that the intervals between two pulses sum to zero is balanced and
-shifts nothing; a moment that changes from one repetition to the next and is
-not cancelled, as a radial readout’s turned prephaser is not, counts. A
-readout reads the pathway that passes the centre of k-space during it: the
-free induction, or the echo of an earlier interval, as an SSFP-echo readout
-reads one. Its echo is the sample at which that pathway passes nearest the
-centre.</p>
-<p>The excitations under one selection, one gradient, frequency and profile, and
-the readouts that follow them form a station.
-For each station, the stream of its events, the pulses that act on its groups
-and its readouts with the shifts between them, is simulated by blochsim’s
-extended phase graphs for each class of tissue, at the frequencies and
-transmit-field magnitudes the cubes interpolate between. The frequency enters
-the states only where an interval between two pulses shifts nothing, as in a
-balanced or a refocused sequence; elsewhere it turns the samples alone.</p>
-</section>
-<section id="temporal-and-readout-bases">
-<h3>Temporal and readout bases<a class="headerlink" href="#temporal-and-readout-bases" title="Link to this heading">#</a></h3>
-<p>At each readout’s echo, the signals of a station’s groups and classes across
-its readouts are spanned by a few temporal terms <span class="math notranslate nohighlight">\(u_p\)</span>. Across the readout,
-from the echo at <span class="math notranslate nohighlight">\(\tau = 0\)</span>, a cube decays as <span class="math notranslate nohighlight">\(e^{-\tau/T_2}\)</span>, dephases as
-<span class="math notranslate nohighlight">\(e^{-|t_u|/T'_2}\)</span>, with <span class="math notranslate nohighlight">\(t_u\)</span> the time the magnetization has gone
-unrefocused, and precesses as <span class="math notranslate nohighlight">\(e^{-2\pi i f_j\tau}\)</span>, or as
-<span class="math notranslate nohighlight">\(e^{-2\pi i f_j t_u}\)</span> where the frequency does not enter the states; those
-factors are
-spanned by a few terms <span class="math notranslate nohighlight">\(v_q\)</span> of the samples’ times. Each cube weighs every
-pair <span class="math notranslate nohighlight">\((u_p, v_q)\)</span>, and the weights of all cubes are spanned by fewer
-combinations of the pairs, the terms <span class="math notranslate nohighlight">\(t\)</span>. Each term is an image
-<span class="math notranslate nohighlight">\(m_t(\mathbf{r})\)</span>, the cubes’ weights in it times their density, so that coil
-<span class="math notranslate nohighlight">\(c\)</span>, of receive sensitivity <span class="math notranslate nohighlight">\(s_c(\mathbf{r})\)</span>, receives at sample <span class="math notranslate nohighlight">\(n\)</span></p>
+<section id="fourier-engine">
+<h3>Fourier engine<a class="headerlink" href="#fourier-engine" title="Link to this heading">#</a></h3>
+<p>What happens to the magnetization over time is separated from where the tissue
+is. Each class of tissue (equal <span class="math notranslate nohighlight">\(T_1\)</span>, <span class="math notranslate nohighlight">\(T_2\)</span>, <span class="math notranslate nohighlight">\(T'_2\)</span>) is simulated by
+blochsim’s extended phase graphs over the pulses and gradient moments the cache
+plays; the images those signals weight are encoded along the trajectory by
+bartorch’s NUFFT, one per coil:</p>
 <div class="math notranslate nohighlight">
 \[
 S_c(n) = e^{i\psi_n} \sum_t w_t(n) \int s_c(\mathbf{r})\, m_t(\mathbf{r})\,
-e^{-2\pi i\,\mathbf{k}(n)\cdot\mathbf{r}}\, d\mathbf{r},
+e^{-2\pi i\,\mathbf{k}(n)\cdot\mathbf{r}}\, d\mathbf{r}.
 \]</div>
-<p>with <span class="math notranslate nohighlight">\(w_t(n)\)</span> the term’s temporal and readout factor at the sample and
-<span class="math notranslate nohighlight">\(\psi_n\)</span> the phase the pulses left, which the receiver phase demodulates. The
-images lie on a grid along the logical axes the trajectory encodes, at the
-resolution its widest <span class="math notranslate nohighlight">\(k\)</span> reaches, over the cubes the station excites; each
-cube is uniform over its width, so its transform weighs every sample. Each
-image times each coil’s sensitivity is transformed to the samples by
-bartorch’s NUFFT. The spacing of the tissue sets how closely the cubes follow
-the object; the resolution of the images is the trajectory’s whatever it is.</p>
-</section>
-<section id="demodulation-and-the-field-of-view-offset">
-<h3>Demodulation and the field-of-view offset<a class="headerlink" href="#demodulation-and-the-field-of-view-offset" title="Link to this heading">#</a></h3>
-<p>The playout demodulates <span class="math notranslate nohighlight">\(S_c\)</span> by <span class="math notranslate nohighlight">\(\exp(i\theta(t))\)</span>, where the receiver phase
-<span class="math notranslate nohighlight">\(\theta\)</span> is the ADC phase offset at the ADC’s start, advancing at its
-frequency offset. The cache carries no ADC phase modulation: the
-reconstruction proxy applies it to the received samples
-(<a class="reference internal" href="reconstruction.html"><span class="doc">Raw-data enrichment and routing</span></a>).</p>
-<p>These are the conventions under which the field-of-view translation applied
-when the IR is built (<a class="reference internal" href="scanner-representation.html"><span class="doc">Scanner representation (PulSeg)</span></a>) recentres an object. Where every block
-is turned by <span class="math notranslate nohighlight">\(R\)</span>, <span class="math notranslate nohighlight">\(\mathbf{k}\)</span> is <span class="math notranslate nohighlight">\(R\mathbf{k}_L\)</span>, with <span class="math notranslate nohighlight">\(\mathbf{k}_L\)</span> its
-value along the logical axes. An object displaced to the prescribed centre
-<span class="math notranslate nohighlight">\(R\mathbf{d}\)</span>, for the offset <span class="math notranslate nohighlight">\(\mathbf{d}\)</span> along the logical axes, gains the
-phase <span class="math notranslate nohighlight">\(-2\pi\,(R\mathbf{d})\cdot(R\mathbf{k}_L) = -2\pi\,\mathbf{d}\cdot\mathbf{k}_L\)</span>,
-which the demodulation removes where the readout gradient holds one value
-across the sampling window; under one that varies, the demodulation removes
-the line through the window centre and the proxy the rest. An object turned by <span class="math notranslate nohighlight">\(R\)</span> presents at
-<span class="math notranslate nohighlight">\(R\mathbf{k}_L\)</span> its own transform at <span class="math notranslate nohighlight">\(\mathbf{k}_L\)</span>. An object posed at the
-prescribed centre, its axes turned by <span class="math notranslate nohighlight">\(R\)</span>, is therefore acquired as the same
-object at the isocentre under the identity, a reflection in <span class="math notranslate nohighlight">\(R\)</span> included.</p>
-</section>
-<section id="diffusion-motion-and-the-gradient-response">
-<h3>Diffusion, motion and the gradient response<a class="headerlink" href="#diffusion-motion-and-the-gradient-response" title="Link to this heading">#</a></h3>
-<p>A tissue class with a diffusion coefficient <span class="math notranslate nohighlight">\(D\)</span> loses <span class="math notranslate nohighlight">\(e^{-bD}\)</span> of its signal
-at each readout, where <span class="math notranslate nohighlight">\(b = (2\pi)^2\int |\mathbf{k}(t)|^2\,dt\)</span> is integrated
-since the last excitation over the moment measured from the readout’s origins,
-so a refocusing pulse mirrors it. Diffusion is isotropic. It is left out where
-no class diffuses, or where the largest <span class="math notranslate nohighlight">\(b\)</span> of the scan times the largest <span class="math notranslate nohighlight">\(D\)</span>
-is below a hundredth.</p>
-<p>A subject in rigid motion, <a class="reference internal" href="../generated/pulserver.virtual.RigidMotion.html#pulserver.virtual.RigidMotion" title="pulserver.virtual.RigidMotion"><code class="xref py py-class docutils literal notranslate"><span class="pre">RigidMotion</span></code></a>, is held in
-the pose it has at each readout’s echo for the whole readout. The pose turns
-the readout’s k-space and shifts its phase, as a phantom placed in that pose
-would be acquired; the coils, the transmit field and the relaxation move with
-the object.</p>
-<p>A gradient impulse response, <a class="reference internal" href="../generated/pulserver.virtual.Girf.html#pulserver.virtual.Girf" title="pulserver.virtual.Girf"><code class="xref py py-class docutils literal notranslate"><span class="pre">Girf</span></code></a>, filters the
-moment the gradients play on each physical axis, so the trajectory, the
-origins and the dephasing all follow the filtered gradients.</p>
-</section>
-<section id="what-is-not-modelled">
-<h3>What is not modelled<a class="headerlink" href="#what-is-not-modelled" title="Link to this heading">#</a></h3>
-<p>A pulse acts at its centre, with no
-relaxation during it, and turns each cube by an ideal rotation, so the phase a
-selective pulse leaves across its slab beyond that rotation is left out. The
-channels of a pTx pulse are summed, as at unit, in-phase sensitivity. A
-readout before the first excitation of its file acquires zeros.</p>
+<p>A few terms <span class="math notranslate nohighlight">\(t\)</span> span the signals of every class and cube, so the number of
+transforms is set by the terms, not by the tissue. The playout then demodulates by the
+ADC offsets, as the scanner does. The full model is in
+<a class="reference internal" href="../developer-guide/internals/virtual-scanner.html"><span class="doc">Virtual scanner</span></a>.</p>
 </section>
 </section>
-<section id="coils-and-the-subject-s-field">
-<h2>Coils and the subject’s field<a class="headerlink" href="#coils-and-the-subject-s-field" title="Link to this heading">#</a></h2>
-<p>A phantom is received by coils of its own. Its tissue can be sampled in one of
-the scanner’s <a class="reference internal" href="../generated/pulserver.virtual.COILS.html#pulserver.virtual.COILS" title="pulserver.virtual.COILS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">COILS</span></code></a> instead, fixed in the physical frame, each a transmit coil and a receive coil,
-named <code class="docutils literal notranslate"><span class="pre">transmit/receive</span></code>: the body coil both ways, taken to be one channel of
-unit sensitivity each way; the body coil transmitting to a 48-channel receive
-head array, <code class="docutils literal notranslate"><span class="pre">body/head48</span></code>; and an 8-channel head coil for parallel transmission
-with a 32-channel receive head array, <code class="docutils literal notranslate"><span class="pre">head8/head32</span></code>. The head coils’
-sensitivities are BART’s coil models rather than electromagnetic simulations:
-the 8-channel coil is <code class="docutils literal notranslate"><span class="pre">HEAD_2D_8CH</span></code>, constant along <span class="math notranslate nohighlight">\(z\)</span>, and the arrays are the
-first 48 and 32 channels of <code class="docutils literal notranslate"><span class="pre">HEAD_3D_64CH</span></code>, each sampled by bartorch over a cube
-25.6 cm wide about the isocentre and interpolated linearly between the samples.
-The receive sensitivities <span class="math notranslate nohighlight">\(s_c\)</span> have a root sum of squares of 1 at the
-isocentre. The transmit sensitivities <span class="math notranslate nohighlight">\(s^+_c\)</span> are the complex conjugates of the
-8-channel coil’s receive sensitivities, the quasi-static limit of reciprocity;
-the models show none of the dielectric effects of a wavelength comparable to
-the head.</p>
-<p>A pulse plays on every transmit channel, weighted by the coil’s default shim,
-the unit weights that bring the channels into phase at the isocentre, where the
-pulse then has its nominal amplitude: each cube sees the transmit field
-<span class="math notranslate nohighlight">\(b^+(\mathbf{r}) = \sum_c w_c\,s^+_c(\mathbf{r})\)</span>, for the weights <span class="math notranslate nohighlight">\(w_c\)</span>.</p>
-<p>A console given field maps takes the coils, and the subject’s field, from
-electromagnetic and susceptibility models of BrainWeb’s head instead
-(<a class="reference internal" href="../developer-guide/internals/virtual-scanner.html"><span class="doc">Virtual scanner</span></a>).</p>
-</section>
-<section id="see-also">
-<h2>See also<a class="headerlink" href="#see-also" title="Link to this heading">#</a></h2>
+<section id="examples">
+<h2>Examples<a class="headerlink" href="#examples" title="Link to this heading">#</a></h2>
 <ul class="simple">
-<li><p><a class="reference internal" href="scanner-representation.html"><span class="doc">Scanner representation (PulSeg)</span></a> — the IR and its prescription.</p></li>
-<li><p><a class="reference internal" href="../user-guide/reconstruction-client.html"><span class="doc">Reconstruction clients</span></a> — the stream the virtual reconstruction client sends.</p></li>
-<li><p><a class="reference internal" href="../api/virtual.html"><span class="doc">Virtual scanner</span></a> — the phantom, the Fourier engine, the scan clock, the client and the export.</p></li>
-<li><p><a class="reference internal" href="../developer-guide/internals/virtual-scanner.html"><span class="doc">Virtual scanner</span></a> — the played waveforms, the Fourier engine’s streams, bases and grids, external simulators, coils from field maps, the scan clock and the sound.</p></li>
+<li><p><a class="reference internal" href="../generated/gallery/01-course/06_testing_on_the_virtual_scanner.html"><span class="doc">6. Test your pair on the virtual scanner</span></a>: a sequence played and reconstructed on the virtual scanner.</p></li>
+<li><p><a class="reference internal" href="../api/virtual.html"><span class="doc">Virtual scanner</span></a>: the phantom, the Fourier engine, the scan clock, the client and the export.</p></li>
+<li><p><a class="reference internal" href="../developer-guide/internals/virtual-scanner.html"><span class="doc">Virtual scanner</span></a>: the signal model, its streams, bases and grids, and what a run establishes.</p></li>
 </ul>
 </section>
 </section>
@@ -845,20 +683,20 @@ electromagnetic and susceptibility models of BrainWeb’s head instead
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="scanner-representation.html"
+       href="reconstruction.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">Scanner representation (PulSeg)</p>
+        <p class="prev-next-title">Reconstruction plugins and calibration context</p>
       </div>
     </a>
     <a class="right-next"
-       href="reconstruction.html"
+       href="../examples/index.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Raw-data enrichment and routing</p>
+        <p class="prev-next-title">Examples</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -880,20 +718,14 @@ electromagnetic and susceptibility models of BrainWeb’s head instead
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#stand-ins">Stand-ins</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#played-trajectory">Played trajectory</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#signal-model">Signal model</a><ul class="nav section-nav flex-column">
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#tissue">Tissue</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#rf-pulses">RF pulses</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#configuration-states">Configuration states</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#temporal-and-readout-bases">Temporal and readout bases</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#demodulation-and-the-field-of-view-offset">Demodulation and the field-of-view offset</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#diffusion-motion-and-the-gradient-response">Diffusion, motion and the gradient response</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#what-is-not-modelled">What is not modelled</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#capabilities">Capabilities</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#limitations">Limitations</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#method">Method</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#played-trajectory">Played trajectory</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#fourier-engine">Fourier engine</a></li>
 </ul>
 </li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#coils-and-the-subject-s-field">Coils and the subject’s field</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#see-also">See also</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#examples">Examples</a></li>
 </ul>
   </nav></div>
 

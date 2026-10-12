@@ -1,237 +1,114 @@
-# Raw-data enrichment and routing
+# Reconstruction plugins and calibration context
 
 ```{admonition} TL;DR
 :class: tldr
 
-- The proxy replaces the encoding counters, flags, encoding spaces and
-  trajectory a client records with those the sequence states, before any
-  reconstruction code reads the stream.
-- The field-of-view offset is played as frequency and phase offsets; where the
-  readout gradient varies across the sampling window, the proxy applies the
-  remaining phase.
-- A reconstruction unit is the readouts of one branch and encoding space that
-  share their image-selecting counters; it closes on the flag its branch
-  declares, and its images carry the values the plugin returned.
+- Your plugin receives k-space already sorted into units, one per image or group of images, closed by MRD flags.
+- Its images carry the values it returned, with the geometry of the acquisition nearest the k-space centre.
+- Calibration is shared across the series of an exam, and reused only where every recorded field matches.
 ```
 
-The scanner's reconstruction client streams each series as MRD: a configuration
-text, the XML header and the acquisitions. The encoding counters, flags,
-encoding spaces and trajectory a vendor client records describe the
-interpreter's playout loop, not the Pulseq sequence: the counters of a
-non-Cartesian or segmented acquisition, the navigator readouts and the k-space
-location of each sample are defined by the sequence. The reconstruction proxy
-therefore replaces them with the values the sequence states, before any
-reconstruction code reads the stream.
+A recon plugin is written as in Gadgetron: gadgets act on each readout as it
+arrives, and a reconstruction runs when the flag that ends its data arrives.
+What pulserver adds is the sorting, so that `recon` is handed k-space rather
+than a stream, and a context that carries calibration from one series of an
+exam to the next. Lessons 4 and 5 of the {doc}`Course <../examples/course>`
+write such a plugin.
 
-The prescribed field-of-view offset is applied to the sequence when its IR is
-built ({doc}`scanner-representation`), as the frequency and phase offsets the
-scanner plays at the middle of each sampling window. Under a readout gradient
-that holds one value across the window, these are the whole phase of the
-offset. Under one that does not, as on a ramp-sampled or non-Cartesian
-readout, the phase is not linear in time, and the proxy applies the remainder,
+## Capabilities
 
-$$
-\phi(t) = 2\pi\, \mathbf{c} \cdot \bigl(\mathbf{k}(t) - \mathbf{k}(t_c)
-- \dot{\mathbf{k}}(t_c)\,(t - t_c)\bigr),
-$$
+:::{container} capabilities
 
-for the offset $\mathbf{c}$ along the logical axes and the window centre
-$t_c$, together with any phase modulation the sequence's ADC events store,
-which the IR cache does not carry. The samples are otherwise left as received,
-and the trajectory the proxy attaches is that of the sequence as designed, in
-the logical frame.
+- **Runs your gadgets on each readout before it is buffered.**
 
-## Enrichment
+  Code: {class}`~pulserver.recon.Gadget`. Tests: *gadgets run before a readout is buffered* (`test_units.py`); *the completed echo is symmetric about the sample at its echo*; *a scan of full echoes is cropped to the reconstruction matrix* (`test_gadgets.py`).
+- **Groups readouts into units by branch, encoding space and image counters, except those you name as axes.**
 
-The header names the design the series was acquired with
-({doc}`designs`). The proxy reads that design's sequence chain and tabulates
-its readouts in play order ({class}`~pulserver.proxy.SequenceTable`). The table
-is applied to the stream as follows.
+  Code: {class}`~pulserver.recon.ReconPlugin`. Tests: *an image counter separates units unless it is an axis of the unit*; *interleaved slices each close at their own flag with their own readouts* (`test_units.py`).
+- **Closes a unit when its branch's flag has arrived at every position along its axes.**
 
-- The header receives one encoding space for the imaging readouts of each
-  subsequence, and one for its navigator readouts when it has any. The
-  reconstruction space of each carries the matrix size and field of view the
-  sequence defines. The encoded space of a Cartesian space carries them with
-  the readout widened to the full echo: its matrix size along the readout is
-  the number of samples of the echo that is symmetric about the readouts'
-  `center_sample`, readout oversampling included, and its field of view along
-  the readout is the reconstructed one times the ratio of the two matrix
-  sizes. The ratio of the encoded to the reconstructed field of view along the
-  readout is the readout oversampling. A space with a trajectory keeps the
-  matrix size and field of view the sequence defines.
-- A subsequence that writes no `PAR` and either defines `SlicePositions` or
-  writes more than one `SLC` excites a stack of 2D slices, each an image of its
-  own. Its `Matrix` and `FOV` along z describe the stack, so each of its
-  spaces is one sample deep along z, over the `SliceThickness` the sequence
-  defines, or the stack's field of view shared among its slices where it
-  defines none.
-- The encoding limits of each space are the minimum and maximum of the
-  counters its readouts reach. The `center` of `kspace_encoding_step_1` and
-  `kspace_encoding_step_2` is the counter of the k-space centre the sequence
-  defines (`kSpaceCenterLine`, `kSpaceCenterPartition`); where it defines
-  none, and for every other counter, the centre is the minimum plus half the
-  number of positions between the minimum and the maximum, rounded down.
-- The header's sequence parameters are the TR, TE, TI and flip angles the
-  sequence defines. The TR and TE it does not define are measured by
-  pypulseqpp's `Sequence.test_report_dict`: TE from the excitation before the
-  closest approach to the k-space centre, and TR between the excitations
-  around it. The flip angles it does not define are the distinct values of
-  `Sequence.rf_flip_angles`.
-- Each acquisition is matched to a table row by its position in the stream and
-  receives the encoding counters, the MRD flags, the dwell time and the
-  encoding space reference, and the k-space trajectory when the k-space
-  location changes across the readout, except on a Cartesian readout sampled
-  on the flat top of its readout gradient alone. In a stack of slices, its
-  position, the field-of-view centre the client sends, is moved along
-  `slice_dir` by the `SlicePositions` entry its `SLC` indexes, to the centre of
-  its slice. When the client numbers its
-  acquisitions, each `scan_counter` must follow the previous one by one; a gap
-  or a repeat stops the series before it is reconstructed, since every later
-  row would be shifted.
+  Code: `triggers` of {class}`~pulserver.recon.ReconPlugin`. Test: *a unit waits for its flag at every position along its axes* (`test_units.py`).
+- **Places each readout in k-space by its counters, and calibration readouts in `ref`.**
 
-The flags are those the sequence's labels set, such as `IS_NAVIGATION_DATA`,
-and the first-and-last flags (`FIRST_IN_SLICE`, `LAST_IN_SLICE` and the
-others), derived from the counters. A reconstruction plugin selects the data a
-reconstruction runs on by these flags.
+  Code: {class}`~pulserver.recon.ReconBuffer`. Tests: *each acquisition lands where its own counters say*; *a partial fourier scan keeps its lines where the centre puts them* (`test_buffers.py`); *a unit places each readout in data and reference by its flags* (`test_units.py`).
+- **Holds only the units open at once, not the series.**
 
-## Trajectory
+  Code: {class}`~pulserver.recon.ReconData`. Test: *the bytes held stay those of one frame over a hundred frames* (`test_units.py`).
+- **Writes each image header from the acquisition nearest the k-space centre, and keeps the values unscaled.**
 
-The k-space location of each sample is the integral of the sequence's
-gradients, with block rotations applied, in 1/m. The table does not hold it for
-the whole scan: it is integrated a run of consecutive readouts at a time, by
-pypulseqpp's `Sequence.adc_kspace`, from the last excitation before the run.
-An excitation resets k to zero at the pulse centre, so the samples that follow
-it do not depend on the gradients played before it, and a run integrated from
-there gives the k-space locations of the scan integrated from its first block.
-A refocusing pulse reverses k rather than resetting it and does not begin an
-integration, nor does an excitation in a block that also holds a readout.
+  Code: {class}`~pulserver.recon.ReconResult`. Tests: *the position and physiology are those of the acquisition nearest the k space centre*; *the ratios between the images of a series survive to the mrd images and the dicom pixels* (`test_images.py`).
+- **Prewhitens on arrival, from the series' noise readouts or the exam's noise covariance.**
 
-An acquisition carries as its trajectory every axis its encoding space varies
-along, up to the last, whether or not its own k moves along it: the line of a
-PROPELLER blade that is played unrotated keeps its phase encoding in ky. The
-partitions of a stack of spokes or spirals are Cartesian along z and placed by
-their `kspace_encode_step_2` counter, so their kz is not part of the
-trajectory. A reconstruction takes the trajectory in grid units, k times the
-reconstructed field of view, through
-{meth}`~pulserver.recon.ReconBuffer.grid_trajectory`.
+  Code: {class}`~pulserver.recon.Prewhiten`. Test: *noise readouts whiten the imaging readouts* (`test_prewhiten.py`).
+- **Compresses coils with one basis per stream.**
 
-A Cartesian readout carries a trajectory only when it samples the ramps of its
-readout gradient. Sampled on the flat top alone, its samples are equally
-spaced in k and placed by the encoding counters and `center_sample`, and an
-encoding space whose readouts are all of that kind carries no trajectory.
+  Code: {class}`~pulserver.recon.CoilCompression`. Tests: *virtual channels are uncorrelated and carry the leading eigenvalues*; *compressed data and maps reconstruct the uncompressed image* (`test_coil_compression.py`).
+- **Finds coil maps in the unit, the stream or the exam, and refuses maps that differ in any recorded field.**
 
-Tabulating a design integrates every range once, for the echo sample of each
-readout and the k-space axes its trajectory spans, which decide the header's
-trajectory type. An acquisition's trajectory is integrated again when it is
-enriched, from the range holding it, and the table keeps the ranges it
-integrated last. The k-space locations the proxy holds therefore do not grow
-with the length of the scan.
+  Code: {func}`~pulserver.recon.coil_maps`, {class}`~pulserver.recon.CoilSensitivities`. Tests: *a later unit without calibration readouts is given the maps of its slice*; *maps that differ in a field are refused naming it with both values*; *exam maps at another matrix are refused not resampled* (`test_calibration.py`).
+- **Shares an exam cache across the series of one exam.**
 
-## Reconstruction units
+  Code: {class}`~pulserver.recon.ExamCache`. Test: *a value one cache stores is read by the next on its directory* (`test_app.py`).
+- **Ships a `pics` plugin with prewhitening, partial Fourier and asymmetric echo.**
 
-A reconstruction takes the readouts of one image, or of several images
-reconstructed together, such as the echoes of a slice. The stream states where
-those readouts end only through the encoding counters and flags that
-enrichment supplies. A *reconstruction unit* is the set of readouts of one
-branch and one encoding space that share their slice, contrast, cardiac phase,
-repetition, set and average counters; a branch is a kind of readout a plugin
-reconstructs separately, such as `imaging` or `navigator`. The `segment` and
-user counters name positions within a readout train and do not separate units.
-A plugin names in its `axes` the counters it takes as axes of the unit's
-k-space instead, such as the echoes of a multi-echo acquisition, and these do
-not separate units either.
+  Code: `src/pulserver/_zoo/recon/pics.py`. Tests: *every other phase encode and the centre reconstruct to the image of all lines*; *a partial fourier image is closer to the full one than the solve of its lines alone* (`test_pics.py`).
+- **Runs a plugin offline on a kept series, unchanged.**
 
-A unit allocates its imaging k-space when its first imaging readout arrives,
-from the encoding space the header gives it, and places each readout as
-described under {ref}`reconstruction-placement`. The flags of a readout select
-its buffer as Gadgetron's acquisition bucket divides readouts: parallel-imaging
-calibration readouts are placed in `ref`, readouts flagged as calibration and
-imaging in `ref` and `data`, phase-correction readouts in neither, and any
-other readout in `data`. The calibration k-space is allocated when the unit
-closes, over the lines its readouts cover.
+  Code: `python -m pulserver.recon`. Test: *plugin runs unchanged offline* (`test_app.py`).
 
-A unit closes when the flag its branch declares has arrived at every position
-along its axes. Enrichment sets the last-in flag of a counter within each
-combination of the encoding space and the other image-selecting counters, so
-`LAST_IN_SLICE` arrives once per echo or average of a slice, and a plugin with
-those counters as axes waits for all of them. Readouts of different units may
-be interleaved: slices acquired line by line each close at their own flagged
-readout.
+:::
 
-A closed unit leaves the plugin before its reconstruction runs, and nothing in
-the runtime holds it afterwards, so the memory a series holds is that of the
-units open at once, not that of the series. A unit still open at the last
-readout of the measurement or at the end of the stream is reconstructed then,
-under its own branch, in the order the units opened.
+## Division of responsibility
 
-## Images
+- **bartorch** computes the whitening, the compression basis, the coil maps and the reconstruction.
+- **Your plugin** chooses the gadgets, the axes, the triggers and the reconstruction.
 
-A {class}`~pulserver.recon.ReconResult` becomes an MRD image whose header the
-runtime builds from the unit that produced it. The values of the image are those
-of the array the plugin returned.
+## Method
 
-### Header
+```{figure} ../_static/context.svg
+:figclass: only-light
 
-The field of view is that of the reconstruction space of the unit's encoding
-space, `(x, y, z)` in mm, so the images of a unit in the second encoding space
-carry the second space's field of view. The matrix is the shape of the returned
-array, which is {attr}`~pulserver.recon.ReconBuffer.image_shape`, the
-reconstruction matrix of the unit's space, for a plugin that uses it.
+Calibration stored by one series of an exam and reused by the next only on an exact match.
+```
 
-The position, the orientation (`read_dir`, `phase_dir`, `slice_dir`), the
-patient table position, the physiology time stamps and the user fields are those
-of the unit's *reference acquisition*, the imaging acquisition placed nearest the
-k-space centre, as Gadgetron selects it for an image header. The centre lies at
-`extent // 2` along the phase-encoding axis and, where the encoded space has more
-than one partition, the partition axis, as described under
-{ref}`reconstruction-placement`; nearness is the Euclidean distance from it in
-grid positions. Of acquisitions at the same distance, the first placed is the
-reference. The acquisition time stamp of the image is the earliest of the unit's
-imaging acquisitions.
+```{figure} ../_static/context-dark.svg
+:figclass: only-dark
 
-A plugin reads the reference acquisition as
-{attr}`~pulserver.recon.ReconBuffer.reference`, and takes the geometry from
-another acquisition by passing it as `ReconResult.reference`.
+Calibration stored by one series of an exam and reused by the next only on an exact match.
+```
 
-### Values
+### Units
 
-The MRD image holds the values the plugin returned: `float32` for real
-floating-point data, `complex64` for complex data, wider types being converted
-to these, and integer data in its own type. No scale or normalisation is
-applied, so the ratios between the images of a series, such as the decay across
-the echoes of a multi-echo acquisition or the ratios between frames, are those
-of the reconstruction. The units are the reconstruction's own.
+A unit is the readouts of one branch (such as `imaging` or `navigator`) and
+encoding space that share their slice, contrast, phase, repetition, set and
+average counters. The counters you name in `axes`, such as the echoes, become
+axes of its k-space instead. Readouts flagged as calibration go to `ref`,
+calibration-and-imaging to both, phase correction to neither, as in Gadgetron's
+acquisition bucket. A unit still open at the end of the stream is
+reconstructed then.
 
-A `(z, y, x)` result becomes one image per partition. Each image states the
-smallest and largest finite value of the result, of its magnitude where it is
-complex, in the meta attributes `ArrayMinimum` and `ArrayMaximum`.
+### Images
 
-## Reconstruction server
+An image's field of view is that of its unit's reconstruction space, and its
+position, orientation and time stamps those of the *reference acquisition*,
+the one placed nearest the k-space centre. Values are written as returned
+(`float32`, `complex64` or integer), so ratios between the images of a series
+are those of the reconstruction.
 
-A proxy given a server to forward to reconstructs no series itself. It
-enriches each series as it arrives and sends it on over TCP to that MRD server:
-a reconstruction server ({class}`~pulserver.proxy.ReconServer`) on another
-computer, or any server that reads the MRD streaming protocol. The server
-receives a config file message naming the reconstruction plugin of the series,
-or a name the proxy is configured with, then the enriched header and
-acquisitions. What it returns is relayed to the client as a worker's output
-is, and a reconstruction timeout closes the connection to it. With DICOM
-conversion enabled, the proxy converts each image the server returns to DICOM
-from the enriched header before relaying it.
+### Calibration context
 
-A reconstruction server runs each series it receives with the plugin its
-config names, in workers, slots and a queue of its own, and enriches nothing:
-the series a proxy forwards arrive enriched.
+Maps estimated from whitened, compressed data describe only data with the same
+channels, whitening, compression and voxel grid. So a stored set records all
+of them, and {func}`~pulserver.recon.coil_maps` hands it to a unit only where
+every field is equal; otherwise it raises
+{class}`~pulserver.recon.MissingCalibration`, naming each source and the field
+that differed. Nothing is resampled. The model and the comparison are in
+{doc}`../developer-guide/internals/calibration`; units and image headers in
+{doc}`../developer-guide/internals/reconstruction-proxy`.
 
-An MRD message carries no length by which a reader can skip a message type it
-does not know. A message the proxy has no reader for therefore ends what it
-relays, and the client receives a text naming the message's type.
+## Examples
 
-## See also
-
-* {doc}`../user-guide/reconstruction-plugins` — writing a reconstruction.
-* {doc}`../user-guide/reconstruction-client` — the MRD stream a reconstruction client sends.
-* {doc}`calibration` — coil sensitivity maps, prewhitening and coil compression.
-* {doc}`../api/proxy` — the proxy, the reconstruction server and the enrichment interface.
-* {doc}`../api/recon` — the reconstruction plugin interface.
-* {doc}`/generated/gallery/02-tours/03_fov_offset_enrichment` — enrichment and reconstruction of a simulated series.
+- {doc}`../generated/gallery/01-course/04_reconstruction_plugin`: a plugin over the units of `gre2d`.
+- {doc}`../user-guide/reconstruction-plugins`: writing a plugin, with prewhitening, compression and maps.
+- {doc}`reconstruction-session`: how a series reaches the plugin.
+- {doc}`../api/recon`: the plugin interface.

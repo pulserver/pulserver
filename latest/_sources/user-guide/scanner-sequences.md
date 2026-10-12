@@ -140,13 +140,14 @@ a plugin's own user entries start at `user12`:
 
 | User entry | Control |
 | --- | --- |
-| `user0` | Dummy scans |
+| `user0` | Dummy scans; −1, the default, plays until the steady state, where the sequence chooses it (bSSFP, MPRAGE, ZTE and FSE count theirs) |
 | `user1` | Partial echo, the fraction of the echo acquired |
 | `user2`, `user3` | Partial Fourier along the phase and the partition encodes |
 | `user4`, `user5` | Calibration (ACS) lines along the phase and the partition encodes |
 | `user6` | Readout oversampling |
 | `user7` | Echo spacing, in ms; 0 the shortest |
 | `user8` | Refocusing flip angle, in degrees |
+| `user9` | CAIPIRINHA shift, in partitions per acquired line |
 
 Saturation is set in a plugin's source, by a module constant, rather than at
 the console. `gre2d` and `se2d` play `BANDS`, two, spatial saturation bands
@@ -160,6 +161,20 @@ band where it was placed, and a band not yet placed waits 150 mm from the
 isocentre, outside the head. `BANDS = 0` plays none. `epi2d` saturates fat before
 every shot while `FAT_SATURATION` is `True`, and `epi3d` excites water alone
 with a spectral-spatial pulse while `EXCITATION` is `"spsp"`.
+
+Other choices of a sequence function that a console has no entry for are
+module constants too, set to the function's default unless stated:
+
+| Plugin | Constant | Choice |
+| --- | --- | --- |
+| 3D Cartesian, stack and MPRAGE plugins | `EXCITATION` | `"slab"`, `"spsp"` (water alone) or `"nonselective"`; `epi3d` ships `"spsp"` |
+| `gre3d`, `se3d`, `gre_multiecho3d` | `ELLIPTICAL` | Only the phase encodes inside the ky-kz ellipse |
+| `gre_multiecho2d`, `gre_multiecho3d` | `FLYBACK` | Monopolar echoes; `False` reads even echoes backwards |
+| `fse3d` | `ORDERING` | `"radial"`, or `"shuffling"`: Poisson-disc views in random order |
+| `zte3d` | `SCHEME` | Spokes ordered `"spiral"` or `"meridian"` |
+
+`bssfp3d` takes its number of phase cycles, each a train with its own RF phase
+increment, as user entry 12.
 
 Optional features are switched by a module constant of the plugin, off in
 the shipped files; a copy of the file in a `--plugins` directory with the
@@ -177,7 +192,7 @@ feature needs, a scanner entry where there is one and a user entry otherwise:
 
 A 3D sequence takes its number of partitions from the number of slices. `Ry`
 undersamples the phase encode of the Cartesian sequences, the blades of
-`gre_propeller2d` and `se_propeller2d` and the shells of `zte3d`, and `Rz` the
+`gre_propeller2d`, `se_propeller2d` and the stacks of blades and the shells of `zte3d`, and `Rz` the
 partition encode of the 3D Cartesian ones. The `ETL` of `se_epi_propeller2d` is
 its blade width, and the MPRAGE sequences take their inversion time as
 `prep_time`.
@@ -189,7 +204,10 @@ repetitions ({ref}`evaluating-a-protocol`). Most call the function with the
 arguments that reduce it to that repetition; `epi3d` and `zte3d` build the
 repetition from the modules their function builds it from. The scan time is the duration of the repetition
 times the number of repetitions the prescription plays, with the slices that
-share a TR counted in the packets the sequence plays them in. The values are
+share a TR counted in the packets the sequence plays them in, and the dummy
+repetitions added: those of `user0`, or, at −1, the count
+{func}`pypulseqpp.sequences.steady_state_dummies` gives for that repetition
+time and flip angle. The values are
 those the main sequence states for the prescription: where the plugin has the
 entry, the echo time and the repetition time in its `TE` and `TR` definitions,
 the receiver bandwidth as the inverse of the dwell time of its first ADC event,
@@ -238,7 +256,7 @@ fov_rotation_33: float|off|1.0|-1.0|1.0|1e-06|
 The last twelve entries are the prescription, which the interpreter fills from
 the scanner's: the field-of-view offset, which the host applies when it builds
 the IR, and the rotation from the logical to the physical axes, in whose frame
-the host checks the design ({doc}`../explanations/designs`).
+the host checks the design ({doc}`../explanations/architecture`).
 
 `nex` is the number of signal averages, which every plugin lists unless it
 declares its own: the design plays its main sequence that many times, written
@@ -282,7 +300,7 @@ chain:
 ...         return Evaluation(protocol.replace(achieved), sequences.duration(seq))
 >>> reply = Resolved().validate(system, {"TE": TEPreset.MINIMUM, "nx": 96})
 >>> reply.valid, round(reply.duration, 3), reply.info
-(True, 36.0, '')
+(True, 38.25, '')
 >>> {name: reply.values[name] for name in ("TE", "TR", "fov", "nx")}
 {'TE': 3080, 'TR': 250000, 'fov': 220.0, 'nx': 96}
 
@@ -310,7 +328,7 @@ reply reports the scan time as unknown.
 as signed binary Pulseq, prescans first, and returns the written paths. The first file
 is `sequence.seq`, and each file names the next as its `NextSequence`
 definition. The `generate` design call converts the design to the IR cache and
-stores it ({doc}`../explanations/designs`).
+stores it ({doc}`../explanations/architecture`).
 
 (evaluating-a-protocol)=
 ## Evaluating a protocol

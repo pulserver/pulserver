@@ -37,7 +37,7 @@
     <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-binder.css?v=f4aeca0c" />
     <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-dataframe.css?v=2082cf3c" />
     <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
-    <link rel="stylesheet" type="text/css" href="../_static/pulserver.css?v=e08ae8f3" />
+    <link rel="stylesheet" type="text/css" href="../_static/pulserver.css?v=6854ff42" />
   
   <!-- So that users can add custom icons -->
   <script defer src="../_static/scripts/fontawesome.js?digest=90905a2f556bf617f1a9"></script>
@@ -52,6 +52,8 @@
     <script src="../_static/copybutton.js?v=f281be69"></script>
     <script src="../_static/sg-tags.js?v=d80f6fa4"></script>
     <script src="../_static/scripts/sphinx-book-theme.js?v=fab101a9"></script>
+    <script>window.MathJax = {"options": {"processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
+    <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-mml-chtml.js"></script>
     <script>DOCUMENTATION_OPTIONS.pagename = 'explanations/architecture';</script>
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
@@ -61,6 +63,7 @@
             true;
         </script>
     <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
+    <script src="../_static/capabilities.js?v=421ebb92"></script>
     <link rel="canonical" href="https://pulserver.github.io/pulserver/latest/explanations/architecture.html" />
     <link rel="icon" href="../_static/pulserver-mark.svg"/>
     <link rel="index" title="Index" href="../genindex.html" />
@@ -256,9 +259,11 @@
 <li class="toctree-l2"><a class="reference internal" href="../developer-guide/documentation.html">Documentation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../developer-guide/terminology.html">Terminology and conventions</a></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../developer-guide/internals/index.html">Internals</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/calibration.html">Calibration, noise and coil compression</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/ir-cache.html">IR cache</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/protocol-wire.html">Protocol text blocks</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/reconstruction-proxy.html">Reconstruction proxy</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/sar-ratios.html">SAR ratios against a reference pulse</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
@@ -271,20 +276,22 @@
 <li class="toctree-l1 current active has-children"><a class="reference internal" href="index.html">Explanations</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">Architecture</a></li>
 <li class="toctree-l2"><a class="reference internal" href="protocol.html">Protocol resolution</a></li>
-<li class="toctree-l2"><a class="reference internal" href="designs.html">Designs and the design store</a></li>
-<li class="toctree-l2"><a class="reference internal" href="scanner-representation.html">Scanner representation (PulSeg)</a></li>
-<li class="toctree-l2"><a class="reference internal" href="virtual-scanner.html">The virtual scanner</a></li>
-<li class="toctree-l2"><a class="reference internal" href="reconstruction.html">Raw-data enrichment and routing</a></li>
-<li class="toctree-l2"><a class="reference internal" href="calibration.html">Calibration, noise and coil compression</a></li>
+<li class="toctree-l2"><a class="reference internal" href="safety-checks.html">Safety checks</a></li>
+<li class="toctree-l2"><a class="reference internal" href="scanner-representation.html">PulSeg representation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="raw-data.html">MRD enrichment</a></li>
+<li class="toctree-l2"><a class="reference internal" href="reconstruction-session.html">Reconstruction session</a></li>
+<li class="toctree-l2"><a class="reference internal" href="reconstruction.html">Reconstruction plugins and calibration context</a></li>
+<li class="toctree-l2"><a class="reference internal" href="virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../examples/index.html">Examples</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../examples/course.html">Course</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/01_protocol_to_image.html">1. From protocol to image</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/02_sequence_plugin.html">2. A scanner sequence and its protocol</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/03_scanner_representation.html">3. Scanner representation</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/04_reconstruction_plugin.html">4. A reconstruction plugin</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/05_testing_on_the_virtual_scanner.html">5. Testing on the virtual scanner</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/01_protocol_to_image.html">1. Your first scan</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/02_sequence_plugin.html">2. Your sequence in the scanner UI</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/03_scanner_representation.html">3. What the scanner plays</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/04_reconstruction_plugin.html">4. What your recon receives</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/05_recon_plugin.html">5. Your recon plugin</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/06_testing_on_the_virtual_scanner.html">6. Test your pair on the virtual scanner</a></li>
 </ul>
 </details></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../examples/tours.html">Tours</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -529,11 +536,16 @@
             </div>
             <nav aria-label="Page">
                 <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#layers">Layers</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#services-and-data-flow">Services and data flow</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#representations-at-each-boundary">Representations at each boundary</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#implementation-languages">Implementation languages</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#see-also">See also</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#capabilities">Capabilities</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#division-of-responsibility">Division of responsibility</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#method">Method</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#acquisition-flow">Acquisition flow</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#design-identity">Design identity</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#design-store">Design store</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#interfaces">Interfaces</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#examples">Examples</a></li>
 </ul>
             </nav>
         </div>
@@ -550,94 +562,110 @@
 <div class="tldr admonition">
 <p class="admonition-title">TL;DR</p>
 <ul class="simple">
-<li><p>An acquisition through pulserver has four tasks: design for the prescribed
-protocol, conversion into the scanner representation, playout and
-reconstruction. pulserver performs the first, second and fourth; the
-scanner’s interpreter plays the sequence.</p></li>
-<li><p>The Pulseq representation, the engines (pypulseqpp and the reconstruction a
-plugin imports), pulserver’s orchestration and scanner execution are kept
-distinct.</p></li>
-<li><p>The design calls run on the scanner host and the reconstruction proxy on
-the reconstruction computer; they share the design store, and exchange a
-protocol block, Pulseq files, the IR cache and an MRD stream.</p></li>
+<li><p>Two services: design calls on the scanner host, the reconstruction proxy on the reconstruction computer.</p></li>
+<li><p>Each design is stored once, under the SHA-256 of what it depends on, and never modified.</p></li>
+<li><p>The interpreter only presents, plays and streams; pypulseqpp designs and your plugin’s engine reconstructs.</p></li>
 </ul>
 </div>
-<p>A Pulseq sequence is a vendor-independent description of an acquisition. To
-acquire data with one on a clinical scanner, four tasks have to be performed:
-the sequence is designed for the protocol the operator prescribes, converted
-into a form the scanner hardware can play, played, and its raw data
-reconstructed into images returned to the console. Pulserver performs the
-first, second and fourth of these on computers beside the scanner, and a
-vendor-specific interpreter performs the third on the scanner itself.</p>
-<section id="layers">
-<h2>Layers<a class="headerlink" href="#layers" title="Link to this heading">#</a></h2>
-<p>Four layers are kept distinct throughout the documentation.</p>
-<dl class="simple myst">
-<dt>Pulseq representation</dt><dd><p>The content of a <code class="docutils literal notranslate"><span class="pre">.seq</span></code> file: blocks, event libraries, shapes, definitions
-and extensions. It is the design of record for every acquisition.</p>
-</dd>
-<dt>Engines</dt><dd><p><a class="reference external" href="https://github.com/pulserver/pypulseqpp">pypulseqpp</a> designs and writes the
-sequence. The reconstruction is whatever a reconstruction plugin imports,
-normally <a class="reference external" href="https://github.com/mcencini/bartorch">bartorch</a>. Pulserver
-implements neither sequence design nor reconstruction algorithms.</p>
-</dd>
-<dt>Orchestration</dt><dd><p>Pulserver: the resolution of a protocol against a sequence function, the
-storage of the resulting designs, the conversion of a design into the scanner
-IR, and the routing and enrichment of raw data.</p>
-</dd>
-<dt>Scanner execution</dt><dd><p>The interpreter: the vendor-specific program that presents the protocol in
-the scanner UI, loads the IR, plays the sequence and streams the raw data. It
-contains no sequence or reconstruction logic.</p>
-</dd>
-</dl>
+<p>You write a sequence plugin and a recon plugin. The design calls answer each
+protocol edit, design and check the sequence, and store it. The proxy receives
+each series, completes it from the stored design and runs your recon plugin.
+Lesson 1 of the <a class="reference internal" href="../examples/course.html"><span class="doc">Course</span></a> runs one acquisition through
+both on the virtual scanner.</p>
+<section id="capabilities">
+<h2>Capabilities<a class="headerlink" href="#capabilities" title="Link to this heading">#</a></h2>
+<div class="capabilities docutils container">
+<ul>
+<li><p><strong>Answers the interpreter’s design calls, one command per call or through a warm server.</strong></p>
+<p>Code: <code class="docutils literal notranslate"><span class="pre">pulserver</span> <span class="pre">design</span></code>, <code class="xref py py-mod docutils literal notranslate"><span class="pre">pulserver.host</span></code>. Tests: <em>a forwarded call replies as the call answered in its own process</em>; <em>a crashing plugin fails only its call</em>; <em>a call is answered while another runs</em> (<code class="docutils literal notranslate"><span class="pre">test_design_server.py</span></code>).</p>
+</li>
+<li><p><strong>Identifies a design by the SHA-256 of its plugin, sources, package versions, limits, VOP file and resolved protocol.</strong></p>
+<p>Code: <a class="reference internal" href="../generated/pulserver.host.design_identity.html#pulserver.host.design_identity" title="pulserver.host.design_identity"><code class="xref py py-func docutils literal notranslate"><span class="pre">design_identity()</span></code></a>. Tests: <em>one resolved protocol is one design</em>; <em>an edited plugin is another design of the same protocol</em>; <em>a design is one of the VOP file contents its SAR ratios came from</em> (<code class="docutils literal notranslate"><span class="pre">test_design_service.py</span></code>).</p>
+</li>
+<li><p><strong>Designs a request once, whether it arrives as typed or as resolved.</strong></p>
+<p>Code: <a class="reference internal" href="../generated/pulserver.host.design_identity.html#pulserver.host.design_identity" title="pulserver.host.design_identity"><code class="xref py py-func docutils literal notranslate"><span class="pre">design_identity()</span></code></a>. Test: <em>a request is generated once whether or not it resolves to itself</em> (<code class="docutils literal notranslate"><span class="pre">test_design_service.py</span></code>).</p>
+</li>
+<li><p><strong>Identifies an imported Pulseq chain by its files and the prescription it is imported at.</strong></p>
+<p>Code: <code class="docutils literal notranslate"><span class="pre">pulserver</span> <span class="pre">design</span> <span class="pre">import</span></code>. Test: <em>importing the same files at the same prescription is one design</em> (<code class="docutils literal notranslate"><span class="pre">test_design_service.py</span></code>).</p>
+</li>
+<li><p><strong>Gives each design a 72-bit identifier that travels in three float32 fields of the raw-data header.</strong></p>
+<p>Code: <a class="reference internal" href="../generated/pulserver.host.design_id.html#pulserver.host.design_id" title="pulserver.host.design_id"><code class="xref py py-func docutils literal notranslate"><span class="pre">design_id()</span></code></a>. Tests: <em>a design identifier is three integers a float32 holds exactly</em>; <em>a design identifier holding another identity is refused</em> (<code class="docutils literal notranslate"><span class="pre">test_design_service.py</span></code>).</p>
+</li>
+<li><p><strong>Writes a design whole or not at all, once, and never modifies it.</strong></p>
+<p>Code: <code class="xref py py-mod docutils literal notranslate"><span class="pre">pulserver.host</span></code>. Tests: <em>a design being written is invisible until it is whole</em>; <em>two processes designing one protocol at once store it once</em>; <em>a stored design holds the files its manifest records and no other</em> (<code class="docutils literal notranslate"><span class="pre">test_design_service.py</span></code>).</p>
+</li>
+<li><p><strong>Prunes the store least recently used first.</strong></p>
+<p>Code: <code class="docutils literal notranslate"><span class="pre">pulserver</span> <span class="pre">design</span> <span class="pre">prune</span></code>. Tests: <em>pruning removes the designs unused for longest first</em>; <em>a design found again is used again</em>; <em>pruning keeps a design used within the day whatever the limits</em> (<code class="docutils literal notranslate"><span class="pre">test_design_service.py</span></code>).</p>
+</li>
+<li><p><strong>Pushes each design to a proxy on another computer, which stores it only if every file matches the manifest.</strong></p>
+<p>Code: <a class="reference internal" href="../generated/pulserver.proxy.DesignIntake.html#pulserver.proxy.DesignIntake" title="pulserver.proxy.DesignIntake"><code class="xref py py-class docutils literal notranslate"><span class="pre">DesignIntake</span></code></a>. Tests: <em>a generation pushes the design it replies</em>; <em>the intake refuses a tampered bundle with the reason</em> (<code class="docutils literal notranslate"><span class="pre">test_design_push.py</span></code>).</p>
+</li>
+<li><p><strong>Reads each design once on the reconstruction side and keeps the most recently read.</strong></p>
+<p>Code: <a class="reference internal" href="../generated/pulserver.proxy.DesignCache.html#pulserver.proxy.DesignCache" title="pulserver.proxy.DesignCache"><code class="xref py py-class docutils literal notranslate"><span class="pre">DesignCache</span></code></a>. Tests: <em>the least recently read design is read again when next named</em>; <em>a series naming no stored design is refused</em> (<code class="docutils literal notranslate"><span class="pre">test_proxy.py</span></code>).</p>
+</li>
+<li><p><strong>Writes a log of each call and each reconstruction, including the output of the processes it spawns.</strong></p>
+<p>Code: <code class="xref py py-mod docutils literal notranslate"><span class="pre">pulserver.host</span></code>. Tests: <em>a call naming a log file appends its outcome there</em> (<code class="docutils literal notranslate"><span class="pre">test_design_server.py</span></code>); <em>a logfile collects log output warnings and spawned children</em> (<code class="docutils literal notranslate"><span class="pre">test_logs.py</span></code>).</p>
+</li>
+</ul>
+</div>
 </section>
-<section id="services-and-data-flow">
-<h2>Services and data flow<a class="headerlink" href="#services-and-data-flow" title="Link to this heading">#</a></h2>
+<section id="division-of-responsibility">
+<h2>Division of responsibility<a class="headerlink" href="#division-of-responsibility" title="Link to this heading">#</a></h2>
+<ul class="simple">
+<li><p><strong>The interpreter</strong> shows the protocol, plays the IR cache and streams the raw data. It holds no sequence or reconstruction logic.</p></li>
+<li><p><strong>pypulseqpp</strong> designs the sequence; any Pulseq tool can supply an imported chain instead.</p></li>
+<li><p><strong>The reconstruction engine</strong> is whatever your recon plugin imports, usually bartorch.</p></li>
+</ul>
+</section>
+<section id="method">
+<h2>Method<a class="headerlink" href="#method" title="Link to this heading">#</a></h2>
 <figure class="only-light align-default" id="id1">
 <img alt="../_images/architecture.svg" src="../_images/architecture.svg" />
 <figcaption>
-<p><span class="caption-text">The two pulserver services between the scanner and the engines, and the
-design store: one directory both reach, or the proxy’s own, to which the design
-calls push each design.</span><a class="headerlink" href="#id1" title="Link to this image">#</a></p>
+<p><span class="caption-text">The two services between the scanner and the engines, and the design store they share.</span><a class="headerlink" href="#id1" title="Link to this image">#</a></p>
 </figcaption>
 </figure>
 <figure class="only-dark align-default" id="id2">
 <img alt="../_images/architecture-dark.svg" src="../_images/architecture-dark.svg" />
 <figcaption>
-<p><span class="caption-text">The two pulserver services between the scanner and the engines, and the
-design store: one directory both reach, or the proxy’s own, to which the design
-calls push each design.</span><a class="headerlink" href="#id2" title="Link to this image">#</a></p>
+<p><span class="caption-text">The two services between the scanner and the engines, and the design store they share.</span><a class="headerlink" href="#id2" title="Link to this image">#</a></p>
 </figcaption>
 </figure>
-<p>The design calls, <code class="xref py py-mod docutils literal notranslate"><span class="pre">pulserver.host</span></code>, run on the scanner host and answer
-the interpreter host process of each running sequence, one command per call or
-through a warm server. The reconstruction proxy, <code class="xref py py-mod docutils literal notranslate"><span class="pre">pulserver.proxy</span></code>, runs on
-the reconstruction computer and answers the scanner’s reconstruction client.
-One acquisition proceeds as follows.</p>
+<section id="acquisition-flow">
+<h3>Acquisition flow<a class="headerlink" href="#acquisition-flow" title="Link to this heading">#</a></h3>
 <ol class="arabic simple">
-<li><p>On each protocol edit, the interpreter host process requests validation,
-naming the scanner-sequence plugin, the scanner limits and the requested
-protocol. The call evaluates the protocol with the plugin, which for a
-shipped sequence designs it with pypulseqpp, and replies with the protocol
-the design achieves and the scan time, or with the error the design raised
-(<a class="reference internal" href="protocol.html"><span class="doc">Protocol resolution</span></a>).</p></li>
-<li><p>When the scan is prepared, the process requests the design. The call designs
-the sequence, checks it, and stores the Pulseq files and the IR cache as a
-design of the design store, pushes the design to the proxy when the proxy
-keeps a store of its own, and replies its identifier (<a class="reference internal" href="designs.html"><span class="doc">Designs and the design store</span></a>,
-<a class="reference internal" href="scanner-representation.html"><span class="doc">Scanner representation (PulSeg)</span></a>). The interpreter loads the IR cache and plays the sequence.</p></li>
-<li><p>The reconstruction client streams the raw data of the series as MRD. The
-header names the design the series was played from, and the client’s config
-names the reconstruction plugin.</p></li>
-<li><p>The proxy reads the design’s sequence files, completes the MRD header and
-every acquisition from them, and runs the reconstruction plugin the config
-names in a worker process, or forwards the completed series to a
-reconstruction server on another computer (<a class="reference internal" href="reconstruction.html"><span class="doc">Raw-data enrichment and routing</span></a>). The
-images return to the console through the client’s connection.</p></li>
+<li><p>Each protocol edit: the call evaluates it with your plugin and replies with the achieved values and scan time (<a class="reference internal" href="protocol.html"><span class="doc">Protocol resolution</span></a>).</p></li>
+<li><p>Scan preparation: the call designs, checks (<a class="reference internal" href="safety-checks.html"><span class="doc">Safety checks</span></a>), converts (<a class="reference internal" href="scanner-representation.html"><span class="doc">PulSeg representation</span></a>) and stores, and replies with the identifier.</p></li>
+<li><p>Acquisition: the client streams MRD; the header names the design and the configuration names the recon plugin.</p></li>
+<li><p>Reconstruction: the proxy completes the stream from the design (<a class="reference internal" href="raw-data.html"><span class="doc">MRD enrichment</span></a>) and runs your plugin in a worker (<a class="reference internal" href="reconstruction.html"><span class="doc">Reconstruction plugins and calibration context</span></a>).</p></li>
 </ol>
 </section>
-<section id="representations-at-each-boundary">
-<h2>Representations at each boundary<a class="headerlink" href="#representations-at-each-boundary" title="Link to this heading">#</a></h2>
+<section id="design-identity">
+<h3>Design identity<a class="headerlink" href="#design-identity" title="Link to this heading">#</a></h3>
+<p>No design call keeps state; the store is all that persists. A changed plugin,
+sequence function, package version or VOP file is a new design of the same
+protocol. The identifier is the first 18 hexadecimal digits of the identity,
+split into three float32 header fields because a float32 holds every integer
+below <span class="math notranslate nohighlight">\(2^{24}\)</span> exactly.</p>
+</section>
+<section id="design-store">
+<h3>Design store<a class="headerlink" href="#design-store" title="Link to this heading">#</a></h3>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>designs/
+  3f9c0a1b2c3d4e5f60/
+    sequence.seq          first file of the NextSequence chain, binary Pulseq
+    sequence_main.seq     the remaining files, when there are prescans
+    sequence.pseg         IR cache
+    resolved.protocol
+    manifest.json         identity and identifier, limits, package versions,
+                          creation time, plugin and source, scan time,
+                          field-of-view offset, SHA-256 of every file
+</pre></div>
+</div>
+<p>The proxy reads the Pulseq files, not the cache: the cache is derived for
+playout, and the Pulseq files are the design of record.</p>
+</section>
+<section id="interfaces">
+<h3>Interfaces<a class="headerlink" href="#interfaces" title="Link to this heading">#</a></h3>
 <div class="pst-scrollable-table-container"><table class="table">
 <thead>
 <tr class="row-odd"><th class="head"><p>Representation</p></th>
@@ -659,29 +687,24 @@ images return to the console through the client’s connection.</p></li>
 <td><p>The interpreter, through the C library in <code class="docutils literal notranslate"><span class="pre">src/c/</span></code></p></td>
 </tr>
 <tr class="row-odd"><td><p>MRD stream</p></td>
-<td><p>Reconstruction client; the proxy, forwarding</p></td>
-<td><p>Reconstruction proxy and its workers; a reconstruction server</p></td>
+<td><p>Reconstruction client; the proxy, when forwarding</p></td>
+<td><p>The proxy and its workers</p></td>
 </tr>
 </tbody>
 </table>
 </div>
-<p>The reconstruction side reads the Pulseq files of a design, not its IR cache:
-the cache is a derived representation for playout, and the Pulseq files remain
-the design of record.</p>
+<p>Orchestration is Python, the IR passes are C++ (<code class="docutils literal notranslate"><span class="pre">src/cpp/ir/</span></code>), and the library
+the interpreter links is C89 (<code class="docutils literal notranslate"><span class="pre">src/c/</span></code>), for the vendor toolchains.</p>
 </section>
-<section id="implementation-languages">
-<h2>Implementation languages<a class="headerlink" href="#implementation-languages" title="Link to this heading">#</a></h2>
-<p>The orchestration is Python. The passes that compute the IR run only on the
-host and are C++, in <code class="docutils literal notranslate"><span class="pre">src/cpp/ir/</span></code>. The code that reads the IR cache and walks
-it during playout is linked into the interpreter, whose vendor toolchains
-accept ANSI C; it is therefore C89, in <code class="docutils literal notranslate"><span class="pre">src/c/</span></code>, and depends on nothing that
-runs only on the host.</p>
 </section>
-<section id="see-also">
-<h2>See also<a class="headerlink" href="#see-also" title="Link to this heading">#</a></h2>
+<section id="examples">
+<h2>Examples<a class="headerlink" href="#examples" title="Link to this heading">#</a></h2>
 <ul class="simple">
-<li><p><a class="reference internal" href="../user-guide/running.html"><span class="doc">Running the services</span></a> — starting the two services.</p></li>
-<li><p><a class="reference internal" href="../api/index.html"><span class="doc">API reference</span></a> — the Python interface of each service.</p></li>
+<li><p><a class="reference internal" href="../generated/gallery/01-course/01_protocol_to_image.html"><span class="doc">1. Your first scan</span></a>: one acquisition
+through both services on the virtual scanner.</p></li>
+<li><p><a class="reference internal" href="../user-guide/running.html"><span class="doc">Running the services</span></a>: starting the two services, pushing designs and
+pruning the store.</p></li>
+<li><p><a class="reference internal" href="../api/host.html"><span class="doc">Design calls</span></a>: the design calls and the store.</p></li>
 </ul>
 </section>
 </section>
@@ -733,11 +756,16 @@ runs only on the host.</p>
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#layers">Layers</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#services-and-data-flow">Services and data flow</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#representations-at-each-boundary">Representations at each boundary</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#implementation-languages">Implementation languages</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#see-also">See also</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#capabilities">Capabilities</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#division-of-responsibility">Division of responsibility</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#method">Method</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#acquisition-flow">Acquisition flow</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#design-identity">Design identity</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#design-store">Design store</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#interfaces">Interfaces</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#examples">Examples</a></li>
 </ul>
   </nav></div>
 

@@ -1,17 +1,5 @@
 # Calibration, noise and coil compression
 
-```{admonition} TL;DR
-:class: tldr
-
-- Sensitivity maps estimated from whitened and compressed data describe only
-  data with the same channels, whitening, compression and voxel grid.
-- Prewhitening and coil compression are linear transforms of the channels;
-  bartorch computes them and the estimate, and `pulserver.recon` holds,
-  compares and routes the results.
-- Stored maps are reused only where every recorded field matches the unit;
-  nothing is resampled, and a mismatch is reported.
-```
-
 A reconstruction from a receive-coil array needs the sensitivity of each
 channel, estimated from calibration data, and combines the channels with equal
 weight, which is the maximum-likelihood combination only where their noise is
@@ -169,7 +157,7 @@ no coil sensitivities for slice 0; sources consulted:
 
 The state in `context` belongs to one stream. What a series leaves to the next
 is what it stores in `context.exam` under the exam keys, which
-{doc}`reconstruction` describes. A calibration series publishes its whitening
+{doc}`../../explanations/reconstruction` describes. A calibration series publishes its whitening
 with {meth}`Prewhiten.publish <pulserver.recon.Prewhiten.publish>` and its maps
 by assigning `context.coil_sensitivities`.
 
@@ -179,10 +167,10 @@ basis in force when they are estimated. The whitening, the compression basis
 and the estimate are bartorch's (`tools.whiten`, `tools.cc` and `tools.ccapply`,
 and the estimate the plugin names, such as `apps.nlinv_maps`); the interfaces
 above hold their results, compare them and route them between units and series.
-{doc}`../user-guide/reconstruction-plugins` shows the calls.
+{doc}`../../user-guide/reconstruction-plugins` shows the calls.
 
 ## See also
 
-* {doc}`../user-guide/reconstruction-plugins` — requesting maps, prewhitening and compressing in a plugin.
-* {doc}`reconstruction` — units, the exam cache and workers.
-* {doc}`../api/recon` — the interfaces named above.
+* {doc}`../../user-guide/reconstruction-plugins` — requesting maps, prewhitening and compressing in a plugin.
+* {doc}`../../explanations/reconstruction` — units, the exam cache and workers.
+* {doc}`../../api/recon` — the interfaces named above.

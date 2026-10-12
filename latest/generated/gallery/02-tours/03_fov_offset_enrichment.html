@@ -37,7 +37,7 @@
     <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-binder.css?v=f4aeca0c" />
     <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
     <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
-    <link rel="stylesheet" type="text/css" href="../../../_static/pulserver.css?v=e08ae8f3" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/pulserver.css?v=6854ff42" />
   
   <!-- So that users can add custom icons -->
   <script defer src="../../../_static/scripts/fontawesome.js?digest=90905a2f556bf617f1a9"></script>
@@ -63,6 +63,7 @@
             true;
         </script>
     <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
+    <script src="../../../_static/capabilities.js?v=421ebb92"></script>
     <link rel="canonical" href="https://pulserver.github.io/pulserver/latest/generated/gallery/02-tours/03_fov_offset_enrichment.html" />
     <link rel="icon" href="../../../_static/pulserver-mark.svg"/>
     <link rel="index" title="Index" href="../../../genindex.html" />
@@ -258,9 +259,11 @@
 <li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/documentation.html">Documentation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/terminology.html">Terminology and conventions</a></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../../../developer-guide/internals/index.html">Internals</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/calibration.html">Calibration, noise and coil compression</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/ir-cache.html">IR cache</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/protocol-wire.html">Protocol text blocks</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/reconstruction-proxy.html">Reconstruction proxy</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/sar-ratios.html">SAR ratios against a reference pulse</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
@@ -273,20 +276,22 @@
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../explanations/index.html">Explanations</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="../../../explanations/architecture.html">Architecture</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../explanations/protocol.html">Protocol resolution</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../explanations/designs.html">Designs and the design store</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../explanations/scanner-representation.html">Scanner representation (PulSeg)</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../explanations/virtual-scanner.html">The virtual scanner</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../explanations/reconstruction.html">Raw-data enrichment and routing</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../explanations/calibration.html">Calibration, noise and coil compression</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/safety-checks.html">Safety checks</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/scanner-representation.html">PulSeg representation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/raw-data.html">MRD enrichment</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/reconstruction-session.html">Reconstruction session</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/reconstruction.html">Reconstruction plugins and calibration context</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 current active has-children"><a class="reference internal" href="../../../examples/index.html">Examples</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
 <li class="toctree-l2 has-children"><a class="reference internal" href="../../../examples/course.html">Course</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l3"><a class="reference internal" href="../01-course/01_protocol_to_image.html">1. From protocol to image</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../01-course/02_sequence_plugin.html">2. A scanner sequence and its protocol</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../01-course/03_scanner_representation.html">3. Scanner representation</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../01-course/04_reconstruction_plugin.html">4. A reconstruction plugin</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../01-course/05_testing_on_the_virtual_scanner.html">5. Testing on the virtual scanner</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../01-course/01_protocol_to_image.html">1. Your first scan</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../01-course/02_sequence_plugin.html">2. Your sequence in the scanner UI</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../01-course/03_scanner_representation.html">3. What the scanner plays</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../01-course/04_reconstruction_plugin.html">4. What your recon receives</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../01-course/05_recon_plugin.html">5. Your recon plugin</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../01-course/06_testing_on_the_virtual_scanner.html">6. Test your pair on the virtual scanner</a></li>
 </ul>
 </details></li>
 <li class="toctree-l2 current active has-children"><a class="reference internal" href="../../../examples/tours.html">Tours</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
@@ -553,24 +558,27 @@ to download the full example code.</p>
 </div>
 <section class="sphx-glr-example-title" id="field-of-view-offset-and-the-proxy-phase">
 <span id="sphx-glr-generated-gallery-02-tours-03-fov-offset-enrichment-py"></span><h1>Field-of-view offset and the proxy phase<a class="headerlink" href="#field-of-view-offset-and-the-proxy-phase" title="Link to this heading">#</a></h1>
-<p>This Tour moves the field of view of two designs away from the isocentre and
-shows where the phase of the offset is applied: by the scanner, as the
-frequency and phase offsets of each readout, and by the reconstruction proxy,
-for the part those offsets cannot carry when the readout gradient varies
-during sampling.</p>
+<a class="reference external image-reference" href="https://colab.research.google.com/github/pulserver/pulserver/blob/gh-pages/latest/_colab/02-tours/03_fov_offset_enrichment.ipynb"><img alt="Open in Colab" class="colab-badge" src="https://colab.research.google.com/assets/colab-badge.svg" />
+</a>
+<p>In this Tour you move the field of view of two designs away from the
+isocentre and see where the phase of the offset is applied. The scanner
+applies it as the frequency and phase offsets of each readout. The
+reconstruction proxy applies the part those offsets cannot carry when the
+readout gradient varies during sampling.</p>
 <p><strong>Prerequisites:</strong> lessons 3 and 4 of the <a class="reference internal" href="../../../examples/course.html"><span class="doc">course</span></a>.</p>
 <p>An object at <span class="math notranslate nohighlight">\(\mathbf{d}\)</span> adds the phase
-<span class="math notranslate nohighlight">\(-2\pi\,\mathbf{d}\cdot\mathbf{k}(t)\)</span> to each sample. Under a
-readout gradient that holds one value, <span class="math notranslate nohighlight">\(\mathbf{k}(t)\)</span> is linear in time
-and the phase is a frequency and a phase offset. On a ramp-sampled readout it
-is not, and the IR cache carries no ADC phase modulation for the rest
-(<a class="reference internal" href="../../../explanations/reconstruction.html"><span class="doc">Raw-data enrichment and routing</span></a>).</p>
+<span class="math notranslate nohighlight">\(-2\pi\,\mathbf{d}\cdot\mathbf{k}(t)\)</span> to each sample. Under a constant
+readout gradient, <span class="math notranslate nohighlight">\(\mathbf{k}(t)\)</span> is linear in time and the phase is a
+frequency and a phase offset. On a ramp-sampled readout it is not linear, and
+the IR cache carries no ADC phase modulation for the remainder
+(<a class="reference internal" href="../../../explanations/reconstruction.html"><span class="doc">Reconstruction plugins and calibration context</span></a>).</p>
 <section id="two-designs-at-an-offset">
 <h2>Two designs at an offset<a class="headerlink" href="#two-designs-at-an-offset" title="Link to this heading">#</a></h2>
-<p>A 2D gradient echo, which samples the flat top of its readout gradient, and
-a 2D echo planar sequence, whose trains are ramp sampled, are converted at
-the prescribed offset <span class="math notranslate nohighlight">\(\mathbf{d} = (30, -50, 0)\)</span> mm along the logical
-readout, phase-encoding and slice axes, and again at the isocentre.</p>
+<p>The two designs are a 2D gradient echo, which samples the flat top of its
+readout gradient, and a 2D echo planar sequence, whose trains are ramp
+sampled. You convert each at the prescribed offset
+<span class="math notranslate nohighlight">\(\mathbf{d} = (30, -50, 0)\)</span> mm along the logical readout,
+phase-encoding and slice axes, and again at the isocentre.</p>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><span class="kn">import</span><span class="w"> </span><span class="nn">tempfile</span><span class="w">
 </span><span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <a class="sphx-glr-backref-module-pathlib sphx-glr-backref-type-py-class reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="pathlib.Path"><span class="n">Path</span></a><span class="w">
 </span><span class="w">
@@ -601,11 +609,11 @@ readout, phase-encoding and slice axes, and again at the isocentre.</p>
 </section>
 <section id="acquisitions">
 <h2>Acquisitions<a class="headerlink" href="#acquisitions" title="Link to this heading">#</a></h2>
-<p>The phantom, sampled as tissue on a 2 mm grid, is acquired by the Fourier
-engine twice per design: placed at <span class="math notranslate nohighlight">\(\mathbf{d}\)</span> and played from the
-cache converted at the offset, and placed at the isocentre and played from
-the cache converted there. Under the identity rotation the physical axes are
-the logical ones.</p>
+<p>The Fourier engine acquires the phantom, sampled as tissue on a 2 mm grid,
+twice per design: placed at <span class="math notranslate nohighlight">\(\mathbf{d}\)</span> and played from the cache
+converted at the offset, and placed at the isocentre and played from the
+cache converted there. Under the identity rotation the physical axes are the
+logical ones.</p>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#list" title="list"><span class="n">ellipses</span></a> <span class="o">=</span> <span class="p">[</span><span class="w">
 </span>    <a class="sphx-glr-backref-module-pulserver-virtual sphx-glr-backref-type-py-class reference internal" href="../../pulserver.virtual.Ellipse.html#pulserver.virtual.Ellipse" title="pulserver.virtual.Ellipse"><span class="n">virtual</span><span class="o">.</span><span class="n">Ellipse</span></a><span class="p">(</span><span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span><span class="p">,</span> <span class="p">(</span><span class="mf">0.06</span><span class="p">,</span> <span class="mf">0.04</span><span class="p">)</span><span class="p">,</span> <span class="n">t1</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">t2</span><span class="o">=</span><span class="mf">0.1</span><span class="p">)</span><span class="p">,</span><span class="w">
 </span>    <a class="sphx-glr-backref-module-pulserver-virtual sphx-glr-backref-type-py-class reference internal" href="../../pulserver.virtual.Ellipse.html#pulserver.virtual.Ellipse" title="pulserver.virtual.Ellipse"><span class="n">virtual</span><span class="o">.</span><span class="n">Ellipse</span></a><span class="p">(</span><span class="p">(</span><span class="mf">0.02</span><span class="p">,</span> <span class="mf">0.01</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span><span class="p">,</span> <span class="p">(</span><span class="mf">0.015</span><span class="p">,</span> <span class="mf">0.015</span><span class="p">)</span><span class="p">,</span> <span class="n">intensity</span><span class="o">=</span><span class="o">-</span><span class="mf">0.5</span><span class="p">,</span> <span class="n">t1</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">t2</span><span class="o">=</span><span class="mf">0.1</span><span class="p">)</span><span class="p">,</span><span class="w">
@@ -625,8 +633,8 @@ the logical ones.</p>
 <section id="the-proxy-phase">
 <h2>The proxy phase<a class="headerlink" href="#the-proxy-phase" title="Link to this heading">#</a></h2>
 <p><a class="reference internal" href="../../pulserver.proxy.SequenceTable.html#pulserver.proxy.SequenceTable" title="pulserver.proxy.SequenceTable"><code class="xref py py-class docutils literal notranslate"><span class="pre">SequenceTable</span></code></a>, read at the offset the cache was
-converted at, gives the phase the proxy applies to each readout, in rad,
-or <code class="docutils literal notranslate"><span class="pre">None</span></code> where the scanner’s offsets carry the whole phase.</p>
+converted at, gives the phase the proxy applies to each readout, in rad. It
+gives <code class="docutils literal notranslate"><span class="pre">None</span></code> where the scanner’s offsets carry the whole phase.</p>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict" title="dict"><span class="n">tables</span></a> <span class="o">=</span> <span class="p">{</span><span class="w">
 </span>    <a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="str"><span class="n">name</span></a><span class="p">:</span> <a class="sphx-glr-backref-module-pulserver-proxy sphx-glr-backref-type-py-method reference internal" href="../../pulserver.proxy.SequenceTable.read.html#pulserver.proxy.SequenceTable.read" title="pulserver.proxy.SequenceTable.read"><span class="n">SequenceTable</span><span class="o">.</span><span class="n">read</span></a><span class="p">(</span><a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict" title="dict"><span class="n">files</span></a><span class="p">[</span><a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="str"><span class="n">name</span></a><span class="p">,</span> <span class="s2">&quot;</span><span class="s2">offset</span><span class="s2">&quot;</span><span class="p">]</span><span class="p">,</span> <span class="n">fov_offset_m</span><span class="o">=</span><a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#tuple" title="tuple"><span class="n">offset</span></a><span class="p">)</span><span class="w">
 </span>    <span class="k">for</span> <a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="str"><span class="n">name</span></a> <span class="ow">in</span> <a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict" title="dict"><span class="n">designs</span></a><span class="w">
@@ -642,17 +650,17 @@ echo planar: a phase on 133 of 133 readouts
 </div>
 <p>On the echo planar readouts the phase is the curvature of
 <span class="math notranslate nohighlight">\(2\pi\,\mathbf{d}\cdot\mathbf{k}(t)\)</span> about the line through the
-middle of the sampling window, which the scanner’s frequency and phase
-offsets play. The imaging readouts are those of the encoding space of the
-main subsequence that is not the navigators’.</p>
+middle of the sampling window. The scanner’s frequency and phase offsets play
+that line. The imaging readouts are those of the main subsequence’s encoding
+space that is not the navigators’.</p>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><a class="sphx-glr-backref-module-pulserver-proxy sphx-glr-backref-type-py-class sphx-glr-backref-instance reference internal" href="../../pulserver.proxy.SequenceTable.html#pulserver.proxy.SequenceTable" title="pulserver.proxy.SequenceTable"><span class="n">table</span></a> <span class="o">=</span> <a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict" title="dict"><span class="n">tables</span></a><span class="p">[</span><span class="s2">&quot;</span><span class="s2">echo planar</span><span class="s2">&quot;</span><span class="p">]</span><span class="w">
 </span><a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="int"><span class="n">main</span></a> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">index</span> <span class="k">for</span> <span class="n">index</span><span class="p">,</span> <span class="n">space</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#tuple" title="tuple"><span class="n">table</span><span class="o">.</span><span class="n">spaces</span></a><span class="p">)</span> <span class="k">if</span> <span class="ow">not</span> <span class="n">space</span><span class="o">.</span><span class="n">navigator</span><span class="p">)</span><span class="w">
 </span><a class="sphx-glr-backref-module-numpy sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="numpy.ndarray"><span class="n">imaging</span></a> <span class="o">=</span> <a class="sphx-glr-backref-module-numpy sphx-glr-backref-type-py-function reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.flatnonzero.html#numpy.flatnonzero" title="numpy.flatnonzero"><span class="n">np</span><span class="o">.</span><span class="n">flatnonzero</span></a><span class="p">(</span><a class="sphx-glr-backref-module-numpy sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="numpy.ndarray"><span class="n">table</span><span class="o">.</span><span class="n">encoding_space</span></a> <span class="o">==</span> <a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="int"><span class="n">main</span></a><span class="p">)</span><span class="w">
 </span><a class="sphx-glr-backref-module-numpy sphx-glr-backref-type-py-attribute reference external" href="https://numpy.org/doc/stable/reference/arrays.scalars.html#numpy.int64" title="numpy.int64"><span class="n">row</span></a> <span class="o">=</span> <a class="sphx-glr-backref-module-numpy sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="numpy.ndarray"><span class="n">imaging</span></a><span class="p">[</span><span class="nb">len</span><span class="p">(</span><a class="sphx-glr-backref-module-numpy sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="numpy.ndarray"><span class="n">imaging</span></a><span class="p">)</span> <span class="o">/</span><span class="o">/</span> <span class="mi">2</span><span class="p">]</span><span class="w">
 </span></pre></div></div>
-<img src="../../../_images/sphx_glr_03_fov_offset_enrichment_001.png" srcset="../../../_images/sphx_glr_03_fov_offset_enrichment_001.png" alt="03 fov offset enrichment" class = "sphx-glr-single-img"/><p>With the proxy phase applied, the samples of the object at the offset are
+<img src="../../../_images/sphx_glr_03_fov_offset_enrichment_001.png" srcset="../../../_images/sphx_glr_03_fov_offset_enrichment_001.png" alt="03 fov offset enrichment" class = "sphx-glr-single-img"/><p>With the proxy phase applied, the samples of the object at the offset match
 those of the object at the isocentre, to the tolerance of the Fourier
-engine’s bases; as received, the echo planar samples are not.</p>
+engine’s bases. As received, the echo planar samples do not.</p>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><span class="k">def</span><span class="w"> </span><span class="nf">agreement</span><span class="p">(</span><a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="str"><span class="n">name</span></a><span class="p">,</span> <a class="sphx-glr-backref-module-numpy sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="numpy.ndarray"><span class="n">corrected</span></a><span class="p">)</span><span class="p">:</span><span class="w">
 </span>    <a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#list" title="list"><span class="n">moved</span></a><span class="p">,</span> <a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#list" title="list"><span class="n">centred</span></a> <span class="o">=</span> <a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict" title="dict"><span class="n">readouts</span></a><span class="p">[</span><a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="str"><span class="n">name</span></a><span class="p">]</span><span class="w">
 </span>    <a class="sphx-glr-backref-module-pulserver-proxy sphx-glr-backref-type-py-class sphx-glr-backref-instance reference internal" href="../../pulserver.proxy.SequenceTable.html#pulserver.proxy.SequenceTable" title="pulserver.proxy.SequenceTable"><span class="n">table</span></a> <span class="o">=</span> <a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict" title="dict"><span class="n">tables</span></a><span class="p">[</span><a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="str"><span class="n">name</span></a><span class="p">]</span><span class="w">
@@ -674,17 +682,17 @@ engine’s bases; as received, the echo planar samples are not.</p>
 </span>    <span class="p">)</span><span class="w">
 </span></pre></div></div>
 <div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>gradient echo: relative difference from the isocentre, as received 4.5e-03, with the proxy phase 4.5e-03
-echo planar: relative difference from the isocentre, as received 5.9e-01, with the proxy phase 5.9e-01
+echo planar: relative difference from the isocentre, as received 9.1e-02, with the proxy phase 6.7e-02
 </pre></div>
 </div>
 </section>
 <section id="images">
 <h2>Images<a class="headerlink" href="#images" title="Link to this heading">#</a></h2>
-<p>The echo planar lines are gridded along the readout from the k-space of
-their samples, placed by their encoding counters, and Fourier transformed.
-The differences from the image at the isocentre show what the phase the
-proxy applies removes. The arcs at the sides of the reference come from the
-linear interpolation of the gridding, which the three images share.</p>
+<p>You grid the echo planar lines along the readout from the k-space of their
+samples, place them by their encoding counters, and Fourier transform them.
+The differences from the image at the isocentre show what the proxy phase
+removes. The arcs at the sides of the reference come from the linear
+interpolation of the gridding, which all three images share.</p>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><span class="k">def</span><span class="w"> </span><span class="nf">image</span><span class="p">(</span><span class="n">samples</span><span class="p">,</span> <a class="sphx-glr-backref-module-pulserver-proxy sphx-glr-backref-type-py-class sphx-glr-backref-instance reference internal" href="../../pulserver.proxy.SequenceTable.html#pulserver.proxy.SequenceTable" title="pulserver.proxy.SequenceTable"><span class="n">table</span></a><span class="p">)</span><span class="p">:</span><span class="w">
 </span>    <span class="n">n</span><span class="p">,</span> <span class="n">fov</span> <span class="o">=</span> <span class="mi">64</span><span class="p">,</span> <span class="mf">0.22</span><span class="w">
 </span>    <span class="n">grid</span> <span class="o">=</span> <span class="p">(</span><a class="sphx-glr-backref-module-numpy sphx-glr-backref-type-py-function reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.arange.html#numpy.arange" title="numpy.arange"><span class="n">np</span><span class="o">.</span><span class="n">arange</span></a><span class="p">(</span><span class="n">n</span><span class="p">)</span> <span class="o">-</span> <span class="n">n</span> <span class="o">/</span> <span class="mi">2</span><span class="p">)</span> <span class="o">/</span> <span class="n">fov</span><span class="w">
@@ -712,13 +720,13 @@ linear interpolation of the gridding, which the three images share.</p>
 </span>    <a class="sphx-glr-backref-module-pulserver-proxy sphx-glr-backref-type-py-class sphx-glr-backref-instance reference internal" href="../../pulserver.proxy.SequenceTable.html#pulserver.proxy.SequenceTable" title="pulserver.proxy.SequenceTable"><span class="n">table</span></a><span class="p">,</span><span class="w">
 </span><span class="p">)</span><span class="w">
 </span></pre></div></div>
-<img src="../../../_images/sphx_glr_03_fov_offset_enrichment_002.png" srcset="../../../_images/sphx_glr_03_fov_offset_enrichment_002.png" alt="at the isocentre, difference, as received, difference, proxy phase" class = "sphx-glr-single-img"/><p>The differences are drawn at a fifth of the reference’s scale. A header that
-states the object at another position, <code class="docutils literal notranslate"><span class="pre">fov_offset_mm</span></code>, makes the proxy
-apply <span class="math notranslate nohighlight">\(2\pi\,\Delta\mathbf{d}\cdot\mathbf{k}(t)\)</span> in full for the
+<img src="../../../_images/sphx_glr_03_fov_offset_enrichment_002.png" srcset="../../../_images/sphx_glr_03_fov_offset_enrichment_002.png" alt="at the isocentre, difference, as received, difference, proxy phase" class = "sphx-glr-single-img"/><p>The differences are drawn at a fifth of the reference’s scale. When a header
+states the object at another position, <code class="docutils literal notranslate"><span class="pre">fov_offset_mm</span></code>, the proxy applies
+<span class="math notranslate nohighlight">\(2\pi\,\Delta\mathbf{d}\cdot\mathbf{k}(t)\)</span> in full for the
 difference, as
-<a class="reference internal" href="../../pulserver.proxy.SequenceTable.readout_phase_modulation.html#pulserver.proxy.SequenceTable.readout_phase_modulation" title="pulserver.proxy.SequenceTable.readout_phase_modulation"><code class="xref py py-meth docutils literal notranslate"><span class="pre">readout_phase_modulation()</span></code></a> states,
-which needs no new cache.</p>
-<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 0.618 seconds)</p>
+<a class="reference internal" href="../../pulserver.proxy.SequenceTable.readout_phase_modulation.html#pulserver.proxy.SequenceTable.readout_phase_modulation" title="pulserver.proxy.SequenceTable.readout_phase_modulation"><code class="xref py py-meth docutils literal notranslate"><span class="pre">readout_phase_modulation()</span></code></a> states. This
+needs no new cache.</p>
+<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 0.607 seconds)</p>
 <div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-generated-gallery-02-tours-03-fov-offset-enrichment-py">
 <div class="sphx-glr-download sphx-glr-download-jupyter docutils container">
 <p><a class="reference download internal" download="" href="../../../_downloads/86e0b6219a6e85792356fbc96660c6dd/03_fov_offset_enrichment.ipynb"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Jupyter</span> <span class="pre">notebook:</span> <span class="pre">03_fov_offset_enrichment.ipynb</span></code></a></p>

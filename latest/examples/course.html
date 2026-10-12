@@ -37,7 +37,7 @@
     <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-binder.css?v=f4aeca0c" />
     <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-dataframe.css?v=2082cf3c" />
     <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
-    <link rel="stylesheet" type="text/css" href="../_static/pulserver.css?v=e08ae8f3" />
+    <link rel="stylesheet" type="text/css" href="../_static/pulserver.css?v=6854ff42" />
   
   <!-- So that users can add custom icons -->
   <script defer src="../_static/scripts/fontawesome.js?digest=90905a2f556bf617f1a9"></script>
@@ -61,11 +61,12 @@
             true;
         </script>
     <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
+    <script src="../_static/capabilities.js?v=421ebb92"></script>
     <link rel="canonical" href="https://pulserver.github.io/pulserver/latest/examples/course.html" />
     <link rel="icon" href="../_static/pulserver-mark.svg"/>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="1. From protocol to image" href="../generated/gallery/01-course/01_protocol_to_image.html" />
+    <link rel="next" title="1. Your first scan" href="../generated/gallery/01-course/01_protocol_to_image.html" />
     <link rel="prev" title="Examples" href="index.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
@@ -252,9 +253,11 @@
 <li class="toctree-l2"><a class="reference internal" href="../developer-guide/documentation.html">Documentation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../developer-guide/terminology.html">Terminology and conventions</a></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../developer-guide/internals/index.html">Internals</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/calibration.html">Calibration, noise and coil compression</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/ir-cache.html">IR cache</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/protocol-wire.html">Protocol text blocks</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/reconstruction-proxy.html">Reconstruction proxy</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/sar-ratios.html">SAR ratios against a reference pulse</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
@@ -267,20 +270,22 @@
 <li class="toctree-l1 has-children"><a class="reference internal" href="../explanations/index.html">Explanations</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="../explanations/architecture.html">Architecture</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../explanations/protocol.html">Protocol resolution</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../explanations/designs.html">Designs and the design store</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../explanations/scanner-representation.html">Scanner representation (PulSeg)</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../explanations/virtual-scanner.html">The virtual scanner</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../explanations/reconstruction.html">Raw-data enrichment and routing</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../explanations/calibration.html">Calibration, noise and coil compression</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../explanations/safety-checks.html">Safety checks</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../explanations/scanner-representation.html">PulSeg representation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../explanations/raw-data.html">MRD enrichment</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../explanations/reconstruction-session.html">Reconstruction session</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../explanations/reconstruction.html">Reconstruction plugins and calibration context</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../explanations/virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 current active has-children"><a class="reference internal" href="index.html">Examples</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
 <li class="toctree-l2 current active has-children"><a class="current reference internal" href="#">Course</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/01_protocol_to_image.html">1. From protocol to image</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/02_sequence_plugin.html">2. A scanner sequence and its protocol</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/03_scanner_representation.html">3. Scanner representation</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/04_reconstruction_plugin.html">4. A reconstruction plugin</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/05_testing_on_the_virtual_scanner.html">5. Testing on the virtual scanner</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/01_protocol_to_image.html">1. Your first scan</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/02_sequence_plugin.html">2. Your sequence in the scanner UI</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/03_scanner_representation.html">3. What the scanner plays</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/04_reconstruction_plugin.html">4. What your recon receives</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/05_recon_plugin.html">5. Your recon plugin</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/06_testing_on_the_virtual_scanner.html">6. Test your pair on the virtual scanner</a></li>
 </ul>
 </details></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="tours.html">Tours</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -529,36 +534,44 @@
                   
   <section class="tex2jax_ignore mathjax_ignore" id="course">
 <h1>Course<a class="headerlink" href="#course" title="Link to this heading">#</a></h1>
-<p>The shortest path from a protocol to a reconstructed image through pulserver,
-one stage of a scan per lesson, read in order. The first lesson runs a whole
-scan on the virtual scanner; the next three follow the data through the
-scanner sequence, the scanner representation and the reconstruction. The
-fifth is optional.</p>
+<p>Six lessons that take you from a scan run with the shipped plugins to a scan
+run with your own sequence and your own reconstruction. They follow the steps
+of a scan in order, so read them in order.</p>
+<p>You need nothing installed: every lesson has an <em>Open in Colab</em> button that
+runs it in your browser. The scanner is the virtual scanner throughout, so
+everything you see is computed by the code on the page.</p>
 <div class="pst-scrollable-table-container"><table class="table">
 <thead>
 <tr class="row-odd"><th class="head"><p>Lesson</p></th>
-<th class="head"><p>What it teaches</p></th>
+<th class="head"><p>The question it answers</p></th>
 </tr>
 </thead>
 <tbody>
-<tr class="row-even"><td><p><a class="reference internal" href="../generated/gallery/01-course/01_protocol_to_image.html"><span class="doc">1. From protocol to image</span></a></p></td>
-<td><p>A scan from protocol to image in one process: the design calls, an exam and a scan on the virtual scanner.</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="../generated/gallery/01-course/01_protocol_to_image.html"><span class="doc">1. Your first scan</span></a></p></td>
+<td><p>What does pulserver do, end to end?</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="../generated/gallery/01-course/02_sequence_plugin.html"><span class="doc">2. A scanner sequence and its protocol</span></a></p></td>
-<td><p>A scanner sequence: entries, presets, an evaluation of one repetition with its RF layout, validation and design.</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="../generated/gallery/01-course/02_sequence_plugin.html"><span class="doc">2. Your sequence in the scanner UI</span></a></p></td>
+<td><p>How does my sequence show up for the operator, and what happens when they edit it?</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="../generated/gallery/01-course/03_scanner_representation.html"><span class="doc">3. Scanner representation</span></a></p></td>
-<td><p>Conversion into the IR cache: the repetition, virtual segments, the execution stream and the grouping rule.</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="../generated/gallery/01-course/03_scanner_representation.html"><span class="doc">3. What the scanner plays</span></a></p></td>
+<td><p>What happens to my sequence before it reaches the scanner?</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="../generated/gallery/01-course/04_reconstruction_plugin.html"><span class="doc">4. A reconstruction plugin</span></a></p></td>
-<td><p>Enrichment of a recorded series from its design, and a reconstruction plugin run on it offline.</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="../generated/gallery/01-course/04_reconstruction_plugin.html"><span class="doc">4. What your recon receives</span></a></p></td>
+<td><p>What does the raw data look like when it reaches my plugin?</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="../generated/gallery/01-course/05_testing_on_the_virtual_scanner.html"><span class="doc">5. Testing on the virtual scanner</span></a></p></td>
-<td><p>Optional: the contrast of a scan on the Fourier engine against the closed-form steady state, and the check of a cache against its sequence.</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="../generated/gallery/01-course/05_recon_plugin.html"><span class="doc">5. Your recon plugin</span></a></p></td>
+<td><p>How do I turn those readouts into images?</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="../generated/gallery/01-course/06_testing_on_the_virtual_scanner.html"><span class="doc">6. Test your pair on the virtual scanner</span></a></p></td>
+<td><p>Do my sequence and my recon work together, with the contrast the physics predicts?</p></td>
 </tr>
 </tbody>
 </table>
 </div>
+<p>By the end you have two files, a sequence plugin and a recon plugin, that run
+unchanged on a real scanner through its interpreter
+(<a class="reference internal" href="../user-guide/running.html"><span class="doc">Running the services</span></a>).</p>
+<p>If you know Gadgetron, lessons 4 and 5 map each of its pieces to pulserver’s.</p>
 <div class="toctree-wrapper compound">
 </div>
 </section>
@@ -588,7 +601,7 @@ fifth is optional.</p>
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">1. From protocol to image</p>
+        <p class="prev-next-title">1. Your first scan</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>

@@ -3,17 +3,17 @@
 Segmentation of a sequence for the scanner
 ==========================================
 
-This Tour converts shipped pypulseqpp sequences into the scanner
-representation and reads what the conversion reduces them to: the repetition
+In this Tour you convert shipped pypulseqpp sequences into the scanner
+representation and read what the conversion reduces them to: the repetition
 of each subsequence, the virtual segments it is cut into, and how those counts
 scale with the length of the scan.
 
 **Prerequisites:** lessons 1 and 3 of the :doc:`course </examples/course>`.
 
-A scanner interpreter prepares each virtual segment once and plays the scan as
-an execution stream of segment instances, so the number of virtual segments,
-not the number of blocks, sets what it prepares. The model is described in
-:doc:`/explanations/scanner-representation`.
+A scanner interpreter prepares each virtual segment once and plays the scan
+as an execution stream of segment instances. The number of virtual segments,
+not the number of blocks, sets what the interpreter prepares.
+:doc:`/explanations/scanner-representation` describes the model.
 """
 
 # sphinx_gallery_start_ignore
@@ -25,10 +25,10 @@ matplotlib.use("Agg")
 # Repetition of a spin echo
 # -------------------------
 #
-# The sequence is pypulseqpp's shipped 2D spin echo at its shortest TR,
-# written to a file and converted under the scanner limits. :func:`~pulserver.ir.convert` writes the
-# IR cache beside the sequence file; :func:`~pulserver.ir.summary` reports the
-# segmentation.
+# The sequence is pypulseqpp's shipped 2D spin echo at its shortest TR. You
+# write it to a file and convert it under the scanner limits.
+# :func:`~pulserver.ir.convert` writes the IR cache beside the sequence file;
+# :func:`~pulserver.ir.summary` reports the segmentation.
 import tempfile
 from pathlib import Path
 
@@ -65,10 +65,10 @@ for index, segment in enumerate(report["segments"]):
 
 # %%
 # The repetition is cut only at block boundaries where every gradient is at
-# rest, so blocks joined by a gradient that does not rest stay in one virtual
-# segment. A pure delay has no events: every pure delay of the repetition
-# plays the one pure-delay virtual segment, with its own duration, as the
-# virtual segment of each block, read from the execution stream, shows.
+# rest. Blocks joined by a gradient that does not rest stay in one virtual
+# segment. A pure delay has no events, so every pure delay of the repetition
+# plays the one pure-delay virtual segment, each with its own duration. The
+# execution stream gives the virtual segment of each block:
 owner = ir.play(work / "se2d.seq")["segment"][: unit["tr_size"]]
 print("virtual segment of each block of the repetition:", owner.tolist())
 
@@ -110,9 +110,9 @@ plt.show()
 # Scan length
 # -----------
 #
-# The same conversion over the shipped 2D gradient echo, with a growing
-# phase-encoding matrix and slice count. The number of blocks and the number
-# of repetitions grow with the scan; the number of virtual segments does not,
+# Here the same conversion runs over the shipped 2D gradient echo, with a
+# growing phase-encoding matrix and slice count. The numbers of blocks and of
+# repetitions grow with the scan. The number of virtual segments does not,
 # because every repetition plays the same base blocks with a different
 # phase-encoding amplitude.
 
@@ -139,11 +139,11 @@ for n_y, n_slices, blocks, result in rows:
 # Subsequences
 # ------------
 #
-# pypulseqpp's echo planar sequence returns a reference prescan, one volume
-# with the phase-encoding direction reversed, and the imaging sequence, as a
-# chain. :func:`pypulseqpp.sequences.write` writes them as separate files
-# linked by the ``NextSequence`` definition, and the conversion reads the chain
-# as the subsequences of one scan.
+# pypulseqpp's echo planar sequence returns a chain of two sequences: a
+# reference prescan, one volume with the phase-encoding direction reversed,
+# and the imaging sequence. :func:`pypulseqpp.sequences.write` writes them as
+# separate files linked by the ``NextSequence`` definition. The conversion
+# reads the chain as the subsequences of one scan.
 
 from pypulseqpp import sequences
 from pypulseqpp.sequences.sequence.epi2D_sequence import epi2d
@@ -162,6 +162,5 @@ print(f"virtual segments over the chain: {report['num_segments']}")
 # %%
 # Virtual segments are deduplicated across subsequences as well as within
 # one. The reference prescan reverses the sign of the phase-encoding
-# gradients, which is an amplitude of each segment instance rather than part
-# of a base block, so both subsequences play the virtual segments printed
-# above.
+# gradients. That sign is an amplitude of each segment instance, not part of a
+# base block, so both subsequences play the virtual segments printed above.

@@ -37,7 +37,7 @@
     <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery-binder.css?v=f4aeca0c" />
     <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
     <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
-    <link rel="stylesheet" type="text/css" href="../../_static/pulserver.css?v=e08ae8f3" />
+    <link rel="stylesheet" type="text/css" href="../../_static/pulserver.css?v=6854ff42" />
   
   <!-- So that users can add custom icons -->
   <script defer src="../../_static/scripts/fontawesome.js?digest=90905a2f556bf617f1a9"></script>
@@ -61,11 +61,12 @@
             true;
         </script>
     <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
+    <script src="../../_static/capabilities.js?v=421ebb92"></script>
     <link rel="canonical" href="https://pulserver.github.io/pulserver/latest/developer-guide/internals/index.html" />
     <link rel="icon" href="../../_static/pulserver-mark.svg"/>
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
-    <link rel="next" title="IR cache" href="ir-cache.html" />
+    <link rel="next" title="Calibration, noise and coil compression" href="calibration.html" />
     <link rel="prev" title="Terminology and conventions" href="../terminology.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
@@ -252,9 +253,11 @@
 <li class="toctree-l2"><a class="reference internal" href="../documentation.html">Documentation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../terminology.html">Terminology and conventions</a></li>
 <li class="toctree-l2 current active has-children"><a class="current reference internal" href="#">Internals</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="calibration.html">Calibration, noise and coil compression</a></li>
 <li class="toctree-l3"><a class="reference internal" href="ir-cache.html">IR cache</a></li>
 <li class="toctree-l3"><a class="reference internal" href="protocol-wire.html">Protocol text blocks</a></li>
 <li class="toctree-l3"><a class="reference internal" href="reconstruction-proxy.html">Reconstruction proxy</a></li>
+<li class="toctree-l3"><a class="reference internal" href="sar-ratios.html">SAR ratios against a reference pulse</a></li>
 <li class="toctree-l3"><a class="reference internal" href="virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
@@ -267,20 +270,22 @@
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../explanations/index.html">Explanations</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="../../explanations/architecture.html">Architecture</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../explanations/protocol.html">Protocol resolution</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../explanations/designs.html">Designs and the design store</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../explanations/scanner-representation.html">Scanner representation (PulSeg)</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../explanations/virtual-scanner.html">The virtual scanner</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../explanations/reconstruction.html">Raw-data enrichment and routing</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../explanations/calibration.html">Calibration, noise and coil compression</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../explanations/safety-checks.html">Safety checks</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../explanations/scanner-representation.html">PulSeg representation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../explanations/raw-data.html">MRD enrichment</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../explanations/reconstruction-session.html">Reconstruction session</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../explanations/reconstruction.html">Reconstruction plugins and calibration context</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../explanations/virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../examples/index.html">Examples</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../../examples/course.html">Course</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l3"><a class="reference internal" href="../../generated/gallery/01-course/01_protocol_to_image.html">1. From protocol to image</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../../generated/gallery/01-course/02_sequence_plugin.html">2. A scanner sequence and its protocol</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../../generated/gallery/01-course/03_scanner_representation.html">3. Scanner representation</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../../generated/gallery/01-course/04_reconstruction_plugin.html">4. A reconstruction plugin</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../../generated/gallery/01-course/05_testing_on_the_virtual_scanner.html">5. Testing on the virtual scanner</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../generated/gallery/01-course/01_protocol_to_image.html">1. Your first scan</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../generated/gallery/01-course/02_sequence_plugin.html">2. Your sequence in the scanner UI</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../generated/gallery/01-course/03_scanner_representation.html">3. What the scanner plays</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../generated/gallery/01-course/04_reconstruction_plugin.html">4. What your recon receives</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../generated/gallery/01-course/05_recon_plugin.html">5. Your recon plugin</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../generated/gallery/01-course/06_testing_on_the_virtual_scanner.html">6. Test your pair on the virtual scanner</a></li>
 </ul>
 </details></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../../examples/tours.html">Tours</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -539,14 +544,20 @@ that code has to keep.</p>
 </tr>
 </thead>
 <tbody>
-<tr class="row-even"><td><p><a class="reference internal" href="ir-cache.html"><span class="doc">IR cache</span></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="calibration.html"><span class="doc">Calibration, noise and coil compression</span></a></p></td>
+<td><p>The channel model of prewhitening, coil compression and sensitivity maps, and the conditions under which stored maps are reused.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="ir-cache.html"><span class="doc">IR cache</span></a></p></td>
 <td><p>Waves, the two stages of a playout, the heaviest repetition, the cache file and its playback, and the C89 constraint.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="protocol-wire.html"><span class="doc">Protocol text blocks</span></a></p></td>
-<td><p>The text blocks in which the host and the interpreter exchange protocols and RF descriptions.</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="protocol-wire.html"><span class="doc">Protocol text blocks</span></a></p></td>
+<td><p>The RF layout, protocol keys and values, and the text blocks in which the host and the interpreter exchange them.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="reconstruction-proxy.html"><span class="doc">Reconstruction proxy</span></a></p></td>
-<td><p>The placement of readouts in a reconstruction unit’s buffers, and the proxy’s workers.</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="reconstruction-proxy.html"><span class="doc">Reconstruction proxy</span></a></p></td>
+<td><p>Reconstruction units and image headers, enrichment and trajectory rules, the placement of readouts in a unit’s buffers, and the proxy’s workers.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="sar-ratios.html"><span class="doc">SAR ratios against a reference pulse</span></a></p></td>
+<td><p>The SAR ratios computed from VOPs against a reference pulse, and how the interpreter uses them.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="virtual-scanner.html"><span class="doc">Virtual scanner</span></a></p></td>
 <td><p>The Fourier engine’s timeline, event streams, bases and grids, export to external simulators, and what a run on the virtual scanner establishes.</p></td>
@@ -579,11 +590,11 @@ that code has to keep.</p>
       </div>
     </a>
     <a class="right-next"
-       href="ir-cache.html"
+       href="calibration.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">IR cache</p>
+        <p class="prev-next-title">Calibration, noise and coil compression</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>

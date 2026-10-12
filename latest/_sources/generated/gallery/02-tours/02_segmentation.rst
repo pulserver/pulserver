@@ -22,17 +22,17 @@
 Segmentation of a sequence for the scanner
 ==========================================
 
-This Tour converts shipped pypulseqpp sequences into the scanner
-representation and reads what the conversion reduces them to: the repetition
+In this Tour you convert shipped pypulseqpp sequences into the scanner
+representation and read what the conversion reduces them to: the repetition
 of each subsequence, the virtual segments it is cut into, and how those counts
 scale with the length of the scan.
 
 **Prerequisites:** lessons 1 and 3 of the :doc:`course </examples/course>`.
 
-A scanner interpreter prepares each virtual segment once and plays the scan as
-an execution stream of segment instances, so the number of virtual segments,
-not the number of blocks, sets what it prepares. The model is described in
-:doc:`/explanations/scanner-representation`.
+A scanner interpreter prepares each virtual segment once and plays the scan
+as an execution stream of segment instances. The number of virtual segments,
+not the number of blocks, sets what the interpreter prepares.
+:doc:`/explanations/scanner-representation` describes the model.
 
 .. GENERATED FROM PYTHON SOURCE LINES 18-24
 
@@ -48,10 +48,10 @@ not the number of blocks, sets what it prepares. The model is described in
 Repetition of a spin echo
 -------------------------
 
-The sequence is pypulseqpp's shipped 2D spin echo at its shortest TR,
-written to a file and converted under the scanner limits. :func:`~pulserver.ir.convert` writes the
-IR cache beside the sequence file; :func:`~pulserver.ir.summary` reports the
-segmentation.
+The sequence is pypulseqpp's shipped 2D spin echo at its shortest TR. You
+write it to a file and convert it under the scanner limits.
+:func:`~pulserver.ir.convert` writes the IR cache beside the sequence file;
+:func:`~pulserver.ir.summary` reports the segmentation.
 
 .. GENERATED FROM PYTHON SOURCE LINES 32-66
 
@@ -99,8 +99,8 @@ segmentation.
 
  .. code-block:: none
 
-    576 blocks in the file; cache se2d.pseg
-    repetition: 9 blocks, TR 18.02 ms, played 64 times
+    585 blocks in the file; cache se2d.pseg
+    repetition: 9 blocks, TR 18.02 ms, played 65 times
     virtual segment 0: blocks 1-2, 3.56 ms, events
     virtual segment 1: blocks 3-3, 0.02 ms, pure delay
     virtual segment 2: blocks 4-8, 12.04 ms, events
@@ -111,10 +111,10 @@ segmentation.
 .. GENERATED FROM PYTHON SOURCE LINES 67-72
 
 The repetition is cut only at block boundaries where every gradient is at
-rest, so blocks joined by a gradient that does not rest stay in one virtual
-segment. A pure delay has no events: every pure delay of the repetition
-plays the one pure-delay virtual segment, with its own duration, as the
-virtual segment of each block, read from the execution stream, shows.
+rest. Blocks joined by a gradient that does not rest stay in one virtual
+segment. A pure delay has no events, so every pure delay of the repetition
+plays the one pure-delay virtual segment, each with its own duration. The
+execution stream gives the virtual segment of each block:
 
 .. GENERATED FROM PYTHON SOURCE LINES 72-109
 
@@ -147,9 +147,9 @@ virtual segment of each block, read from the execution stream, shows.
 Scan length
 -----------
 
-The same conversion over the shipped 2D gradient echo, with a growing
-phase-encoding matrix and slice count. The number of blocks and the number
-of repetitions grow with the scan; the number of virtual segments does not,
+Here the same conversion runs over the shipped 2D gradient echo, with a
+growing phase-encoding matrix and slice count. The numbers of blocks and of
+repetitions grow with the scan. The number of virtual segments does not,
 because every repetition plays the same base blocks with a different
 phase-encoding amplitude.
 
@@ -178,10 +178,10 @@ phase-encoding amplitude.
  .. code-block:: none
 
        ny  slices   blocks  repetitions  virtual segments
-       64       1      480           80                 2
-      128       1      864          144                 2
-      256       1     1632          272                 2
-      256       4     6528         1088                 2
+       64       1     1326          221                 2
+      128       1     1710          285                 2
+      256       1     2478          413                 2
+      256       4     8304         1384                 2
 
 
 
@@ -191,11 +191,11 @@ phase-encoding amplitude.
 Subsequences
 ------------
 
-pypulseqpp's echo planar sequence returns a reference prescan, one volume
-with the phase-encoding direction reversed, and the imaging sequence, as a
-chain. :func:`pypulseqpp.sequences.write` writes them as separate files
-linked by the ``NextSequence`` definition, and the conversion reads the chain
-as the subsequences of one scan.
+pypulseqpp's echo planar sequence returns a chain of two sequences: a
+reference prescan, one volume with the phase-encoding direction reversed,
+and the imaging sequence. :func:`pypulseqpp.sequences.write` writes them as
+separate files linked by the ``NextSequence`` definition. The conversion
+reads the chain as the subsequences of one scan.
 
 .. GENERATED FROM PYTHON SOURCE LINES 147-162
 
@@ -225,25 +225,24 @@ as the subsequences of one scan.
  .. code-block:: none
 
     ['epi.seq', 'epi_epi_2d.seq']
-    subsequence 0: 72 blocks per repetition, 3 repetitions
-    subsequence 1: 72 blocks per repetition, 3 repetitions
+    subsequence 0: 72 blocks per repetition, 6 repetitions
+    subsequence 1: 72 blocks per repetition, 6 repetitions
     virtual segments over the chain: 3
 
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 163-168
+.. GENERATED FROM PYTHON SOURCE LINES 163-167
 
 Virtual segments are deduplicated across subsequences as well as within
 one. The reference prescan reverses the sign of the phase-encoding
-gradients, which is an amplitude of each segment instance rather than part
-of a base block, so both subsequences play the virtual segments printed
-above.
+gradients. That sign is an amplitude of each segment instance, not part of a
+base block, so both subsequences play the virtual segments printed above.
 
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.563 seconds)
+   **Total running time of the script:** (0 minutes 0.603 seconds)
 
 
 .. _sphx_glr_download_generated_gallery_02-tours_02_segmentation.py:

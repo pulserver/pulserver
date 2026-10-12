@@ -36,7 +36,7 @@
     <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-binder.css?v=f4aeca0c" />
     <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
     <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
-    <link rel="stylesheet" type="text/css" href="../../../_static/pulserver.css?v=e08ae8f3" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/pulserver.css?v=6854ff42" />
   
   <!-- So that users can add custom icons -->
   <script defer src="../../../_static/scripts/fontawesome.js?digest=90905a2f556bf617f1a9"></script>
@@ -60,6 +60,7 @@
             true;
         </script>
     <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
+    <script src="../../../_static/capabilities.js?v=421ebb92"></script>
     <link rel="canonical" href="https://pulserver.github.io/pulserver/latest/_modules/pulserver/virtual/_fourier.html" />
     <link rel="icon" href="../../../_static/pulserver-mark.svg"/>
     <link rel="index" title="Index" href="../../../genindex.html" />
@@ -251,9 +252,11 @@
 <li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/documentation.html">Documentation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/terminology.html">Terminology and conventions</a></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../../../developer-guide/internals/index.html">Internals</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/calibration.html">Calibration, noise and coil compression</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/ir-cache.html">IR cache</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/protocol-wire.html">Protocol text blocks</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/reconstruction-proxy.html">Reconstruction proxy</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/sar-ratios.html">SAR ratios against a reference pulse</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
@@ -266,20 +269,22 @@
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../explanations/index.html">Explanations</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="../../../explanations/architecture.html">Architecture</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../explanations/protocol.html">Protocol resolution</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../explanations/designs.html">Designs and the design store</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../explanations/scanner-representation.html">Scanner representation (PulSeg)</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../explanations/virtual-scanner.html">The virtual scanner</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../explanations/reconstruction.html">Raw-data enrichment and routing</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../explanations/calibration.html">Calibration, noise and coil compression</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/safety-checks.html">Safety checks</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/scanner-representation.html">PulSeg representation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/raw-data.html">MRD enrichment</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/reconstruction-session.html">Reconstruction session</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/reconstruction.html">Reconstruction plugins and calibration context</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../examples/index.html">Examples</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../../../examples/course.html">Course</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/01_protocol_to_image.html">1. From protocol to image</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/02_sequence_plugin.html">2. A scanner sequence and its protocol</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/03_scanner_representation.html">3. Scanner representation</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/04_reconstruction_plugin.html">4. A reconstruction plugin</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/05_testing_on_the_virtual_scanner.html">5. Testing on the virtual scanner</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/01_protocol_to_image.html">1. Your first scan</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/02_sequence_plugin.html">2. Your sequence in the scanner UI</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/03_scanner_representation.html">3. What the scanner plays</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/04_reconstruction_plugin.html">4. What your recon receives</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/05_recon_plugin.html">5. Your recon plugin</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/06_testing_on_the_virtual_scanner.html">6. Test your pair on the virtual scanner</a></li>
 </ul>
 </details></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../../../examples/tours.html">Tours</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -588,7 +593,9 @@
 <span class="sd">    Each pulse turns an entry ideally, through its flip angle on resonance</span>
 <span class="sd">    times the magnitude of the transmit field the entry sees and the pulse's</span>
 <span class="sd">    own profile at the field the entry sees during it, about its axis turned</span>
-<span class="sd">    by the transmit field's phase. Between pulses and readouts, the net moment</span>
+<span class="sd">    by the transmit field's phase; a pulse under a gradient that changes along</span>
+<span class="sd">    one axis, a spectral-spatial one, by its profile across the field and the</span>
+<span class="sd">    position along that axis, simulated over those the entries span. Between pulses and readouts, the net moment</span>
 <span class="sd">    of the gradients across a voxel shifts the configuration states by one</span>
 <span class="sd">    order where it dephases by at least :data:`SHIFT_CYCLES` cycles along the</span>
 <span class="sd">    axes the tissue spans; its part that changes from one repetition to the</span>
@@ -620,6 +627,10 @@
 <span class="sd">    rotation</span>
 <span class="sd">        ``(3, 3)`` rotation of the prescription from logical to physical axes;</span>
 <span class="sd">        the identity by default.</span>
+<span class="sd">    centre</span>
+<span class="sd">        ``(3,)`` the prescription's centre along the physical axes, in m, the</span>
+<span class="sd">        isocentre by default: the place the stream of events is played in the</span>
+<span class="sd">        frame of (:func:`_framed`).</span>
 <span class="sd">    device</span>
 <span class="sd">        Where the simulation runs; a card where there is one by default.</span>
 <span class="sd">    tolerance</span>
@@ -643,6 +654,7 @@
         <span class="n">cache_ext</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">".pseg"</span><span class="p">,</span>
         <span class="o">*</span><span class="p">,</span>
         <span class="n">rotation</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">centre</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">tolerance</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">TOLERANCE</span><span class="p">,</span>
         <span class="n">motion</span><span class="p">:</span> <span class="n">RigidMotion</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -655,6 +667,7 @@
             <span class="n">seq_path</span><span class="p">,</span> <span class="n">cache_ext</span><span class="p">,</span> <span class="n">rotation</span><span class="o">=</span><span class="n">rotation</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">girf</span><span class="o">=</span><span class="n">girf</span>
         <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">played</span> <span class="o">=</span> <span class="n">timeline</span><span class="o">.</span><span class="n">played</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_phases</span> <span class="o">=</span> <span class="n">_framed</span><span class="p">(</span><span class="n">timeline</span><span class="p">,</span> <span class="n">centre</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_tolerance</span> <span class="o">=</span> <span class="n">tolerance</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_coils</span> <span class="o">=</span> <span class="n">tissue</span><span class="o">.</span><span class="n">coils</span>
         <span class="n">pulses</span> <span class="o">=</span> <span class="n">timeline</span><span class="o">.</span><span class="n">pulses</span>
@@ -667,17 +680,12 @@
         <span class="n">shifted</span> <span class="o">=</span> <span class="n">_shifted</span><span class="p">(</span><span class="n">timeline</span><span class="p">,</span> <span class="n">events</span><span class="p">,</span> <span class="n">voxel</span><span class="p">,</span> <span class="n">spanned</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_poses</span> <span class="o">=</span> <span class="kc">None</span> <span class="k">if</span> <span class="n">motion</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">_poses</span><span class="p">(</span><span class="n">timeline</span><span class="p">,</span> <span class="n">motion</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
         <span class="n">selector_of</span><span class="p">,</span> <span class="n">selectors</span> <span class="o">=</span> <span class="n">_selectors</span><span class="p">(</span><span class="n">pulses</span><span class="p">)</span>
-        <span class="n">profiles</span> <span class="o">=</span> <span class="n">_profiles</span><span class="p">(</span><span class="n">everything</span><span class="p">,</span> <span class="n">selectors</span><span class="p">,</span> <span class="n">pulses</span><span class="p">)</span>
-        <span class="n">excitations</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span>
-            <span class="n">np</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">selector_of</span><span class="p">[</span><span class="n">pulses</span><span class="o">.</span><span class="n">use</span> <span class="o">==</span> <span class="n">_EXCITATION</span><span class="p">]),</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span>
+        <span class="n">excitations</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">selector_of</span><span class="p">[</span><span class="n">pulses</span><span class="o">.</span><span class="n">use</span> <span class="o">==</span> <span class="n">_EXCITATION</span><span class="p">])</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_entries</span><span class="p">,</span> <span class="n">groups</span><span class="p">,</span> <span class="n">group_of</span> <span class="o">=</span> <span class="n">_grouped</span><span class="p">(</span>
+            <span class="n">everything</span><span class="p">,</span> <span class="n">selectors</span><span class="p">,</span> <span class="n">pulses</span><span class="p">,</span> <span class="n">excitations</span>
         <span class="p">)</span>
-        <span class="n">excited</span> <span class="o">=</span> <span class="p">(</span><span class="n">profiles</span><span class="p">[:,</span> <span class="n">excitations</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_entries</span> <span class="o">=</span> <span class="n">everything</span><span class="o">.</span><span class="n">subset</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">nonzero</span><span class="p">(</span><span class="n">excited</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">))</span>
-        <span class="n">groups</span><span class="p">,</span> <span class="n">group_of</span> <span class="o">=</span> <span class="n">_merged</span><span class="p">(</span>
-            <span class="o">*</span><span class="n">torch</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">profiles</span><span class="p">[</span><span class="n">excited</span><span class="p">],</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">return_inverse</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_entries</span><span class="o">.</span><span class="n">density</span><span class="p">,</span>
-        <span class="p">)</span>
-        <span class="k">del</span> <span class="n">everything</span><span class="p">,</span> <span class="n">profiles</span><span class="p">,</span> <span class="n">excited</span>
+        <span class="n">groups</span><span class="p">,</span> <span class="n">group_of</span> <span class="o">=</span> <span class="n">_merged</span><span class="p">(</span><span class="n">groups</span><span class="p">,</span> <span class="n">group_of</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_entries</span><span class="o">.</span><span class="n">density</span><span class="p">)</span>
+        <span class="k">del</span> <span class="n">everything</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_groups</span> <span class="o">=</span> <span class="n">groups</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_group_of</span> <span class="o">=</span> <span class="n">group_of</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_stations</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_station_of</span> <span class="o">=</span> <span class="n">_stations</span><span class="p">(</span><span class="n">timeline</span><span class="p">,</span> <span class="n">selector_of</span><span class="p">)</span>
@@ -760,6 +768,7 @@
             <span class="n">selector_of</span><span class="p">,</span>
             <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_groups</span><span class="p">[</span><span class="n">members</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">),</span>
             <span class="n">readouts</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_phases</span><span class="p">,</span>
         <span class="p">)</span>
         <span class="n">settle_us</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span>
             <span class="mf">1e6</span> <span class="o">*</span> <span class="nb">float</span><span class="p">(</span><span class="n">held</span><span class="o">.</span><span class="n">t1</span><span class="p">[</span><span class="n">atoms</span><span class="p">]</span><span class="o">.</span><span class="n">max</span><span class="p">())</span> <span class="o">*</span> <span class="n">math</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="mf">1.0</span> <span class="o">/</span> <span class="n">_SETTLED</span><span class="p">),</span>
@@ -1025,6 +1034,7 @@
     <span class="n">cache_ext</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">".pseg"</span><span class="p">,</span>
     <span class="o">*</span><span class="p">,</span>
     <span class="n">rotation</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">centre</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">motion</span><span class="p">:</span> <span class="n">RigidMotion</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">girf</span><span class="p">:</span> <span class="n">Girf</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -1040,6 +1050,7 @@
         <span class="n">tissue</span><span class="p">,</span>
         <span class="n">cache_ext</span><span class="p">,</span>
         <span class="n">rotation</span><span class="o">=</span><span class="n">rotation</span><span class="p">,</span>
+        <span class="n">centre</span><span class="o">=</span><span class="n">centre</span><span class="p">,</span>
         <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
         <span class="n">motion</span><span class="o">=</span><span class="n">motion</span><span class="p">,</span>
         <span class="n">girf</span><span class="o">=</span><span class="n">girf</span><span class="p">,</span>
@@ -1196,6 +1207,15 @@
         <span class="n">voxel</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">minimum</span><span class="p">(</span><span class="n">voxel</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">reach</span> <span class="o">&gt;</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.5</span> <span class="o">/</span> <span class="n">reach</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">inf</span><span class="p">))</span>
     <span class="n">pulses</span> <span class="o">=</span> <span class="n">timeline</span><span class="o">.</span><span class="n">pulses</span>
     <span class="k">for</span> <span class="n">at</span> <span class="ow">in</span> <span class="n">np</span><span class="o">.</span><span class="n">flatnonzero</span><span class="p">(</span><span class="n">pulses</span><span class="o">.</span><span class="n">use</span> <span class="o">==</span> <span class="n">_EXCITATION</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">pulses</span><span class="o">.</span><span class="n">trace</span><span class="p">[</span><span class="n">at</span><span class="p">]</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="c1"># The slab a pulse under a changing gradient selects on resonance.</span>
+            <span class="n">width</span> <span class="o">=</span> <span class="n">pulses</span><span class="o">.</span><span class="n">traces</span><span class="p">[</span><span class="n">pulses</span><span class="o">.</span><span class="n">trace</span><span class="p">[</span><span class="n">at</span><span class="p">]]</span><span class="o">.</span><span class="n">width</span>
+            <span class="n">logical</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">pulses</span><span class="o">.</span><span class="n">direction</span><span class="p">[</span><span class="n">at</span><span class="p">]</span> <span class="o">@</span> <span class="n">timeline</span><span class="o">.</span><span class="n">rotation</span><span class="p">)</span>
+            <span class="k">with</span> <span class="n">np</span><span class="o">.</span><span class="n">errstate</span><span class="p">(</span><span class="n">divide</span><span class="o">=</span><span class="s2">"ignore"</span><span class="p">,</span> <span class="n">invalid</span><span class="o">=</span><span class="s2">"ignore"</span><span class="p">):</span>
+                <span class="n">voxel</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">minimum</span><span class="p">(</span>
+                    <span class="n">voxel</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">logical</span> <span class="o">&gt;</span> <span class="mf">1e-12</span><span class="p">,</span> <span class="n">width</span> <span class="o">/</span> <span class="n">logical</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">inf</span><span class="p">)</span>
+                <span class="p">)</span>
+            <span class="k">continue</span>
         <span class="n">gradient</span> <span class="o">=</span> <span class="n">pulses</span><span class="o">.</span><span class="n">gradient</span><span class="p">[</span><span class="n">at</span><span class="p">]</span> <span class="o">@</span> <span class="n">timeline</span><span class="o">.</span><span class="n">rotation</span>
         <span class="n">detuning</span><span class="p">,</span> <span class="n">ratio</span> <span class="o">=</span> <span class="n">pulses</span><span class="o">.</span><span class="n">profiles</span><span class="p">[</span><span class="n">pulses</span><span class="o">.</span><span class="n">profile</span><span class="p">[</span><span class="n">at</span><span class="p">]]</span>
         <span class="n">half</span> <span class="o">=</span> <span class="n">detuning</span><span class="p">[</span><span class="n">ratio</span> <span class="o">&gt;=</span> <span class="mf">0.5</span><span class="p">]</span>
@@ -1408,16 +1428,56 @@
     <span class="k">return</span> <span class="n">gradient</span>
 
 
+<span class="k">def</span><span class="w"> </span><span class="nf">_offsets</span><span class="p">(</span><span class="n">pulses</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return the frequency each pulse selects about, in Hz.</span>
+
+<span class="sd">    Its own, except where pulses select by frequency alone under gradients</span>
+<span class="sd">    they do not select under: a pulse prescribed off centre advances its</span>
+<span class="sd">    frequency by ``g . r0`` to follow its gradient there, which, the gradient</span>
+<span class="sd">    dropped, would move its band by as much. Their part ``g . r0``, ``r0``</span>
+<span class="sd">    fitted by least squares with a common offset over them, is taken off, and</span>
+<span class="sd">    what remains is rounded to a sixteenth of the step of the pulse's profile.</span>
+<span class="sd">    """</span>
+    <span class="n">starts</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">profile</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span> <span class="k">for</span> <span class="n">profile</span> <span class="ow">in</span> <span class="n">pulses</span><span class="o">.</span><span class="n">profiles</span><span class="p">])</span>
+    <span class="n">offset</span> <span class="o">=</span> <span class="n">pulses</span><span class="o">.</span><span class="n">band</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">-</span> <span class="n">starts</span><span class="p">[</span><span class="n">pulses</span><span class="o">.</span><span class="n">profile</span><span class="p">]</span>
+    <span class="n">dropped</span> <span class="o">=</span> <span class="n">pulses</span><span class="o">.</span><span class="n">gradient</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span> <span class="o">&amp;</span> <span class="o">~</span><span class="n">_selecting</span><span class="p">(</span><span class="n">pulses</span><span class="p">)</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">count_nonzero</span><span class="p">(</span><span class="n">dropped</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">4</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">offset</span>
+    <span class="n">gradient</span> <span class="o">=</span> <span class="n">pulses</span><span class="o">.</span><span class="n">gradient</span><span class="p">[</span><span class="n">dropped</span><span class="p">]</span>
+    <span class="n">fitted</span><span class="p">,</span> <span class="o">*</span><span class="n">_</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">lstsq</span><span class="p">(</span>
+        <span class="n">np</span><span class="o">.</span><span class="n">column_stack</span><span class="p">([</span><span class="n">gradient</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">gradient</span><span class="p">))]),</span>
+        <span class="n">offset</span><span class="p">[</span><span class="n">dropped</span><span class="p">],</span>
+        <span class="n">rcond</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">steps</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span>
+        <span class="p">[</span>
+            <span class="p">(</span><span class="n">profile</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="n">profile</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">0</span><span class="p">])</span> <span class="o">/</span> <span class="mf">16.0</span> <span class="k">if</span> <span class="n">profile</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">size</span> <span class="o">&gt;</span> <span class="mi">1</span> <span class="k">else</span> <span class="mf">1.0</span>
+            <span class="k">for</span> <span class="n">profile</span> <span class="ow">in</span> <span class="n">pulses</span><span class="o">.</span><span class="n">profiles</span>
+        <span class="p">]</span>
+    <span class="p">)[</span><span class="n">pulses</span><span class="o">.</span><span class="n">profile</span><span class="p">[</span><span class="n">dropped</span><span class="p">]]</span>
+    <span class="n">offset</span> <span class="o">=</span> <span class="n">offset</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+    <span class="c1"># Plus zero, so that no -0.0 keys a selector of its own.</span>
+    <span class="n">offset</span><span class="p">[</span><span class="n">dropped</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="n">steps</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">round</span><span class="p">((</span><span class="n">offset</span><span class="p">[</span><span class="n">dropped</span><span class="p">]</span> <span class="o">-</span> <span class="n">gradient</span> <span class="o">@</span> <span class="n">fitted</span><span class="p">[:</span><span class="mi">3</span><span class="p">])</span> <span class="o">/</span> <span class="n">steps</span><span class="p">)</span> <span class="o">+</span> <span class="mf">0.0</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="n">offset</span>
+
+
 <span class="k">def</span><span class="w"> </span><span class="nf">_selectors</span><span class="p">(</span><span class="n">pulses</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]:</span>
 <span class="w">    </span><span class="sd">"""Return which selector each pulse is, and each selector's first pulse.</span>
 
-<span class="sd">    A selector is a gradient, a frequency and a profile.</span>
+<span class="sd">    A selector is a gradient, a frequency and a profile, or the trace of a</span>
+<span class="sd">    pulse under a gradient that changes along one axis.</span>
 <span class="sd">    """</span>
-    <span class="n">offset</span> <span class="o">=</span> <span class="p">(</span>
-        <span class="n">pulses</span><span class="o">.</span><span class="n">band</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">]</span>
-        <span class="o">-</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">profile</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span> <span class="k">for</span> <span class="n">profile</span> <span class="ow">in</span> <span class="n">pulses</span><span class="o">.</span><span class="n">profiles</span><span class="p">])[</span><span class="n">pulses</span><span class="o">.</span><span class="n">profile</span><span class="p">]</span>
+    <span class="n">keys</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">column_stack</span><span class="p">(</span>
+        <span class="p">[</span>
+            <span class="n">_selecting</span><span class="p">(</span><span class="n">pulses</span><span class="p">),</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">round</span><span class="p">(</span><span class="n">_offsets</span><span class="p">(</span><span class="n">pulses</span><span class="p">),</span> <span class="mi">3</span><span class="p">),</span>
+            <span class="n">pulses</span><span class="o">.</span><span class="n">profile</span><span class="p">,</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">round</span><span class="p">(</span><span class="n">pulses</span><span class="o">.</span><span class="n">direction</span><span class="p">,</span> <span class="mi">6</span><span class="p">),</span>
+            <span class="n">pulses</span><span class="o">.</span><span class="n">trace</span><span class="p">,</span>
+        <span class="p">]</span>
     <span class="p">)</span>
-    <span class="n">keys</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">column_stack</span><span class="p">([</span><span class="n">_selecting</span><span class="p">(</span><span class="n">pulses</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">round</span><span class="p">(</span><span class="n">offset</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="n">pulses</span><span class="o">.</span><span class="n">profile</span><span class="p">])</span>
     <span class="n">_</span><span class="p">,</span> <span class="n">selector_of</span> <span class="o">=</span> <span class="n">_rows</span><span class="p">(</span><span class="n">keys</span><span class="p">)</span>
     <span class="n">first</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">selector_of</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">initial</span><span class="o">=-</span><span class="mi">1</span><span class="p">))</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="n">selector_of</span><span class="o">.</span><span class="n">size</span><span class="p">)</span>
     <span class="n">np</span><span class="o">.</span><span class="n">minimum</span><span class="o">.</span><span class="n">at</span><span class="p">(</span><span class="n">first</span><span class="p">,</span> <span class="n">selector_of</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">selector_of</span><span class="o">.</span><span class="n">size</span><span class="p">))</span>
@@ -1426,33 +1486,92 @@
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_profiles</span><span class="p">(</span><span class="n">entries</span><span class="p">:</span> <span class="n">_Entries</span><span class="p">,</span> <span class="n">selectors</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">pulses</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Return the level of :data:`_LEVELS` nearest each entry's flip angle under each selector, over the one on resonance; zero outside its band, ``(entries, selectors)``."""</span>
-    <span class="n">device</span> <span class="o">=</span> <span class="n">entries</span><span class="o">.</span><span class="n">positions</span><span class="o">.</span><span class="n">device</span>
     <span class="n">held</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span>
-        <span class="p">(</span><span class="n">entries</span><span class="o">.</span><span class="n">positions</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">selectors</span><span class="o">.</span><span class="n">size</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">int8</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span>
+        <span class="p">(</span><span class="n">entries</span><span class="o">.</span><span class="n">positions</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">selectors</span><span class="o">.</span><span class="n">size</span><span class="p">),</span>
+        <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">int8</span><span class="p">,</span>
+        <span class="n">device</span><span class="o">=</span><span class="n">entries</span><span class="o">.</span><span class="n">positions</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
     <span class="p">)</span>
     <span class="n">gradients</span> <span class="o">=</span> <span class="n">_selecting</span><span class="p">(</span><span class="n">pulses</span><span class="p">)</span>
+    <span class="n">offsets</span> <span class="o">=</span> <span class="n">_offsets</span><span class="p">(</span><span class="n">pulses</span><span class="p">)</span>
     <span class="k">for</span> <span class="n">at</span><span class="p">,</span> <span class="n">pulse</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">selectors</span><span class="p">):</span>
-        <span class="n">detuning</span><span class="p">,</span> <span class="n">ratio</span> <span class="o">=</span> <span class="n">pulses</span><span class="o">.</span><span class="n">profiles</span><span class="p">[</span><span class="n">pulses</span><span class="o">.</span><span class="n">profile</span><span class="p">[</span><span class="n">pulse</span><span class="p">]]</span>
-        <span class="n">offset</span> <span class="o">=</span> <span class="n">pulses</span><span class="o">.</span><span class="n">band</span><span class="p">[</span><span class="n">pulse</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">-</span> <span class="n">detuning</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
-        <span class="n">field</span> <span class="o">=</span> <span class="n">entries</span><span class="o">.</span><span class="n">frequency</span> <span class="o">-</span> <span class="nb">float</span><span class="p">(</span><span class="n">offset</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">gradients</span><span class="p">[</span><span class="n">pulse</span><span class="p">]):</span>
-            <span class="n">gradient</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span>
-                <span class="n">pulses</span><span class="o">.</span><span class="n">gradient</span><span class="p">[</span><span class="n">pulse</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span>
-            <span class="p">)</span>
-            <span class="n">field</span> <span class="o">=</span> <span class="n">field</span> <span class="o">+</span> <span class="n">entries</span><span class="o">.</span><span class="n">positions</span> <span class="o">@</span> <span class="n">gradient</span>
-        <span class="n">step</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">detuning</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="n">detuning</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span> <span class="k">if</span> <span class="n">detuning</span><span class="o">.</span><span class="n">size</span> <span class="o">&gt;</span> <span class="mi">1</span> <span class="k">else</span> <span class="mf">1.0</span>
-        <span class="n">place</span> <span class="o">=</span> <span class="p">(</span><span class="n">field</span> <span class="o">-</span> <span class="nb">float</span><span class="p">(</span><span class="n">detuning</span><span class="p">[</span><span class="mi">0</span><span class="p">]))</span> <span class="o">/</span> <span class="n">step</span>
-        <span class="n">below</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">floor</span><span class="p">(</span><span class="n">place</span><span class="p">)</span>
-        <span class="n">inside</span> <span class="o">=</span> <span class="p">(</span><span class="n">below</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">below</span> <span class="o">&lt;</span> <span class="n">detuning</span><span class="o">.</span><span class="n">size</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
-        <span class="n">index</span> <span class="o">=</span> <span class="n">below</span><span class="o">.</span><span class="n">clamp</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="nb">max</span><span class="p">(</span><span class="n">detuning</span><span class="o">.</span><span class="n">size</span> <span class="o">-</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">0</span><span class="p">))</span><span class="o">.</span><span class="n">long</span><span class="p">()</span>
-        <span class="n">table</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span><span class="n">ratio</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
-        <span class="n">upper</span> <span class="o">=</span> <span class="n">table</span><span class="p">[(</span><span class="n">index</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">clamp</span><span class="p">(</span><span class="nb">max</span><span class="o">=</span><span class="n">detuning</span><span class="o">.</span><span class="n">size</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)]</span>
-        <span class="n">flip</span> <span class="o">=</span> <span class="n">table</span><span class="p">[</span><span class="n">index</span><span class="p">]</span> <span class="o">+</span> <span class="p">(</span><span class="n">place</span> <span class="o">-</span> <span class="n">below</span><span class="p">)</span> <span class="o">*</span> <span class="p">(</span><span class="n">upper</span> <span class="o">-</span> <span class="n">table</span><span class="p">[</span><span class="n">index</span><span class="p">])</span>
-        <span class="n">flip</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">inside</span><span class="p">,</span> <span class="n">flip</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span>
-        <span class="n">levels</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span><span class="n">_LEVELS</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
-        <span class="n">nearest</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">searchsorted</span><span class="p">(</span><span class="n">levels</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span> <span class="o">+</span> <span class="n">levels</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="mf">2.0</span> <span class="o">*</span> <span class="n">flip</span><span class="o">.</span><span class="n">contiguous</span><span class="p">())</span>
-        <span class="n">held</span><span class="p">[:,</span> <span class="n">at</span><span class="p">]</span> <span class="o">=</span> <span class="n">nearest</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">int8</span><span class="p">)</span>
+        <span class="n">held</span><span class="p">[:,</span> <span class="n">at</span><span class="p">]</span> <span class="o">=</span> <span class="n">_profile</span><span class="p">(</span><span class="n">entries</span><span class="p">,</span> <span class="n">pulse</span><span class="p">,</span> <span class="n">pulses</span><span class="p">,</span> <span class="n">gradients</span><span class="p">,</span> <span class="n">offsets</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">held</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_grouped</span><span class="p">(</span>
+    <span class="n">entries</span><span class="p">:</span> <span class="n">_Entries</span><span class="p">,</span> <span class="n">selectors</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">pulses</span><span class="p">,</span> <span class="n">excitations</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">_Entries</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Return the entries the selectors ``excitations`` turn, the distinct rows of their :func:`_profiles` in ascending order, and each one's row.</span>
+
+<span class="sd">    The rows are told apart one selector at a time, so that no table of every</span>
+<span class="sd">    entry under every selector is held.</span>
+<span class="sd">    """</span>
+    <span class="n">gradients</span> <span class="o">=</span> <span class="n">_selecting</span><span class="p">(</span><span class="n">pulses</span><span class="p">)</span>
+    <span class="n">offsets</span> <span class="o">=</span> <span class="n">_offsets</span><span class="p">(</span><span class="n">pulses</span><span class="p">)</span>
+    <span class="n">excited</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span>
+        <span class="n">entries</span><span class="o">.</span><span class="n">positions</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">entries</span><span class="o">.</span><span class="n">positions</span><span class="o">.</span><span class="n">device</span>
+    <span class="p">)</span>
+    <span class="k">for</span> <span class="n">at</span> <span class="ow">in</span> <span class="n">excitations</span><span class="p">:</span>
+        <span class="n">excited</span> <span class="o">|=</span> <span class="n">_profile</span><span class="p">(</span><span class="n">entries</span><span class="p">,</span> <span class="n">selectors</span><span class="p">[</span><span class="n">at</span><span class="p">],</span> <span class="n">pulses</span><span class="p">,</span> <span class="n">gradients</span><span class="p">,</span> <span class="n">offsets</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span>
+    <span class="n">entries</span> <span class="o">=</span> <span class="n">entries</span><span class="o">.</span><span class="n">subset</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">nonzero</span><span class="p">(</span><span class="n">excited</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">))</span>
+    <span class="n">count</span> <span class="o">=</span> <span class="n">entries</span><span class="o">.</span><span class="n">positions</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="n">row_of</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">count</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">int64</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">excited</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">pulse</span> <span class="ow">in</span> <span class="n">selectors</span><span class="p">:</span>
+        <span class="n">level</span> <span class="o">=</span> <span class="n">_profile</span><span class="p">(</span><span class="n">entries</span><span class="p">,</span> <span class="n">pulse</span><span class="p">,</span> <span class="n">pulses</span><span class="p">,</span> <span class="n">gradients</span><span class="p">,</span> <span class="n">offsets</span><span class="p">)</span><span class="o">.</span><span class="n">long</span><span class="p">()</span>
+        <span class="n">row_of</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">row_of</span> <span class="o">*</span> <span class="n">_LEVELS</span><span class="o">.</span><span class="n">size</span> <span class="o">+</span> <span class="n">level</span><span class="p">,</span> <span class="n">return_inverse</span><span class="o">=</span><span class="kc">True</span><span class="p">)[</span><span class="mi">1</span><span class="p">]</span>
+    <span class="n">rows</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">row_of</span><span class="o">.</span><span class="n">max</span><span class="p">())</span> <span class="o">+</span> <span class="mi">1</span> <span class="k">if</span> <span class="n">count</span> <span class="k">else</span> <span class="mi">0</span>
+    <span class="n">first</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">full</span><span class="p">((</span><span class="n">rows</span><span class="p">,),</span> <span class="n">count</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">int64</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">excited</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+    <span class="n">first</span><span class="o">.</span><span class="n">scatter_reduce_</span><span class="p">(</span>
+        <span class="mi">0</span><span class="p">,</span> <span class="n">row_of</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">count</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">excited</span><span class="o">.</span><span class="n">device</span><span class="p">),</span> <span class="n">reduce</span><span class="o">=</span><span class="s2">"amin"</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="n">entries</span><span class="p">,</span> <span class="n">_profiles</span><span class="p">(</span><span class="n">entries</span><span class="o">.</span><span class="n">subset</span><span class="p">(</span><span class="n">first</span><span class="p">),</span> <span class="n">selectors</span><span class="p">,</span> <span class="n">pulses</span><span class="p">),</span> <span class="n">row_of</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_profile</span><span class="p">(</span>
+    <span class="n">entries</span><span class="p">:</span> <span class="n">_Entries</span><span class="p">,</span>
+    <span class="n">pulse</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">pulses</span><span class="p">,</span>
+    <span class="n">gradients</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+    <span class="n">offsets</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return :func:`_profiles` under the selector whose first pulse is ``pulse``, ``(entries,)``."""</span>
+    <span class="n">device</span> <span class="o">=</span> <span class="n">entries</span><span class="o">.</span><span class="n">positions</span><span class="o">.</span><span class="n">device</span>
+    <span class="n">detuning</span><span class="p">,</span> <span class="n">ratio</span> <span class="o">=</span> <span class="n">pulses</span><span class="o">.</span><span class="n">profiles</span><span class="p">[</span><span class="n">pulses</span><span class="o">.</span><span class="n">profile</span><span class="p">[</span><span class="n">pulse</span><span class="p">]]</span>
+    <span class="n">field</span> <span class="o">=</span> <span class="n">entries</span><span class="o">.</span><span class="n">frequency</span> <span class="o">-</span> <span class="nb">float</span><span class="p">(</span><span class="n">offsets</span><span class="p">[</span><span class="n">pulse</span><span class="p">])</span>
+    <span class="k">if</span> <span class="n">pulses</span><span class="o">.</span><span class="n">trace</span><span class="p">[</span><span class="n">pulse</span><span class="p">]</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="n">along</span> <span class="o">=</span> <span class="n">entries</span><span class="o">.</span><span class="n">positions</span> <span class="o">@</span> <span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span>
+            <span class="n">pulses</span><span class="o">.</span><span class="n">direction</span><span class="p">[</span><span class="n">pulse</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span>
+        <span class="p">)</span>
+        <span class="n">flip</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span>
+            <span class="n">pulses</span><span class="o">.</span><span class="n">traces</span><span class="p">[</span><span class="n">pulses</span><span class="o">.</span><span class="n">trace</span><span class="p">[</span><span class="n">pulse</span><span class="p">]]</span><span class="o">.</span><span class="n">ratio</span><span class="p">(</span>
+                <span class="n">field</span><span class="o">.</span><span class="n">double</span><span class="p">()</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">numpy</span><span class="p">(),</span> <span class="n">along</span><span class="o">.</span><span class="n">double</span><span class="p">()</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span>
+            <span class="p">),</span>
+            <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span>
+            <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">_level</span><span class="p">(</span><span class="n">flip</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">gradients</span><span class="p">[</span><span class="n">pulse</span><span class="p">]):</span>
+        <span class="n">gradient</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span>
+            <span class="n">pulses</span><span class="o">.</span><span class="n">gradient</span><span class="p">[</span><span class="n">pulse</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span>
+        <span class="p">)</span>
+        <span class="n">field</span> <span class="o">=</span> <span class="n">field</span> <span class="o">+</span> <span class="n">entries</span><span class="o">.</span><span class="n">positions</span> <span class="o">@</span> <span class="n">gradient</span>
+    <span class="n">step</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">detuning</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="n">detuning</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span> <span class="k">if</span> <span class="n">detuning</span><span class="o">.</span><span class="n">size</span> <span class="o">&gt;</span> <span class="mi">1</span> <span class="k">else</span> <span class="mf">1.0</span>
+    <span class="n">place</span> <span class="o">=</span> <span class="p">(</span><span class="n">field</span> <span class="o">-</span> <span class="nb">float</span><span class="p">(</span><span class="n">detuning</span><span class="p">[</span><span class="mi">0</span><span class="p">]))</span> <span class="o">/</span> <span class="n">step</span>
+    <span class="n">below</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">floor</span><span class="p">(</span><span class="n">place</span><span class="p">)</span>
+    <span class="n">inside</span> <span class="o">=</span> <span class="p">(</span><span class="n">below</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">below</span> <span class="o">&lt;</span> <span class="n">detuning</span><span class="o">.</span><span class="n">size</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
+    <span class="n">index</span> <span class="o">=</span> <span class="n">below</span><span class="o">.</span><span class="n">clamp</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="nb">max</span><span class="p">(</span><span class="n">detuning</span><span class="o">.</span><span class="n">size</span> <span class="o">-</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">0</span><span class="p">))</span><span class="o">.</span><span class="n">long</span><span class="p">()</span>
+    <span class="n">table</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span><span class="n">ratio</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
+    <span class="n">upper</span> <span class="o">=</span> <span class="n">table</span><span class="p">[(</span><span class="n">index</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">clamp</span><span class="p">(</span><span class="nb">max</span><span class="o">=</span><span class="n">detuning</span><span class="o">.</span><span class="n">size</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)]</span>
+    <span class="n">flip</span> <span class="o">=</span> <span class="n">table</span><span class="p">[</span><span class="n">index</span><span class="p">]</span> <span class="o">+</span> <span class="p">(</span><span class="n">place</span> <span class="o">-</span> <span class="n">below</span><span class="p">)</span> <span class="o">*</span> <span class="p">(</span><span class="n">upper</span> <span class="o">-</span> <span class="n">table</span><span class="p">[</span><span class="n">index</span><span class="p">])</span>
+    <span class="k">return</span> <span class="n">_level</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">inside</span><span class="p">,</span> <span class="n">flip</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">))</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_level</span><span class="p">(</span><span class="n">flip</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return the level of :data:`_LEVELS` nearest each flip angle ratio, as ``int8``."""</span>
+    <span class="n">levels</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span><span class="n">_LEVELS</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">flip</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">searchsorted</span><span class="p">(</span><span class="n">levels</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span> <span class="o">+</span> <span class="n">levels</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="mf">2.0</span> <span class="o">*</span> <span class="n">flip</span><span class="o">.</span><span class="n">contiguous</span><span class="p">())</span><span class="o">.</span><span class="n">to</span><span class="p">(</span>
+        <span class="n">torch</span><span class="o">.</span><span class="n">int8</span>
+    <span class="p">)</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_merged</span><span class="p">(</span>
@@ -1633,7 +1752,36 @@
         <span class="p">)</span>
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_stream</span><span class="p">(</span><span class="n">timeline</span><span class="p">,</span> <span class="n">events</span><span class="p">,</span> <span class="n">shifted</span><span class="p">,</span> <span class="n">selector_of</span><span class="p">,</span> <span class="n">acting</span><span class="p">,</span> <span class="n">readouts</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">_Stream</span><span class="p">:</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_framed</span><span class="p">(</span>
+    <span class="n">timeline</span><span class="p">:</span> <span class="n">Timeline</span><span class="p">,</span> <span class="n">centre</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Return each pulse's phase and each readout's receiver phase at its echo, in the frame of the prescription's centre.</span>
+
+<span class="sd">    A scanner playing a prescription centred at ``centre`` advances each</span>
+<span class="sd">    pulse's phase by ``2 pi m . centre``, ``m`` the moment of the gradients</span>
+<span class="sd">    from the start of the scan, in step with the magnetization there, and its</span>
+<span class="sd">    receivers with it. The stream of events takes a moment that dephases less</span>
+<span class="sd">    than a voxel as balanced, which holds at one place; taking off each pulse</span>
+<span class="sd">    its own ``2 pi m . centre``, and off each readout that of the pulse before</span>
+<span class="sd">    it, moves that place to the centre, and keeps what each readout encodes</span>
+<span class="sd">    of it.</span>
+<span class="sd">    """</span>
+    <span class="n">pulses</span><span class="p">,</span> <span class="n">readouts</span> <span class="o">=</span> <span class="n">timeline</span><span class="o">.</span><span class="n">pulses</span><span class="p">,</span> <span class="n">timeline</span><span class="o">.</span><span class="n">readouts</span>
+    <span class="k">if</span> <span class="n">centre</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">centre</span><span class="p">)</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">pulses</span><span class="o">.</span><span class="n">block</span><span class="o">.</span><span class="n">size</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">pulses</span><span class="o">.</span><span class="n">phase</span><span class="p">,</span> <span class="n">readouts</span><span class="o">.</span><span class="n">receiver</span>
+    <span class="n">moment</span> <span class="o">=</span> <span class="n">timeline</span><span class="o">.</span><span class="n">moment</span><span class="p">(</span>
+        <span class="n">pulses</span><span class="o">.</span><span class="n">block</span><span class="p">,</span> <span class="n">pulses</span><span class="o">.</span><span class="n">time_us</span> <span class="o">-</span> <span class="n">timeline</span><span class="o">.</span><span class="n">starts_us</span><span class="p">[</span><span class="n">pulses</span><span class="o">.</span><span class="n">block</span><span class="p">]</span>
+    <span class="p">)</span>
+    <span class="n">taken</span> <span class="o">=</span> <span class="mf">2.0</span> <span class="o">*</span> <span class="n">math</span><span class="o">.</span><span class="n">pi</span> <span class="o">*</span> <span class="p">(</span><span class="n">moment</span> <span class="o">@</span> <span class="n">timeline</span><span class="o">.</span><span class="n">rotation</span><span class="o">.</span><span class="n">T</span><span class="p">)</span> <span class="o">@</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">centre</span><span class="p">,</span> <span class="nb">float</span><span class="p">)</span>
+    <span class="n">before</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">searchsorted</span><span class="p">(</span><span class="n">pulses</span><span class="o">.</span><span class="n">time_us</span><span class="p">,</span> <span class="n">readouts</span><span class="o">.</span><span class="n">echo_us</span><span class="p">,</span> <span class="n">side</span><span class="o">=</span><span class="s2">"right"</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span>
+    <span class="k">return</span> <span class="n">pulses</span><span class="o">.</span><span class="n">phase</span> <span class="o">-</span> <span class="n">taken</span><span class="p">,</span> <span class="n">readouts</span><span class="o">.</span><span class="n">receiver</span> <span class="o">-</span> <span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span>
+        <span class="n">before</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">,</span> <span class="n">taken</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">maximum</span><span class="p">(</span><span class="n">before</span><span class="p">,</span> <span class="mi">0</span><span class="p">)],</span> <span class="mf">0.0</span>
+    <span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_stream</span><span class="p">(</span>
+    <span class="n">timeline</span><span class="p">,</span> <span class="n">events</span><span class="p">,</span> <span class="n">shifted</span><span class="p">,</span> <span class="n">selector_of</span><span class="p">,</span> <span class="n">acting</span><span class="p">,</span> <span class="n">readouts</span><span class="p">,</span> <span class="n">phases</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">_Stream</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Return the pulses that act on a station's groups, under the selectors ``acting`` marks, and its ``readouts``.</span>
 
 <span class="sd">    Between two of them, the states shift by as many orders as the interval</span>
@@ -1687,8 +1835,8 @@
         <span class="n">use</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">is_pulse</span><span class="p">,</span> <span class="n">pulses</span><span class="o">.</span><span class="n">use</span><span class="p">[</span><span class="n">rf</span><span class="p">],</span> <span class="mi">0</span><span class="p">),</span>
         <span class="n">phase</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span>
             <span class="n">is_pulse</span><span class="p">,</span>
-            <span class="n">pulses</span><span class="o">.</span><span class="n">phase</span><span class="p">[</span><span class="n">rf</span><span class="p">],</span>
-            <span class="n">timeline</span><span class="o">.</span><span class="n">readouts</span><span class="o">.</span><span class="n">receiver</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">maximum</span><span class="p">(</span><span class="n">readout</span><span class="p">,</span> <span class="mi">0</span><span class="p">)],</span>
+            <span class="n">phases</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="n">rf</span><span class="p">],</span>
+            <span class="n">phases</span><span class="p">[</span><span class="mi">1</span><span class="p">][</span><span class="n">np</span><span class="o">.</span><span class="n">maximum</span><span class="p">(</span><span class="n">readout</span><span class="p">,</span> <span class="mi">0</span><span class="p">)],</span>
         <span class="p">),</span>
         <span class="n">orders</span><span class="o">=</span><span class="n">orders</span><span class="p">,</span>
         <span class="n">shift_us</span><span class="o">=</span><span class="n">shift_us</span><span class="p">,</span>

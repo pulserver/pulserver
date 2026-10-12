@@ -18,68 +18,110 @@
 .. _sphx_glr_generated_gallery_01-course_03_scanner_representation.py:
 
 
-===========================
-3. Scanner representation
-===========================
+=========================
+3. What the scanner plays
+=========================
 
-A Pulseq file lists every block of a scan. The scanner plays it as an
-execution stream of segment instances: each virtual segment, an ordered list
-of base blocks, is prepared once and played many times with new amplitudes and
-phases. This lesson converts the design of the previous lessons into that
-representation, reads what it was reduced to, and walks the stream as the
-scanner's playout does. The model is described in
-:doc:`/explanations/scanner-representation`.
+When the operator presses *Scan*, pulserver does three things before the
+scanner plays a single block: it designs the whole scan with your sequence
+function, checks it against the scanner's limits, and converts it into the
+form the scanner plays. In lesson 1 all three were one call,
+``console.design("generate", ...)``. In this lesson you run them one at a
+time and look at what each one produces.
 
 **Learning objectives**
 
-- Convert a sequence file into its IR cache with :func:`~pulserver.ir.convert`.
-- Read the repetition, the virtual segments and the readouts of a design from
-  :func:`~pulserver.ir.summary`.
-- Walk the execution stream with :func:`~pulserver.ir.play`, and tell what a
-  segment instance changes from what its virtual segment fixes.
-- Change where segment boundaries fall with :class:`~pulserver.ir.Grouping`.
+- See which checks a design must pass, and what the operator reads when one
+  fails.
+- Fix a failing design by designing it under gentler limits.
+- See how a scan of hundreds of blocks becomes a couple of segments the
+  scanner prepares once, and what changes each time it plays them.
 
-The next lesson reconstructs the raw data a scan of this cache returns.
+Previous: :doc:`02_sequence_plugin`. Next: :doc:`04_reconstruction_plugin`,
+where you follow the raw data on its way back.
 
-.. GENERATED FROM PYTHON SOURCE LINES 25-31
-
-
+.. GENERATED FROM PYTHON SOURCE LINES 24-27
 
 
 
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 32-39
 
-Conversion
-----------
 
-The design is pypulseqpp's 2D gradient echo at a 64 by 64 matrix, written to
-a file. :func:`~pulserver.ir.convert` reads it under the scanner limits and
-writes the IR cache beside it, and :func:`~pulserver.ir.summary` reports
-what the conversion reduced it to.
+.. GENERATED FROM PYTHON SOURCE LINES 28-34
 
-.. GENERATED FROM PYTHON SOURCE LINES 39-56
+The whole scan
+--------------
+
+The scan is your sequence function called with the final protocol. Here it
+is ``gre2d`` at a 64 by 64 matrix, the protocol you scanned in lesson 1,
+written to a Pulseq file as pulserver writes it.
+
+.. GENERATED FROM PYTHON SOURCE LINES 34-49
 
 .. code-block:: Python
 
     import tempfile
     from pathlib import Path
 
+    import matplotlib.pyplot as plt
     import numpy as np
     import pypulseqpp as pp
     from pypulseqpp.sequences.sequence.gre2D_sequence import gre2d
 
+    system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
+
+    seq = gre2d(system, n_x=64, n_y=64)
+    path = Path(tempfile.mkdtemp()) / "gre2d.seq"
+    seq.write(path)
+    print(f"{seq.num_blocks} blocks, {seq.duration()[0]:.2f} s")
+
+
+
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    534 blocks, 22.25 s
+
+
+
+
+.. GENERATED FROM PYTHON SOURCE LINES 50-66
+
+The checks
+----------
+
+A sequence designed under the scanner's limits can still break them, for
+example on a rotated slice, where two gradient axes add up on one physical
+axis. So pulserver checks the design as the scanner will play it, rotated to
+the prescription, with :func:`~pulserver.ir.check`:
+
+- the timing: every block on its raster, dead times respected;
+- the gradient amplitude and the slew rate against ``system``;
+- peripheral nerve stimulation (PNS) and mechanical resonances, under the
+  models every scanner sends;
+- acoustic noise, when the scanner has a model of it.
+
+The PNS model belongs to the gradient coil, and the scanner sends it with
+its limits. Here is an example rheobase-chronaxie model:
+
+.. GENERATED FROM PYTHON SOURCE LINES 66-76
+
+.. code-block:: Python
+
+    from pypulseqpp import safety
+
     from pulserver import ir
 
-    system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
-    path = Path(tempfile.mkdtemp()) / "gre2d.seq"
-    seq = gre2d(system, n_x=64, n_y=64)
-    seq.write(path)
+    coil = safety.ChronaxieModel(chronaxie=360e-6, rheobase=20, alpha=0.333)
+    limits = ir.CheckLimits(pns=coil)
 
-    print(ir.convert(path, system).name)
-    report = ir.summary(path, system, cache_ext=".pseg")
+    problems = ir.check(path, system, limits=limits)
+    print("\n".join(problems) or "no problems")
 
 
 
@@ -89,106 +131,23 @@ what the conversion reduced it to.
 
  .. code-block:: none
 
-    gre2d.pseg
+    PNS of 102% of the chronaxie threshold, largest on z, at 1.0034 s in block 26 reaches 100%
 
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 57-62
+.. GENERATED FROM PYTHON SOURCE LINES 77-85
 
-The repetition is the period pypulseqpp's ``Sequence.repetition`` finds: one
-phase-encoding line, played once per line and once per dummy scan. The
-conversion cuts it into virtual segments at block boundaries where the
-gradients rest. A pure delay is a virtual segment of its own, played with
-each instance's duration.
+The design is refused. On a scanner this message is what the operator reads
+instead of a scan starting, and nothing is played.
+:doc:`/explanations/safety-checks` lists every check and what each one
+needs from the scanner.
 
-.. GENERATED FROM PYTHON SOURCE LINES 62-76
+The figure shows why. Over the first 12 ms of a TR, the gradients stay
+within 40 mT/m and the slew rate within 150 T/m/s, but the slice rephaser
+ramps fast enough to drive the nerve response just above its threshold.
 
-.. code-block:: Python
-
-    repetition = report["subsequences"][0]
-    print(f"{seq.num_blocks} blocks in the file")
-    print(
-        f"repetition: {repetition['tr_size']} blocks, "
-        f"TR {repetition['tr_duration_us'] / 1e3:.1f} ms, "
-        f"played {repetition['num_trs']} times"
-    )
-    for index, segment in enumerate(report["segments"]):
-        first = segment["start_block"] + 1
-        last = segment["start_block"] + segment["num_blocks"]
-        kind = "pure delay" if segment["pure_delay"] else "events"
-        print(f"virtual segment {index}: blocks {first}-{last} of the repetition, {kind}")
-    print(f"{report['total_readouts']} readouts")
-
-
-
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    480 blocks in the file
-    repetition: 6 blocks, TR 250.0 ms, played 80 times
-    virtual segment 0: blocks 1-5 of the repetition, events
-    virtual segment 1: blocks 6-6 of the repetition, pure delay
-    64 readouts
-
-
-
-
-.. GENERATED FROM PYTHON SOURCE LINES 77-84
-
-The execution stream
---------------------
-
-:func:`~pulserver.ir.play` loads the cache with the C library a scanner
-links and walks the execution stream with its cursor, one entry per played
-block. Each segment instance plays the blocks of its virtual segment, so the
-stream is read instance by instance by stepping over that many blocks.
-
-.. GENERATED FROM PYTHON SOURCE LINES 84-93
-
-.. code-block:: Python
-
-    played = ir.play(path)
-    instances = []
-    block = 0
-    while block < len(played["segment"]):
-        instances.append(int(played["segment"][block]))
-        block += report["segments"][instances[-1]]["num_blocks"]
-    print(f"{block} blocks played as {len(instances)} segment instances")
-    print("virtual segments of the first instances:", instances[:6])
-
-
-
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    480 blocks played as 160 segment instances
-    virtual segments of the first instances: [0, 1, 0, 1, 0, 1]
-
-
-
-
-.. GENERATED FROM PYTHON SOURCE LINES 94-97
-
-Every instance of the first virtual segment plays the same base blocks. What
-changes from one to the next is held by the instance: here the amplitude of
-the phase-encoding gradient and the RF phase offset that spoiling steps.
-
-.. GENERATED FROM PYTHON SOURCE LINES 97-117
-
-.. code-block:: Python
-
-    blocks = repetition["tr_size"]
-    gy = played["gradient_hz_per_m"][:, 1].reshape(-1, blocks)
-    phase_encoding = np.abs(gy).max(axis=0).argmax()
-    rf_phase = played["rf_phase_rad"].reshape(-1, blocks)[:, 0]
-
+.. GENERATED FROM PYTHON SOURCE LINES 85-126
 
 
 
@@ -202,31 +161,76 @@ the phase-encoding gradient and the RF phase offset that spoiling steps.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 118-131
+.. GENERATED FROM PYTHON SOURCE LINES 127-134
 
-The first repetitions are the dummy scans, played without phase encoding; the
-lines follow. The RF phase offset steps by an increment that grows by
-117° from one repetition to the next, the schedule of RF spoiling.
-Both are parameters of segment instances: the virtual segment, and the
-waveforms the scanner prepares for it, are the same in every repetition.
+Designing under gentler limits
+------------------------------
 
-Grouping
---------
+The remedy is a change of design, not of the check: design the sequence
+with a lower slew rate, and check it against the same scanner. A scanner can send
+such design limits with its own (``design_max_slew``), and pulserver then
+hands your sequence function the gentler ``system``.
 
-Where boundaries may fall depends on the interpreter: one that inserts
-switching time at every segment boundary needs as few segments as possible.
-:class:`~pulserver.ir.Grouping` states the rule. Without splitting off the
-delay at the edge of a segment, the repetition is one virtual segment.
-
-.. GENERATED FROM PYTHON SOURCE LINES 131-136
+.. GENERATED FROM PYTHON SOURCE LINES 134-158
 
 .. code-block:: Python
 
-    ir.convert(path, system, grouping=ir.Grouping(split_edge_delays=False))
-    merged = ir.summary(path, system, cache_ext=".pseg")
+    gentle = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=100, slew_unit="T/m/s")
+
+    seq = gre2d(gentle, n_x=64, n_y=64)
+    seq.write(path)
+    problems = ir.check(path, system, limits=limits)
+    print("\n".join(problems) or "no problems")
+
+
+
+
+
+.. image-sg:: /generated/gallery/01-course/images/sphx_glr_03_scanner_representation_002.png
+   :alt: 03 scanner representation
+   :srcset: /generated/gallery/01-course/images/sphx_glr_03_scanner_representation_002.png
+   :class: sphx-glr-single-img
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    no problems
+
+
+
+
+.. GENERATED FROM PYTHON SOURCE LINES 159-170
+
+The same TE and TR, with the nerve response under its threshold.
+
+What the scanner prepares
+-------------------------
+
+The scanner does not read the Pulseq file block by block while it plays.
+pulserver first finds what repeats: the TR, here 6 blocks played once per
+line and once per dummy TR (64 lines and 25 dummies). It cuts the TR into **segments**, short runs of
+blocks the scanner prepares once, and lists the order to play them in. The
+result is the **cache** the scanner loads, written beside the Pulseq file by
+:func:`~pulserver.ir.convert`:
+
+.. GENERATED FROM PYTHON SOURCE LINES 170-182
+
+.. code-block:: Python
+
+    print(ir.convert(path, system).name)
+
+    report = ir.summary(path, system, cache_ext=".pseg")
+    repetition = report["subsequences"][0]
     print(
-        f"virtual segments: {report['num_segments']} by default, {merged['num_segments']} merged"
+        f"{seq.num_blocks} blocks = {repetition['num_trs']} TRs "
+        f"of {repetition['tr_size']} blocks"
     )
+    for number, segment in enumerate(report["segments"]):
+        kind = "a pure delay" if segment["pure_delay"] else "RF, gradients and ADC"
+        print(f"segment {number}: {segment['num_blocks']} block(s), {kind}")
+
 
 
 
@@ -235,15 +239,105 @@ delay at the edge of a segment, the repetition is one virtual segment.
 
  .. code-block:: none
 
-    virtual segments: 2 by default, 1 merged
+    gre2d.pseg
+    534 blocks = 89 TRs of 6 blocks
+    segment 0: 5 block(s), RF, gradients and ADC
+    segment 1: 1 block(s), a pure delay
 
 
 
+
+.. GENERATED FROM PYTHON SOURCE LINES 183-185
+
+Segment 0 excites, encodes and reads out; segment 1 is the wait until the
+next TR. Every TR plays the two of them in turn, as the scanner will:
+
+.. GENERATED FROM PYTHON SOURCE LINES 185-224
+
+
+
+
+.. image-sg:: /generated/gallery/01-course/images/sphx_glr_03_scanner_representation_003.png
+   :alt: 03 scanner representation
+   :srcset: /generated/gallery/01-course/images/sphx_glr_03_scanner_representation_003.png
+   :class: sphx-glr-single-img
+
+
+
+
+
+.. GENERATED FROM PYTHON SOURCE LINES 225-242
+
+What changes from one TR to the next
+------------------------------------
+
+Every TR plays the same segments, and what differs between TRs, such as the
+phase encoding, is carried by the segment instances. The scanner prepares a segment's timing and waveform shapes once. Each time it
+plays the segment, the *instance* sets everything else:
+
+- the amplitude of each gradient, and its rotation;
+- another gradient waveform in place of the prepared one, provided its
+  timing is the same;
+- the RF amplitude, its phase and frequency offsets, and the shim of each
+  transmit channel;
+- the ADC phase and frequency offsets, or no acquisition at all;
+- whether it waits for a trigger, and the digital outputs.
+
+:func:`~pulserver.ir.play` walks the cache with the same C library the
+scanner links, one entry per block played, so you can read these values:
+
+.. GENERATED FROM PYTHON SOURCE LINES 242-262
+
+.. code-block:: Python
+
+    gy = played["gradient_hz_per_m"][:, 1].reshape(-1, blocks)
+    phase_encoding = np.abs(gy).max(axis=0).argmax()
+    rf_phase = played["rf_phase_rad"].reshape(-1, blocks)[:, 0]
+    acquires = played["adc"].reshape(-1, blocks).any(axis=1)
+
+
+
+
+
+.. image-sg:: /generated/gallery/01-course/images/sphx_glr_03_scanner_representation_004.png
+   :alt: 03 scanner representation
+   :srcset: /generated/gallery/01-course/images/sphx_glr_03_scanner_representation_004.png
+   :class: sphx-glr-single-img
+
+
+
+
+
+.. GENERATED FROM PYTHON SOURCE LINES 263-286
+
+The first TRs are the dummy TRs: the same segment, with no phase encoding
+and the ADC off. Then the phase-encoding amplitude steps through the 64
+lines. The RF phase follows the quadratic schedule of RF spoiling, its
+increment growing by 117° per TR. The scanner prepares segment 0 once and
+only changes these numbers, so its preparation does not grow with the
+length of the scan.
+
+Where the segment boundaries fall can be tuned to the scanner's interpreter;
+:doc:`/explanations/scanner-representation` explains the model.
+
+As a spec
+---------
+
+What this lesson did, stated the way you would ask an agent for it:
+
+.. code-block:: text
+
+   Design pypulseqpp's gre2d at 64 x 64 for a 40 mT/m, 150 T/m/s scanner and
+   check it with pulserver.ir.check against a chronaxie PNS model
+   (chronaxie 360 us, rheobase 20 T/m/s, alpha 0.333). If it is refused,
+   redesign it at 100 T/m/s and check again. Convert the accepted design
+   with pulserver.ir.convert, report its segments, and plot the
+   phase-encoding amplitude and RF phase of every TR from pulserver.ir.play.
 
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.183 seconds)
+   **Total running time of the script:** (0 minutes 0.643 seconds)
 
 
 .. _sphx_glr_download_generated_gallery_01-course_03_scanner_representation.py:
