@@ -52,7 +52,7 @@ class PicsRecon(ReconPlugin):
     between sampled lines, and
     :func:`bartorch.apps.partial_fourier` completes the image along it
     (``bart homodyne -I -C``). bartorch is imported when the first unit is
-    reconstructed, which the ``coils`` extra installs.
+    reconstructed.
 
     A unit of a non-Cartesian encoding space is a wave-CAIPI volume, which the
     proxy makes of readouts whose k-space moves along the phase encodes:

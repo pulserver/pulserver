@@ -44,8 +44,7 @@ class Prewhiten(Gadget):
     :meth:`startup` loads when its coil labels are those of the header. With
     neither, readouts pass unchanged and a warning is logged once. A plugin
     that rejects noise readouts with ``reject_flags`` gives the gadget no noise
-    to estimate from. bartorch is imported when ``W`` is computed; the
-    ``coils`` extra installs it.
+    to estimate from. bartorch is imported when ``W`` is computed.
 
     Corresponds to Gadgetron's ``NoiseAdjustGadget``.
 
@@ -171,7 +170,7 @@ class RemoveReadoutOversampling(Gadget):
     or not stated pass unchanged, as do navigator and noise readouts.
 
     This is Gadgetron's ``RemoveROOversamplingGadget``. bartorch is imported
-    when the first readout is cropped; the ``coils`` extra installs it.
+    when the first readout is cropped.
 
     Raises
     ------

@@ -218,7 +218,7 @@ line, is written to standard output, and the scan clock to standard error.
   ```
 
   `--phantom brainweb` scans {class}`~pulserver.virtual.BrainWeb`, BrainWeb's
-  normal brain, downloaded on first use; it needs the `brainweb` extra, and its
+  normal brain, downloaded on first use; its
   `--spacing` is a whole number of millimetres. Its grey and white matter and
   CSF diffuse. Without `--phantom`, the phantom is seven vials of water around
   one of fat, with T1 from 0.3 s to 2.0 s and T2 from 0.04 s to 0.3 s.
@@ -249,7 +249,7 @@ line, is written to standard output, and the scan clock to standard error.
 
 ## Console server
 
-`pulserver console`, which needs the `console` extra, answers a scanner console
+`pulserver console` answers a scanner console
 over a WebSocket: the design calls on the interpreter's text blocks, an exam on
 a subject, and scans of the designs it generates, played on the subject's
 phantom:

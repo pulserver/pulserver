@@ -242,8 +242,7 @@ class CoilCompression:
 
     The returned unit holds new buffers with ``n_virtual`` channels, and shares
     its ``counters`` and ``acquisitions`` with the unit it was made from.
-    bartorch is imported when a unit is compressed; the ``coils`` extra
-    installs it.
+    bartorch is imported when a unit is compressed.
 
     Corresponds to Gadgetron's ``GenericReconEigenChannelGadget``.
 
