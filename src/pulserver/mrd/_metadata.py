@@ -8,12 +8,16 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+import numpy as np
+
 from .._labels import MRD_FLAGS, canonical_label
 
 __all__ = [
+    "DIFFUSION_TABLE",
     "MrdMetadata",
     "acquisition_label",
     "acquisition_labels",
+    "diffusion_table",
     "has_acquisition_flag",
     "max_stored_value",
     "user_parameter",
@@ -55,6 +59,32 @@ def user_parameter(metadata: Any, name: str, default: Any = None) -> Any:
             if getattr(parameter, "name", None) == name:
                 return getattr(parameter, "value", default)
     return default
+
+
+#: User parameter string an MRD header states a diffusion table in: one
+#: ``x y z b`` row per line.
+DIFFUSION_TABLE = "diffusion_table"
+
+
+def diffusion_table(metadata: Any) -> tuple[np.ndarray, np.ndarray] | None:
+    """Return the diffusion table an MRD header states, or None when it states none.
+
+    Row ``i`` is the volume whose ``repetition`` counter is ``i``.
+
+    Returns
+    -------
+    b : numpy.ndarray
+        ``(volumes,)``, s/mm².
+    g : numpy.ndarray
+        ``(volumes, 3)``, unit directions along the logical readout, phase and
+        slice axes, which an acquisition's ``read_dir``, ``phase_dir`` and
+        ``slice_dir`` state in the patient frame; zero where ``b`` is zero.
+    """
+    text = user_parameter(metadata, DIFFUSION_TABLE)
+    if not text:
+        return None
+    rows = np.loadtxt(str(text).splitlines(), dtype=float, ndmin=2)
+    return rows[:, 3], rows[:, :3]
 
 
 def max_stored_value(metadata: Any) -> int:

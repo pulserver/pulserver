@@ -8,7 +8,7 @@ import pytest
 from _synthetic import DELTA_K, SAMPLES, add_readout
 from pypulseqpp import sequences
 
-from pulserver.mrd import AcquisitionFlag, EncodingSpace
+from pulserver.mrd import AcquisitionFlag, EncodingSpace, diffusion_table
 from pulserver.proxy._enrich import (
     SequenceTable,
     enrich_acquisition,
@@ -609,3 +609,34 @@ def test_a_stated_position_away_from_the_converted_shift_adds_its_whole_phase():
             2 * np.pi * (shift @ k),
             atol=1e-9,
         )
+
+
+def designed_with_table(tmp_path, contents):
+    path = tmp_path / "table7.dat"
+    path.write_text(contents)
+    seq = pp.Sequence()
+    add_readout(seq)
+    pp.io.set_diffusion_table(seq, path, b_value=1000.0, directions=3)
+    return seq, path
+
+
+def test_the_header_states_the_diffusion_table_its_design_names(tmp_path):
+    seq, _ = designed_with_table(tmp_path, "3\n0 0 0\n1 0 0\n0 0.5 0\n")
+    enriched = header()
+    enrich_header(enriched, written(seq, tmp_path))
+    b, g = diffusion_table(enriched)
+    np.testing.assert_allclose(b, [0.0, 1000.0, 250.0])
+    np.testing.assert_allclose(g, [[0, 0, 0], [1, 0, 0], [0, 1, 0]])
+
+
+def test_a_design_whose_table_cannot_be_read_enriches_without_one(tmp_path, caplog):
+    seq, path = designed_with_table(tmp_path, "3\n0 0 0\n1 0 0\n0 0.5 0\n")
+    table = written(seq, tmp_path)
+    path.unlink()
+    unreadable = written(seq, tmp_path)
+    enriched = header()
+    enrich_header(enriched, unreadable)
+    assert table.diffusion is not None
+    assert unreadable.diffusion is None
+    assert diffusion_table(enriched) is None
+    assert "diffusion table" in caplog.text

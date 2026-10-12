@@ -113,6 +113,7 @@ class IntKey(StrEnum):
     HEART_RATE = "heart_rate"
     NUM_FRAMES = "num_frames"
     DIFFUSION_DIRECTIONS = "diffusion_directions"
+    DIFFUSION_TABLE = "diffusion_table"
     NUM_SHOTS = "num_shots"
     ETL = "etl"
     NUM_ECHOES = "num_echoes"
@@ -343,6 +344,7 @@ class UIParam:
     HEART_RATE = IntKey.HEART_RATE
     NUM_FRAMES = IntKey.NUM_FRAMES
     DIFFUSION_DIRECTIONS = IntKey.DIFFUSION_DIRECTIONS
+    DIFFUSION_TABLE = IntKey.DIFFUSION_TABLE
     NUM_SHOTS = IntKey.NUM_SHOTS
     ETL = IntKey.ETL
     NUM_ECHOES = IntKey.NUM_ECHOES

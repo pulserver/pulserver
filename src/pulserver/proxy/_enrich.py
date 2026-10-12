@@ -15,20 +15,23 @@ __all__ = [
 ]
 
 import dataclasses
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import ismrmrd.xsd as xsd
 import numpy as np
+from pypulseqpp.io import get_diffusion_table
 
 from .._accelerators import require
 from .._labels import MRD_COUNTERS, MRD_FLAGS
 from ..mrd._acquisitions import AcquisitionFlag
-from ..mrd._metadata import user_parameter
+from ..mrd._metadata import DIFFUSION_TABLE, user_parameter
 from ..mrd._sequence import ReadoutTable, SequenceDefinitions, read_chain
 
 _F = AcquisitionFlag
+_log = logging.getLogger("pulserver.proxy")
 
 #: Counter label, its first and last boundary flags, and whether it selects a
 #: whole image rather than a position within one.
@@ -159,6 +162,10 @@ class SequenceTable:
         The field-of-view shift the scanner plays the chain at, in m, along
         the axes the design's blocks are rotated onto, as
         :func:`pulserver.ir.prescribe` takes it.
+    diffusion : tuple of ndarray or None
+        ``(b, g)`` read from the table file the first file of the chain to
+        name one names (:func:`pypulseqpp.io.get_diffusion_table`); None when
+        no file names one or the table cannot be read.
     """
 
     counters: dict[str, np.ndarray]
@@ -174,6 +181,7 @@ class SequenceTable:
     _files: tuple[ReadoutTable, ...] = dataclasses.field(repr=False)
     _first_rows: np.ndarray = dataclasses.field(repr=False)
     fov_offset_m: tuple[float, float, float] = (0.0, 0.0, 0.0)
+    diffusion: tuple[np.ndarray, np.ndarray] | None = None
 
     def __len__(self) -> int:
         return int(self.num_samples.size)
@@ -239,7 +247,10 @@ class SequenceTable:
         te: list[float] = []
         ti: list[float] = []
         flip: list[float] = []
+        diffusion = None
         for subsequence, (_, seq) in enumerate(read_chain(path)):
+            if diffusion is None:
+                diffusion = _diffusion(seq)
             definitions = SequenceDefinitions.from_sequence(seq)
             readouts = ReadoutTable.from_sequence(seq)
             part, part_spaces = _map_readouts(
@@ -301,6 +312,7 @@ class SequenceTable:
             _files=tuple(files),
             _first_rows=np.cumsum([0] + [len(file) for file in files[:-1]]),
             fov_offset_m=tuple(float(value) for value in fov_offset_m),
+            diffusion=diffusion,
         )
 
 
@@ -333,6 +345,22 @@ def _shift_phase(
     return phase if np.abs(phase).max() > 1e-9 else None
 
 
+def _diffusion(seq: Any) -> tuple[np.ndarray, np.ndarray] | None:
+    try:
+        return get_diffusion_table(seq)
+    except (OSError, ValueError) as error:
+        _log.warning("the diffusion table is not stated in the header: %s", error)
+        return None
+
+
+def _set_user_string(header: Any, name: str, value: str) -> None:
+    if header.userParameters is None:
+        header.userParameters = xsd.userParametersType()
+    strings = header.userParameters.userParameterString
+    strings[:] = [entry for entry in strings if entry.name != name]
+    strings.append(xsd.userParameterStringType(name=name, value=value))
+
+
 def enrich_header(header: Any, table: SequenceTable) -> None:
     """Write the table's encoding spaces and sequence parameters into an MRD header, in place.
 
@@ -346,7 +374,9 @@ def enrich_header(header: Any, table: SequenceTable) -> None:
     ``kspace_encoding_step_1`` and ``_2`` and the middle of the range for the
     others, and ``trajectory`` is ``OTHER`` or ``CARTESIAN``. Other fields of
     an existing encoding are kept; missing encodings are appended. Sequence
-    parameters the table holds replace the header's.
+    parameters the table holds replace the header's, and its diffusion table
+    becomes the ``diffusion_table`` user parameter string, one ``x y z b`` row
+    per volume (:func:`pulserver.mrd.diffusion_table`).
     """
     parameters = header.sequenceParameters
     if table.sequence_parameters and parameters is None:
@@ -360,6 +390,16 @@ def enrich_header(header: Any, table: SequenceTable) -> None:
     ):
         if key in table.sequence_parameters:
             setattr(parameters, field, list(table.sequence_parameters[key]))
+    if table.diffusion is not None:
+        b, g = table.diffusion
+        _set_user_string(
+            header,
+            DIFFUSION_TABLE,
+            "\n".join(
+                f"{x:.6g} {y:.6g} {z:.6g} {value:.6g}"
+                for (x, y, z), value in zip(g, b, strict=True)
+            ),
+        )
 
     encodings = list(header.encoding or ())
     for index, space in enumerate(table.spaces):
