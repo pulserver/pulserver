@@ -3,7 +3,7 @@
 Development, contribution and release procedures, the documentation
 conventions, and the implementation design behind the explanations.
 
-| Page | Scope |
+| Page | Contents |
 | --- | --- |
 | {doc}`installation` | Prerequisites, the editable installation, pre-commit hooks and the documentation build. |
 | {doc}`workflow` | Forks, branches, pull requests, continuous integration and the code of conduct. |
