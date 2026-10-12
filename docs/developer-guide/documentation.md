@@ -364,6 +364,8 @@ An explanation page has these sections, in this order. Every heading, the page t
 
 A capability is stated as the reader observes it, and every capability names a test; a claim no test holds is not listed.
 
+The concept-named heading rule covers explanation, reference and Tour headings. Two kinds of heading keep the reader's voice: Course lesson titles, and the README's *How it works*, *Learn more* and *How to cite*.
+
 Explanatory documentation may:
 
 * introduce terminology to readers outside the immediate specialty;
