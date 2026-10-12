@@ -57,11 +57,9 @@ its segments.
 
 ## What the interpreter does
 
-- **Prepares each virtual segment once and plays its instances**
-  waves into waveform memory on the schedule the cache lays out.
-- **Generates the scanner's instructions**
-  waveforms onto the scanner's rasters ({doc}`safety-checks`).
-- **Applies the prescription's rotation**
+- **Prepares each virtual segment once and plays its instances**, loading waves into waveform memory on the cache's schedule.
+- **Generates the scanner's instructions**, resampling waveforms onto the scanner's rasters ({doc}`safety-checks`).
+- **Applies the prescription's rotation**, after each block's own.
 
 ## How it works
 
@@ -106,6 +104,18 @@ A slice played with its own preparation and dummy shots is therefore one
 repetition, and a block played once makes the whole file one. The segment IDs
 of the execution stream are then run-length encoded over the shortest period
 the whole stream repeats with.
+
+```{figure} ../_static/repetition.svg
+:figclass: only-light
+
+One repetition of three segments played N times: IDs stored once, parameters per instance.
+```
+
+```{figure} ../_static/repetition-dark.svg
+:figclass: only-dark
+
+One repetition of three segments played N times: IDs stored once, parameters per instance.
+```
 
 ### Cutting virtual segments
 
@@ -154,18 +164,6 @@ integer with its step, so a sequencer that plays integers converts nothing
 while it plays. The `ir_wave_` limits state the waveform memory the waves are
 laid out for ({class}`~pulserver.ir.WaveBudget`). Every field must be stated,
 and {func}`~pulserver.ir.read_vendor` refuses a file that leaves one out.
-
-```{figure} ../_static/repetition.svg
-:figclass: only-light
-
-One repetition of three segments played N times: IDs stored once, parameters per instance.
-```
-
-```{figure} ../_static/repetition-dark.svg
-:figclass: only-dark
-
-One repetition of three segments played N times: IDs stored once, parameters per instance.
-```
 
 ### Field-of-view offset
 

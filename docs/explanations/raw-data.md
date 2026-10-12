@@ -55,12 +55,8 @@ before and after.
 
 ## What the scanner and your plugin do
 
-- **The scanner's reconstruction client**
-  design identifier and the name of the recon plugin, every readout in play
-  order including dummies, noise scans and navigators
-  ({doc}`../user-guide/reconstruction-client`).
-- **Your recon plugin**
-  counters, as described in {doc}`reconstruction`.
+- **The scanner's client** sends every readout in play order, dummies and navigators included, with the design identifier and the recon plugin's name ({doc}`../user-guide/reconstruction-client`).
+- **Your recon plugin** sorts the readouts into k-space by their counters ({doc}`reconstruction`).
 
 ## How it works
 
