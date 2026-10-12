@@ -278,8 +278,7 @@ class FourierPlayer:
 
     def _temporal(self, station: int, events, shifted, selector_of) -> _Basis | None:
         """Return the basis spanning the signals of a station's groups and atoms at its readouts' echoes; None where it excites no entry."""
-        from blochsim.sequence import EpgEngine, TissueProperties
-        from blochsim.sequence._accelerators import pack_description
+        from blochsim.sequence import EpgEngine, TissueProperties, pack_description
 
         readouts = np.flatnonzero(self._station_of == station)
         members = np.flatnonzero(self._groups[:, station] > 0)
