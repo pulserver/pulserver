@@ -4,7 +4,7 @@
 :class: tldr
 
 - Each Pulseq file becomes an IR cache in PulSeg's terms: base blocks, virtual segments prepared once, and a stream of segment instances.
-- The repetition is pypulseqpp's; segments are cut within it where the gradients are near zero.
+- The repetition is pypulseqpp's period of the block table; segments are cut within it where the gradients are near zero, under a grouping each vendor can set.
 - The interpreter reads the cache through a C89 library pulserver ships.
 ```
 
@@ -31,6 +31,9 @@ its segments.
 - **Cuts virtual segments only where every gradient is near zero, under a tunable grouping.**
 
   Code: {class}`~pulserver.ir.Grouping`. Tests: *the default grouping is what a conversion does unasked*; *a grouping moves the boundaries and not the gradient* (`test_ir_grouping.py`); *a gradient its file ends live may not end the repetition* (`test_ir.py`).
+- **Converts under the grouping and number formats a vendor file states.**
+
+  Code: {func}`~pulserver.ir.read_vendor`, `ir_vendor_file`. Tests: *a design is converted under the vendor file its limits name*; *an unreadable vendor file is refused and stores nothing* (`test_design_service.py`); *a vendor file stating anything else is refused* (`test_ir_vendor.py`).
 - **Gives repetitions that differ in pulses, timing or arbitrary gradients their own segment variant.**
 
   Code: `src/cpp/ir/`. Tests: *repetitions that play different pulses each play their own*; *repetitions whose gradients differ in timing each play their own* (`test_ir_segments.py`).
@@ -84,15 +87,73 @@ Base blocks, virtual segments and the execution stream of segment instances.
 An instance plays $\mathbf{g}(t) = R\, s\, \hat{\mathbf{g}}(t)$: the base
 block's normalised waveform, scaled by $s$ and rotated by $R$.
 
-### Repetition and virtual segments
+### Finding the repetition
 
-The repetition is the period `pypulseqpp.Sequence.repetition` reports.
-Segments are cut within it where every gradient is within
-`boundary_gradient_hz_per_m` of zero (100 Hz/m by default) and where `NOROT`
-or `PMC` changes; navigators, edge delays and runs with other RF or ADC events
-become segments of their own, up to 64 variants each
-({class}`~pulserver.ir.Grouping`). The stream's segment IDs are run-length
-encoded once per period.
+The repetition, the TR the scanner prepares for, is what
+`pypulseqpp.Sequence.repetition` reports for each file of the chain. It starts
+at the first block and is the first of these that applies:
+
+1. A `TRSize` definition in the file, when it is shorter than the sequence,
+   divides it and the blocks repeat it. This is how you declare a hyper-TR.
+2. The shortest period of the block definitions that every later block
+   repeats, the last copy possibly cut short.
+3. The shortest period dividing the sequence over which blocks match in
+   duration and in the channels they play, so that shots with their own
+   pulses or gradient shapes still repeat.
+4. Otherwise the whole file is one repetition, refused above 15 s.
+
+A slice played with its own preparation and dummy shots is therefore one
+repetition, and a block played once makes the whole file one. The segment IDs
+of the execution stream are then run-length encoded over the shortest period
+the whole stream repeats with.
+
+### Cutting virtual segments
+
+Within the repetition, a {class}`~pulserver.ir.Grouping` decides where one
+virtual segment ends and the next begins:
+
+- a boundary **may** fall between two blocks only where every gradient is
+  within `boundary_gradient_hz_per_m` of zero at the join (100 Hz/m);
+- a boundary **must** fall where the `NOROT` or `PMC` label changes, since the
+  scanner sets one prescription rotation per segment instance; a change under
+  a gradient is refused;
+- a boundary is **added** around navigator readouts (`split_navigators`),
+  around pure delays at a segment's edge (`split_edge_delays`), and between
+  runs that play other RF or ADC events (`split_by_pulses`,
+  `split_by_readouts`).
+
+A repetition whose pulses, timing or arbitrary gradients differ from the
+first plays its own variant of a segment, up to 64 per segment.
+
+### Customizing for a vendor
+
+The grouping and the number formats the cache is written in are the
+interpreter's, not the sequence's. An interpreter states them in a vendor file
+and names it with `ir_vendor_file` in the limits it sends
+({doc}`../user-guide/running`):
+
+```text
+[Grouping]
+boundary_gradient_hz_per_m: 100
+split_by_pulses: true
+split_by_readouts: true
+split_navigators: true
+split_edge_delays: true
+[Grouping End]
+[VendorProfile]
+grad_sample: float32 0
+...
+[VendorProfile End]
+```
+
+A sequencer that can start a segment under a gradient states a large
+`boundary_gradient_hz_per_m`; one that inserts switching time at every
+boundary sets `split_edge_delays: false` to keep segments few. The
+`[VendorProfile]` block gives each waveform and amplitude as a float or as an
+integer with its step, so a sequencer that plays integers converts nothing
+while it plays. The `ir_wave_` limits state the waveform memory the waves are
+laid out for ({class}`~pulserver.ir.WaveBudget`). Every field must be stated,
+and {func}`~pulserver.ir.read_vendor` refuses a file that leaves one out.
 
 ```{figure} ../_static/repetition.svg
 :figclass: only-light
@@ -106,10 +167,8 @@ One repetition of three segments played N times: IDs stored once, parameters per
 One repetition of three segments played N times: IDs stored once, parameters per instance.
 ```
 
-### Non-periodic sequences and the field-of-view offset
+### Field-of-view offset
 
-A subsequence that does not repeat is one repetition, segmented the same way;
-one longer than 15 s is refused, a limit of pulserver's playout memory model.
 The offset is applied by {func}`~pulserver.ir.prescribe` as RF and ADC
 frequency and phase offsets at the middle of each window; the remaining phase
 under a varying readout gradient is applied by the proxy ({doc}`raw-data`).
