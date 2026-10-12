@@ -28,9 +28,9 @@ def gradient_tolerance_mt_per_m(
 
     Parameters
     ----------
-    max_slew_t_per_m_per_s
+    max_slew_t_per_m_per_s : float
         Maximum slew rate, in T/m/s.
-    raster_us
+    raster_us : float
         Gradient raster time, in µs.
     """
     # A slew in T/m/s over a raster in us is mT/m once per thousand.
@@ -143,14 +143,14 @@ def compare_shape(
 
     Parameters
     ----------
-    asked_time_us, asked
+    asked_time_us, asked : NDArray[np.float64]
         Sample times in µs and amplitudes the sequence asks for.
-    played_time_us, played
+    played_time_us, played : NDArray[np.float64]
         Sample times in µs and amplitudes of the recording, in counts. The
         sequence is interpolated at these times, zero outside its extent.
-    channel
+    channel : str
         Name recorded in the result.
-    tolerance_percent
+    tolerance_percent : float
         Largest root mean square difference, as a percentage of the peak.
 
     Returns
@@ -205,15 +205,15 @@ def compare_gradients(
 
     Parameters
     ----------
-    asked
+    asked : dict[str, tuple[NDArray[np.float64], NDArray[np.float64]]]
         What the sequence asks for.
-    played
+    played : dict[str, tuple[NDArray[np.float64], NDArray[np.float64]]]
         What is being checked against.
-    reference
+    reference : str
         Names what ``played`` is, for :attr:`Comparison.reference`.
-    shift_us
+    shift_us : float, default=0.0
         Subtracted from the times of ``played`` before comparing, in µs.
-    tolerance_mt_per_m
+    tolerance_mt_per_m : float, default=0.05
         The largest difference that still counts as agreement, in mT/m.
 
     Returns

@@ -37,9 +37,9 @@ def read_chain(path: Path | str, *, verify: bool = False) -> list[tuple[Path, An
 
     Parameters
     ----------
-    path
+    path : Path | str
         The first file of the chain.
-    verify
+    verify : bool, default=False
         Refuse a file whose contents do not match the signature it carries. A
         file carrying none is read either way.
 

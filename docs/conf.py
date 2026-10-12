@@ -332,6 +332,8 @@ html_theme_options = {
     },
     "check_switcher": False,
     "show_version_warning_banner": True,
+    # The header carries no search field of its own: the sidebar's is the one.
+    "navbar_persistent": [],
     # The sidebar carries the sections and their pages, not every object:
     # individual objects are reached from the tables on the API pages, whose
     # stubs are generated from `docs/api_objects.rst` and so never enter this

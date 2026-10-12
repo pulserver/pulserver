@@ -146,11 +146,11 @@ class EncodingSpace:
 
         Parameters
         ----------
-        header
+        header : ismrmrd.xsd.ismrmrdHeader
             Parsed MRD header.
-        index
+        index : int, default=0
             Position in the header's encoding list.
-        loops
+        loops : Iterable[str], default=None
             Counters to lay out as axes where the header gives them more than one
             value, in the order of :data:`LOOP_COUNTERS` followed by ``segment``;
             ``None`` takes every counter of :data:`LOOP_COUNTERS`.

@@ -50,7 +50,7 @@ class Prewhiten(Gadget):
 
     Parameters
     ----------
-    required
+    required : bool, default=False
         Raise :class:`~pulserver.recon.MissingCalibration`, rather than log a
         warning, at the first readout that is not noise when there is no ``W``
         to apply.

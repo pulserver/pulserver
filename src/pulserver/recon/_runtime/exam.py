@@ -64,11 +64,11 @@ class ExamCacheManager:
 
     Parameters
     ----------
-    resolver
+    resolver : Callable[[Any], Hashable], default=None
         Returns a header's exam identifier, or ``None``; :func:`resolve_exam_id`
         by default. A header without one gets a cache of its own that is never
         shared.
-    directory
+    directory : Path | str, default=None
         Where each exam's cache gets a directory of its own (see
         :class:`~pulserver.recon.ExamCache`), removed when the cache closes;
         ``None`` keeps caches in memory.

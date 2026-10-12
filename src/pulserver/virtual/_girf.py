@@ -17,11 +17,11 @@ class Girf:
 
     Parameters
     ----------
-    impulse
+    impulse : np.ndarray
         ``(taps, 3)`` the response along x, y and z at ``taps`` delays
         ``dt_s`` apart from zero, in 1/s; each column's sum times ``dt_s`` is
         the axis's gain at zero frequency.
-    dt_s
+    dt_s : float
         The spacing of the delays, in s.
     """
 

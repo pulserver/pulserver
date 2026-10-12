@@ -53,18 +53,18 @@ def playout(
 
     Parameters
     ----------
-    seq_path
+    seq_path : Path | str
         The first file of the chain; the cache is the file beside it.
-    budget
+    budget : WaveBudget, default=None
         The waveform memory the waves are held in; None takes the cache's own
         layout.
-    waveforms
+    waveforms : bool, default=False
         Also return what each block plays, under the keys of :func:`play`.
-    pulses
+    pulses : bool, default=True
         With ``waveforms``, include the RF pulses.
-    prescan
+    prescan : Prescan, default=None
         Play this receive-gain calibration instead of the scan.
-    cache_ext
+    cache_ext : str, default='.pseg'
         Extension of the cache, dot included.
 
     Returns

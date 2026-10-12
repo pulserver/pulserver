@@ -202,7 +202,7 @@ def chain(seq_path: Path | str) -> list[Path]:
 
     Parameters
     ----------
-    seq_path
+    seq_path : Path | str
         The first file of the chain.
 
     Returns
@@ -253,44 +253,44 @@ def convert(
 
     Parameters
     ----------
-    seq_path
+    seq_path : Path | str
         Text or binary Pulseq file.
-    system
+    system : pypulseqpp.Opts
         Limits and rasters the scan is segmented under.
-    fov_offset
+    fov_offset : Sequence[float], default=None
         Translation of the field-of-view centre along the logical readout,
         phase and slice axes, in metres. None or zero leaves the files as
         designed.
-    vendor
+    vendor : int, default=0
         ``PULSEG_VENDOR_*`` code; 0 is vendor-neutral.
-    label_column_map
+    label_column_map : Sequence[int], default=(0, 1, 2)
         Pulseq label state indices filling the three ADC label columns:
         0 SLC, 1 PHS, 2 REP, 3 AVG, 4 SEG, 5 SET, 6 ECO, 7 PAR, 8 LIN, 9 ACQ.
-    cache_ext
+    cache_ext : str, default='.pseg'
         Extension of the cache file, dot included.
-    verify_signature
+    verify_signature : bool, default=True
         Refuse a file whose contents do not match the signature it carries. A
         file carrying none is read either way.
-    sar_ratios
+    sar_ratios : Sequence[SarRatio], default=None
         One per file of the chain, as :func:`sar_ratios` returns them, written
         into each subsequence of the cache; zero when None.
-    spl_levels
+    spl_levels : Sequence[SplLevels], default=None
         One per file of the chain, as :func:`spl_levels` returns them, written
         into each subsequence of the cache, 0 dB for a file without
         gradients; -1 when None.
-    profile
+    profile : VendorProfile, default=None
         What the cache holds its numbers as; every quantity a float in its SI
         unit when left out.
-    grouping
+    grouping : Grouping, default=None
         How the blocks of a repetition are grouped into virtual segments.
         Left out, ``Grouping()``: a boundary falls only where every gradient
         is within 100 Hz/m of zero, and must fall where the ``NOROT`` or
         ``PMC`` label changes.
-    wave_budget
+    wave_budget : WaveBudget, default=None
         The waveform memory of the playout the cache is for, which the cache
         lays the waves out in (:func:`plan_waves`); None holds every wave at
         once on the gradient raster of the chain's first file.
-    designed
+    designed : list[tuple[Path, pypulseqpp.Sequence]], default=None
         ``(path, sequence)`` pairs of the chain as ``mrd._sequence.designed_chain``
         returns them, segmented in place of reading and verifying the files
         and moved to ``fov_offset`` in place.
@@ -417,17 +417,17 @@ def summary(
 
     Parameters
     ----------
-    seq_path
+    seq_path : Path | str
         Text or binary Pulseq file, the first of its ``NextSequence`` chain.
-    system
+    system : pypulseqpp.Opts
         Limits and rasters the chain is segmented under; unused with
         ``cache_ext``.
-    cache_ext
+    cache_ext : str, default=None
         Extension of the cache beside the file, dot included. When given, that
         cache is loaded instead of the chain being read and segmented again;
         this build loads only vendor-neutral caches, and only when the size
         recorded in the cache matches the file.
-    label_column_map
+    label_column_map : Sequence[int], default=(0, 1, 2)
         Label state indices of the three readout label columns, as for
         :func:`convert`; unused with ``cache_ext``.
 
@@ -459,9 +459,9 @@ def prescribe(sequence: pp.Sequence, fov_offset: Sequence[float]) -> pp.Sequence
 
     Parameters
     ----------
-    sequence
+    sequence : pypulseqpp.Sequence
         One file of a chain, as designed.
-    fov_offset
+    fov_offset : Sequence[float]
         Translation along the logical readout, phase and slice axes, in metres.
 
     Returns
@@ -507,11 +507,11 @@ def play(
 
     Parameters
     ----------
-    seq_path
+    seq_path : Path | str
         The first file of the chain; the cache is the file beside it.
-    cache_ext
+    cache_ext : str, default='.pseg'
         Extension of the cache, dot included.
-    waveforms
+    waveforms : bool, default=False
         Also return the samples and corners each block plays.
 
     Returns

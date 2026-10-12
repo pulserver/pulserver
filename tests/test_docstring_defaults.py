@@ -1,7 +1,8 @@
-"""Every parameter a docstring documents is one the signature has, at its default.
+"""Every parameter a docstring documents is one the signature has, typed and at its default.
 
-A Parameters entry names a parameter of the callable it documents, and a
-default it states as ``default=value`` is the signature's. The sources are
+A Parameters entry reads ``name : type`` and names a parameter of the callable
+it documents; a parameter with a default states it as ``default=value``, the
+signature's. The sources are
 parsed rather than imported, so the check needs no compiled extension.
 """
 
@@ -127,8 +128,14 @@ def test_documented_parameters_match_the_signature(path, owner, function, doc):
         if name not in defaults:
             errors.append(f"{name} is documented but is not a parameter")
             continue
+        if not spec.strip():
+            errors.append(f"{name} states no type")
+        if "optional" in spec:
+            errors.append(f"{name} says optional rather than default=value")
         match = DEFAULT.search(spec)
         if match is None:
+            if defaults[name] is not None:
+                errors.append(f"{name} omits default={defaults[name]}")
             continue
         stated, expected = match.group(1).strip(), defaults[name]
         if expected is None:
@@ -147,7 +154,7 @@ def f(x, *, step=0.5):
 
     Parameters
     ----------
-    x
+    x : float
         The input.
     steps : float, default=0.5
         Stale name.

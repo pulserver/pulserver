@@ -74,18 +74,18 @@ class Phantom:
 
     Parameters
     ----------
-    ellipses
+    ellipses : Sequence[Ellipse]
         The object.
-    coils
+    coils : int, default=1
         Receive channels.
-    period
+    period : float, default=0.5
         Spatial period of the sensitivities, in metres.
-    depth
+    depth : float, default=0.5
         Their modulation depth.
-    rotation
+    rotation : np.ndarray, default=None
         ``(3, 3)`` orthonormal matrix from the phantom's axes to the physical
         ones, a reflection included; the identity by default.
-    position
+    position : Sequence[float], default=(0.0, 0.0, 0.0)
         Physical location of the phantom's origin, in metres.
     """
 

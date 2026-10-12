@@ -164,18 +164,18 @@ def coil_maps(
 
     Parameters
     ----------
-    context
+    context : ReconContext
         Scan context; its ``device`` is where the estimate runs and the maps
         are returned.
-    data
+    data : ReconData
         The unit that needs maps; ``data.counters["slice"]`` is its slice,
         0 when the unit has no such counter.
-    estimate
+    estimate : callable
         ``estimate(kspace) -> maps``, such as :func:`bartorch.apps.nlinv_maps`.
         ``kspace`` is the calibration k-space of the unit as a torch tensor
         ``(coils, [z,] y, x)``, zero outside the lines it holds, on the grid of
         its encoding space; ``maps`` are the sensitivities on the same grid.
-    required
+    required : bool, default=True
         Return ``None``, rather than raise, when no source has usable maps.
 
     Returns
@@ -248,7 +248,7 @@ class CoilCompression:
 
     Parameters
     ----------
-    n_virtual
+    n_virtual : int
         Virtual channels kept, at most the number of channels of the first
         unit.
     """

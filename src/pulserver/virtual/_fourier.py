@@ -147,28 +147,28 @@ class FourierPlayer:
 
     Parameters
     ----------
-    seq_path
+    seq_path : Path | str
         The first file of the sequence's chain, beside its cache.
-    tissue
+    tissue : Tissue
         The phantom's tissue.
-    cache_ext
+    cache_ext : str, default='.pseg'
         The extension of the cache beside each file.
-    rotation
+    rotation : np.ndarray, default=None
         ``(3, 3)`` rotation of the prescription from logical to physical axes;
         the identity by default.
-    centre
+    centre : np.ndarray, default=None
         ``(3,)`` the prescription's centre along the physical axes, in m; the
         isocentre by default. Pulse and receiver phases are taken in the frame
         of this centre.
-    device
+    device : torch.device | str, default=None
         Where the simulation runs; a card where there is one by default.
-    tolerance
+    tolerance : float, default=TOLERANCE
         Relative residual to which the temporal and readout bases span the
         signals; :data:`TOLERANCE` by default.
-    motion
+    motion : RigidMotion, default=None
         How the subject moves, at each readout's echo; it moves its encoding
         alone, its excitation, relaxation and coil sensitivities following it.
-    girf
+    girf : Girf, default=None
         The impulse response the gradients play through.
 
     Attributes

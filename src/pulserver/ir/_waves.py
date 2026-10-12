@@ -30,12 +30,12 @@ def plan_waves(
 
     Parameters
     ----------
-    seq_path
+    seq_path : Path | str
         The first file of the chain; the cache is the file beside it.
-    budget
+    budget : WaveBudget, default=None
         The waveform memory to lay the waves out for; None reads the layout
         the cache carries.
-    cache_ext
+    cache_ext : str, default='.pseg'
         Extension of the cache, dot included.
 
     Returns
@@ -93,16 +93,16 @@ def sample_wave(
 
     Parameters
     ----------
-    seq_path
+    seq_path : Path | str
         The first file of the chain; the cache is the file beside it.
-    wave
+    wave : tuple[int, int]
         ``(subsequence, index)``.
-    region
+    region : dict[str, Any]
         One region of the layout :func:`plan_waves` returns.
-    budget
+    budget : WaveBudget
         The budget the layout was planned for; its ``raster_us`` is the sampling
         interval.
-    cache_ext
+    cache_ext : str, default='.pseg'
         Extension of the cache, dot included.
 
     Returns
@@ -155,13 +155,13 @@ def repetition_gradients(
 
     Parameters
     ----------
-    seq_path
+    seq_path : Path | str
         The first file of the chain; the cache is the file beside it.
-    subsequence
+    subsequence : int, default=0
         Index of the subsequence, in chain order.
-    raster_us
+    raster_us : float, default=None
         Gradient raster in µs for ``samples_hz_per_m``; None omits it.
-    cache_ext
+    cache_ext : str, default='.pseg'
         Extension of the cache, dot included.
 
     Returns

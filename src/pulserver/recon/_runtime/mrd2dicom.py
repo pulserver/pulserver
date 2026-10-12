@@ -123,7 +123,7 @@ class MrdDicomBuilder:
 
     Parameters
     ----------
-    mrdHead
+    mrdHead : ismrmrd.xsd.ismrmrdHeader
         Parsed MRD XML header of the series.
 
     Raises
