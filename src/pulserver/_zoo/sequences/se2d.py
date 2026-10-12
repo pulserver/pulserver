@@ -14,8 +14,8 @@ from pulserver.design import (
 )
 from pulserver.protocol import ImagingMode, TEPreset, TRPreset, UIParam
 
-#: Explicit saturation bands the sequence plays, prescribed on the console's
-#: graphic Rx and always on; 0 plays none.
+#: Explicit saturation bands the console may place, each played while it is
+#: placed; 0 offers none.
 BANDS = 2
 
 

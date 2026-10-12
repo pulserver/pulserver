@@ -62,13 +62,13 @@ def _reconstructed(directory, wave, device):
     """The image the pics reconstruction makes of a gre3d scan of the slab, the wave on or off."""
     plugins = directory / "plugins"
     plugins.mkdir()
-    source = (_plugins.SEQUENCES / "gre3d.py").read_text()
-    if wave:
-        assert "\nWAVE = False\n" in source
-        source = source.replace("\nWAVE = False\n", "\nWAVE = True\n")
-    (plugins / "gre3d.py").write_text(source)
+    (plugins / "gre3d.py").write_text((_plugins.SEQUENCES / "gre3d.py").read_text())
+    (directory / "parameters" / "gre3d").mkdir(parents=True)
+    (directory / "parameters" / "gre3d" / "01.toml").write_text("wave = true\n")
     store = DesignStore(directory / "designs")
-    design = generate(store, "gre3d", PROTOCOL, plugins=plugins)
+    design = generate(
+        store, "gre3d", PROTOCOL, plugins=plugins, parameter_set=1 if wave else 0
+    )
     acquired = acquire(store.directory(design) / "sequence.seq", _slab())
     virtual.record(directory / "raw.h5", design, acquired)
 

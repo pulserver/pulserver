@@ -44,6 +44,19 @@ def _parser() -> argparse.ArgumentParser:
                 help="directory of <plugin>.py, repeatable; the first holding it is used",
             )
             sub.add_argument("--plugin", required=True, help="scanner-sequence plugin")
+            sub.add_argument(
+                "--parameter-set",
+                type=int,
+                default=0,
+                help="load the plugin with the options of parameters/<script>/<NN>.toml; "
+                "0, the default, loads it with its own",
+            )
+            sub.add_argument(
+                "--parameters",
+                type=Path,
+                help="directory of the parameter files, by default the parameters "
+                "directory beside the plugin directory",
+            )
         if limits:
             sub.add_argument(
                 "--limits",
@@ -173,6 +186,10 @@ def request(args: argparse.Namespace, block: str) -> dict[str, Any]:
     if getattr(args, "plugin", None) is not None:
         found["plugins"] = [str(path.absolute()) for path in args.plugins]
         found["plugin"] = args.plugin
+        if args.parameter_set:
+            found["parameter_set"] = args.parameter_set
+        if args.parameters is not None:
+            found["parameters"] = str(args.parameters.absolute())
     if getattr(args, "limits", None) is not None:
         found["limits"] = args.limits.read_text()
     if getattr(args, "store", None) is not None:

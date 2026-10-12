@@ -1,0 +1,2 @@
+# Every phase encode of the ky-kz plane, not only those inside its ellipse.
+elliptical = false

@@ -15,13 +15,14 @@ from pulserver.design import (
     SequencePlugin,
     StatedParam,
     TimeParam,
+    option,
 )
 from pulserver.protocol import ImagingMode, TriggerType, TRPreset, UIParam
 
 #: ECG gating is retrospective: each segment cycled over a heartbeat, binned
 #: into cardiac phases by the reconstruction. Prospective otherwise: each
 #: heartbeat triggered and acquired once per cardiac phase.
-RETROSPECTIVE = False
+RETROSPECTIVE = option("retrospective", False)
 
 
 class Bssfp2D(SequencePlugin):

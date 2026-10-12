@@ -24,6 +24,7 @@ from pulserver._zoo._evaluation import arguments, dummies, rf_layout
 from pulserver._zoo._slab import slab
 from pulserver._zoo._user import user_entries
 from pulserver.design import (
+    ChoiceParam,
     Evaluation,
     FloatParam,
     IntParam,
@@ -31,22 +32,20 @@ from pulserver.design import (
     StatedParam,
     TimeParam,
 )
-from pulserver.protocol import ImagingMode, TEPreset, TRPreset, UIParam
-
-#: The slab's excitation, one of ``sequences.EXCITATIONS``. ``"spsp"`` excites
-#: water alone, which keeps fat, shifted many pixels along the phase encode,
-#: out of the image without a fat saturation pulse.
-EXCITATION = "spsp"
+from pulserver.protocol import Excitation, ImagingMode, TEPreset, TRPreset, UIParam
 
 
 class Epi3D(SequencePlugin):
     # Twofold readout oversampling keeps the ramp-sampled flat top within the
     # spacing of the readout field of view, so it can be resampled onto a grid.
-    app = slab(
-        functools.partial(epi3d, readout_oversampling=2.0, excitation=EXCITATION)
-    )
+    app = slab(functools.partial(epi3d, readout_oversampling=2.0))
     protocol = {
         UIParam.IMAGING_MODE: StatedParam(ImagingMode.THREE_D),
+        # Water alone by default: fat, shifted many pixels along the phase
+        # encode, stays out of the image without a fat saturation pulse.
+        UIParam.EXCITATION: ChoiceParam(
+            "excitation", Excitation, default=Excitation.SPSP
+        ),
         UIParam.FLIP: FloatParam(
             "flip_angle_deg", unit="deg", range_min=1.0, range_max=90.0
         ),
