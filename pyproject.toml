@@ -29,8 +29,8 @@ dependencies = [
   "ismrmrd>=1.15.0",
   "pydicom>=3.0.2",
   "torch>=2.4",
-  "blochsim>=0.0.10",
-  "bartorch>=0.0.13",
+  "blochsim>=0.0.12",
+  "bartorch>=0.0.14",
   # The virtual scanner's BrainWeb phantom and its console's server.
   "brainweb-dl>=0.4.6",
   "websockets>=16.1.1",
