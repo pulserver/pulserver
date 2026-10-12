@@ -581,14 +581,21 @@ def test_an_evaluation_states_as_its_layout_a_regular_tr_of_the_design(
     # than scaled by it.
     scaled = UIParam.FLIP in plugin.protocol and not name.startswith("fse3d")
     expected = rf_layout(main, scaled, start=start)
+    amplitude = expected.instances.amplitude.copy()
+    if name in OPTIMIZED:
+        # A train holds the pulses of the longest train, those beyond its own
+        # length at zero amplitude; the layout plays them all.
+        uses = [
+            expected.instances.definitions[n].use for n in expected.instances.definition
+        ]
+        refocusing = np.array([use == "refocusing" for use in uses])
+        amplitude[refocusing] = amplitude[refocusing].max()
     assert layout.period == pytest.approx(expected.period, rel=1e-12)
     assert layout.instances.definition.tolist() == (
         expected.instances.definition.tolist()
     )
     assert layout.control == expected.control
-    assert layout.instances.amplitude == pytest.approx(
-        expected.instances.amplitude, rel=1e-9
-    )
+    assert layout.instances.amplitude == pytest.approx(amplitude, rel=1e-9)
     definitions = layout.instances.definitions
     assert [d.use for d in definitions] == [
         d.use for d in expected.instances.definitions
@@ -780,6 +787,57 @@ def test_changing_the_flip_angle_scales_exactly_the_instances_a_zoo_layout_marks
     assert marked.any()
     assert ratio[marked] == pytest.approx(0.5, rel=1e-9)
     assert ratio[~marked] == pytest.approx(1.0, rel=1e-9)
+
+
+def test_a_shuffled_fse_states_the_layout_of_the_radial_order_at_its_default_protocol(
+    zoo,
+):
+    shuffled = zoo["fse3d+SHUFFLING"]
+    radial = zoo["fse3d"]
+
+    layout = shuffled.evaluate(SYSTEM, _protocol(shuffled)).rf_layout
+    expected = radial.evaluate(SYSTEM, _protocol(radial)).rf_layout
+
+    assert layout.instances.definition.tolist() == (
+        expected.instances.definition.tolist()
+    )
+    assert layout.instances.amplitude.tolist() == expected.instances.amplitude.tolist()
+    assert layout.period == expected.period
+
+
+@WITH_BLOCHSIM
+def test_a_dual_region_fse_layout_plays_at_least_the_rf_power_of_every_train(zoo):
+    plugin = zoo["fse3d+DUAL_REGION"]
+    protocol = _protocol(
+        plugin,
+        {
+            "nslices": 16,
+            "etl": 10,
+            "nx": 64,
+            "ny": 32,
+            "TR": 1000000,
+            "user12_value": 300.0,
+            "user13_value": 20,
+            "flip": 180.0,
+        },
+    )
+
+    layout = plugin.evaluate(SYSTEM, protocol).rf_layout
+    main = _main(plugin, protocol)
+
+    instances = main.rf_instances()
+    uses = [instances.definitions[number].use for number in instances.definition]
+    pulses = np.flatnonzero(main.libraries().blocks[:, 0])
+    starts = [
+        int(block)
+        for block, use in zip(pulses, uses, strict=True)
+        if use == "excitation"
+    ]
+    ends = np.cumsum(main.libraries().block_durations)
+    for first, last in zip(starts, [*starts[1:], ends.size], strict=True):
+        duration = ends[last - 1] - (ends[first - 1] if first else 0.0)
+        power = main.calc_rf_power(block_range=(first + 1, last))[3] / duration
+        assert _layout_power(layout) >= power
 
 
 @pytest.mark.parametrize("name", SPIN_ECHO)

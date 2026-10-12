@@ -2,6 +2,7 @@
 
 import functools
 
+import numpy as np
 import pypulseqpp as pp
 from pypulseqpp.sequences.sequence.fse3D_sequence import (
     SHUFFLE_SEED,
@@ -18,6 +19,7 @@ from pulserver.design import (
     Evaluation,
     FloatParam,
     IntParam,
+    RfLayout,
     SequencePlugin,
     StatedParam,
     TimeParam,
@@ -135,8 +137,9 @@ class Fse3D(SequencePlugin):
 
     def evaluate(self, system, protocol):
         # A TR is one echo train. The design of the centre view plays one
-        # train of the full length at the centre's TR, at a constant
-        # refocusing angle standing in for an optimized train.
+        # train of the full length at a constant refocusing angle standing in
+        # for an optimized train. The RF of a train does not depend on the
+        # view order.
         a = arguments(self, protocol)
         one = {
             "n_dummy": 0,
@@ -145,6 +148,7 @@ class Fse3D(SequencePlugin):
             "n_acs_y": 0,
             "n_acs_z": 0,
             "flip_modulation": "constant",
+            "ordering": "radial",
         }
         train = self.app(system, **(protocol.arguments | one))
         calibrating, imaging = pp.make_cartesian_plane_sampling(
@@ -177,5 +181,26 @@ class Fse3D(SequencePlugin):
         return Evaluation(
             protocol.replace(achieved(self, train)),
             (a["n_dummy"] + references) * times[0] + sum(times),
-            rf_layout=rf_layout(train, scaled=False),
+            rf_layout=_longest_train(train, min(times)),
         )
+
+
+def _longest_train(train: pp.Sequence, period: float) -> RfLayout:
+    """Return the RF layout of the longest train of the scan at its shortest TR.
+
+    A train holds as many refocusing pulses as the longest train, those beyond
+    its own length at zero amplitude; the layout plays them all at the nominal
+    refocusing angle.
+    """
+    layout = rf_layout(train, scaled=False, period=period)
+    instances = layout.instances
+    refocusing = np.array(
+        [instances.definitions[n].use == "refocusing" for n in instances.definition]
+    )
+    amplitude = instances.amplitude.copy()
+    amplitude[refocusing] = amplitude[refocusing].max()
+    return RfLayout(
+        pp.RfInstances(instances.definitions, instances.definition, amplitude),
+        layout.control,
+        period,
+    )
