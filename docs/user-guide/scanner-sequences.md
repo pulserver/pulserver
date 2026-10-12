@@ -448,8 +448,9 @@ TENSOR_SUFFIX = ".dat"
 
 def dwi(system, table=1, b_value=1000.0, directions=30):
     seq = pp.Sequence(system)
-    path = os.path.join(TENSOR_DIRECTORY, f"{TENSOR_PREFIX}{table}{TENSOR_SUFFIX}")
-    b, g = pp.io.set_diffusion_table(seq, path, b_value=b_value, directions=directions)
+    name = f"{TENSOR_PREFIX}{table}{TENSOR_SUFFIX}"
+    path = os.path.join(TENSOR_DIRECTORY, name)
+    b, g = pp.io.set_diffusion_table(seq, path, b_value, directions)
     for volume, (b_volume, direction) in enumerate(zip(b, g)):
         ...  # one volume, its REP label set to `volume`
     return seq
@@ -458,10 +459,9 @@ def dwi(system, table=1, b_value=1000.0, directions=30):
 class Dwi(SequencePlugin):
     app = dwi
     protocol = {
-        UIParam.DIFFUSION_TABLE: IntParam("table", range_min=1, range_max=99999),
-        UIParam.DIFFUSION_BVALUES: FloatParam("b_value", unit="s/mm²",
-                                              range_min=0.0, range_max=10000.0),
-        UIParam.DIFFUSION_DIRECTIONS: IntParam("directions", range_min=1, range_max=512),
+        UIParam.DIFFUSION_TABLE: IntParam("table", range_min=1),
+        UIParam.DIFFUSION_BVALUES: FloatParam("b_value", unit="s/mm²"),
+        UIParam.DIFFUSION_DIRECTIONS: IntParam("directions", range_min=1),
     }
 ```
 
