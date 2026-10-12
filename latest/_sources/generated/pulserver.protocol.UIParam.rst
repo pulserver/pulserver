@@ -36,6 +36,8 @@
    ~UIParam.DIFFUSION_TABLE
    ~UIParam.ENABLE_SATURATION_UI
    ~UIParam.ETL
+   ~UIParam.EXCITATION
+   ~UIParam.EXSAT_MASK
    ~UIParam.FAT_SAT
    ~UIParam.FLIP
    ~UIParam.FOV

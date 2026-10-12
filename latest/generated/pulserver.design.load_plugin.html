@@ -504,10 +504,18 @@
 <dd><p>Import a plugin file and instantiate the one SequencePlugin it defines.</p>
 <p>The module is registered as <code class="docutils literal notranslate"><span class="pre">pulserver_plugin_&lt;file</span> <span class="pre">stem&gt;</span></code>; loading
 another file with the same stem replaces it. A subclass of
-<a class="reference internal" href="pulserver.design.ScannerSequence.html#pulserver.design.ScannerSequence" title="pulserver.design.ScannerSequence"><code class="xref py py-class docutils literal notranslate"><span class="pre">ScannerSequence</span></code></a> is a plugin too.</p>
+<a class="reference internal" href="pulserver.design.ScannerSequence.html#pulserver.design.ScannerSequence" title="pulserver.design.ScannerSequence"><code class="xref py py-class docutils literal notranslate"><span class="pre">ScannerSequence</span></code></a> is a plugin too. <code class="docutils literal notranslate"><span class="pre">options</span></code> are the values the
+plugin’s <a class="reference internal" href="pulserver.design.option.html#pulserver.design.option" title="pulserver.design.option"><code class="xref py py-func docutils literal notranslate"><span class="pre">option()</span></code></a> calls return in place of their
+defaults, as a parameter file states them. The instance’s <code class="docutils literal notranslate"><span class="pre">options</span></code>
+attribute holds every option the plugin declares, at the value it was
+loaded with.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Raises<span class="colon">:</span></dt>
-<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.15)"><strong>ValueError</strong></a> – If the file defines no SequencePlugin subclass, or more than one.</p>
+<dd class="field-odd"><ul class="simple">
+<li><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.15)"><strong>ValueError</strong></a> – If the file defines no SequencePlugin subclass, or more than one.</p></li>
+<li><p><a class="reference internal" href="pulserver.design.OptionError.html#pulserver.design.OptionError" title="pulserver.design.OptionError"><strong>OptionError</strong></a> – If <code class="docutils literal notranslate"><span class="pre">options</span></code> names an option the plugin does not declare, or gives
+    one a value it does not take.</p></li>
+</ul>
 </dd>
 </dl>
 </dd></dl>

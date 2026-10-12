@@ -487,6 +487,7 @@
             <nav aria-label="Page">
                 <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#sequence">Sequence</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#options">Options</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#rf-layout">RF layout</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#ui-entries">UI entries</a></li>
 </ul>
@@ -537,6 +538,33 @@ control variable, are described in <a class="reference internal" href="../explan
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="../generated/pulserver.design.load_exam.html#pulserver.design.load_exam" title="pulserver.design.load_exam"><code class="xref py py-obj docutils literal notranslate"><span class="pre">load_exam</span></code></a></p></td>
 <td><p>Open the cache of the current exam, given to a design hook as <code class="docutils literal notranslate"><span class="pre">exam</span></code>.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section id="options">
+<h2>Options<a class="headerlink" href="#options" title="Link to this heading">#</a></h2>
+<p>A plugin’s options are module constants a parameter file sets when the plugin
+is loaded, so that they shape its sequence function and the protocol it
+declares. A design call selects the file by number: set <code class="docutils literal notranslate"><span class="pre">N</span></code> of a plugin whose
+file is <code class="docutils literal notranslate"><span class="pre">&lt;script&gt;.py</span></code> is <code class="docutils literal notranslate"><span class="pre">parameters/&lt;script&gt;/&lt;NN&gt;.toml</span></code>, and set 0 loads the
+plugin with its defaults.</p>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Object</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.design.option.html#pulserver.design.option" title="pulserver.design.option"><code class="xref py py-obj docutils literal notranslate"><span class="pre">option</span></code></a></p></td>
+<td><p>The value of an option: the parameter file’s, else its default.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="../generated/pulserver.design.read_options.html#pulserver.design.read_options" title="pulserver.design.read_options"><code class="xref py py-obj docutils literal notranslate"><span class="pre">read_options</span></code></a></p></td>
+<td><p>The options a parameter file sets.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.design.OptionError.html#pulserver.design.OptionError" title="pulserver.design.OptionError"><code class="xref py py-obj docutils literal notranslate"><span class="pre">OptionError</span></code></a></p></td>
+<td><p>An option a parameter file sets that the plugin does not declare or take.</p></td>
 </tr>
 </tbody>
 </table>
@@ -657,6 +685,7 @@ one TR in play order and the protocol entry each instance’s amplitude follows
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#sequence">Sequence</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#options">Options</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#rf-layout">RF layout</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#ui-entries">UI entries</a></li>
 </ul>

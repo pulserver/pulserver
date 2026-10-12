@@ -28,6 +28,7 @@
    :toctree:
    :nosignatures:
 
+   ~ScannerSequence.options
    ~ScannerSequence.protocol
    ~ScannerSequence.reads_exam
    ~ScannerSequence.app

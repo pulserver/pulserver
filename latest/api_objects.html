@@ -514,40 +514,49 @@ from.</p>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.design.load_exam.html#pulserver.design.load_exam" title="pulserver.design.load_exam"><code class="xref py py-obj docutils literal notranslate"><span class="pre">load_exam</span></code></a></p></td>
 <td><p>Return the cache of the exam whose directory a design hook was given.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.design.RfLayout.html#pulserver.design.RfLayout" title="pulserver.design.RfLayout"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RfLayout</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.design.option.html#pulserver.design.option" title="pulserver.design.option"><code class="xref py py-obj docutils literal notranslate"><span class="pre">option</span></code></a></p></td>
+<td><p>Return the value of a plugin option: the parameter file's where it sets <code class="docutils literal notranslate"><span class="pre">name</span></code>, else <code class="docutils literal notranslate"><span class="pre">default</span></code>.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.design.read_options.html#pulserver.design.read_options" title="pulserver.design.read_options"><code class="xref py py-obj docutils literal notranslate"><span class="pre">read_options</span></code></a></p></td>
+<td><p>Return the options a parameter file sets, a TOML table of option names and values.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.design.OptionError.html#pulserver.design.OptionError" title="pulserver.design.OptionError"><code class="xref py py-obj docutils literal notranslate"><span class="pre">OptionError</span></code></a></p></td>
+<td><p>An option a parameter file sets that the plugin does not declare or take.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.design.RfLayout.html#pulserver.design.RfLayout" title="pulserver.design.RfLayout"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RfLayout</span></code></a></p></td>
 <td><p>The RF definitions a plugin plays and the instances of one TR.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.design.RfControl.html#pulserver.design.RfControl" title="pulserver.design.RfControl"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RfControl</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.design.RfControl.html#pulserver.design.RfControl" title="pulserver.design.RfControl"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RfControl</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.design.TimeParam.html#pulserver.design.TimeParam" title="pulserver.design.TimeParam"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TimeParam</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.design.TimeParam.html#pulserver.design.TimeParam" title="pulserver.design.TimeParam"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TimeParam</span></code></a></p></td>
 <td><p>A time UI entry bound to an argument of the sequence function, in seconds.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.design.FloatParam.html#pulserver.design.FloatParam" title="pulserver.design.FloatParam"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FloatParam</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.design.FloatParam.html#pulserver.design.FloatParam" title="pulserver.design.FloatParam"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FloatParam</span></code></a></p></td>
 <td><p>A float UI entry bound to an argument of the sequence function.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.design.IntParam.html#pulserver.design.IntParam" title="pulserver.design.IntParam"><code class="xref py py-obj docutils literal notranslate"><span class="pre">IntParam</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.design.IntParam.html#pulserver.design.IntParam" title="pulserver.design.IntParam"><code class="xref py py-obj docutils literal notranslate"><span class="pre">IntParam</span></code></a></p></td>
 <td><p>An integer UI entry bound to an argument of the sequence function; a dropdown when it has options.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.design.BoolParam.html#pulserver.design.BoolParam" title="pulserver.design.BoolParam"><code class="xref py py-obj docutils literal notranslate"><span class="pre">BoolParam</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.design.BoolParam.html#pulserver.design.BoolParam" title="pulserver.design.BoolParam"><code class="xref py py-obj docutils literal notranslate"><span class="pre">BoolParam</span></code></a></p></td>
 <td><p>A checkbox UI entry bound to an argument of the sequence function.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.design.ChoiceParam.html#pulserver.design.ChoiceParam" title="pulserver.design.ChoiceParam"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ChoiceParam</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.design.ChoiceParam.html#pulserver.design.ChoiceParam" title="pulserver.design.ChoiceParam"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ChoiceParam</span></code></a></p></td>
 <td><p>A choice among the members of a <code class="docutils literal notranslate"><span class="pre">StrEnum</span></code>, bound to an argument of the sequence function.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.design.StringListParam.html#pulserver.design.StringListParam" title="pulserver.design.StringListParam"><code class="xref py py-obj docutils literal notranslate"><span class="pre">StringListParam</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.design.StringListParam.html#pulserver.design.StringListParam" title="pulserver.design.StringListParam"><code class="xref py py-obj docutils literal notranslate"><span class="pre">StringListParam</span></code></a></p></td>
 <td><p>Return a <a class="reference internal" href="generated/pulserver.design.ChoiceParam.html#pulserver.design.ChoiceParam" title="pulserver.design.ChoiceParam"><code class="xref py py-class docutils literal notranslate"><span class="pre">ChoiceParam</span></code></a> over a <code class="docutils literal notranslate"><span class="pre">StrEnum</span></code> built from option strings.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.design.AveragesParam.html#pulserver.design.AveragesParam" title="pulserver.design.AveragesParam"><code class="xref py py-obj docutils literal notranslate"><span class="pre">AveragesParam</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.design.AveragesParam.html#pulserver.design.AveragesParam" title="pulserver.design.AveragesParam"><code class="xref py py-obj docutils literal notranslate"><span class="pre">AveragesParam</span></code></a></p></td>
 <td><p>The number of signal averages, NEX: how many times the main sequence plays; binds no argument.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.design.StatedParam.html#pulserver.design.StatedParam" title="pulserver.design.StatedParam"><code class="xref py py-obj docutils literal notranslate"><span class="pre">StatedParam</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.design.StatedParam.html#pulserver.design.StatedParam" title="pulserver.design.StatedParam"><code class="xref py py-obj docutils literal notranslate"><span class="pre">StatedParam</span></code></a></p></td>
 <td><p>A choice the sequence states without binding an argument, such as <code class="docutils literal notranslate"><span class="pre">imaging_mode</span></code> of a 3D sequence.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.design.ConfigParam.html#pulserver.design.ConfigParam" title="pulserver.design.ConfigParam"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ConfigParam</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.design.ConfigParam.html#pulserver.design.ConfigParam" title="pulserver.design.ConfigParam"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ConfigParam</span></code></a></p></td>
 <td><p>A value the sequence declares to the interpreter; never shown or edited.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.design.Description.html#pulserver.design.Description" title="pulserver.design.Description"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Description</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.design.Description.html#pulserver.design.Description" title="pulserver.design.Description"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Description</span></code></a></p></td>
 <td><p>A read-only text row in the UI.</p></td>
 </tr>
 </tbody>
@@ -845,6 +854,9 @@ from.</p>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.protocol.TriggerType.html#pulserver.protocol.TriggerType" title="pulserver.protocol.TriggerType"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TriggerType</span></code></a></p></td>
 <td><p>Options of <code class="docutils literal notranslate"><span class="pre">trigger_type</span></code>.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.protocol.Excitation.html#pulserver.protocol.Excitation" title="pulserver.protocol.Excitation"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Excitation</span></code></a></p></td>
+<td><p>Options of <code class="docutils literal notranslate"><span class="pre">excitation</span></code>.</p></td>
 </tr>
 </tbody>
 </table>

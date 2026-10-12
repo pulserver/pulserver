@@ -457,6 +457,7 @@
 <span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..protocol._keys</span><span class="w"> </span><span class="kn">import</span> <span class="n">WIRE_NAMES</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">._entries</span><span class="w"> </span><span class="kn">import</span> <span class="n">AveragesParam</span><span class="p">,</span> <span class="n">Entry</span><span class="p">,</span> <span class="n">Protocol</span><span class="p">,</span> <span class="n">_parameter</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">._options</span><span class="w"> </span><span class="kn">import</span> <span class="n">OptionValue</span><span class="p">,</span> <span class="n">loading_options</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">._rf</span><span class="w"> </span><span class="kn">import</span> <span class="n">RfLayout</span>
 
 <span class="n">_log</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="s2">"pulserver.design"</span><span class="p">)</span>
@@ -543,6 +544,10 @@
 <span class="sd">        its ``default`` may bind a name the app does not take; it is then read</span>
 <span class="sd">        by the plugin's own :meth:`evaluate` and :meth:`generate`, which do</span>
 <span class="sd">        not pass it to the app.</span>
+<span class="sd">    options : mapping</span>
+<span class="sd">        The plugin's options, by name, at the values</span>
+<span class="sd">        :func:`~pulserver.design.load_plugin` loaded it with; empty for an</span>
+<span class="sd">        instance made otherwise.</span>
 
 <span class="sd">    Raises</span>
 <span class="sd">    ------</span>
@@ -567,6 +572,7 @@
 
     <span class="n">app</span><span class="p">:</span> <span class="n">ClassVar</span><span class="p">[</span><span class="n">Callable</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span>
     <span class="n">protocol</span><span class="p">:</span> <span class="n">ClassVar</span><span class="p">[</span><span class="n">Mapping</span><span class="p">[</span><span class="n">ProtocolKey</span><span class="p">,</span> <span class="n">Entry</span><span class="p">]]</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="n">options</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">OptionValue</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
 
     <span class="n">_deprecated_alias</span><span class="p">:</span> <span class="n">ClassVar</span><span class="p">[</span><span class="nb">bool</span><span class="p">]</span> <span class="o">=</span> <span class="kc">False</span>
 
@@ -1023,24 +1029,32 @@
 
 <div class="viewcode-block" id="load_plugin">
 <a class="viewcode-back" href="../../../generated/pulserver.design.load_plugin.html#pulserver.design.load_plugin">[docs]</a>
-<span class="k">def</span><span class="w"> </span><span class="nf">load_plugin</span><span class="p">(</span><span class="n">path</span><span class="p">:</span> <span class="n">Path</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">SequencePlugin</span><span class="p">:</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">load_plugin</span><span class="p">(</span><span class="n">path</span><span class="p">:</span> <span class="n">Path</span><span class="p">,</span> <span class="n">options</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">SequencePlugin</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Import a plugin file and instantiate the one SequencePlugin it defines.</span>
 
 <span class="sd">    The module is registered as ``pulserver_plugin_&lt;file stem&gt;``; loading</span>
 <span class="sd">    another file with the same stem replaces it. A subclass of</span>
-<span class="sd">    :class:`ScannerSequence` is a plugin too.</span>
+<span class="sd">    :class:`ScannerSequence` is a plugin too. ``options`` are the values the</span>
+<span class="sd">    plugin's :func:`~pulserver.design.option` calls return in place of their</span>
+<span class="sd">    defaults, as a parameter file states them. The instance's ``options``</span>
+<span class="sd">    attribute holds every option the plugin declares, at the value it was</span>
+<span class="sd">    loaded with.</span>
 
 <span class="sd">    Raises</span>
 <span class="sd">    ------</span>
 <span class="sd">    ValueError</span>
 <span class="sd">        If the file defines no SequencePlugin subclass, or more than one.</span>
+<span class="sd">    OptionError</span>
+<span class="sd">        If ``options`` names an option the plugin does not declare, or gives</span>
+<span class="sd">        one a value it does not take.</span>
 <span class="sd">    """</span>
     <span class="n">path</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
     <span class="n">name</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"pulserver_plugin_</span><span class="si">{</span><span class="n">path</span><span class="o">.</span><span class="n">stem</span><span class="si">}</span><span class="s2">"</span>
     <span class="n">spec</span> <span class="o">=</span> <span class="n">importlib</span><span class="o">.</span><span class="n">util</span><span class="o">.</span><span class="n">spec_from_file_location</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">path</span><span class="p">)</span>
     <span class="n">module</span> <span class="o">=</span> <span class="n">importlib</span><span class="o">.</span><span class="n">util</span><span class="o">.</span><span class="n">module_from_spec</span><span class="p">(</span><span class="n">spec</span><span class="p">)</span>
     <span class="n">sys</span><span class="o">.</span><span class="n">modules</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">module</span>
-    <span class="n">spec</span><span class="o">.</span><span class="n">loader</span><span class="o">.</span><span class="n">exec_module</span><span class="p">(</span><span class="n">module</span><span class="p">)</span>
+    <span class="k">with</span> <span class="n">loading_options</span><span class="p">(</span><span class="n">options</span> <span class="ow">or</span> <span class="p">{})</span> <span class="k">as</span> <span class="n">resolved</span><span class="p">:</span>
+        <span class="n">spec</span><span class="o">.</span><span class="n">loader</span><span class="o">.</span><span class="n">exec_module</span><span class="p">(</span><span class="n">module</span><span class="p">)</span>
     <span class="n">found</span> <span class="o">=</span> <span class="p">[</span>
         <span class="n">obj</span>
         <span class="k">for</span> <span class="n">obj</span> <span class="ow">in</span> <span class="nb">vars</span><span class="p">(</span><span class="n">module</span><span class="p">)</span><span class="o">.</span><span class="n">values</span><span class="p">()</span>
@@ -1052,7 +1066,9 @@
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
             <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">path</span><span class="si">}</span><span class="s2"> defines </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">found</span><span class="p">)</span><span class="si">}</span><span class="s2"> SequencePlugin subclasses; a plugin defines one"</span>
         <span class="p">)</span>
-    <span class="k">return</span> <span class="n">found</span><span class="p">[</span><span class="mi">0</span><span class="p">]()</span></div>
+    <span class="n">plugin</span> <span class="o">=</span> <span class="n">found</span><span class="p">[</span><span class="mi">0</span><span class="p">]()</span>
+    <span class="n">plugin</span><span class="o">.</span><span class="n">options</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">resolved</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">plugin</span></div>
 
 </pre></div>
 

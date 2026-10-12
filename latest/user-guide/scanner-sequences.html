@@ -494,7 +494,8 @@
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#rf-layout">RF layout</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#shipped-sequences">Shipped sequences</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#shared-user-entries">Shared user entries</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#module-constants">Module constants</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#console-controls">Console controls</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#options">Options</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#diffusion-tables">Diffusion tables</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#protocol-conventions">Protocol conventions</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#shipped-evaluation">Shipped evaluation</a></li>
@@ -927,108 +928,132 @@ function takes, at the same user entry in every plugin, each as a
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">user9</span></code></p></td>
 <td><p>CAIPIRINHA shift, in partitions per acquired line</p></td>
 </tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">user10</span></code>, <code class="docutils literal notranslate"><span class="pre">user11</span></code></p></td>
+<td><p>Wave-encoding amplitude, in mT/m, and cycles per readout, shown while the <code class="docutils literal notranslate"><span class="pre">wave</span></code> option is on</p></td>
+</tr>
 </tbody>
 </table>
 </div>
 <p><code class="docutils literal notranslate"><span class="pre">bssfp3d</span></code> takes its number of phase cycles, each a train with its own RF phase
 increment, as <code class="docutils literal notranslate"><span class="pre">user12</span></code>.</p>
 </section>
-<section id="module-constants">
-<h3>Module constants<a class="headerlink" href="#module-constants" title="Link to this heading">#</a></h3>
-<p>Choices a console has no entry for are module constants of the plugin, set to
-the sequence function’s default unless stated. To change one, copy the plugin
-file into a <code class="docutils literal notranslate"><span class="pre">--plugins</span></code> directory and set the constant there; the copy replaces
-the shipped plugin.</p>
+<section id="console-controls">
+<h3>Console controls<a class="headerlink" href="#console-controls" title="Link to this heading">#</a></h3>
+<p>The excitation, the fat saturation, the multiband factor and the explicit
+saturation bands are the console’s own controls:</p>
 <div class="pst-scrollable-table-container"><table class="table">
 <thead>
 <tr class="row-odd"><th class="head"><p>Plugin</p></th>
-<th class="head"><p>Constant</p></th>
+<th class="head"><p>Entry</p></th>
 <th class="head"><p>Choice</p></th>
 </tr>
 </thead>
 <tbody>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">gre2d</span></code>, <code class="docutils literal notranslate"><span class="pre">se2d</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">BANDS</span></code></p></td>
-<td><p>Spatial saturation bands played before every excitation, 2 by default; 0 plays none</p></td>
+<tr class="row-even"><td><p>3D Cartesian, stack and MPRAGE plugins</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">excitation</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">slab</span></code>, <code class="docutils literal notranslate"><span class="pre">spsp</span></code> (water only) or <code class="docutils literal notranslate"><span class="pre">nonselective</span></code>; <code class="docutils literal notranslate"><span class="pre">slab</span></code> by default, <code class="docutils literal notranslate"><span class="pre">spsp</span></code> for <code class="docutils literal notranslate"><span class="pre">epi3d</span></code></p></td>
 </tr>
-<tr class="row-odd"><td><p>3D Cartesian, stack and MPRAGE plugins</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">EXCITATION</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">&quot;slab&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;spsp&quot;</span></code> (water only) or <code class="docutils literal notranslate"><span class="pre">&quot;nonselective&quot;</span></code>; <code class="docutils literal notranslate"><span class="pre">epi3d</span></code> ships <code class="docutils literal notranslate"><span class="pre">&quot;spsp&quot;</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">epi2d</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">FatSat</span></code></p></td>
+<td><p>Fat saturation before every shot; on by default</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">epi2d</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">FAT_SATURATION</span></code></p></td>
-<td><p>Fat saturation before every shot; <code class="docutils literal notranslate"><span class="pre">True</span></code> by default</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">multiband</span></code></p></td>
+<td><p>Simultaneous multislice factor; 1 plays one slice per excitation</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">gre3d</span></code>, <code class="docutils literal notranslate"><span class="pre">se3d</span></code>, <code class="docutils literal notranslate"><span class="pre">gre_multiecho3d</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">ELLIPTICAL</span></code></p></td>
-<td><p>Only the phase encodes inside the ky-kz ellipse</p></td>
-</tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">gre_multiecho2d</span></code>, <code class="docutils literal notranslate"><span class="pre">gre_multiecho3d</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">FLYBACK</span></code></p></td>
-<td><p>Monopolar echoes; <code class="docutils literal notranslate"><span class="pre">False</span></code> reads even echoes reversed</p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">fse3d</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">ORDERING</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">&quot;radial&quot;</span></code>, or <code class="docutils literal notranslate"><span class="pre">&quot;shuffling&quot;</span></code>: Poisson-disc views in random order</p></td>
-</tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">zte3d</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">SCHEME</span></code></p></td>
-<td><p>Spokes ordered <code class="docutils literal notranslate"><span class="pre">&quot;spiral&quot;</span></code> or <code class="docutils literal notranslate"><span class="pre">&quot;meridian&quot;</span></code></p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">bssfp2d</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">RETROSPECTIVE</span></code></p></td>
-<td><p>ECG gating: <code class="docutils literal notranslate"><span class="pre">False</span></code>, prospective, each heartbeat triggered and acquired once per cardiac phase; <code class="docutils literal notranslate"><span class="pre">True</span></code>, retrospective, each segment cycled over a heartbeat and binned into cardiac phases by the reconstruction</p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">gre2d</span></code>, <code class="docutils literal notranslate"><span class="pre">se2d</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">exsat_mask</span></code></p></td>
+<td><p>The explicit saturation bands placed, bit <code class="docutils literal notranslate"><span class="pre">n</span> <span class="pre">-</span> <span class="pre">1</span></code> for band <code class="docutils literal notranslate"><span class="pre">n</span></code>; none by default</p></td>
 </tr>
 </tbody>
 </table>
 </div>
 <p>The saturation bands of <code class="docutils literal notranslate"><span class="pre">gre2d</span></code> and <code class="docutils literal notranslate"><span class="pre">se2d</span></code> are placed graphically, as a
-scanner’s console places an explicit band, and are always on. <code class="docutils literal notranslate"><span class="pre">exsat_mask</span></code> is a
-configuration the plugin declares, with bit <code class="docutils literal notranslate"><span class="pre">n</span> <span class="pre">-</span> <span class="pre">1</span></code> set for each band <code class="docutils literal notranslate"><span class="pre">n</span></code> it
-plays; <code class="docutils literal notranslate"><span class="pre">exsat&lt;n&gt;_normal_x</span></code>, <code class="docutils literal notranslate"><span class="pre">_y</span></code> and <code class="docutils literal notranslate"><span class="pre">_z</span></code>, <code class="docutils literal notranslate"><span class="pre">exsat&lt;n&gt;_loc</span></code> and
-<code class="docutils literal notranslate"><span class="pre">exsat&lt;n&gt;_thickness</span></code> give each band’s normal along the physical axes, the
-distance of its centre from the isocentre along that normal, and its thickness,
-in mm. The field-of-view offset and rotation leave a band where it was placed,
-and a band not yet placed sits 150 mm from the isocentre, outside the head.</p>
-<p>Optional features are switched by a module constant, off in the shipped files.
-A switch adds the entries the feature needs, a scanner entry where one exists
-and a user entry otherwise:</p>
+scanner’s console places an explicit band, and each is played before every
+excitation while it is placed; a plugin offers as many bands as its module
+constant <code class="docutils literal notranslate"><span class="pre">BANDS</span></code>, 2, and refuses a mask placing more.
+<code class="docutils literal notranslate"><span class="pre">exsat&lt;n&gt;_normal_x</span></code>, <code class="docutils literal notranslate"><span class="pre">_y</span></code> and <code class="docutils literal notranslate"><span class="pre">_z</span></code>, <code class="docutils literal notranslate"><span class="pre">exsat&lt;n&gt;_loc</span></code> and <code class="docutils literal notranslate"><span class="pre">exsat&lt;n&gt;_thickness</span></code>
+give each band’s normal along the physical axes, the distance of its centre
+from the isocentre along that normal, and its thickness, in mm. The
+field-of-view offset and rotation leave a band where it was placed.</p>
+</section>
+<section id="options">
+<h3>Options<a class="headerlink" href="#options" title="Link to this heading">#</a></h3>
+<p>Choices that set what a sequence is, rather than a value an operator tunes from
+scan to scan, are options: module constants a plugin reads through
+<a class="reference internal" href="../generated/pulserver.design.option.html#pulserver.design.option" title="pulserver.design.option"><code class="xref py py-func docutils literal notranslate"><span class="pre">option()</span></code></a>. A numbered parameter set selects them. Set
+<code class="docutils literal notranslate"><span class="pre">N</span></code> of a plugin whose file is <code class="docutils literal notranslate"><span class="pre">&lt;script&gt;.py</span></code> is the TOML file
+<code class="docutils literal notranslate"><span class="pre">parameters/&lt;script&gt;/&lt;NN&gt;.toml</span></code> beside the plugin directory, its number in two
+digits; a slot linked to a script, such as <code class="docutils literal notranslate"><span class="pre">sequence3.py</span></code> linked to
+<code class="docutils literal notranslate"><span class="pre">src/fse3d.py</span></code>, reads that script’s directory. Set 0 plays every option at its
+default. A file names only the options it changes:</p>
+<div class="highlight-toml notranslate"><div class="highlight"><pre><span></span><span class="c1"># parameters/fse3d/01.toml</span>
+<span class="n">refocusing</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"dual_region"</span>
+<span class="n">navigator</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span>
+</pre></div>
+</div>
+<p>A file naming an option the plugin does not declare, or giving one a value it
+does not take, is refused. The options join the design’s identity and its
+manifest, so a design is a function of the set’s contents, not of its number.
+<code class="docutils literal notranslate"><span class="pre">pulserver</span> <span class="pre">design</span></code> takes the set as <code class="docutils literal notranslate"><span class="pre">--parameter-set</span></code> and the directory as
+<code class="docutils literal notranslate"><span class="pre">--parameters</span></code>; <code class="docutils literal notranslate"><span class="pre">src/pulserver/_zoo/parameters/</span></code> ships a file for each choice
+below.</p>
 <div class="pst-scrollable-table-container"><table class="table">
 <thead>
 <tr class="row-odd"><th class="head"><p>Plugin</p></th>
-<th class="head"><p>Constant</p></th>
-<th class="head"><p>Feature</p></th>
+<th class="head"><p>Option</p></th>
+<th class="head"><p>Choice</p></th>
 <th class="head"><p>Entries added</p></th>
 </tr>
 </thead>
 <tbody>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">epi2d</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">MULTIBAND</span></code></p></td>
-<td><p>Simultaneous multislice</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">multiband</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">fse3d</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">refocusing</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">&quot;constant&quot;</span></code>; <code class="docutils literal notranslate"><span class="pre">&quot;optimized&quot;</span></code>, a train designed with blochsim and shared by every shot; or <code class="docutils literal notranslate"><span class="pre">&quot;dual_region&quot;</span></code>, trains designed for the centre and the periphery of k-space, each shot’s train a cubic step between them, <code class="docutils literal notranslate"><span class="pre">TR</span></code> and <code class="docutils literal notranslate"><span class="pre">ETL</span></code> being the centre’s</p></td>
+<td><p>Flip angle: the refocusing angle at the TE echo; <code class="docutils literal notranslate"><span class="pre">&quot;dual_region&quot;</span></code> also adds <code class="docutils literal notranslate"><span class="pre">user12</span></code> and <code class="docutils literal notranslate"><span class="pre">user13</span></code>, TR and ETL at the periphery</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">fse3d</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">OPTIMIZED</span></code></p></td>
-<td><p>Refocusing train designed with blochsim, shared by every shot</p></td>
-<td><p>Flip angle: the refocusing angle at the TE echo</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">ordering</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">&quot;radial&quot;</span></code>, or <code class="docutils literal notranslate"><span class="pre">&quot;shuffling&quot;</span></code>: Poisson-disc views in random order</p></td>
+<td><p>None</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">fse3d</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">DUAL_REGION</span></code></p></td>
-<td><p>Trains designed with blochsim for the centre and the periphery of k-space, each shot’s train a cubic step between them; <code class="docutils literal notranslate"><span class="pre">TR</span></code> and <code class="docutils literal notranslate"><span class="pre">ETL</span></code> are the centre’s</p></td>
-<td><p>Flip angle, as <code class="docutils literal notranslate"><span class="pre">OPTIMIZED</span></code>; <code class="docutils literal notranslate"><span class="pre">user12</span></code> and <code class="docutils literal notranslate"><span class="pre">user13</span></code>: TR and ETL at the periphery</p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">mprage3d</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">ordering</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">&quot;radial&quot;</span></code>, each partition’s lines centre-out, or <code class="docutils literal notranslate"><span class="pre">&quot;shuffling&quot;</span></code>: Poisson-disc lines in random order, for a time-resolved reconstruction</p></td>
+<td><p>None</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">fse3d</span></code>, <code class="docutils literal notranslate"><span class="pre">mprage3d</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">NAVIGATOR</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">navigator</span></code></p></td>
 <td><p>Three-plane navigators; the design sets <code class="docutils literal notranslate"><span class="pre">EnablePmc</span></code>, and <code class="docutils literal notranslate"><span class="pre">pmc</span></code> publishes each pose to the scan</p></td>
 <td><p>None</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">gre3d</span></code>, <code class="docutils literal notranslate"><span class="pre">gre_multiecho3d</span></code>, <code class="docutils literal notranslate"><span class="pre">mprage3d</span></code>, <code class="docutils literal notranslate"><span class="pre">fse3d</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">WAVE</span></code></p></td>
-<td><p>Wave-CAIPI at <code class="docutils literal notranslate"><span class="pre">WAVE_AMPLITUDE</span></code> (T/m) and <code class="docutils literal notranslate"><span class="pre">WAVE_CYCLES</span></code>; the calibration region is acquired first without the wave, and <code class="docutils literal notranslate"><span class="pre">pics</span></code> and <code class="docutils literal notranslate"><span class="pre">pmc</span></code> reconstruct the wave-encoded volume</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">wave</span></code></p></td>
+<td><p>Wave-CAIPI; the calibration region is acquired first without the wave, and <code class="docutils literal notranslate"><span class="pre">pics</span></code> and <code class="docutils literal notranslate"><span class="pre">pmc</span></code> reconstruct the wave-encoded volume</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">user10</span></code> and <code class="docutils literal notranslate"><span class="pre">user11</span></code>: wave amplitude and cycles</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">gre3d</span></code>, <code class="docutils literal notranslate"><span class="pre">se3d</span></code>, <code class="docutils literal notranslate"><span class="pre">gre_multiecho3d</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">elliptical</span></code></p></td>
+<td><p>Only the phase encodes inside the ky-kz ellipse; <code class="docutils literal notranslate"><span class="pre">true</span></code> by default</p></td>
+<td><p>None</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">gre_multiecho2d</span></code>, <code class="docutils literal notranslate"><span class="pre">gre_multiecho3d</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">flyback</span></code></p></td>
+<td><p>Monopolar echoes; <code class="docutils literal notranslate"><span class="pre">false</span></code> reads even echoes reversed</p></td>
+<td><p>None</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">zte3d</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">scheme</span></code></p></td>
+<td><p>Spokes ordered <code class="docutils literal notranslate"><span class="pre">&quot;spiral&quot;</span></code> or <code class="docutils literal notranslate"><span class="pre">&quot;meridian&quot;</span></code></p></td>
+<td><p>None</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">bssfp2d</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">retrospective</span></code></p></td>
+<td><p>ECG gating: <code class="docutils literal notranslate"><span class="pre">false</span></code>, prospective, each heartbeat triggered and acquired once per cardiac phase; <code class="docutils literal notranslate"><span class="pre">true</span></code>, retrospective, each segment cycled over a heartbeat and binned into cardiac phases by the reconstruction</p></td>
 <td><p>None</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">gre_spiral2d</span></code>, <code class="docutils literal notranslate"><span class="pre">se_spiral2d</span></code>, <code class="docutils literal notranslate"><span class="pre">gre_stack_of_spirals3d</span></code>, <code class="docutils literal notranslate"><span class="pre">se_stack_of_spirals3d</span></code>, <code class="docutils literal notranslate"><span class="pre">mprage_stack_of_spirals3d</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">VARIABLE_DENSITY</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">variable_density</span></code></p></td>
 <td><p>Variable-density spirals</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">user12</span></code>: periphery undersampling</p></td>
 </tr>
@@ -1194,7 +1219,8 @@ request names under <code class="docutils literal notranslate"><span class="pre"
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#rf-layout">RF layout</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#shipped-sequences">Shipped sequences</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#shared-user-entries">Shared user entries</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#module-constants">Module constants</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#console-controls">Console controls</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#options">Options</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#diffusion-tables">Diffusion tables</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#protocol-conventions">Protocol conventions</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#shipped-evaluation">Shipped evaluation</a></li>

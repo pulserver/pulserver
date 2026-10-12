@@ -551,7 +551,9 @@
     <span class="n">NY</span> <span class="o">=</span> <span class="s2">"ny"</span>
     <span class="n">NSLICES</span> <span class="o">=</span> <span class="s2">"nslices"</span>
     <span class="n">NUM_SLABS</span> <span class="o">=</span> <span class="s2">"num_slabs"</span>
-    <span class="n">OVERLAP_LOCATIONS</span> <span class="o">=</span> <span class="s2">"overlap_locations"</span></div>
+    <span class="n">OVERLAP_LOCATIONS</span> <span class="o">=</span> <span class="s2">"overlap_locations"</span>
+    <span class="c1"># Bit n - 1 set for each explicit saturation band n the operator places.</span>
+    <span class="n">EXSAT_MASK</span> <span class="o">=</span> <span class="s2">"exsat_mask"</span></div>
 
 
 
@@ -575,13 +577,15 @@
 <span class="w">    </span><span class="sd">"""Keys the interpreter declares as string lists.</span>
 
 <span class="sd">    Their options are :class:`SequenceType`, :class:`ImagingMode`,</span>
-<span class="sd">    :class:`PreparationType` and :class:`TriggerType`, in that order.</span>
+<span class="sd">    :class:`PreparationType`, :class:`TriggerType` and :class:`Excitation`, in</span>
+<span class="sd">    that order.</span>
 <span class="sd">    """</span>
 
     <span class="n">SEQUENCE_TYPE</span> <span class="o">=</span> <span class="s2">"sequence_type"</span>
     <span class="n">IMAGING_MODE</span> <span class="o">=</span> <span class="s2">"imaging_mode"</span>
     <span class="n">PREPARATION_TYPE</span> <span class="o">=</span> <span class="s2">"preparation_type"</span>
-    <span class="n">TRIGGER_TYPE</span> <span class="o">=</span> <span class="s2">"trigger_type"</span></div>
+    <span class="n">TRIGGER_TYPE</span> <span class="o">=</span> <span class="s2">"trigger_type"</span>
+    <span class="n">EXCITATION</span> <span class="o">=</span> <span class="s2">"excitation"</span></div>
 
 
 
@@ -595,8 +599,7 @@
 <span class="sd">    :class:`~pulserver.design.ConfigParam`.</span>
 <span class="sd">    """</span>
 
-    <span class="n">ENABLE_SAR_BURST_MODE</span> <span class="o">=</span> <span class="s2">"enable_sar_burst_mode"</span>
-    <span class="n">EXSAT_MASK</span> <span class="o">=</span> <span class="s2">"exsat_mask"</span></div>
+    <span class="n">ENABLE_SAR_BURST_MODE</span> <span class="o">=</span> <span class="s2">"enable_sar_burst_mode"</span></div>
 
 
 
@@ -801,6 +804,7 @@
     <span class="n">NSLICES</span> <span class="o">=</span> <span class="n">IntKey</span><span class="o">.</span><span class="n">NSLICES</span>
     <span class="n">NUM_SLABS</span> <span class="o">=</span> <span class="n">IntKey</span><span class="o">.</span><span class="n">NUM_SLABS</span>
     <span class="n">OVERLAP_LOCATIONS</span> <span class="o">=</span> <span class="n">IntKey</span><span class="o">.</span><span class="n">OVERLAP_LOCATIONS</span>
+    <span class="n">EXSAT_MASK</span> <span class="o">=</span> <span class="n">IntKey</span><span class="o">.</span><span class="n">EXSAT_MASK</span>
 
     <span class="n">FAT_SAT</span> <span class="o">=</span> <span class="n">BoolKey</span><span class="o">.</span><span class="n">FAT_SAT</span>
     <span class="n">SPOILER</span> <span class="o">=</span> <span class="n">BoolKey</span><span class="o">.</span><span class="n">SPOILER</span>
@@ -813,6 +817,7 @@
     <span class="n">IMAGING_MODE</span> <span class="o">=</span> <span class="n">EnumKey</span><span class="o">.</span><span class="n">IMAGING_MODE</span>
     <span class="n">PREPARATION_TYPE</span> <span class="o">=</span> <span class="n">EnumKey</span><span class="o">.</span><span class="n">PREPARATION_TYPE</span>
     <span class="n">TRIGGER_TYPE</span> <span class="o">=</span> <span class="n">EnumKey</span><span class="o">.</span><span class="n">TRIGGER_TYPE</span>
+    <span class="n">EXCITATION</span> <span class="o">=</span> <span class="n">EnumKey</span><span class="o">.</span><span class="n">EXCITATION</span>
 
 <div class="viewcode-block" id="UIParam.user_value">
 <a class="viewcode-back" href="../../../generated/pulserver.protocol.UIParam.user_value.html#pulserver.protocol.UIParam.user_value">[docs]</a>
@@ -933,6 +938,21 @@
     <span class="n">NONE</span> <span class="o">=</span> <span class="s2">"none"</span>
     <span class="n">RESPIRATORY</span> <span class="o">=</span> <span class="s2">"physio1"</span>
     <span class="n">ECG</span> <span class="o">=</span> <span class="s2">"physio2"</span></div>
+
+
+
+<div class="viewcode-block" id="Excitation">
+<a class="viewcode-back" href="../../../generated/pulserver.protocol.Excitation.html#pulserver.protocol.Excitation">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">Excitation</span><span class="p">(</span><span class="n">StrEnum</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Options of ``excitation``.</span>
+
+<span class="sd">    The values are the excitations ``pypulseqpp.sequences.EXCITATIONS``</span>
+<span class="sd">    names: ``spsp`` excites water alone within the slab.</span>
+<span class="sd">    """</span>
+
+    <span class="n">SLAB</span> <span class="o">=</span> <span class="s2">"slab"</span>
+    <span class="n">SPSP</span> <span class="o">=</span> <span class="s2">"spsp"</span>
+    <span class="n">NONSELECTIVE</span> <span class="o">=</span> <span class="s2">"nonselective"</span></div>
 
 
 

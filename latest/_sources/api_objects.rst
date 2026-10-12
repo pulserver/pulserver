@@ -20,6 +20,9 @@ from.
    ScannerSequence
    load_plugin
    load_exam
+   option
+   read_options
+   OptionError
    RfLayout
    RfControl
    TimeParam
@@ -165,6 +168,7 @@ from.
    ImagingMode
    PreparationType
    TriggerType
+   Excitation
 
 .. currentmodule:: pulserver.proxy
 

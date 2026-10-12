@@ -26,6 +26,20 @@ control variable, are described in {doc}`../explanations/protocol`.
 | {obj}`~pulserver.design.load_plugin` | Import a plugin file and instantiate the sequence plugin it defines. |
 | {obj}`~pulserver.design.load_exam` | Open the cache of the current exam, given to a design hook as `exam`. |
 
+## Options
+
+A plugin's options are module constants a parameter file sets when the plugin
+is loaded, so that they shape its sequence function and the protocol it
+declares. A design call selects the file by number: set `N` of a plugin whose
+file is `<script>.py` is `parameters/<script>/<NN>.toml`, and set 0 loads the
+plugin with its defaults.
+
+| Object | Description |
+| --- | --- |
+| {obj}`~pulserver.design.option` | The value of an option: the parameter file's, else its default. |
+| {obj}`~pulserver.design.read_options` | The options a parameter file sets. |
+| {obj}`~pulserver.design.OptionError` | An option a parameter file sets that the plugin does not declare or take. |
+
 ## RF layout
 
 The RF an evaluation states: the RF definitions of a sequence, the instances of
