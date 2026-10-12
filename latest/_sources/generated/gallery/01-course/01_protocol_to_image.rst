@@ -207,7 +207,7 @@ both in the store under one identifier.
 
  .. code-block:: none
 
-    GENERATED a9ace6051c92d31511
+    GENERATED be05d49afc6ce0f32d
 
     ['manifest.json', 'resolved.protocol', 'sequence.pseg', 'sequence.seq']
 
@@ -323,7 +323,7 @@ What this lesson did, stated the way you would ask an agent for it:
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.598 seconds)
+   **Total running time of the script:** (0 minutes 0.805 seconds)
 
 
 .. _sphx_glr_download_generated_gallery_01-course_01_protocol_to_image.py:
