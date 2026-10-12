@@ -6,7 +6,6 @@ import numpy as np
 import pypulseqpp as pp
 from pypulseqpp.sequences.sequence.fse3D_sequence import (
     ORDERINGS,
-    SHUFFLE_SEED,
     fse3d,
     shot_parameters,
 )
@@ -137,9 +136,9 @@ class Fse3D(SequencePlugin):
 
     def evaluate(self, system, protocol):
         # A TR is one echo train. The design of the centre view plays one
-        # train of the full length at a constant refocusing angle standing in
-        # for an optimized train. The RF of a train does not depend on the
-        # view order.
+        # train of the full length at a constant refocusing angle, which is
+        # the peak of an optimized train and so bounds its RF. The RF of a
+        # train does not depend on the view order.
         a = arguments(self, protocol)
         one = {
             "n_dummy": 0,
@@ -151,7 +150,13 @@ class Fse3D(SequencePlugin):
             "ordering": "radial",
         }
         train = self.app(system, **(protocol.arguments | one))
-        calibrating, imaging = pp.make_cartesian_plane_sampling(
+        tr = train.duration()[0]
+        tr_periphery = tr if a["tr_periphery"] is None else a["tr_periphery"]
+        etl_periphery = a["etl"] if a["etl_periphery"] is None else a["etl_periphery"]
+        # Identical trains are all full: the views fill whole trains.
+        individual = tr_periphery != tr or etl_periphery != a["etl"]
+        length = 1 if individual else a["etl"]
+        calibrating, imaging = pp.count_cartesian_plane_sampling(
             (a["n_y"], a["n_z"]),
             (a["ry"], a["rz"]),
             (a["n_acs_y"], a["n_acs_z"]),
@@ -160,24 +165,18 @@ class Fse3D(SequencePlugin):
             elliptical=True,
             elliptical_acs=a["elliptical_acs"],
             sampling="poisson" if a["ordering"] == "shuffling" else "lattice",
-            seed=SHUFFLE_SEED,
+            train_length=length,
         )
+        views = calibrating + imaging
         # Each train lasts its own TR, a cubic step from the centre's to the
         # periphery's; dummies and, under the wave, the wave-free trains of
         # the calibration region, each as long as the first, play the first.
-        tr = train.duration()[0]
-        tr_periphery = a["tr_periphery"]
-        etl_periphery = a["etl_periphery"]
         lengths, times, _ = shot_parameters(
-            len(calibrating) + len(imaging),
-            a["etl"],
-            a["etl"] if etl_periphery is None else etl_periphery,
-            tr,
-            tr if tr_periphery is None else tr_periphery,
+            views, a["etl"], etl_periphery, tr, tr_periphery
         )
         raster = system.block_duration_raster
         times = [pp.round_to_raster(time, raster) for time in times]
-        references = -(-len(calibrating) // lengths[0]) if waved(a) else 0
+        references = -(-calibrating // lengths[0]) if waved(a) else 0
         return Evaluation(
             protocol.replace(achieved(self, train)),
             (a["n_dummy"] + references) * times[0] + sum(times),

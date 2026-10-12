@@ -590,12 +590,13 @@ def test_an_evaluation_states_as_its_layout_a_regular_tr_of_the_design(
         ]
         refocusing = np.array([use == "refocusing" for use in uses])
         amplitude[refocusing] = amplitude[refocusing].max()
+    definition = layout.instances.definition.tolist()
+    played = layout.instances.amplitude
+    control = layout.control
     assert layout.period == pytest.approx(expected.period, rel=1e-12)
-    assert layout.instances.definition.tolist() == (
-        expected.instances.definition.tolist()
-    )
-    assert layout.control == expected.control
-    assert layout.instances.amplitude == pytest.approx(amplitude, rel=1e-9)
+    assert definition == expected.instances.definition.tolist()
+    assert control == expected.control
+    assert played == pytest.approx(amplitude, rel=1e-9)
     definitions = layout.instances.definitions
     assert [d.use for d in definitions] == [
         d.use for d in expected.instances.definitions
@@ -813,6 +814,33 @@ def test_a_shuffled_fse_states_the_layout_of_the_radial_order_at_its_default_pro
     )
     assert layout.instances.amplitude.tolist() == expected.instances.amplitude.tolist()
     assert layout.period == expected.period
+
+
+@pytest.mark.parametrize(
+    ("name", "changes"),
+    [
+        (
+            "fse3d+SHUFFLING",
+            {"nslices": 32, "etl": 10, "nx": 64, "ny": 64, "Ry": 2, "Rz": 2},
+        ),
+        ("mprage3d+SHUFFLING", {"nslices": 48, "nx": 64, "ny": 96, "Ry": 2, "Rz": 2}),
+    ],
+    ids=["fse3d", "mprage3d"],
+)
+def test_an_undersampled_shuffled_scan_states_the_scan_time_of_its_draw(
+    zoo, name, changes
+):
+    plugin = zoo[name]
+    protocol = _protocol(plugin, changes)
+
+    evaluation = plugin.evaluate(SYSTEM, protocol)
+    chain = _chain(plugin.generate(SYSTEM, protocol))
+    played = sum(sequence.duration()[0] for sequence in chain)
+
+    # Every train holds the same number of views, so the draw's trains are
+    # counted without drawing it.
+    rounding = SYSTEM.block_duration_raster * sum(map(_excitations, chain))
+    assert abs(evaluation.duration - played) <= rounding + 1e-9
 
 
 @WITH_BLOCHSIM

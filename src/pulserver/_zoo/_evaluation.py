@@ -242,7 +242,7 @@ def cartesian_3d(a: dict[str, Any]) -> tuple[dict[str, Any], int]:
 
     Under the wave the views include the wave-free calibration region.
     """
-    calibrating, imaging = pp.make_cartesian_plane_sampling(
+    calibrating, imaging = pp.count_cartesian_plane_sampling(
         (a["n_y"], a["n_z"]),
         (a["ry"], a["rz"]),
         (a["n_acs_y"], a["n_acs_z"]),
@@ -252,8 +252,8 @@ def cartesian_3d(a: dict[str, Any]) -> tuple[dict[str, Any], int]:
         elliptical_acs=a["elliptical_acs"],
     )
     one = {"n_dummy": 0, "ry": a["n_y"], "rz": a["n_z"], "n_acs_y": 0, "n_acs_z": 0}
-    references = len(calibrating) if waved(a) else 0
-    return one, references + len(calibrating) + len(imaging)
+    references = calibrating if waved(a) else 0
+    return one, references + calibrating + imaging
 
 
 def _nyquist_spokes(n: int) -> int:
