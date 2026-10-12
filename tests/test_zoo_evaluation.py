@@ -805,6 +805,22 @@ def test_a_shuffled_fse_states_the_layout_of_the_radial_order_at_its_default_pro
     assert layout.period == expected.period
 
 
+def test_an_undersampled_shuffled_fse_states_the_scan_time_of_its_draw_to_its_tolerance(
+    zoo,
+):
+    plugin = zoo["fse3d+SHUFFLING"]
+    protocol = _protocol(
+        plugin,
+        {"nslices": 32, "etl": 10, "nx": 64, "ny": 64, "Ry": 2, "Rz": 2},
+    )
+
+    evaluation = plugin.evaluate(SYSTEM, protocol)
+    played = sum(s.duration()[0] for s in _chain(plugin.generate(SYSTEM, protocol)))
+
+    # 0.1 in 4 from the draw, and a train of the hundred the scan plays.
+    assert evaluation.duration == pytest.approx(played, rel=0.1 / 4 + 1 / 100)
+
+
 @WITH_BLOCHSIM
 def test_a_dual_region_fse_layout_plays_at_least_the_rf_power_of_every_train(zoo):
     plugin = zoo["fse3d+DUAL_REGION"]

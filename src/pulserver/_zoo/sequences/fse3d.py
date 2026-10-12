@@ -4,11 +4,7 @@ import functools
 
 import numpy as np
 import pypulseqpp as pp
-from pypulseqpp.sequences.sequence.fse3D_sequence import (
-    SHUFFLE_SEED,
-    fse3d,
-    shot_parameters,
-)
+from pypulseqpp.sequences.sequence.fse3D_sequence import fse3d, shot_parameters
 
 from pulserver._zoo._evaluation import achieved, arguments, rf_layout, waved
 from pulserver._zoo._pmc import navigated
@@ -137,9 +133,9 @@ class Fse3D(SequencePlugin):
 
     def evaluate(self, system, protocol):
         # A TR is one echo train. The design of the centre view plays one
-        # train of the full length at a constant refocusing angle standing in
-        # for an optimized train. The RF of a train does not depend on the
-        # view order.
+        # train of the full length at a constant refocusing angle, which is
+        # the peak of an optimized train and so bounds its RF. The RF of a
+        # train does not depend on the view order.
         a = arguments(self, protocol)
         one = {
             "n_dummy": 0,
@@ -151,7 +147,7 @@ class Fse3D(SequencePlugin):
             "ordering": "radial",
         }
         train = self.app(system, **(protocol.arguments | one))
-        calibrating, imaging = pp.make_cartesian_plane_sampling(
+        calibrating, imaging = pp.count_cartesian_plane_sampling(
             (a["n_y"], a["n_z"]),
             (a["ry"], a["rz"]),
             (a["n_acs_y"], a["n_acs_z"]),
@@ -159,9 +155,21 @@ class Fse3D(SequencePlugin):
             partial_fourier=(a["partial_fourier_y"], a["partial_fourier_z"]),
             elliptical=True,
             elliptical_acs=a["elliptical_acs"],
-            sampling="poisson" if a["ordering"] == "shuffling" else "lattice",
-            seed=SHUFFLE_SEED,
         )
+        views = calibrating + imaging
+        if a["ordering"] == "shuffling" and a["ry"] * a["rz"] > 1:
+            # A Poisson-disc draw reaches its acceleration over the whole
+            # plane to within 0.1, so its size is estimated rather than drawn.
+            views = max(
+                calibrating,
+                round(
+                    a["n_y"]
+                    * a["n_z"]
+                    * a["partial_fourier_y"]
+                    * a["partial_fourier_z"]
+                    / (a["ry"] * a["rz"])
+                ),
+            )
         # Each train lasts its own TR, a cubic step from the centre's to the
         # periphery's; dummies and, under the wave, the wave-free trains of
         # the calibration region, each as long as the first, play the first.
@@ -169,7 +177,7 @@ class Fse3D(SequencePlugin):
         tr_periphery = a["tr_periphery"]
         etl_periphery = a["etl_periphery"]
         lengths, times, _ = shot_parameters(
-            len(calibrating) + len(imaging),
+            views,
             a["etl"],
             a["etl"] if etl_periphery is None else etl_periphery,
             tr,
@@ -177,7 +185,7 @@ class Fse3D(SequencePlugin):
         )
         raster = system.block_duration_raster
         times = [pp.round_to_raster(time, raster) for time in times]
-        references = -(-len(calibrating) // lengths[0]) if waved(a) else 0
+        references = -(-calibrating // lengths[0]) if waved(a) else 0
         return Evaluation(
             protocol.replace(achieved(self, train)),
             (a["n_dummy"] + references) * times[0] + sum(times),

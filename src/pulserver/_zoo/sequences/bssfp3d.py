@@ -76,7 +76,7 @@ class Bssfp3D(SequencePlugin):
             "n_phase_cycles": 1,
         }
         catalyst, view = self.app(system, **(protocol.arguments | one))
-        calibrating, imaging = pp.make_cartesian_plane_sampling(
+        calibrating, imaging = pp.count_cartesian_plane_sampling(
             (a["n_y"], a["n_z"]),
             (a["ry"], a["rz"]),
             (a["n_acs_y"], a["n_acs_z"]),
@@ -85,10 +85,7 @@ class Bssfp3D(SequencePlugin):
             elliptical=True,
             elliptical_acs=a["elliptical_acs"],
         )
-        cycle = (
-            catalyst.duration()[0]
-            + (len(calibrating) + len(imaging)) * view.duration()[0]
-        )
+        cycle = catalyst.duration()[0] + (calibrating + imaging) * view.duration()[0]
         return Evaluation(
             protocol.replace(achieved(self, view)),
             a["n_phase_cycles"] * cycle,
