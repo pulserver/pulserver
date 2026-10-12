@@ -1,9 +1,10 @@
 """pypulseqpp's 3D MPRAGE bound to the scanner UI, its partitions counted by the number of slices."""
 
+import functools
 import itertools
 
 import pypulseqpp as pp
-from pypulseqpp.sequences.sequence.mprage3D_sequence import mprage3d
+from pypulseqpp.sequences.sequence.mprage3D_sequence import ORDERINGS, mprage3d
 
 from pulserver._zoo._evaluation import achieved, arguments, rf_layout, waved
 from pulserver._zoo._pmc import navigated
@@ -30,6 +31,11 @@ NAVIGATOR = option("navigator", False)
 #: adds their amplitude and cycles as user entries.
 WAVE = option("wave", False)
 
+#: Order of the lines within a partition: ``"radial"``, centre-out on the
+#: CAIPIRINHA lattice, or ``"shuffling"``, Poisson-disc lines in random order
+#: for a time-resolved reconstruction.
+ORDERING = option("ordering", "radial", choices=ORDERINGS)
+
 
 class Mprage3D(SequencePlugin):
     app = (
@@ -37,6 +43,7 @@ class Mprage3D(SequencePlugin):
         if NAVIGATOR
         else shortest_at_zero(slab(mprage3d), "esp")
     )
+    app = functools.partial(app, ordering=ORDERING)
     protocol = {
         UIParam.IMAGING_MODE: StatedParam(ImagingMode.THREE_D),
         UIParam.EXCITATION: ChoiceParam(
@@ -92,6 +99,17 @@ class Mprage3D(SequencePlugin):
         # design of the centre partition alone plays one shot of the full
         # length, after its wave-free shot under the wave.
         a = arguments(self, protocol)
+        if a["ordering"] == "shuffling":
+            # A shuffled order draws its lines from a Poisson-disc support,
+            # whose fullest partition sets the length of every shot: the
+            # design of the whole scan states it, and every TR of it plays
+            # the same RF.
+            scan = self.app(system, **protocol.arguments)
+            return Evaluation(
+                protocol.replace(achieved(self, scan)),
+                scan.duration()[0],
+                rf_layout=rf_layout(scan, scaled=True),
+            )
         calibrating, imaging = pp.make_cartesian_plane_sampling(
             (a["n_y"], a["n_z"]),
             (a["ry"], a["rz"]),

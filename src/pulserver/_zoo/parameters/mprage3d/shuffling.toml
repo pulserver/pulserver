@@ -1,0 +1,2 @@
+# Lines of each partition drawn from a Poisson-disc support and played in random order.
+ordering = "shuffling"

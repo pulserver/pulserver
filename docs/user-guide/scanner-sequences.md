@@ -433,6 +433,7 @@ below.
 | --- | --- | --- | --- |
 | `fse3d` | `refocusing` | `"constant"`; `"optimized"`, a train designed with blochsim and shared by every shot; or `"dual_region"`, trains designed for the centre and the periphery of k-space, each shot's train a cubic step between them, `TR` and `ETL` being the centre's | Flip angle: the refocusing angle at the TE echo; `"dual_region"` also adds `user12` and `user13`, TR and ETL at the periphery |
 | `fse3d` | `ordering` | `"radial"`, or `"shuffling"`: Poisson-disc views in random order | None |
+| `mprage3d` | `ordering` | `"radial"`, each partition's lines centre-out, or `"shuffling"`: Poisson-disc lines in random order, for a time-resolved reconstruction | None |
 | `fse3d`, `mprage3d` | `navigator` | Three-plane navigators; the design sets `EnablePmc`, and `pmc` publishes each pose to the scan | None |
 | `gre3d`, `gre_multiecho3d`, `mprage3d`, `fse3d` | `wave` | Wave-CAIPI; the calibration region is acquired first without the wave, and `pics` and `pmc` reconstruct the wave-encoded volume | `user10` and `user11`: wave amplitude and cycles |
 | `gre3d`, `se3d`, `gre_multiecho3d` | `elliptical` | Only the phase encodes inside the ky-kz ellipse; `true` by default | None |
