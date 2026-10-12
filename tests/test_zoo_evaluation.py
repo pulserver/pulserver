@@ -593,18 +593,6 @@ def test_an_evaluation_states_as_its_layout_a_regular_tr_of_the_design(
     definition = layout.instances.definition.tolist()
     played = layout.instances.amplitude
     control = layout.control
-    if name == "mprage3d+SHUFFLING":
-        # The layout plays a shot as long as the fullest partition the draw
-        # is expected to hold, at least the shot of the draw.
-        count = len(amplitude)
-        assert set(definition[count:]) <= {definition[-1]}
-        assert played[count:] == pytest.approx(played[-1], rel=1e-9)
-        assert set(control[count:]) <= {control[-1]}
-        definition, played, control = (
-            definition[:count],
-            played[:count],
-            control[:count],
-        )
     assert layout.period == pytest.approx(expected.period, rel=1e-12)
     assert definition == expected.instances.definition.tolist()
     assert control == expected.control
@@ -828,51 +816,31 @@ def test_a_shuffled_fse_states_the_layout_of_the_radial_order_at_its_default_pro
     assert layout.period == expected.period
 
 
-def test_an_undersampled_shuffled_fse_states_the_scan_time_of_its_draw_to_its_tolerance(
-    zoo,
-):
-    plugin = zoo["fse3d+SHUFFLING"]
-    protocol = _protocol(
-        plugin,
-        {"nslices": 32, "etl": 10, "nx": 64, "ny": 64, "Ry": 2, "Rz": 2},
-    )
-
-    evaluation = plugin.evaluate(SYSTEM, protocol)
-    played = sum(s.duration()[0] for s in _chain(plugin.generate(SYSTEM, protocol)))
-
-    # 0.1 in 4 from the draw, and a train of the hundred the scan plays.
-    assert evaluation.duration == pytest.approx(played, rel=0.1 / 4 + 1 / 100)
-
-
 @pytest.mark.parametrize(
-    "changes",
+    ("name", "changes"),
     [
-        {"nslices": 32, "nx": 64, "ny": 64, "Ry": 2},
-        {"nslices": 48, "nx": 64, "ny": 96, "Ry": 2, "Rz": 2},
+        (
+            "fse3d+SHUFFLING",
+            {"nslices": 32, "etl": 10, "nx": 64, "ny": 64, "Ry": 2, "Rz": 2},
+        ),
+        ("mprage3d+SHUFFLING", {"nslices": 48, "nx": 64, "ny": 96, "Ry": 2, "Rz": 2}),
     ],
+    ids=["fse3d", "mprage3d"],
 )
-def test_a_shuffled_mprage_states_a_shortest_tr_its_design_plays_and_the_scan_time_of_its_draw(
-    zoo, changes
+def test_an_undersampled_shuffled_scan_states_the_scan_time_of_its_draw(
+    zoo, name, changes
 ):
-    plugin = zoo["mprage3d+SHUFFLING"]
-    shortest = plugin.evaluate(
-        SYSTEM, _protocol(plugin, changes | {"TR": TRPreset.MINIMUM})
-    )
-    stated = shortest.protocol.to_wire()["TR"]
-    protocol = _protocol(plugin, changes | {"TR": stated})
+    plugin = zoo[name]
+    protocol = _protocol(plugin, changes)
 
     evaluation = plugin.evaluate(SYSTEM, protocol)
-    played = sum(s.duration()[0] for s in _chain(plugin.generate(SYSTEM, protocol)))
+    chain = _chain(plugin.generate(SYSTEM, protocol))
+    played = sum(sequence.duration()[0] for sequence in chain)
 
-    # At a stated TR the scan plays a shot per partition holding a line; the
-    # sparse partitions at the edge of the ellipse are counted to a shot.
-    tr = stated * 1e-6
-    assert abs(evaluation.duration - played) <= 2 * tr
-    # The shortest TR covers the draw's fullest partition, within a few lines.
-    floor = _chain(
-        plugin.generate(SYSTEM, _protocol(plugin, changes | {"TR": TRPreset.MINIMUM}))
-    )[-1].definitions["TR"][0]
-    assert floor <= tr <= floor * 1.05
+    # Every train holds the same number of views, so the draw's trains are
+    # counted without drawing it.
+    rounding = SYSTEM.block_duration_raster * sum(map(_excitations, chain))
+    assert abs(evaluation.duration - played) <= rounding + 1e-9
 
 
 @WITH_BLOCHSIM

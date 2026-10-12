@@ -150,6 +150,12 @@ class Fse3D(SequencePlugin):
             "ordering": "radial",
         }
         train = self.app(system, **(protocol.arguments | one))
+        tr = train.duration()[0]
+        tr_periphery = tr if a["tr_periphery"] is None else a["tr_periphery"]
+        etl_periphery = a["etl"] if a["etl_periphery"] is None else a["etl_periphery"]
+        # Identical trains are all full: the views fill whole trains.
+        individual = tr_periphery != tr or etl_periphery != a["etl"]
+        length = 1 if individual else a["etl"]
         calibrating, imaging = pp.count_cartesian_plane_sampling(
             (a["n_y"], a["n_z"]),
             (a["ry"], a["rz"]),
@@ -158,39 +164,15 @@ class Fse3D(SequencePlugin):
             partial_fourier=(a["partial_fourier_y"], a["partial_fourier_z"]),
             elliptical=True,
             elliptical_acs=a["elliptical_acs"],
+            sampling="poisson" if a["ordering"] == "shuffling" else "lattice",
+            train_length=length,
         )
         views = calibrating + imaging
-        if a["ordering"] == "shuffling" and a["ry"] * a["rz"] > 1:
-            # A Poisson-disc draw is counted by its expected density.
-            views = round(
-                sum(
-                    p.sum()
-                    for p in pp.calc_cartesian_plane_sampling_probability(
-                        (a["n_y"], a["n_z"]),
-                        (a["ry"], a["rz"]),
-                        (a["n_acs_y"], a["n_acs_z"]),
-                        partial_fourier=(
-                            a["partial_fourier_y"],
-                            a["partial_fourier_z"],
-                        ),
-                        elliptical=True,
-                        elliptical_acs=a["elliptical_acs"],
-                        sampling="poisson",
-                    )
-                )
-            )
         # Each train lasts its own TR, a cubic step from the centre's to the
         # periphery's; dummies and, under the wave, the wave-free trains of
         # the calibration region, each as long as the first, play the first.
-        tr = train.duration()[0]
-        tr_periphery = a["tr_periphery"]
-        etl_periphery = a["etl_periphery"]
         lengths, times, _ = shot_parameters(
-            views,
-            a["etl"],
-            a["etl"] if etl_periphery is None else etl_periphery,
-            tr,
-            tr if tr_periphery is None else tr_periphery,
+            views, a["etl"], etl_periphery, tr, tr_periphery
         )
         raster = system.block_duration_raster
         times = [pp.round_to_raster(time, raster) for time in times]

@@ -1,10 +1,7 @@
 """pypulseqpp's 3D MPRAGE bound to the scanner UI, its partitions counted by the number of slices."""
 
 import functools
-import itertools
-import math
 
-import numpy as np
 import pypulseqpp as pp
 from pypulseqpp.sequences.sequence.mprage3D_sequence import ORDERINGS, mprage3d
 
@@ -33,9 +30,9 @@ NAVIGATOR = option("navigator", False)
 #: adds their amplitude and cycles as user entries.
 WAVE = option("wave", False)
 
-#: Order of the lines within a partition: ``"radial"``, centre-out on the
-#: CAIPIRINHA lattice, or ``"shuffling"``, Poisson-disc lines in random order
-#: for a time-resolved reconstruction.
+#: Order of the views in the trains: ``"radial"``, angular wedges of the
+#: CAIPIRINHA lattice read centre-out, or ``"shuffling"``, Poisson-disc views
+#: in random order for a time-resolved reconstruction.
 ORDERING = option("ordering", "radial", choices=ORDERINGS)
 
 
@@ -94,16 +91,15 @@ class Mprage3D(SequencePlugin):
     protocol |= user_entries(app, protocol)
 
     def evaluate(self, system, protocol):
-        # A TR is one inversion shot: the inversion, then one excitation per
-        # line of the fullest partition, which is the centre one. The scan
-        # plays a shot per partition, after the dummy shots and, under the
-        # wave, a wave-free shot per partition of the calibration region. The
-        # design of the centre partition alone plays one shot of the full
-        # length, after its wave-free shot under the wave.
+        # A TR is one inversion shot: the inversion, then a train of one
+        # excitation per view. Every train holds as many views as a line has
+        # at the undersampling, and the views fill whole trains, so the scan
+        # plays a shot per train after the dummy shots and, under the wave,
+        # the wave-free trains of the calibration region. The design of one
+        # partition's lattice without calibration fills exactly one train.
         a = arguments(self, protocol)
-        if a["ordering"] == "shuffling":
-            return self._shuffled(system, protocol, a)
-        calibrating, imaging = pp.make_cartesian_plane_sampling(
+        length = -(-a["n_y"] // a["ry"])
+        calibrating, imaging = pp.count_cartesian_plane_sampling(
             (a["n_y"], a["n_z"]),
             (a["ry"], a["rz"]),
             (a["n_acs_y"], a["n_acs_z"]),
@@ -111,56 +107,22 @@ class Mprage3D(SequencePlugin):
             partial_fourier=(a["partial_fourier_y"], a["partial_fourier_z"]),
             elliptical=True,
             elliptical_acs=a["elliptical_acs"],
+            sampling="poisson" if a["ordering"] == "shuffling" else "lattice",
+            train_length=length,
         )
-        partitions = {z for _, z in itertools.chain(calibrating, imaging)}
-        references = len({z for _, z in calibrating}) if waved(a) else 0
-        one = {"n_dummy": 0, "rz": a["n_z"], "n_acs_z": 1}
-        shot = self.app(system, **(protocol.arguments | one))
-        designed = 2 if waved(a) and a["n_acs_y"] > 0 else 1
-        return Evaluation(
-            protocol.replace(achieved(self, shot)),
-            (a["n_dummy"] + references + len(partitions))
-            * shot.duration()[0]
-            / designed,
-            rf_layout=rf_layout(shot, scaled=True),
-        )
-
-    def _shuffled(self, system, protocol, a):
-        # A shuffled order draws its lines from a Poisson-disc support, and
-        # every shot plays as many lines as its fullest partition. The draw is
-        # replaced by its expected density: a partition expected to hold a
-        # line or more is a shot, and a shot is as long as the fullest
-        # expected partition two standard deviations up, which a draw rarely
-        # passes.
-        calibrating, imaging = pp.calc_cartesian_plane_sampling_probability(
-            (a["n_y"], a["n_z"]),
-            (a["ry"], a["rz"]),
-            (a["n_acs_y"], a["n_acs_z"]),
-            partial_fourier=(a["partial_fourier_y"], a["partial_fourier_z"]),
-            elliptical=True,
-            elliptical_acs=a["elliptical_acs"],
-            sampling="poisson",
-        )
-        acquired = calibrating + imaging
-        lines = acquired.sum(axis=0)
-        spread = np.sqrt((acquired * (1 - acquired)).sum(axis=0))
-        readouts = min(a["n_y"], math.ceil((lines + 2 * spread).max()))
-        partitions = round(np.minimum(lines, 1).sum())
-        references = np.count_nonzero(calibrating.any(axis=0)) if waved(a) else 0
-        # The centre partition alone, as a calibration region of that many
-        # lines, plays one shot of that length.
+        trains = -(-(calibrating + imaging) // length)
+        references = -(-calibrating // length) if waved(a) else 0
         one = {
             "n_dummy": 0,
             "ordering": "radial",
-            "ry": a["n_y"],
             "rz": a["n_z"],
-            "n_acs_y": readouts,
-            "n_acs_z": 1,
+            "n_acs_y": 0,
+            "n_acs_z": 0,
+            "caipi_shift": 0,
         }
         shot = self.app(system, **(protocol.arguments | one))
-        designed = 2 if waved(a) else 1
         return Evaluation(
             protocol.replace(achieved(self, shot)),
-            (a["n_dummy"] + references + partitions) * shot.duration()[0] / designed,
+            (a["n_dummy"] + references + trains) * shot.duration()[0],
             rf_layout=rf_layout(shot, scaled=True),
         )
