@@ -16,6 +16,7 @@ from pulserver._zoo._evaluation import (
 )
 from pulserver._zoo._user import user_entries
 from pulserver.design import (
+    BoolParam,
     Evaluation,
     FloatParam,
     IntParam,
@@ -30,23 +31,16 @@ from pulserver.protocol import (
     UIParam,
 )
 
-#: Simultaneous multislice: adds the multiband factor to the protocol.
-MULTIBAND = False
-
-
-#: Saturate fat before every shot: with the fat shifted many pixels along the
-#: phase encode, an EPI without it shows the scalp over the brain.
-FAT_SATURATION = True
-
 
 class Epi2D(SequencePlugin):
     # Twofold readout oversampling keeps the ramp-sampled flat top within the
     # spacing of the readout field of view, so it can be resampled onto a grid.
-    app = functools.partial(
-        epi2d, readout_oversampling=2.0, fat_saturation=FAT_SATURATION
-    )
+    app = functools.partial(epi2d, readout_oversampling=2.0)
     protocol = {
         UIParam.IMAGING_MODE: StatedParam(ImagingMode.TWO_D),
+        # On by default: with the fat shifted many pixels along the phase
+        # encode, an EPI without it shows the scalp over the brain.
+        UIParam.FAT_SAT: BoolParam("fat_saturation", default=True),
         UIParam.FLIP: FloatParam(
             "flip_angle_deg", unit="deg", range_min=1.0, range_max=90.0
         ),
@@ -89,9 +83,8 @@ class Epi2D(SequencePlugin):
         UIParam.NUM_FRAMES: IntParam("n_frames", range_min=1, range_max=1000),
         UIParam.NUM_SHOTS: IntParam("n_shots", range_min=1, range_max=16),
         UIParam.RY: IntParam("ry", range_min=1, range_max=4),
+        UIParam.MULTIBAND: IntParam("multiband", range_min=1, range_max=8),
     }
-    if MULTIBAND:
-        protocol[UIParam.MULTIBAND] = IntParam("multiband", range_min=1, range_max=8)
 
     protocol |= user_entries(app, protocol)
 

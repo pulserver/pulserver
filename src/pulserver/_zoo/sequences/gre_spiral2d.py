@@ -13,12 +13,13 @@ from pulserver.design import (
     SequencePlugin,
     StatedParam,
     TimeParam,
+    option,
 )
 from pulserver.protocol import ImagingMode, TEPreset, TRPreset, UIParam
 
 #: Variable-density spirals: adds how much sparser the periphery is sampled
 #: than the centre as a user entry.
-VARIABLE_DENSITY = False
+VARIABLE_DENSITY = option("variable_density", False)
 
 
 class GreSpiral2D(SequencePlugin):

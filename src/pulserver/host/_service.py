@@ -17,13 +17,19 @@ from collections.abc import Callable, Mapping
 from concurrent.futures import ThreadPoolExecutor
 from functools import lru_cache, partial
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 import pypulseqpp as pp
 
 from .. import __version__, _plugins, ir
 from .._plugins import PluginPath
-from ..design import RfLayout, SequencePlugin, load_plugin
+from ..design import (
+    OptionError,
+    RfLayout,
+    SequencePlugin,
+    load_plugin,
+    read_options,
+)
 from ..ir._convert import _payload, _read_chain, _write_cache
 from ..mrd._sequence import designed_chain
 from ..protocol import (
@@ -67,15 +73,64 @@ def plugin_path(plugins: PluginPath, plugin: str) -> Path:
         raise CallError(str(error)) from None
 
 
+def parameter_file(
+    path: Path, parameter_set: int, parameters: Path | str | None = None
+) -> Path | None:
+    """Return the parameter file of set ``parameter_set`` for the plugin file ``path``; ``None`` for set 0.
+
+    The file is ``<parameters>/<script>/<NN>.toml``, the set number in two
+    digits at least. ``<script>`` is the stem of the plugin file once its
+    symbolic links are followed, so a slot ``sequence3.py`` linked to
+    ``src/fse3d.py`` reads ``fse3d/``. ``parameters`` defaults to the
+    ``parameters`` directory beside the plugin directory.
+
+    Raises
+    ------
+    CallError
+        If the set is negative, or positive and its file does not exist.
+    """
+    if parameter_set < 0:
+        raise CallError(f"parameter set {parameter_set} is negative")
+    if parameter_set == 0:
+        return None
+    directory = Path(parameters) if parameters else path.parent.parent / "parameters"
+    script = path.resolve().stem
+    file = directory / script / f"{parameter_set:02d}.toml"
+    if not file.is_file():
+        raise CallError(f"parameter set {parameter_set} of {script}: no file {file}")
+    return file
+
+
+class _Variant(NamedTuple):
+    """A plugin file and the parameter file it is loaded with, if any."""
+
+    path: str
+    parameters: str | None
+
+
+def _variant(
+    plugins: PluginPath,
+    plugin: str,
+    parameter_set: int,
+    parameters: Path | str | None,
+) -> _Variant:
+    path = plugin_path(plugins, plugin)
+    file = parameter_file(path, parameter_set, parameters)
+    return _Variant(str(path), None if file is None else str(file))
+
+
 def list_protocol(
     plugins: PluginPath,
     plugin: str,
     limits: Mapping[str, Any] | None = None,
     rf_definitions: bool = False,
+    parameter_set: int = 0,
+    parameters: Path | str | None = None,
 ) -> str:
     """Reply ``PROTOCOL`` and the plugin's listing block, and its RF definitions where asked.
 
-    The listing depends on the plugin file and the installed packages only.
+    The listing depends on the plugin file, the file of ``parameter_set``
+    (see :func:`parameter_file`) and the installed packages only.
     With ``rf_definitions``, the ``[RfDefinitions]`` block of the plugin's
     evaluation at its default protocol under ``limits`` follows it, naming the
     definitions, and the peak amplitudes, the RF layouts of later validations
@@ -88,8 +143,8 @@ def list_protocol(
     CallError
         If ``rf_definitions`` is asked without ``limits``.
     """
-    path = str(plugin_path(plugins, plugin))
-    reply = "PROTOCOL\n" + format_listing(_listing(path))
+    variant = _variant(plugins, plugin, parameter_set, parameters)
+    reply = "PROTOCOL\n" + format_listing(_listing(variant))
     if not rf_definitions:
         return reply
     if limits is None:
@@ -98,7 +153,7 @@ def list_protocol(
             "carries none"
         )
     layout = _default_rf_layout(
-        path, _read(limits), f"the RF definitions of {plugin} are not listed"
+        variant, _read(limits), f"the RF definitions of {plugin} are not listed"
     )
     if layout is not None:
         reply += format_rf_definitions(layout.instances)
@@ -112,6 +167,8 @@ def validate(
     block: str,
     rf_layout: bool = False,
     exam: str | None = None,
+    parameter_set: int = 0,
+    parameters: Path | str | None = None,
 ) -> str:
     """Reply ``VALID <seconds>`` or ``INVALID``, an ``INFO`` line and the value block.
 
@@ -122,17 +179,19 @@ def validate(
     listing states, read by evaluating the plugin again at its default
     protocol. Where that evaluation is invalid, a warning is logged and the
     amplitudes are the layout's own. ``exam`` is the directory of the current
-    exam's cache, which the plugin's hooks read where they take it.
+    exam's cache, which the plugin's hooks read where they take it. The
+    plugin is loaded with the options of ``parameter_set``, as
+    :func:`list_protocol` loads it.
     """
-    path = str(plugin_path(plugins, plugin))
-    listing = _listing(path)
+    variant = _variant(plugins, plugin, parameter_set, parameters)
+    listing = _listing(variant)
     request = _request(block, listing)
     limits = _read(limits)
-    validation = _validated(path, limits, request, exam)
+    validation = _validated(variant, limits, request, exam)
     listed: list[float] = []
     if rf_layout and validation.valid and validation.rf_layout is not None:
         default = _default_rf_layout(
-            path,
+            variant,
             limits,
             f"the RF layout of {plugin} is not stated over the listed peaks",
         )
@@ -153,11 +212,14 @@ def generate(
     store: DesignStore,
     push: str | None = None,
     exam: str | None = None,
+    parameter_set: int = 0,
+    parameters: Path | str | None = None,
 ) -> str:
     """Reply ``GENERATED <id>`` for the design a request resolves to.
 
-    A design already stored for the resolved protocol, the plugin source, the
-    package versions and the limits is returned without designing again.
+    A design already stored for the resolved protocol, the plugin's options,
+    the plugin source, the package versions and the limits is returned
+    without designing again.
     Otherwise the sequence is designed once, under the scanner limits
     capped by the design limits ``design_max_grad`` and ``design_max_slew``,
     written in the logical frame, checked in the physical frame of the
@@ -176,13 +238,13 @@ def generate(
         If the request is invalid or the design fails a check, when nothing
         is stored; or if the design cannot be pushed, when it stays stored.
     """
-    path = str(plugin_path(plugins, plugin))
-    listing = _listing(path)
+    variant = _variant(plugins, plugin, parameter_set, parameters)
+    listing = _listing(variant)
     request = _request(block, listing)
     limits = _read(limits)
     system, options, checked = split_limits(limits)
     design = design_system(limits)
-    scanner = _plugin(path)
+    scanner = _plugin(variant)
     requested = {key: p.value for key, p in listing.items() if p.editable}
     requested.update(request)
     if not scanner.reads_exam:
@@ -192,8 +254,10 @@ def generate(
         validation = scanner.validate(design, validation.values, exam)
     if not validation.valid:
         raise CallError(validation.info)
-    source = _source(path)
+    source = _source(variant)
     identified = dict(validation.values)
+    if scanner.options:
+        identified["options"] = dict(scanner.options)
     if exam is not None:
         identified["exam"] = _exam_digest(exam)
     identity = design_identity(plugin, identified_limits(limits), identified, source)
@@ -225,6 +289,7 @@ def generate(
         manifest = {
             **_record(limits),
             "plugin": plugin,
+            "options": dict(scanner.options),
             "source": source,
             "scan_time": validation.duration,
             "fov_offset_mm": [1e3 * value for value in offset],
@@ -391,29 +456,45 @@ def _record(limits: Mapping[str, Any]) -> dict[str, Any]:
 
 
 @lru_cache(maxsize=32)
-def _cached(path: str, mtime_ns: int) -> SequencePlugin:  # noqa: ARG001 -- part of the key
-    return load_plugin(Path(path))
+def _cached(variant: _Variant, mtimes_ns: tuple[int, ...]) -> SequencePlugin:  # noqa: ARG001 -- part of the key
+    options = {} if variant.parameters is None else read_options(variant.parameters)
+    return load_plugin(Path(variant.path), options)
 
 
-def _plugin(path: str) -> SequencePlugin:
-    """Return the plugin at ``path``, imported again when the file changed."""
-    return _cached(path, Path(path).stat().st_mtime_ns)
+def _mtimes(variant: _Variant) -> tuple[int, ...]:
+    """Return the modification times of the files of a variant, which change when either is edited."""
+    return tuple(Path(f).stat().st_mtime_ns for f in variant if f is not None)
 
 
-def _listing(path: str) -> dict[ProtocolKey, Parameter]:
-    return _plugin(path).listing()
+def _plugin(variant: _Variant) -> SequencePlugin:
+    """Return the plugin of a variant, imported again when either of its files changed.
+
+    Raises
+    ------
+    CallError
+        If the parameter file is not TOML, or sets options the plugin does
+        not declare or values it does not take.
+    """
+    try:
+        return _cached(variant, _mtimes(variant))
+    except OptionError as error:
+        raise CallError(f"{variant.parameters}: {error}") from None
 
 
-def _source(path: str) -> str:
-    """Return a digest of the code that designs with the plugin at ``path``.
+def _listing(variant: _Variant) -> dict[ProtocolKey, Parameter]:
+    return _plugin(variant).listing()
+
+
+def _source(variant: _Variant) -> str:
+    """Return a digest of the code that designs with the plugin of a variant.
 
     Covers the plugin file, the source file of the app it binds, and the
     installed versions of pypulseqpp and pulserver. A :func:`functools.partial`
     app is covered through the function it wraps. Modules the app imports from
     elsewhere are covered only through those versions.
     """
-    digest = hashlib.sha256(Path(path).read_bytes())
-    app = _plugin(path).app
+    digest = hashlib.sha256(Path(variant.path).read_bytes())
+    app = _plugin(variant).app
     while isinstance(app, functools.partial):
         app = app.func
     try:
@@ -427,12 +508,12 @@ def _source(path: str) -> str:
 
 
 def _validated(
-    path: str,
+    variant: _Variant,
     limits: Mapping[str, Any],
     request: Mapping[ProtocolKey, Any],
     exam: str | None = None,
 ) -> Validation:
-    return _plugin(path).validate(design_system(limits), request, exam)
+    return _plugin(variant).validate(design_system(limits), request, exam)
 
 
 def _exam_digest(exam: str) -> str:
@@ -446,16 +527,16 @@ def _exam_digest(exam: str) -> str:
 
 
 def _default_rf_layout(
-    path: str, limits: Mapping[str, Any], unavailable: str
+    variant: _Variant, limits: Mapping[str, Any], unavailable: str
 ) -> RfLayout | None:
     """Return the RF layout of the plugin's evaluation at its default protocol, the RF the listing states.
 
     ``None`` where the evaluation states none. Where it is invalid, a warning
     that begins with ``unavailable`` is logged and the result is ``None``. The
-    evaluation is made once per plugin file, as last modified, and limits.
+    evaluation is made once per variant, as last modified, and limits.
     """
     evaluated = _default_validation(
-        path, Path(path).stat().st_mtime_ns, tuple(sorted(limits.items()))
+        variant, _mtimes(variant), tuple(sorted(limits.items()))
     )
     if not evaluated.valid:
         _log.warning(
@@ -465,8 +546,12 @@ def _default_rf_layout(
 
 
 @lru_cache(maxsize=32)
-def _default_validation(path: str, mtime_ns: int, limits: tuple) -> Validation:  # noqa: ARG001 -- part of the key
-    return _validated(path, dict(limits), {})
+def _default_validation(
+    variant: _Variant,
+    mtimes_ns: tuple[int, ...],  # noqa: ARG001 -- part of the key
+    limits: tuple,
+) -> Validation:
+    return _validated(variant, dict(limits), {})
 
 
 def _play_averages(path: Path, averages: int) -> None:

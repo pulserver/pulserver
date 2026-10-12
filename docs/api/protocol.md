@@ -48,6 +48,7 @@ protocol stay members until a wire block formats them.
 | {obj}`~pulserver.protocol.ImagingMode` | Options of `imaging_mode`. |
 | {obj}`~pulserver.protocol.PreparationType` | Options of `preparation_type`. |
 | {obj}`~pulserver.protocol.TriggerType` | Options of `trigger_type`: Pulseq trigger channel names. |
+| {obj}`~pulserver.protocol.Excitation` | Options of `excitation`: the excitations pypulseqpp's sequences take. |
 
 ## Prescription
 

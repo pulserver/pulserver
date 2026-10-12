@@ -2,40 +2,41 @@
 
 import functools
 import itertools
+import math
 
+import numpy as np
 import pypulseqpp as pp
-from pypulseqpp.sequences.sequence.mprage3D_sequence import mprage3d
+from pypulseqpp.sequences.sequence.mprage3D_sequence import ORDERINGS, mprage3d
 
 from pulserver._zoo._evaluation import achieved, arguments, rf_layout, waved
 from pulserver._zoo._pmc import navigated
 from pulserver._zoo._slab import slab
-from pulserver._zoo._user import shortest_at_zero, user_entries
+from pulserver._zoo._user import shortest_at_zero, user_entries, wave_entries
 from pulserver.design import (
+    ChoiceParam,
     Evaluation,
     FloatParam,
     IntParam,
     SequencePlugin,
     StatedParam,
     TimeParam,
+    option,
 )
-from pulserver.protocol import ImagingMode, TEPreset, TRPreset, UIParam
+from pulserver.protocol import Excitation, ImagingMode, TEPreset, TRPreset, UIParam
 
 #: Three-plane navigators after each train, whose pose the ``pmc``
 #: reconstruction states to the scan.
-NAVIGATOR = False
+NAVIGATOR = option("navigator", False)
 
 #: Wave-CAIPI: sinusoidal gradients on the phase- and partition-encoding axes
-#: during each readout, the calibration region acquired first without them.
-WAVE = False
-#: Peak wave-encoding gradient amplitude requested, in T/m.
-WAVE_AMPLITUDE = 6e-3
-#: Wave periods across the sampling window.
-WAVE_CYCLES = 8
+#: during each readout, the calibration region acquired first without them;
+#: adds their amplitude and cycles as user entries.
+WAVE = option("wave", False)
 
-#: The excitation, one of ``pypulseqpp.sequences.EXCITATIONS``: ``"slab"``
-#: selects the slab, ``"spsp"`` excites water alone in it and
-#: ``"nonselective"`` plays a hard pulse.
-EXCITATION = "slab"
+#: Order of the lines within a partition: ``"radial"``, centre-out on the
+#: CAIPIRINHA lattice, or ``"shuffling"``, Poisson-disc lines in random order
+#: for a time-resolved reconstruction.
+ORDERING = option("ordering", "radial", choices=ORDERINGS)
 
 
 class Mprage3D(SequencePlugin):
@@ -44,13 +45,12 @@ class Mprage3D(SequencePlugin):
         if NAVIGATOR
         else shortest_at_zero(slab(mprage3d), "esp")
     )
-    if WAVE:
-        app = functools.partial(
-            app, wave_amplitude=WAVE_AMPLITUDE, wave_cycles=WAVE_CYCLES
-        )
-    app = functools.partial(app, excitation=EXCITATION)
+    app = functools.partial(app, ordering=ORDERING)
     protocol = {
         UIParam.IMAGING_MODE: StatedParam(ImagingMode.THREE_D),
+        UIParam.EXCITATION: ChoiceParam(
+            "excitation", Excitation, default=Excitation.SLAB
+        ),
         UIParam.FLIP: FloatParam(
             "flip_angle_deg", unit="deg", range_min=1.0, range_max=90.0
         ),
@@ -88,6 +88,9 @@ class Mprage3D(SequencePlugin):
         UIParam.RZ: IntParam("rz", range_min=1, range_max=4),
     }
 
+    if WAVE:
+        protocol |= wave_entries()
+
     protocol |= user_entries(app, protocol)
 
     def evaluate(self, system, protocol):
@@ -98,6 +101,8 @@ class Mprage3D(SequencePlugin):
         # design of the centre partition alone plays one shot of the full
         # length, after its wave-free shot under the wave.
         a = arguments(self, protocol)
+        if a["ordering"] == "shuffling":
+            return self._shuffled(system, protocol, a)
         calibrating, imaging = pp.make_cartesian_plane_sampling(
             (a["n_y"], a["n_z"]),
             (a["ry"], a["rz"]),
@@ -117,5 +122,45 @@ class Mprage3D(SequencePlugin):
             (a["n_dummy"] + references + len(partitions))
             * shot.duration()[0]
             / designed,
+            rf_layout=rf_layout(shot, scaled=True),
+        )
+
+    def _shuffled(self, system, protocol, a):
+        # A shuffled order draws its lines from a Poisson-disc support, and
+        # every shot plays as many lines as its fullest partition. The draw is
+        # replaced by its expected density: a partition expected to hold a
+        # line or more is a shot, and a shot is as long as the fullest
+        # expected partition two standard deviations up, which a draw rarely
+        # passes.
+        calibrating, imaging = pp.calc_cartesian_plane_sampling_probability(
+            (a["n_y"], a["n_z"]),
+            (a["ry"], a["rz"]),
+            (a["n_acs_y"], a["n_acs_z"]),
+            partial_fourier=(a["partial_fourier_y"], a["partial_fourier_z"]),
+            elliptical=True,
+            elliptical_acs=a["elliptical_acs"],
+            sampling="poisson",
+        )
+        acquired = calibrating + imaging
+        lines = acquired.sum(axis=0)
+        spread = np.sqrt((acquired * (1 - acquired)).sum(axis=0))
+        readouts = min(a["n_y"], math.ceil((lines + 2 * spread).max()))
+        partitions = round(np.minimum(lines, 1).sum())
+        references = np.count_nonzero(calibrating.any(axis=0)) if waved(a) else 0
+        # The centre partition alone, as a calibration region of that many
+        # lines, plays one shot of that length.
+        one = {
+            "n_dummy": 0,
+            "ordering": "radial",
+            "ry": a["n_y"],
+            "rz": a["n_z"],
+            "n_acs_y": readouts,
+            "n_acs_z": 1,
+        }
+        shot = self.app(system, **(protocol.arguments | one))
+        designed = 2 if waved(a) else 1
+        return Evaluation(
+            protocol.replace(achieved(self, shot)),
+            (a["n_dummy"] + references + partitions) * shot.duration()[0] / designed,
             rf_layout=rf_layout(shot, scaled=True),
         )

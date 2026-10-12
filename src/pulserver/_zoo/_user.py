@@ -85,8 +85,32 @@ SHARED: tuple[tuple[tuple[str, ...], str, Callable[[str], Entry]], ...] = (
     ),
 )
 
+#: The user CV of the wave-encoding amplitude, followed by that of its
+#: cycles, which a plugin shows while its ``wave`` option is on.
+WAVE = 10
+
 #: The first user CV a plugin's own controls take, after the shared ones.
 OWN = 12
+
+
+def wave_entries() -> dict[ProtocolKey, Entry]:
+    """Return the wave-CAIPI controls: the peak amplitude asked of the wave gradients and the wave periods across a readout."""
+    return {
+        UIParam.user_name(WAVE): Description("Wave amplitude"),
+        UIParam.user_value(WAVE): FloatParam(
+            "wave_amplitude",
+            unit="mT/m",
+            scale=1e-3,
+            range_min=0.5,
+            range_max=40.0,
+            range_incr=0.1,
+            default=6.0,
+        ),
+        UIParam.user_name(WAVE + 1): Description("Wave cycles"),
+        UIParam.user_value(WAVE + 1): IntParam(
+            "wave_cycles", range_min=1, range_max=32, default=8
+        ),
+    }
 
 
 def user_entries(

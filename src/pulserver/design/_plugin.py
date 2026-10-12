@@ -32,6 +32,7 @@ from ..protocol import (
 )
 from ..protocol._keys import WIRE_NAMES
 from ._entries import AveragesParam, Entry, Protocol, _parameter
+from ._options import OptionValue, loading_options
 from ._rf import RfLayout
 
 _log = logging.getLogger("pulserver.design")
@@ -113,6 +114,10 @@ class SequencePlugin:
         its ``default`` may bind a name the app does not take; it is then read
         by the plugin's own :meth:`evaluate` and :meth:`generate`, which do
         not pass it to the app.
+    options : mapping
+        The plugin's options, by name, at the values
+        :func:`~pulserver.design.load_plugin` loaded it with; empty for an
+        instance made otherwise.
 
     Raises
     ------
@@ -137,6 +142,7 @@ class SequencePlugin:
 
     app: ClassVar[Callable[..., Any]]
     protocol: ClassVar[Mapping[ProtocolKey, Entry]] = {}
+    options: Mapping[str, OptionValue] = {}
 
     _deprecated_alias: ClassVar[bool] = False
 
@@ -569,24 +575,32 @@ def _write(
     return [str(path) for path in paths]
 
 
-def load_plugin(path: Path) -> SequencePlugin:
+def load_plugin(path: Path, options: Mapping[str, Any] | None = None) -> SequencePlugin:
     """Import a plugin file and instantiate the one SequencePlugin it defines.
 
     The module is registered as ``pulserver_plugin_<file stem>``; loading
     another file with the same stem replaces it. A subclass of
-    :class:`ScannerSequence` is a plugin too.
+    :class:`ScannerSequence` is a plugin too. ``options`` are the values the
+    plugin's :func:`~pulserver.design.option` calls return in place of their
+    defaults, as a parameter file states them. The instance's ``options``
+    attribute holds every option the plugin declares, at the value it was
+    loaded with.
 
     Raises
     ------
     ValueError
         If the file defines no SequencePlugin subclass, or more than one.
+    OptionError
+        If ``options`` names an option the plugin does not declare, or gives
+        one a value it does not take.
     """
     path = Path(path)
     name = f"pulserver_plugin_{path.stem}"
     spec = importlib.util.spec_from_file_location(name, path)
     module = importlib.util.module_from_spec(spec)
     sys.modules[name] = module
-    spec.loader.exec_module(module)
+    with loading_options(options or {}) as resolved:
+        spec.loader.exec_module(module)
     found = [
         obj
         for obj in vars(module).values()
@@ -598,4 +612,6 @@ def load_plugin(path: Path) -> SequencePlugin:
         raise ValueError(
             f"{path} defines {len(found)} SequencePlugin subclasses; a plugin defines one"
         )
-    return found[0]()
+    plugin = found[0]()
+    plugin.options = dict(resolved)
+    return plugin

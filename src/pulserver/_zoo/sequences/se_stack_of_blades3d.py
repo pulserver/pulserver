@@ -1,7 +1,5 @@
 """pypulseqpp's stack-of-blades spin echo bound to the scanner UI, its partitions counted by the number of slices."""
 
-import functools
-
 from pypulseqpp.sequences.sequence.se_stack_of_blades3D_sequence import (
     se_stack_of_blades3d,
 )
@@ -10,24 +8,23 @@ from pulserver._zoo._evaluation import evaluation, stack_of_blades
 from pulserver._zoo._slab import slab
 from pulserver._zoo._user import user_entries
 from pulserver.design import (
+    ChoiceParam,
     FloatParam,
     IntParam,
     SequencePlugin,
     StatedParam,
     TimeParam,
 )
-from pulserver.protocol import ImagingMode, TEPreset, TRPreset, UIParam
-
-#: The excitation, one of ``pypulseqpp.sequences.EXCITATIONS``: ``"slab"``
-#: selects the slab, ``"spsp"`` excites water alone in it and
-#: ``"nonselective"`` plays a hard pulse.
-EXCITATION = "slab"
+from pulserver.protocol import Excitation, ImagingMode, TEPreset, TRPreset, UIParam
 
 
 class SeStackOfBlades3D(SequencePlugin):
-    app = functools.partial(slab(se_stack_of_blades3d), excitation=EXCITATION)
+    app = slab(se_stack_of_blades3d)
     protocol = {
         UIParam.IMAGING_MODE: StatedParam(ImagingMode.THREE_D),
+        UIParam.EXCITATION: ChoiceParam(
+            "excitation", Excitation, default=Excitation.SLAB
+        ),
         UIParam.TE: TimeParam(
             "te",
             range_min=2000,

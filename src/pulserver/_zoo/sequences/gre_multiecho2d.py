@@ -12,12 +12,13 @@ from pulserver.design import (
     SequencePlugin,
     StatedParam,
     TimeParam,
+    option,
 )
 from pulserver.protocol import ImagingMode, TEPreset, TRPreset, UIParam
 
 #: Monopolar echo train, each echo rewound; bipolar, with even echoes read
 #: backwards, otherwise.
-FLYBACK = True
+FLYBACK = option("flyback", True)
 
 
 class GreMultiecho2D(SequencePlugin):

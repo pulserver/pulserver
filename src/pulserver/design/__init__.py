@@ -16,6 +16,7 @@ from ._entries import (
     StringListParam,
     TimeParam,
 )
+from ._options import OptionError, option, read_options
 from ._plugin import (
     Evaluation,
     ScannerSequence,
@@ -34,6 +35,7 @@ __all__ = [
     "Evaluation",
     "FloatParam",
     "IntParam",
+    "OptionError",
     "Protocol",
     "RfControl",
     "RfLayout",
@@ -44,4 +46,6 @@ __all__ = [
     "TimeParam",
     "load_exam",
     "load_plugin",
+    "option",
+    "read_options",
 ]

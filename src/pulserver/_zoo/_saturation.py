@@ -7,9 +7,9 @@ import inspect
 from collections.abc import Callable
 from typing import Any
 
-from ..design import ConfigParam, FloatParam
+from ..design import ConfigParam, FloatParam, IntParam
 from ..design._entries import Entry
-from ..protocol import ConfigKey, ProtocolKey, UIParam
+from ..protocol import ProtocolKey, UIParam
 
 #: The normal each band starts with, along the physical axes, before the console turns it.
 _NORMALS = ((1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0)) * 2
@@ -20,16 +20,18 @@ _POSITION_MM, _THICKNESS_MM = 150.0, 40.0
 
 
 def band_entries(count: int) -> dict[ProtocolKey, Entry]:
-    """Return the entries of ``count`` explicit saturation bands, 1 to 6, all of them on.
+    """Return the entries of ``count`` explicit saturation bands, 1 to 6, none of them on.
 
-    ``exsat_mask`` is declared, not edited: bit ``n - 1`` is set for each band
-    the sequence plays, so the console offers every one of them to be placed.
-    Each band has its normal along the physical axes, its centre's distance
-    from the isocentre along it and its thickness, in mm.
+    ``exsat_mask`` has bit ``n - 1`` set for each band ``n`` the operator
+    places on the console's graphic Rx, up to ``count``. Each band has its
+    normal along the physical axes, its centre's distance from the isocentre
+    along it and its thickness, in mm.
     """
     entries: dict[ProtocolKey, Entry] = {
         UIParam.ENABLE_SATURATION_UI: ConfigParam(1),
-        ConfigKey.EXSAT_MASK: ConfigParam(2**count - 1),
+        UIParam.EXSAT_MASK: IntParam(
+            "exsat_mask", range_min=0, range_max=2**count - 1, default=0
+        ),
     }
     for n in range(1, count + 1):
         for key in UIParam.exsat_normal(n):
@@ -54,12 +56,14 @@ def band_entries(count: int) -> dict[ProtocolKey, Entry]:
 
 
 def explicit_bands(app: Callable[..., Any], count: int) -> Callable[..., Any]:
-    """Return ``app`` taking the console's ``count`` bands, ``exsat<n>_*``, in place of its ``sat<n>_*``.
+    """Return ``app`` taking the console's ``count`` bands, ``exsat<n>_*`` and ``exsat_mask``, in place of its ``sat<n>_*``.
 
     A band is in the physical frame, as the console prescribes it and as
     ``app`` plays it: its normal along the physical axes, its position from
-    the isocentre and its thickness, in metres. Every band is played; ``app``
-    leaves the others off.
+    the isocentre and its thickness, in metres. The bands ``exsat_mask``
+    sets are played and the others are passed at zero thickness, which
+    ``app`` leaves off. A mask setting a band past ``count`` raises
+    ``ValueError``.
     """
     signature = inspect.signature(app)
     own = [p for p in signature.parameters.values() if not p.name.startswith("sat")]
@@ -85,6 +89,9 @@ def explicit_bands(app: Callable[..., Any], count: int) -> Callable[..., Any]:
                 default=1e-3 * _THICKNESS_MM,
             ),
         ]
+    given.append(
+        inspect.Parameter("exsat_mask", inspect.Parameter.KEYWORD_ONLY, default=0)
+    )
     stated = signature.replace(parameters=[*own, *given])
 
     @functools.wraps(app)
@@ -92,11 +99,19 @@ def explicit_bands(app: Callable[..., Any], count: int) -> Callable[..., Any]:
         bound = stated.bind(*args, **kwargs)
         bound.apply_defaults()
         values = dict(bound.arguments)
+        mask = int(values.pop("exsat_mask"))
+        if mask >> count:
+            raise ValueError(
+                f"the console places explicit saturation bands past band {count}, "
+                f"the last this sequence plays (mask {mask})"
+            )
         for n in range(1, count + 1):
+            on = bool(mask >> (n - 1) & 1)
             for axis in "xyz":
                 values[f"sat{n}_normal_{axis}"] = values.pop(f"exsat{n}_normal_{axis}")
             values[f"sat{n}_position"] = values.pop(f"exsat{n}_loc")
-            values[f"sat{n}_thickness"] = values.pop(f"exsat{n}_thickness")
+            thickness = values.pop(f"exsat{n}_thickness")
+            values[f"sat{n}_thickness"] = thickness if on else 0.0
         return app(**values)
 
     banded.__signature__ = stated  # type: ignore[attr-defined]

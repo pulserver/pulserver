@@ -4,13 +4,18 @@ import functools
 
 import numpy as np
 import pypulseqpp as pp
-from pypulseqpp.sequences.sequence.fse3D_sequence import fse3d, shot_parameters
+from pypulseqpp.sequences.sequence.fse3D_sequence import (
+    ORDERINGS,
+    fse3d,
+    shot_parameters,
+)
 
 from pulserver._zoo._evaluation import achieved, arguments, rf_layout, waved
 from pulserver._zoo._pmc import navigated
 from pulserver._zoo._slab import slab
-from pulserver._zoo._user import OWN, shortest_at_zero, user_entries
+from pulserver._zoo._user import OWN, shortest_at_zero, user_entries, wave_entries
 from pulserver.design import (
+    ChoiceParam,
     Description,
     Evaluation,
     FloatParam,
@@ -19,41 +24,37 @@ from pulserver.design import (
     SequencePlugin,
     StatedParam,
     TimeParam,
+    option,
 )
-from pulserver.protocol import ImagingMode, TEPreset, TRPreset, UIParam
+from pulserver.protocol import Excitation, ImagingMode, TEPreset, TRPreset, UIParam
 
 #: Three-plane navigators after each train, whose pose the ``pmc``
 #: reconstruction states to the scan.
-NAVIGATOR = False
+NAVIGATOR = option("navigator", False)
 
-#: Refocusing trains designed with blochsim's extended phase graphs around
-#: the refocusing angle at the TE echo, one train shared by every shot.
-OPTIMIZED = False
-
-#: Optimized trains individually parameterized for the centre and the
-#: periphery of k-space: adds the TR and the echo train length at the
-#: periphery as user entries, TR and ETL being the centre's; each shot's train
-#: is a cubic step between the two designs.
-DUAL_REGION = False
+#: The refocusing trains: ``"constant"``, at the refocusing angle;
+#: ``"optimized"``, designed with blochsim's extended phase graphs around the
+#: refocusing angle at the TE echo, one train shared by every shot; or
+#: ``"dual_region"``, optimized trains individually parameterized for the
+#: centre and the periphery of k-space, each shot's train a cubic step between
+#: the two designs, which adds the TR and the echo train length at the
+#: periphery as user entries, TR and ETL being the centre's.
+REFOCUSING = option(
+    "refocusing", "constant", choices=("constant", "optimized", "dual_region")
+)
+OPTIMIZED = REFOCUSING != "constant"
+DUAL_REGION = REFOCUSING == "dual_region"
 
 #: Wave-CAIPI: sinusoidal gradients on the phase- and partition-encoding axes
-#: during each readout, the calibration region acquired first without them.
-WAVE = False
-#: Peak wave-encoding gradient amplitude requested, in T/m.
-WAVE_AMPLITUDE = 6e-3
-#: Wave periods across the sampling window.
-WAVE_CYCLES = 8
+#: during each readout, the calibration region acquired first without them;
+#: adds their amplitude and cycles as user entries.
+WAVE = option("wave", False)
 
-if OPTIMIZED or DUAL_REGION:
+if OPTIMIZED:
     import blochsim  # noqa: F401  the trains are designed with it
 
-#: The excitation, one of ``pypulseqpp.sequences.EXCITATIONS``: ``"slab"``
-#: selects the slab, ``"spsp"`` excites water alone in it and
-#: ``"nonselective"`` plays a hard pulse.
-EXCITATION = "slab"
-
 #: Order of the views across shots, ``"radial"`` or ``"shuffling"``.
-ORDERING = "radial"
+ORDERING = option("ordering", "radial", choices=ORDERINGS)
 
 
 class Fse3D(SequencePlugin):
@@ -62,15 +63,14 @@ class Fse3D(SequencePlugin):
         if NAVIGATOR
         else shortest_at_zero(slab(fse3d), "esp")
     )
-    if OPTIMIZED or DUAL_REGION:
+    if OPTIMIZED:
         app = functools.partial(app, flip_modulation="optimized")
-    if WAVE:
-        app = functools.partial(
-            app, wave_amplitude=WAVE_AMPLITUDE, wave_cycles=WAVE_CYCLES
-        )
-    app = functools.partial(app, excitation=EXCITATION, ordering=ORDERING)
+    app = functools.partial(app, ordering=ORDERING)
     protocol = {
         UIParam.IMAGING_MODE: StatedParam(ImagingMode.THREE_D),
+        UIParam.EXCITATION: ChoiceParam(
+            "excitation", Excitation, default=Excitation.SLAB
+        ),
         UIParam.TE: TimeParam(
             "te", range_min=2000, range_max=500000, presets={TEPreset.MINIMUM: None}
         ),
@@ -104,7 +104,7 @@ class Fse3D(SequencePlugin):
         UIParam.RY: IntParam("ry", range_min=1, range_max=4),
         UIParam.RZ: IntParam("rz", range_min=1, range_max=4),
     }
-    if OPTIMIZED or DUAL_REGION:
+    if OPTIMIZED:
         protocol[UIParam.FLIP] = FloatParam(
             "refocusing_angle_deg",
             unit="deg",
@@ -128,6 +128,9 @@ class Fse3D(SequencePlugin):
                 "etl_periphery", range_min=1, range_max=256, default=45
             ),
         }
+
+    if WAVE:
+        protocol |= wave_entries()
 
     protocol |= user_entries(app, protocol)
 
@@ -158,17 +161,23 @@ class Fse3D(SequencePlugin):
         )
         views = calibrating + imaging
         if a["ordering"] == "shuffling" and a["ry"] * a["rz"] > 1:
-            # A Poisson-disc draw reaches its acceleration over the whole
-            # plane to within 0.1, so its size is estimated rather than drawn.
-            views = max(
-                calibrating,
-                round(
-                    a["n_y"]
-                    * a["n_z"]
-                    * a["partial_fourier_y"]
-                    * a["partial_fourier_z"]
-                    / (a["ry"] * a["rz"])
-                ),
+            # A Poisson-disc draw is counted by its expected density.
+            views = round(
+                sum(
+                    p.sum()
+                    for p in pp.calc_cartesian_plane_sampling_probability(
+                        (a["n_y"], a["n_z"]),
+                        (a["ry"], a["rz"]),
+                        (a["n_acs_y"], a["n_acs_z"]),
+                        partial_fourier=(
+                            a["partial_fourier_y"],
+                            a["partial_fourier_z"],
+                        ),
+                        elliptical=True,
+                        elliptical_acs=a["elliptical_acs"],
+                        sampling="poisson",
+                    )
+                )
             )
         # Each train lasts its own TR, a cubic step from the centre's to the
         # periphery's; dummies and, under the wave, the wave-free trains of

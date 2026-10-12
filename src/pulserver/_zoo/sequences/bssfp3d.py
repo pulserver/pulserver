@@ -1,7 +1,5 @@
 """pypulseqpp's 3D balanced SSFP bound to the scanner UI, its partitions counted by the number of slices."""
 
-import functools
-
 import pypulseqpp as pp
 from pypulseqpp.sequences.sequence.bssfp3D_sequence import bssfp3d
 
@@ -9,6 +7,7 @@ from pulserver._zoo._evaluation import achieved, arguments, rf_layout
 from pulserver._zoo._slab import slab
 from pulserver._zoo._user import OWN, user_entries
 from pulserver.design import (
+    ChoiceParam,
     Description,
     Evaluation,
     FloatParam,
@@ -17,18 +16,16 @@ from pulserver.design import (
     StatedParam,
     TimeParam,
 )
-from pulserver.protocol import ImagingMode, TRPreset, UIParam
-
-#: The excitation, one of ``pypulseqpp.sequences.EXCITATIONS``: ``"slab"``
-#: selects the slab, ``"spsp"`` excites water alone in it and
-#: ``"nonselective"`` plays a hard pulse.
-EXCITATION = "slab"
+from pulserver.protocol import Excitation, ImagingMode, TRPreset, UIParam
 
 
 class Bssfp3D(SequencePlugin):
-    app = functools.partial(slab(bssfp3d), excitation=EXCITATION)
+    app = slab(bssfp3d)
     protocol = {
         UIParam.IMAGING_MODE: StatedParam(ImagingMode.THREE_D),
+        UIParam.EXCITATION: ChoiceParam(
+            "excitation", Excitation, default=Excitation.SLAB
+        ),
         UIParam.FLIP: FloatParam(
             "flip_angle_deg", unit="deg", range_min=1.0, range_max=90.0
         ),

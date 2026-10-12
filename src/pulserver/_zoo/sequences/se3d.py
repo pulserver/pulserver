@@ -8,29 +8,27 @@ from pulserver._zoo._evaluation import cartesian_3d, evaluation
 from pulserver._zoo._slab import slab
 from pulserver._zoo._user import user_entries
 from pulserver.design import (
+    ChoiceParam,
     FloatParam,
     IntParam,
     SequencePlugin,
     StatedParam,
     TimeParam,
+    option,
 )
-from pulserver.protocol import ImagingMode, TEPreset, TRPreset, UIParam
-
-#: The excitation, one of ``pypulseqpp.sequences.EXCITATIONS``: ``"slab"``
-#: selects the slab, ``"spsp"`` excites water alone in it and
-#: ``"nonselective"`` plays a hard pulse.
-EXCITATION = "slab"
+from pulserver.protocol import Excitation, ImagingMode, TEPreset, TRPreset, UIParam
 
 #: Sample only the phase encodes inside the ky-kz ellipse.
-ELLIPTICAL = True
+ELLIPTICAL = option("elliptical", True)
 
 
 class Se3D(SequencePlugin):
-    app = functools.partial(
-        slab(se3d), excitation=EXCITATION, elliptical_sampling=ELLIPTICAL
-    )
+    app = functools.partial(slab(se3d), elliptical_sampling=ELLIPTICAL)
     protocol = {
         UIParam.IMAGING_MODE: StatedParam(ImagingMode.THREE_D),
+        UIParam.EXCITATION: ChoiceParam(
+            "excitation", Excitation, default=Excitation.SLAB
+        ),
         UIParam.TE: TimeParam(
             "te",
             range_min=2000,

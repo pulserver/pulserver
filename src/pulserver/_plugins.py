@@ -17,6 +17,10 @@ NAME = re.compile(r"[A-Za-z0-9_\-]+")
 SEQUENCES = Path(__file__).parent / "_zoo" / "sequences"
 RECONSTRUCTIONS = Path(__file__).parent / "_zoo" / "recon"
 
+#: The shipped parameter files of the shipped sequences, ``<script>/<name>.toml``,
+#: which an installation links into its parameter directory as numbered sets.
+PARAMETERS = Path(__file__).parent / "_zoo" / "parameters"
+
 
 def directories(plugins: PluginPath) -> tuple[Path, ...]:
     """Return the directories of a search path, in search order."""

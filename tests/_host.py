@@ -43,9 +43,15 @@ def value_block(values):
 
 
 def generate(
-    store: DesignStore, plugin: str, values, limits=LIMITS, plugins=PLUGINS, push=None
+    store: DesignStore,
+    plugin: str,
+    values,
+    limits=LIMITS,
+    plugins=PLUGINS,
+    push=None,
+    parameter_set=0,
 ):
-    """Return the identifier of the design a request generates, pushed to ``push``.
+    """Return the identifier of the design a request generates, pushed to ``push``, in the plugin's ``parameter_set``.
 
     Raises
     ------
@@ -60,6 +66,7 @@ def generate(
         block=value_block(values),
         store=store,
         push=push,
+        parameter_set=parameter_set,
     )
     assert status == 0, reply
     return reply.split()[1]
