@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>Editable installation &#8212; pulserver documentation</title>
+    <title>Development setup &#8212; pulserver documentation</title>
   
   
   
@@ -66,8 +66,8 @@
     <link rel="icon" href="../_static/pulserver-mark.svg"/>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Development workflow" href="workflow.html" />
-    <link rel="prev" title="Development prerequisites" href="prerequisites.html" />
+    <link rel="next" title="Contribution workflow" href="workflow.html" />
+    <link rel="prev" title="Developer guide" href="index.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   <meta name="docsearch:version" content="latest" />
@@ -155,6 +155,10 @@
   
 
   
+    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
+      <span class="fa-solid fa-outdent"></span>
+    </button>
+  
 </div>
 
     </header>
@@ -238,17 +242,16 @@
         </ul>
         <ul class="current nav bd-sidenav">
 <li class="toctree-l1 has-children"><a class="reference internal" href="../user-guide/index.html">User guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="../user-guide/running.html">Running the services</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../user-guide/running.html">Services</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../user-guide/scanner-sequences.html">Scanner sequences</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../user-guide/reconstruction-plugins.html">Reconstruction plugins</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../user-guide/reconstruction-client.html">Reconstruction clients</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../user-guide/virtual-scanner.html">Scanning a phantom without a scanner</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../user-guide/reconstruction-client.html">Reconstruction client</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../user-guide/virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 current active has-children"><a class="reference internal" href="index.html">Developer guide</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
-<li class="toctree-l2"><a class="reference internal" href="prerequisites.html">Development prerequisites</a></li>
-<li class="toctree-l2 current active"><a class="current reference internal" href="#">Editable installation</a></li>
-<li class="toctree-l2"><a class="reference internal" href="workflow.html">Development workflow</a></li>
+<li class="toctree-l2 current active"><a class="current reference internal" href="#">Development setup</a></li>
+<li class="toctree-l2"><a class="reference internal" href="workflow.html">Contribution workflow</a></li>
 <li class="toctree-l2"><a class="reference internal" href="style.html">Coding style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="documentation.html">Documentation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="terminology.html">Terminology and conventions</a></li>
@@ -261,10 +264,7 @@
 <li class="toctree-l3"><a class="reference internal" href="internals/virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
-<li class="toctree-l2"><a class="reference internal" href="pre-commit.html">Pre-commit</a></li>
-<li class="toctree-l2"><a class="reference internal" href="pull-requests.html">Pull requests</a></li>
 <li class="toctree-l2"><a class="reference internal" href="releases.html">Releases</a></li>
-<li class="toctree-l2"><a class="reference internal" href="code-of-conduct.html">Code of conduct</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../explanations/index.html">Explanations</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -507,7 +507,9 @@
 <button class="btn btn-sm pst-navbar-icon search-button search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
     <i class="fa-solid fa-magnifying-glass fa-lg"></i>
 </button>
-
+<button class="sidebar-toggle secondary-toggle btn btn-sm pst-navbar-icon" title="Toggle secondary sidebar" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="fa-solid fa-list"></span>
+</button>
 </div></div>
       
     </div>
@@ -518,11 +520,22 @@
               
 
 <div id="jb-print-docs-body" class="onlyprint">
-    <h1>Editable installation</h1>
+    <h1>Development setup</h1>
     <!-- Table of contents -->
     <div id="print-main-content">
         <div id="jb-print-toc">
             
+            <div>
+                <h2> Contents </h2>
+            </div>
+            <nav aria-label="Page">
+                <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#prerequisites">Prerequisites</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#editable-installation">Editable installation</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pre-commit-hooks">Pre-commit hooks</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#documentation-build">Documentation build</a></li>
+</ul>
+            </nav>
         </div>
     </div>
 </div>
@@ -532,18 +545,55 @@
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <section class="tex2jax_ignore mathjax_ignore" id="editable-installation">
-<h1>Editable installation<a class="headerlink" href="#editable-installation" title="Link to this heading">#</a></h1>
+  <section class="tex2jax_ignore mathjax_ignore" id="development-setup">
+<h1>Development setup<a class="headerlink" href="#development-setup" title="Link to this heading">#</a></h1>
+<section id="prerequisites">
+<h2>Prerequisites<a class="headerlink" href="#prerequisites" title="Link to this heading">#</a></h2>
+<p>You need Git, Python 3.10 to 3.14, a C compiler, a C++17 compiler and CMake,
+on Linux or macOS. Windows is not supported: the warm design server forks per
+call and listens on a Unix socket.</p>
+<p>The test that compiles <code class="docutils literal notranslate"><span class="pre">src/c/</span></code> as a 32-bit scanner build needs a 32-bit C
+toolchain, which <code class="docutils literal notranslate"><span class="pre">gcc-multilib</span></code> provides on Debian and Ubuntu; without one it
+skips.</p>
+</section>
+<section id="editable-installation">
+<h2>Editable installation<a class="headerlink" href="#editable-installation" title="Link to this heading">#</a></h2>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python<span class="w"> </span>-m<span class="w"> </span>venv<span class="w"> </span>.venv
 <span class="nb">source</span><span class="w"> </span>.venv/bin/activate
 python<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </span><span class="s1">'.[dev,doc]'</span>
 </pre></div>
 </div>
-<p>The <code class="docutils literal notranslate"><span class="pre">dev</span></code> extra contains the lint and test tools and the <code class="docutils literal notranslate"><span class="pre">doc</span></code> extra the
-documentation tools, including sphinx-gallery and matplotlib for the examples,
-which are executed while the pages are built. The editable install compiles the extension into the build
-directory; a change to <code class="docutils literal notranslate"><span class="pre">src/cpp/</span></code> or <code class="docutils literal notranslate"><span class="pre">src/c/</span></code> is compiled again on the next
-import.</p>
+<p>The <code class="docutils literal notranslate"><span class="pre">dev</span></code> extra holds the test, lint and pre-commit tools, with Ruff pinned to
+one version. The <code class="docutils literal notranslate"><span class="pre">doc</span></code> extra holds Sphinx, sphinx-gallery and matplotlib.</p>
+<p>The installation compiles the extension <code class="docutils literal notranslate"><span class="pre">pulserver._ext</span></code> from <code class="docutils literal notranslate"><span class="pre">src/cpp/</span></code> and
+<code class="docutils literal notranslate"><span class="pre">src/c/</span></code>; <code class="docutils literal notranslate"><span class="pre">src/c/</span></code> is compiled with <code class="docutils literal notranslate"><span class="pre">-std=c90</span> <span class="pre">-pedantic-errors</span></code>, as a scanner
+build compiles it. The extension is not rebuilt on import. After you change
+<code class="docutils literal notranslate"><span class="pre">src/cpp/</span></code> or <code class="docutils literal notranslate"><span class="pre">src/c/</span></code>, or switch to a branch that changes them, run the
+installation again; otherwise the tests run against the previous build.</p>
+</section>
+<section id="pre-commit-hooks">
+<h2>Pre-commit hooks<a class="headerlink" href="#pre-commit-hooks" title="Link to this heading">#</a></h2>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pre-commit<span class="w"> </span>install
+pre-commit<span class="w"> </span>run<span class="w"> </span>--all-files
+</pre></div>
+</div>
+<p>The local hook runs <code class="docutils literal notranslate"><span class="pre">scripts/format_and_lint.sh</span></code>, which formats and lints in
+place; the Style workflow runs the same script with <code class="docutils literal notranslate"><span class="pre">--check</span></code>. The whitespace
+hooks skip the sequence files under <code class="docutils literal notranslate"><span class="pre">tests/fixtures/</span></code>.</p>
+<p><code class="docutils literal notranslate"><span class="pre">git</span> <span class="pre">commit</span> <span class="pre">--no-verify</span></code> bypasses every hook for one commit, and
+<code class="docutils literal notranslate"><span class="pre">SKIP=&lt;hook-id&gt;</span> <span class="pre">git</span> <span class="pre">commit</span></code> bypasses one. CI runs the same checks, so a bypass
+does not let a failing check through.</p>
+</section>
+<section id="documentation-build">
+<h2>Documentation build<a class="headerlink" href="#documentation-build" title="Link to this heading">#</a></h2>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>bash<span class="w"> </span>scripts/build_docs.sh
+</pre></div>
+</div>
+<p>The script builds the HTML into <code class="docutils literal notranslate"><span class="pre">docs/build/html</span></code> and executes every gallery
+script while it does; a Sphinx warning fails the build. The Course scans in
+the <code class="docutils literal notranslate"><span class="pre">body/head48</span></code> coil, whose sensitivities bartorch samples with the <code class="docutils literal notranslate"><span class="pre">coils</span></code>
+extra, so install <code class="docutils literal notranslate"><span class="pre">'.[dev,doc,coils]'</span></code> to build every page.</p>
+</section>
 </section>
 
 
@@ -558,12 +608,12 @@ import.</p>
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="prerequisites.html"
+       href="index.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">Development prerequisites</p>
+        <p class="prev-next-title">Developer guide</p>
       </div>
     </a>
     <a class="right-next"
@@ -571,7 +621,7 @@ import.</p>
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Development workflow</p>
+        <p class="prev-next-title">Contribution workflow</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -581,6 +631,26 @@ import.</p>
             </div>
             
             
+              
+                <dialog id="pst-secondary-sidebar-modal"></dialog>
+                <div id="pst-secondary-sidebar" class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item"><div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> Contents
+  </div>
+  <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#prerequisites">Prerequisites</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#editable-installation">Editable installation</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pre-commit-hooks">Pre-commit hooks</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#documentation-build">Documentation build</a></li>
+</ul>
+  </nav></div>
+
+</div></div>
               
             
           </div>

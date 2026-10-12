@@ -237,17 +237,16 @@
         </ul>
         <ul class="nav bd-sidenav">
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../user-guide/index.html">User guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/running.html">Running the services</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/running.html">Services</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../user-guide/scanner-sequences.html">Scanner sequences</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../user-guide/reconstruction-plugins.html">Reconstruction plugins</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/reconstruction-client.html">Reconstruction clients</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/virtual-scanner.html">Scanning a phantom without a scanner</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/reconstruction-client.html">Reconstruction client</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../developer-guide/index.html">Developer guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/prerequisites.html">Development prerequisites</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/installation.html">Editable installation</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/workflow.html">Development workflow</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/installation.html">Development setup</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/workflow.html">Contribution workflow</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/style.html">Coding style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/documentation.html">Documentation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/terminology.html">Terminology and conventions</a></li>
@@ -260,10 +259,7 @@
 <li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/pre-commit.html">Pre-commit</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/pull-requests.html">Pull requests</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/releases.html">Releases</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/code-of-conduct.html">Code of conduct</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../explanations/index.html">Explanations</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -516,7 +512,7 @@
 <span class="sd">      logical axes, the block's own rotation included, turned, except in a</span>
 <span class="sd">      block labelled ``NOROT``, by the prescription's ``rotation`` from</span>
 <span class="sd">      logical to physical axes, as</span>
-<span class="sd">      :func:`~pulserver.virtual.trajectory` turns them, each as a time-shaped</span>
+<span class="sd">      :class:`~pulserver.virtual.FourierPlayer` turns them, each as a time-shaped</span>
 <span class="sd">      gradient through the corners the cache plays, a step from or to zero</span>
 <span class="sd">      as a ramp 10 ns wide;</span>
 <span class="sd">    - its ADC window, without frequency or phase offsets.</span>
@@ -544,7 +540,7 @@
 <span class="sd">        The receiver phase of every readout, in play order, in radians, one</span>
 <span class="sd">        per sample: the ADC phase offset at the ADC's start, advancing at its</span>
 <span class="sd">        frequency offset; the cache carries no phase modulation. The playout</span>
-<span class="sd">        demodulates by it, as :func:`~pulserver.virtual.acquire` does, and</span>
+<span class="sd">        demodulates by it, as :class:`~pulserver.virtual.FourierPlayer` does, and</span>
 <span class="sd">        ``target`` leaves it out.</span>
 <span class="sd">    """</span>
     <span class="n">played</span> <span class="o">=</span> <span class="n">ir</span><span class="o">.</span><span class="n">playout</span><span class="p">(</span><span class="n">seq_path</span><span class="p">,</span> <span class="n">waveforms</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">cache_ext</span><span class="o">=</span><span class="n">cache_ext</span><span class="p">)[</span><span class="s2">"blocks"</span><span class="p">]</span>

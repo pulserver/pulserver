@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>Reconstruction clients &#8212; pulserver documentation</title>
+    <title>Reconstruction client &#8212; pulserver documentation</title>
   
   
   
@@ -66,7 +66,7 @@
     <link rel="icon" href="../_static/pulserver-mark.svg"/>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Scanning a phantom without a scanner" href="virtual-scanner.html" />
+    <link rel="next" title="Virtual scanner" href="virtual-scanner.html" />
     <link rel="prev" title="Reconstruction plugins" href="reconstruction-plugins.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
@@ -242,17 +242,16 @@
         </ul>
         <ul class="current nav bd-sidenav">
 <li class="toctree-l1 current active has-children"><a class="reference internal" href="index.html">User guide</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
-<li class="toctree-l2"><a class="reference internal" href="running.html">Running the services</a></li>
+<li class="toctree-l2"><a class="reference internal" href="running.html">Services</a></li>
 <li class="toctree-l2"><a class="reference internal" href="scanner-sequences.html">Scanner sequences</a></li>
 <li class="toctree-l2"><a class="reference internal" href="reconstruction-plugins.html">Reconstruction plugins</a></li>
-<li class="toctree-l2 current active"><a class="current reference internal" href="#">Reconstruction clients</a></li>
-<li class="toctree-l2"><a class="reference internal" href="virtual-scanner.html">Scanning a phantom without a scanner</a></li>
+<li class="toctree-l2 current active"><a class="current reference internal" href="#">Reconstruction client</a></li>
+<li class="toctree-l2"><a class="reference internal" href="virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../developer-guide/index.html">Developer guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="../developer-guide/prerequisites.html">Development prerequisites</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../developer-guide/installation.html">Editable installation</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../developer-guide/workflow.html">Development workflow</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer-guide/installation.html">Development setup</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer-guide/workflow.html">Contribution workflow</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../developer-guide/style.html">Coding style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../developer-guide/documentation.html">Documentation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../developer-guide/terminology.html">Terminology and conventions</a></li>
@@ -265,10 +264,7 @@
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
-<li class="toctree-l2"><a class="reference internal" href="../developer-guide/pre-commit.html">Pre-commit</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../developer-guide/pull-requests.html">Pull requests</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../developer-guide/releases.html">Releases</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../developer-guide/code-of-conduct.html">Code of conduct</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../explanations/index.html">Explanations</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -524,7 +520,7 @@
               
 
 <div id="jb-print-docs-body" class="onlyprint">
-    <h1>Reconstruction clients</h1>
+    <h1>Reconstruction client</h1>
     <!-- Table of contents -->
     <div id="print-main-content">
         <div id="jb-print-toc">
@@ -549,16 +545,17 @@
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <section class="tex2jax_ignore mathjax_ignore" id="reconstruction-clients">
-<h1>Reconstruction clients<a class="headerlink" href="#reconstruction-clients" title="Link to this heading">#</a></h1>
+  <section class="tex2jax_ignore mathjax_ignore" id="reconstruction-client">
+<h1>Reconstruction client<a class="headerlink" href="#reconstruction-client" title="Link to this heading">#</a></h1>
 <p>The reconstruction client is the scanner-side program that streams the raw
 data of each series to the reconstruction proxy and returns the images to the
-console. It connects to the proxy’s TCP port (<a class="reference internal" href="running.html"><span class="doc">Running the services</span></a>), sends one series
-per connection as MRD messages, and reads what the reconstruction returns on
-the same connection.</p>
+console. It connects to the proxy’s TCP port (<a class="reference internal" href="running.html"><span class="doc">Services</span></a>), sends one series
+per connection as MRD messages with the message identifiers of Gadgetron’s
+streaming protocol, and reads what the reconstruction returns on the same
+connection.</p>
 <p>The proxy replaces the encoding counters, flags, encoding spaces and trajectory
 of the series with those the sequence states (<a class="reference internal" href="../explanations/raw-data.html"><span class="doc">MRD enrichment</span></a>).
-The client therefore sends what the scanner measured, the identity of the
+Your client therefore sends what the scanner measured, the identifier of the
 design the series was played from and the reconstruction plugin to run, and
 leaves the Pulseq structure of the scan to the proxy.</p>
 <section id="messages">
@@ -572,9 +569,9 @@ leaves the Pulseq structure of the scan to the proxy.</p>
 </tr>
 </thead>
 <tbody>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">CONFIG</span></code></p></td>
-<td><p>2</p></td>
-<td><p>The reconstruction plugin, as a bare name or the path of its <code class="docutils literal notranslate"><span class="pre">&lt;plugin&gt;.py</span></code> file, or as either under <code class="docutils literal notranslate"><span class="pre">parameters.config</span></code> of a JSON, YAML or XML text</p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">CONFIG_FILE</span></code> or <code class="docutils literal notranslate"><span class="pre">CONFIG_TEXT</span></code></p></td>
+<td><p>1 or 2</p></td>
+<td><p>The reconstruction plugin: a config file message holding its name, or a config text holding a bare name or the path of its <code class="docutils literal notranslate"><span class="pre">&lt;plugin&gt;.py</span></code> file, or either under <code class="docutils literal notranslate"><span class="pre">parameters.config</span></code> of a JSON, YAML or XML text</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">HEADER</span></code></p></td>
 <td><p>3</p></td>
@@ -596,9 +593,10 @@ leaves the Pulseq structure of the scan to the proxy.</p>
 </table>
 </div>
 <p>The design names no reconstruction, so the proxy refuses a series whose config
-names none, unless it forwards with a <code class="docutils literal notranslate"><span class="pre">--forward-config</span></code>. A path ending in <code class="docutils literal notranslate"><span class="pre">.py</span></code>
-names the plugin its file is called, without the extension; the proxy searches
-its own <code class="docutils literal notranslate"><span class="pre">--plugins</span></code> directories for that name, whatever the path’s directory.</p>
+names none, or that sends no config, unless it forwards with a
+<code class="docutils literal notranslate"><span class="pre">--forward-config</span></code>. A path ending in <code class="docutils literal notranslate"><span class="pre">.py</span></code> names the plugin by the file’s stem;
+the proxy searches its own <code class="docutils literal notranslate"><span class="pre">--plugins</span></code> directories for that name, whatever the
+path’s directory.</p>
 <p>The client then reads until the proxy’s <code class="docutils literal notranslate"><span class="pre">CLOSE</span></code>: images (<code class="docutils literal notranslate"><span class="pre">IMAGE</span></code>, 1022),
 DICOM datasets (<code class="docutils literal notranslate"><span class="pre">DICOM_WITHNAME</span></code>, 1018) and texts (<code class="docutils literal notranslate"><span class="pre">TEXT</span></code>, 5), in the order the
 reconstruction produces them. A text beginning <code class="docutils literal notranslate"><span class="pre">pulserver:</span></code> reports a series
@@ -661,7 +659,7 @@ the store, is refused before any acquisition is read.</p>
 <section id="acquisitions">
 <h2>Acquisitions<a class="headerlink" href="#acquisitions" title="Link to this heading">#</a></h2>
 <p>The proxy matches acquisitions to readouts by their position in the stream, so
-the client sends every readout the sequence chain plays, those of dummy scans,
+your client sends every readout the sequence chain plays, those of dummy scans,
 noise scans and navigators included, and no other.</p>
 <div class="pst-scrollable-table-container"><table class="table">
 <thead>
@@ -718,11 +716,11 @@ when the stream carries more or fewer acquisitions than the chain plays.</p>
 <section id="see-also">
 <h2>See also<a class="headerlink" href="#see-also" title="Link to this heading">#</a></h2>
 <ul class="simple">
-<li><p><a class="reference internal" href="running.html"><span class="doc">Running the services</span></a> — starting the proxy.</p></li>
-<li><p><a class="reference internal" href="../explanations/raw-data.html"><span class="doc">MRD enrichment</span></a> — enrichment.</p></li>
-<li><p><a class="reference internal" href="../explanations/reconstruction.html"><span class="doc">Reconstruction plugins and calibration context</span></a> — reconstruction units and routing.</p></li>
-<li><p><a class="reference internal" href="../explanations/architecture.html"><span class="doc">Architecture</span></a> — the design store and the identifier of a design.</p></li>
-<li><p><a class="reference internal" href="../generated/pulserver.proxy.ReconProxy.html#pulserver.proxy.ReconProxy" title="pulserver.proxy.ReconProxy"><code class="xref py py-class docutils literal notranslate"><span class="pre">ReconProxy</span></code></a> — the proxy.</p></li>
+<li><p><a class="reference internal" href="running.html"><span class="doc">Services</span></a>: starting the proxy.</p></li>
+<li><p><a class="reference internal" href="../explanations/raw-data.html"><span class="doc">MRD enrichment</span></a>: MRD enrichment.</p></li>
+<li><p><a class="reference internal" href="../explanations/reconstruction-session.html"><span class="doc">Reconstruction session</span></a>: the messages, workers and forwarding.</p></li>
+<li><p><a class="reference internal" href="../explanations/architecture.html"><span class="doc">Architecture</span></a>: the design store and the identifier of a design.</p></li>
+<li><p><a class="reference internal" href="../generated/pulserver.proxy.ReconProxy.html#pulserver.proxy.ReconProxy" title="pulserver.proxy.ReconProxy"><code class="xref py py-class docutils literal notranslate"><span class="pre">ReconProxy</span></code></a>: the proxy.</p></li>
 </ul>
 </section>
 </section>
@@ -752,7 +750,7 @@ when the stream carries more or fewer acquisitions than the chain plays.</p>
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Scanning a phantom without a scanner</p>
+        <p class="prev-next-title">Virtual scanner</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>

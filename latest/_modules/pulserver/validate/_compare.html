@@ -237,17 +237,16 @@
         </ul>
         <ul class="nav bd-sidenav">
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../user-guide/index.html">User guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/running.html">Running the services</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/running.html">Services</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../user-guide/scanner-sequences.html">Scanner sequences</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../user-guide/reconstruction-plugins.html">Reconstruction plugins</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/reconstruction-client.html">Reconstruction clients</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/virtual-scanner.html">Scanning a phantom without a scanner</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/reconstruction-client.html">Reconstruction client</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../developer-guide/index.html">Developer guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/prerequisites.html">Development prerequisites</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/installation.html">Editable installation</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/workflow.html">Development workflow</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/installation.html">Development setup</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/workflow.html">Contribution workflow</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/style.html">Coding style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/documentation.html">Documentation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/terminology.html">Terminology and conventions</a></li>
@@ -260,10 +259,7 @@
 <li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/pre-commit.html">Pre-commit</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/pull-requests.html">Pull requests</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/releases.html">Releases</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/code-of-conduct.html">Code of conduct</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../explanations/index.html">Explanations</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -495,11 +491,14 @@
 <span class="k">def</span><span class="w"> </span><span class="nf">gradient_tolerance_mt_per_m</span><span class="p">(</span>
     <span class="n">max_slew_t_per_m_per_s</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">raster_us</span><span class="p">:</span> <span class="nb">float</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""Return how far two renderings of a gradient may differ and still agree.</span>
+<span class="w">    </span><span class="sd">"""Return the gradient tolerance in mT/m: the amplitude slewed through in three raster steps.</span>
 
-<span class="sd">    The amplitude a machine can legitimately be away by is what it can slew</span>
-<span class="sd">    through in the few raster steps the two renderings may be apart, so the</span>
-<span class="sd">    tolerance is the hardware's and not a number chosen here.</span>
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    max_slew_t_per_m_per_s</span>
+<span class="sd">        Maximum slew rate, in T/m/s.</span>
+<span class="sd">    raster_us</span>
+<span class="sd">        Gradient raster time, in µs.</span>
 <span class="sd">    """</span>
     <span class="c1"># A slew in T/m/s over a raster in us is mT/m once per thousand.</span>
     <span class="k">return</span> <span class="n">_STEPS_OF_SLEW</span> <span class="o">*</span> <span class="n">max_slew_t_per_m_per_s</span> <span class="o">*</span> <span class="n">raster_us</span> <span class="o">*</span> <span class="mf">1e-3</span></div>
@@ -518,10 +517,13 @@
 <span class="sd">        Which channel: a gradient axis ``gx``, ``gy`` or ``gz``, or a transmit</span>
 <span class="sd">        channel ``rho`` or ``theta``.</span>
 <span class="sd">    peak</span>
-<span class="sd">        The larger of the two renderings' peak amplitudes, in the channel's</span>
-<span class="sd">        unit. The scale the difference is read against.</span>
+<span class="sd">        The scale the difference is read against: the larger of the two</span>
+<span class="sd">        renderings' peak amplitudes in mT/m for a gradient, the sequence's</span>
+<span class="sd">        peak magnitude for ``rho``, and π for ``theta``.</span>
 <span class="sd">    largest_difference</span>
-<span class="sd">        The largest absolute difference between them, in the same unit.</span>
+<span class="sd">        The largest absolute difference in mT/m for a gradient, the root mean</span>
+<span class="sd">        square difference of ``rho`` as a percentage of its peak, and the</span>
+<span class="sd">        largest phase difference of ``theta`` in rad.</span>
 <span class="sd">    agrees</span>
 <span class="sd">        Whether the difference stayed within the tolerance asked for.</span>
 <span class="sd">    """</span>
@@ -552,7 +554,12 @@
 <span class="sd">    channels</span>
 <span class="sd">        One per channel compared.</span>
 <span class="sd">    shift_us</span>
-<span class="sd">        The time the reference was moved by before comparing, in microseconds.</span>
+<span class="sd">        Subtracted from the reference's gradient times before comparing, in µs.</span>
+<span class="sd">    rf_shift_us</span>
+<span class="sd">        The same for the transmit channels, in µs.</span>
+<span class="sd">    magnitude_scale</span>
+<span class="sd">        Hz per recorded count of the transmit magnitude, which is compared by</span>
+<span class="sd">        shape; 1 without a transmit comparison.</span>
 <span class="sd">    agrees</span>
 <span class="sd">        Whether every channel agreed.</span>
 <span class="sd">    """</span>
@@ -601,16 +608,32 @@
     <span class="n">channel</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
     <span class="n">tolerance_percent</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">ChannelAgreement</span><span class="p">,</span> <span class="nb">float</span><span class="p">]:</span>
-<span class="w">    </span><span class="sd">"""Compare two renderings of a channel whose scale is not known, by shape.</span>
+<span class="w">    </span><span class="sd">"""Compare two renderings of a channel whose scale is unknown, by shape.</span>
 
-<span class="sd">    The transmit magnitude a machine records is in its converter's own numbers,</span>
-<span class="sd">    and what turns them into hertz is the peak transmit field of the scan being</span>
-<span class="sd">    played, which the recording does not carry. So the recording is scaled to</span>
-<span class="sd">    the peak the sequence asks for and the two are compared as shapes; the</span>
-<span class="sd">    scale that took is returned, because it is the quantity a machine's own</span>
-<span class="sd">    calibration would have to supply.</span>
+<span class="sd">    The recorded transmit magnitude is in the converter's own counts, and the</span>
+<span class="sd">    recording does not carry the peak transmit field that converts them to Hz.</span>
+<span class="sd">    The recording is scaled to the peak the sequence asks for, and the scale is</span>
+<span class="sd">    returned.</span>
 
-<span class="sd">    The difference is the root mean square against the peak, as a percentage.</span>
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    asked_time_us, asked</span>
+<span class="sd">        Sample times in µs and amplitudes the sequence asks for.</span>
+<span class="sd">    played_time_us, played</span>
+<span class="sd">        Sample times in µs and amplitudes of the recording, in counts. The</span>
+<span class="sd">        sequence is interpolated at these times, zero outside its extent.</span>
+<span class="sd">    channel</span>
+<span class="sd">        Name recorded in the result.</span>
+<span class="sd">    tolerance_percent</span>
+<span class="sd">        Largest root mean square difference, as a percentage of the peak.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    tuple of (ChannelAgreement, float)</span>
+<span class="sd">        The agreement, whose ``largest_difference`` is the root mean square</span>
+<span class="sd">        difference as a percentage of the peak, and the scale applied to the</span>
+<span class="sd">        recording. Without samples on either side, an agreement and a scale</span>
+<span class="sd">        of 1.</span>
 <span class="sd">    """</span>
     <span class="k">if</span> <span class="ow">not</span> <span class="n">played_time_us</span><span class="o">.</span><span class="n">size</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">asked_time_us</span><span class="o">.</span><span class="n">size</span><span class="p">:</span>
         <span class="k">return</span> <span class="p">(</span>
@@ -648,17 +671,11 @@
     <span class="n">shift_us</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">,</span>
     <span class="n">tolerance_mt_per_m</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.05</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Comparison</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""Compare two renderings of the gradients, sampled where the second has samples.</span>
+<span class="w">    </span><span class="sd">"""Compare two renderings of the gradients, at the sample times of the second.</span>
 
-<span class="sd">    Both are given as ``(time_us, amplitude_mt_per_m)`` per axis. The first is</span>
-<span class="sd">    read at the second's sample times, so a difference is read where the</span>
-<span class="sd">    machine actually stepped rather than on a grid of this function's choosing.</span>
-
-<span class="sd">    ``shift_us`` moves the second in time before comparing. The transmit and</span>
-<span class="sd">    gradient channels of a machine are driven on their own timelines and a</span>
-<span class="sd">    recording holds them as each was driven, so a comparison that does not</span>
-<span class="sd">    account for the offset between them reads one against the other at times</span>
-<span class="sd">    that never coincided.</span>
+<span class="sd">    Both are given as ``{axis: (time_us, amplitude_mt_per_m)}`` for ``gx``,</span>
+<span class="sd">    ``gy`` and ``gz``. The first is interpolated linearly at the second's</span>
+<span class="sd">    sample times, zero outside its extent.</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
@@ -669,9 +686,9 @@
 <span class="sd">    reference</span>
 <span class="sd">        Names what ``played`` is, for :attr:`Comparison.reference`.</span>
 <span class="sd">    shift_us</span>
-<span class="sd">        Moves ``played`` forward in time by this much before comparing.</span>
+<span class="sd">        Subtracted from the times of ``played`` before comparing, in µs.</span>
 <span class="sd">    tolerance_mt_per_m</span>
-<span class="sd">        The largest difference that still counts as agreement.</span>
+<span class="sd">        The largest difference that still counts as agreement, in mT/m.</span>
 
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
@@ -712,11 +729,7 @@
 <span class="k">def</span><span class="w"> </span><span class="nf">gradients_of_sequence</span><span class="p">(</span>
     <span class="n">sequence</span><span class="p">:</span> <span class="nb">object</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">],</span> <span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]]]:</span>
-<span class="w">    </span><span class="sd">"""Return a sequence's gradient corners per axis, in microseconds and mT/m.</span>
-
-<span class="sd">    The corners are what the sequence asks for, before any machine has rounded</span>
-<span class="sd">    them to a raster.</span>
-<span class="sd">    """</span>
+<span class="w">    </span><span class="sd">"""Return a sequence's gradient corners per axis, in µs and mT/m, unrounded to any raster."""</span>
     <span class="n">played</span> <span class="o">=</span> <span class="n">sequence</span><span class="o">.</span><span class="n">waveforms</span><span class="p">()</span>
     <span class="n">out</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">],</span> <span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]]]</span> <span class="o">=</span> <span class="p">{}</span>
     <span class="k">for</span> <span class="n">axis</span><span class="p">,</span> <span class="n">corners</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">((</span><span class="s2">"gx"</span><span class="p">,</span> <span class="s2">"gy"</span><span class="p">,</span> <span class="s2">"gz"</span><span class="p">),</span> <span class="n">played</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>

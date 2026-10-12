@@ -240,17 +240,16 @@
         </ul>
         <ul class="nav bd-sidenav">
 <li class="toctree-l1 has-children"><a class="reference internal" href="../user-guide/index.html">User guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="../user-guide/running.html">Running the services</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../user-guide/running.html">Services</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../user-guide/scanner-sequences.html">Scanner sequences</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../user-guide/reconstruction-plugins.html">Reconstruction plugins</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../user-guide/reconstruction-client.html">Reconstruction clients</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../user-guide/virtual-scanner.html">Scanning a phantom without a scanner</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../user-guide/reconstruction-client.html">Reconstruction client</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../user-guide/virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../developer-guide/index.html">Developer guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="../developer-guide/prerequisites.html">Development prerequisites</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../developer-guide/installation.html">Editable installation</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../developer-guide/workflow.html">Development workflow</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer-guide/installation.html">Development setup</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer-guide/workflow.html">Contribution workflow</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../developer-guide/style.html">Coding style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../developer-guide/documentation.html">Documentation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../developer-guide/terminology.html">Terminology and conventions</a></li>
@@ -263,10 +262,7 @@
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
-<li class="toctree-l2"><a class="reference internal" href="../developer-guide/pre-commit.html">Pre-commit</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../developer-guide/pull-requests.html">Pull requests</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../developer-guide/releases.html">Releases</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../developer-guide/code-of-conduct.html">Code of conduct</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../explanations/index.html">Explanations</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -549,16 +545,24 @@
 <dl class="py method">
 <dt class="sig sig-object py" id="pulserver.virtual.Coil.limits">
 <span class="sig-prename descclassname"><span class="pre">Coil.</span></span><span class="sig-name descname"><span class="pre">limits</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pulserver/virtual/_coils.html#Coil.limits"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.virtual.Coil.limits" title="Link to this definition">#</a></dt>
-<dd><p>Return the VOP entries of the check limits a design is made under in this coil; none unless its transmit maps have VOPs beside them.</p>
-<p><code class="docutils literal notranslate"><span class="pre">vop_file</span></code> is <code class="docutils literal notranslate"><span class="pre">&lt;coil&gt;_vops.npz</span></code> beside the transmit maps
-<code class="docutils literal notranslate"><span class="pre">&lt;coil&gt;.npz</span></code>; <code class="docutils literal notranslate"><span class="pre">vop_drive_per_hz</span></code> the drive of every channel, in
-the unit of the maps and the VOPs, per Hz of a pulse’s amplitude,
-with which the channels’ rotating fields, half their <code class="docutils literal notranslate"><span class="pre">minus</span></code>, add
-up to the pulse’s nominal amplitude at the isocentre through the
-<a class="reference internal" href="pulserver.virtual.Coil.default_shim.html#pulserver.virtual.Coil.default_shim" title="pulserver.virtual.Coil.default_shim"><code class="xref py py-attr docutils literal notranslate"><span class="pre">default_shim</span></code></a>; <code class="docutils literal notranslate"><span class="pre">vop_default_shim</span></code> that shim, a magnitude
+<dd><p>Return the VOP entries of the check limits a design is made under in this coil.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Empty unless the transmit maps <code class="docutils literal notranslate"><span class="pre">&lt;coil&gt;.npz</span></code> have
+<code class="docutils literal notranslate"><span class="pre">&lt;coil&gt;_vops.npz</span></code> beside them. Otherwise: <code class="docutils literal notranslate"><span class="pre">vop_file</span></code>, the VOP
+file; <code class="docutils literal notranslate"><span class="pre">vop_drive_per_hz</span></code>, the drive of every channel, in the unit
+of the maps and the VOPs, per Hz of a pulse’s amplitude, with which
+the channels’ rotating fields, half their <code class="docutils literal notranslate"><span class="pre">minus</span></code>, add up to the
+pulse’s nominal amplitude at the isocentre through the
+<a class="reference internal" href="pulserver.virtual.Coil.default_shim.html#pulserver.virtual.Coil.default_shim" title="pulserver.virtual.Coil.default_shim"><code class="xref py py-attr docutils literal notranslate"><span class="pre">default_shim</span></code></a>; <code class="docutils literal notranslate"><span class="pre">vop_default_shim</span></code>, that shim, a magnitude
 and a phase per channel; and <code class="docutils literal notranslate"><span class="pre">vop_head_limit</span></code> and
 <code class="docutils literal notranslate"><span class="pre">vop_local_limit</span></code>, <code class="xref py py-data docutils literal notranslate"><span class="pre">HEAD_SAR_LIMIT</span></code> and
 <code class="xref py py-data docutils literal notranslate"><span class="pre">LOCAL_SAR_LIMIT</span></code>.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict" title="(in Python v3.15)">dict</a> of str to str</p>
+</dd>
+</dl>
 </dd></dl>
 
 </section>

@@ -237,17 +237,16 @@
         </ul>
         <ul class="nav bd-sidenav">
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../user-guide/index.html">User guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/running.html">Running the services</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/running.html">Services</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../user-guide/scanner-sequences.html">Scanner sequences</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../user-guide/reconstruction-plugins.html">Reconstruction plugins</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/reconstruction-client.html">Reconstruction clients</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/virtual-scanner.html">Scanning a phantom without a scanner</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/reconstruction-client.html">Reconstruction client</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../developer-guide/index.html">Developer guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/prerequisites.html">Development prerequisites</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/installation.html">Editable installation</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/workflow.html">Development workflow</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/installation.html">Development setup</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/workflow.html">Contribution workflow</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/style.html">Coding style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/documentation.html">Documentation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/terminology.html">Terminology and conventions</a></li>
@@ -260,10 +259,7 @@
 <li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/pre-commit.html">Pre-commit</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/pull-requests.html">Pull requests</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/releases.html">Releases</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/code-of-conduct.html">Code of conduct</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../explanations/index.html">Explanations</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -549,7 +545,7 @@
 <a class="viewcode-back" href="../../../generated/pulserver.recon.ReconResult.html#pulserver.recon.ReconResult">[docs]</a>
 <span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 <span class="k">class</span><span class="w"> </span><span class="nc">ReconResult</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""Image array for the runtime to package as an MRD image, or as DICOM.</span>
+<span class="w">    </span><span class="sd">"""A reconstructed image array, packaged by the runtime as an MRD image or DICOM.</span>
 
 <span class="sd">    The runtime builds the image header, so a plugin builds none. The field of</span>
 <span class="sd">    view and matrix are those of the unit's own encoding space; position,</span>
@@ -618,22 +614,19 @@
 
 
 
-<span class="c1">#: What a calibration scan leaves in the exam cache for the series that follow.</span>
-<span class="c1">#:</span>
-<span class="c1">#: A map is measured once and read by every later series of the exam, so the</span>
-<span class="c1">#: two have to mean the same thing by it. These are the names they agree on;</span>
-<span class="c1">#: a plugin storing a map under one of its own is storing it for itself alone.</span>
+<span class="c1">#: Exam cache keys of the maps a calibration series leaves for the series that</span>
+<span class="c1">#: follow. A plugin storing a map under another key stores it for itself alone.</span>
 <span class="c1">#:</span>
 <span class="c1">#: ``B0_MAP`` is off-resonance in Hz, ``B1_MAP`` the transmit field as a</span>
-<span class="c1">#: fraction of what was asked for, and ``COIL_SENSITIVITIES`` the receive</span>
+<span class="c1">#: fraction of the nominal one, and ``COIL_SENSITIVITIES`` the receive</span>
 <span class="c1">#: sensitivity of each coil, a :class:`~pulserver.recon.CoilSensitivities`. A</span>
 <span class="c1">#: value is stored as measured, in the frame and on the grid it was measured</span>
 <span class="c1">#: on. A map stored as an :class:`~pulserver.recon.ExamImage` carries that</span>
 <span class="c1">#: geometry, and a series with another orientation, centre, field of view or</span>
 <span class="c1">#: matrix reads it resampled onto its own grid with</span>
 <span class="c1">#: :meth:`~pulserver.recon.ExamImage.on`. Coil sensitivities are reused only</span>
-<span class="c1">#: on the grid they were estimated on: :func:`~pulserver.recon.coil_maps`</span>
-<span class="c1">#: makes that comparison.</span>
+<span class="c1">#: on the grid they were estimated on, which</span>
+<span class="c1">#: :func:`~pulserver.recon.coil_maps` checks.</span>
 <span class="n">B0_MAP</span> <span class="o">=</span> <span class="s2">"b0_map"</span>
 <span class="n">B1_MAP</span> <span class="o">=</span> <span class="s2">"b1_map"</span>
 <span class="n">COIL_SENSITIVITIES</span> <span class="o">=</span> <span class="s2">"coil_sensitivities"</span>
@@ -1175,9 +1168,8 @@
 <span class="sd">    ----------</span>
 <span class="sd">    gadgets : tuple of Gadget</span>
 <span class="sd">    triggers : dict</span>
-<span class="sd">    axes : tuple of str</span>
-<span class="sd">    merge : tuple of str</span>
-<span class="sd">        Read when a stream starts, so a subclass may assign it after</span>
+<span class="sd">    axes, merge : tuple of str</span>
+<span class="sd">        Read when a stream starts, so a subclass may assign them after</span>
 <span class="sd">        ``super().__init__``.</span>
 
 <span class="sd">    Examples</span>
@@ -1580,7 +1572,7 @@
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_copy_acquisition</span><span class="p">(</span><span class="n">acquisition</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""Return a copy of an acquisition whose header fields can be assigned without changing the original.</span>
+<span class="w">    </span><span class="sd">"""Return a copy of an acquisition with its own header fields.</span>
 
 <span class="sd">    The copy shares the samples and trajectory.</span>
 <span class="sd">    """</span>

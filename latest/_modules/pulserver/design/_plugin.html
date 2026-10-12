@@ -237,17 +237,16 @@
         </ul>
         <ul class="nav bd-sidenav">
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../user-guide/index.html">User guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/running.html">Running the services</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/running.html">Services</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../user-guide/scanner-sequences.html">Scanner sequences</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../user-guide/reconstruction-plugins.html">Reconstruction plugins</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/reconstruction-client.html">Reconstruction clients</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/virtual-scanner.html">Scanning a phantom without a scanner</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/reconstruction-client.html">Reconstruction client</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../developer-guide/index.html">Developer guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/prerequisites.html">Development prerequisites</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/installation.html">Editable installation</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/workflow.html">Development workflow</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/installation.html">Development setup</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/workflow.html">Contribution workflow</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/style.html">Coding style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/documentation.html">Documentation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/terminology.html">Terminology and conventions</a></li>
@@ -260,10 +259,7 @@
 <li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/pre-commit.html">Pre-commit</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/pull-requests.html">Pull requests</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/releases.html">Releases</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/code-of-conduct.html">Code of conduct</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../explanations/index.html">Explanations</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -554,11 +550,12 @@
 <span class="w">    </span><span class="sd">"""A sequence function bound to the entries of the scanner protocol.</span>
 
 <span class="sd">    A subclass sets :attr:`app` and, for the arguments the operator edits,</span>
-<span class="sd">    :attr:`protocol`; without ``protocol`` the sequence function plays its defaults. Entries</span>
-<span class="sd">    a request omits keep their initial values, the entry's ``default`` or else</span>
-<span class="sd">    the sequence function's. Times travel as integer microseconds and other floats to six</span>
-<span class="sd">    significant digits, the precision of a float32 parameter, so a reply stored</span>
-<span class="sd">    in scanner parameters and sent back evaluates to itself.</span>
+<span class="sd">    :attr:`protocol`; without ``protocol`` the sequence function plays its</span>
+<span class="sd">    defaults. Entries a request omits keep their initial values, the entry's</span>
+<span class="sd">    ``default`` or else the sequence function's. Times travel as integer</span>
+<span class="sd">    microseconds and other floats to six significant digits, the precision of a</span>
+<span class="sd">    float32 parameter, so a reply stored in scanner parameters and sent back</span>
+<span class="sd">    evaluates to itself.</span>
 
 <span class="sd">    :meth:`validate` evaluates a request with :meth:`evaluate`, and</span>
 <span class="sd">    :meth:`design` generates and writes it with :meth:`generate`. A subclass</span>
@@ -568,14 +565,15 @@
 <span class="sd">    Attributes</span>
 <span class="sd">    ----------</span>
 <span class="sd">    app : callable</span>
-<span class="sd">        The sequence function, ``app(system, **arguments)``. It</span>
-<span class="sd">        takes the scanner limits, a :class:`pypulseqpp.Opts`, and the keyword</span>
-<span class="sd">        arguments the entries of :attr:`protocol` bind, and returns a</span>
+<span class="sd">        The sequence function, ``app(system, **arguments)``. It takes the</span>
+<span class="sd">        scanner limits, a :class:`pypulseqpp.Opts`, and the keyword arguments</span>
+<span class="sd">        the entries of :attr:`protocol` bind, and returns a</span>
 <span class="sd">        :class:`pypulseqpp.Sequence` or a list of them, which is a chain: the</span>
 <span class="sd">        prescans first and the main sequence last. The defaults the listing</span>
 <span class="sd">        shows are those of its signature, so a :func:`functools.partial` is a</span>
-<span class="sd">        sequence function too. :meth:`generate` calls it, and so does an :meth:`evaluate` that</span>
-<span class="sd">        designs the sequence; the default :meth:`evaluate` does not.</span>
+<span class="sd">        sequence function too. :meth:`generate` calls it, and so does an</span>
+<span class="sd">        :meth:`evaluate` that designs the sequence; the default</span>
+<span class="sd">        :meth:`evaluate` does not.</span>
 <span class="sd">    protocol : mapping</span>
 <span class="sd">        The entries the operator edits, by key: the interpreter's parameter</span>
 <span class="sd">        names, which are the members of</span>
@@ -690,12 +688,12 @@
 <div class="viewcode-block" id="SequencePlugin.listing">
 <a class="viewcode-back" href="../../../generated/pulserver.design.SequencePlugin.listing.html#pulserver.design.SequencePlugin.listing">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">listing</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="n">ProtocolKey</span><span class="p">,</span> <span class="n">Parameter</span><span class="p">]:</span>
-<span class="w">        </span><span class="sd">"""Return the protocol with its schema, valued at the sequence function's defaults.</span>
+<span class="w">        </span><span class="sd">"""Return the protocol with its schema, at the sequence function's defaults.</span>
 
-<span class="sd">        An argument defaulting to ``None`` shows the preset that requests ``None``.</span>
-<span class="sd">        The ``PRESCRIPTION`` entries of :mod:`pulserver.protocol` follow the</span>
-<span class="sd">        declared ones, not editable in the UI: the offset at zero, the rotation</span>
-<span class="sd">        at the identity.</span>
+<span class="sd">        An argument defaulting to ``None`` shows the preset that requests</span>
+<span class="sd">        ``None``. The ``PRESCRIPTION`` entries of :mod:`pulserver.protocol`</span>
+<span class="sd">        follow the declared ones, not editable in the UI: the offset at zero</span>
+<span class="sd">        (mm), the rotation at the identity.</span>
 <span class="sd">        """</span>
         <span class="n">defaults</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_defaults</span><span class="p">()</span>
         <span class="n">listing</span> <span class="o">=</span> <span class="p">{</span>
@@ -871,7 +869,7 @@
         <span class="n">directory</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span><span class="p">,</span>
         <span class="n">exam</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">Validation</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="n">Path</span><span class="p">,</span> <span class="n">pp</span><span class="o">.</span><span class="n">Sequence</span><span class="p">]]]:</span>
-<span class="w">        </span><span class="sd">"""Return what :meth:`design` returns, and each written path with its sequence as written."""</span>
+<span class="w">        </span><span class="sd">"""Return what :meth:`design` returns, with each written path and its sequence as written."""</span>
         <span class="n">validation</span><span class="p">,</span> <span class="n">protocol</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_validated</span><span class="p">(</span><span class="n">system</span><span class="p">,</span> <span class="n">request</span><span class="p">,</span> <span class="n">exam</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">protocol</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">return</span> <span class="n">validation</span><span class="p">,</span> <span class="p">[],</span> <span class="p">[]</span>

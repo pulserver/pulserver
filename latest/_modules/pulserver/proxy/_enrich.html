@@ -237,17 +237,16 @@
         </ul>
         <ul class="nav bd-sidenav">
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../user-guide/index.html">User guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/running.html">Running the services</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/running.html">Services</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../user-guide/scanner-sequences.html">Scanner sequences</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../user-guide/reconstruction-plugins.html">Reconstruction plugins</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/reconstruction-client.html">Reconstruction clients</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/virtual-scanner.html">Scanning a phantom without a scanner</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/reconstruction-client.html">Reconstruction client</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../developer-guide/index.html">Developer guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/prerequisites.html">Development prerequisites</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/installation.html">Editable installation</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/workflow.html">Development workflow</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/installation.html">Development setup</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/workflow.html">Contribution workflow</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/style.html">Coding style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/documentation.html">Documentation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/terminology.html">Terminology and conventions</a></li>
@@ -260,10 +259,7 @@
 <li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/pre-commit.html">Pre-commit</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/pull-requests.html">Pull requests</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/releases.html">Releases</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/code-of-conduct.html">Code of conduct</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../explanations/index.html">Explanations</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -791,7 +787,9 @@
 <span class="k">def</span><span class="w"> </span><span class="nf">_shift_phase</span><span class="p">(</span>
     <span class="n">k</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">converted_m</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">moved_m</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""Return the receive phase a shift leaves to the proxy, in rad, or None when it is zero.</span>
+<span class="w">    </span><span class="sd">"""Return the receive phase a field-of-view shift needs applied to the samples, in rad.</span>
+
+<span class="sd">    None when the phase is negligible.</span>
 
 <span class="sd">    ``2 pi c . (k(t) - k(t_c) - k'(t_c) (t - t_c)) + 2 pi m . k(t)``: the</span>
 <span class="sd">    curvature of the converted shift ``c`` about the line through the window</span>
@@ -818,7 +816,7 @@
 <div class="viewcode-block" id="enrich_header">
 <a class="viewcode-back" href="../../../generated/pulserver.proxy.enrich_header.html#pulserver.proxy.enrich_header">[docs]</a>
 <span class="k">def</span><span class="w"> </span><span class="nf">enrich_header</span><span class="p">(</span><span class="n">header</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">table</span><span class="p">:</span> <span class="n">SequenceTable</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""Describe the table's encoding spaces and sequence parameters in an MRD header.</span>
+<span class="w">    </span><span class="sd">"""Write the table's encoding spaces and sequence parameters into an MRD header, in place.</span>
 
 <span class="sd">    For every space, sets ``reconSpace`` from the sequence's matrix and field</span>
 <span class="sd">    of view when defined, and ``encodedSpace`` from them with the readout of a</span>
@@ -1064,10 +1062,11 @@
 <span class="k">def</span><span class="w"> </span><span class="nf">_is_slice_stack</span><span class="p">(</span>
     <span class="n">labels</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">],</span> <span class="n">definitions</span><span class="p">:</span> <span class="n">SequenceDefinitions</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""Whether a subsequence excites its readouts' slices one by one, its ``Matrix`` and ``FOV`` along z stating the stack.</span>
+<span class="w">    </span><span class="sd">"""Whether a subsequence excites its slices one by one.</span>
 
-<span class="sd">    So it is when it writes no ``PAR`` and either defines ``SlicePositions``</span>
-<span class="sd">    or writes more than one ``SLC``.</span>
+<span class="sd">    True when it writes no ``PAR`` and either defines ``SlicePositions`` or</span>
+<span class="sd">    writes more than one ``SLC``; its ``Matrix`` and ``FOV`` along z then state</span>
+<span class="sd">    the stack.</span>
 <span class="sd">    """</span>
     <span class="k">if</span> <span class="s2">"PAR"</span> <span class="ow">in</span> <span class="n">labels</span><span class="p">:</span>
         <span class="k">return</span> <span class="kc">False</span>
@@ -1097,7 +1096,9 @@
 <span class="k">def</span><span class="w"> </span><span class="nf">_slice_offsets</span><span class="p">(</span>
     <span class="n">labels</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">],</span> <span class="n">definitions</span><span class="p">:</span> <span class="n">SequenceDefinitions</span><span class="p">,</span> <span class="n">count</span><span class="p">:</span> <span class="nb">int</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""Return the ``SlicePositions`` entry each readout's ``SLC`` indexes, in m; 0 without ``SlicePositions``.</span>
+<span class="w">    </span><span class="sd">"""Return the ``SlicePositions`` entry each readout's ``SLC`` indexes, in m.</span>
+
+<span class="sd">    Zeros where the sequence defines no ``SlicePositions``.</span>
 
 <span class="sd">    Raises</span>
 <span class="sd">    ------</span>
@@ -1144,7 +1145,9 @@
 <span class="k">def</span><span class="w"> </span><span class="nf">_full_echo</span><span class="p">(</span>
     <span class="n">samples</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">centre</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">reverse</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""Return the samples of the largest full echo the readouts are parts of, or ``None`` for no readouts.</span>
+<span class="w">    </span><span class="sd">"""Return the samples of the largest full echo the readouts are parts of.</span>
+
+<span class="sd">    ``None`` for no readouts.</span>
 
 <span class="sd">    A readout is a full echo when its ``center_sample`` is ``samples // 2``,</span>
 <span class="sd">    which is also taken of one whose k does not move (``centre`` -1);</span>
@@ -1165,7 +1168,11 @@
     <span class="n">space</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
     <span class="n">written</span><span class="p">:</span> <span class="nb">set</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""Set the first and last flags of every written counter, keyed by space and the other written image counters."""</span>
+<span class="w">    </span><span class="sd">"""Set the first and last flags of every written counter, in place.</span>
+
+<span class="sd">    A boundary is keyed by the encoding space and the other written</span>
+<span class="sd">    image-selecting counters.</span>
+<span class="sd">    """</span>
     <span class="n">sets</span> <span class="o">=</span> <span class="p">[]</span>
     <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">first</span><span class="p">,</span> <span class="n">last</span><span class="p">,</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">_BOUNDARY_COUNTERS</span><span class="p">:</span>
         <span class="k">if</span> <span class="n">name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">written</span><span class="p">:</span>
@@ -1181,7 +1188,10 @@
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_limit</span><span class="p">(</span><span class="n">values</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">centre</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""Return the ``limitType`` of a counter's values, centred on ``centre`` or, where it is ``None``, on the middle of the range."""</span>
+<span class="w">    </span><span class="sd">"""Return the ``limitType`` of a counter's values.</span>
+
+<span class="sd">    Centred on ``centre``, or on the middle of the range where it is ``None``.</span>
+<span class="sd">    """</span>
     <span class="n">minimum</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">values</span><span class="o">.</span><span class="n">min</span><span class="p">())</span> <span class="k">if</span> <span class="n">values</span><span class="o">.</span><span class="n">size</span> <span class="k">else</span> <span class="mi">0</span>
     <span class="n">maximum</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">values</span><span class="o">.</span><span class="n">max</span><span class="p">())</span> <span class="k">if</span> <span class="n">values</span><span class="o">.</span><span class="n">size</span> <span class="k">else</span> <span class="mi">0</span>
     <span class="k">return</span> <span class="n">xsd</span><span class="o">.</span><span class="n">limitType</span><span class="p">(</span>
@@ -1192,7 +1202,9 @@
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_encoding_space</span><span class="p">(</span><span class="n">space</span><span class="p">:</span> <span class="n">TableSpace</span><span class="p">,</span> <span class="n">current</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">widened</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""Return an ``encodingSpaceType`` from the space's definitions, falling back to ``current`` per field.</span>
+<span class="w">    </span><span class="sd">"""Return an ``encodingSpaceType`` from the space's definitions.</span>
+
+<span class="sd">    Each field the space leaves undefined is taken from ``current``.</span>
 
 <span class="sd">    With ``widened``, a defined matrix has as many samples along the readout as</span>
 <span class="sd">    the space's full echo, and a defined field of view the extent of them.</span>

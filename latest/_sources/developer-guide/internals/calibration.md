@@ -6,10 +6,10 @@ weight, which is the maximum-likelihood combination only where their noise is
 uncorrelated and of equal variance. Prewhitening makes the noise of the
 channels so, and coil compression reduces their number. Each of the three is
 expressed in a basis of the channels, and a quantity estimated in one basis
-does not describe data in another. This page states the model, the conditions
-under which ``pulserver.recon`` reuses sensitivity maps, and the interfaces
-that hold them. The transforms and the estimate are computed by bartorch; the
-reconstruction plugin passes the estimate to {func}`~pulserver.recon.coil_maps`.
+does not describe data in another. The transforms and the estimate are
+computed by bartorch; the reconstruction plugin passes the estimate to
+{func}`~pulserver.recon.coil_maps`, which returns stored maps only under the
+conditions stated under *Reuse*.
 
 ## Signal model
 
@@ -147,7 +147,7 @@ no coil sensitivities for slice 0; sources consulted:
   this exam: geometry.matrix differs: stored (96, 96), this unit (192, 192) (estimated by nlinv_maps from measurement 7)
 ```
 
-## Software abstraction
+## Interfaces
 
 | Quantity | Interface | State |
 | --- | --- | --- |

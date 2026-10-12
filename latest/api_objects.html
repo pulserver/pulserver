@@ -238,17 +238,16 @@
         </ul>
         <ul class="nav bd-sidenav">
 <li class="toctree-l1 has-children"><a class="reference internal" href="user-guide/index.html">User guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="user-guide/running.html">Running the services</a></li>
+<li class="toctree-l2"><a class="reference internal" href="user-guide/running.html">Services</a></li>
 <li class="toctree-l2"><a class="reference internal" href="user-guide/scanner-sequences.html">Scanner sequences</a></li>
 <li class="toctree-l2"><a class="reference internal" href="user-guide/reconstruction-plugins.html">Reconstruction plugins</a></li>
-<li class="toctree-l2"><a class="reference internal" href="user-guide/reconstruction-client.html">Reconstruction clients</a></li>
-<li class="toctree-l2"><a class="reference internal" href="user-guide/virtual-scanner.html">Scanning a phantom without a scanner</a></li>
+<li class="toctree-l2"><a class="reference internal" href="user-guide/reconstruction-client.html">Reconstruction client</a></li>
+<li class="toctree-l2"><a class="reference internal" href="user-guide/virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="developer-guide/index.html">Developer guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="developer-guide/prerequisites.html">Development prerequisites</a></li>
-<li class="toctree-l2"><a class="reference internal" href="developer-guide/installation.html">Editable installation</a></li>
-<li class="toctree-l2"><a class="reference internal" href="developer-guide/workflow.html">Development workflow</a></li>
+<li class="toctree-l2"><a class="reference internal" href="developer-guide/installation.html">Development setup</a></li>
+<li class="toctree-l2"><a class="reference internal" href="developer-guide/workflow.html">Contribution workflow</a></li>
 <li class="toctree-l2"><a class="reference internal" href="developer-guide/style.html">Coding style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="developer-guide/documentation.html">Documentation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="developer-guide/terminology.html">Terminology and conventions</a></li>
@@ -261,10 +260,7 @@
 <li class="toctree-l3"><a class="reference internal" href="developer-guide/internals/virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
-<li class="toctree-l2"><a class="reference internal" href="developer-guide/pre-commit.html">Pre-commit</a></li>
-<li class="toctree-l2"><a class="reference internal" href="developer-guide/pull-requests.html">Pull requests</a></li>
 <li class="toctree-l2"><a class="reference internal" href="developer-guide/releases.html">Releases</a></li>
-<li class="toctree-l2"><a class="reference internal" href="developer-guide/code-of-conduct.html">Code of conduct</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="explanations/index.html">Explanations</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -583,10 +579,10 @@ from.</p>
 <td><p>Return a <a class="reference internal" href="generated/pulserver.design.ChoiceParam.html#pulserver.design.ChoiceParam" title="pulserver.design.ChoiceParam"><code class="xref py py-class docutils literal notranslate"><span class="pre">ChoiceParam</span></code></a> over a <code class="docutils literal notranslate"><span class="pre">StrEnum</span></code> built from option strings.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.design.AveragesParam.html#pulserver.design.AveragesParam" title="pulserver.design.AveragesParam"><code class="xref py py-obj docutils literal notranslate"><span class="pre">AveragesParam</span></code></a></p></td>
-<td><p>The number of signal averages, NEX: how many times the main sequence plays, binding no argument.</p></td>
+<td><p>The number of signal averages, NEX: how many times the main sequence plays; binds no argument.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.design.StatedParam.html#pulserver.design.StatedParam" title="pulserver.design.StatedParam"><code class="xref py py-obj docutils literal notranslate"><span class="pre">StatedParam</span></code></a></p></td>
-<td><p>A choice the sequence states, which binds no argument: a 3D sequence's <code class="docutils literal notranslate"><span class="pre">imaging_mode</span></code> is <code class="docutils literal notranslate"><span class="pre">3d</span></code>.</p></td>
+<td><p>A choice the sequence states without binding an argument, such as <code class="docutils literal notranslate"><span class="pre">imaging_mode</span></code> of a 3D sequence.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.design.ConfigParam.html#pulserver.design.ConfigParam" title="pulserver.design.ConfigParam"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ConfigParam</span></code></a></p></td>
 <td><p>A value the sequence declares to the interpreter; never shown or edited.</p></td>
@@ -626,7 +622,7 @@ from.</p>
 <td><p>Return the problems of a chain under a scanner's limits, in the physical frame.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.ir.CheckLimits.html#pulserver.ir.CheckLimits" title="pulserver.ir.CheckLimits"><code class="xref py py-obj docutils literal notranslate"><span class="pre">CheckLimits</span></code></a></p></td>
-<td><p>The nerve, resonance and acoustic limits of a chain, and the VOPs of its SAR ratios, besides <code class="docutils literal notranslate"><span class="pre">pypulseqpp.Opts</span></code>.</p></td>
+<td><p>Limits and models checked on a chain beyond those of <code class="docutils literal notranslate"><span class="pre">pypulseqpp.Opts</span></code>.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.ir.sar_ratios.html#pulserver.ir.sar_ratios" title="pulserver.ir.sar_ratios"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sar_ratios</span></code></a></p></td>
 <td><p>Return the SAR ratios of each file of a chain against the reference pulse.</p></td>
@@ -917,7 +913,7 @@ from.</p>
 <td><p>One encoding space of a <a class="reference internal" href="generated/pulserver.proxy.SequenceTable.html#pulserver.proxy.SequenceTable" title="pulserver.proxy.SequenceTable"><code class="xref py py-class docutils literal notranslate"><span class="pre">SequenceTable</span></code></a>.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.proxy.enrich_header.html#pulserver.proxy.enrich_header" title="pulserver.proxy.enrich_header"><code class="xref py py-obj docutils literal notranslate"><span class="pre">enrich_header</span></code></a></p></td>
-<td><p>Describe the table's encoding spaces and sequence parameters in an MRD header.</p></td>
+<td><p>Write the table's encoding spaces and sequence parameters into an MRD header, in place.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.proxy.enrich_acquisition.html#pulserver.proxy.enrich_acquisition" title="pulserver.proxy.enrich_acquisition"><code class="xref py py-obj docutils literal notranslate"><span class="pre">enrich_acquisition</span></code></a></p></td>
 <td><p>Stamp row <code class="docutils literal notranslate"><span class="pre">index</span></code> of the table on one acquisition, in place.</p></td>
@@ -982,7 +978,7 @@ from.</p>
 <td><p>Reduce the receive channels of a unit's k-space to virtual channels.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.recon.gradient_unwarped.html#pulserver.recon.gradient_unwarped" title="pulserver.recon.gradient_unwarped"><code class="xref py py-obj docutils literal notranslate"><span class="pre">gradient_unwarped</span></code></a></p></td>
-<td><p>Return an image resampled from where its voxels were acquired to where they belong.</p></td>
+<td><p>Correct an image for gradient nonlinearity.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.recon.ReconData.html#pulserver.recon.ReconData" title="pulserver.recon.ReconData"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ReconData</span></code></a></p></td>
 <td><p>The readouts of one reconstruction unit, as <a class="reference internal" href="generated/pulserver.recon.ReconPlugin.recon.html#pulserver.recon.ReconPlugin.recon" title="pulserver.recon.ReconPlugin.recon"><code class="xref py py-meth docutils literal notranslate"><span class="pre">ReconPlugin.recon()</span></code></a> receives them.</p></td>
@@ -991,7 +987,7 @@ from.</p>
 <td><p>K-space of one encoding space, filled one acquisition at a time.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.recon.ReconResult.html#pulserver.recon.ReconResult" title="pulserver.recon.ReconResult"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ReconResult</span></code></a></p></td>
-<td><p>Image array for the runtime to package as an MRD image, or as DICOM.</p></td>
+<td><p>A reconstructed image array, packaged by the runtime as an MRD image or DICOM.</p></td>
 </tr>
 </tbody>
 </table>
@@ -1008,7 +1004,7 @@ from.</p>
 <td><p>How far apart one channel's two renderings are.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.validate.gradient_tolerance_mt_per_m.html#pulserver.validate.gradient_tolerance_mt_per_m" title="pulserver.validate.gradient_tolerance_mt_per_m"><code class="xref py py-obj docutils literal notranslate"><span class="pre">gradient_tolerance_mt_per_m</span></code></a></p></td>
-<td><p>Return how far two renderings of a gradient may differ and still agree.</p></td>
+<td><p>Return the gradient tolerance in mT/m: the amplitude slewed through in three raster steps.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.validate.read_waveform_xml.html#pulserver.validate.read_waveform_xml" title="pulserver.validate.read_waveform_xml"><code class="xref py py-obj docutils literal notranslate"><span class="pre">read_waveform_xml</span></code></a></p></td>
 <td><p>Read one waveform XML file.</p></td>
@@ -1064,7 +1060,7 @@ from.</p>
 <td><p>Return the axial, coronal and sagittal images of a phantom's proton density, as DICOM.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.virtual.Coil.html#pulserver.virtual.Coil" title="pulserver.virtual.Coil"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Coil</span></code></a></p></td>
-<td><p>The RF coils of an exam, fixed in the physical frame: the coil pulses are transmitted on and the coil the signal is received by.</p></td>
+<td><p>The transmit and receive RF coils of an exam, fixed in the physical frame.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.virtual.COILS.html#pulserver.virtual.COILS" title="pulserver.virtual.COILS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">COILS</span></code></a></p></td>
 <td><p>the body coil both ways, the body coil transmitting to a 48-channel receive head array, and an 8-channel head coil for parallel transmission with a 32-channel receive head array.</p></td>

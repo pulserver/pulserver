@@ -237,17 +237,16 @@
         </ul>
         <ul class="nav bd-sidenav">
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../user-guide/index.html">User guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/running.html">Running the services</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/running.html">Services</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../user-guide/scanner-sequences.html">Scanner sequences</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../user-guide/reconstruction-plugins.html">Reconstruction plugins</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/reconstruction-client.html">Reconstruction clients</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/virtual-scanner.html">Scanning a phantom without a scanner</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/reconstruction-client.html">Reconstruction client</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../developer-guide/index.html">Developer guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/prerequisites.html">Development prerequisites</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/installation.html">Editable installation</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/workflow.html">Development workflow</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/installation.html">Development setup</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/workflow.html">Contribution workflow</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/style.html">Coding style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/documentation.html">Documentation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/terminology.html">Terminology and conventions</a></li>
@@ -260,10 +259,7 @@
 <li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/pre-commit.html">Pre-commit</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/pull-requests.html">Pull requests</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/releases.html">Releases</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/code-of-conduct.html">Code of conduct</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../explanations/index.html">Explanations</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -505,8 +501,9 @@
 <span class="w">    </span><span class="sd">"""A float UI entry bound to an argument of the sequence function.</span>
 
 <span class="sd">    The UI value is the argument divided by ``scale``, in ``unit``; a dropdown</span>
-<span class="sd">    when it has options. ``default`` is the UI value the protocol starts at;</span>
-<span class="sd">    ``None`` starts it at the sequence function's default.</span>
+<span class="sd">    when it has options. ``range_min``, ``range_max``, ``range_incr`` and</span>
+<span class="sd">    ``options`` are in UI units. ``default`` is the UI value the protocol</span>
+<span class="sd">    starts at; ``None`` starts it at the sequence function's default.</span>
 <span class="sd">    """</span>
 
     <span class="n">argument</span><span class="p">:</span> <span class="nb">str</span>
@@ -527,8 +524,8 @@
 <span class="w">    </span><span class="sd">"""A time UI entry bound to an argument of the sequence function, in seconds.</span>
 
 <span class="sd">    Values, ranges and options are integer microseconds, the unit of the</span>
-<span class="sd">    scanner's time parameters, so the value a parameter holds is the value the design</span>
-<span class="sd">    reported. Each key of ``presets`` is a dropdown preset; its value is the</span>
+<span class="sd">    scanner's time parameters, so the value a parameter holds is the value the</span>
+<span class="sd">    design reported. Each key of ``presets`` is a dropdown preset; its value is the</span>
 <span class="sd">    time it requests: seconds, ``None`` for the sequence function's own shortest</span>
 <span class="sd">    choice, or a function of the scanner limits. The entry is a dropdown when</span>
 <span class="sd">    it has options or presets. ``default``, microseconds or a key of</span>
@@ -593,8 +590,8 @@
 <span class="sd">    The argument receives the chosen member, a ``str`` equal to its option. The</span>
 <span class="sd">    options are the members in definition order, and the wire carries the index</span>
 <span class="sd">    of the chosen one. ``default`` is the member the protocol starts at;</span>
-<span class="sd">    ``None`` starts it at the sequence function's default, which has to be a member</span>
-<span class="sd">    or the value of one.</span>
+<span class="sd">    ``None`` starts it at the sequence function's default, which has to be a</span>
+<span class="sd">    member or the value of one.</span>
 <span class="sd">    """</span>
 
     <span class="n">argument</span><span class="p">:</span> <span class="nb">str</span>
@@ -607,7 +604,7 @@
 <a class="viewcode-back" href="../../../generated/pulserver.design.StatedParam.html#pulserver.design.StatedParam">[docs]</a>
 <span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 <span class="k">class</span><span class="w"> </span><span class="nc">StatedParam</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""A choice the sequence states, which binds no argument: a 3D sequence's ``imaging_mode`` is ``3d``.</span>
+<span class="w">    </span><span class="sd">"""A choice the sequence states without binding an argument, such as ``imaging_mode`` of a 3D sequence.</span>
 
 <span class="sd">    It is listed as a choice among all the members of its enum, so that the</span>
 <span class="sd">    wire carries the value's index among them, as the interpreter reads it</span>
@@ -622,7 +619,7 @@
 <a class="viewcode-back" href="../../../generated/pulserver.design.AveragesParam.html#pulserver.design.AveragesParam">[docs]</a>
 <span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 <span class="k">class</span><span class="w"> </span><span class="nc">AveragesParam</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""The number of signal averages, NEX: how many times the main sequence plays, binding no argument.</span>
+<span class="w">    </span><span class="sd">"""The number of signal averages, NEX: how many times the main sequence plays; binds no argument.</span>
 
 <span class="sd">    Every plugin has it unless it declares its own. The main sequence of a</span>
 <span class="sd">    design is played that many times, written into its block table once it</span>
@@ -876,8 +873,8 @@
 <span class="sd">    A time is in seconds and a float in the unit of the argument it binds,</span>
 <span class="sd">    metres for a length; an integer is an ``int``, a checkbox a ``bool`` and a</span>
 <span class="sd">    choice a member of its enum. A time entry showing a preset holds what the</span>
-<span class="sd">    preset requests, a number of seconds or ``None`` for the sequence function's own</span>
-<span class="sd">    shortest choice, and :meth:`preset` names the preset. The prescription</span>
+<span class="sd">    preset requests, a number of seconds or ``None`` for the sequence function's</span>
+<span class="sd">    own shortest choice, and :meth:`preset` names the preset. The prescription</span>
 <span class="sd">    entries bind no argument and keep the units of the wire: mm for the</span>
 <span class="sd">    offset, unitless for the rotation.</span>
 

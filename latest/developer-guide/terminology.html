@@ -242,17 +242,16 @@
         </ul>
         <ul class="current nav bd-sidenav">
 <li class="toctree-l1 has-children"><a class="reference internal" href="../user-guide/index.html">User guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="../user-guide/running.html">Running the services</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../user-guide/running.html">Services</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../user-guide/scanner-sequences.html">Scanner sequences</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../user-guide/reconstruction-plugins.html">Reconstruction plugins</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../user-guide/reconstruction-client.html">Reconstruction clients</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../user-guide/virtual-scanner.html">Scanning a phantom without a scanner</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../user-guide/reconstruction-client.html">Reconstruction client</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../user-guide/virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 current active has-children"><a class="reference internal" href="index.html">Developer guide</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
-<li class="toctree-l2"><a class="reference internal" href="prerequisites.html">Development prerequisites</a></li>
-<li class="toctree-l2"><a class="reference internal" href="installation.html">Editable installation</a></li>
-<li class="toctree-l2"><a class="reference internal" href="workflow.html">Development workflow</a></li>
+<li class="toctree-l2"><a class="reference internal" href="installation.html">Development setup</a></li>
+<li class="toctree-l2"><a class="reference internal" href="workflow.html">Contribution workflow</a></li>
 <li class="toctree-l2"><a class="reference internal" href="style.html">Coding style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="documentation.html">Documentation</a></li>
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">Terminology and conventions</a></li>
@@ -265,10 +264,7 @@
 <li class="toctree-l3"><a class="reference internal" href="internals/virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
-<li class="toctree-l2"><a class="reference internal" href="pre-commit.html">Pre-commit</a></li>
-<li class="toctree-l2"><a class="reference internal" href="pull-requests.html">Pull requests</a></li>
 <li class="toctree-l2"><a class="reference internal" href="releases.html">Releases</a></li>
-<li class="toctree-l2"><a class="reference internal" href="code-of-conduct.html">Code of conduct</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../explanations/index.html">Explanations</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -843,15 +839,18 @@ significant digits.</p>
 <h2>5. Safety language<a class="headerlink" href="#safety-language" title="Link to this heading">#</a></h2>
 <p>Pulserver runs the timing, gradient, PNS, mechanical-resonance and sound
 pressure checks, which pypulseqpp implements, under the limits the interpreter
-passes, before it writes an IR cache, and refuses a design that fails one. It
-writes each subsequence’s sound pressure levels into the cache, and from
-pypulseqpp’s SAR check each subsequence’s SAR relative to a reference pulse.
-The interpreter computes the SAR and the gradient and RF heating with the
-scanner’s own routines. The checks compute estimates; passing them does not
+passes, before it writes an IR cache, and refuses a design that fails one.
+On a scanner every check is mandatory except sound pressure. Pulserver writes
+each subsequence’s sound pressure levels into the cache and, for pTx, its SAR
+relative to a reference pulse, computed from the VOPs. SAR, RF coil heating
+and gradient heating are computed by the vendor’s routines from the inputs
+the interpreter passes. The checks compute estimates; passing them does not
 establish scanner or patient safety.</p>
 <ul class="simple">
 <li><p>Never write “safe”, “validated”, “compliant” or “approved” of a sequence, a
 protocol or a design.</p></li>
+<li><p>Of a design a check refuses, write “a sequence raising a safety check
+violation”, not “an unsafe sequence”.</p></li>
 <li><p>A valid <code class="docutils literal notranslate"><span class="pre">VALIDATE</span></code> reply means the plugin’s evaluation accepted the
 prescription under the scanner limits it was given. State that, not more.</p></li>
 </ul>

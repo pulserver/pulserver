@@ -66,7 +66,7 @@
     <link rel="icon" href="../_static/pulserver-mark.svg"/>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Running the services" href="running.html" />
+    <link rel="next" title="Services" href="running.html" />
     <link rel="prev" title="Homepage" href="../index.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
@@ -242,17 +242,16 @@
         </ul>
         <ul class="current nav bd-sidenav">
 <li class="toctree-l1 current active has-children"><a class="current reference internal" href="#">User guide</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="running.html">Running the services</a></li>
+<li class="toctree-l2"><a class="reference internal" href="running.html">Services</a></li>
 <li class="toctree-l2"><a class="reference internal" href="scanner-sequences.html">Scanner sequences</a></li>
 <li class="toctree-l2"><a class="reference internal" href="reconstruction-plugins.html">Reconstruction plugins</a></li>
-<li class="toctree-l2"><a class="reference internal" href="reconstruction-client.html">Reconstruction clients</a></li>
-<li class="toctree-l2"><a class="reference internal" href="virtual-scanner.html">Scanning a phantom without a scanner</a></li>
+<li class="toctree-l2"><a class="reference internal" href="reconstruction-client.html">Reconstruction client</a></li>
+<li class="toctree-l2"><a class="reference internal" href="virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../developer-guide/index.html">Developer guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="../developer-guide/prerequisites.html">Development prerequisites</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../developer-guide/installation.html">Editable installation</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../developer-guide/workflow.html">Development workflow</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer-guide/installation.html">Development setup</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer-guide/workflow.html">Contribution workflow</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../developer-guide/style.html">Coding style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../developer-guide/documentation.html">Documentation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../developer-guide/terminology.html">Terminology and conventions</a></li>
@@ -265,10 +264,7 @@
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
-<li class="toctree-l2"><a class="reference internal" href="../developer-guide/pre-commit.html">Pre-commit</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../developer-guide/pull-requests.html">Pull requests</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../developer-guide/releases.html">Releases</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../developer-guide/code-of-conduct.html">Code of conduct</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../explanations/index.html">Explanations</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -534,10 +530,9 @@
             </div>
             <nav aria-label="Page">
                 <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#documentation-sections">Documentation sections</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#prerequisites-and-supported-platforms">Prerequisites and supported platforms</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#supported-platforms">Supported platforms</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#installation">Installation</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#reporting-issues">Reporting issues</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#issue-tracker">Issue tracker</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#discussions">Discussions</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#security">Security</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#safety">Safety</a></li>
@@ -554,70 +549,45 @@
                   
   <section class="tex2jax_ignore mathjax_ignore" id="user-guide">
 <h1>User guide<a class="headerlink" href="#user-guide" title="Link to this heading">#</a></h1>
-<p>Installing the package, the platforms it is supported on, running its services
-and writing the plugins they load. The components and the representations they
-exchange are described in <a class="reference internal" href="../explanations/index.html"><span class="doc">Explanations</span></a>.</p>
-<section id="documentation-sections">
-<h2>Documentation sections<a class="headerlink" href="#documentation-sections" title="Link to this heading">#</a></h2>
+<p>Installing pulserver, running its services and writing the plugins they load.
+The concepts behind them are in <a class="reference internal" href="../explanations/index.html"><span class="doc">Explanations</span></a>, and the exact
+interfaces, units and defaults in <a class="reference internal" href="../api/index.html"><span class="doc">API reference</span></a>.</p>
 <div class="pst-scrollable-table-container"><table class="table">
 <thead>
-<tr class="row-odd"><th class="head"><p>Section</p></th>
-<th class="head"><p>Purpose</p></th>
+<tr class="row-odd"><th class="head"><p>Page</p></th>
+<th class="head"><p>Task</p></th>
 </tr>
 </thead>
 <tbody>
-<tr class="row-even"><td><p>This page</p></td>
-<td><p>Installation, supported platforms, issues and security.</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="running.html"><span class="doc">Services</span></a></p></td>
+<td><p>Run the design calls, the warm design server, the reconstruction proxy and the reconstruction server, and check a sequence plays as written.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="running.html"><span class="doc">Running the services</span></a></p></td>
-<td><p>The design calls, the warm server and the reconstruction proxy, and their options.</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="scanner-sequences.html"><span class="doc">Scanner sequences</span></a></p></td>
+<td><p>Bind a sequence function to the scanner protocol.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="scanner-sequences.html"><span class="doc">Scanner sequences</span></a></p></td>
-<td><p>Binding a pypulseqpp sequence function to the scanner protocol.</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="reconstruction-plugins.html"><span class="doc">Reconstruction plugins</span></a></p></td>
+<td><p>Write a reconstruction plugin and run it offline.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="reconstruction-plugins.html"><span class="doc">Reconstruction plugins</span></a></p></td>
-<td><p>Writing a reconstruction and running it outside the proxy.</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="reconstruction-client.html"><span class="doc">Reconstruction client</span></a></p></td>
+<td><p>Send a series to the proxy from a scanner’s reconstruction client.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="reconstruction-client.html"><span class="doc">Reconstruction clients</span></a></p></td>
-<td><p>The MRD stream a scanner’s reconstruction client sends the proxy.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="virtual-scanner.html"><span class="doc">Scanning a phantom without a scanner</span></a></p></td>
-<td><p>Scanning an analytic phantom through a stored design, the proxy and a reconstruction plugin, without a scanner.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="../explanations/index.html"><span class="doc">Explanations</span></a></p></td>
-<td><p>Architecture, protocol resolution, the design store, the scanner IR and raw-data enrichment.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="../examples/index.html"><span class="doc">Examples</span></a></p></td>
-<td><p>Executable examples: a course from a protocol to a reconstructed image, and Tours of specialised workflows.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="../api/index.html"><span class="doc">API reference</span></a></p></td>
-<td><p>Exact interfaces, units and defaults.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="../developer-guide/index.html"><span class="doc">Developer guide</span></a></p></td>
-<td><p>Development setup and contribution workflow.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="../misc/index.html"><span class="doc">Miscellaneous</span></a></p></td>
-<td><p>Licensing, related projects and contributors.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference external" href="https://github.com/pulserver/pulserver">Source</a></p></td>
-<td><p>Repository, issues and discussions.</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="virtual-scanner.html"><span class="doc">Virtual scanner</span></a></p></td>
+<td><p>Scan a phantom through a stored design, the proxy and a reconstruction plugin, without a scanner.</p></td>
 </tr>
 </tbody>
 </table>
 </div>
 <div class="toctree-wrapper compound">
 </div>
-</section>
-<section id="prerequisites-and-supported-platforms">
-<h2>Prerequisites and supported platforms<a class="headerlink" href="#prerequisites-and-supported-platforms" title="Link to this heading">#</a></h2>
-<p>pulserver supports Python 3.10 through 3.14. CI tests the lower and upper
-bounds on Linux and macOS. Windows is not supported: the warm design server
-forks one process per call and listens on a Unix socket.</p>
-<p>Published wheels cover:</p>
+<section id="supported-platforms">
+<h2>Supported platforms<a class="headerlink" href="#supported-platforms" title="Link to this heading">#</a></h2>
+<p>pulserver supports Python 3.10 through 3.14; CI tests both bounds on Linux and
+macOS. Windows is not supported: the warm design server forks one process per
+call and listens on a Unix socket.</p>
 <div class="pst-scrollable-table-container"><table class="table">
 <thead>
 <tr class="row-odd"><th class="head"><p>Platform</p></th>
-<th class="head"><p>Architectures</p></th>
+<th class="head"><p>Wheel architectures</p></th>
 </tr>
 </thead>
 <tbody>
@@ -630,55 +600,82 @@ forks one process per call and listens on a Unix socket.</p>
 </tbody>
 </table>
 </div>
-<p>The extension <code class="docutils literal notranslate"><span class="pre">pulserver._ext</span></code> is compiled into each wheel. A source build
-requires a C compiler, a C++17 compiler, CMake and the Python development
-headers.</p>
+<p>Each wheel carries the compiled extension <code class="docutils literal notranslate"><span class="pre">pulserver._ext</span></code>. A source build
+needs a C compiler, a C++17 compiler, CMake and the Python development headers.</p>
 </section>
 <section id="installation">
 <h2>Installation<a class="headerlink" href="#installation" title="Link to this heading">#</a></h2>
-<p>Install the package from PyPI:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span>pulserver
 </pre></div>
 </div>
-<p>This installs pypulseqpp, which designs the sequences, and the ISMRMRD and DICOM
-libraries the reconstruction side uses. A reconstruction engine is not a
-dependency: a reconstruction plugin imports the engine it uses, and the
-reconstruction proxy imports bartorch into its spare workers when it is
-installed.</p>
-<p>Developer installation is documented in <a class="reference internal" href="../developer-guide/index.html"><span class="doc">Developer guide</span></a>.</p>
+<p>This installs pypulseqpp, which designs the sequences; bartorch and PyTorch,
+which the shipped reconstructions use; blochsim, with which the virtual
+scanner simulates the signal and the shipped <code class="docutils literal notranslate"><span class="pre">fse3d</span></code> plugin optimizes its
+refocusing trains; and the ISMRMRD and DICOM libraries. A reconstruction plugin may import any other
+engine; the reconstruction proxy imports bartorch into its spare workers ahead
+of a series.</p>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Extra</p></th>
+<th class="head"><p>Adds</p></th>
+<th class="head"><p>Needed for</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">console</span></code></p></td>
+<td><p>websockets</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">pulserver</span> <span class="pre">console</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">coils</span></code></p></td>
+<td><p>bartorch’s <code class="docutils literal notranslate"><span class="pre">motion</span></code> extra (SimpleITK)</p></td>
+<td><p>The navigator registration of the shipped <code class="docutils literal notranslate"><span class="pre">pmc</span></code> reconstruction</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">brainweb</span></code></p></td>
+<td><p>brainweb-dl</p></td>
+<td><p>BrainWeb’s normal brain as a virtual-scanner phantom</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span><span class="s1">'pulserver[console,coils]'</span>
+</pre></div>
+</div>
+<p>A development installation is described in <a class="reference internal" href="../developer-guide/index.html"><span class="doc">Developer guide</span></a>.</p>
 </section>
-<section id="reporting-issues">
-<h2>Reporting issues<a class="headerlink" href="#reporting-issues" title="Link to this heading">#</a></h2>
-<p>Use the <a class="reference external" href="https://github.com/pulserver/pulserver/issues">GitHub issue tracker</a>
-for a reproducible defect, a documentation error, or a narrowly scoped feature
-request. A useful report includes the pulserver, pypulseqpp and Python versions,
-the operating system, the affected subpackage and the smallest reproducer: a
-plugin file, a short <code class="docutils literal notranslate"><span class="pre">.seq</span></code> file, or the design call and its reply.</p>
-<p>A defect in sequence design belongs to the
+<section id="issue-tracker">
+<h2>Issue tracker<a class="headerlink" href="#issue-tracker" title="Link to this heading">#</a></h2>
+<p>Report a reproducible defect, a documentation error or a narrowly scoped
+feature request on the
+<a class="reference external" href="https://github.com/pulserver/pulserver/issues">GitHub issue tracker</a>. Include
+the pulserver, pypulseqpp and Python versions, the operating system, the
+affected subpackage and the smallest reproducer: a plugin file, a short <code class="docutils literal notranslate"><span class="pre">.seq</span></code>
+file, or the design call and its reply.</p>
+<p>A defect in sequence design belongs on the
 <a class="reference external" href="https://github.com/pulserver/pypulseqpp/issues">pypulseqpp tracker</a>, and one
-in a reconstruction algorithm to the
+in a reconstruction algorithm on the
 <a class="reference external" href="https://github.com/mcencini/bartorch/issues">bartorch tracker</a>.</p>
 </section>
 <section id="discussions">
 <h2>Discussions<a class="headerlink" href="#discussions" title="Link to this heading">#</a></h2>
 <p><a class="reference external" href="https://github.com/pulserver/pulserver/discussions">GitHub Discussions</a> is the
-public forum for usage questions and broad design ideas. Reproducible defects
-belong in the issue tracker.</p>
+public forum for usage questions and broad design ideas.</p>
 </section>
 <section id="security">
 <h2>Security<a class="headerlink" href="#security" title="Link to this heading">#</a></h2>
-<p>The canonical policy is <a class="reference external" href="https://github.com/pulserver/pulserver/blob/main/SECURITY.md"><code class="docutils literal notranslate"><span class="pre">SECURITY.md</span></code></a>.
-Vulnerabilities must be reported through
+<p>The policy is <a class="reference external" href="https://github.com/pulserver/pulserver/blob/main/SECURITY.md"><code class="docutils literal notranslate"><span class="pre">SECURITY.md</span></code></a>.
+Report a vulnerability through
 <a class="reference external" href="https://github.com/pulserver/pulserver/security/advisories/new">GitHub private vulnerability reporting</a>,
 not through a public issue.</p>
 </section>
 <section id="safety">
 <h2>Safety<a class="headerlink" href="#safety" title="Link to this heading">#</a></h2>
-<p>Pulserver designs, converts and reconstructs. Before it writes a cache it
-runs pypulseqpp’s timing, gradient, PNS, mechanical-resonance and sound
-pressure checks; the interpreter computes SAR and gradient and RF heating
-with the scanner’s own routines. These checks compute estimates. Passing them
-does not establish scanner or patient safety.</p>
+<p>Before it writes an IR cache, pulserver runs pypulseqpp’s timing, gradient,
+PNS, mechanical-resonance and sound pressure checks under the limits the
+interpreter sends, and refuses a sequence raising a safety check violation.
+SAR, RF coil heating and gradient heating are computed by the vendor’s routines
+on the scanner, from inputs pulserver provides
+(<a class="reference internal" href="../explanations/safety-checks.html"><span class="doc">Safety checks</span></a>). The checks compute estimates; passing
+them does not establish scanner or patient safety.</p>
 </section>
 </section>
 
@@ -707,7 +704,7 @@ does not establish scanner or patient safety.</p>
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Running the services</p>
+        <p class="prev-next-title">Services</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -729,10 +726,9 @@ does not establish scanner or patient safety.</p>
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#documentation-sections">Documentation sections</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#prerequisites-and-supported-platforms">Prerequisites and supported platforms</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#supported-platforms">Supported platforms</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#installation">Installation</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#reporting-issues">Reporting issues</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#issue-tracker">Issue tracker</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#discussions">Discussions</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#security">Security</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#safety">Safety</a></li>

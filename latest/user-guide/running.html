@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>Running the services &#8212; pulserver documentation</title>
+    <title>Services &#8212; pulserver documentation</title>
   
   
   
@@ -242,17 +242,16 @@
         </ul>
         <ul class="current nav bd-sidenav">
 <li class="toctree-l1 current active has-children"><a class="reference internal" href="index.html">User guide</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
-<li class="toctree-l2 current active"><a class="current reference internal" href="#">Running the services</a></li>
+<li class="toctree-l2 current active"><a class="current reference internal" href="#">Services</a></li>
 <li class="toctree-l2"><a class="reference internal" href="scanner-sequences.html">Scanner sequences</a></li>
 <li class="toctree-l2"><a class="reference internal" href="reconstruction-plugins.html">Reconstruction plugins</a></li>
-<li class="toctree-l2"><a class="reference internal" href="reconstruction-client.html">Reconstruction clients</a></li>
-<li class="toctree-l2"><a class="reference internal" href="virtual-scanner.html">Scanning a phantom without a scanner</a></li>
+<li class="toctree-l2"><a class="reference internal" href="reconstruction-client.html">Reconstruction client</a></li>
+<li class="toctree-l2"><a class="reference internal" href="virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../developer-guide/index.html">Developer guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="../developer-guide/prerequisites.html">Development prerequisites</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../developer-guide/installation.html">Editable installation</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../developer-guide/workflow.html">Development workflow</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer-guide/installation.html">Development setup</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer-guide/workflow.html">Contribution workflow</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../developer-guide/style.html">Coding style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../developer-guide/documentation.html">Documentation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../developer-guide/terminology.html">Terminology and conventions</a></li>
@@ -265,10 +264,7 @@
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
-<li class="toctree-l2"><a class="reference internal" href="../developer-guide/pre-commit.html">Pre-commit</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../developer-guide/pull-requests.html">Pull requests</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../developer-guide/releases.html">Releases</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../developer-guide/code-of-conduct.html">Code of conduct</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../explanations/index.html">Explanations</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -524,7 +520,7 @@
               
 
 <div id="jb-print-docs-body" class="onlyprint">
-    <h1>Running the services</h1>
+    <h1>Services</h1>
     <!-- Table of contents -->
     <div id="print-main-content">
         <div id="jb-print-toc">
@@ -535,15 +531,27 @@
             <nav aria-label="Page">
                 <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#design-calls">Design calls</a><ul class="nav section-nav flex-column">
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#limits">Limits</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#import-block">Import block</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#scanner-limits">Scanner limits</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#in-process-calls">In-process calls</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#design-store">Design store</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pushing-designs">Pushing designs</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#warm-server">Warm server</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#design-push">Design push</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#warm-design-server">Warm design server</a></li>
 </ul>
 </li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#reconstruction-proxy">Reconstruction proxy</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#reconstruction-proxy">Reconstruction proxy</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#series-routing">Series routing</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#saved-series">Saved series</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#proxy-lifetime">Proxy lifetime</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#exam-directory">Exam directory</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#forwarding">Forwarding</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#sequence-description">Sequence description</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#design-intake">Design intake</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#network-exposure">Network exposure</a></li>
+</ul>
+</li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#reconstruction-server">Reconstruction server</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#checking-a-sequence-plays-as-it-was-written">Checking a sequence plays as it was written</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#playout-validation">Playout validation</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#see-also">See also</a></li>
 </ul>
             </nav>
@@ -556,26 +564,26 @@
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <section class="tex2jax_ignore mathjax_ignore" id="running-the-services">
-<h1>Running the services<a class="headerlink" href="#running-the-services" title="Link to this heading">#</a></h1>
-<p>Pulserver runs two services. The design calls answer the scanner’s interpreter
-host processes: they resolve protocols and write the designs the scanner plays into a
-design store, one command per call or through a warm server. The
-reconstruction proxy receives the raw data of each series from the scanner’s
-reconstruction client, reads the design it was played from in a design store,
-and returns the images. When the two run on different computers, either the
-store is a directory both can reach, or the proxy keeps a store of its own and
-its design intake receives each design the design calls push to it. The store
-and the identity of a design are described in
-<a class="reference internal" href="../explanations/architecture.html"><span class="doc">Architecture</span></a>. Where the reconstructions run on a computer of
-their own, a reconstruction server runs there and the proxy forwards each
-series to it.</p>
+  <section class="tex2jax_ignore mathjax_ignore" id="services">
+<h1>Services<a class="headerlink" href="#services" title="Link to this heading">#</a></h1>
+<p>pulserver runs two services. The design calls answer the scanner’s interpreter
+host processes: they resolve protocols and write the designs the scanner plays
+into a design store, one command per call or through a warm design server. The
+reconstruction proxy receives each series from the scanner’s reconstruction
+client, reads the design it was played from in a design store, and returns the
+images.</p>
+<p>When the two run on different computers, either the design store is a
+directory both can reach, or the proxy keeps a store of its own and its design
+intake receives each design the design calls push to it. When the
+reconstructions run on a computer of their own, a reconstruction server runs
+there and the proxy forwards each series to it. The services and the design
+store are described in <a class="reference internal" href="../explanations/architecture.html"><span class="doc">Architecture</span></a>.</p>
 <section id="design-calls">
 <h2>Design calls<a class="headerlink" href="#design-calls" title="Link to this heading">#</a></h2>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pulserver<span class="w"> </span>design<span class="w"> </span>list<span class="w">     </span>--plugins<span class="w"> </span>DIR<span class="w"> </span>--plugin<span class="w"> </span>NAME<span class="w"> </span><span class="o">[</span>--limits<span class="w"> </span>FILE<span class="w"> </span>--rf-definitions<span class="o">]</span>
-pulserver<span class="w"> </span>design<span class="w"> </span>validate<span class="w"> </span>--plugins<span class="w"> </span>DIR<span class="w"> </span>--plugin<span class="w"> </span>NAME<span class="w"> </span>--limits<span class="w"> </span>FILE<span class="w"> </span><span class="o">[</span>--rf-layout<span class="o">]</span><span class="w"> </span>&lt;<span class="w"> </span>VALUES
-pulserver<span class="w"> </span>design<span class="w"> </span>generate<span class="w"> </span>--plugins<span class="w"> </span>DIR<span class="w"> </span>--plugin<span class="w"> </span>NAME<span class="w"> </span>--limits<span class="w"> </span>FILE<span class="w"> </span>--store<span class="w"> </span>DIR<span class="w"> </span><span class="o">[</span>--push<span class="w"> </span>URL<span class="o">]</span><span class="w"> </span>&lt;<span class="w"> </span>VALUES
-pulserver<span class="w"> </span>design<span class="w"> </span>import<span class="w">   </span>--limits<span class="w"> </span>FILE<span class="w"> </span>--store<span class="w"> </span>DIR<span class="w"> </span><span class="o">[</span>--push<span class="w"> </span>URL<span class="o">]</span><span class="w"> </span>&lt;<span class="w"> </span>IMPORT
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pulserver<span class="w"> </span>design<span class="w"> </span>list<span class="w">     </span>--plugins<span class="w"> </span>DIR<span class="w"> </span>--plugin<span class="w"> </span>NAME<span class="w"> </span><span class="o">[</span>--limits<span class="w"> </span>FILE<span class="w"> </span>--rf-definitions<span class="o">]</span><span class="w"> </span><span class="o">[</span>--socket<span class="w"> </span>PATH<span class="o">]</span>
+pulserver<span class="w"> </span>design<span class="w"> </span>validate<span class="w"> </span>--plugins<span class="w"> </span>DIR<span class="w"> </span>--plugin<span class="w"> </span>NAME<span class="w"> </span>--limits<span class="w"> </span>FILE<span class="w"> </span><span class="o">[</span>--rf-layout<span class="o">]</span><span class="w"> </span><span class="o">[</span>--exam<span class="w"> </span>DIR<span class="o">]</span><span class="w"> </span><span class="o">[</span>--socket<span class="w"> </span>PATH<span class="o">]</span><span class="w"> </span>&lt;<span class="w"> </span>VALUES
+pulserver<span class="w"> </span>design<span class="w"> </span>generate<span class="w"> </span>--plugins<span class="w"> </span>DIR<span class="w"> </span>--plugin<span class="w"> </span>NAME<span class="w"> </span>--limits<span class="w"> </span>FILE<span class="w"> </span>--store<span class="w"> </span>DIR<span class="w"> </span><span class="o">[</span>--exam<span class="w"> </span>DIR<span class="o">]</span><span class="w"> </span><span class="o">[</span>--push<span class="w"> </span>URL<span class="o">]</span><span class="w"> </span><span class="o">[</span>--socket<span class="w"> </span>PATH<span class="o">]</span><span class="w"> </span>&lt;<span class="w"> </span>VALUES
+pulserver<span class="w"> </span>design<span class="w"> </span>import<span class="w">   </span>--limits<span class="w"> </span>FILE<span class="w"> </span>--store<span class="w"> </span>DIR<span class="w"> </span><span class="o">[</span>--push<span class="w"> </span>URL<span class="o">]</span><span class="w"> </span><span class="o">[</span>--socket<span class="w"> </span>PATH<span class="o">]</span><span class="w"> </span>&lt;<span class="w"> </span>IMPORT
 pulserver<span class="w"> </span>design<span class="w"> </span>push<span class="w">     </span>--store<span class="w"> </span>DIR<span class="w"> </span>--to<span class="w"> </span>URL<span class="w"> </span>ID...
 pulserver<span class="w"> </span>design<span class="w"> </span>prune<span class="w">    </span>--store<span class="w"> </span>DIR<span class="w"> </span><span class="o">[</span>--max-age-days<span class="w"> </span>D<span class="o">]</span><span class="w"> </span><span class="o">[</span>--max-bytes<span class="w"> </span>B<span class="o">]</span>
 </pre></div>
@@ -584,7 +592,9 @@ pulserver<span class="w"> </span>design<span class="w"> </span>prune<span class=
 its reply to standard output; <code class="docutils literal notranslate"><span class="pre">python</span> <span class="pre">-m</span> <span class="pre">pulserver.host</span></code> takes the same
 arguments. <code class="docutils literal notranslate"><span class="pre">--plugins</span></code> is a directory of scanner-sequence plugin files,
 <code class="docutils literal notranslate"><span class="pre">&lt;plugin&gt;.py</span></code>, and may be repeated: a plugin is the file of the first directory
-that holds it. <code class="docutils literal notranslate"><span class="pre">--store</span></code> is the design store, created when missing.</p>
+that holds it, and the shipped plugins are searched last
+(<a class="reference internal" href="scanner-sequences.html#shipped-sequences"><span class="std std-ref">Shipped sequences</span></a>). <code class="docutils literal notranslate"><span class="pre">--store</span></code> is the design store, created when
+missing.</p>
 <div class="pst-scrollable-table-container"><table class="table">
 <thead>
 <tr class="row-odd"><th class="head"><p>Call</p></th>
@@ -599,13 +609,13 @@ that holds it. <code class="docutils literal notranslate"><span class="pre">--st
 <td><p><code class="docutils literal notranslate"><span class="pre">VALID</span> <span class="pre">&lt;seconds&gt;</span></code> or <code class="docutils literal notranslate"><span class="pre">INVALID</span></code>, an <code class="docutils literal notranslate"><span class="pre">INFO</span></code> line and the value block of the resolved protocol; with <code class="docutils literal notranslate"><span class="pre">--rf-layout</span></code>, a valid reply ends with the <code class="docutils literal notranslate"><span class="pre">[RfLayout]</span></code> block</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">generate</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">GENERATED</span> <span class="pre">&lt;id&gt;</span></code>: the identifier of the design in the store</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">GENERATED</span> <span class="pre">&lt;id&gt;</span></code>, the identifier of the design in the store</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">import</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">IMPORTED</span> <span class="pre">&lt;id&gt;</span></code></p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">push</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">PUSHED</span> <span class="pre">&lt;count&gt;</span></code>: the designs sent, not counting those the intake holds already</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">PUSHED</span> <span class="pre">&lt;count&gt;</span></code>: the designs sent, not counting those the intake already holds</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">prune</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">PRUNED</span> <span class="pre">&lt;count&gt;</span></code></p></td>
@@ -613,40 +623,93 @@ that holds it. <code class="docutils literal notranslate"><span class="pre">--st
 </tbody>
 </table>
 </div>
-<p>The RF blocks are sent only when asked, and only where the plugin’s evaluation
-states an RF layout (<a class="reference internal" href="scanner-sequences.html#stating-the-rf-layout"><span class="std std-ref">Stating the RF layout</span></a>). <code class="docutils literal notranslate"><span class="pre">--rf-definitions</span></code> evaluates
-the plugin at its default protocol under <code class="docutils literal notranslate"><span class="pre">--limits</span></code>, which it requires, and
-follows the listing with the RF definitions of that evaluation. <code class="docutils literal notranslate"><span class="pre">--rf-layout</span></code>
-follows a valid reply with the RF layout of the evaluation of the request, its
-amplitudes over the peaks the listing states, which it reads by evaluating the
-plugin at its default protocol as well. Both blocks are described in
-<a class="reference internal" href="../explanations/protocol.html"><span class="doc">Protocol resolution</span></a>. Without a flag, <code class="docutils literal notranslate"><span class="pre">list</span></code> reads no limits and
-<code class="docutils literal notranslate"><span class="pre">validate</span></code> replies no RF block.</p>
-<p>A call that fails replies <code class="docutils literal notranslate"><span class="pre">ERROR</span> <span class="pre">&lt;message&gt;</span></code> and exits with status 1; a plugin
-that ends its process ends the call without a reply and with a nonzero exit
-status. The value blocks are those of <code class="xref py py-mod docutils literal notranslate"><span class="pre">pulserver.protocol</span></code>, and the import
-block names the first file of a chain and, optionally, its prescription:</p>
+<p>A failed call replies <code class="docutils literal notranslate"><span class="pre">ERROR</span> <span class="pre">&lt;message&gt;</span></code> and exits with status 1; a plugin that
+ends its process ends the call without a reply and with a nonzero exit status.
+The listing and value blocks are those of <code class="xref py py-mod docutils literal notranslate"><span class="pre">pulserver.protocol</span></code>, described
+in <a class="reference internal" href="../explanations/protocol.html"><span class="doc">Protocol resolution</span></a>.</p>
+<p>The RF blocks are sent only when asked for, and only where the plugin’s
+evaluation states an RF layout (<a class="reference internal" href="scanner-sequences.html#stating-the-rf-layout"><span class="std std-ref">RF layout</span></a>).
+<code class="docutils literal notranslate"><span class="pre">--rf-definitions</span></code> evaluates the plugin at its default protocol under
+<code class="docutils literal notranslate"><span class="pre">--limits</span></code>, which it then requires. <code class="docutils literal notranslate"><span class="pre">--rf-layout</span></code> follows a valid reply with the
+RF layout of the evaluated request, its amplitudes relative to the peaks the
+listing states. Without <code class="docutils literal notranslate"><span class="pre">--rf-definitions</span></code>, <code class="docutils literal notranslate"><span class="pre">list</span></code> depends on the plugin file
+and the installed packages only, so its reply can be written once at
+installation and read without a call.</p>
+<p><code class="docutils literal notranslate"><span class="pre">--exam</span></code> names the directory of the current exam’s cache, which is passed to
+the plugin hooks that take <code class="docutils literal notranslate"><span class="pre">exam</span></code> (<a class="reference internal" href="scanner-sequences.html#exam-cache"><span class="std std-ref">Exam cache</span></a>); for such a plugin the
+files of that directory are part of the design’s identity.</p>
+<p><code class="docutils literal notranslate"><span class="pre">generate</span></code> designs a request once, in the logical frame, checks it in the
+physical frame of the prescription rotation, converts it to the IR cache at the
+prescribed field-of-view offset and stores it. A request that resolves to a
+stored design returns that design’s identifier without designing again.</p>
+<section id="import-block">
+<h3>Import block<a class="headerlink" href="#import-block" title="Link to this heading">#</a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">import</span></code> stores a Pulseq file written by any sequence development tool with a
+Pulseq writer. The block names the first file of a <code class="docutils literal notranslate"><span class="pre">NextSequence</span></code> chain and,
+optionally, its prescription and its number of averages:</p>
 <div class="highlight-text notranslate"><div class="highlight"><pre><span></span>[Import]
 file: /data/sequence.seq
 fov_offset_x: 0.0
 fov_offset_y: 20.0
 fov_offset_z: 0.0
+nex: 2
 [Import End]
 </pre></div>
 </div>
-<p>with the offset in mm along the logical axes and the rotation in the
-<code class="docutils literal notranslate"><span class="pre">fov_rotation_ij</span></code> lines of <a class="reference internal" href="../explanations/protocol.html"><span class="doc">Protocol resolution</span></a>. <code class="docutils literal notranslate"><span class="pre">generate</span></code> designs a
-request once, writes it in the logical frame, checks it and converts it to the
-IR cache at the prescribed field-of-view offset; <code class="docutils literal notranslate"><span class="pre">import</span></code> copies the chain, then
-checks and converts it the same way. A request that resolves to a stored
-design returns its identifier without designing again.</p>
-<section id="limits">
-<h3>Limits<a class="headerlink" href="#limits" title="Link to this heading">#</a></h3>
-<p>The limits file holds a <code class="docutils literal notranslate"><span class="pre">[Limits]</span></code> block, one <code class="docutils literal notranslate"><span class="pre">name:</span> <span class="pre">value</span></code> per line between
-<code class="docutils literal notranslate"><span class="pre">[Limits]</span></code> and <code class="docutils literal notranslate"><span class="pre">[Limits</span> <span class="pre">End]</span></code>. The lines are keyword arguments of
-<code class="docutils literal notranslate"><span class="pre">pypulseqpp.Opts</span></code>, of which <code class="docutils literal notranslate"><span class="pre">B0</span></code>, the field in T the scan runs at, is
-required: ppm offsets are resolved at it, and a call without it is refused.
-Further options are for the IR conversion:</p>
+<p>The offset is in mm along the logical readout, phase and slice axes, zero along
+an axis left out, and the rotation is given by the <code class="docutils literal notranslate"><span class="pre">fov_rotation_ij</span></code> lines of
+<a class="reference internal" href="../explanations/protocol.html"><span class="doc">Protocol resolution</span></a>. <code class="docutils literal notranslate"><span class="pre">nex</span></code>, a whole number from 1, plays the main
+sequence, the last file of the chain, that many times. The chain is copied,
+then checked and converted as <code class="docutils literal notranslate"><span class="pre">generate</span></code> checks and converts a design.</p>
+</section>
+<section id="scanner-limits">
+<span id="id1"></span><h3>Scanner limits<a class="headerlink" href="#scanner-limits" title="Link to this heading">#</a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">--limits</span></code> names a file holding a <code class="docutils literal notranslate"><span class="pre">[Limits]</span></code> block, one <code class="docutils literal notranslate"><span class="pre">name:</span> <span class="pre">value</span></code> per line,
+here <code class="docutils literal notranslate"><span class="pre">system.txt</span></code>:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>[Limits]
+max_grad: 40.0
+grad_unit: mT/m
+max_slew: 150.0
+slew_unit: T/m/s
+B0: 3.0
+design_max_grad: 23.094
+design_max_slew: 86.603
+[Limits End]
+</pre></div>
+</div>
+<p>The lines without a prefix are keyword arguments of <code class="docutils literal notranslate"><span class="pre">pypulseqpp.Opts</span></code>, of which
+<code class="docutils literal notranslate"><span class="pre">B0</span></code>, the field in T, is required: ppm offsets are resolved at it. The limits
+are the <code class="docutils literal notranslate"><span class="pre">system</span></code> the plugin designs under and the checks hold the design to, so
+include the scanner’s RF and ADC dead times, RF ringdown time and ADC sample
+divisor; <code class="docutils literal notranslate"><span class="pre">pypulseqpp.Opts</span></code> sets the dead times to zero and the divisor to four
+when they are left out.</p>
+<p><code class="docutils literal notranslate"><span class="pre">max_grad</span></code> and <code class="docutils literal notranslate"><span class="pre">max_slew</span></code> are the limits of the gradient coils, to which the
+checks hold every physical axis. Logical axes played together add on one
+physical axis, so under an oblique prescription a design held to <code class="docutils literal notranslate"><span class="pre">max_grad</span></code> and
+<code class="docutils literal notranslate"><span class="pre">max_slew</span></code> per logical axis can exceed them on a physical one and is refused.
+Two design limits cap what each logical axis is designed under, derated by the
+scanner for the prescription’s rotation:</p>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Limit</p></th>
+<th class="head"><p>Meaning</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">design_max_grad</span></code></p></td>
+<td><p>Gradient amplitude each logical axis is designed under, in the <code class="docutils literal notranslate"><span class="pre">grad_unit</span></code> of <code class="docutils literal notranslate"><span class="pre">max_grad</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">design_max_slew</span></code></p></td>
+<td><p>Slew rate each logical axis is designed under, in the <code class="docutils literal notranslate"><span class="pre">slew_unit</span></code> of <code class="docutils literal notranslate"><span class="pre">max_slew</span></code></p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>A design limit above the scanner’s leaves the scanner’s, and one left out is the
+scanner’s. <code class="docutils literal notranslate"><span class="pre">validate</span></code> resolves a request under the same limits as <code class="docutils literal notranslate"><span class="pre">generate</span></code>.
+An imported chain is not designed, and is checked against <code class="docutils literal notranslate"><span class="pre">max_grad</span></code> and
+<code class="docutils literal notranslate"><span class="pre">max_slew</span></code> alone.</p>
+<p>Options prefixed <code class="docutils literal notranslate"><span class="pre">ir_</span></code> configure the IR conversion:</p>
 <div class="pst-scrollable-table-container"><table class="table">
 <thead>
 <tr class="row-odd"><th class="head"><p>Option</p></th>
@@ -667,67 +730,35 @@ Further options are for the IR conversion:</p>
 <td><p>Vendor file the cache is grouped and stored under, read by <a class="reference internal" href="../generated/pulserver.ir.read_vendor.html#pulserver.ir.read_vendor" title="pulserver.ir.read_vendor"><code class="xref py py-func docutils literal notranslate"><span class="pre">read_vendor()</span></code></a>; a file it cannot read refuses the call</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">ir_wave_max_samples</span></code></p></td>
-<td><p>Samples each gradient axis of the playout’s waveform memory holds for waves</p></td>
+<td><p>Samples of waveform memory per gradient axis of the playout</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">ir_wave_raster_us</span></code></p></td>
-<td><p>The playout’s gradient raster, in µs per sample</p></td>
+<td><p>Gradient raster of the playout, in µs per sample</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">ir_wave_load_us_per_sample</span></code></p></td>
-<td><p>Time the playout takes to load one sample on one axis, in µs; 0, the default, leaves the loading unchecked</p></td>
+<td><p>Time the playout takes to load one sample on one axis, in µs; 0, the default, leaves loading unchecked</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">ir_wave_headroom</span></code></p></td>
-<td><p>Share of the playout’s time its loading may take, 0.5 by default</p></td>
+<td><p>Fraction of the playout time that loading may take, 0.5 by default</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">ir_wave_slots</span></code></p></td>
-<td><p>Slots per segment position that a playout streaming the waves rings through, 2 by default</p></td>
+<td><p>Slots per segment position that a streaming playout cycles through, 2 by default</p></td>
 </tr>
 </tbody>
 </table>
 </div>
-<p>The <code class="docutils literal notranslate"><span class="pre">ir_wave_</span></code> options are the waveform memory of the scanner’s playout, which
-the cache lays the waves out for (<a class="reference internal" href="../generated/pulserver.ir.WaveBudget.html#pulserver.ir.WaveBudget" title="pulserver.ir.WaveBudget"><code class="xref py py-class docutils literal notranslate"><span class="pre">WaveBudget</span></code></a>);
-<code class="docutils literal notranslate"><span class="pre">ir_wave_max_samples</span></code> and <code class="docutils literal notranslate"><span class="pre">ir_wave_raster_us</span></code> come together. Without them every
-wave is held at once on the gradient raster of the chain’s first file, and a
-playout that holds them otherwise refuses the cache.</p>
-<p>A generated design and an imported chain are checked against the limits before
-their IR cache is written (<a class="reference internal" href="../explanations/architecture.html"><span class="doc">Architecture</span></a>), so the limits
-include the RF and ADC dead times, the RF ringdown time and the ADC sample
-divisor of the scanner; <code class="docutils literal notranslate"><span class="pre">pypulseqpp.Opts</span></code> sets the dead times to zero and the
-divisor to four when they are left out.</p>
-<p><code class="docutils literal notranslate"><span class="pre">max_grad</span></code> and <code class="docutils literal notranslate"><span class="pre">max_slew</span></code> are the limits of the gradient coils, which the checks
-hold every physical axis to. Two design limits cap the limits a sequence is
-designed under:</p>
-<div class="pst-scrollable-table-container"><table class="table">
-<thead>
-<tr class="row-odd"><th class="head"><p>Limit</p></th>
-<th class="head"><p>Meaning</p></th>
-</tr>
-</thead>
-<tbody>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">design_max_grad</span></code></p></td>
-<td><p>Gradient amplitude each logical axis is designed under, in <code class="docutils literal notranslate"><span class="pre">grad_unit</span></code> as <code class="docutils literal notranslate"><span class="pre">max_grad</span></code> is</p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">design_max_slew</span></code></p></td>
-<td><p>Slew rate each logical axis is designed under, in <code class="docutils literal notranslate"><span class="pre">slew_unit</span></code> as <code class="docutils literal notranslate"><span class="pre">max_slew</span></code> is</p></td>
-</tr>
-</tbody>
-</table>
-</div>
-<p>The scanner derates them for the prescription’s rotation: logical axes played
-together add on one physical axis, so under an oblique prescription a design
-held under <code class="docutils literal notranslate"><span class="pre">max_grad</span></code> and <code class="docutils literal notranslate"><span class="pre">max_slew</span></code> alone can exceed them on a physical axis,
-and is then refused. A design limit above the scanner’s leaves the scanner’s,
-one left out is the scanner’s, and <code class="docutils literal notranslate"><span class="pre">validate</span></code> resolves a request under the same
-limits as <code class="docutils literal notranslate"><span class="pre">generate</span></code>. An imported chain is not designed, and is checked against
-<code class="docutils literal notranslate"><span class="pre">max_grad</span></code> and <code class="docutils literal notranslate"><span class="pre">max_slew</span></code> alone.</p>
-<p>The limits also carry what the host checks besides the gradient limits and
-rasters: the scanner’s nerve model and its forbidden gradient bands, which a
-scanner always sends, the gradient coil’s acoustic transfer function where the
-scanner has one, and, for pTx, the VOPs. A check whose limits are left out is
-not run. For pTx the host writes into the cache each subsequence’s SAR at the
-VOPs relative to a reference pulse (<a class="reference internal" href="../explanations/safety-checks.html"><span class="doc">Safety checks</span></a>); the
-vendor’s routines on the scanner compute SAR and RF and gradient heating from
-these inputs.</p>
+<p>The <code class="docutils literal notranslate"><span class="pre">ir_wave_</span></code> options describe the playout’s waveform memory, for which the
+cache lays out the waveforms (<a class="reference internal" href="../generated/pulserver.ir.WaveBudget.html#pulserver.ir.WaveBudget" title="pulserver.ir.WaveBudget"><code class="xref py py-class docutils literal notranslate"><span class="pre">WaveBudget</span></code></a>);
+<code class="docutils literal notranslate"><span class="pre">ir_wave_max_samples</span></code> and <code class="docutils literal notranslate"><span class="pre">ir_wave_raster_us</span></code> are given together. Without them
+every waveform is held at once on the gradient raster of the chain’s first
+file, and a playout that holds them otherwise refuses the cache.</p>
+<p>The remaining options are the limits of the checks besides the gradient limits
+and rasters (<a class="reference internal" href="../explanations/safety-checks.html"><span class="doc">Safety checks</span></a>). A scanner always sends its
+nerve model and forbidden bands, the acoustic transfer function of its gradient
+coil where it has one, and the VOPs for pTx. A check whose limits are left out
+is not run. For pTx, each subsequence’s SAR at the VOPs relative to a reference
+pulse is written into the cache; the vendor’s routines compute SAR and RF and
+gradient heating from it.</p>
 <div class="pst-scrollable-table-container"><table class="table">
 <thead>
 <tr class="row-odd"><th class="head"><p>Limit</p></th>
@@ -745,16 +776,16 @@ these inputs.</p>
 <td><p>Largest PNS response allowed, as a fraction of the model’s threshold; 1 when left out</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">forbidden_band_&lt;n&gt;</span></code></p></td>
-<td><p>One forbidden band: its physical axis (<code class="docutils literal notranslate"><span class="pre">x</span></code>, <code class="docutils literal notranslate"><span class="pre">y</span></code>, <code class="docutils literal notranslate"><span class="pre">z</span></code> or <code class="docutils literal notranslate"><span class="pre">all</span></code>), its lowest and highest frequency in Hz and, optionally, the largest amplitude allowed in it in mT/m, separated by spaces</p></td>
+<td><p>One forbidden band: its physical axis (<code class="docutils literal notranslate"><span class="pre">x</span></code>, <code class="docutils literal notranslate"><span class="pre">y</span></code>, <code class="docutils literal notranslate"><span class="pre">z</span></code> or <code class="docutils literal notranslate"><span class="pre">all</span></code>), its lowest and highest frequency in Hz and, optionally, the largest amplitude allowed in it in mT/m, separated by spaces. Without an amplitude, the <code class="docutils literal notranslate"><span class="pre">min_threshold</span></code> of <code class="docutils literal notranslate"><span class="pre">pypulseqpp.safety.check_mech_resonance</span></code></p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">vop_file</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">.mat</span></code> or <code class="docutils literal notranslate"><span class="pre">.npz</span></code> file of VOPs and the head SAR matrix of each body model, at a path the design calls can read; its <code class="docutils literal notranslate"><span class="pre">safety_factor</span></code> multiplies local SAR</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">vop_head_limit</span></code>, <code class="docutils literal notranslate"><span class="pre">vop_local_limit</span></code></p></td>
-<td><p>The scanner’s head and local SAR limits in W/kg in its current operating mode; both needed with a <code class="docutils literal notranslate"><span class="pre">vop_file</span></code></p></td>
+<td><p>The scanner’s head and local SAR limits in W/kg in its current operating mode</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">vop_drive_per_hz</span></code></p></td>
-<td><p>Channel drive per Hz of RF amplitude, one per channel separated by spaces; a scale common to every channel cancels, and equal drives when left out</p></td>
+<td><p>Channel drive per Hz of RF amplitude, one value or one per channel separated by spaces; a scale common to every channel cancels. Equal drives when left out</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">vop_default_shim</span></code></p></td>
 <td><p>Magnitude and phase in rad of each channel’s weight for a pulse played without an RF shim, separated by spaces; equal weights when left out</p></td>
@@ -763,25 +794,25 @@ these inputs.</p>
 <td><p>Transmit configuration the scanner reports; the VOP file’s <code class="docutils literal notranslate"><span class="pre">transmit</span></code> metadata must name the same one</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">acoustic_file</span></code></p></td>
-<td><p>HDF5 file of the gradient coil’s acoustic transfer function, at a path the design calls can read; the peak and A-weighted average sound pressure levels are held to those of IEC 60601-2-33 and written into the cache</p></td>
+<td><p>HDF5 file of the gradient coil’s acoustic transfer function, at a path the design calls can read; the peak and A-weighted average sound pressure levels are held to the limits of IEC 60601-2-33 and written into the cache</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">acoustic_interval_us</span></code></p></td>
-<td><p>Sampling interval in µs the bins of <code class="docutils literal notranslate"><span class="pre">acoustic_file</span></code> refer to; given with it</p></td>
+<td><p>Sampling interval in µs that the bins of <code class="docutils literal notranslate"><span class="pre">acoustic_file</span></code> refer to; given with it</p></td>
 </tr>
 </tbody>
 </table>
 </div>
-<p>A band given no amplitude is held to the <code class="docutils literal notranslate"><span class="pre">min_threshold</span></code> of
-<code class="docutils literal notranslate"><span class="pre">pypulseqpp.safety.check_mech_resonance</span></code>. The gradient, PNS, resonance and
-sound pressure checks are made in the physical frame of the prescription
-rotation each request carries. A call refuses limits it cannot read, and a
-design is identified with the contents of the VOP and acoustic files as well
-as their paths.</p>
-<p>A plugin can be exercised without a scanner through
-<a class="reference internal" href="../generated/pulserver.host.call.html#pulserver.host.call" title="pulserver.host.call"><code class="xref py py-func docutils literal notranslate"><span class="pre">call()</span></code></a>, which answers a call in the calling process:</p>
+<p>A call refuses limits it cannot read. A design is identified by the contents
+of the VOP, vendor and acoustic files as well as by their paths.</p>
+</section>
+<section id="in-process-calls">
+<h3>In-process calls<a class="headerlink" href="#in-process-calls" title="Link to this heading">#</a></h3>
+<p><a class="reference internal" href="../generated/pulserver.host.call.html#pulserver.host.call" title="pulserver.host.call"><code class="xref py py-func docutils literal notranslate"><span class="pre">call()</span></code></a> answers a design call in the calling process,
+which exercises a plugin without a scanner:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pulserver.host</span><span class="w"> </span><span class="kn">import</span> <span class="n">DesignStore</span><span class="p">,</span> <span class="n">call</span>
 
-<span class="n">limits</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"max_grad"</span><span class="p">:</span> <span class="mf">40.0</span><span class="p">,</span> <span class="s2">"grad_unit"</span><span class="p">:</span> <span class="s2">"mT/m"</span><span class="p">,</span> <span class="s2">"max_slew"</span><span class="p">:</span> <span class="mf">150.0</span><span class="p">,</span> <span class="s2">"slew_unit"</span><span class="p">:</span> <span class="s2">"T/m/s"</span><span class="p">}</span>
+<span class="n">limits</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"max_grad"</span><span class="p">:</span> <span class="mf">40.0</span><span class="p">,</span> <span class="s2">"grad_unit"</span><span class="p">:</span> <span class="s2">"mT/m"</span><span class="p">,</span> <span class="s2">"max_slew"</span><span class="p">:</span> <span class="mf">150.0</span><span class="p">,</span>
+          <span class="s2">"slew_unit"</span><span class="p">:</span> <span class="s2">"T/m/s"</span><span class="p">,</span> <span class="s2">"B0"</span><span class="p">:</span> <span class="mf">3.0</span><span class="p">}</span>
 <span class="n">block</span> <span class="o">=</span> <span class="s2">"[Protocol]</span><span class="se">\n</span><span class="s2">TE: 5000</span><span class="se">\n</span><span class="s2">nx: 96</span><span class="se">\n</span><span class="s2">[Protocol End]</span><span class="se">\n</span><span class="s2">"</span>
 <span class="n">status</span><span class="p">,</span> <span class="n">reply</span> <span class="o">=</span> <span class="n">call</span><span class="p">(</span><span class="s2">"validate"</span><span class="p">,</span> <span class="n">plugins</span><span class="o">=</span><span class="s2">"sequences"</span><span class="p">,</span> <span class="n">plugin</span><span class="o">=</span><span class="s2">"gre2d"</span><span class="p">,</span>
                      <span class="n">limits</span><span class="o">=</span><span class="n">limits</span><span class="p">,</span> <span class="n">block</span><span class="o">=</span><span class="n">block</span><span class="p">)</span>
@@ -793,62 +824,55 @@ as their paths.</p>
 </section>
 <section id="design-store">
 <h3>Design store<a class="headerlink" href="#design-store" title="Link to this heading">#</a></h3>
-<p>The store holds one directory per design, <code class="docutils literal notranslate"><span class="pre">&lt;store&gt;/&lt;id&gt;/</span></code>: the Pulseq files of
-the chain, the IR cache, the resolved protocol and <code class="docutils literal notranslate"><span class="pre">manifest.json</span></code>, which
-records the identity and identifier, the limits, the package versions, the
-creation time, the plugin and the source it was designed from, the scan time,
-the field-of-view offset (and the rotation, for an imported chain) and the
-SHA-256 of every file. The identifier is three 24-bit integers, each
-held exactly by a float32 scanner parameter. <code class="docutils literal notranslate"><span class="pre">prune</span></code> removes designs least recently used
-first: those unused for longer than <code class="docutils literal notranslate"><span class="pre">--max-age-days</span></code>, then others until the
-store holds at most <code class="docutils literal notranslate"><span class="pre">--max-bytes</span></code>. A design used within the last day is kept
-whatever the limits, since a series may still be playing it or the proxy
-reading it by identifier. A store that
-receives pushed designs is pruned the same way, on the reconstruction computer.</p>
+<p>The store holds one directory per design, <code class="docutils literal notranslate"><span class="pre">&lt;store&gt;/&lt;id&gt;/</span></code>, laid out as
+<a class="reference internal" href="../explanations/architecture.html"><span class="doc">Architecture</span></a> shows. <code class="docutils literal notranslate"><span class="pre">prune</span></code> removes designs least
+recently used first: those unused for longer than <code class="docutils literal notranslate"><span class="pre">--max-age-days</span></code>, then others
+until the store holds at most <code class="docutils literal notranslate"><span class="pre">--max-bytes</span></code>. A design used within the last day
+is kept whatever the limits, since a series may still be playing it or the
+proxy reading it. A store that receives pushed designs is pruned the same way,
+on the reconstruction computer.</p>
 </section>
-<section id="pushing-designs">
-<h3>Pushing designs<a class="headerlink" href="#pushing-designs" title="Link to this heading">#</a></h3>
+<section id="design-push">
+<h3>Design push<a class="headerlink" href="#design-push" title="Link to this heading">#</a></h3>
 <p>With <code class="docutils literal notranslate"><span class="pre">--push</span></code>, or the <code class="docutils literal notranslate"><span class="pre">PULSERVER_DESIGN_PUSH</span></code> environment variable, naming the
 URL of a proxy’s design intake, <code class="docutils literal notranslate"><span class="pre">http://&lt;host&gt;:&lt;intake-port&gt;</span></code>, <code class="docutils literal notranslate"><span class="pre">generate</span></code> and
-<code class="docutils literal notranslate"><span class="pre">import</span></code> send the design they reply to that intake before replying; <code class="docutils literal notranslate"><span class="pre">push</span></code>
-sends the stored designs it names to the intake <code class="docutils literal notranslate"><span class="pre">--to</span></code> names. A design travels
-as a bundle, a gzip-compressed tar of the files of its directory, and the
-intake stores it only when every file has the SHA-256 its manifest records. A
-design the intake holds already is not sent again.</p>
+<code class="docutils literal notranslate"><span class="pre">import</span></code> send their design to that intake before replying; <code class="docutils literal notranslate"><span class="pre">push</span></code> sends the
+stored designs it names to the intake <code class="docutils literal notranslate"><span class="pre">--to</span></code> names. A design travels as a
+bundle, a gzip-compressed tar of the files of its directory, and the intake
+stores it only when every file has the SHA-256 its manifest records. A design
+the intake already holds is not sent again.</p>
 <p>A <code class="docutils literal notranslate"><span class="pre">generate</span></code> or <code class="docutils literal notranslate"><span class="pre">import</span></code> whose design cannot be pushed replies
 <code class="docutils literal notranslate"><span class="pre">ERROR</span> <span class="pre">design</span> <span class="pre">&lt;id&gt;</span> <span class="pre">is</span> <span class="pre">stored</span> <span class="pre">but</span> <span class="pre">not</span> <span class="pre">pushed:</span> <span class="pre">&lt;reason&gt;</span></code> and exits with status 1,
 so the interpreter receives no identifier of a design the intake lacks. The
 design stays stored, and the same call made again pushes it without designing
 again. <code class="docutils literal notranslate"><span class="pre">push</span></code> replies <code class="docutils literal notranslate"><span class="pre">ERROR</span> <span class="pre">design</span> <span class="pre">&lt;id&gt;</span> <span class="pre">is</span> <span class="pre">not</span> <span class="pre">pushed:</span> <span class="pre">&lt;reason&gt;</span></code> for the first
 design it cannot send.</p>
-<p>Without <code class="docutils literal notranslate"><span class="pre">--rf-definitions</span></code>, <code class="docutils literal notranslate"><span class="pre">list</span></code> depends on the plugin file and the installed
-packages only, so its reply can be written when they are installed and read
-without a call. With it, the reply depends on the limits as well.</p>
 </section>
-<section id="warm-server">
-<h3>Warm server<a class="headerlink" href="#warm-server" title="Link to this heading">#</a></h3>
+<section id="warm-design-server">
+<h3>Warm design server<a class="headerlink" href="#warm-design-server" title="Link to this heading">#</a></h3>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pulserver<span class="w"> </span>design<span class="w"> </span>serve<span class="w"> </span>--plugins<span class="w"> </span>DIR<span class="w"> </span>--socket<span class="w"> </span>PATH
 </pre></div>
 </div>
-<p>A call answered in its own process imports the design engine first, which
-takes most of its time. A warm server imports it once, designs, checks and
-converts a sequence of its own, and imports every plugin of its <code class="docutils literal notranslate"><span class="pre">--plugins</span></code>
-directories. It then
-answers each call forwarded to its socket in a child process forked from it, so
-nothing a call does outlives the call, and a plugin that ends its process fails
-its own call only, with <code class="docutils literal notranslate"><span class="pre">ERROR</span> <span class="pre">the</span> <span class="pre">design</span> <span class="pre">call</span> <span class="pre">ended</span> <span class="pre">with</span> <span class="pre">exit</span> <span class="pre">status</span> <span class="pre">N</span></code>.
-Calls run concurrently, one child each. A call is forwarded when <code class="docutils literal notranslate"><span class="pre">--socket</span></code>, or
+<p>A call answered in its own process spends most of its time importing the
+design engine. A warm server imports it once, designs, checks and converts one
+sequence of its own, and imports every plugin of its <code class="docutils literal notranslate"><span class="pre">--plugins</span></code> directories.
+It answers each call forwarded to its socket in a child process forked from
+it, so nothing a call does outlives the call, and a plugin that ends its
+process fails only its own call, with
+<code class="docutils literal notranslate"><span class="pre">ERROR</span> <span class="pre">the</span> <span class="pre">design</span> <span class="pre">call</span> <span class="pre">ended</span> <span class="pre">with</span> <span class="pre">exit</span> <span class="pre">status</span> <span class="pre">N</span></code>. Calls run concurrently, one
+child each.</p>
+<p><code class="docutils literal notranslate"><span class="pre">list</span></code>, <code class="docutils literal notranslate"><span class="pre">validate</span></code>, <code class="docutils literal notranslate"><span class="pre">generate</span></code> and <code class="docutils literal notranslate"><span class="pre">import</span></code> are forwarded when <code class="docutils literal notranslate"><span class="pre">--socket</span></code>, or
 the <code class="docutils literal notranslate"><span class="pre">PULSERVER_DESIGN_SOCKET</span></code> environment variable, names the socket of a
-running server, and is answered in its own process otherwise; the reply is the
-same either way. The command imports neither NumPy nor pypulseqpp to forward a
-call. The server stops on <code class="docutils literal notranslate"><span class="pre">SIGINT</span></code> or <code class="docutils literal notranslate"><span class="pre">SIGTERM</span></code> and ends the calls it is
-running. The socket is neither authenticated nor encrypted: its file
-permissions decide who may call.</p>
-<p>The server logs to standard error one line per call, naming the call, its
-plugin, its exit status and its duration. A request whose JSON carries <code class="docutils literal notranslate"><span class="pre">log</span></code>,
-a file path, has its child append everything else it logs and prints to that
-file, so a scanner’s interpreter can keep the design calls of one scan beside
-the rest of that scan’s log.</p>
+running server, and are answered in their own process otherwise; the reply is
+the same either way. Forwarding a call imports neither NumPy nor pypulseqpp.
+The server stops on <code class="docutils literal notranslate"><span class="pre">SIGINT</span></code> or <code class="docutils literal notranslate"><span class="pre">SIGTERM</span></code> and ends the calls it is running. The
+socket is neither authenticated nor encrypted: its file permissions decide who
+may call.</p>
+<p>The server logs one line per call to standard error, naming the call, its
+plugin, its exit status and its duration. A request sent to the socket whose
+JSON carries <code class="docutils literal notranslate"><span class="pre">log</span></code>, a file path, has its child append everything else it logs
+and prints to that file, so an interpreter can keep the design calls of one
+scan beside the rest of that scan’s log.</p>
 </section>
 </section>
 <section id="reconstruction-proxy">
@@ -877,22 +901,22 @@ pulserver<span class="w"> </span>proxy<span class="w"> </span>--store<span class
 <td><p>TCP port of the design intake, on the <code class="docutils literal notranslate"><span class="pre">--host</span></code> address; no intake when unset</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--plugins</span></code></p></td>
-<td><p>Directory of reconstruction plugin files, <code class="docutils literal notranslate"><span class="pre">&lt;plugin&gt;.py</span></code>, repeatable, searched in order; required unless <code class="docutils literal notranslate"><span class="pre">--forward</span></code> is given</p></td>
+<td><p>Directory of reconstruction plugin files, <code class="docutils literal notranslate"><span class="pre">&lt;plugin&gt;.py</span></code>, repeatable, searched in order before the shipped ones; required unless <code class="docutils literal notranslate"><span class="pre">--forward</span></code> is given</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--queue</span></code></p></td>
 <td><p>Directory the series waiting for a slot are written to; a temporary directory, removed when the proxy stops, when unset</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--exams</span></code></p></td>
-<td><p>Directory the proxies of this host share the caches of an exam in; a location under the system temporary directory when unset</p></td>
+<td><p>Directory in which the proxies of this host share the caches of an exam; a location under the system temporary directory when unset</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--slots</span></code></p></td>
 <td><p>Series reconstructed at once; derived from available memory and the GPUs when unset</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--gpu-slots</span></code></p></td>
-<td><p>Series reconstructed at once on each GPU when <code class="docutils literal notranslate"><span class="pre">--slots</span></code> is unset, default 1</p></td>
+<td><p>Series reconstructed at once on each GPU when <code class="docutils literal notranslate"><span class="pre">--slots</span></code> is unset; 1 by default</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--spares</span></code></p></td>
-<td><p>Worker processes started ahead of a series, default 1</p></td>
+<td><p>Worker processes started ahead of a series; 1 by default</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--recon-timeout</span></code></p></td>
 <td><p>Seconds a reconstruction may run after its series ends; the worker is then terminated, or the connection to the server closed, and the client told. Unlimited when unset</p></td>
@@ -904,16 +928,16 @@ pulserver<span class="w"> </span>proxy<span class="w"> </span>--store<span class
 <td><p>Config name sent to the <code class="docutils literal notranslate"><span class="pre">--forward</span></code> server; the series’ reconstruction plugin when unset</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--dicom</span></code></p></td>
-<td><p>Convert each image to DICOM before it is relayed, whatever reconstructed it</p></td>
+<td><p>Convert each image to DICOM before it is relayed, whatever reconstructed it; for a client that reads DICOM only</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--save-data</span></code></p></td>
 <td><p>Directory each series is kept in as the scanner sends it; kept nowhere when unset</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--idle-timeout</span></code></p></td>
-<td><p>Seconds without a client after which the proxy closes; it waits for whatever is running. Unlimited when unset</p></td>
+<td><p>Seconds without a client after which the proxy closes, never while a series is reconstructed. Unlimited when unset</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--logfile</span></code></p></td>
-<td><p>File the log is appended to, with the standard output and error of the proxy and of its workers, so what a reconstruction plugin logs, prints or warns lands there too; the standard error when unset</p></td>
+<td><p>File the log is appended to, together with the standard output and error of the proxy and its workers, so whatever a reconstruction plugin logs, prints or warns lands there too; standard error when unset</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--log-level</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">DEBUG</span></code>, <code class="docutils literal notranslate"><span class="pre">INFO</span></code>, <code class="docutils literal notranslate"><span class="pre">WARNING</span></code> or <code class="docutils literal notranslate"><span class="pre">ERROR</span></code>; <code class="docutils literal notranslate"><span class="pre">INFO</span></code> when unset</p></td>
@@ -921,87 +945,112 @@ pulserver<span class="w"> </span>proxy<span class="w"> </span>--store<span class
 </tbody>
 </table>
 </div>
+<p>The proxy and its workers are described in
+<a class="reference internal" href="../explanations/reconstruction-session.html"><span class="doc">Reconstruction session</span></a>, and the messages and header
+fields the client sends in <a class="reference internal" href="reconstruction-client.html"><span class="doc">Reconstruction client</span></a>.</p>
+<section id="series-routing">
+<h3>Series routing<a class="headerlink" href="#series-routing" title="Link to this heading">#</a></h3>
 <p>The MRD header of each series names the design it was played from in the
 <code class="docutils literal notranslate"><span class="pre">pulserver_design</span></code> user parameter, and the proxy refuses a series whose header
-names no stored design. The client’s config text names the reconstruction
-plugin, as a bare plugin name or the path of its file, or as either under
-<code class="docutils literal notranslate"><span class="pre">parameters.config</span></code>; the design names none. A series whose config names none is
-refused unless the proxy forwards with <code class="docutils literal notranslate"><span class="pre">--forward-config</span></code>. The messages and
-fields the client sends are listed in <a class="reference internal" href="reconstruction-client.html"><span class="doc">Reconstruction clients</span></a>.</p>
+names no stored design. The client’s config names the reconstruction plugin, as
+a bare plugin name or the path of its file, or as either under
+<code class="docutils literal notranslate"><span class="pre">parameters.config</span></code>; the design names none. A series whose config names none
+is refused unless the proxy forwards with <code class="docutils literal notranslate"><span class="pre">--forward-config</span></code>.</p>
 <p>A series that finds every slot busy is written to the queue directory as it
 arrives and reconstructed once a slot frees; the client stays connected
-meanwhile.</p>
+meanwhile. What goes back to a client whose connection has dropped is kept for
+a day: a client that opens a series with the same <code class="docutils literal notranslate"><span class="pre">measurementID</span></code> is sent it in
+place of a new reconstruction.</p>
+</section>
+<section id="saved-series">
+<h3>Saved series<a class="headerlink" href="#saved-series" title="Link to this heading">#</a></h3>
 <p>With <code class="docutils literal notranslate"><span class="pre">--save-data</span></code>, each series is also written to
 <code class="docutils literal notranslate"><span class="pre">&lt;save-data&gt;/mrd_&lt;timestamp&gt;.h5</span></code> as the scanner sends it, header first and each
-acquisition as it arrives, before anything enriches it. A plugin runs on the
-file against the store the series names, which reconstructs it again offline
-exactly as the proxy did (<a class="reference internal" href="reconstruction-plugins.html"><span class="doc">Reconstruction plugins</span></a>). The queue directory
-holds a series only until it is reconstructed; this is what survives the scan.</p>
-<p>A proxy started for one scan outlives whoever started it, so <code class="docutils literal notranslate"><span class="pre">--idle-timeout</span></code>
-is how it ends: it closes once nothing has been connected for that long,
-counted from the last client leaving, never while a series is still being
-reconstructed. Without one it serves until it is signalled.</p>
-<p>A reconstruction computer runs one proxy per acquisition, so the series of one
-exam are reconstructed by different processes. What a calibration series
+acquisition as it arrives, before it is enriched. A plugin run on that file
+against the store reconstructs it offline exactly as the proxy did
+(<a class="reference internal" href="reconstruction-plugins.html#offline-reconstruction"><span class="std std-ref">Offline reconstruction</span></a>). The queue directory holds a series only until
+it is reconstructed.</p>
+</section>
+<section id="proxy-lifetime">
+<h3>Proxy lifetime<a class="headerlink" href="#proxy-lifetime" title="Link to this heading">#</a></h3>
+<p>A proxy started for one scan outlives whatever started it, so <code class="docutils literal notranslate"><span class="pre">--idle-timeout</span></code>
+ends it: it closes once no client has been connected for that long, counted
+from the last client leaving, and never while a series is being reconstructed.
+Without it, the proxy serves until it receives <code class="docutils literal notranslate"><span class="pre">SIGINT</span></code> or <code class="docutils literal notranslate"><span class="pre">SIGTERM</span></code>, and then
+waits for the series it is running before it exits.</p>
+</section>
+<section id="exam-directory">
+<h3>Exam directory<a class="headerlink" href="#exam-directory" title="Link to this heading">#</a></h3>
+<p>A reconstruction computer may run one proxy per acquisition, so the series of
+one exam are reconstructed by different processes. What a calibration series
 measures is kept under <code class="docutils literal notranslate"><span class="pre">--exams</span></code>, in a directory of the exam’s own, and read
-there by a later series whatever proxy takes it: a hook assigns
+there by a later series whichever proxy takes it: a hook assigns
 <code class="docutils literal notranslate"><span class="pre">context.b0_map</span></code>, <code class="docutils literal notranslate"><span class="pre">context.b1_map</span></code> or <code class="docutils literal notranslate"><span class="pre">context.coil_sensitivities</span></code> and a later
-hook reads them (<a class="reference internal" href="../generated/pulserver.recon.ReconContext.html#pulserver.recon.ReconContext" title="pulserver.recon.ReconContext"><code class="xref py py-class docutils literal notranslate"><span class="pre">ReconContext</span></code></a>). An exam’s directory is removed
-once the last proxy on that exam has moved to another, so a proxy prescribing
-the next exam does not take the artifacts from one still reconstructing the
-last.</p>
+hook reads them (<a class="reference internal" href="../generated/pulserver.recon.ReconContext.html#pulserver.recon.ReconContext" title="pulserver.recon.ReconContext"><code class="xref py py-class docutils literal notranslate"><span class="pre">ReconContext</span></code></a>). An exam’s directory
+is removed once the last proxy on that exam has moved to another, so a proxy on
+the next exam does not remove the data of one still reconstructing the last.</p>
+</section>
+<section id="forwarding">
+<h3>Forwarding<a class="headerlink" href="#forwarding" title="Link to this heading">#</a></h3>
 <p>With <code class="docutils literal notranslate"><span class="pre">--forward</span></code>, the proxy runs no workers: each series is enriched as it
 arrives and sent on to the MRD server at <code class="docutils literal notranslate"><span class="pre">HOST:PORT</span></code>, whose own slots and queue
-determine when it is reconstructed. The server receives a config file message naming the series’
-reconstruction plugin, which a reconstruction server runs, or the
-<code class="docutils literal notranslate"><span class="pre">--forward-config</span></code> name, such as the configuration a Gadgetron or a FIRE server
-selects its pipeline by. The client’s config text is not forwarded. What the
-server returns is relayed to the client; a message the proxy has no reader for
-ends the relay, and the client receives a <code class="docutils literal notranslate"><span class="pre">pulserver:</span></code> text naming its type.</p>
+determine when it is reconstructed. The server receives a config file message
+naming the series’ reconstruction plugin, which a reconstruction server runs,
+or the <code class="docutils literal notranslate"><span class="pre">--forward-config</span></code> name, such as the configuration by which a Gadgetron
+or FIRE server selects its pipeline. The client’s config text is not
+forwarded. What the server returns is relayed to the client; a message type the
+proxy cannot read ends the relay, and the client receives a <code class="docutils literal notranslate"><span class="pre">pulserver:</span></code> text
+naming the type.</p>
+</section>
+<section id="sequence-description">
+<h3>Sequence description<a class="headerlink" href="#sequence-description" title="Link to this heading">#</a></h3>
 <p>Whether forwarded or reconstructed by a worker, the series carries, after its
 header and before its first acquisition, one <code class="docutils literal notranslate"><span class="pre">TEXT</span></code> message (5) describing the
-sequence chain to a simulation: a JSON object under the key
+sequence chain for a signal simulation: a JSON object under the key
 <code class="docutils literal notranslate"><span class="pre">pulserver_sequence_description</span></code>, holding per file of the chain one row per
-block, RF at the pulse centre and ADC at the sample nearest the centre of
-k-space, and the pulses the RF rows name. It is meant for a reconstruction
-server that simulates the signal, which chooses the signal model the rows
-drive, and is not relayed back to the client.</p>
+block, RF at the pulse centre and ADC at the sample nearest the k-space centre,
+and the pulses the RF rows name. It is meant for a reconstruction that
+simulates the signal, which chooses the signal model the rows drive, and is not
+relayed back to the client.</p>
+</section>
+<section id="design-intake">
+<h3>Design intake<a class="headerlink" href="#design-intake" title="Link to this heading">#</a></h3>
 <p>With <code class="docutils literal notranslate"><span class="pre">--intake-port</span></code>, the proxy runs a design intake beside it
 (<a class="reference internal" href="../generated/pulserver.proxy.DesignIntake.html#pulserver.proxy.DesignIntake" title="pulserver.proxy.DesignIntake"><code class="xref py py-class docutils literal notranslate"><span class="pre">DesignIntake</span></code></a>), an HTTP endpoint that writes the
-designs pushed to it into <code class="docutils literal notranslate"><span class="pre">--store</span></code>: <code class="docutils literal notranslate"><span class="pre">HEAD</span> <span class="pre">/designs/&lt;id&gt;</span></code> answers 200 when the
-store holds the design and 404 otherwise, and <code class="docutils literal notranslate"><span class="pre">PUT</span> <span class="pre">/designs/&lt;id&gt;</span></code> stores a
-bundle, answering 201, 200 for a design already stored, or 400 with the reason
-for a bundle that is not the design its path names. Asking for a design the
-store holds marks it as used for <code class="docutils literal notranslate"><span class="pre">prune</span></code>.</p>
+designs pushed to it into <code class="docutils literal notranslate"><span class="pre">--store</span></code>. <code class="docutils literal notranslate"><span class="pre">HEAD</span> <span class="pre">/designs/&lt;id&gt;</span></code> answers 200 when the
+store holds the design and 404 otherwise; <code class="docutils literal notranslate"><span class="pre">PUT</span> <span class="pre">/designs/&lt;id&gt;</span></code> stores a bundle
+and answers 201, 200 for a design already stored, or 400 with the reason for a
+bundle that is not the design its path names. A <code class="docutils literal notranslate"><span class="pre">HEAD</span></code> for a stored design
+marks it as used for <code class="docutils literal notranslate"><span class="pre">prune</span></code>.</p>
+</section>
+<section id="network-exposure">
+<h3>Network exposure<a class="headerlink" href="#network-exposure" title="Link to this heading">#</a></h3>
 <p>The MRD stream is neither authenticated nor encrypted, and its header carries
 patient data. The design intake is neither authenticated nor encrypted either,
 and writes the designs it accepts into the store the proxy reconstructs from.
-Both belong on the network between the scanner and the reconstruction
-computer, with <code class="docutils literal notranslate"><span class="pre">--host</span></code> naming the address of the interface on it; a scanner’s
+Run both on the network between the scanner and the reconstruction computer,
+with <code class="docutils literal notranslate"><span class="pre">--host</span></code> naming the address of the interface on it; a scanner’s
 reconstruction client cannot reach the loopback default.</p>
-<p>The proxy and the warm design server stop on <code class="docutils literal notranslate"><span class="pre">SIGINT</span></code> or <code class="docutils literal notranslate"><span class="pre">SIGTERM</span></code>. The proxy
-waits for the series it is running before it exits.</p>
+</section>
 </section>
 <section id="reconstruction-server">
 <h2>Reconstruction server<a class="headerlink" href="#reconstruction-server" title="Link to this heading">#</a></h2>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pulserver<span class="w"> </span>recon<span class="w"> </span>--plugins<span class="w"> </span>DIR<span class="w"> </span>--port<span class="w"> </span>N<span class="w"> </span><span class="o">[</span>--host<span class="w"> </span>ADDR<span class="o">]</span><span class="w"> </span><span class="o">[</span>--queue<span class="w"> </span>DIR<span class="o">]</span><span class="w"> </span><span class="o">[</span>--slots<span class="w"> </span>N<span class="o">]</span><span class="w"> </span><span class="o">[</span>--gpu-slots<span class="w"> </span><span class="m">1</span><span class="o">]</span><span class="w"> </span><span class="o">[</span>--spares<span class="w"> </span><span class="m">1</span><span class="o">]</span><span class="w"> </span><span class="o">[</span>--recon-timeout<span class="w"> </span>S<span class="o">]</span><span class="w"> </span><span class="o">[</span>--save-data<span class="w"> </span>DIR<span class="o">]</span><span class="w"> </span><span class="o">[</span>--idle-timeout<span class="w"> </span>S<span class="o">]</span><span class="w"> </span><span class="o">[</span>--logfile<span class="w"> </span>FILE<span class="o">]</span><span class="w"> </span><span class="o">[</span>--log-level<span class="w"> </span>LEVEL<span class="o">]</span>
 </pre></div>
 </div>
-<p>The reconstruction server is what a forwarding proxy sends its series to, on
-the computer that reconstructs them. It reconstructs each series it receives
-with the plugin its config names, as a config file message or as a config text
-naming it as a bare name or under <code class="docutils literal notranslate"><span class="pre">parameters.config</span></code>, and enriches nothing:
-the series a proxy forwards arrive enriched. Its options are the proxy’s, with
-the same workers, slots, queue and exam directories, and <code class="docutils literal notranslate"><span class="pre">--save-data</span></code>,
-<code class="docutils literal notranslate"><span class="pre">--idle-timeout</span></code>, <code class="docutils literal notranslate"><span class="pre">--logfile</span></code> and <code class="docutils literal notranslate"><span class="pre">--log-level</span></code> behave as they do there; what
-it keeps is the series as the proxy forwarded it, enriched. Its stream is neither
-authenticated nor encrypted, and <code class="docutils literal notranslate"><span class="pre">--host</span></code> names the interface the proxy
-reaches it on. It stops on <code class="docutils literal notranslate"><span class="pre">SIGINT</span></code> or <code class="docutils literal notranslate"><span class="pre">SIGTERM</span></code> and waits for the series it is
-running.</p>
+<p>The reconstruction server receives the series a forwarding proxy sends, on the
+computer that reconstructs them. It reconstructs each series with the plugin
+its config names, as a config file message or as a config text naming it as a
+bare name or under <code class="docutils literal notranslate"><span class="pre">parameters.config</span></code>, and enriches nothing: a forwarded
+series arrives enriched. Its options are those of the proxy, with the same
+workers, slots, queue and exam directories; <code class="docutils literal notranslate"><span class="pre">--save-data</span></code> keeps each series as
+the proxy forwarded it, enriched. Its stream is neither authenticated nor
+encrypted, and <code class="docutils literal notranslate"><span class="pre">--host</span></code> names the interface the proxy reaches it on. It stops
+on <code class="docutils literal notranslate"><span class="pre">SIGINT</span></code> or <code class="docutils literal notranslate"><span class="pre">SIGTERM</span></code> and waits for the series it is running.</p>
 </section>
-<section id="checking-a-sequence-plays-as-it-was-written">
-<h2>Checking a sequence plays as it was written<a class="headerlink" href="#checking-a-sequence-plays-as-it-was-written" title="Link to this heading">#</a></h2>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pulserver<span class="w"> </span>validate<span class="w"> </span>SEQ<span class="w"> </span><span class="o">[</span>--vendor<span class="w"> </span>ge<span class="o">]</span><span class="w"> </span><span class="o">[</span>--played<span class="w"> </span>FILE<span class="o">]</span><span class="w"> </span><span class="o">[</span>--dead-time-us<span class="w"> </span>N<span class="o">]</span><span class="w"> </span><span class="o">[</span>--rf-wait-us<span class="w"> </span>N<span class="o">]</span><span class="w"> </span><span class="o">[</span>--tolerance<span class="w"> </span>MT<span class="o">]</span><span class="w"> </span><span class="o">[</span>--rf-tolerance<span class="w"> </span>PCT<span class="o">]</span><span class="w"> </span><span class="o">[</span>--limits<span class="w"> </span>FILE<span class="o">]</span>
+<section id="playout-validation">
+<h2>Playout validation<a class="headerlink" href="#playout-validation" title="Link to this heading">#</a></h2>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pulserver<span class="w"> </span>validate<span class="w"> </span>SEQ<span class="w"> </span><span class="o">[</span>--vendor<span class="w"> </span>ge<span class="o">]</span><span class="w"> </span><span class="o">[</span>--played<span class="w"> </span>FILE<span class="o">]</span><span class="w"> </span><span class="o">[</span>--dead-time-us<span class="w"> </span>N<span class="o">]</span><span class="w"> </span><span class="o">[</span>--rf-wait-us<span class="w"> </span>N<span class="o">]</span><span class="w"> </span><span class="o">[</span>--tolerance<span class="w"> </span>MT<span class="o">]</span><span class="w"> </span><span class="o">[</span>--rf-tolerance<span class="w"> </span>PCT<span class="o">]</span><span class="w"> </span><span class="o">[</span>--limits<span class="w"> </span>FILE<span class="o">]</span><span class="w"> </span><span class="o">[</span>--cache-ext<span class="w"> </span>EXT<span class="o">]</span>
 </pre></div>
 </div>
 <div class="pst-scrollable-table-container"><table class="table">
@@ -1015,25 +1064,28 @@ running.</p>
 <td><p>The sequence file to check</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--vendor</span></code></p></td>
-<td><p>Which machine the recording came from. Without one the check is against the sequence’s own IR cache</p></td>
+<td><p>The machine the recording came from. Without one, the check is against the sequence’s own IR cache</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--played</span></code></p></td>
-<td><p>The recording to check against; without one, and with a vendor named, the recording is asked for from that vendor’s tooling if it is installed</p></td>
+<td><p>The recording to check against; without one, and with a vendor named, the recording is requested from that vendor’s tooling if it is installed</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--dead-time-us</span></code></p></td>
-<td><p>What the recording’s times run ahead of the sequence’s by, on every channel</p></td>
+<td><p>Time by which the recording runs ahead of the sequence on every channel, in µs; 0 by default</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--rf-wait-us</span></code></p></td>
-<td><p>What the transmit channels run ahead by on top of that</p></td>
+<td><p>Time by which the transmit channels run further ahead, in µs; 0 by default</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--tolerance</span></code></p></td>
-<td><p>The largest gradient difference that counts as agreement, in mT/m; taken from the slew rate and raster of <code class="docutils literal notranslate"><span class="pre">--limits</span></code> when unset</p></td>
+<td><p>Largest gradient difference that counts as agreement, in mT/m; derived from the slew rate and raster of <code class="docutils literal notranslate"><span class="pre">--limits</span></code> when unset</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--rf-tolerance</span></code></p></td>
-<td><p>The largest transmit difference, as a percentage of the peak; 1 by default</p></td>
+<td><p>Largest transmit difference, as a percentage of the peak; 1 by default</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--limits</span></code></p></td>
 <td><p>The <code class="docutils literal notranslate"><span class="pre">[Limits]</span></code> block, for a sequence that has no cache yet</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--cache-ext</span></code></p></td>
+<td><p>Extension of the cache, dot included; <code class="docutils literal notranslate"><span class="pre">.pseg</span></code> by default</p></td>
 </tr>
 </tbody>
 </table>
@@ -1041,37 +1093,36 @@ running.</p>
 <p>The command exits 0 where the two agree, 1 where they differ, and 2 where it
 could not compare, and prints the largest difference on each gradient axis
 against the peak that axis reaches.</p>
-<p>Naming a vendor compares against a recording of a machine playing the sequence,
-which establishes that the machine plays what was written. Naming none compares
-against the waveforms the sequence’s own IR cache holds, which establishes only
-that the conversion kept the sequence — a conversion and a playout that are
-wrong in the same way agree with each other. The output says which of the two
-ran.</p>
-<p>The gradients are compared in millitesla per metre, and the transmit channels
-as the recording stores them: the phase over a converter that spans a turn, and
-the magnitude by its shape, because what turns a recorded count into hertz is
-the peak transmit field of the scan being played and the recording does not
-carry it. The scale that the shape took is printed, which is the number a
-machine’s own calibration would have to supply.</p>
-<p>A machine starts a unit before it plays anything of it, and drives its transmit
-and gradient channels on separate timelines, so a recording runs ahead of the
-sequence by one constant on every channel and by a second on the transmit
-channels. <code class="docutils literal notranslate"><span class="pre">--dead-time-us</span></code> and <code class="docutils literal notranslate"><span class="pre">--rf-wait-us</span></code> state them. Nothing estimates
-them, because a comparison that quietly aligns two waveforms can align away the
-disagreement it exists to find.</p>
-<p>The gradient tolerance is the hardware’s: what the gradients can slew through
-in the few raster steps the two renderings may be apart. A fixed number would
-be either too tight for a fast machine or too loose for a careful one.</p>
-<p>Checking a sequence leaves nothing beside it: where no cache is there already,
-one is built beside a copy and discarded.</p>
+<p>Naming a vendor compares against a recording of a machine playing the
+sequence, which establishes that the machine plays what was written. Naming
+none compares against the waveforms the sequence’s own IR cache holds, which
+establishes only that the conversion preserved the sequence: a conversion and
+a playout that are wrong in the same way agree. The output states which
+comparison ran.</p>
+<p>The gradients are compared in mT/m. The transmit channels are compared as the
+recording stores them: the phase over a converter that spans one cycle, and the
+magnitude by its shape, because converting a recorded count into Hz needs the
+peak B1 of the scan being played, which the recording does not carry. The
+fitted scale of the shape is printed; it is the number a machine’s own
+calibration would have to supply.</p>
+<p>A machine starts a unit before it plays any of it, and drives its transmit and
+gradient channels on separate timelines, so a recording runs ahead of the
+sequence by one constant on every channel and by a second one on the transmit
+channels. State them with <code class="docutils literal notranslate"><span class="pre">--dead-time-us</span></code> and <code class="docutils literal notranslate"><span class="pre">--rf-wait-us</span></code>; they are not
+estimated, since an alignment fitted to the two waveforms could remove the
+disagreement the comparison is meant to find. The default gradient tolerance is
+what the gradients can slew through in the few raster steps by which the two
+renderings may differ.</p>
+<p>The check leaves nothing beside the sequence: where no cache exists, one is
+built beside a copy and discarded.</p>
 </section>
 <section id="see-also">
 <h2>See also<a class="headerlink" href="#see-also" title="Link to this heading">#</a></h2>
 <ul class="simple">
-<li><p><a class="reference internal" href="../explanations/architecture.html"><span class="doc">Architecture</span></a> — the services and what passes between them.</p></li>
-<li><p><a class="reference internal" href="../explanations/architecture.html"><span class="doc">Architecture</span></a> — the design store and the identity of a design.</p></li>
-<li><p><a class="reference internal" href="reconstruction-client.html"><span class="doc">Reconstruction clients</span></a> — the MRD stream of a series.</p></li>
-<li><p><a class="reference internal" href="../api/host.html"><span class="doc">Design calls</span></a> and <a class="reference internal" href="../api/proxy.html"><span class="doc">Reconstruction proxy</span></a> — the design calls, the proxy and the reconstruction server.</p></li>
+<li><p><a class="reference internal" href="../explanations/architecture.html"><span class="doc">Architecture</span></a>: the services, the design store and the identity of a design.</p></li>
+<li><p><a class="reference internal" href="../explanations/reconstruction-session.html"><span class="doc">Reconstruction session</span></a>: the proxy, its workers and forwarding.</p></li>
+<li><p><a class="reference internal" href="reconstruction-client.html"><span class="doc">Reconstruction client</span></a>: the MRD stream of a series.</p></li>
+<li><p><a class="reference internal" href="../api/host.html"><span class="doc">Design calls</span></a> and <a class="reference internal" href="../api/proxy.html"><span class="doc">Reconstruction proxy</span></a>: the design calls, the proxy and the reconstruction server.</p></li>
 </ul>
 </section>
 </section>
@@ -1124,15 +1175,27 @@ one is built beside a copy and discarded.</p>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#design-calls">Design calls</a><ul class="nav section-nav flex-column">
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#limits">Limits</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#import-block">Import block</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#scanner-limits">Scanner limits</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#in-process-calls">In-process calls</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#design-store">Design store</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#pushing-designs">Pushing designs</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#warm-server">Warm server</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#design-push">Design push</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#warm-design-server">Warm design server</a></li>
 </ul>
 </li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#reconstruction-proxy">Reconstruction proxy</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#reconstruction-proxy">Reconstruction proxy</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#series-routing">Series routing</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#saved-series">Saved series</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#proxy-lifetime">Proxy lifetime</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#exam-directory">Exam directory</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#forwarding">Forwarding</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#sequence-description">Sequence description</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#design-intake">Design intake</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#network-exposure">Network exposure</a></li>
+</ul>
+</li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#reconstruction-server">Reconstruction server</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#checking-a-sequence-plays-as-it-was-written">Checking a sequence plays as it was written</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#playout-validation">Playout validation</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#see-also">See also</a></li>
 </ul>
   </nav></div>

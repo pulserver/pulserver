@@ -237,17 +237,16 @@
         </ul>
         <ul class="nav bd-sidenav">
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../user-guide/index.html">User guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/running.html">Running the services</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/running.html">Services</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../user-guide/scanner-sequences.html">Scanner sequences</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../user-guide/reconstruction-plugins.html">Reconstruction plugins</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/reconstruction-client.html">Reconstruction clients</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/virtual-scanner.html">Scanning a phantom without a scanner</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/reconstruction-client.html">Reconstruction client</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../developer-guide/index.html">Developer guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/prerequisites.html">Development prerequisites</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/installation.html">Editable installation</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/workflow.html">Development workflow</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/installation.html">Development setup</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/workflow.html">Contribution workflow</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/style.html">Coding style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/documentation.html">Documentation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/terminology.html">Terminology and conventions</a></li>
@@ -260,10 +259,7 @@
 <li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/pre-commit.html">Pre-commit</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/pull-requests.html">Pull requests</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/releases.html">Releases</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/code-of-conduct.html">Code of conduct</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../explanations/index.html">Explanations</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -518,10 +514,10 @@
 <span class="sd">    second rendering: a recording of a machine playing it, where one is given</span>
 <span class="sd">    or can be made, and otherwise the waveforms its own cache holds.</span>
 
-<span class="sd">    The two answer different questions, and :attr:`Comparison.reference` says</span>
-<span class="sd">    which was answered. A recording establishes that the machine plays the</span>
-<span class="sd">    sequence. The cache establishes only that the conversion kept it -- a</span>
-<span class="sd">    conversion and a playout that are wrong in the same way agree.</span>
+<span class="sd">    :attr:`Comparison.reference` says which was compared. A recording</span>
+<span class="sd">    establishes that the machine plays the sequence. The cache establishes only</span>
+<span class="sd">    that the conversion kept it: a conversion and a playout that are wrong in</span>
+<span class="sd">    the same way agree.</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
@@ -535,21 +531,22 @@
 <span class="sd">        asked for from that vendor's tooling if it is installed here.</span>
 <span class="sd">    dead_time_us</span>
 <span class="sd">        What a recording's times run ahead of the sequence's by, on every</span>
-<span class="sd">        channel: a machine starts a unit before it plays anything of it.</span>
+<span class="sd">        channel, in µs.</span>
 <span class="sd">    rf_wait_us</span>
-<span class="sd">        What the transmit channels run ahead by on top of that. A machine</span>
-<span class="sd">        drives transmit and gradients on separate timelines and records each as</span>
-<span class="sd">        it drove it, so the two meet only once both constants are stated.</span>
+<span class="sd">        What the transmit channels run ahead by on top of ``dead_time_us``, in</span>
+<span class="sd">        µs; a machine drives transmit and gradients on separate timelines and</span>
+<span class="sd">        records each as driven.</span>
 <span class="sd">    tolerance_mt_per_m</span>
-<span class="sd">        The largest gradient difference that still counts as agreement. Taken</span>
-<span class="sd">        from the slew rate and the gradient raster when a system is given,</span>
-<span class="sd">        which is what the hardware can legitimately be away by; 0.05 otherwise.</span>
+<span class="sd">        The largest gradient difference that still counts as agreement, in</span>
+<span class="sd">        mT/m. Three raster steps of the slew rate of ``system`` when given</span>
+<span class="sd">        (:func:`gradient_tolerance_mt_per_m`); 0.05 otherwise.</span>
 <span class="sd">    rf_tolerance_percent</span>
 <span class="sd">        The largest transmit difference, as a percentage of the peak.</span>
 <span class="sd">    cache_ext</span>
 <span class="sd">        Extension of the cache read when comparing against it.</span>
 <span class="sd">    system</span>
-<span class="sd">        ``pypulseqpp.Opts`` the cache is converted under, when one has to be.</span>
+<span class="sd">        ``pypulseqpp.Opts`` the cache is converted under when none exists;</span>
+<span class="sd">        default ``pypulseqpp.Opts()``.</span>
 
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>

@@ -244,17 +244,16 @@
         </ul>
         <ul class="current nav bd-sidenav">
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../user-guide/index.html">User guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="../../user-guide/running.html">Running the services</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../user-guide/running.html">Services</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../user-guide/scanner-sequences.html">Scanner sequences</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../user-guide/reconstruction-plugins.html">Reconstruction plugins</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../user-guide/reconstruction-client.html">Reconstruction clients</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../user-guide/virtual-scanner.html">Scanning a phantom without a scanner</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../user-guide/reconstruction-client.html">Reconstruction client</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../user-guide/virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 current active has-children"><a class="reference internal" href="../index.html">Developer guide</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
-<li class="toctree-l2"><a class="reference internal" href="../prerequisites.html">Development prerequisites</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../installation.html">Editable installation</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../workflow.html">Development workflow</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../installation.html">Development setup</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../workflow.html">Contribution workflow</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../style.html">Coding style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../documentation.html">Documentation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../terminology.html">Terminology and conventions</a></li>
@@ -267,10 +266,7 @@
 <li class="toctree-l3"><a class="reference internal" href="virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
-<li class="toctree-l2"><a class="reference internal" href="../pre-commit.html">Pre-commit</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../pull-requests.html">Pull requests</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../releases.html">Releases</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../code-of-conduct.html">Code of conduct</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../explanations/index.html">Explanations</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -537,10 +533,15 @@
             <nav aria-label="Page">
                 <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#prescription">Prescription</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#conversion-passes">Conversion passes</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#conversion-passes">Conversion passes</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#segmentation-rules">Segmentation rules</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#rf-statistics">RF statistics</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#offsets-labels-and-rotations">Offsets, labels and rotations</a></li>
+</ul>
+</li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#waves">Waves</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#the-two-stages-of-a-playout">The two stages of a playout</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#the-heaviest-repetition">The heaviest repetition</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#playout-stages">Playout stages</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#heaviest-repetition">Heaviest repetition</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#cache-file">Cache file</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#playback">Playback</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#language-constraint">Language constraint</a></li>
@@ -557,13 +558,9 @@
                   
   <section class="tex2jax_ignore mathjax_ignore" id="ir-cache">
 <h1>IR cache<a class="headerlink" href="#ir-cache" title="Link to this heading">#</a></h1>
-<p>The implementation of the scanner representation
-(<a class="reference internal" href="../../explanations/scanner-representation.html"><span class="doc">PulSeg representation</span></a>): how the prescription is
-applied, the passes that compute it and the statistics they record, how gradients that a
-prepared segment cannot play are carried as waves, how a playout loads the
-cache in two stages, the gradients kept for the scanner’s heating model, and
-the layout of the cache file. The C headers an interpreter
-includes are in
+<p>Implementation of the scanner representation
+(<a class="reference internal" href="../../explanations/scanner-representation.html"><span class="doc">PulSeg representation</span></a>). The C headers an
+interpreter includes are in
 <a class="reference external" href="https://github.com/pulserver/pulserver/tree/main/src/c/include/pulseg"><code class="docutils literal notranslate"><span class="pre">src/c/include/pulseg/</span></code></a>.</p>
 <section id="prescription">
 <h2>Prescription<a class="headerlink" href="#prescription" title="Link to this heading">#</a></h2>
@@ -584,8 +581,8 @@ relative to its excitation is <span class="math notranslate nohighlight">\(2\pi\
 <span class="math notranslate nohighlight">\(\mathbf{k}\)</span> the k-space location of the sample in 1/m;</p></li>
 <li><p>blocks labelled <code class="docutils literal notranslate"><span class="pre">NOPOS</span></code> keep the phases they were designed with.</p></li>
 </ul>
-<p>A block that carries a rotation extension plays its drawn gradients turned by
-that rotation, and it is moved by the gradients it plays.</p>
+<p>For a block that carries a rotation extension, the offsets follow the
+gradients it plays, its rotation included.</p>
 <p>The cache carries each readout’s frequency and phase offsets, taken at the
 middle of its sampling window, and no phase modulation: the scanner
 demodulates by the offsets alone. The reconstruction proxy applies the rest,
@@ -594,12 +591,13 @@ about the window centre <span class="math notranslate nohighlight">\(t_c\)</span
 <span class="math notranslate nohighlight">\(\mathbf{d}\)</span> the design was converted at. Where the MRD header states the
 object at another position (<code class="docutils literal notranslate"><span class="pre">fov_offset_mm</span></code>), such as one a motion correction
 updates, the proxy also applies <span class="math notranslate nohighlight">\(2\pi\,\Delta\mathbf{d}\cdot\mathbf{k}(t)\)</span>
-for the difference, which needs no new cache. The reconstruction then receives an object at
-the stated position at the centre of its field of view. A chain whose stored
-modulation does not hold one phase per ADC sample is refused. The rotation of the prescription is not applied
-to the cache: the scanner plays it through its rotation matrix, composed after
-each block’s own rotation. Two offsets make two caches of one design, and two
-designs (<a class="reference internal" href="../../explanations/architecture.html"><span class="doc">Architecture</span></a>).</p>
+for the difference, which needs no new cache. The reconstruction then
+receives the object at the stated position at the centre of its field of view.
+A chain whose stored modulation does not hold one phase per ADC sample is
+refused. The rotation of the prescription is not applied to the cache: the
+scanner plays it through its rotation matrix, composed after each block’s own
+rotation. A cache is converted at one offset, so two offsets give two caches
+and two designs (<a class="reference internal" href="../../explanations/architecture.html"><span class="doc">Architecture</span></a>).</p>
 </section>
 <section id="conversion-passes">
 <h2>Conversion passes<a class="headerlink" href="#conversion-passes" title="Link to this heading">#</a></h2>
@@ -634,21 +632,26 @@ designs (<a class="reference internal" href="../../explanations/architecture.htm
 </tbody>
 </table>
 </div>
-<p>The limits and rasters of the scanner (<code class="docutils literal notranslate"><span class="pre">pypulseqpp.Opts</span></code>) are those under which
-the scan is segmented. A segment boundary falls where every gradient is
+<section id="segmentation-rules">
+<h3>Segmentation rules<a class="headerlink" href="#segmentation-rules" title="Link to this heading">#</a></h3>
+<p>The scan is segmented under the limits and rasters of the scanner
+(<code class="docutils literal notranslate"><span class="pre">pypulseqpp.Opts</span></code>). A segment boundary falls where every gradient is
 within the grouping’s tolerance of zero, judged by the first and last values
 each arbitrary gradient’s library row stores for the event’s edges; a
-trapezoid starts and ends at zero. A virtual segment is prepared from the RF and gradient definitions of the blocks of one
-repetition; a block instance sets only their amplitudes, frequency and phase
-offsets and gradient shape, or, where the blocks carry a rotation, the rotated
-wave it plays. Every repetition that plays a virtual segment
-therefore plays the same RF and gradient definitions at each position, and the
-same ADC definition wherever it acquires. A repetition that plays other
+trapezoid starts and ends at zero. A virtual segment is prepared from the RF
+and gradient definitions of the blocks of one repetition; a block instance
+sets only their amplitudes, frequency and phase offsets and gradient shape,
+or, where the blocks carry a rotation, the rotated wave it plays. Every
+repetition that plays a virtual segment therefore plays the same RF and
+gradient definitions at each position, and the same ADC definition wherever it acquires. A repetition that plays other
 definitions, such as a pulse of its own per shot in a repetition pypulseqpp
 finds by block duration and the channels played, or that digitises with other
-ADC events, plays a virtual segment of its own; one with more than 64 such
-variants of either kind is refused. The
-spectral statistics are measured by pypulseqpp’s
+ADC events, plays a virtual segment of its own; a virtual segment with more
+than 64 such variants of either kind is refused.</p>
+</section>
+<section id="rf-statistics">
+<h3>RF statistics<a class="headerlink" href="#rf-statistics" title="Link to this heading">#</a></h3>
+<p>The spectral statistics are measured by pypulseqpp’s
 <code class="docutils literal notranslate"><span class="pre">calc_rf_bandwidth</span></code> when the chain is read, with the Pulseq recipe of the width
 at half the spectral peak; a band is a run of the spectrum above 30 % of its
 peak, and its offset is measured from the carrier. A dynamic pTx pulse holds
@@ -660,8 +663,11 @@ coherently, the flip where every channel has unit, in-phase sensitivity; the
 envelope for the power statistics is the root sum of squares of the channels.
 The energy is held as the integral of the squared envelope scaled to unit
 peak, in seconds: pypulseqpp’s <code class="docutils literal notranslate"><span class="pre">calc_rf_power</span></code> energy, the integral of
-<span class="math notranslate nohighlight">\(|b_1|^2\)</span>, over its peak power, both summed over the channels.
-A pulse a file leaves unlabelled takes the use pypulseqpp detects for it when
+<span class="math notranslate nohighlight">\(|b_1|^2\)</span>, over its peak power, both summed over the channels.</p>
+</section>
+<section id="offsets-labels-and-rotations">
+<h3>Offsets, labels and rotations<a class="headerlink" href="#offsets-labels-and-rotations" title="Link to this heading">#</a></h3>
+<p>A pulse a file leaves unlabelled takes the use pypulseqpp detects for it when
 the chain is read. RF and ADC frequency and phase offsets are stored absolute:
 the ppm offsets are resolved on the host, at the gamma and B0 of the call’s
 limits, by pypulseqpp’s <code class="docutils literal notranslate"><span class="pre">SequenceLibraries.absolute_offsets</span></code>. The labels
@@ -676,6 +682,7 @@ steady from the pulse’s first sample to its last as
 <code class="docutils literal notranslate"><span class="pre">label_column_map</span></code> selects the three labels the
 interpreter records per readout, as indices in the order SLC, PHS, REP, AVG,
 SEG, SET, ECO, PAR, LIN, ACQ.</p>
+</section>
 </section>
 <section id="waves">
 <h2>Waves<a class="headerlink" href="#waves" title="Link to this heading">#</a></h2>
@@ -739,8 +746,8 @@ while the instance before it plays; with more, from further ahead. A chain
 whose waves fit neither layout, or an instance of which cannot be loaded in
 time, is refused at conversion.</p>
 </section>
-<section id="the-two-stages-of-a-playout">
-<h2>The two stages of a playout<a class="headerlink" href="#the-two-stages-of-a-playout" title="Link to this heading">#</a></h2>
+<section id="playout-stages">
+<h2>Playout stages<a class="headerlink" href="#playout-stages" title="Link to this heading">#</a></h2>
 <p>The C library runs both stages of a playout over a backend the playout
 provides (<code class="docutils literal notranslate"><span class="pre">pulseg_playout_prepare</span></code> and <code class="docutils literal notranslate"><span class="pre">pulseg_playout_scan</span></code>, in
 <code class="docutils literal notranslate"><span class="pre">pulseg_playout.h</span></code>). The order of the calls and the values they carry are the
@@ -789,21 +796,22 @@ stages into the 32-bit scanner reader, which plays the same instances and
 waves as the host and, built with 16-bit samples, loads the same waves scaled
 to that type.</p>
 </section>
-<section id="the-heaviest-repetition">
-<h2>The heaviest repetition<a class="headerlink" href="#the-heaviest-repetition" title="Link to this heading">#</a></h2>
+<section id="heaviest-repetition">
+<h2>Heaviest repetition<a class="headerlink" href="#heaviest-repetition" title="Link to this heading">#</a></h2>
 <p>A scanner evaluates its gradient-heating model on the gradients of a
 repetition, and the host’s sound pressure check
-(<code class="docutils literal notranslate"><span class="pre">pypulseqpp.safety.check_spl</span></code>) chooses the same one. For each subsequence the conversion finds the repetition, of
-those the execution stream holds from its first block, over which</p>
+(<code class="docutils literal notranslate"><span class="pre">pypulseqpp.safety.check_spl</span></code>) chooses the same one. For each subsequence,
+the conversion finds the repetition, of those the execution stream holds from
+its first block, over which</p>
 <div class="math notranslate nohighlight">
 \[
 E = \int \lVert \mathbf{g}(t) \rVert^2 \, dt
 \]</div>
 <p>is largest, the earliest on a tie, or the whole subsequence where it does not
 repeat, and the cache carries its gradients
-(<a class="reference internal" href="../../generated/pulserver.ir.repetition_gradients.html#pulserver.ir.repetition_gradients" title="pulserver.ir.repetition_gradients"><code class="xref py py-func docutils literal notranslate"><span class="pre">repetition_gradients()</span></code></a>, <code class="docutils literal notranslate"><span class="pre">pulseg_get_tr_corner_points</span></code>). <span class="math notranslate nohighlight">\(E\)</span> sums, over the blocks and their gradient
-events, the square of each event’s amplitude times the integral of its
-normalised waveform’s square, which a rotation leaves unchanged, so the choice
+(<a class="reference internal" href="../../generated/pulserver.ir.repetition_gradients.html#pulserver.ir.repetition_gradients" title="pulserver.ir.repetition_gradients"><code class="xref py py-func docutils literal notranslate"><span class="pre">repetition_gradients()</span></code></a>, <code class="docutils literal notranslate"><span class="pre">pulseg_get_tr_corner_points</span></code>).
+<span class="math notranslate nohighlight">\(E\)</span> sums, over the blocks and their gradient events, the square of each
+event’s amplitude times the integral of its normalised waveform’s square, which a rotation leaves unchanged, so the choice
 does not depend on the blocks’ rotations. The repetition is one the scanner
 plays, each block at its own amplitudes and with its own shapes and rotation,
 or through its wave: a waveform that plays, not an envelope of
@@ -815,14 +823,14 @@ raster samples them at the centres of its intervals
 </section>
 <section id="cache-file">
 <h2>Cache file<a class="headerlink" href="#cache-file" title="Link to this heading">#</a></h2>
-<p>The cache has the name of the first sequence file with its extension replaced:
-<code class="docutils literal notranslate"><span class="pre">.pseg</span></code> by default. It is divided into sections that a
-consumer loads independently. The pulse-generation stage of a playout reads the
+<p>The cache has the name of the first sequence file with its extension replaced,
+<code class="docutils literal notranslate"><span class="pre">.pseg</span></code> by default. It is divided into sections that a consumer loads
+independently. The pulse-generation stage of a playout reads the
 definitions, their waveforms, the waves and their layout, and the gradients of
 each subsequence’s heaviest repetition; the scan loop also reads
 the per-block instances, the rotations and the execution stream, whose size
-scales with the scan length. Integer and float fields are 4 bytes. The byte order is recorded
-in the file, and a reader on a machine of the other byte order swaps on load. A
+scales with the scan length. Integer and float fields are 4 bytes. The byte
+order is recorded in the file, and a reader on a machine of the other byte order swaps on load. A
 cache whose format version differs from the reader’s is rejected rather than
 read in part.</p>
 <p>A cache may be tagged with a vendor code (<code class="docutils literal notranslate"><span class="pre">PULSEG_VENDOR_*</span></code>), which selects the
@@ -851,8 +859,8 @@ the segmentation, the waves, their layout in a playout’s waveform memory and
 each subsequence’s heaviest repetition. The cache reader and writer, the
 accessors a playout uses to walk the loaded collection, and the two stages of a
 playout are compiled into the interpreter, whose vendor toolchains accept ANSI
-C. They are therefore C89, in <code class="docutils literal notranslate"><span class="pre">src/c/</span></code>, and call nothing in <code class="docutils literal notranslate"><span class="pre">src/cpp/</span></code>. The test suite
-compiles <code class="docutils literal notranslate"><span class="pre">src/c/</span></code> as a scanner build does, 32-bit and vendor-tagged, and reads
+C. They are therefore C89, in <code class="docutils literal notranslate"><span class="pre">src/c/</span></code>, and call nothing in <code class="docutils literal notranslate"><span class="pre">src/cpp/</span></code>. The
+test suite compiles <code class="docutils literal notranslate"><span class="pre">src/c/</span></code> as a scanner build does, 32-bit and vendor-tagged, and reads
 back a cache written on the host.</p>
 </section>
 </section>
@@ -905,10 +913,15 @@ back a cache written on the host.</p>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#prescription">Prescription</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#conversion-passes">Conversion passes</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#conversion-passes">Conversion passes</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#segmentation-rules">Segmentation rules</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#rf-statistics">RF statistics</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#offsets-labels-and-rotations">Offsets, labels and rotations</a></li>
+</ul>
+</li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#waves">Waves</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#the-two-stages-of-a-playout">The two stages of a playout</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#the-heaviest-repetition">The heaviest repetition</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#playout-stages">Playout stages</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#heaviest-repetition">Heaviest repetition</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#cache-file">Cache file</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#playback">Playback</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#language-constraint">Language constraint</a></li>

@@ -240,17 +240,16 @@
         </ul>
         <ul class="nav bd-sidenav">
 <li class="toctree-l1 has-children"><a class="reference internal" href="../user-guide/index.html">User guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="../user-guide/running.html">Running the services</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../user-guide/running.html">Services</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../user-guide/scanner-sequences.html">Scanner sequences</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../user-guide/reconstruction-plugins.html">Reconstruction plugins</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../user-guide/reconstruction-client.html">Reconstruction clients</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../user-guide/virtual-scanner.html">Scanning a phantom without a scanner</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../user-guide/reconstruction-client.html">Reconstruction client</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../user-guide/virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../developer-guide/index.html">Developer guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="../developer-guide/prerequisites.html">Development prerequisites</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../developer-guide/installation.html">Editable installation</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../developer-guide/workflow.html">Development workflow</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer-guide/installation.html">Development setup</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer-guide/workflow.html">Contribution workflow</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../developer-guide/style.html">Coding style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../developer-guide/documentation.html">Documentation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../developer-guide/terminology.html">Terminology and conventions</a></li>
@@ -263,10 +262,7 @@
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
-<li class="toctree-l2"><a class="reference internal" href="../developer-guide/pre-commit.html">Pre-commit</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../developer-guide/pull-requests.html">Pull requests</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../developer-guide/releases.html">Releases</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../developer-guide/code-of-conduct.html">Code of conduct</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../explanations/index.html">Explanations</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -549,7 +545,7 @@
 <dl class="py method">
 <dt class="sig sig-object py" id="pulserver.virtual.Console.scan">
 <span class="sig-prename descclassname"><span class="pre">Console.</span></span><span class="sig-name descname"><span class="pre">scan</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pulserver/virtual/_console.html#Console.scan"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.virtual.Console.scan" title="Link to this definition">#</a></dt>
-<dd><p>Scan a stored design on the exam’s phantom; return the reconstruction’s status.</p>
+<dd><p>Scan a stored design on the exam’s phantom; return the status of the reconstruction.</p>
 <p><code class="docutils literal notranslate"><span class="pre">emit</span></code> receives the scan clock after each span played, a span
 lasting at least <code class="xref py py-data docutils literal notranslate"><span class="pre">_SPAN</span></code>, as <code class="docutils literal notranslate"><span class="pre">{&quot;clock&quot;:</span> <span class="pre">s,</span> <span class="pre">&quot;duration&quot;:</span> <span class="pre">s}</span></code>,
 then the reconstruction’s images as DICOM, <code class="docutils literal notranslate"><span class="pre">{&quot;dicom&quot;:</span> <span class="pre">base64,</span>
@@ -563,9 +559,9 @@ starts <code class="docutils literal notranslate"><span class="pre">emit</span><
 with the wall-clock time left before it does, or <code class="docutils literal notranslate"><span class="pre">null</span></code> before there
 is an estimate. The status is 1 when a text reports a refused or
 failed series, or when the scan is cancelled.</p>
-<p>The Fourier engine plays a scan on the phantom’s tissue at
-<code class="docutils literal notranslate"><span class="pre">spacing</span></code>, sampled once an exam, where its excitation pulses excite
-it.</p>
+<p>The Fourier engine simulates the scan on the phantom’s tissue,
+sampled at <code class="docutils literal notranslate"><span class="pre">spacing</span></code> once per exam, where the excitation pulses
+excite it.</p>
 <p><code class="docutils literal notranslate"><span class="pre">recon</span></code> names the reconstruction plugin. Without it, a design of a
 shipped scanner sequence is reconstructed with the shipped
 reconstruction paired with it in <code class="docutils literal notranslate"><span class="pre">pulserver._zoo.ZOO_PAIRS</span></code>. A

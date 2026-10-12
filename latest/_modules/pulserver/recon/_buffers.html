@@ -237,17 +237,16 @@
         </ul>
         <ul class="nav bd-sidenav">
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../user-guide/index.html">User guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/running.html">Running the services</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/running.html">Services</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../user-guide/scanner-sequences.html">Scanner sequences</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../user-guide/reconstruction-plugins.html">Reconstruction plugins</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/reconstruction-client.html">Reconstruction clients</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/virtual-scanner.html">Scanning a phantom without a scanner</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/reconstruction-client.html">Reconstruction client</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../developer-guide/index.html">Developer guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/prerequisites.html">Development prerequisites</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/installation.html">Editable installation</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/workflow.html">Development workflow</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/installation.html">Development setup</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/workflow.html">Contribution workflow</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/style.html">Coding style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/documentation.html">Documentation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/terminology.html">Terminology and conventions</a></li>
@@ -260,10 +259,7 @@
 <li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/pre-commit.html">Pre-commit</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/pull-requests.html">Pull requests</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/releases.html">Releases</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/code-of-conduct.html">Code of conduct</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../explanations/index.html">Explanations</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -516,7 +512,7 @@
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">discards</span><span class="p">(</span><span class="n">acquisition</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]:</span>
-<span class="w">    </span><span class="sd">"""Return the ``(discard_pre, discard_post)`` sample counts of an acquisition, 0 where it states none."""</span>
+<span class="w">    </span><span class="sd">"""Return the ``(discard_pre, discard_post)`` counts of an acquisition; 0 where it states none."""</span>
     <span class="n">pre</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">acquisition_label</span><span class="p">(</span><span class="n">acquisition</span><span class="p">,</span> <span class="s2">"discard_pre"</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span> <span class="ow">or</span> <span class="mi">0</span><span class="p">)</span>
     <span class="n">post</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">acquisition_label</span><span class="p">(</span><span class="n">acquisition</span><span class="p">,</span> <span class="s2">"discard_post"</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span> <span class="ow">or</span> <span class="mi">0</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">pre</span><span class="p">,</span> <span class="n">post</span>
@@ -532,7 +528,7 @@
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_grid_position</span><span class="p">(</span><span class="n">space</span><span class="p">:</span> <span class="n">EncodingSpace</span><span class="p">,</span> <span class="n">acquisition</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">]:</span>
-<span class="w">    </span><span class="sd">"""Return the index of an acquisition on each varying placement axis of ``space``'s grid.</span>
+<span class="w">    </span><span class="sd">"""Return the index of an acquisition on each varying placement axis of a grid.</span>
 
 <span class="sd">    Raises</span>
 <span class="sd">    ------</span>
@@ -561,7 +557,7 @@
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_width</span><span class="p">(</span><span class="n">space</span><span class="p">:</span> <span class="n">EncodingSpace</span><span class="p">,</span> <span class="n">acquisition</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">samples</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""Return the readout samples of a buffer of ``space`` whose first readout is ``acquisition``.</span>
+<span class="w">    </span><span class="sd">"""Return the readout samples of a buffer whose first readout is ``acquisition``.</span>
 
 <span class="sd">    The readout's own samples when it is a centred full echo, which is how a</span>
 <span class="sd">    readout completed by :class:`~pulserver.recon.AsymmetricEcho` arrives, or</span>
@@ -972,7 +968,7 @@
 
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_picks</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">where</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="o">...</span><span class="p">]:</span>
-<span class="w">        </span><span class="sd">"""Index the placement axes, accepting only index 0 for an axis this space does not vary."""</span>
+<span class="w">        </span><span class="sd">"""Index the placement axes; an axis this space does not vary takes only 0."""</span>
         <span class="n">placement</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">axes</span><span class="p">[</span><span class="mi">1</span><span class="p">:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
         <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">index</span> <span class="ow">in</span> <span class="n">where</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
             <span class="k">if</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">placement</span><span class="p">:</span>
@@ -1103,7 +1099,7 @@
 
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">combinations</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""Number of positions along the unit's axes and merged counters, 1 where its space is not described."""</span>
+<span class="w">        </span><span class="sd">"""Positions along the unit's axes and merged counters; 1 where its space is not described."""</span>
         <span class="n">space</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">spaces</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">space_index</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">space</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">return</span> <span class="mi">1</span>
@@ -1213,12 +1209,14 @@
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">nearest_to_centre</span><span class="p">(</span><span class="n">space</span><span class="p">:</span> <span class="n">EncodingSpace</span><span class="p">,</span> <span class="n">acquisitions</span><span class="p">:</span> <span class="n">Iterable</span><span class="p">[</span><span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""Return the acquisition placed nearest the k-space centre of ``space``, ``None`` when there are none.</span>
+<span class="w">    </span><span class="sd">"""Return the placed acquisition nearest the k-space centre of ``space``.</span>
 
-<span class="sd">    Distance is Euclidean over the positions on the grid along ``phase_encode``</span>
-<span class="sd">    and, where ``space`` has more than one partition, ``partition``, from</span>
-<span class="sd">    ``extent // 2``, where a buffer of ``space`` places the centre. The earliest</span>
-<span class="sd">    of equally near acquisitions is returned.</span>
+<span class="sd">    ``None`` when there are none.</span>
+
+<span class="sd">        Distance is Euclidean over the positions on the grid along ``phase_encode``</span>
+<span class="sd">        and, where ``space`` has more than one partition, ``partition``, from</span>
+<span class="sd">        ``extent // 2``, where a buffer of ``space`` places the centre. The earliest</span>
+<span class="sd">        of equally near acquisitions is returned.</span>
 <span class="sd">    """</span>
     <span class="n">axes</span> <span class="o">=</span> <span class="p">[</span>
         <span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">extent</span><span class="p">)</span>
@@ -1241,7 +1239,7 @@
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">readout_roles</span><span class="p">(</span><span class="n">acquisition</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">bool</span><span class="p">,</span> <span class="nb">bool</span><span class="p">]:</span>
-<span class="w">    </span><span class="sd">"""Return whether an acquisition belongs to a unit's imaging data and to its calibration data.</span>
+<span class="w">    </span><span class="sd">"""Return whether an acquisition is imaging data and whether it is calibration data.</span>
 
 <span class="sd">    A readout flagged as calibration only is calibration; one flagged as</span>
 <span class="sd">    calibration and imaging is both; a phase-correction readout is neither</span>

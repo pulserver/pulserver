@@ -68,7 +68,7 @@
     <link rel="icon" href="../../_static/pulserver-mark.svg"/>
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
-    <link rel="next" title="Pre-commit" href="../pre-commit.html" />
+    <link rel="next" title="Releases" href="../releases.html" />
     <link rel="prev" title="SAR ratios against a reference pulse" href="sar-ratios.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
@@ -244,17 +244,16 @@
         </ul>
         <ul class="current nav bd-sidenav">
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../user-guide/index.html">User guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="../../user-guide/running.html">Running the services</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../user-guide/running.html">Services</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../user-guide/scanner-sequences.html">Scanner sequences</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../user-guide/reconstruction-plugins.html">Reconstruction plugins</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../user-guide/reconstruction-client.html">Reconstruction clients</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../user-guide/virtual-scanner.html">Scanning a phantom without a scanner</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../user-guide/reconstruction-client.html">Reconstruction client</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../user-guide/virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 current active has-children"><a class="reference internal" href="../index.html">Developer guide</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
-<li class="toctree-l2"><a class="reference internal" href="../prerequisites.html">Development prerequisites</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../installation.html">Editable installation</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../workflow.html">Development workflow</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../installation.html">Development setup</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../workflow.html">Contribution workflow</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../style.html">Coding style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../documentation.html">Documentation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../terminology.html">Terminology and conventions</a></li>
@@ -267,10 +266,7 @@
 <li class="toctree-l3 current active"><a class="current reference internal" href="#">Virtual scanner</a></li>
 </ul>
 </details></li>
-<li class="toctree-l2"><a class="reference internal" href="../pre-commit.html">Pre-commit</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../pull-requests.html">Pull requests</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../releases.html">Releases</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../code-of-conduct.html">Code of conduct</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../explanations/index.html">Explanations</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -545,7 +541,7 @@
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#temporal-and-readout-bases">Temporal and readout bases</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#demodulation-and-the-field-of-view-offset">Demodulation and the field-of-view offset</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#diffusion-motion-and-the-gradient-response">Diffusion, motion and the gradient response</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#what-is-not-modelled">What is not modelled</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#model-limitations">Model limitations</a></li>
 </ul>
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#coils-and-the-subject-s-field">Coils and the subject’s field</a></li>
@@ -557,7 +553,7 @@
 </ul>
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#external-simulators">External simulators</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#what-a-run-establishes">What a run establishes</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#test-coverage">Test coverage</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#coils-from-field-maps">Coils from field maps</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#scan-clock-and-sound">Scan clock and sound</a></li>
 </ul>
@@ -573,12 +569,10 @@
                   
   <section class="tex2jax_ignore mathjax_ignore" id="virtual-scanner">
 <h1>Virtual scanner<a class="headerlink" href="#virtual-scanner" title="Link to this heading">#</a></h1>
-<p>The implementation of the virtual scanner
-(<a class="reference internal" href="../../explanations/virtual-scanner.html"><span class="doc">Virtual scanner</span></a>): how the virtual interpreter
-resolves each block’s waveforms, how the Fourier engine builds its timeline,
-event streams, bases and images and to what tolerance, how a cache is exported
-to an external Bloch simulator, what the test suite establishes by playing
-caches, the signal model, the coils taken from field maps, and the scan clock and the sound.</p>
+<p>Implementation of the virtual scanner
+(<a class="reference internal" href="../../explanations/virtual-scanner.html"><span class="doc">Virtual scanner</span></a>): the virtual interpreter, the
+Fourier engine and its signal model, the coils, export to external Bloch
+simulators, the scan clock, and the properties the test suite holds.</p>
 <section id="played-waveforms">
 <span id="vs-played-waveforms"></span><h2>Played waveforms<a class="headerlink" href="#played-waveforms" title="Link to this heading">#</a></h2>
 <p><a class="reference internal" href="../../generated/pulserver.ir.playout.html#pulserver.ir.playout" title="pulserver.ir.playout"><code class="xref py py-func docutils literal notranslate"><span class="pre">playout()</span></code></a> plays the cache through the two stages of a
@@ -603,22 +597,19 @@ the same waveforms, bit for bit.</p>
 </section>
 <section id="played-trajectory">
 <h2>Played trajectory<a class="headerlink" href="#played-trajectory" title="Link to this heading">#</a></h2>
-<p><a class="reference internal" href="../../generated/pulserver.ir.playout.html#pulserver.ir.playout" title="pulserver.ir.playout"><code class="xref py py-func docutils literal notranslate"><span class="pre">playout()</span></code></a> plays the cache through the two stages of a
-playout (<a class="reference internal" href="ir-cache.html"><span class="doc">IR cache</span></a>) and, with <code class="docutils literal notranslate"><span class="pre">waveforms</span></code>,
-returns the gradients and the RF pulse each block plays, as the scan loop sets
-them; <a class="reference internal" href="#vs-played-waveforms"><span class="std std-ref">Played waveforms</span></a> states which
-prepared events and waves they are taken from.</p>
-<p>The virtual scanner integrates those gradients into the k-space location
-<span class="math notranslate nohighlight">\(\mathbf{k}\)</span> of every ADC sample, in 1/m along the physical axes. The rotation <span class="math notranslate nohighlight">\(R\)</span> of the prescription, from logical to physical axes, is
-not in the cache (<a class="reference internal" href="../../explanations/scanner-representation.html"><span class="doc">PulSeg representation</span></a>): the virtual interpreter is given it, as a
-playout is, and turns each block’s gradients, which carry the block’s own
-rotation, by <span class="math notranslate nohighlight">\(R\)</span>, except in the segment instances whose blocks are labelled
-<code class="docutils literal notranslate"><span class="pre">NOROT</span></code>, which play as the cache holds them. This is the frame
-<a class="reference internal" href="../../generated/pulserver.ir.check.html#pulserver.ir.check" title="pulserver.ir.check"><code class="xref py py-func docutils literal notranslate"><span class="pre">check()</span></code></a> checks in. Under
-the identity the physical axes are the logical ones. An excitation returns
-<span class="math notranslate nohighlight">\(\mathbf{k}\)</span> to zero, and a refocusing pulse negates it, at the RF centre the
-design records, which the cache carries for each RF event with its use; each
-file of a chain starts from zero. The test suite holds this trajectory to the
+<p>The virtual scanner integrates the gradients <a class="reference internal" href="../../generated/pulserver.ir.playout.html#pulserver.ir.playout" title="pulserver.ir.playout"><code class="xref py py-func docutils literal notranslate"><span class="pre">playout()</span></code></a>
+returns (<a class="reference internal" href="#vs-played-waveforms"><span class="std std-ref">Played waveforms</span></a>) into the k-space
+location <span class="math notranslate nohighlight">\(\mathbf{k}\)</span> of every ADC sample, in 1/m along the physical axes. The
+rotation <span class="math notranslate nohighlight">\(R\)</span> of the prescription, from logical to physical axes, is not in the
+cache (<a class="reference internal" href="../../explanations/scanner-representation.html"><span class="doc">PulSeg representation</span></a>): the virtual
+interpreter is given it, as a playout is, and turns each block’s gradients,
+which carry the block’s own rotation, by <span class="math notranslate nohighlight">\(R\)</span>, except in the segment instances
+whose blocks are labelled <code class="docutils literal notranslate"><span class="pre">NOROT</span></code>, which play as the cache holds them. This is
+the frame <a class="reference internal" href="../../generated/pulserver.ir.check.html#pulserver.ir.check" title="pulserver.ir.check"><code class="xref py py-func docutils literal notranslate"><span class="pre">check()</span></code></a> checks in. Under the identity the
+physical axes are the logical ones. An excitation returns <span class="math notranslate nohighlight">\(\mathbf{k}\)</span> to
+zero, and a refocusing pulse negates it, at the RF centre the design records,
+which the cache carries for each RF event with its use; each file of a chain
+starts from zero. The test suite holds this trajectory to the
 one each file designs, turned as <code class="docutils literal notranslate"><span class="pre">pypulseqpp.TransformFOV</span></code> turns it for the
 checks, and the trajectory of the identity to the one the enrichment states.</p>
 </section>
@@ -768,8 +759,8 @@ the object.</p>
 moment the gradients play on each physical axis, so the trajectory, the
 origins and the dephasing all follow the filtered gradients.</p>
 </section>
-<section id="what-is-not-modelled">
-<h3>What is not modelled<a class="headerlink" href="#what-is-not-modelled" title="Link to this heading">#</a></h3>
+<section id="model-limitations">
+<h3>Model limitations<a class="headerlink" href="#model-limitations" title="Link to this heading">#</a></h3>
 <p>A pulse acts at its centre, with no
 relaxation during it, and turns each cube by an ideal rotation, so the phase a
 selective pulse leaves across its slab beyond that rotation is left out. The
@@ -887,9 +878,9 @@ and each receiver with it. A stream whose shifts take a moment as balanced
 holds that moment balanced at one place; each pulse’s phase less its own
 <span class="math notranslate nohighlight">\(2\pi\,\mathbf{m}\cdot\mathbf{r}_0\)</span>, and each readout’s less that of the
 pulse before it, puts the place at <span class="math notranslate nohighlight">\(\mathbf{r}_0\)</span> and keeps what the readout
-encodes of it. In the frame of the isocentre, an unspoiled ZTE 25 mm off
-centre took these phases as a cycle of its pulses’ phases and kept a
-thousandth of its signal.</p>
+encodes of it. Played in the frame of the isocentre instead, these phases
+appear as a cycle of the pulses’ phases, and an unspoiled ZTE 25 mm off centre
+keeps about a thousandth of its signal.</p>
 <p>A stream whose pulses recur, with the same phase increments, times and
 shifts, every <span class="math notranslate nohighlight">\(q\)</span> of them, plays its first periods until the deviation from
 the periodic state, which relaxation contracts by at least
@@ -976,8 +967,8 @@ without a flat top, so the job turns a design’s gradients itself. The two
 simulations then differ only where the cache plays something other than the
 design, or by the rounding of the text format.</p>
 </section>
-<section id="what-a-run-establishes">
-<h2>What a run establishes<a class="headerlink" href="#what-a-run-establishes" title="Link to this heading">#</a></h2>
+<section id="test-coverage">
+<h2>Test coverage<a class="headerlink" href="#test-coverage" title="Link to this heading">#</a></h2>
 <ul class="simple">
 <li><p>The trajectory the cache plays is the one each file designs, for the
 fixtures and for every sequence pypulseqpp ships, at small sizes, and under
@@ -1143,11 +1134,11 @@ under the same prescription, to the single precision of the cache.</p>
       </div>
     </a>
     <a class="right-next"
-       href="../pre-commit.html"
+       href="../releases.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Pre-commit</p>
+        <p class="prev-next-title">Releases</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -1178,7 +1169,7 @@ under the same prescription, to the single precision of the cache.</p>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#temporal-and-readout-bases">Temporal and readout bases</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#demodulation-and-the-field-of-view-offset">Demodulation and the field-of-view offset</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#diffusion-motion-and-the-gradient-response">Diffusion, motion and the gradient response</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#what-is-not-modelled">What is not modelled</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#model-limitations">Model limitations</a></li>
 </ul>
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#coils-and-the-subject-s-field">Coils and the subject’s field</a></li>
@@ -1190,7 +1181,7 @@ under the same prescription, to the single precision of the cache.</p>
 </ul>
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#external-simulators">External simulators</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#what-a-run-establishes">What a run establishes</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#test-coverage">Test coverage</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#coils-from-field-maps">Coils from field maps</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#scan-clock-and-sound">Scan clock and sound</a></li>
 </ul>

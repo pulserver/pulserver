@@ -1,11 +1,9 @@
 # Virtual scanner
 
-The implementation of the virtual scanner
-({doc}`../../explanations/virtual-scanner`): how the virtual interpreter
-resolves each block's waveforms, how the Fourier engine builds its timeline,
-event streams, bases and images and to what tolerance, how a cache is exported
-to an external Bloch simulator, what the test suite establishes by playing
-caches, the signal model, the coils taken from field maps, and the scan clock and the sound.
+Implementation of the virtual scanner
+({doc}`../../explanations/virtual-scanner`): the virtual interpreter, the
+Fourier engine and its signal model, the coils, export to external Bloch
+simulators, the scan clock, and the properties the test suite holds.
 
 (vs-played-waveforms)=
 ## Played waveforms
@@ -32,23 +30,19 @@ the same waveforms, bit for bit.
 
 ## Played trajectory
 
-{func}`~pulserver.ir.playout` plays the cache through the two stages of a
-playout ({doc}`ir-cache`) and, with `waveforms`,
-returns the gradients and the RF pulse each block plays, as the scan loop sets
-them; {ref}`Played waveforms <vs-played-waveforms>` states which
-prepared events and waves they are taken from.
-
-The virtual scanner integrates those gradients into the k-space location
-$\mathbf{k}$ of every ADC sample, in 1/m along the physical axes. The rotation $R$ of the prescription, from logical to physical axes, is
-not in the cache ({doc}`../../explanations/scanner-representation`): the virtual interpreter is given it, as a
-playout is, and turns each block's gradients, which carry the block's own
-rotation, by $R$, except in the segment instances whose blocks are labelled
-`NOROT`, which play as the cache holds them. This is the frame
-{func}`~pulserver.ir.check` checks in. Under
-the identity the physical axes are the logical ones. An excitation returns
-$\mathbf{k}$ to zero, and a refocusing pulse negates it, at the RF centre the
-design records, which the cache carries for each RF event with its use; each
-file of a chain starts from zero. The test suite holds this trajectory to the
+The virtual scanner integrates the gradients {func}`~pulserver.ir.playout`
+returns ({ref}`Played waveforms <vs-played-waveforms>`) into the k-space
+location $\mathbf{k}$ of every ADC sample, in 1/m along the physical axes. The
+rotation $R$ of the prescription, from logical to physical axes, is not in the
+cache ({doc}`../../explanations/scanner-representation`): the virtual
+interpreter is given it, as a playout is, and turns each block's gradients,
+which carry the block's own rotation, by $R$, except in the segment instances
+whose blocks are labelled `NOROT`, which play as the cache holds them. This is
+the frame {func}`~pulserver.ir.check` checks in. Under the identity the
+physical axes are the logical ones. An excitation returns $\mathbf{k}$ to
+zero, and a refocusing pulse negates it, at the RF centre the design records,
+which the cache carries for each RF event with its use; each file of a chain
+starts from zero. The test suite holds this trajectory to the
 one each file designs, turned as `pypulseqpp.TransformFOV` turns it for the
 checks, and the trajectory of the identity to the one the enrichment states.
 
@@ -206,7 +200,7 @@ A gradient impulse response, {class}`~pulserver.virtual.Girf`, filters the
 moment the gradients play on each physical axis, so the trajectory, the
 origins and the dephasing all follow the filtered gradients.
 
-### What is not modelled
+### Model limitations
 
 A pulse acts at its centre, with no
 relaxation during it, and turns each cube by an ideal rotation, so the phase a
@@ -331,9 +325,9 @@ and each receiver with it. A stream whose shifts take a moment as balanced
 holds that moment balanced at one place; each pulse's phase less its own
 $2\pi\,\mathbf{m}\cdot\mathbf{r}_0$, and each readout's less that of the
 pulse before it, puts the place at $\mathbf{r}_0$ and keeps what the readout
-encodes of it. In the frame of the isocentre, an unspoiled ZTE 25 mm off
-centre took these phases as a cycle of its pulses' phases and kept a
-thousandth of its signal.
+encodes of it. Played in the frame of the isocentre instead, these phases
+appear as a cycle of the pulses' phases, and an unspoiled ZTE 25 mm off centre
+keeps about a thousandth of its signal.
 
 A stream whose pulses recur, with the same phase increments, times and
 shifts, every $q$ of them, plays its first periods until the deviation from
@@ -423,7 +417,7 @@ without a flat top, so the job turns a design's gradients itself. The two
 simulations then differ only where the cache plays something other than the
 design, or by the rounding of the text format.
 
-## What a run establishes
+## Test coverage
 
 - The trajectory the cache plays is the one each file designs, for the
   fixtures and for every sequence pypulseqpp ships, at small sizes, and under

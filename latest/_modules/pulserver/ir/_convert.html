@@ -237,17 +237,16 @@
         </ul>
         <ul class="nav bd-sidenav">
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../user-guide/index.html">User guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/running.html">Running the services</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/running.html">Services</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../user-guide/scanner-sequences.html">Scanner sequences</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../user-guide/reconstruction-plugins.html">Reconstruction plugins</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/reconstruction-client.html">Reconstruction clients</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/virtual-scanner.html">Scanning a phantom without a scanner</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/reconstruction-client.html">Reconstruction client</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../developer-guide/index.html">Developer guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/prerequisites.html">Development prerequisites</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/installation.html">Editable installation</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/workflow.html">Development workflow</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/installation.html">Development setup</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/workflow.html">Contribution workflow</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/style.html">Coding style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/documentation.html">Documentation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/terminology.html">Terminology and conventions</a></li>
@@ -260,10 +259,7 @@
 <li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/pre-commit.html">Pre-commit</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/pull-requests.html">Pull requests</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/releases.html">Releases</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/code-of-conduct.html">Code of conduct</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../explanations/index.html">Explanations</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -695,6 +691,15 @@
 <span class="k">def</span><span class="w"> </span><span class="nf">chain</span><span class="p">(</span><span class="n">seq_path</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">Path</span><span class="p">]:</span>
 <span class="w">    </span><span class="sd">"""Return the files of the ``NextSequence`` chain starting at a sequence file, in play order.</span>
 
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    seq_path</span>
+<span class="sd">        The first file of the chain.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    list of Path</span>
+
 <span class="sd">    Raises</span>
 <span class="sd">    ------</span>
 <span class="sd">    FileNotFoundError</span>
@@ -780,9 +785,9 @@
 <span class="sd">        lays the waves out in (:func:`plan_waves`); None holds every wave at</span>
 <span class="sd">        once on the gradient raster of the chain's first file.</span>
 <span class="sd">    designed</span>
-<span class="sd">        The chain as :func:`pulserver.mrd.designed_chain` returns it,</span>
-<span class="sd">        segmented in place of reading and verifying the files, and moved to</span>
-<span class="sd">        ``fov_offset`` in place.</span>
+<span class="sd">        ``(path, sequence)`` pairs of the chain as ``mrd._sequence.designed_chain``</span>
+<span class="sd">        returns them, segmented in place of reading and verifying the files</span>
+<span class="sd">        and moved to ``fov_offset`` in place.</span>
 
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
@@ -794,8 +799,8 @@
 <span class="sd">    ValueError</span>
 <span class="sd">        If a file of the chain cannot be read, verified or segmented,</span>
 <span class="sd">        ``sar_ratios`` or ``spl_levels`` does not give one per file, or the</span>
-<span class="sd">        waves fit neither</span>
-<span class="sd">        layout of ``wave_budget`` or cannot be loaded in time.</span>
+<span class="sd">        waves fit neither layout of ``wave_budget`` or cannot be loaded in</span>
+<span class="sd">        time.</span>
 <span class="sd">    OSError</span>
 <span class="sd">        If no cache was written.</span>
 <span class="sd">    """</span>
@@ -886,28 +891,42 @@
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
 <span class="w">    </span><span class="sd">"""Return the segmentation of a sequence: subsequences, segments and readouts.</span>
 
-<span class="sd">    Each subsequence lists its unique RF definitions under ``rf``: the flip</span>
-<span class="sd">    angle in degrees at the largest amplitude the definition plays, as</span>
-<span class="sd">    ``pypulseqpp.Sequence.rf_flip_angles`` gives it; and the bandwidth at half</span>
-<span class="sd">    the spectral peak, the number of bands, each band's offset from the</span>
-<span class="sd">    carrier and the widest band's bandwidth, all in Hz, as</span>
-<span class="sd">    ``pypulseqpp.calc_rf_bandwidth`` measures them; and ``b1sq_integral_s``,</span>
-<span class="sd">    the integral of the squared envelope scaled to unit peak, in s:</span>
-<span class="sd">    ``pypulseqpp.calc_rf_power``'s energy over its peak power, both summed</span>
-<span class="sd">    over a dynamic pTx pulse's channels.</span>
-<span class="sd">    ``vop_sar_ratio`` and ``vop_global_sar_ratio`` are those the cache was</span>
-<span class="sd">    written with, zero when the chain is read and segmented again;</span>
-<span class="sd">    ``spl_peak_db`` and ``spl_average_dba`` likewise, -1 when it is.</span>
-<span class="sd">    ``readout_labels`` lists, per readout in play order, the values of the</span>
-<span class="sd">    three labels ``label_column_map`` selects, as in force at that readout.</span>
-<span class="sd">    ``waves`` lists the subsequence's waves, as :func:`play` indexes</span>
-<span class="sd">    them: each one's point count, and its largest magnitude along x, y and z</span>
-<span class="sd">    over that of the largest gradient event it combines. ``grad_raster_us``</span>
-<span class="sd">    is the raster the file's gradient shapes are sampled on, in µs.</span>
+<span class="sd">    Each subsequence reports:</span>
 
-<span class="sd">    With ``cache_ext``, the cache beside the file is loaded instead of the</span>
-<span class="sd">    chain being read and segmented again; this build loads only vendor-neutral</span>
-<span class="sd">    caches, and only when the size recorded in the cache matches the file.</span>
+<span class="sd">    - ``rf``: its unique RF definitions, each with the flip angle in degrees at</span>
+<span class="sd">      the largest amplitude it plays (``pypulseqpp.Sequence.rf_flip_angles``);</span>
+<span class="sd">      the bandwidth at half the spectral peak, the number of bands, each band's</span>
+<span class="sd">      offset from the carrier and the widest band's bandwidth, in Hz</span>
+<span class="sd">      (``pypulseqpp.calc_rf_bandwidth``); and ``b1sq_integral_s``, the</span>
+<span class="sd">      integral of the squared envelope scaled to unit peak, in s, which is</span>
+<span class="sd">      ``pypulseqpp.calc_rf_power``'s energy over its peak power. Spectra and</span>
+<span class="sd">      integral are summed over the channels of a dynamic pTx pulse.</span>
+<span class="sd">    - ``vop_sar_ratio``, ``vop_global_sar_ratio``, ``spl_peak_db``,</span>
+<span class="sd">      ``spl_average_dba``: the values the cache was written with; 0, 0, -1 and</span>
+<span class="sd">      -1 when the chain is read and segmented again.</span>
+<span class="sd">    - ``readout_labels``: per readout in play order, the values of the three</span>
+<span class="sd">      labels ``label_column_map`` selects, as in force at that readout.</span>
+<span class="sd">    - ``waves``: the subsequence's waves, indexed as :func:`play` indexes them,</span>
+<span class="sd">      each with its point count and its largest magnitude along x, y and z over</span>
+<span class="sd">      that of the largest gradient event it combines.</span>
+<span class="sd">    - ``grad_raster_us``: the raster the file's gradient shapes are sampled on,</span>
+<span class="sd">      in µs.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    seq_path</span>
+<span class="sd">        Text or binary Pulseq file, the first of its ``NextSequence`` chain.</span>
+<span class="sd">    system</span>
+<span class="sd">        Limits and rasters the chain is segmented under; unused with</span>
+<span class="sd">        ``cache_ext``.</span>
+<span class="sd">    cache_ext</span>
+<span class="sd">        Extension of the cache beside the file, dot included. When given, that</span>
+<span class="sd">        cache is loaded instead of the chain being read and segmented again;</span>
+<span class="sd">        this build loads only vendor-neutral caches, and only when the size</span>
+<span class="sd">        recorded in the cache matches the file.</span>
+<span class="sd">    label_column_map</span>
+<span class="sd">        Label state indices of the three readout label columns, as for</span>
+<span class="sd">        :func:`convert`; unused with ``cache_ext``.</span>
 
 <span class="sd">    Raises</span>
 <span class="sd">    ------</span>
@@ -988,6 +1007,15 @@
 <span class="sd">    in play order, across the subsequences of the chain. This build loads only</span>
 <span class="sd">    vendor-neutral caches, and only when the size recorded in the cache</span>
 <span class="sd">    matches the file.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    seq_path</span>
+<span class="sd">        The first file of the chain; the cache is the file beside it.</span>
+<span class="sd">    cache_ext</span>
+<span class="sd">        Extension of the cache, dot included.</span>
+<span class="sd">    waveforms</span>
+<span class="sd">        Also return the samples and corners each block plays.</span>
 
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>

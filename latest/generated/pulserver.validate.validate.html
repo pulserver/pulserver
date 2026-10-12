@@ -240,17 +240,16 @@
         </ul>
         <ul class="nav bd-sidenav">
 <li class="toctree-l1 has-children"><a class="reference internal" href="../user-guide/index.html">User guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="../user-guide/running.html">Running the services</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../user-guide/running.html">Services</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../user-guide/scanner-sequences.html">Scanner sequences</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../user-guide/reconstruction-plugins.html">Reconstruction plugins</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../user-guide/reconstruction-client.html">Reconstruction clients</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../user-guide/virtual-scanner.html">Scanning a phantom without a scanner</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../user-guide/reconstruction-client.html">Reconstruction client</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../user-guide/virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../developer-guide/index.html">Developer guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="../developer-guide/prerequisites.html">Development prerequisites</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../developer-guide/installation.html">Editable installation</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../developer-guide/workflow.html">Development workflow</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer-guide/installation.html">Development setup</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer-guide/workflow.html">Contribution workflow</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../developer-guide/style.html">Coding style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../developer-guide/documentation.html">Documentation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../developer-guide/terminology.html">Terminology and conventions</a></li>
@@ -263,10 +262,7 @@
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
-<li class="toctree-l2"><a class="reference internal" href="../developer-guide/pre-commit.html">Pre-commit</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../developer-guide/pull-requests.html">Pull requests</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../developer-guide/releases.html">Releases</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../developer-guide/code-of-conduct.html">Code of conduct</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../explanations/index.html">Explanations</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -553,10 +549,10 @@
 <p>Reads the gradients the sequence asks for, and compares them against a
 second rendering: a recording of a machine playing it, where one is given
 or can be made, and otherwise the waveforms its own cache holds.</p>
-<p>The two answer different questions, and <a class="reference internal" href="pulserver.validate.Comparison.reference.html#pulserver.validate.Comparison.reference" title="pulserver.validate.Comparison.reference"><code class="xref py py-attr docutils literal notranslate"><span class="pre">Comparison.reference</span></code></a> says
-which was answered. A recording establishes that the machine plays the
-sequence. The cache establishes only that the conversion kept it – a
-conversion and a playout that are wrong in the same way agree.</p>
+<p><a class="reference internal" href="pulserver.validate.Comparison.reference.html#pulserver.validate.Comparison.reference" title="pulserver.validate.Comparison.reference"><code class="xref py py-attr docutils literal notranslate"><span class="pre">Comparison.reference</span></code></a> says which was compared. A recording
+establishes that the machine plays the sequence. The cache establishes only
+that the conversion kept it: a conversion and a playout that are wrong in
+the same way agree.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
@@ -566,16 +562,17 @@ compares against the cache and ignores <code class="docutils literal notranslate
 <li><p><strong>played</strong> – A recording to compare against. Absent, and with a vendor named, one is
 asked for from that vendor’s tooling if it is installed here.</p></li>
 <li><p><strong>dead_time_us</strong> – What a recording’s times run ahead of the sequence’s by, on every
-channel: a machine starts a unit before it plays anything of it.</p></li>
-<li><p><strong>rf_wait_us</strong> – What the transmit channels run ahead by on top of that. A machine
-drives transmit and gradients on separate timelines and records each as
-it drove it, so the two meet only once both constants are stated.</p></li>
-<li><p><strong>tolerance_mt_per_m</strong> – The largest gradient difference that still counts as agreement. Taken
-from the slew rate and the gradient raster when a system is given,
-which is what the hardware can legitimately be away by; 0.05 otherwise.</p></li>
+channel, in µs.</p></li>
+<li><p><strong>rf_wait_us</strong> – What the transmit channels run ahead by on top of <code class="docutils literal notranslate"><span class="pre">dead_time_us</span></code>, in
+µs; a machine drives transmit and gradients on separate timelines and
+records each as driven.</p></li>
+<li><p><strong>tolerance_mt_per_m</strong> – The largest gradient difference that still counts as agreement, in
+mT/m. Three raster steps of the slew rate of <code class="docutils literal notranslate"><span class="pre">system</span></code> when given
+(<a class="reference internal" href="pulserver.validate.gradient_tolerance_mt_per_m.html#pulserver.validate.gradient_tolerance_mt_per_m" title="pulserver.validate.gradient_tolerance_mt_per_m"><code class="xref py py-func docutils literal notranslate"><span class="pre">gradient_tolerance_mt_per_m()</span></code></a>); 0.05 otherwise.</p></li>
 <li><p><strong>rf_tolerance_percent</strong> – The largest transmit difference, as a percentage of the peak.</p></li>
 <li><p><strong>cache_ext</strong> – Extension of the cache read when comparing against it.</p></li>
-<li><p><strong>system</strong> – <code class="docutils literal notranslate"><span class="pre">pypulseqpp.Opts</span></code> the cache is converted under, when one has to be.</p></li>
+<li><p><strong>system</strong> – <code class="docutils literal notranslate"><span class="pre">pypulseqpp.Opts</span></code> the cache is converted under when none exists;
+default <code class="docutils literal notranslate"><span class="pre">pypulseqpp.Opts()</span></code>.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Return type<span class="colon">:</span></dt>

@@ -237,17 +237,16 @@
         </ul>
         <ul class="nav bd-sidenav">
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../user-guide/index.html">User guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/running.html">Running the services</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/running.html">Services</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../user-guide/scanner-sequences.html">Scanner sequences</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../user-guide/reconstruction-plugins.html">Reconstruction plugins</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/reconstruction-client.html">Reconstruction clients</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/virtual-scanner.html">Scanning a phantom without a scanner</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/reconstruction-client.html">Reconstruction client</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../developer-guide/index.html">Developer guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/prerequisites.html">Development prerequisites</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/installation.html">Editable installation</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/workflow.html">Development workflow</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/installation.html">Development setup</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/workflow.html">Contribution workflow</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/style.html">Coding style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/documentation.html">Documentation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/terminology.html">Terminology and conventions</a></li>
@@ -260,10 +259,7 @@
 <li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/pre-commit.html">Pre-commit</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/pull-requests.html">Pull requests</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/releases.html">Releases</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/code-of-conduct.html">Code of conduct</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../explanations/index.html">Explanations</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -601,16 +597,21 @@
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">EncodingSpace</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">"""Read encoding space ``index`` of a parsed MRD header.</span>
 
-<span class="sd">        For a Cartesian space ``phase_encodes`` and ``partitions`` are the encoded</span>
-<span class="sd">        matrix, the whole grid whatever number of lines an undersampled scan took,</span>
-<span class="sd">        and ``phase_center`` and ``partition_center`` place the counters on it. For</span>
-<span class="sd">        a non-Cartesian space ``phase_encodes`` is the ``kspace_encoding_step_1``</span>
-<span class="sd">        limit, which counts views, or the encoded matrix when no limit is stated;</span>
-<span class="sd">        its ``partitions`` is the larger of the encoded matrix and the</span>
-<span class="sd">        ``kspace_encoding_step_2`` limit, a stack being Cartesian along z, or one</span>
-<span class="sd">        where that limit states a single partition, as for a trajectory that</span>
-<span class="sd">        encodes kz itself, and no counter is shifted. ``recon_matrix`` and ``recon_fov`` fall back to the</span>
-<span class="sd">        encoded space when the header has no ``reconSpace``.</span>
+<span class="sd">        For a Cartesian space, ``phase_encodes`` and ``partitions`` are the</span>
+<span class="sd">        encoded matrix, the whole grid whatever number of lines an undersampled</span>
+<span class="sd">        scan took, and ``phase_center`` and ``partition_center`` place the</span>
+<span class="sd">        counters on it.</span>
+
+<span class="sd">        For a non-Cartesian space, ``phase_encodes`` is the</span>
+<span class="sd">        ``kspace_encoding_step_1`` limit, which counts views, or the encoded</span>
+<span class="sd">        matrix when no limit is stated. ``partitions`` is 1 when the</span>
+<span class="sd">        ``kspace_encoding_step_2`` limit states a single partition, as for a</span>
+<span class="sd">        trajectory that encodes kz itself, and otherwise the larger of that</span>
+<span class="sd">        limit and the encoded matrix, as for a stack that is Cartesian along z.</span>
+<span class="sd">        Both centres are ``None``, so no counter is shifted.</span>
+
+<span class="sd">        ``recon_matrix`` and ``recon_fov`` fall back to the encoded space when</span>
+<span class="sd">        the header has no ``reconSpace``.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
