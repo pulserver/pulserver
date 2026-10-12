@@ -567,33 +567,14 @@ needs a C compiler, a C++17 compiler, CMake and the Python development headers.<
 <p>This installs pypulseqpp, which designs the sequences; bartorch and PyTorch,
 which the shipped reconstructions use; blochsim, with which the virtual
 scanner simulates the signal and the shipped <code class="docutils literal notranslate"><span class="pre">fse3d</span></code> plugin optimizes its
-refocusing trains; and the ISMRMRD and DICOM libraries. A reconstruction plugin may import any other
-engine; the reconstruction proxy imports bartorch into its spare workers ahead
-of a series.</p>
-<div class="pst-scrollable-table-container"><table class="table">
-<thead>
-<tr class="row-odd"><th class="head"><p>Extra</p></th>
-<th class="head"><p>Adds</p></th>
-<th class="head"><p>Needed for</p></th>
-</tr>
-</thead>
-<tbody>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">console</span></code></p></td>
-<td><p>websockets</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">pulserver</span> <span class="pre">console</span></code></p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">coils</span></code></p></td>
-<td><p>bartorch’s <code class="docutils literal notranslate"><span class="pre">motion</span></code> extra (SimpleITK)</p></td>
-<td><p>The navigator registration of the shipped <code class="docutils literal notranslate"><span class="pre">pmc</span></code> reconstruction</p></td>
-</tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">brainweb</span></code></p></td>
-<td><p>brainweb-dl</p></td>
-<td><p>BrainWeb’s normal brain as a virtual-scanner phantom</p></td>
-</tr>
-</tbody>
-</table>
-</div>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span><span class="s1">'pulserver[console,coils]'</span>
+refocusing trains; the ISMRMRD and DICOM libraries; and brainweb-dl and
+websockets, for the virtual scanner’s BrainWeb phantom and <code class="docutils literal notranslate"><span class="pre">pulserver</span> <span class="pre">console</span></code>.
+A reconstruction plugin may import any other engine; the reconstruction proxy
+imports bartorch into its spare workers ahead of a series.</p>
+<p>The shipped EPI reconstruction also corrects susceptibility distortion when
+PyHySCO is installed. PyHySCO is GPL-3.0-only, so it is never installed for
+you:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span><span class="s1">'bartorch[pyhysco]'</span>
 </pre></div>
 </div>
 <p>A development installation is described in <a class="reference internal" href="../developer-guide/index.html"><span class="doc">Developer guide</span></a>.</p>

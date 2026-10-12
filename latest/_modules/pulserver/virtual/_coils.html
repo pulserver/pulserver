@@ -477,7 +477,7 @@
 <span class="sd">    -S`` selects them, or the file of the coil's field maps :func:`coils`</span>
 <span class="sd">    reads; a side without either is one channel of unit sensitivity</span>
 <span class="sd">    everywhere, as a body coil is taken to be. A model is sampled by bartorch</span>
-<span class="sd">    on first use, which the ``coils`` extra installs, over :data:`MODEL_FOV`</span>
+<span class="sd">    on first use, over :data:`MODEL_FOV`</span>
 <span class="sd">    along the physical axes; ``HEAD_2D_8CH`` is constant along z. Either is</span>
 <span class="sd">    interpolated linearly.</span>
 
@@ -683,12 +683,8 @@
 <span class="sd">    Sample ``i`` along an axis lies at ``(i - n // 2) / n`` of the model's</span>
 <span class="sd">    field of view, as BART's ``phantom`` places it.</span>
 <span class="sd">    """</span>
-    <span class="k">try</span><span class="p">:</span>
-        <span class="kn">from</span><span class="w"> </span><span class="nn">bartorch.tools</span><span class="w"> </span><span class="kn">import</span> <span class="n">phantom</span>
-    <span class="k">except</span> <span class="ne">ImportError</span> <span class="k">as</span> <span class="n">error</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
-            <span class="s2">"BART's coil models are sampled by bartorch: pip install 'pulserver[coils]'"</span>
-        <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">error</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">bartorch.tools</span><span class="w"> </span><span class="kn">import</span> <span class="n">phantom</span>
+
     <span class="n">three</span> <span class="o">=</span> <span class="n">model</span> <span class="o">==</span> <span class="s2">"HEAD_3D_64CH"</span>
     <span class="n">maps</span> <span class="o">=</span> <span class="n">phantom</span><span class="p">((</span><span class="n">_SAMPLES</span><span class="p">,)</span> <span class="o">*</span> <span class="p">(</span><span class="mi">3</span> <span class="k">if</span> <span class="n">three</span> <span class="k">else</span> <span class="mi">2</span><span class="p">),</span> <span class="n">S</span><span class="o">=</span><span class="n">channels</span><span class="p">,</span> <span class="n">coil</span><span class="o">=</span><span class="n">model</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">maps</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">numpy</span><span class="p">(),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">complex64</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span>

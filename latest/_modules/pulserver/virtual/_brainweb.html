@@ -498,7 +498,7 @@
 <span class="sd">    The fuzzy tissue model of BrainWeb's normal brain (Collins et al., IEEE</span>
 <span class="sd">    Trans Med Imaging 17:463, 1998) gives each 1 mm voxel the fraction of it</span>
 <span class="sd">    each tissue class fills. brainweb-dl downloads it on first use into its</span>
-<span class="sd">    cache, which the ``brainweb`` extra installs. The brain is oriented as a subject</span>
+<span class="sd">    cache. The brain is oriented as a subject</span>
 <span class="sd">    lying head first and supine, with the origin of its MNI coordinates, the</span>
 <span class="sd">    anterior commissure, at the isocentre: the physical x axis points to the</span>
 <span class="sd">    subject's left, y posterior and z superior. Each tissue class relaxes with</span>
@@ -575,17 +575,11 @@
 
 <span class="sd">        Raises</span>
 <span class="sd">        ------</span>
-<span class="sd">        ImportError</span>
-<span class="sd">            If brainweb-dl is not installed.</span>
 <span class="sd">        ValueError</span>
 <span class="sd">            If the model does not hold one fraction per tissue class.</span>
 <span class="sd">        """</span>
-        <span class="k">try</span><span class="p">:</span>
-            <span class="kn">import</span><span class="w"> </span><span class="nn">brainweb_dl</span>
-        <span class="k">except</span> <span class="ne">ImportError</span> <span class="k">as</span> <span class="n">error</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
-                <span class="s2">"BrainWeb is downloaded by brainweb-dl: pip install 'pulserver[brainweb]'"</span>
-            <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">error</span>
+        <span class="kn">import</span><span class="w"> </span><span class="nn">brainweb_dl</span>
+
         <span class="c1"># C order, as every sampling of the model reshapes it: brainweb-dl</span>
         <span class="c1"># returns the NIfTI file's Fortran order.</span>
         <span class="n">fractions</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span>

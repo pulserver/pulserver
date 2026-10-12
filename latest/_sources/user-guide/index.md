@@ -45,18 +45,17 @@ pip install pulserver
 This installs pypulseqpp, which designs the sequences; bartorch and PyTorch,
 which the shipped reconstructions use; blochsim, with which the virtual
 scanner simulates the signal and the shipped `fse3d` plugin optimizes its
-refocusing trains; and the ISMRMRD and DICOM libraries. A reconstruction plugin may import any other
-engine; the reconstruction proxy imports bartorch into its spare workers ahead
-of a series.
+refocusing trains; the ISMRMRD and DICOM libraries; and brainweb-dl and
+websockets, for the virtual scanner's BrainWeb phantom and `pulserver console`.
+A reconstruction plugin may import any other engine; the reconstruction proxy
+imports bartorch into its spare workers ahead of a series.
 
-| Extra | Adds | Needed for |
-| --- | --- | --- |
-| `console` | websockets | `pulserver console` |
-| `coils` | bartorch's `motion` extra (SimpleITK) | The navigator registration of the shipped `pmc` reconstruction |
-| `brainweb` | brainweb-dl | BrainWeb's normal brain as a virtual-scanner phantom |
+The shipped EPI reconstruction also corrects susceptibility distortion when
+PyHySCO is installed. PyHySCO is GPL-3.0-only, so it is never installed for
+you:
 
 ```bash
-pip install 'pulserver[console,coils]'
+pip install 'bartorch[pyhysco]'
 ```
 
 A development installation is described in {doc}`../developer-guide/index`.
