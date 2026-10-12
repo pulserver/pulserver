@@ -57,7 +57,9 @@ class Tissue:
 
 
 def transmitted(coil, positions: np.ndarray) -> np.ndarray | None:
-    """Return the transmit field a coil's channels play a single-channel pulse with at ``(n, 3)`` physical points, ``(n,)`` relative to its nominal amplitude; None for one uniform channel.
+    """Return the transmit field a coil's channels play a single-channel pulse with at ``(n, 3)`` physical points.
+
+    ``(n,)``, relative to the nominal amplitude; None for one uniform channel.
 
     Each channel plays the pulse times its weight in the coil's default shim,
     which scales the waveform by the conjugate of the field it adds.

@@ -208,61 +208,59 @@ class _Listener:
 class ReconProxy(_Listener):
     """Routes each series of an MRD stream to a reconstruction.
 
-    One thread per client connection, which carries one series: an optional
-    config text, the header, one acquisition per readout of the chain and a
-    ``CLOSE``. The header's ``pulserver_design`` names the design of the store
-    the series was played from; its readout table enriches the header and
-    every acquisition, and the reconstruction receives the chain's sequence
-    description as a text message after the header and before the first
-    acquisition (:func:`~pulserver.proxy._seqdesc.message`), which is not
-    sent back to the client. The readouts arrive demodulated to the
-    prescribed field-of-view centre by the playout
-    (:func:`pulserver.ir.prescribe`), and their samples are passed on as
-    received. The reconstruction plugin is the one the client's config text
-    names. A series that breaks this is refused with a text naming the reason
-    and a ``CLOSE``, and what the client still sends is discarded until it
-    closes the connection.
+    A client connection carries one series and is served by a thread of its
+    own: an optional config text, the header, one acquisition per readout of
+    the chain and a ``CLOSE``. The header's ``pulserver_design`` user parameter
+    names the design of the store the series was played from. Its readout
+    table enriches the header and every acquisition; the samples are passed on
+    as received, demodulated to the prescribed field-of-view centre by the
+    playout (:func:`pulserver.ir.prescribe`). The reconstruction receives the
+    chain's sequence description as a text message, after the header and
+    before the first acquisition
+    (:func:`~pulserver.proxy._seqdesc.message`); the message is not sent back
+    to the client. The reconstruction plugin is the one the client's config
+    text names. A series that breaks these rules is refused with a text naming
+    the reason and a ``CLOSE``, and what the client still sends is discarded
+    until it closes the connection.
 
-    The enriched series is reconstructed by a local worker, or, with
-    ``forward``, by the MRD server at that address. Whatever reconstructs it,
-    its images, DICOM and text go back to the client as they arrive, the
+    The series is reconstructed by a local worker or, with ``forward``, by the
+    MRD server at that address, which is sent a config file message naming
+    ``forward_config`` or else the series' plugin (the client's config text is
+    not forwarded) and decides by its own slots and queue when the series
+    runs. Images, DICOM and text go back to the client as they arrive. The
     client's close closes the reconstruction's stream, and the
-    reconstruction's close closes the client. A message the proxy has no
-    reader for ends what goes back, with a text naming its type. Once the
-    client's stream ends, the proxy waits for the reconstruction to close,
-    however long it takes, unless ``recon_timeout`` caps it.
+    reconstruction's close closes the client. A message the proxy has no reader
+    for ends what goes back, with a text naming its type. Once the client's
+    stream ends, the proxy waits for the reconstruction to close unless
+    ``recon_timeout`` caps it.
 
-    A local series holds a slot for as long as it runs. On a host with GPUs,
-    found through ``CUDA_VISIBLE_DEVICES`` or ``nvidia-smi``, each slot holds
-    one, ``gpu_slots`` slots per GPU, and the reconstruction reads it as
-    ``context.device``. A series that finds every slot busy is queued instead:
-    its enriched stream is written to a file of ``queue`` while it arrives, its
+    A local series holds a slot while it runs. On a host with GPUs, found
+    through ``CUDA_VISIBLE_DEVICES`` or ``nvidia-smi``, each slot holds one GPU,
+    ``gpu_slots`` slots per GPU, and the reconstruction reads it as
+    ``context.device``. A series that finds every slot busy is queued: its
+    enriched stream is written to a file of ``queue`` while it arrives, its
     client stays connected, and the file is replayed to a worker and deleted
-    once a slot frees. The series of one exam share a directory under the
-    system's temporary directory, through which a reconstruction reads what an
-    earlier series of the exam stored in its
-    :class:`~pulserver.recon.ExamCache`. It is deleted once a header names
-    another exam, or nothing has leased it for
+    once a slot frees.
+
+    The series of one exam share a directory under the system's temporary
+    directory, through which a reconstruction reads what an earlier series of
+    the exam stored in its :class:`~pulserver.recon.ExamCache`. The directory
+    is deleted once a header names another exam, or nothing has leased it for
     :data:`~pulserver.recon._runtime.exam.EXAM_IDLE` seconds, and no series of
     the exam still runs on any proxy.
 
-    A series whose sequence sets ``EnablePmc`` is corrected for motion while
-    it plays: the poses its reconstruction states are published into the
-    pose file the scan reads, ``motion.buf`` in the design's directory,
-    rather than sent to the client. A forwarded series publishes the poses the
-    server passes back.
+    A series whose sequence sets ``EnablePmc`` is corrected for motion while it
+    plays: the poses its reconstruction states are published into the pose
+    file the scan reads, ``motion.buf`` in the design's directory, rather than
+    sent to the client. A forwarded series publishes the poses the server
+    passes back.
 
     What goes back to a client is also written to a directory under the
     system's temporary directory, shared with every other proxy on this host,
-    and removed once the client has had all of it. When the client has gone,
-    it is kept: a client opening a series with the same ``measurementID`` is
-    sent it, after it is complete, in place of a new reconstruction. Kept
-    output nobody takes up is removed after a day.
-
-    A forwarded series is sent on as it arrives; the server's own slots and
-    queue determine when it is reconstructed. The server is sent a config file message naming
-    ``forward_config``, or else the series' reconstruction plugin; the client's
-    config text itself is not forwarded.
+    and removed once the client has had all of it. When the client has gone, it
+    is kept: a client opening a series with the same ``measurementID`` is sent
+    it, once complete, in place of a new reconstruction. Kept output nobody
+    takes up is removed after a day.
 
     Parameters
     ----------
@@ -304,8 +302,14 @@ class ReconProxy(_Listener):
         Config name sent to that server instead of the reconstruction plugin.
     dicom
         Convert each image to DICOM, from the enriched header, before it is
-        relayed. Whatever reconstructed it: a client that reads DICOM alone,
-        such as a scanner's, needs this of a plugin that emits images.
+        relayed, whatever reconstructed it. Needed by a client that reads
+        DICOM alone, with a plugin that emits images.
+    save_to
+        Directory each series is kept in, as the scanner sent it, so that it
+        can be reconstructed again offline; not kept when ``None``.
+    idle_timeout
+        Seconds without a client after which :meth:`serve` returns, counted
+        from the last client to leave; never when ``None``.
 
     Attributes
     ----------
@@ -441,6 +445,11 @@ class ReconServer(_Listener):
         :data:`~pulserver.recon._runtime.exam.DEFAULT_EXAM_DIRECTORY` when
         ``None``. An exam's directory is removed when the last proxy on that
         exam lets go of it.
+    save_to
+        Directory each series is kept in, as received; not kept when ``None``.
+    idle_timeout
+        Seconds without a client after which :meth:`serve` returns; never when
+        ``None``.
 
     Attributes
     ----------

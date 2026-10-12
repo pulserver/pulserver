@@ -1,4 +1,4 @@
-"""The checks a sequence chain passes before its IR is built, its SAR against a reference and its sound pressure levels."""
+"""Pre-conversion checks of a sequence chain, its SAR ratios and its sound pressure levels."""
 
 from __future__ import annotations
 
@@ -34,7 +34,10 @@ REFERENCE_DURATION = 1e-3
 
 @dataclass(frozen=True)
 class CheckLimits:
-    """The nerve, resonance and acoustic limits of a chain, and the VOPs of its SAR ratios, besides ``pypulseqpp.Opts``.
+    """Limits and models checked on a chain beyond those of ``pypulseqpp.Opts``.
+
+    Nerve stimulation, mechanical resonance and acoustic limits, and the VOPs
+    and SAR limits of :func:`sar_ratios`.
 
     Attributes
     ----------
@@ -183,8 +186,9 @@ def check(
     limits
         The nerve and resonance limits; none by default.
     designed
-        The chain as :func:`pulserver.mrd.designed_chain` returns it, checked
-        in place of reading the files, and rotated in place.
+        ``(path, sequence)`` pairs of the chain as ``mrd._sequence.designed_chain``
+        returns them, checked in place of reading the files and rotated in
+        place.
     spl_levels
         One per file of the chain, as :func:`spl_levels` returns them for
         ``rotation``, held to the limits in place of computing them.
@@ -372,8 +376,8 @@ def spl_levels(
     limits
         The acoustic transfer function.
     designed
-        The chain as :func:`pulserver.mrd.designed_chain` returns it, read in
-        place of the files.
+        ``(path, sequence)`` pairs of the chain as ``mrd._sequence.designed_chain``
+        returns them, used in place of reading the files.
     rotation
         ``(3, 3)`` prescription rotation from logical to physical axes; the
         identity by default.
@@ -422,8 +426,8 @@ def sar_ratios(
         default shim and, when given, the transmit configuration the VOP file
         must name.
     designed
-        The chain as :func:`pulserver.mrd.designed_chain` returns it, weighed
-        in place of reading the files.
+        ``(path, sequence)`` pairs of the chain as ``mrd._sequence.designed_chain``
+        returns them, used in place of reading the files.
 
     Returns
     -------

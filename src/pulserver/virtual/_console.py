@@ -195,7 +195,7 @@ class Console:
         self._exams = 0
 
     def design(self, call: str, plugin: str | None = None, block: str = "") -> dict:
-        """Answer a design call; a generated or imported design's id is ``design``."""
+        """Answer a design call; the id of a generated or imported design is ``design``."""
         from ..host._server import answer
 
         if call not in DESIGN_CALLS:
@@ -233,7 +233,11 @@ class Console:
         return recon_names(() if self.local is None else self.local.plugins)
 
     def coils(self) -> list[dict[str, Any]]:
-        """Return each coil an exam can be started with: its ``name`` and its ``transmit`` and ``receive`` channels."""
+        """Return each coil an exam can be started with.
+
+        Each entry holds the coil's ``name`` and its ``transmit`` and ``receive``
+        channel counts.
+        """
         return [
             {
                 "name": coil.name,
@@ -244,7 +248,7 @@ class Console:
         ]
 
     def exam(self, subject: str, coil: str | None = None) -> list[bytes]:
-        """Start an exam on the phantom ``subject`` names, in the coil ``coil`` names; return its three-plane localizer as DICOM files.
+        """Start an exam on a subject, in a coil; return its three-plane localizer as DICOM files.
 
         ``brainweb`` names BrainWeb's normal brain, and so does every subject
         of a console with field maps; any other subject, the vials. Without
@@ -284,7 +288,7 @@ class Console:
         sound: bool = False,
         recon: str | None = None,
     ) -> int:
-        """Scan a stored design on the exam's phantom; return the reconstruction's status.
+        """Scan a stored design on the exam's phantom; return the status of the reconstruction.
 
         ``emit`` receives the scan clock after each span played, a span
         lasting at least :data:`_SPAN`, as ``{"clock": s, "duration": s}``,
@@ -300,9 +304,9 @@ class Console:
         is an estimate. The status is 1 when a text reports a refused or
         failed series, or when the scan is cancelled.
 
-        The Fourier engine plays a scan on the phantom's tissue at
-        ``spacing``, sampled once an exam, where its excitation pulses excite
-        it.
+        The Fourier engine simulates the scan on the phantom's tissue,
+        sampled at ``spacing`` once per exam, where the excitation pulses
+        excite it.
 
         ``recon`` names the reconstruction plugin. Without it, a design of a
         shipped scanner sequence is reconstructed with the shipped
@@ -379,7 +383,7 @@ class Console:
         return default_phantom()
 
     def _warm(self) -> None:
-        """Compute, in a thread of its own, the field map of the exam's BrainWeb unless it has one, and the exam's tissue for the Fourier engine."""
+        """Start a thread computing the exam's BrainWeb field map, if missing, and its tissue."""
         phantom, coil, earlier = self.phantom, self.coil, self._warming
         mapped = (
             phantom is not self._brainweb
@@ -616,7 +620,7 @@ def _dicom_base64(dataset: Any) -> str:
 
 
 async def _connection(console: Console, websocket: Any) -> None:
-    """Answer one console's requests, each a JSON object carrying ``call`` and an ``id`` its replies repeat."""
+    """Answer one connection's requests: JSON objects carrying ``call`` and an ``id`` that replies repeat."""
     loop = asyncio.get_running_loop()
     cancel = threading.Event()
     running: set[asyncio.Future] = set()

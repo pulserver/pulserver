@@ -94,8 +94,7 @@ imaging_mode: stringlist|1|2d|3d
 ```
 
 A value block carries `name: value` lines only, a string list as the index of
-its chosen option. The grammar is implemented in {mod}`pulserver.protocol` for
-the host and in `pulseg_protocol.h` for the interpreter.
+its chosen option.
 
 The RF blocks follow a reply when the call asks for them, and no block follows
 where the evaluation is invalid or states no layout. They are lists of numbers:

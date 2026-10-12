@@ -1,12 +1,13 @@
 # SAR ratios against a reference pulse
 
-How {func}`~pulserver.ir.sar_ratios` turns VOPs into the two numbers the IR
-cache carries per subsequence, and what the interpreter does with them. The
-concept is in {doc}`../../explanations/safety-checks`.
+{func}`~pulserver.ir.sar_ratios` reduces the virtual observation points (VOPs)
+of a transmit coil to two numbers per subsequence, which the IR cache carries
+and the interpreter uses to cost each pulse in the vendor's SAR routine
+({doc}`../../explanations/safety-checks`).
 
 VOPs are used only for pTx: a multichannel transmit coil is connected, and
 the file contains RF shim events or multichannel RF waveforms. The interpreter
-then sends the coil's virtual observation points (VOPs). The vendor's SAR
+then sends the coil's VOPs. The vendor's SAR
 routine is calibrated for a pulse played in the coil's default channel weights,
 so pulserver relates every pulse of a subsequence to such a pulse, the
 *reference pulse*: hard, 180° and 1 ms, in the default channel weights.
@@ -37,8 +38,7 @@ allows, the time at which the reference's head SAR reaches $L_{\mathrm{head}}$.
 This fixes the drive scale without a measurement of transmitted power: at that
 scale, a pulse given $\max(r_{\mathrm{local}}, r_{\mathrm{head}})$ times the
 reference pulse's time deposits at most $L_{\mathrm{local}}$ of peak local SAR
-and $L_{\mathrm{head}}$ of head SAR. Two consequences are worth checking a
-design against:
+and $L_{\mathrm{head}}$ of head SAR. Two consequences follow:
 
 - a 1 ms hard pulse of 90° counts a quarter of the reference in both terms,
   and a repetition of reference pulses has a head term of 1;

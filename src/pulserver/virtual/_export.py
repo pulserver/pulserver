@@ -45,7 +45,7 @@ def export(
       logical axes, the block's own rotation included, turned, except in a
       block labelled ``NOROT``, by the prescription's ``rotation`` from
       logical to physical axes, as
-      :func:`~pulserver.virtual.trajectory` turns them, each as a time-shaped
+      :class:`~pulserver.virtual.FourierPlayer` turns them, each as a time-shaped
       gradient through the corners the cache plays, a step from or to zero
       as a ramp 10 ns wide;
     - its ADC window, without frequency or phase offsets.
@@ -73,7 +73,7 @@ def export(
         The receiver phase of every readout, in play order, in radians, one
         per sample: the ADC phase offset at the ADC's start, advancing at its
         frequency offset; the cache carries no phase modulation. The playout
-        demodulates by it, as :func:`~pulserver.virtual.acquire` does, and
+        demodulates by it, as :class:`~pulserver.virtual.FourierPlayer` does, and
         ``target`` leaves it out.
     """
     played = ir.playout(seq_path, waveforms=True, cache_ext=cache_ext)["blocks"]

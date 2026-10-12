@@ -1,4 +1,4 @@
-"""Host half of the orchestrator: the design calls of interpreter host processes."""
+"""The design calls of an interpreter host process, and the design store they write."""
 
 from ._store import DesignStore, design_id, design_identity
 

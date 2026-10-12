@@ -90,12 +90,12 @@ def _logged(request: Mapping[str, Any]) -> tuple[int, str]:
 
 
 class DesignServer:
-    """Answers design calls on a Unix socket, each in a child forked from a warm parent.
+    """Server of design calls on a Unix socket, each answered in a child forked from a warm parent.
 
     The parent imports the design engine, designs, checks and converts one
     sequence of its own, and imports every plugin the directories ``plugins``
-    hold; no plugin code designs in it. A call is then answered in a child forked from it, which
-    inherits what the parent imported, answers as :func:`answer` does and
+    hold; no plugin code designs in it. A call is answered in a child forked
+    from it, which inherits what the parent imported, answers as :func:`answer` does and
     exits: nothing a call does outlives its child. A child that ends without
     a reply, a crash of plugin code among them, is answered with an ``ERROR``
     line naming its exit status. Calls run concurrently, one child each.
@@ -103,8 +103,8 @@ class DesignServer:
     A request is one line of JSON, as :func:`answer` takes it; the reply is
     one line of JSON, ``{"status": <exit status>, "output": <reply text>}``.
     A request may also carry ``log``, a file the child appends its log and
-    output to rather than the server's. The socket is neither authenticated nor encrypted; its file permissions
-    decide who may call.
+    output to rather than the server's. The socket is neither authenticated
+    nor encrypted; its file permissions decide who may call.
     """
 
     def __init__(self, plugins: PluginPath, socket_path: Path | str) -> None:

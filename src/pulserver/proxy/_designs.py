@@ -21,7 +21,7 @@ from ._enrich import SequenceTable
 from ._seqdesc import describe, message
 
 #: Header user parameter naming the design a stream was played from: its
-#: identifier, as ``GENERATED`` or ``IMPORTED`` replied it.
+#: identifier, as returned by ``GENERATED`` or ``IMPORTED``.
 DESIGN_PARAMETER = "pulserver_design"
 
 _ENTRY = "sequence.seq"

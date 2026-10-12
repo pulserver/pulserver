@@ -47,7 +47,7 @@ def echo_centre(acquisition: Any, samples: int) -> int:
 
 
 def discards(acquisition: Any) -> tuple[int, int]:
-    """Return the ``(discard_pre, discard_post)`` sample counts of an acquisition, 0 where it states none."""
+    """Return the ``(discard_pre, discard_post)`` counts of an acquisition; 0 where it states none."""
     pre = int(acquisition_label(acquisition, "discard_pre", 0) or 0)
     post = int(acquisition_label(acquisition, "discard_post", 0) or 0)
     return pre, post
@@ -63,7 +63,7 @@ def _as_readout(data: Any) -> np.ndarray:
 
 
 def _grid_position(space: EncodingSpace, acquisition: Any) -> tuple[int, ...]:
-    """Return the index of an acquisition on each varying placement axis of ``space``'s grid.
+    """Return the index of an acquisition on each varying placement axis of a grid.
 
     Raises
     ------
@@ -92,7 +92,7 @@ def _grid_position(space: EncodingSpace, acquisition: Any) -> tuple[int, ...]:
 
 
 def _width(space: EncodingSpace, acquisition: Any, samples: int) -> int:
-    """Return the readout samples of a buffer of ``space`` whose first readout is ``acquisition``.
+    """Return the readout samples of a buffer whose first readout is ``acquisition``.
 
     The readout's own samples when it is a centred full echo, which is how a
     readout completed by :class:`~pulserver.recon.AsymmetricEcho` arrives, or
@@ -486,7 +486,7 @@ class ReconBuffer:
         return self.trajectory[(slice(None), *self._picks(where))]
 
     def _picks(self, where: Mapping[str, int]) -> tuple[Any, ...]:
-        """Index the placement axes, accepting only index 0 for an axis this space does not vary."""
+        """Index the placement axes; an axis this space does not vary takes only 0."""
         placement = self.axes[1:-1]
         for name, index in where.items():
             if name in placement:
@@ -613,7 +613,7 @@ class ReconUnit:
 
     @property
     def combinations(self) -> int:
-        """Number of positions along the unit's axes and merged counters, 1 where its space is not described."""
+        """Positions along the unit's axes and merged counters; 1 where its space is not described."""
         space = self.spaces.get(self.space_index)
         if space is None:
             return 1
@@ -723,12 +723,14 @@ class ReconUnit:
 
 
 def nearest_to_centre(space: EncodingSpace, acquisitions: Iterable[Any]) -> Any:
-    """Return the acquisition placed nearest the k-space centre of ``space``, ``None`` when there are none.
+    """Return the placed acquisition nearest the k-space centre of ``space``.
 
-    Distance is Euclidean over the positions on the grid along ``phase_encode``
-    and, where ``space`` has more than one partition, ``partition``, from
-    ``extent // 2``, where a buffer of ``space`` places the centre. The earliest
-    of equally near acquisitions is returned.
+    ``None`` when there are none.
+
+        Distance is Euclidean over the positions on the grid along ``phase_encode``
+        and, where ``space`` has more than one partition, ``partition``, from
+        ``extent // 2``, where a buffer of ``space`` places the centre. The earliest
+        of equally near acquisitions is returned.
     """
     axes = [
         (name, extent)
@@ -751,7 +753,7 @@ def nearest_to_centre(space: EncodingSpace, acquisitions: Iterable[Any]) -> Any:
 
 
 def readout_roles(acquisition: Any) -> tuple[bool, bool]:
-    """Return whether an acquisition belongs to a unit's imaging data and to its calibration data.
+    """Return whether an acquisition is imaging data and whether it is calibration data.
 
     A readout flagged as calibration only is calibration; one flagged as
     calibration and imaging is both; a phase-correction readout is neither

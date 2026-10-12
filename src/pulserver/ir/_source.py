@@ -1,4 +1,4 @@
-"""The event and shape libraries of a sequence, as the IR conversion reads them from pypulseqpp."""
+"""Event, shape and specification libraries of a sequence, read from pypulseqpp for the IR conversion."""
 
 from __future__ import annotations
 
@@ -457,6 +457,7 @@ class _ShapeTable:
         return self._grids[count]
 
     def empty(self, identifiers: set[int]) -> None:
+        """Replace the shapes with these ids by empty ones."""
         for identifier in identifiers:
             self._entries[identifier - 1] = Shape(0, np.zeros(0))
 
@@ -667,7 +668,7 @@ def _label_rows(values: Any, labels: Any) -> NDArray[np.float64]:
 
 
 def _block_states(sequence: Any) -> dict[str, Any]:
-    """Return the per-block state pypulseqpp evaluates, which the converter lays out per block and per readout.
+    """Return the per-block state pypulseqpp evaluates, for the converter to lay out per block and per readout.
 
     ``flag_labels`` and ``readout_labels`` hold, in the order of
     :data:`_BLOCK_FLAGS` and :data:`_READOUT_LABELS`, the values in force once

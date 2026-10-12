@@ -1,4 +1,4 @@
-"""The vendor file: the grouping and number formats one vendor's sequencer reads a cache in."""
+"""Reader of the vendor file: the grouping and number formats a sequencer reads a cache in."""
 
 from __future__ import annotations
 
@@ -35,6 +35,15 @@ def read_vendor(path: Path | str) -> tuple[VendorProfile, Grouping]:
         rf_phase: float32 0
         rf_frequency: float32 0
         [VendorProfile End]
+
+    Parameters
+    ----------
+    path
+        The vendor file.
+
+    Returns
+    -------
+    tuple of (VendorProfile, Grouping)
 
     Raises
     ------

@@ -80,11 +80,12 @@ class SequencePlugin:
     """A sequence function bound to the entries of the scanner protocol.
 
     A subclass sets :attr:`app` and, for the arguments the operator edits,
-    :attr:`protocol`; without ``protocol`` the sequence function plays its defaults. Entries
-    a request omits keep their initial values, the entry's ``default`` or else
-    the sequence function's. Times travel as integer microseconds and other floats to six
-    significant digits, the precision of a float32 parameter, so a reply stored
-    in scanner parameters and sent back evaluates to itself.
+    :attr:`protocol`; without ``protocol`` the sequence function plays its
+    defaults. Entries a request omits keep their initial values, the entry's
+    ``default`` or else the sequence function's. Times travel as integer
+    microseconds and other floats to six significant digits, the precision of a
+    float32 parameter, so a reply stored in scanner parameters and sent back
+    evaluates to itself.
 
     :meth:`validate` evaluates a request with :meth:`evaluate`, and
     :meth:`design` generates and writes it with :meth:`generate`. A subclass
@@ -94,14 +95,15 @@ class SequencePlugin:
     Attributes
     ----------
     app : callable
-        The sequence function, ``app(system, **arguments)``. It
-        takes the scanner limits, a :class:`pypulseqpp.Opts`, and the keyword
-        arguments the entries of :attr:`protocol` bind, and returns a
+        The sequence function, ``app(system, **arguments)``. It takes the
+        scanner limits, a :class:`pypulseqpp.Opts`, and the keyword arguments
+        the entries of :attr:`protocol` bind, and returns a
         :class:`pypulseqpp.Sequence` or a list of them, which is a chain: the
         prescans first and the main sequence last. The defaults the listing
         shows are those of its signature, so a :func:`functools.partial` is a
-        sequence function too. :meth:`generate` calls it, and so does an :meth:`evaluate` that
-        designs the sequence; the default :meth:`evaluate` does not.
+        sequence function too. :meth:`generate` calls it, and so does an
+        :meth:`evaluate` that designs the sequence; the default
+        :meth:`evaluate` does not.
     protocol : mapping
         The entries the operator edits, by key: the interpreter's parameter
         names, which are the members of
@@ -214,12 +216,12 @@ class SequencePlugin:
             cls.ui = keyed
 
     def listing(self) -> dict[ProtocolKey, Parameter]:
-        """Return the protocol with its schema, valued at the sequence function's defaults.
+        """Return the protocol with its schema, at the sequence function's defaults.
 
-        An argument defaulting to ``None`` shows the preset that requests ``None``.
-        The ``PRESCRIPTION`` entries of :mod:`pulserver.protocol` follow the
-        declared ones, not editable in the UI: the offset at zero, the rotation
-        at the identity.
+        An argument defaulting to ``None`` shows the preset that requests
+        ``None``. The ``PRESCRIPTION`` entries of :mod:`pulserver.protocol`
+        follow the declared ones, not editable in the UI: the offset at zero
+        (mm), the rotation at the identity.
         """
         defaults = self._defaults()
         listing = {
@@ -382,7 +384,7 @@ class SequencePlugin:
         directory: Path | str,
         exam: Path | str | None = None,
     ) -> tuple[Validation, list[str], list[tuple[Path, pp.Sequence]]]:
-        """Return what :meth:`design` returns, and each written path with its sequence as written."""
+        """Return what :meth:`design` returns, with each written path and its sequence as written."""
         validation, protocol = self._validated(system, request, exam)
         if protocol is None:
             return validation, [], []

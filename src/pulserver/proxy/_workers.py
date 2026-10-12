@@ -64,12 +64,26 @@ class WorkerPool:
         exam_directory: Path | str | None = None,
         device: str | None = None,
     ) -> SpawnProcess:
-        """Hand a spare the plugin to run, the socket to reach the proxy on, its exam directory and device.
+        """Assign a series to a spare and start a replacement spare.
 
-        Starts a replacement spare before returning, so the next series does not
-        wait for an import. The series' :class:`~pulserver.recon.ExamCache`
-        shares ``exam_directory`` with the exam's other series; ``None`` keeps
-        it to this series. ``device`` is the series' ``context.device``.
+        Blocks while there is no spare.
+
+        Parameters
+        ----------
+        plugin
+            Reconstruction plugin file to run.
+        socket_path
+            Unix socket the worker reaches the proxy on.
+        exam_directory
+            Directory the series' :class:`~pulserver.recon.ExamCache` shares
+            with the exam's other series; ``None`` keeps it to this series.
+        device
+            The series' ``context.device``.
+
+        Returns
+        -------
+        multiprocessing.context.SpawnProcess
+            The worker process.
 
         Raises
         ------
@@ -138,7 +152,7 @@ class WorkerPool:
 
 
 def _warm(pipe: Pipe, level: int) -> None:
-    """Import the reconstruction engine, wait for an assignment, serve that one series, and exit.
+    """Import the reconstruction engine, then serve the one series assigned and exit.
 
     A host without bartorch reconstructs with whatever its plugins import.
     """

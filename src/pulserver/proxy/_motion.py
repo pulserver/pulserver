@@ -1,17 +1,13 @@
 """The pose a tracker leaves for a running scan, in a file both sides hold open.
 
-Prospective motion correction needs the scan to know, between one segment and
-the next, where the object now is. The tracker runs here and the scan runs on
-the sequencer; what they share is a directory. So the pose travels through a
+The tracker runs on the host and the scan on the sequencer; they share a
 file of fixed size, created before the scan starts and written in place. It is
-never renamed, never truncated and never extended, so a descriptor opened once
-stays valid for the whole scan -- which is what the sequencer needs, having
-only the gap between two segments to read in.
+never renamed, truncated or extended, so a descriptor opened once stays valid
+for the whole scan.
 
-What travels is a pose, not a change of pose. A latest-value file drops
-versions: the reader is not promised to see every write, so one accumulating
-changes would silently lose the ones it missed. Reading an absolute pose, it
-can miss any number and still be right.
+The file holds an absolute pose, not a change of pose: a reader is not
+promised to see every write, and an absolute pose stays correct when versions
+are missed.
 
 Only the rotation crosses. A translation is corrected as a phase on the data,
 which the reconstruction applies.

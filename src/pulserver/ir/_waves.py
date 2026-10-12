@@ -1,4 +1,4 @@
-"""What a playout plays from a cache's gradients: its waves and its heaviest repetition."""
+"""Waves and heaviest repetition of a cache's gradients, as a playout plays them."""
 
 from __future__ import annotations
 
@@ -27,6 +27,16 @@ def plan_waves(
     are loaded one instance after another, from once the instance
     ``slots - 1`` before it has started, and have to be loaded before it
     starts.
+
+    Parameters
+    ----------
+    seq_path
+        The first file of the chain; the cache is the file beside it.
+    budget
+        The waveform memory to lay the waves out for; None reads the layout
+        the cache carries.
+    cache_ext
+        Extension of the cache, dot included.
 
     Returns
     -------
@@ -81,6 +91,20 @@ def sample_wave(
     between the points :func:`~pulserver.ir.play` plays it through and zero
     outside them.
 
+    Parameters
+    ----------
+    seq_path
+        The first file of the chain; the cache is the file beside it.
+    wave
+        ``(subsequence, index)``.
+    region
+        One region of the layout :func:`plan_waves` returns.
+    budget
+        The budget the layout was planned for; its ``raster_us`` is the sampling
+        interval.
+    cache_ext
+        Extension of the cache, dot included.
+
     Returns
     -------
     ndarray
@@ -128,6 +152,17 @@ def repetition_gradients(
     not repeat. The repetition is one the scanner plays, with its blocks'
     own amplitudes, shapes and rotations. A scanner evaluates its
     gradient-heating and acoustic models on it.
+
+    Parameters
+    ----------
+    seq_path
+        The first file of the chain; the cache is the file beside it.
+    subsequence
+        Index of the subsequence, in chain order.
+    raster_us
+        Gradient raster in µs for ``samples_hz_per_m``; None omits it.
+    cache_ext
+        Extension of the cache, dot included.
 
     Returns
     -------

@@ -1,10 +1,9 @@
 # Reconstruction proxy
 
-How the reconstruction runtime places the readouts of a reconstruction unit in
-its buffers, and how the proxy runs, schedules and isolates the
-reconstructions of each series ({doc}`../../explanations/reconstruction`).
+Reconstruction units, their buffers and images, and the scheduling and
+enrichment of each series by the proxy
+({doc}`../../explanations/reconstruction`).
 
-(reconstruction-placement)=
 ## Reconstruction units
 
 A reconstruction takes the readouts of one image, or of several images
@@ -84,6 +83,7 @@ A `(z, y, x)` result becomes one image per partition. Each image states the
 smallest and largest finite value of the result, of its magnitude where it is
 complex, in the meta attributes `ArrayMinimum` and `ArrayMaximum`.
 
+(reconstruction-placement)=
 ## Placement
 
 The readouts of a Cartesian encoding space are placed as Gadgetron's
@@ -146,8 +146,8 @@ one proxy's: a reconstruction computer runs one proxy per acquisition, so the
 series of an exam are reconstructed by different processes. It is deleted once
 no series of that exam is being reconstructed anywhere on the host.
 
-Three maps have names the series agree on, and a hook reaches them as
-attributes of its context: `b0_map` is off-resonance in Hz, `b1_map` the
+The context names three maps shared by the series of an exam, which a hook
+reaches as attributes: `b0_map` is off-resonance in Hz, `b1_map` the
 transmit field as a fraction of what was asked for, and `coil_sensitivities`
 the receive sensitivity of each coil, a
 {class}`~pulserver.recon.CoilSensitivities`. A calibration hook assigns what it
@@ -162,13 +162,16 @@ def recon(self, context, branch, data):
     return recon.ReconResult(image)
 ```
 
-A map is stored as measured, in the frame and on the grid of its series.
-Nothing resamples, regrids or reslices it for a series acquired at another
-position, orientation or matrix; {func}`~pulserver.recon.coil_maps` compares the
-coil sensitivities with the unit that needs them, as {doc}`calibration` states.
+A map is stored as measured, in the frame and on the grid of its series. A map
+stored as an {class}`~pulserver.recon.ExamImage` carries that geometry, and a
+series acquired at another position, orientation, field of view or matrix
+reads it resliced onto its own grid with
+{meth}`ExamImage.on <pulserver.recon.ExamImage.on>`. Coil sensitivities are
+never resampled: {func}`~pulserver.recon.coil_maps` returns them only to a
+unit on the grid they were estimated on, as {doc}`calibration` states.
 
-Those three are the whole vocabulary of the exam's maps, so a misspelt name
-raises rather than storing a map where nothing looks for it. An artifact a
+No other attribute name is accepted, so a misspelt name raises instead of
+storing a map under a key no series reads. An artifact a
 plugin carries for itself goes in `context.exam` under a key of its own, as
 {obj}`~pulserver.recon.NOISE_COVARIANCE` does for the whitening of a noise
 series.

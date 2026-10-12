@@ -125,7 +125,10 @@ class Trace:
     dt: float
 
     def ratio(self, field_hz: np.ndarray, position_m: np.ndarray) -> np.ndarray:
-        """Return the angle the pulse turns the magnetization at rest through at fields from its frequency and positions along its axis, over the one at zero of both; zero below ``_IN_BAND`` of it.
+        """Return the angle the pulse turns the magnetization at rest through at fields from its frequency and positions along its axis.
+
+        Relative to the angle at zero field and position; zero below
+        ``_IN_BAND`` of it.
 
         Read bilinearly off a Bloch simulation across the box the points span,
         at ``_TRACED_POINTS`` per resolution: the inverse of the pulse's
@@ -162,7 +165,11 @@ class Trace:
         return float(np.ptp(np.cumsum(self.along) * self.dt))
 
     def _tipped(self, field_hz: np.ndarray, position_m: np.ndarray) -> np.ndarray:
-        """Return the angle the pulse turns the magnetization at rest through at each field and position, over the one at zero of both; zero below ``_IN_BAND`` of it."""
+        """Return the angle the pulse turns the magnetization at rest through at each field and position.
+
+        Relative to the angle at zero field and position; zero below
+        ``_IN_BAND`` of it.
+        """
         points = np.column_stack([np.append(field_hz, 0.0), np.append(position_m, 0.0)])
         tipped = np.concatenate(
             [
@@ -564,7 +571,11 @@ class Timeline:
         )
 
     def _held(self, blocks: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-        """Return the gradient each block's pulse plays under along the physical axes, in Hz/m, ``(n, 3)``, zero where it changes during the pulse; and where it does."""
+        """Return the gradient each block's pulse plays under along the physical axes, in Hz/m, ``(n, 3)``.
+
+        Zero where the gradient changes during the pulse. Also returns where it
+        does.
+        """
         played = self.played
         span = self._prepared["rf_span"][self._position[blocks]]
         channels = np.maximum(played["rf_channels"][blocks], 1)
@@ -593,7 +604,10 @@ class Timeline:
         ) + bytes([int(played["rotate"][block] != 0)])
 
     def _trace(self, block: int) -> tuple[np.ndarray, Trace] | None:
-        """Return the physical axis along which the gradient changes during a block's pulse, and the pulse on its raster; ``None`` where the gradient turns."""
+        """Return the physical axis along which the gradient changes during a block's pulse.
+
+        Also returns the pulse on its raster; ``None`` where the gradient turns.
+        """
         played = self.played
         b1, step_us, since_us = _raster(
             self._prepared,
@@ -746,7 +760,11 @@ class Timeline:
         return times, k, receiver
 
     def unrefocused_us(self, times_us: np.ndarray) -> np.ndarray:
-        """Return how long the magnetization sampled at times has precessed unrefocused, in µs: from the last excitation, mirrored about each refocusing pulse since; NaN before the first excitation of each file of a chain."""
+        """Return how long the magnetization sampled at times has precessed unrefocused, in µs.
+
+        From the last excitation, mirrored about each refocusing pulse since;
+        NaN before the first excitation of each file of a chain.
+        """
         return times_us - self._precession[self._last(times_us) + 1]
 
     def _last_t(self, times_us: torch.Tensor) -> torch.Tensor:
@@ -837,7 +855,11 @@ def _turn(
 def _raster(
     prepared: dict, at: int, amplitude: float, channels: int, delay_us: float
 ) -> tuple[np.ndarray, float, np.ndarray]:
-    """Return the field the pulse prepared position ``at`` plays at ``amplitude``, its channels summed, on a uniform raster; the raster, and its samples' times from the block's start, in µs."""
+    """Return the field the pulse prepared position ``at`` plays at ``amplitude``, its channels summed, on a uniform raster.
+
+    Also returns the raster, and its samples' times from the block's start, in
+    µs.
+    """
     start, stop = prepared["rf_span"][at]
     channels = max(channels, 1)
     times = prepared["rf_time_us"][start:stop].astype(float).reshape(channels, -1)[0]

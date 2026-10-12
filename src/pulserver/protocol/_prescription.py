@@ -1,4 +1,4 @@
-"""The prescription entries: where the interpreter asks for the field of view to be."""
+"""The prescription entries of a protocol: field-of-view offset and rotation."""
 
 from __future__ import annotations
 

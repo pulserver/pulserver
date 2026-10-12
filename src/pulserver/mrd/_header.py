@@ -128,16 +128,21 @@ class EncodingSpace:
     ) -> EncodingSpace:
         """Read encoding space ``index`` of a parsed MRD header.
 
-        For a Cartesian space ``phase_encodes`` and ``partitions`` are the encoded
-        matrix, the whole grid whatever number of lines an undersampled scan took,
-        and ``phase_center`` and ``partition_center`` place the counters on it. For
-        a non-Cartesian space ``phase_encodes`` is the ``kspace_encoding_step_1``
-        limit, which counts views, or the encoded matrix when no limit is stated;
-        its ``partitions`` is the larger of the encoded matrix and the
-        ``kspace_encoding_step_2`` limit, a stack being Cartesian along z, or one
-        where that limit states a single partition, as for a trajectory that
-        encodes kz itself, and no counter is shifted. ``recon_matrix`` and ``recon_fov`` fall back to the
-        encoded space when the header has no ``reconSpace``.
+        For a Cartesian space, ``phase_encodes`` and ``partitions`` are the
+        encoded matrix, the whole grid whatever number of lines an undersampled
+        scan took, and ``phase_center`` and ``partition_center`` place the
+        counters on it.
+
+        For a non-Cartesian space, ``phase_encodes`` is the
+        ``kspace_encoding_step_1`` limit, which counts views, or the encoded
+        matrix when no limit is stated. ``partitions`` is 1 when the
+        ``kspace_encoding_step_2`` limit states a single partition, as for a
+        trajectory that encodes kz itself, and otherwise the larger of that
+        limit and the encoded matrix, as for a stack that is Cartesian along z.
+        Both centres are ``None``, so no counter is shifted.
+
+        ``recon_matrix`` and ``recon_fov`` fall back to the encoded space when
+        the header has no ``reconSpace``.
 
         Parameters
         ----------

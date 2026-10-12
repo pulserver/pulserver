@@ -78,7 +78,7 @@ from ._units import UnitKey, _Closure, _FlagClosure, unit_key
 
 @dataclass(frozen=True)
 class ReconResult:
-    """Image array for the runtime to package as an MRD image, or as DICOM.
+    """A reconstructed image array, packaged by the runtime as an MRD image or DICOM.
 
     The runtime builds the image header, so a plugin builds none. The field of
     view and matrix are those of the unit's own encoding space; position,
@@ -146,22 +146,19 @@ class ReconResult:
             )
 
 
-#: What a calibration scan leaves in the exam cache for the series that follow.
-#:
-#: A map is measured once and read by every later series of the exam, so the
-#: two have to mean the same thing by it. These are the names they agree on;
-#: a plugin storing a map under one of its own is storing it for itself alone.
+#: Exam cache keys of the maps a calibration series leaves for the series that
+#: follow. A plugin storing a map under another key stores it for itself alone.
 #:
 #: ``B0_MAP`` is off-resonance in Hz, ``B1_MAP`` the transmit field as a
-#: fraction of what was asked for, and ``COIL_SENSITIVITIES`` the receive
+#: fraction of the nominal one, and ``COIL_SENSITIVITIES`` the receive
 #: sensitivity of each coil, a :class:`~pulserver.recon.CoilSensitivities`. A
 #: value is stored as measured, in the frame and on the grid it was measured
 #: on. A map stored as an :class:`~pulserver.recon.ExamImage` carries that
 #: geometry, and a series with another orientation, centre, field of view or
 #: matrix reads it resampled onto its own grid with
 #: :meth:`~pulserver.recon.ExamImage.on`. Coil sensitivities are reused only
-#: on the grid they were estimated on: :func:`~pulserver.recon.coil_maps`
-#: makes that comparison.
+#: on the grid they were estimated on, which
+#: :func:`~pulserver.recon.coil_maps` checks.
 B0_MAP = "b0_map"
 B1_MAP = "b1_map"
 COIL_SENSITIVITIES = "coil_sensitivities"
@@ -671,9 +668,8 @@ class ReconPlugin(ABC):
     ----------
     gadgets : tuple of Gadget
     triggers : dict
-    axes : tuple of str
-    merge : tuple of str
-        Read when a stream starts, so a subclass may assign it after
+    axes, merge : tuple of str
+        Read when a stream starts, so a subclass may assign them after
         ``super().__init__``.
 
     Examples
@@ -1045,7 +1041,7 @@ _AXES = (*LOOP_COUNTERS, "segment")
 
 
 def _copy_acquisition(acquisition: Any) -> Any:
-    """Return a copy of an acquisition whose header fields can be assigned without changing the original.
+    """Return a copy of an acquisition with its own header fields.
 
     The copy shares the samples and trajectory.
     """
