@@ -14,7 +14,7 @@ each series, completes it from the stored design and runs your recon plugin.
 Lesson 1 of the {doc}`Course <../examples/course>` runs one acquisition through
 both on the virtual scanner.
 
-## What pulserver does
+## Capabilities
 
 :::{container} capabilities
 
@@ -51,13 +51,13 @@ both on the virtual scanner.
 
 :::
 
-## What the scanner and the engines do
+## Division of responsibility
 
 - **The interpreter** shows the protocol, plays the IR cache and streams the raw data. It holds no sequence or reconstruction logic.
 - **pypulseqpp** designs the sequence; any Pulseq tool can supply an imported chain instead.
 - **The reconstruction engine** is whatever your recon plugin imports, usually bartorch.
 
-## How it works
+## Method
 
 ```{figure} ../_static/architecture.svg
 :figclass: only-light
@@ -71,7 +71,7 @@ The two services between the scanner and the engines, and the design store they 
 The two services between the scanner and the engines, and the design store they share.
 ```
 
-### One acquisition
+### Acquisition flow
 
 1. Each protocol edit: the call evaluates it with your plugin and replies with the achieved values and scan time ({doc}`protocol`).
 2. Scan preparation: the call designs, checks ({doc}`safety-checks`), converts ({doc}`scanner-representation`) and stores, and replies with the identifier.
@@ -86,7 +86,7 @@ protocol. The identifier is the first 18 hexadecimal digits of the identity,
 split into three float32 header fields because a float32 holds every integer
 below $2^{24}$ exactly.
 
-### The store
+### Design store
 
 ```text
 designs/
@@ -103,7 +103,7 @@ designs/
 The proxy reads the Pulseq files, not the cache: the cache is derived for
 playout, and the Pulseq files are the design of record.
 
-### What crosses each boundary
+### Interfaces
 
 | Representation | Written by | Read by |
 | --- | --- | --- |
@@ -115,7 +115,7 @@ playout, and the Pulseq files are the design of record.
 Orchestration is Python, the IR passes are C++ (`src/cpp/ir/`), and the library
 the interpreter links is C89 (`src/c/`), for the vendor toolchains.
 
-## See it run
+## Examples
 
 - {doc}`../generated/gallery/01-course/01_protocol_to_image`: one acquisition
   through both services on the virtual scanner.

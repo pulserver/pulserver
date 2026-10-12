@@ -17,7 +17,7 @@ runs the checks on a design that fails.
 The checks compute estimates; passing them does not establish scanner or
 patient safety.
 
-## What pulserver does
+## Capabilities
 
 :::{container} capabilities
 
@@ -63,7 +63,7 @@ patient safety.
 
 :::
 
-## What the scanner does
+## Division of responsibility
 
 - **SAR, RF coil heating and gradient heating**, in the vendor's routines,
   from the RF pulses and gradients the interpreter passes on, as for a product
@@ -71,7 +71,7 @@ patient safety.
 - **Resampling onto the scanner's rasters**, by decimation or
   piecewise-constant hold, in the vendor's instruction generation.
 
-## How it works
+## Method
 
 ```{figure} ../_static/safety.svg
 :figclass: only-light
@@ -87,7 +87,7 @@ Rotated to the prescription, checked on the physical axes, then refused or
 converted into the IR cache with its sound pressure levels and SAR ratios.
 ```
 
-### The physical frame
+### Physical frame
 
 Two logical axes at 0.8 of the amplitude limit put $0.8\sqrt{2}$ of it on one
 physical axis at 45°. So the sequence is designed under `design_max_grad` and
@@ -96,7 +96,7 @@ on the physical axes against `max_grad` and `max_slew`. The rotation arrives
 in the protocol's `fov_rotation_ij` entries; your sequence function never sees
 it.
 
-### Where the limits come from
+### Limit sources
 
 The interpreter sends a `[Limits]` block with every call
 ({doc}`../user-guide/running`): gradient limits and dead times, the nerve
@@ -112,7 +112,7 @@ back. SAR ratios relate each subsequence's pulses to a 1 ms, 180° hard pulse
 in the coil's default channel weights, the pulse the vendor's SAR routine is
 calibrated for; {doc}`../developer-guide/internals/sar-ratios` derives them.
 
-## See it run
+## Examples
 
 - {doc}`../generated/gallery/01-course/03_scanner_representation`: a design
   refused on PNS, and the same design accepted when made at a lower slew rate.

@@ -1,4 +1,4 @@
-# The reconstruction session
+# Reconstruction session
 
 ```{admonition} TL;DR
 :class: tldr
@@ -14,7 +14,7 @@ on the other end refuses a series it cannot serve, enriches it from its design
 ({doc}`raw-data`), and runs your recon plugin on it. Lesson 4 of the
 {doc}`Course <../examples/course>` runs one series through it.
 
-## What pulserver does
+## Capabilities
 
 :::{container} capabilities
 
@@ -60,12 +60,12 @@ on the other end refuses a series it cannot serve, enriches it from its design
 
 :::
 
-## What the scanner and your plugin do
+## Division of responsibility
 
 - **The client** sends the series and shows what comes back ({doc}`../user-guide/reconstruction-client`).
 - **Your recon plugin** turns the series into images ({doc}`reconstruction`).
 
-## How it works
+## Method
 
 ```{figure} ../_static/session.svg
 :figclass: only-light
@@ -105,7 +105,7 @@ on another computer, with a config naming the plugin or `--forward-config`. A
 {class}`~pulserver.proxy.ReconServer` runs the plugin in its own workers and
 enriches nothing.
 
-## See it run
+## Examples
 
 - {doc}`../generated/gallery/01-course/04_reconstruction_plugin`: one series through the proxy.
 - {doc}`../user-guide/running`: the proxy's options.

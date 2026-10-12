@@ -261,10 +261,10 @@ above govern docstrings.
 | `docs/misc/` | Licensing, related projects, contributors | |
 
 The prose style of one type is not carried into another. An explanation page
-is a TL;DR, a short introduction, *What pulserver does* (a capability list, one
-bold line each, with its code and tests behind a toggle), what the scanner or
-the engines do instead, *How it works* (a figure and a few short subsections)
-and *See it run*; `docs/developer-guide/documentation.md` states the layout.
+is a TL;DR, a short introduction, *Capabilities* (a list, one
+bold line each, with its code and tests behind a toggle), *Division of
+responsibility* (what the scanner or the engines do), *Method* (a figure and
+a few short subsections) and *Examples*; every heading names a concept; `docs/developer-guide/documentation.md` states the layout.
 Explanations are conceptual:
 implementation design, file layouts, tolerances and test inventories go to
 `docs/developer-guide/internals/`. The explanations are one flat list, in the

@@ -353,14 +353,14 @@ An explanation page opens with a **TL;DR** block directly under its title: at mo
 
 #### Organization of an explanatory page
 
-An explanation page states what the library does for the reader, what it leaves to others, and how it works, in this order:
+An explanation page has these sections, in this order. Every heading, the page title included, names a concept as a textbook would (*Segmentation rules*, not *How we cut segments*):
 
 1. **TL;DR.**
 2. **Introduction.** Three to five lines in the second person: the problem, and the Course lesson that shows it.
-3. **What the library does.** A `:::{container} capabilities` list, one bold line per capability. Under each, a muted line names the code and the tests that hold it (`Code: … Tests: *sentence of the test name* (file)`); the page hides these lines behind one toggle, so the list reads as claims and the evidence stays one click away.
-4. **What others do.** Two or three one-line bullets for what the scanner, the engines or the reader's plugin do instead.
-5. **How it works.** A figure, drawn by `scripts/make_artwork.py` in a light and a dark variant, and at most a few short subsections giving the model or rule. Derivations, rule tables and implementation design go to the developer guide's internals pages and are linked, not repeated.
-6. **See it run.** Links to the gallery, the user guide and the API.
+3. **Capabilities.** A `:::{container} capabilities` list, one bold line per capability. Under each, a muted line names the code and the tests that hold it (`Code: … Tests: *sentence of the test name* (file)`); the page hides these lines behind one toggle, so the list reads as claims and the evidence stays one click away.
+4. **Division of responsibility.** Two or three one-line bullets for what the scanner, the engines or the reader's plugin do instead.
+5. **Method.** A figure, drawn by `scripts/make_artwork.py` in a light and a dark variant, and at most a few short subsections giving the model or rule. Derivations, rule tables and implementation design go to the developer guide's internals pages and are linked, not repeated.
+6. **Examples.** Links to the gallery, the user guide and the API.
 
 A capability is stated as the reader observes it, and every capability names a test; a claim no test holds is not listed.
 

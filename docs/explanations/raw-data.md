@@ -1,4 +1,4 @@
-# Raw data: what pulserver adds to MRD
+# MRD enrichment
 
 ```{admonition} TL;DR
 :class: tldr
@@ -16,7 +16,7 @@ recon plugin receives what a Gadgetron reconstruction receives from a product
 sequence. Lesson 4 of the {doc}`Course <../examples/course>` prints the stream
 before and after.
 
-## What pulserver does
+## Capabilities
 
 :::{container} capabilities
 
@@ -53,14 +53,14 @@ before and after.
 
 :::
 
-## What the scanner and your plugin do
+## Division of responsibility
 
 - **The scanner's client** sends every readout in play order, dummies and navigators included, with the design identifier and the recon plugin's name ({doc}`../user-guide/reconstruction-client`).
 - **Your recon plugin** sorts the readouts into k-space by their counters ({doc}`reconstruction`).
 
-## How it works
+## Method
 
-### The field-of-view offset
+### Field-of-view phase
 
 The scanner plays the offset as frequency and phase offsets at the middle of
 each window ({doc}`scanner-representation`), which is the whole phase only
@@ -86,7 +86,7 @@ by its counters and `center_sample` alone. A plugin reads the trajectory in grid
 units through {meth}`~pulserver.recon.ReconBuffer.grid_trajectory`. The full
 rules are in {doc}`../developer-guide/internals/reconstruction-proxy`.
 
-## See it run
+## Examples
 
 - {doc}`../generated/gallery/01-course/04_reconstruction_plugin`: the stream of
   `gre2d` before and after enrichment.

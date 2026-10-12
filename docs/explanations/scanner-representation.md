@@ -1,4 +1,4 @@
-# PulSeg: what the scanner plays
+# PulSeg representation
 
 ```{admonition} TL;DR
 :class: tldr
@@ -15,7 +15,7 @@ terms of PulSeg 2.1-alpha ([HarmonizedMRI/pulseg](https://github.com/HarmonizedM
 Lesson 3 of the {doc}`Course <../examples/course>` converts `gre2d` and looks at
 its segments.
 
-## What pulserver does
+## Capabilities
 
 :::{container} capabilities
 
@@ -55,13 +55,13 @@ its segments.
 
 :::
 
-## What the interpreter does
+## Division of responsibility
 
 - **Prepares each virtual segment once and plays its instances**, loading waves into waveform memory on the cache's schedule.
 - **Generates the scanner's instructions**, resampling waveforms onto the scanner's rasters ({doc}`safety-checks`).
 - **Applies the prescription's rotation**, after each block's own.
 
-## How it works
+## Method
 
 ### The PulSeg model
 
@@ -85,7 +85,7 @@ Base blocks, virtual segments and the execution stream of segment instances.
 An instance plays $\mathbf{g}(t) = R\, s\, \hat{\mathbf{g}}(t)$: the base
 block's normalised waveform, scaled by $s$ and rotated by $R$.
 
-### Finding the repetition
+### Repetition detection
 
 The repetition, the TR the scanner prepares for, is what
 `pypulseqpp.Sequence.repetition` reports for each file of the chain. It starts
@@ -117,7 +117,7 @@ One repetition of three segments played N times: IDs stored once, parameters per
 One repetition of three segments played N times: IDs stored once, parameters per instance.
 ```
 
-### Cutting virtual segments
+### Segmentation rules
 
 Within the repetition, a {class}`~pulserver.ir.Grouping` decides where one
 virtual segment ends and the next begins:
@@ -135,7 +135,7 @@ virtual segment ends and the next begins:
 A repetition whose pulses, timing or arbitrary gradients differ from the
 first plays its own variant of a segment, up to 64 per segment.
 
-### Customizing for a vendor
+### Vendor configuration
 
 The grouping and the number formats the cache is written in are the
 interpreter's, not the sequence's. An interpreter states them in a vendor file
@@ -181,7 +181,7 @@ Two offsets give two caches, and two designs.
 | Periodicity | Not part of the model | Taken from pypulseqpp when present, and used to encode the stream |
 | Multishot gradient variants | One base block with shot variants, chosen per instance by the optional `gradient_shot_index` | No shot index: a gradient that differs between instances is played as a wave from waveform memory, or the run is a variant of its virtual segment |
 
-## See it run
+## Examples
 
 - {doc}`../generated/gallery/01-course/03_scanner_representation`: `gre2d`
   converted, its segments, and what changes from one TR to the next.

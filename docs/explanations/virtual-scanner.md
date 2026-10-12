@@ -1,4 +1,4 @@
-# The virtual scanner
+# Virtual scanner
 
 ```{admonition} TL;DR
 :class: tldr
@@ -15,7 +15,7 @@ the pulses the cache plays, and sends the readouts as a scanner's client does.
 Lesson 6 of the {doc}`Course <../examples/course>` runs a sequence on it; a
 browser build of its console is at <https://pulserver.github.io/MaRGE/>.
 
-## What pulserver does
+## Capabilities
 
 :::{container} capabilities
 
@@ -58,13 +58,13 @@ browser build of its console is at <https://pulserver.github.io/MaRGE/>.
 
 :::
 
-## What is not modelled
+## Limitations
 
 - **RF pulses** act at their centre, without relaxation, as ideal rotations; the phase a selective pulse leaves across its slab is left out.
 - **pTx pulses** sum their channels at unit, in-phase sensitivity.
 - **Coil models** are BART's, not electromagnetic simulations, unless a console is given field maps.
 
-## How it works
+## Method
 
 ```{figure} ../_static/virtual.svg
 :figclass: only-light
@@ -85,7 +85,7 @@ in 1/m along the physical axes, turned by the prescription except in `NOROT`
 blocks. An excitation resets k and a refocusing pulse negates it, at the RF
 centre the design records.
 
-### The Fourier engine
+### Fourier engine
 
 What happens to the magnetization over time is separated from where the tissue
 is. Each class of tissue (equal $T_1$, $T_2$, $T'_2$) is simulated by
@@ -103,7 +103,7 @@ transforms is set by the terms, not by the tissue. The playout then demodulates 
 ADC offsets, as the scanner does. The full model is in
 {doc}`../developer-guide/internals/virtual-scanner`.
 
-## See it run
+## Examples
 
 - {doc}`../generated/gallery/01-course/06_testing_on_the_virtual_scanner`: a sequence played and reconstructed on the virtual scanner.
 - {doc}`../api/virtual`: the phantom, the Fourier engine, the scan clock, the client and the export.

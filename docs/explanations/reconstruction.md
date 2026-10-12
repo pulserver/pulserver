@@ -1,4 +1,4 @@
-# Reconstruction plugins and their context
+# Reconstruction plugins and calibration context
 
 ```{admonition} TL;DR
 :class: tldr
@@ -15,7 +15,7 @@ than a stream, and a context that carries calibration from one series of an
 exam to the next. Lessons 4 and 5 of the {doc}`Course <../examples/course>`
 write such a plugin.
 
-## What pulserver does
+## Capabilities
 
 :::{container} capabilities
 
@@ -58,12 +58,12 @@ write such a plugin.
 
 :::
 
-## What bartorch and your plugin do
+## Division of responsibility
 
 - **bartorch** computes the whitening, the compression basis, the coil maps and the reconstruction.
 - **Your plugin** chooses the gadgets, the axes, the triggers and the reconstruction.
 
-## How it works
+## Method
 
 ```{figure} ../_static/context.svg
 :figclass: only-light
@@ -95,7 +95,7 @@ the one placed nearest the k-space centre. Values are written as returned
 (`float32`, `complex64` or integer), so ratios between the images of a series
 are those of the reconstruction.
 
-### The calibration context
+### Calibration context
 
 Maps estimated from whitened, compressed data describe only data with the same
 channels, whitening, compression and voxel grid. So a stored set records all
@@ -106,7 +106,7 @@ that differed. Nothing is resampled. The model and the comparison are in
 {doc}`../developer-guide/internals/calibration`; units and image headers in
 {doc}`../developer-guide/internals/reconstruction-proxy`.
 
-## See it run
+## Examples
 
 - {doc}`../generated/gallery/01-course/04_reconstruction_plugin`: a plugin over the units of `gre2d`.
 - {doc}`../user-guide/reconstruction-plugins`: writing a plugin, with prewhitening, compression and maps.

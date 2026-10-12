@@ -14,7 +14,7 @@ has no number until the sequence is designed. So every edit in the scanner UI
 is answered by your plugin. Lesson 2 of the {doc}`Course <../examples/course>`
 writes such a plugin.
 
-## What pulserver does
+## Capabilities
 
 :::{container} capabilities
 
@@ -51,12 +51,12 @@ writes such a plugin.
 
 :::
 
-## What the scanner and your plugin do
+## Division of responsibility
 
 - **Your plugin decides what `evaluate` reports**: one designed TR, times from block durations, or the request accepted as it is. The default accepts the protocol and builds nothing.
 - **The interpreter draws the UI**, converts microseconds to the milliseconds the operator types, and fills the prescription entries.
 
-## How it works
+## Method
 
 ### Resolution
 
@@ -90,7 +90,7 @@ the SI argument (`1e-3` for a field of view in mm). Because replies carry
 exactly what the scanner stores, sending a resolved protocol back gives the
 same protocol, and the same design ({doc}`architecture`).
 
-## See it run
+## Examples
 
 * {doc}`../generated/gallery/01-course/02_sequence_plugin` — a plugin written one entry at a time, and its `evaluate`.
 * {doc}`../user-guide/scanner-sequences` — writing a scanner sequence.
