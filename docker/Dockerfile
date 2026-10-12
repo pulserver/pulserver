@@ -1,4 +1,4 @@
-# pulserver with its console, BrainWeb and coil extras and PyHySCO,
+# pulserver with PyHySCO,
 # BrainWeb's normal brain, and the field maps and VOPs of the virtual
 # scanner's coils solved in it, on which every exam is scanned. Run without a command, it serves the
 # console of the virtual scanner on port 8765, reconstructing each scan in its
@@ -29,7 +29,7 @@ FROM python:3.12-slim
 RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
 
 COPY --from=build /wheels /wheels
-RUN pip install --no-cache-dir "$(echo /wheels/pulserver-*.whl)[console,brainweb,coils]" \
+RUN pip install --no-cache-dir "$(echo /wheels/pulserver-*.whl)" \
  && rm -rf /wheels
 
 # PyHySCO, with which the EPI reconstruction corrects each image and volume

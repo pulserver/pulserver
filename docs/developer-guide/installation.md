@@ -49,6 +49,4 @@ bash scripts/build_docs.sh
 ```
 
 The script builds the HTML into `docs/build/html` and executes every gallery
-script while it does; a Sphinx warning fails the build. The Course scans in
-the `body/head48` coil, whose sensitivities bartorch samples with the `coils`
-extra, so install `'.[dev,doc,coils]'` to build every page.
+script while it does; a Sphinx warning fails the build.
