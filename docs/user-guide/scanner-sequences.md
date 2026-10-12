@@ -379,49 +379,67 @@ function takes, at the same user entry in every plugin, each as a
 | `user7` | Echo spacing, in ms; 0 the shortest |
 | `user8` | Refocusing flip angle, in degrees |
 | `user9` | CAIPIRINHA shift, in partitions per acquired line |
+| `user10`, `user11` | Wave-encoding amplitude, in mT/m, and cycles per readout, shown while the `wave` option is on |
 
 `bssfp3d` takes its number of phase cycles, each a train with its own RF phase
 increment, as `user12`.
 
-### Module constants
+### Console controls
 
-Choices a console has no entry for are module constants of the plugin, set to
-the sequence function's default unless stated. To change one, copy the plugin
-file into a `--plugins` directory and set the constant there; the copy replaces
-the shipped plugin.
+The excitation, the fat saturation, the multiband factor and the explicit
+saturation bands are the console's own controls:
 
-| Plugin | Constant | Choice |
+| Plugin | Entry | Choice |
 | --- | --- | --- |
-| `gre2d`, `se2d` | `BANDS` | Spatial saturation bands played before every excitation, 2 by default; 0 plays none |
-| 3D Cartesian, stack and MPRAGE plugins | `EXCITATION` | `"slab"`, `"spsp"` (water only) or `"nonselective"`; `epi3d` ships `"spsp"` |
-| `epi2d` | `FAT_SATURATION` | Fat saturation before every shot; `True` by default |
-| `gre3d`, `se3d`, `gre_multiecho3d` | `ELLIPTICAL` | Only the phase encodes inside the ky-kz ellipse |
-| `gre_multiecho2d`, `gre_multiecho3d` | `FLYBACK` | Monopolar echoes; `False` reads even echoes reversed |
-| `fse3d` | `ORDERING` | `"radial"`, or `"shuffling"`: Poisson-disc views in random order |
-| `zte3d` | `SCHEME` | Spokes ordered `"spiral"` or `"meridian"` |
-| `bssfp2d` | `RETROSPECTIVE` | ECG gating: `False`, prospective, each heartbeat triggered and acquired once per cardiac phase; `True`, retrospective, each segment cycled over a heartbeat and binned into cardiac phases by the reconstruction |
+| 3D Cartesian, stack and MPRAGE plugins | `excitation` | `slab`, `spsp` (water only) or `nonselective`; `slab` by default, `spsp` for `epi3d` |
+| `epi2d` | `FatSat` | Fat saturation before every shot; on by default |
+| `epi2d` | `multiband` | Simultaneous multislice factor; 1 plays one slice per excitation |
+| `gre2d`, `se2d` | `exsat_mask` | The explicit saturation bands placed, bit `n - 1` for band `n`; none by default |
 
 The saturation bands of `gre2d` and `se2d` are placed graphically, as a
-scanner's console places an explicit band, and are always on. `exsat_mask` is a
-configuration the plugin declares, with bit `n - 1` set for each band `n` it
-plays; `exsat<n>_normal_x`, `_y` and `_z`, `exsat<n>_loc` and
-`exsat<n>_thickness` give each band's normal along the physical axes, the
-distance of its centre from the isocentre along that normal, and its thickness,
-in mm. The field-of-view offset and rotation leave a band where it was placed,
-and a band not yet placed sits 150 mm from the isocentre, outside the head.
+scanner's console places an explicit band, and each is played before every
+excitation while it is placed; a plugin offers as many bands as its module
+constant `BANDS`, 2, and refuses a mask placing more.
+`exsat<n>_normal_x`, `_y` and `_z`, `exsat<n>_loc` and `exsat<n>_thickness`
+give each band's normal along the physical axes, the distance of its centre
+from the isocentre along that normal, and its thickness, in mm. The
+field-of-view offset and rotation leave a band where it was placed.
 
-Optional features are switched by a module constant, off in the shipped files.
-A switch adds the entries the feature needs, a scanner entry where one exists
-and a user entry otherwise:
+### Options
 
-| Plugin | Constant | Feature | Entries added |
+Choices that set what a sequence is, rather than a value an operator tunes from
+scan to scan, are options: module constants a plugin reads through
+{func}`~pulserver.design.option`. A numbered parameter set selects them. Set
+`N` of a plugin whose file is `<script>.py` is the TOML file
+`parameters/<script>/<NN>.toml` beside the plugin directory, its number in two
+digits; a slot linked to a script, such as `sequence3.py` linked to
+`src/fse3d.py`, reads that script's directory. Set 0 plays every option at its
+default. A file names only the options it changes:
+
+```toml
+# parameters/fse3d/01.toml
+refocusing = "dual_region"
+navigator = true
+```
+
+A file naming an option the plugin does not declare, or giving one a value it
+does not take, is refused. The options join the design's identity and its
+manifest, so a design is a function of the set's contents, not of its number.
+`pulserver design` takes the set as `--parameter-set` and the directory as
+`--parameters`; `src/pulserver/_zoo/parameters/` ships a file for each choice
+below.
+
+| Plugin | Option | Choice | Entries added |
 | --- | --- | --- | --- |
-| `epi2d` | `MULTIBAND` | Simultaneous multislice | `multiband` |
-| `fse3d` | `OPTIMIZED` | Refocusing train designed with blochsim, shared by every shot | Flip angle: the refocusing angle at the TE echo |
-| `fse3d` | `DUAL_REGION` | Trains designed with blochsim for the centre and the periphery of k-space, each shot's train a cubic step between them; `TR` and `ETL` are the centre's | Flip angle, as `OPTIMIZED`; `user12` and `user13`: TR and ETL at the periphery |
-| `fse3d`, `mprage3d` | `NAVIGATOR` | Three-plane navigators; the design sets `EnablePmc`, and `pmc` publishes each pose to the scan | None |
-| `gre3d`, `gre_multiecho3d`, `mprage3d`, `fse3d` | `WAVE` | Wave-CAIPI at `WAVE_AMPLITUDE` (T/m) and `WAVE_CYCLES`; the calibration region is acquired first without the wave, and `pics` and `pmc` reconstruct the wave-encoded volume | None |
-| `gre_spiral2d`, `se_spiral2d`, `gre_stack_of_spirals3d`, `se_stack_of_spirals3d`, `mprage_stack_of_spirals3d` | `VARIABLE_DENSITY` | Variable-density spirals | `user12`: periphery undersampling |
+| `fse3d` | `refocusing` | `"constant"`; `"optimized"`, a train designed with blochsim and shared by every shot; or `"dual_region"`, trains designed for the centre and the periphery of k-space, each shot's train a cubic step between them, `TR` and `ETL` being the centre's | Flip angle: the refocusing angle at the TE echo; `"dual_region"` also adds `user12` and `user13`, TR and ETL at the periphery |
+| `fse3d` | `ordering` | `"radial"`, or `"shuffling"`: Poisson-disc views in random order | None |
+| `fse3d`, `mprage3d` | `navigator` | Three-plane navigators; the design sets `EnablePmc`, and `pmc` publishes each pose to the scan | None |
+| `gre3d`, `gre_multiecho3d`, `mprage3d`, `fse3d` | `wave` | Wave-CAIPI; the calibration region is acquired first without the wave, and `pics` and `pmc` reconstruct the wave-encoded volume | `user10` and `user11`: wave amplitude and cycles |
+| `gre3d`, `se3d`, `gre_multiecho3d` | `elliptical` | Only the phase encodes inside the ky-kz ellipse; `true` by default | None |
+| `gre_multiecho2d`, `gre_multiecho3d` | `flyback` | Monopolar echoes; `false` reads even echoes reversed | None |
+| `zte3d` | `scheme` | Spokes ordered `"spiral"` or `"meridian"` | None |
+| `bssfp2d` | `retrospective` | ECG gating: `false`, prospective, each heartbeat triggered and acquired once per cardiac phase; `true`, retrospective, each segment cycled over a heartbeat and binned into cardiac phases by the reconstruction | None |
+| `gre_spiral2d`, `se_spiral2d`, `gre_stack_of_spirals3d`, `se_stack_of_spirals3d`, `mprage_stack_of_spirals3d` | `variable_density` | Variable-density spirals | `user12`: periphery undersampling |
 
 ### Diffusion tables
 

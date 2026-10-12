@@ -10,18 +10,14 @@ from pulserver._zoo._inversion import inversion_train, shots_of_stars
 from pulserver._zoo._slab import slab
 from pulserver._zoo._user import shortest_at_zero, user_entries
 from pulserver.design import (
+    ChoiceParam,
     FloatParam,
     IntParam,
     SequencePlugin,
     StatedParam,
     TimeParam,
 )
-from pulserver.protocol import ImagingMode, TEPreset, TRPreset, UIParam
-
-#: The excitation, one of ``pypulseqpp.sequences.EXCITATIONS``: ``"slab"``
-#: selects the slab, ``"spsp"`` excites water alone in it and
-#: ``"nonselective"`` plays a hard pulse.
-EXCITATION = "slab"
+from pulserver.protocol import Excitation, ImagingMode, TEPreset, TRPreset, UIParam
 
 
 class MprageStackOfStars3D(SequencePlugin):
@@ -31,9 +27,11 @@ class MprageStackOfStars3D(SequencePlugin):
         slab(functools.partial(mprage_stack_of_stars3d, partition_angle_shift="none")),
         "esp",
     )
-    app = functools.partial(app, excitation=EXCITATION)
     protocol = {
         UIParam.IMAGING_MODE: StatedParam(ImagingMode.THREE_D),
+        UIParam.EXCITATION: ChoiceParam(
+            "excitation", Excitation, default=Excitation.SLAB
+        ),
         UIParam.FLIP: FloatParam(
             "flip_angle_deg", unit="deg", range_min=1.0, range_max=90.0
         ),

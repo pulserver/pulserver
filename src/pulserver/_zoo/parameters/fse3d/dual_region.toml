@@ -1,0 +1,2 @@
+# Optimized refocusing trains for the centre and the periphery of k-space.
+refocusing = "dual_region"

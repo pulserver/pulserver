@@ -22,11 +22,12 @@ from pulserver.design import (
     SequencePlugin,
     StatedParam,
     TimeParam,
+    option,
 )
 from pulserver.protocol import ImagingMode, TRPreset, UIParam
 
 #: Order of the spokes over the sphere, ``"spiral"`` or ``"meridian"``.
-SCHEME = "spiral"
+SCHEME = option("scheme", "spiral", choices=("spiral", "meridian"))
 
 
 class Zte3D(SequencePlugin):

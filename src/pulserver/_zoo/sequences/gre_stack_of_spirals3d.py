@@ -10,23 +10,20 @@ from pulserver._zoo._evaluation import evaluation, stack_of_spirals
 from pulserver._zoo._slab import slab
 from pulserver._zoo._user import OWN, user_entries
 from pulserver.design import (
+    ChoiceParam,
     Description,
     FloatParam,
     IntParam,
     SequencePlugin,
     StatedParam,
     TimeParam,
+    option,
 )
-from pulserver.protocol import ImagingMode, TEPreset, TRPreset, UIParam
+from pulserver.protocol import Excitation, ImagingMode, TEPreset, TRPreset, UIParam
 
 #: Variable-density spirals: adds how much sparser the periphery is sampled
 #: than the centre as a user entry.
-VARIABLE_DENSITY = False
-
-#: The excitation, one of ``pypulseqpp.sequences.EXCITATIONS``: ``"slab"``
-#: selects the slab, ``"spsp"`` excites water alone in it and
-#: ``"nonselective"`` plays a hard pulse.
-EXCITATION = "slab"
+VARIABLE_DENSITY = option("variable_density", False)
 
 
 class GreStackOfSpirals3D(SequencePlugin):
@@ -36,9 +33,11 @@ class GreStackOfSpirals3D(SequencePlugin):
             density="variable" if VARIABLE_DENSITY else "constant",
         )
     )
-    app = functools.partial(app, excitation=EXCITATION)
     protocol = {
         UIParam.IMAGING_MODE: StatedParam(ImagingMode.THREE_D),
+        UIParam.EXCITATION: ChoiceParam(
+            "excitation", Excitation, default=Excitation.SLAB
+        ),
         UIParam.FLIP: FloatParam(
             "flip_angle_deg", unit="deg", range_min=1.0, range_max=90.0
         ),

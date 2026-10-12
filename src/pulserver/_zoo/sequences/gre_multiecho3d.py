@@ -6,48 +6,39 @@ from pypulseqpp.sequences.sequence.gre_multiecho3D_sequence import gre_multiecho
 
 from pulserver._zoo._evaluation import cartesian_3d, evaluation
 from pulserver._zoo._slab import slab
-from pulserver._zoo._user import shortest_at_zero, user_entries
+from pulserver._zoo._user import shortest_at_zero, user_entries, wave_entries
 from pulserver.design import (
+    ChoiceParam,
     FloatParam,
     IntParam,
     SequencePlugin,
     StatedParam,
     TimeParam,
+    option,
 )
-from pulserver.protocol import ImagingMode, TEPreset, TRPreset, UIParam
+from pulserver.protocol import Excitation, ImagingMode, TEPreset, TRPreset, UIParam
 
 #: Wave-CAIPI: sinusoidal gradients on the phase- and partition-encoding axes
-#: during each readout, the calibration region acquired first without them.
-WAVE = False
-#: Peak wave-encoding gradient amplitude requested, in T/m.
-WAVE_AMPLITUDE = 6e-3
-#: Wave periods across the sampling window.
-WAVE_CYCLES = 8
-
-#: The excitation, one of ``pypulseqpp.sequences.EXCITATIONS``: ``"slab"``
-#: selects the slab, ``"spsp"`` excites water alone in it and
-#: ``"nonselective"`` plays a hard pulse.
-EXCITATION = "slab"
+#: during each readout, the calibration region acquired first without them;
+#: adds their amplitude and cycles as user entries.
+WAVE = option("wave", False)
 
 #: Sample only the phase encodes inside the ky-kz ellipse.
-ELLIPTICAL = True
+ELLIPTICAL = option("elliptical", True)
 
 #: Monopolar echo train, each echo rewound; bipolar, with even echoes read
 #: backwards, otherwise.
-FLYBACK = True
+FLYBACK = option("flyback", True)
 
 
 class GreMultiecho3D(SequencePlugin):
     app = shortest_at_zero(slab(gre_multiecho3d), "echo_spacing")
-    if WAVE:
-        app = functools.partial(
-            app, wave_amplitude=WAVE_AMPLITUDE, wave_cycles=WAVE_CYCLES
-        )
-    app = functools.partial(
-        app, excitation=EXCITATION, elliptical_sampling=ELLIPTICAL, flyback=FLYBACK
-    )
+    app = functools.partial(app, elliptical_sampling=ELLIPTICAL, flyback=FLYBACK)
     protocol = {
         UIParam.IMAGING_MODE: StatedParam(ImagingMode.THREE_D),
+        UIParam.EXCITATION: ChoiceParam(
+            "excitation", Excitation, default=Excitation.SLAB
+        ),
         UIParam.FLIP: FloatParam(
             "flip_angle_deg", unit="deg", range_min=1.0, range_max=90.0
         ),
@@ -81,6 +72,9 @@ class GreMultiecho3D(SequencePlugin):
         UIParam.RY: IntParam("ry", range_min=1, range_max=4),
         UIParam.RZ: IntParam("rz", range_min=1, range_max=4),
     }
+
+    if WAVE:
+        protocol |= wave_entries()
 
     protocol |= user_entries(app, protocol)
 

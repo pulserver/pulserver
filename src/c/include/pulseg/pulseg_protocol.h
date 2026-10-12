@@ -216,11 +216,10 @@ extern "C"
 #define PULSEG_PARAM_FOV_ROTATION_33 145
 /* --- Gating --- */
 #define PULSEG_PARAM_HEART_RATE 146
-/* --- Explicit saturation bands: the mask is a configuration
- *     (PULSEG_PTYPE_CONFIG) the sequence declares, bit n - 1 set for each
- *     band n it plays; each band's normal along the physical axes, its
- *     centre's distance from the isocentre along it and its thickness, in
- *     mm --- */
+/* --- Explicit saturation bands: the mask has bit n - 1 set for each band
+ *     n the operator places, and its range spans the bands the sequence
+ *     offers; each band's normal along the physical axes, its centre's
+ *     distance from the isocentre along it and its thickness, in mm --- */
 #define PULSEG_PARAM_EXSAT_MASK 147
 #define PULSEG_PARAM_EXSAT1_NORMAL_X 148
 #define PULSEG_PARAM_EXSAT1_NORMAL_Y 149
@@ -254,7 +253,9 @@ extern "C"
 #define PULSEG_PARAM_EXSAT6_THICK 177
 /* --- Diffusion table --- */
 #define PULSEG_PARAM_DIFF_TABLE 178
-#define PULSEG_PARAM_COUNT 179 /* sentinel */
+/* --- Excitation: selective, spectral-spatial or nonselective --- */
+#define PULSEG_PARAM_EXCITATION 179
+#define PULSEG_PARAM_COUNT 180 /* sentinel */
 
     /* ================================================================== */
     /*  Parameter types                                                   */

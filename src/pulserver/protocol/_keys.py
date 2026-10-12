@@ -122,6 +122,8 @@ class IntKey(StrEnum):
     NSLICES = "nslices"
     NUM_SLABS = "num_slabs"
     OVERLAP_LOCATIONS = "overlap_locations"
+    # Bit n - 1 set for each explicit saturation band n the operator places.
+    EXSAT_MASK = "exsat_mask"
 
 
 class BoolKey(StrEnum):
@@ -139,13 +141,15 @@ class EnumKey(StrEnum):
     """Keys the interpreter declares as string lists.
 
     Their options are :class:`SequenceType`, :class:`ImagingMode`,
-    :class:`PreparationType` and :class:`TriggerType`, in that order.
+    :class:`PreparationType`, :class:`TriggerType` and :class:`Excitation`, in
+    that order.
     """
 
     SEQUENCE_TYPE = "sequence_type"
     IMAGING_MODE = "imaging_mode"
     PREPARATION_TYPE = "preparation_type"
     TRIGGER_TYPE = "trigger_type"
+    EXCITATION = "excitation"
 
 
 class ConfigKey(StrEnum):
@@ -157,7 +161,6 @@ class ConfigKey(StrEnum):
     """
 
     ENABLE_SAR_BURST_MODE = "enable_sar_burst_mode"
-    EXSAT_MASK = "exsat_mask"
 
 
 class UserKey(StrEnum):
@@ -353,6 +356,7 @@ class UIParam:
     NSLICES = IntKey.NSLICES
     NUM_SLABS = IntKey.NUM_SLABS
     OVERLAP_LOCATIONS = IntKey.OVERLAP_LOCATIONS
+    EXSAT_MASK = IntKey.EXSAT_MASK
 
     FAT_SAT = BoolKey.FAT_SAT
     SPOILER = BoolKey.SPOILER
@@ -365,6 +369,7 @@ class UIParam:
     IMAGING_MODE = EnumKey.IMAGING_MODE
     PREPARATION_TYPE = EnumKey.PREPARATION_TYPE
     TRIGGER_TYPE = EnumKey.TRIGGER_TYPE
+    EXCITATION = EnumKey.EXCITATION
 
     @staticmethod
     def user_value(n: int) -> UserKey:
@@ -458,6 +463,18 @@ class TriggerType(StrEnum):
     NONE = "none"
     RESPIRATORY = "physio1"
     ECG = "physio2"
+
+
+class Excitation(StrEnum):
+    """Options of ``excitation``.
+
+    The values are the excitations ``pypulseqpp.sequences.EXCITATIONS``
+    names: ``spsp`` excites water alone within the slab.
+    """
+
+    SLAB = "slab"
+    SPSP = "spsp"
+    NONSELECTIVE = "nonselective"
 
 
 #: Every wire name of the interpreter's parameter table, with its key.

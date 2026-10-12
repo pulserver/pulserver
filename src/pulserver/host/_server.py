@@ -35,8 +35,10 @@ def answer(request: Mapping[str, Any]) -> tuple[int, str]:
     text of a ``[Limits]`` block), ``store``, ``push`` and ``input`` (the
     block the command reads from standard input). ``store`` is passed to
     ``generate`` and ``import`` only, and ignored by the other calls.
-    ``exam``, for ``validate`` and ``generate``, is the directory of the
-    current exam's cache. ``rf_definitions``, for ``list``, and
+    ``parameter_set`` and ``parameters``, for the calls that take a plugin,
+    select the plugin's parameter file and its directory. ``exam``, for
+    ``validate`` and ``generate``, is the directory of the current exam's
+    cache. ``rf_definitions``, for ``list``, and
     ``rf_layout``, for ``validate``, ask when true for the RF block of the
     reply.
     """
@@ -49,6 +51,10 @@ def answer(request: Mapping[str, Any]) -> tuple[int, str]:
     if request.get("plugin") is not None:
         inputs["plugins"] = directories(request["plugins"])
         inputs["plugin"] = str(request["plugin"])
+        if request.get("parameter_set"):
+            inputs["parameter_set"] = int(request["parameter_set"])
+        if request.get("parameters"):
+            inputs["parameters"] = str(request["parameters"])
     if request.get("limits") is not None:
         inputs["limits"] = parse_limits(str(request["limits"]))
     if request.get("store") is not None and call in ("generate", "import"):

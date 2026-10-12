@@ -61,6 +61,7 @@ static const pulseg_param_entry g_param_table[] = {
     {"imaging_mode", PULSEG_PARAM_IMAGING_MODE, PULSEG_PTYPE_STRINGLIST},
     {"preparation_type", PULSEG_PARAM_PREP_TYPE, PULSEG_PTYPE_STRINGLIST},
     {"trigger_type", PULSEG_PARAM_TRIGGER_TYPE, PULSEG_PTYPE_STRINGLIST},
+    {"excitation", PULSEG_PARAM_EXCITATION, PULSEG_PTYPE_STRINGLIST},
     /* Flags */
     {"FatSat", PULSEG_PARAM_FAT_SAT, PULSEG_PTYPE_BOOL},
     {"Spoiler", PULSEG_PARAM_SPOILER, PULSEG_PTYPE_BOOL},
@@ -87,7 +88,7 @@ static const pulseg_param_entry g_param_table[] = {
     /* Gating */
     {"heart_rate", PULSEG_PARAM_HEART_RATE, PULSEG_PTYPE_INT},
     /* Explicit saturation bands */
-    {"exsat_mask", PULSEG_PARAM_EXSAT_MASK, PULSEG_PTYPE_CONFIG},
+    {"exsat_mask", PULSEG_PARAM_EXSAT_MASK, PULSEG_PTYPE_INT},
     {"exsat1_normal_x", PULSEG_PARAM_EXSAT1_NORMAL_X, PULSEG_PTYPE_FLOAT},
     {"exsat1_normal_y", PULSEG_PARAM_EXSAT1_NORMAL_Y, PULSEG_PTYPE_FLOAT},
     {"exsat1_normal_z", PULSEG_PARAM_EXSAT1_NORMAL_Z, PULSEG_PTYPE_FLOAT},

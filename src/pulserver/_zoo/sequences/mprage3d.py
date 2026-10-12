@@ -1,6 +1,5 @@
 """pypulseqpp's 3D MPRAGE bound to the scanner UI, its partitions counted by the number of slices."""
 
-import functools
 import itertools
 
 import pypulseqpp as pp
@@ -9,33 +8,27 @@ from pypulseqpp.sequences.sequence.mprage3D_sequence import mprage3d
 from pulserver._zoo._evaluation import achieved, arguments, rf_layout, waved
 from pulserver._zoo._pmc import navigated
 from pulserver._zoo._slab import slab
-from pulserver._zoo._user import shortest_at_zero, user_entries
+from pulserver._zoo._user import shortest_at_zero, user_entries, wave_entries
 from pulserver.design import (
+    ChoiceParam,
     Evaluation,
     FloatParam,
     IntParam,
     SequencePlugin,
     StatedParam,
     TimeParam,
+    option,
 )
-from pulserver.protocol import ImagingMode, TEPreset, TRPreset, UIParam
+from pulserver.protocol import Excitation, ImagingMode, TEPreset, TRPreset, UIParam
 
 #: Three-plane navigators after each train, whose pose the ``pmc``
 #: reconstruction states to the scan.
-NAVIGATOR = False
+NAVIGATOR = option("navigator", False)
 
 #: Wave-CAIPI: sinusoidal gradients on the phase- and partition-encoding axes
-#: during each readout, the calibration region acquired first without them.
-WAVE = False
-#: Peak wave-encoding gradient amplitude requested, in T/m.
-WAVE_AMPLITUDE = 6e-3
-#: Wave periods across the sampling window.
-WAVE_CYCLES = 8
-
-#: The excitation, one of ``pypulseqpp.sequences.EXCITATIONS``: ``"slab"``
-#: selects the slab, ``"spsp"`` excites water alone in it and
-#: ``"nonselective"`` plays a hard pulse.
-EXCITATION = "slab"
+#: during each readout, the calibration region acquired first without them;
+#: adds their amplitude and cycles as user entries.
+WAVE = option("wave", False)
 
 
 class Mprage3D(SequencePlugin):
@@ -44,13 +37,11 @@ class Mprage3D(SequencePlugin):
         if NAVIGATOR
         else shortest_at_zero(slab(mprage3d), "esp")
     )
-    if WAVE:
-        app = functools.partial(
-            app, wave_amplitude=WAVE_AMPLITUDE, wave_cycles=WAVE_CYCLES
-        )
-    app = functools.partial(app, excitation=EXCITATION)
     protocol = {
         UIParam.IMAGING_MODE: StatedParam(ImagingMode.THREE_D),
+        UIParam.EXCITATION: ChoiceParam(
+            "excitation", Excitation, default=Excitation.SLAB
+        ),
         UIParam.FLIP: FloatParam(
             "flip_angle_deg", unit="deg", range_min=1.0, range_max=90.0
         ),
@@ -87,6 +78,9 @@ class Mprage3D(SequencePlugin):
         UIParam.RY: IntParam("ry", range_min=1, range_max=4),
         UIParam.RZ: IntParam("rz", range_min=1, range_max=4),
     }
+
+    if WAVE:
+        protocol |= wave_entries()
 
     protocol |= user_entries(app, protocol)
 

@@ -124,7 +124,7 @@ GRE2D_LISTING = block(
         "slice_thickness: float|typein|5.0|1.0|20.0|1.0|mm",
         "Ry: int|typein|1|1|4|1|",
         "enable_saturation_ui: config|1",
-        "exsat_mask: config|3",
+        "exsat_mask: int|typein|0|0|3|1|",
         "exsat1_normal_x: float|typein|1.0|-1.0|1.0|0.001|",
         "exsat1_normal_y: float|typein|0.0|-1.0|1.0|0.001|",
         "exsat1_normal_z: float|typein|0.0|-1.0|1.0|0.001|",
