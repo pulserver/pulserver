@@ -4,13 +4,13 @@ Installing pulserver, running its services and writing the plugins they load.
 The concepts behind them are in {doc}`../explanations/index`, and the exact
 interfaces, units and defaults in {doc}`../api/index`.
 
-| Page | Task |
+| Page | Contents |
 | --- | --- |
-| {doc}`running` | Run the design calls, the warm design server, the reconstruction proxy and the reconstruction server, and check a sequence plays as written. |
-| {doc}`scanner-sequences` | Bind a sequence function to the scanner protocol. |
-| {doc}`reconstruction-plugins` | Write a reconstruction plugin and run it offline. |
-| {doc}`reconstruction-client` | Send a series to the proxy from a scanner's reconstruction client. |
-| {doc}`virtual-scanner` | Scan a phantom through a stored design, the proxy and a reconstruction plugin, without a scanner. |
+| {doc}`running` | Design calls, design server, reconstruction proxy and server, playout validation. |
+| {doc}`scanner-sequences` | Sequence plugins, protocol entries and evaluation. |
+| {doc}`reconstruction-plugins` | Reconstruction plugins and offline reconstruction. |
+| {doc}`reconstruction-client` | Messages and header of a reconstruction client. |
+| {doc}`virtual-scanner` | Phantom scans through a stored design, the proxy and a plugin. |
 
 ```{toctree}
 :hidden:
