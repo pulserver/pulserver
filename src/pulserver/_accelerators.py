@@ -33,7 +33,7 @@ def require(attribute: str | None = None) -> Any:
 
     Parameters
     ----------
-    attribute
+    attribute : str, default=None
         Symbol the caller needs, checked at load so a binary that predates it
         fails here rather than at the call.
 

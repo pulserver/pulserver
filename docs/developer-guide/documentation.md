@@ -333,6 +333,8 @@ A separate example is justified when it studies something across objects, or goe
 
 The examples landing page carries a **Course** table and a **Tours** table. When examples fall into categories, each category gets a landing page the documentation owns, carrying one or two factual sentences and a table of what is below it. A table is preferred to a wall of thumbnails once a category holds more than a handful of examples, because a reader looking for one sequence or one module reads names rather than pictures.
 
+Every landing table, in every section, has two columns or, on the API landing page, three: the linked page (and its module), then **Contents**. A Contents cell is a short technical noun phrase naming what the page holds (*Single-shot EPI: blurring along the echo train and Nyquist ghosting from gradient delays.*), never a question, an instruction or a narrative sentence.
+
 Global navigation carries the gallery and its categories, to the depth at which a category is still something a reader would look for on its own. Below that depth, an example is reached from the table on its category's page and from cross-references, not from the navigation tree.
 
 Give each category a name that states what its examples have in common. Do not add prose to fill the page.

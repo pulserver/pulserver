@@ -68,24 +68,27 @@ class Scan:
 
     Parameters
     ----------
-    seq_path
+    seq_path : Path | str
         The first file of the sequence's chain, beside its cache.
-    tissue
+    tissue : Tissue
         The phantom's tissue.
-    cache_ext
+    cache_ext : str, default='.pseg'
         The extension of the cache beside each file.
-    rotation
+    rotation : np.ndarray, default=None
         ``(3, 3)`` rotation of the prescription from logical to physical axes,
         a reflection included; the identity by default.
-    centre
+    centre : np.ndarray, default=None
         ``(3,)`` the prescription's centre along the physical axes, in m; the
         isocentre by default.
-    device
+    device : str, default=None
         Where the Fourier engine runs, as
         :class:`~pulserver.virtual.FourierPlayer` takes it.
-    motion, girf
-        How the subject moves and the gradients' impulse response, as
-        :class:`~pulserver.virtual.FourierPlayer` takes them.
+    motion : RigidMotion, default=None
+        How the subject moves, as :class:`~pulserver.virtual.FourierPlayer`
+        takes it.
+    girf : Girf, default=None
+        The gradients' impulse response, as
+        :class:`~pulserver.virtual.FourierPlayer` takes it.
     """
 
     def __init__(
@@ -151,28 +154,28 @@ class Scan:
 
         Parameters
         ----------
-        length
+        length : float, default=0.1
             The scan time a span lasts at least, in s, unless it ends the
             scan's last stretch.
-        speed
+        speed : float, default=None
             How many times as fast as a scanner the scan is played. Its clock
             starts once the simulation, at the rate it has run, stays ahead of
             the clock to the end of the scan, and each span is yielded once the
             clock has passed its end. A stretch not yet simulated by its start
             holds the clock until it is. As fast as the stretches are
             simulated when None.
-        sound
+        sound : bool, default=True
             Whether the spans carry their sound.
-        sample_rate
+        sample_rate : float, default=SAMPLE_RATE
             Audio sample rate, in Hz.
-        channel_weights
+        channel_weights : Sequence[float], default=(1.0, 1.0, 1.0)
             Weights of the x, y and z axes in the sound.
-        preparing
+        preparing : Callable[[float], None], default=None
             Called about twice a second until the clock starts, at a speed,
             with the wall-clock time left before it does, in s, or None before
             a stretch that acquires has been simulated. An exception
             it raises ends the scan, and is raised where the spans are taken.
-        heard
+        heard : Callable[[Chunk], None], default=None
             Called with each span as its sound starts to play: at a speed,
             once the clock reaches the span's start, a span before the span is
             yielded; without one, just before it is yielded.

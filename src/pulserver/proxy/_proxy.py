@@ -264,50 +264,50 @@ class ReconProxy(_Listener):
 
     Parameters
     ----------
-    store
+    store : Path | str
         Directory of designs, as the design calls write it; read only.
-    plugins
+    plugins : PluginPath, default=None
         Directories of reconstruction plugin files, ``<plugin>.py``, in search
         order; required unless the proxy forwards.
-    slots
+    slots : int, default=None
         Series reconstructed at once; derived from memory and the GPUs when
         ``None``.
-    gpu_slots
+    gpu_slots : int, default=1
         Series reconstructed at once on each GPU, when ``slots`` is ``None``.
-    spares
+    spares : int, default=1
         Warm worker processes waiting for a series.
-    recon_timeout
+    recon_timeout : float, default=None
         Seconds a reconstruction may take after the stream ends before it is
         stopped and the client told so; ``None`` waits for its close. A local
         worker is terminated; a forwarded series' connection is closed.
-    queue
+    queue : Path | str, default=None
         Directory the queued series are written to; a temporary directory,
         removed on :meth:`close`, when ``None``.
-    slot_directory
+    slot_directory : Path | str, default=None
         Directory the slots are held in, shared with every other proxy on this
         host so they count against one set;
         :data:`~pulserver.recon._runtime.concurrency.DEFAULT_SLOT_DIRECTORY`
         when ``None``.
-    exam_directory
+    exam_directory : Path | str, default=None
         Directory the caches of an exam are held in, shared with every other
         proxy on this host so a map one series measures reaches a series on
         another;
         :data:`~pulserver.recon._runtime.exam.DEFAULT_EXAM_DIRECTORY` when
         ``None``. An exam's directory is removed when the last proxy on that
         exam lets go of it.
-    forward
+    forward : tuple[str, int], default=None
         ``(host, port)`` of the MRD server that reconstructs every series;
         local workers when ``None``.
-    forward_config
+    forward_config : str, default=None
         Config name sent to that server instead of the reconstruction plugin.
-    dicom
+    dicom : bool, default=False
         Convert each image to DICOM, from the enriched header, before it is
         relayed, whatever reconstructed it. Needed by a client that reads
         DICOM alone, with a plugin that emits images.
-    save_to
+    save_to : Path | str, default=None
         Directory each series is kept in, as the scanner sent it, so that it
         can be reconstructed again offline; not kept when ``None``.
-    idle_timeout
+    idle_timeout : float, default=None
         Seconds without a client after which :meth:`serve` returns, counted
         from the last client to leave; never when ``None``.
 
@@ -417,37 +417,37 @@ class ReconServer(_Listener):
 
     Parameters
     ----------
-    plugins
+    plugins : PluginPath
         Directories of reconstruction plugin files, ``<plugin>.py``, in search
         order.
-    slots
+    slots : int, default=None
         Series reconstructed at once; derived from memory and the GPUs when
         ``None``.
-    gpu_slots
+    gpu_slots : int, default=1
         Series reconstructed at once on each GPU, when ``slots`` is ``None``.
-    spares
+    spares : int, default=1
         Warm worker processes waiting for a series.
-    recon_timeout
+    recon_timeout : float, default=None
         Seconds a worker may take after the stream ends before it is
         terminated and the client told so; ``None`` waits for its close.
-    queue
+    queue : Path | str, default=None
         Directory the queued series are written to; a temporary directory,
         removed on :meth:`close`, when ``None``.
-    slot_directory
+    slot_directory : Path | str, default=None
         Directory the slots are held in, shared with every other proxy on this
         host so they count against one set;
         :data:`~pulserver.recon._runtime.concurrency.DEFAULT_SLOT_DIRECTORY`
         when ``None``.
-    exam_directory
+    exam_directory : Path | str, default=None
         Directory the caches of an exam are held in, shared with every other
         proxy on this host so a map one series measures reaches a series on
         another;
         :data:`~pulserver.recon._runtime.exam.DEFAULT_EXAM_DIRECTORY` when
         ``None``. An exam's directory is removed when the last proxy on that
         exam lets go of it.
-    save_to
+    save_to : Path | str, default=None
         Directory each series is kept in, as received; not kept when ``None``.
-    idle_timeout
+    idle_timeout : float, default=None
         Seconds without a client after which :meth:`serve` returns; never when
         ``None``.
 

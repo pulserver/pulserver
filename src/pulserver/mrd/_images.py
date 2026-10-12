@@ -12,9 +12,9 @@ def center_crop(image: Any, shape: Any) -> Any:
 
     Parameters
     ----------
-    image
+    image : array_like
         NumPy or Torch array.
-    shape
+    shape : tuple of int
         Extent of each trailing axis to keep; leading axes pass through.
 
     Returns
@@ -67,11 +67,11 @@ def coil_combine(
 
     Parameters
     ----------
-    coil_images
+    coil_images : array_like
         NumPy or Torch array with coils along ``coil_axis``.
-    coil_maps
+    coil_maps : array_like, default=None
         Sensitivities broadcastable against ``coil_images``.
-    coil_axis
+    coil_axis : int, default=-3
         Coil axis; the default fits ``(..., coil, y, x)``.
 
     Returns

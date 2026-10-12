@@ -150,9 +150,9 @@ def has_acquisition_flag(acquisition: Any, flag: int | str) -> bool:
 
     Parameters
     ----------
-    acquisition
+    acquisition : ismrmrd.Acquisition
         ``ismrmrd.Acquisition``, or any object with ``is_flag_set`` or ``flags``.
-    flag
+    flag : int | str
         A single :class:`~pulserver.mrd.AcquisitionFlag`, a 1-based bit position
         as the ``ismrmrd.ACQ_*`` constants are, a constant name
         (``"ACQ_LAST_IN_MEASUREMENT"``), or a flag label (``"LASTSCAN"``).

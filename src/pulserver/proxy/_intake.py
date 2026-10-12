@@ -34,13 +34,13 @@ class DesignIntake:
 
     Parameters
     ----------
-    store
+    store : Path | str
         Directory of designs; created when missing.
-    host
+    host : str, default='127.0.0.1'
         Address to listen on; the loopback interface by default.
-    port
+    port : int, default=0
         TCP port; 0 takes a free one.
-    received
+    received : Callable[[Path], object], default=None
         Called with the directory of each design stored or found stored, in
         a thread of its own once the request is answered: a proxy tabulates
         the design there, ahead of the scan that plays it.

@@ -162,9 +162,9 @@ class MotionWriter:
 
         Parameters
         ----------
-        rotation
+        rotation : sequence of float
             Nine values, row major, the physical frame from the logical one.
-        rescan
+        rescan : bool, default=False
             Whether the repetition that measured this pose should be played
             again.
 

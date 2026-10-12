@@ -84,21 +84,21 @@ class BrainWeb:
 
     Parameters
     ----------
-    coils
+    coils : int, default=1
         Receive channels.
-    period
+    period : float, default=0.5
         Spatial period of the sensitivities, in metres.
-    depth
+    depth : float, default=0.5
         Their modulation depth.
-    directory
+    directory : Path | str, default=None
         brainweb-dl's cache; ``BRAINWEB_DIR``, or ``~/.cache/brainweb``,
         without one.
-    susceptibility
+    susceptibility : bool, default=True
         Whether the field the head's susceptibility adds acts on it.
-    t2_prime
+    t2_prime : Mapping[str, float], default=None
         T2', in s, by tissue class, in place of the one :meth:`relaxation`
         derives, at any field.
-    diffusion
+    diffusion : Mapping[str, float], default=None
         Isotropic diffusion coefficient, in m²/s, by tissue class, as
         :attr:`DIFFUSION` gives them; a class without one does not diffuse.
     """
