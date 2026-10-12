@@ -1,0 +1,19 @@
+labels: ["idea"]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: The idea
+      description: |
+        A capability, an interface or a direction you think pulserver should take,
+        before it is concrete enough to be a feature request.
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Where it comes from
+      description: |
+        The experiment that prompted it, and any paper or implementation that
+        already does something like it.

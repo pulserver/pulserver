@@ -1,6 +1,5 @@
 # pulserver — agent instructions
 
-`CLAUDE.md` and `GEMINI.md` import this file. Edit this file only.
 `SKILLS.md` indexes the skills under `.claude/skills/`: the procedures for
 building and testing the package and for writing documentation. This page
 states the rules; a skill states how a recurring task is carried out under
