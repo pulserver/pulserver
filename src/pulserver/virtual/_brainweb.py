@@ -71,7 +71,7 @@ class BrainWeb:
     The fuzzy tissue model of BrainWeb's normal brain (Collins et al., IEEE
     Trans Med Imaging 17:463, 1998) gives each 1 mm voxel the fraction of it
     each tissue class fills. brainweb-dl downloads it on first use into its
-    cache, which the ``brainweb`` extra installs. The brain lies as a subject
+    cache, which the ``brainweb`` extra installs. The brain is oriented as a subject
     lying head first and supine, with the origin of its MNI coordinates, the
     anterior commissure, at the isocentre: the physical x axis points to the
     subject's left, y posterior and z superior. Each tissue class relaxes with
@@ -79,8 +79,7 @@ class BrainWeb:
     at from the parameters BrainWeb's simulator gives it at 1.5 T (Kwan et
     al., IEEE Trans Med Imaging 18:1085, 1999), and has the proton density
     the simulator gives it. Fat precesses at pypulseqpp's fat shift, and every
-    voxel at the field
-    :attr:`field_ppm` its head adds. The coils are those of
+    voxel at the field :attr:`field_ppm` its head adds. The coils are those of
     :class:`~pulserver.virtual.Phantom`, fixed in the physical frame.
 
     Parameters

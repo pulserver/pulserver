@@ -38,7 +38,11 @@ def unit_key(
 
 
 def carries(acquisition: Any, flag: Any) -> bool:
-    """Whether an acquisition carries ``flag``, or any member of a combined :class:`~pulserver.mrd.AcquisitionFlag`."""
+    """Whether an acquisition carries ``flag``.
+
+    For a combined :class:`~pulserver.mrd.AcquisitionFlag`, whether it carries
+    any member.
+    """
     if isinstance(flag, AcquisitionFlag):
         return any(
             has_acquisition_flag(acquisition, member.flag)
@@ -67,11 +71,11 @@ class _Closure(Protocol):
 
 
 class _FlagClosure:
-    """Closes a unit when its branch's flag has arrived at every position along its axes and merged counters.
+    """Closes a unit when its branch's flag has arrived at every position of its counters.
 
-    A position is one combination of the counters in ``axes`` and ``merge``;
-    with neither, the flag arriving once closes the unit. How many positions
-    there are comes from the unit's encoding space.
+    A position is one combination of the counters in ``axes`` and ``merge``,
+    and the unit's encoding space gives how many there are; with neither, the
+    flag arriving once closes the unit.
     """
 
     def __init__(

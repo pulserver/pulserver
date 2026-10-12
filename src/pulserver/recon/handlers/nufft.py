@@ -27,31 +27,34 @@ class NufftRecon(ReconPlugin):
     near the k-space centre (:func:`bartorch.apps.nlinv_maps`,
     ``bart nlinv -m 1 -t``), whatever calibration the stream or the exam
     holds: :func:`~pulserver.recon.coil_maps` estimates from Cartesian
-    calibration k-space only. The image minimises
-    ``|D (F S x - y)|^2 + lambda |W x|_1`` over them (``bart pics -t -p D
-    -R W``), ``F`` bartorch's NUFFT, ``W`` the wavelet transform over the
-    spatial axes the trajectory encodes of at least
-    ``WAVELET_MIN_POINTS`` points and ``D`` the square root of the
-    trajectory's Pipe-Menon density compensation
-    (:func:`bartorch.estimate_density`), which preconditions the solve
-    (Baron et al., Magn Reson Med 2018); the step is the reciprocal of the largest eigenvalue of the
-    normal operator (``bart pics -e``). The trajectory is the one the proxy's
-    enrichment writes, which
+    calibration k-space only.
+
+    The image minimises ``|D (F S x - y)|^2 + lambda |W x|_1`` over ``x``
+    (``bart pics -t -p D -R W``), ``F`` being bartorch's NUFFT, ``S`` the coil
+    sensitivities, ``W`` the wavelet transform over the spatial axes the
+    trajectory encodes of at least ``WAVELET_MIN_POINTS`` points, and ``D`` the
+    square root of the trajectory's Pipe-Menon density compensation
+    (:func:`bartorch.estimate_density`), which preconditions the solve (Baron
+    et al., Magn Reson Med 2018). The step is the reciprocal of the largest
+    eigenvalue of the normal operator (``bart pics -e``). An image is its
+    averages summed, and its values are those of the solve, unscaled.
+
+    The trajectory is the one the proxy's enrichment writes, which
     :meth:`~pulserver.recon.ReconBuffer.grid_trajectory` scales to the image
     grid. The readouts of a unit are its shots, whichever segment (a PROPELLER
-    blade) and line they carry, and one solve takes them all; a shot at which
+    blade) and line they carry, and one solve takes them all. A shot at which
     no readout was placed is not a sample, nor is a sample past the image
     matrix, ``|k| > N / 2`` along an axis of ``N`` points, as the corners of a
-    PROPELLER blade are: the solve is on the matrix's own grid. A stack of blades, spokes or spirals
-    is Fourier transformed along its partitions first and fitted partition by
-    partition. A trajectory that encodes kz, with no partitions, is one
-    three-dimensional solve, its maps fitted as ``bart nlinv -m 1 -t`` fits
-    them over three spatial axes. A unit closes as that of
-    :class:`~pulserver.recon.handlers.pics.PicsRecon` does, and also
-    once the last readout of each of its segments has arrived; an image is its
-    averages summed, and its values are those of the solve, unscaled. bartorch
-    is imported when the first image is made, which the ``coils`` extra
-    installs.
+    PROPELLER blade are: the solve is on the matrix's own grid. A stack of
+    blades, spokes or spirals is Fourier transformed along its partitions first
+    and fitted partition by partition. A trajectory that encodes kz, with no
+    partitions, is one three-dimensional solve, its maps fitted as
+    ``bart nlinv -m 1 -t`` fits them over three spatial axes.
+
+    A unit closes as that of
+    :class:`~pulserver.recon.handlers.pics.PicsRecon` does, and also once the
+    last readout of each of its segments has arrived. bartorch is imported when
+    the first image is made, which the ``coils`` extra installs.
 
     Parameters
     ----------

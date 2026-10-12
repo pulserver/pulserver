@@ -1,19 +1,17 @@
 """The event stream of a sequence, as a simulation reads it.
 
-A reconstruction that simulates the signal needs what the sequence did to the
-magnetisation: when each pulse turned it, through what angle and about what
-phase, and when each readout sampled it. It does not need gradients, which it
-would discard, nor the waveform memory the scanner lays out.
+The stream records when each pulse turns the magnetization, through what
+angle and about what phase, and when each readout samples it. It carries no
+gradients and no waveform memory.
 
-What is written here is mechanical -- it is read off the file the scanner
-plays. Which signal model the stream means is not: a Pulseq file has no
-gradient "use" field, so a crusher cannot be told from a phase encode without
-tracking the k-space moment through a whole repetition, and whether a readout
-is followed by spoiling is a property of the sequence's intent. That reading is
-hand-written on the reconstruction side, against the sequence family in hand,
-and nothing here guesses at it.
+It is read mechanically off the Pulseq file. Which signal model it means is
+not: a Pulseq file has no gradient use field, so a crusher cannot be told from
+a phase encode without tracking the k-space moment through a repetition, and
+whether a readout is followed by spoiling is a property of the sequence's
+intent. That choice belongs to the reconstruction plugin, against the sequence
+family in hand.
 
-The field order of each event is the one the simulation reads them back in.
+The field order of each event is the order the simulation reads it back in.
 """
 
 from __future__ import annotations
@@ -143,7 +141,7 @@ class SequenceDescription:
 def describe(seq: Any, *, subsequence_index: int = 0) -> SequenceDescription:
     """Read the event stream of a sequence.
 
-    One row per block, in play order: the pulse a block turns the magnetisation
+    One row per block, in play order: the pulse a block turns the magnetization
     through, the readout it samples with, or a wait where it does neither.
 
     An RF row is timed at the pulse's centre, and a readout at the sample

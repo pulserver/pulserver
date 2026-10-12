@@ -1,4 +1,4 @@
-"""Both stages of a segmented playout, over a backend that records what each sets."""
+"""Segmented playout of a cache over a backend that records what each stage sets."""
 
 from __future__ import annotations
 
@@ -50,6 +50,22 @@ def playout(
     With ``prescan``, the scan loop plays that receive-gain calibration
     instead. It waits for no trigger, drives no digital output, and plays at
     zero every gradient whose amplitude varies across repetitions.
+
+    Parameters
+    ----------
+    seq_path
+        The first file of the chain; the cache is the file beside it.
+    budget
+        The waveform memory the waves are held in; None takes the cache's own
+        layout.
+    waveforms
+        Also return what each block plays, under the keys of :func:`play`.
+    pulses
+        With ``waveforms``, include the RF pulses.
+    prescan
+        Play this receive-gain calibration instead of the scan.
+    cache_ext
+        Extension of the cache, dot included.
 
     Returns
     -------

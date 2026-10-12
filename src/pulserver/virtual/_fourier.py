@@ -119,30 +119,30 @@ _REFOCUSING = 2
 class FourierPlayer:
     """The blocks the cache beside a sequence file plays, acquired of a phantom's tissue by the Fourier engine.
 
-    Each pulse turns an entry ideally, through its flip angle on resonance
-    times the magnitude of the transmit field the entry sees and the pulse's
-    own profile at the field the entry sees during it, about its axis turned
-    by the transmit field's phase; a pulse under a gradient that changes along
-    one axis, a spectral-spatial one, by its profile across the field and the
-    position along that axis, simulated over those the entries span. Between pulses and readouts, the net moment
-    of the gradients across a voxel shifts the configuration states by one
+    A pulse turns an entry through its flip angle on resonance times the
+    magnitude of the transmit field the entry sees, with the pulse's profile at
+    the field the entry sees during it, about an axis turned by the phase of the
+    transmit field. A pulse under a gradient that changes along one axis, as a
+    spectral-spatial pulse, has its profile across the field and the position
+    along that axis, simulated over those the entries span. Between events, the
+    net gradient moment across a voxel shifts the configuration states by one
     order where it dephases by at least :data:`SHIFT_CYCLES` cycles along the
     axes the tissue spans; its part that changes from one repetition to the
     next counts where the intervals between two pulses do not cancel it, and
-    anything less is taken as balanced. Entries a pulse turns alike form a
-    group, and the groups an excitation turns form a station: its readouts,
-    and a stream of the events that act on its groups, a train per group,
-    over each class of tissue, bin of the field and bin of the transmit field
-    the entries interpolate between, simulated by blochsim's extended phase
-    graphs. At each readout's echo, the sample nearest the centre of k-space,
-    those signals are spanned by a temporal basis. Across the readout, each
-    entry decays with its T2 from the echo, dephases with its T2' over the
-    time the magnetization has gone unrefocused, and precesses at its
-    frequency from the echo, spanned by a basis of the samples' times. A
-    station's readouts encode one image per pair of terms, sampled on a grid
-    along the logical axes the trajectory encodes, at the resolution its
-    widest k reaches, over the entries it excites, each entry a cube of
-    uniform magnetization. Each image times each coil's sensitivity is
+    anything less is taken as balanced.
+
+    Entries a pulse turns alike form a group, and the groups an excitation
+    turns form a station. A station's signals are simulated by blochsim's
+    extended phase graphs, a train per group, over each class of tissue, bin of
+    the field and bin of the transmit field the entries interpolate between,
+    and spanned by a temporal basis at each readout's echo, the sample nearest
+    the centre of k-space. Across a readout, each entry decays with its T2 from
+    the echo, dephases with its T2' over the time the magnetization has gone
+    unrefocused, and precesses at its frequency from the echo; a basis of the
+    samples' times spans this. The station's readouts encode one image per pair
+    of terms, on a grid along the logical axes the trajectory encodes, at the
+    resolution its widest k reaches, over the entries it excites, each entry a
+    cube of uniform magnetization. Each image times each coil's sensitivity is
     transformed to the samples by bartorch's NUFFT.
 
     Parameters
@@ -157,13 +157,14 @@ class FourierPlayer:
         ``(3, 3)`` rotation of the prescription from logical to physical axes;
         the identity by default.
     centre
-        ``(3,)`` the prescription's centre along the physical axes, in m, the
-        isocentre by default: the place the stream of events is played in the
-        frame of (:func:`_framed`).
+        ``(3,)`` the prescription's centre along the physical axes, in m; the
+        isocentre by default. Pulse and receiver phases are taken in the frame
+        of this centre.
     device
         Where the simulation runs; a card where there is one by default.
     tolerance
-        The relative residual of the bases.
+        Relative residual to which the temporal and readout bases span the
+        signals; :data:`TOLERANCE` by default.
     motion
         How the subject moves, at each readout's echo; it moves its encoding
         alone, its excitation, relaxation and coil sensitivities following it.
@@ -265,7 +266,11 @@ class FourierPlayer:
             yield samples[:, firsts[at] : firsts[at + 1]]
 
     def _ahead(self, start: int, stop: int) -> int:
-        """Return the readout before which a batch from ``start`` acquires: past ``stop``, to the batch's samples, which double from one batch to the next up to :data:`_AHEAD_SAMPLES`."""
+        """Return the readout before which a batch from ``start`` acquires.
+
+        Past ``stop``, to the batch's samples, which double from one batch to
+        the next up to :data:`_AHEAD_SAMPLES`.
+        """
         firsts = self._timeline.readouts.first
         reach = int(np.searchsorted(firsts, firsts[start] + self._batch, side="right"))
         self._batch = min(2 * self._batch, _AHEAD_SAMPLES)
@@ -359,7 +364,10 @@ class FourierPlayer:
         )
 
     def _weighting(self, readouts: np.ndarray, column: np.ndarray, atoms: _Atoms):
-        """Return what weighs a station's played signals with each readout's diffusion, and the columns it writes; None and ``column`` where nothing diffuses.
+        """Return what weighs a station's played signals with each readout's diffusion.
+
+        Also returns the columns it writes. The weighting is None, and the
+        columns are ``column``, where nothing diffuses.
 
         Each readout's signal is the played one's, times exp(-b D) at its own
         b-value: readouts that share a played signal and a b-value, to
@@ -713,7 +721,11 @@ def _events(timeline: Timeline) -> _Events:
 
 
 def _voxel(timeline: Timeline, entries: _Entries, spacing: float) -> np.ndarray:
-    """Return the voxel along each logical axis, in m: the resolution the widest k reaches, the excited slab where k does not move, and the tissue's extent where neither bounds it."""
+    """Return the voxel along each logical axis, in m.
+
+    The resolution the widest k reaches, the excited slab where k does not
+    move, and the tissue's extent where neither bounds it.
+    """
     reach = timeline.readouts.reach.max(axis=0, initial=0.0)
     if entries.positions.shape[0]:
         logical = entries.positions @ torch.as_tensor(
@@ -1004,7 +1016,11 @@ def _selectors(pulses) -> tuple[np.ndarray, np.ndarray]:
 
 
 def _profiles(entries: _Entries, selectors: np.ndarray, pulses) -> torch.Tensor:
-    """Return the level of :data:`_LEVELS` nearest each entry's flip angle under each selector, over the one on resonance; zero outside its band, ``(entries, selectors)``."""
+    """Return each entry's flip angle under each selector as a level of :data:`_LEVELS`.
+
+    ``(entries, selectors)``: the nearest level of the angle over the one on
+    resonance; zero outside the selector's band.
+    """
     held = torch.zeros(
         (entries.positions.shape[0], selectors.size),
         dtype=torch.int8,
@@ -1771,7 +1787,11 @@ class _ReadoutBasis:
 
 
 def _encoded(reach: np.ndarray, extent: np.ndarray) -> np.ndarray:
-    """Return the logical axes a grid spans: those the trajectory encodes across the positions, and as many of the widest others as make two, which a transform takes at the least."""
+    """Return the logical axes a grid spans.
+
+    Those the trajectory encodes across the positions, and as many of the
+    widest others as make two, which a transform takes at the least.
+    """
     axes = np.flatnonzero(reach * extent >= 0.5)
     others = [axis for axis in np.argsort(-extent, kind="stable") if axis not in axes]
     return np.sort(np.concatenate([axes, others[: max(0, 2 - axes.size)]])).astype(
@@ -1907,7 +1927,10 @@ class _Grid:
         return spectrum
 
     def trajectory(self, k: torch.Tensor) -> torch.Tensor:
-        """Return k-space locations in the grid's units, ``(n, axes)``, its first axis first: on a lattice, within the period its spectrum repeats over."""
+        """Return k-space locations in the grid's units, ``(n, axes)``, its first axis first.
+
+        On a lattice, within the period its spectrum repeats over.
+        """
         size = torch.as_tensor(self.size, dtype=k.dtype, device=k.device)
         span = torch.as_tensor(self.size * self.delta, dtype=k.dtype, device=k.device)
         located = k[:, torch.as_tensor(self.axes, device=k.device)] * span

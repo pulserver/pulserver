@@ -42,7 +42,7 @@ class _Grid(NamedTuple):
 
 @dataclass(frozen=True)
 class Coil:
-    """The RF coils of an exam, fixed in the physical frame: the coil pulses are transmitted on and the coil the signal is received by.
+    """The transmit and receive RF coils of an exam, fixed in the physical frame.
 
     ``name`` is ``transmit/receive``, or one coil's name where it does both.
     Each side is BART's coil model (``HEAD_2D_8CH`` or ``HEAD_3D_64CH``) and
@@ -88,29 +88,39 @@ class Coil:
         return np.exp(1j * np.angle(_isocentre(_transmit(self.transmit_model))))
 
     def transmit(self, points: np.ndarray) -> np.ndarray | None:
-        """Return each channel's transmit sensitivity at ``(n, 3)`` physical points, in m: ``(n, channels)``; None for one uniform channel."""
+        """Return each channel's transmit sensitivity at ``(n, 3)`` physical points, in m.
+
+        ``(n, channels)``; None for one uniform channel.
+        """
         if self.transmit_model is None:
             return None
         return _interpolated(_transmit(self.transmit_model), points)
 
     def receive(self, points: np.ndarray) -> np.ndarray | None:
-        """Return each coil's receive sensitivity at ``(n, 3)`` physical points, in m: ``(n, coils)``; None for one uniform coil."""
+        """Return each coil's receive sensitivity at ``(n, 3)`` physical points, in m.
+
+        ``(n, coils)``; None for one uniform coil.
+        """
         if self.receive_model is None:
             return None
         return _interpolated(_receive(self.receive_model), points)
 
     def limits(self) -> dict[str, str]:
-        """Return the VOP entries of the check limits a design is made under in this coil; none unless its transmit maps have VOPs beside them.
+        """Return the VOP entries of the check limits a design is made under in this coil.
 
-        ``vop_file`` is ``<coil>_vops.npz`` beside the transmit maps
-        ``<coil>.npz``; ``vop_drive_per_hz`` the drive of every channel, in
-        the unit of the maps and the VOPs, per Hz of a pulse's amplitude,
-        with which the channels' rotating fields, half their ``minus``, add
-        up to the pulse's nominal amplitude at the isocentre through the
-        :attr:`default_shim`; ``vop_default_shim`` that shim, a magnitude
-        and a phase per channel; and ``vop_head_limit`` and
-        ``vop_local_limit``, :data:`HEAD_SAR_LIMIT` and
-        :data:`LOCAL_SAR_LIMIT`.
+        Returns
+        -------
+        dict of str to str
+            Empty unless the transmit maps ``<coil>.npz`` have
+            ``<coil>_vops.npz`` beside them. Otherwise: ``vop_file``, the VOP
+            file; ``vop_drive_per_hz``, the drive of every channel, in the unit
+            of the maps and the VOPs, per Hz of a pulse's amplitude, with which
+            the channels' rotating fields, half their ``minus``, add up to the
+            pulse's nominal amplitude at the isocentre through the
+            :attr:`default_shim`; ``vop_default_shim``, that shim, a magnitude
+            and a phase per channel; and ``vop_head_limit`` and
+            ``vop_local_limit``, :data:`HEAD_SAR_LIMIT` and
+            :data:`LOCAL_SAR_LIMIT`.
         """
         maps = self.transmit_model
         if not isinstance(maps, Path):
@@ -141,7 +151,9 @@ COILS = {
 def coils(
     fields: Path | str | None = None, *, field_t: float | None = None
 ) -> dict[str, Coil]:
-    """Return the virtual scanner's coils by name: :data:`COILS`, or the same coils with the field maps in ``fields``.
+    """Return the virtual scanner's coils by name.
+
+    :data:`COILS`, or the same coils with the field maps in ``fields``.
 
     Each coil of a name has its maps in ``<coil>.npz``, as mariepy's
     ``maps.write`` writes them: the circular components ``plus`` and
@@ -277,12 +289,12 @@ def _isocentre(grid: _Grid) -> np.ndarray:
 
 
 def _interpolated(grid: _Grid, points: np.ndarray) -> np.ndarray:
-    """Return ``grid`` interpolated trilinearly at ``(n, 3)`` physical points, as :func:`_trilinear` interpolates it; the edge value beyond it.
+    """Return ``grid`` interpolated trilinearly at ``(n, 3)`` physical points.
 
-    The result is complex128,
-    in a temporary file mapped into memory: its pages belong to the file,
-    which the operating system writes back rather than holding in the
-    process's memory. ``TMPDIR`` names where the file is made.
+    The edge value is taken beyond the grid. The result is complex128, held in
+    a temporary file mapped into memory, so that the operating system writes
+    its pages back rather than the process holding them. ``TMPDIR`` names
+    where the file is made.
     """
     points = np.ascontiguousarray(np.asarray(points, dtype=float).reshape(-1, 3))
     out = _mapped((len(points), grid.values.shape[0]))

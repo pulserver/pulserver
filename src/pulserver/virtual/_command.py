@@ -203,7 +203,10 @@ def read_phantom(path: Path | str, coils: int = 1) -> Any:
 
 
 def prescription(args: argparse.Namespace) -> tuple[np.ndarray, np.ndarray]:
-    """Return the rotation from logical to physical axes and the field-of-view offset along the logical axes, in mm."""
+    """Return the rotation from logical to physical axes and the field-of-view offset in mm.
+
+    The offset is along the logical axes.
+    """
     if args.rotation is not None:
         rotation = np.asarray(args.rotation, dtype=float).reshape(3, 3)
     else:
@@ -300,10 +303,11 @@ def _played(
 
 
 def _received(items: Sequence[Any], output: Path) -> int:
-    """Write the reconstruction's images to ``output`` and its texts to standard output; return the exit status.
+    """Write the reconstruction's images and texts; return the exit status.
 
-    Images go to ``images.h5`` and DICOM datasets to the files they are named
-    by; the status is 1 when a text reports a refused or failed series.
+    Images go to ``images.h5`` in ``output``, DICOM datasets to the files they
+    are named by, and texts to standard output. The status is 1 when a text
+    reports a refused or failed series.
     """
     import ismrmrd
     import ismrmrd.hdf5

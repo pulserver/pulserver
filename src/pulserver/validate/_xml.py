@@ -34,14 +34,12 @@ _PHASE_COUNT_IN_RAD = np.pi / 2**23
 class PlayedWaveforms:
     """What a scanner played, as its plotter recorded it.
 
-    One pair of arrays per channel: the time of each sample in microseconds,
-    and its amplitude in the unit that channel is stored in. The gradients are
-    in gauss per centimetre, and :meth:`gradient_mt_per_m` converts them. The
-    transmit channels are stored as the converter's own numbers.
-    :meth:`phase_rad` converts the phase, whose converter spans a turn. The
-    magnitude's scale is the peak transmit field of the scan being played,
-    which is not in the file, so nothing here invents one: a magnitude is
-    compared by its shape.
+    One pair of arrays per channel: the time of each sample in µs, and its
+    amplitude in the unit that channel is stored in. Gradients are in gauss per
+    centimetre (:meth:`gradient_mt_per_m` converts them) and transmit channels
+    in converter counts (:meth:`phase_rad` converts the phase). The magnitude's
+    scale is the peak transmit field of the scan played, which the file does
+    not hold, so a magnitude is compared by its shape.
 
     Attributes
     ----------
@@ -87,7 +85,12 @@ def read_waveform_xml(path: Path | str) -> PlayedWaveforms:
     """Read one waveform XML file.
 
     The file holds one ``sequencer`` per channel, each carrying its samples as
-    lines of a time in microseconds and an amplitude.
+    lines of a time in µs and an amplitude.
+
+    Parameters
+    ----------
+    path
+        The XML file.
 
     Raises
     ------

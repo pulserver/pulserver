@@ -47,10 +47,10 @@ def validate(
     second rendering: a recording of a machine playing it, where one is given
     or can be made, and otherwise the waveforms its own cache holds.
 
-    The two answer different questions, and :attr:`Comparison.reference` says
-    which was answered. A recording establishes that the machine plays the
-    sequence. The cache establishes only that the conversion kept it -- a
-    conversion and a playout that are wrong in the same way agree.
+    :attr:`Comparison.reference` says which was compared. A recording
+    establishes that the machine plays the sequence. The cache establishes only
+    that the conversion kept it: a conversion and a playout that are wrong in
+    the same way agree.
 
     Parameters
     ----------
@@ -64,21 +64,22 @@ def validate(
         asked for from that vendor's tooling if it is installed here.
     dead_time_us
         What a recording's times run ahead of the sequence's by, on every
-        channel: a machine starts a unit before it plays anything of it.
+        channel, in µs.
     rf_wait_us
-        What the transmit channels run ahead by on top of that. A machine
-        drives transmit and gradients on separate timelines and records each as
-        it drove it, so the two meet only once both constants are stated.
+        What the transmit channels run ahead by on top of ``dead_time_us``, in
+        µs; a machine drives transmit and gradients on separate timelines and
+        records each as driven.
     tolerance_mt_per_m
-        The largest gradient difference that still counts as agreement. Taken
-        from the slew rate and the gradient raster when a system is given,
-        which is what the hardware can legitimately be away by; 0.05 otherwise.
+        The largest gradient difference that still counts as agreement, in
+        mT/m. Three raster steps of the slew rate of ``system`` when given
+        (:func:`gradient_tolerance_mt_per_m`); 0.05 otherwise.
     rf_tolerance_percent
         The largest transmit difference, as a percentage of the peak.
     cache_ext
         Extension of the cache read when comparing against it.
     system
-        ``pypulseqpp.Opts`` the cache is converted under, when one has to be.
+        ``pypulseqpp.Opts`` the cache is converted under when none exists;
+        default ``pypulseqpp.Opts()``.
 
     Returns
     -------

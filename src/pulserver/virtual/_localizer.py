@@ -38,8 +38,7 @@ def localizer(
     through ``centre``, sampled at the centres of ``matrix`` by ``matrix``
     pixels over ``fov`` with pixel ``matrix // 2`` on ``centre``, where a
     reconstruction's FFT puts it, as the phantom's ``proton_density`` gives
-    it: the
-    ground truth, with no sequence played. The images carry the geometry of
+    it: the ground truth, with no sequence played. The images carry the geometry of
     the reconstructed ones, so a console plans on them as it plans on a
     scanned localizer. Their read and phase directions along the physical
     axes, which are the patient's LPS axes for a subject lying head first and

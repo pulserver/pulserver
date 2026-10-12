@@ -1,37 +1,33 @@
 # Scanner sequences
 
 A scanner sequence is a plugin file, `<name>.py` in a `--plugins` directory,
-that binds a sequence function to the scanner protocol with one
-{class}`~pulserver.design.SequencePlugin` subclass. The sequence function is a function that
-returns the designed sequences ({ref}`sequence-functions`), as every sequence of
-pypulseqpp is:
+defining one {class}`~pulserver.design.SequencePlugin` subclass that binds a
+sequence function to the scanner protocol:
 
 ```python
 # sequences/gre.py
 from pypulseqpp.sequences.sequence.gre2D_sequence import gre2d
 from pulserver.design import SequencePlugin
 
+
 class Gre(SequencePlugin):
     app = gre2d
 ```
 
-The interpreter names it `--plugin gre`. Without `protocol`, the protocol is the
-sequence function's defaults. A PyPulseq script becomes a sequence function by taking the scanner
-limits and its parameters as arguments and returning its sequence
+The interpreter names it `--plugin gre`. Without `protocol`, the protocol is
+the sequence function's defaults. A PyPulseq script becomes a sequence function
+by taking the scanner limits and its parameters as arguments and returning its
+sequence
 ([from a PyPulseq script](https://pulserver.github.io/pypulseqpp/latest/user-guide/from-pypulseq.html)).
 
-## Binding the protocol
+## Protocol entries
 
 `protocol` maps the parameters of the interpreter's table, the members of
 {data}`~pulserver.protocol.ProtocolKey`, to entries;
 {class}`~pulserver.protocol.UIParam` collects those of the UI controls. A plain
-string naming a parameter is stored as its member, and a name outside the table
-is refused when the class is defined. An entry names the keyword argument of the
-sequence function it sets. The class does not name a reconstruction: the console's scan
-or the reconstruction client does ({doc}`reconstruction-plugins`). A `recon`
-attribute has no effect, and defining one raises a `DeprecationWarning`.
-`ui` and `ScannerSequence` are deprecated names of `protocol` and
-`SequencePlugin`, and a class using either warns with a `DeprecationWarning`.
+string naming a parameter is stored as its member, and a name outside the
+table is refused when the class is defined. Each entry names the keyword
+argument of the sequence function it sets.
 
 ```pycon
 >>> from pypulseqpp.sequences.sequence.gre2D_sequence import gre2d
@@ -53,7 +49,7 @@ attribute has no effect, and defining one raises a `DeprecationWarning`.
 
 | Entry | UI | Argument |
 | --- | --- | --- |
-| {class}`~pulserver.design.TimeParam` | integer microseconds, with presets | seconds |
+| {class}`~pulserver.design.TimeParam` | integer µs, with presets | s |
 | {class}`~pulserver.design.FloatParam` | the argument divided by `scale`, in `unit` | as the sequence function takes it |
 | {class}`~pulserver.design.IntParam` | integer | integer |
 | {class}`~pulserver.design.BoolParam` | checkbox | boolean |
@@ -68,26 +64,33 @@ The options of the four string-list parameters are
 {class}`~pulserver.protocol.TriggerType`, which
 {class}`~pulserver.design.ChoiceParam` takes as its `choices`:
 `ChoiceParam("mode", ImagingMode)`. The argument receives the member, a `str`
-equal to the option. {func}`~pulserver.design.StringListParam`, which builds
-the enum from option strings, is deprecated.
+equal to the option.
 
-A preset is a negative value the interpreter sends in place of a time;
-`{TEPreset.MINIMUM: None}` passes `None`, for which the sequence function designs its
-shortest echo time. An entry's `default` replaces the sequence function's default as the
-initial value, in UI units: `default=TEPreset.MINIMUM` offers a protocol a
-scanner with weaker gradients than the sequence function's default assumes can play.
+A preset is a negative value the interpreter sends in place of a time.
+`{TEPreset.MINIMUM: None}` passes `None`, for which the sequence function
+designs its shortest echo time. An entry's `default` replaces the sequence
+function's default as the initial value, in UI units: `default=TEPreset.MINIMUM`
+offers an initial protocol that a scanner with weaker gradients than the
+function's default assumes can play.
+
+The class names no reconstruction: the reconstruction client, or the scan on a
+console, names it ({doc}`reconstruction-plugins`). A `recon` or `follows`
+attribute has no effect and raises a `DeprecationWarning`, as do `ui` and
+`ScannerSequence`, the deprecated names of `protocol` and `SequencePlugin`, and
+{func}`~pulserver.design.StringListParam`.
 
 (sequence-functions)=
 ## Sequence functions
 
-A sequence function takes the scanner limits, a {class}`pypulseqpp.Opts`, and one
-keyword argument for each entry of `protocol`, and returns the designed
-{class}`pypulseqpp.Sequence`. A list of sequences is a chain, the prescans first
-and the main sequence last; each file names the next as its `NextSequence`
-definition. The initial value of an entry is the default of its argument in the
-signature, so a {func}`functools.partial` is a sequence function too. The default evaluation
-does not call the function; {meth}`~pulserver.design.SequencePlugin.generate`
-calls it when the design is generated ({ref}`evaluating-a-protocol`).
+A sequence function takes the scanner limits, a {class}`pypulseqpp.Opts`, and
+one keyword argument for each entry of `protocol`, and returns the designed
+{class}`pypulseqpp.Sequence`. A list of sequences is a chain, the prescans
+first and the main sequence last; each file names the next as its
+`NextSequence` definition. The initial value of an entry is the default of its
+argument in the signature, so a {func}`functools.partial` is a sequence function
+too. The default evaluation does not call the function;
+{meth}`~pulserver.design.SequencePlugin.generate` calls it when the design is
+generated ({ref}`evaluating-a-protocol`).
 
 ```pycon
 >>> import numpy as np
@@ -114,116 +117,7 @@ calls it when the design is generated ({ref}`evaluating-a-protocol`).
 
 ```
 
-(shipped-sequences)=
-## Shipped sequences
-
-pulserver ships a plugin for each of these pypulseqpp sequences, searched after
-every `--plugins` directory, so a file of the same name there replaces it:
-
-| Plugin | Paired reconstruction |
-| --- | --- |
-| `gre2d`, `se2d`, `bssfp2d`, `gre_multiecho2d`, `gre3d`, `se3d`, `bssfp3d`, `gre_multiecho3d` | `pics` |
-| `fse3d`, `mprage3d` | `pmc` |
-| `gre_radial2d`, `gre_spiral2d`, `se_radial2d`, `se_spiral2d`, `gre_propeller2d`, `se_propeller2d`, `se_epi_propeller2d`, `zte3d` | `nufft` |
-| `gre_stack_of_stars3d`, `gre_stack_of_spirals3d`, `gre_stack_of_blades3d`, `se_stack_of_stars3d`, `se_stack_of_spirals3d`, `se_stack_of_blades3d` | `nufft` |
-| `mprage_stack_of_stars3d`, `mprage_stack_of_spirals3d` | `nufft_train` |
-| `epi2d`, `epi3d` | `epi` |
-
-The pair is what a console reconstructs a shipped sequence with when the scan
-names no reconstruction ({doc}`virtual-scanner`); a scan can name another, and
-the reconstruction client of a scanner names one in its config
-({doc}`reconstruction-client`).
-
-Each shipped plugin also offers, as a named user entry, every one of these
-controls its sequence function takes, at the same user entry in every plugin;
-a plugin's own user entries start at `user12`:
-
-| User entry | Control |
-| --- | --- |
-| `user0` | Dummy scans; −1, the default, plays until the steady state, where the sequence chooses it (bSSFP, MPRAGE, ZTE and FSE count theirs) |
-| `user1` | Partial echo, the fraction of the echo acquired |
-| `user2`, `user3` | Partial Fourier along the phase and the partition encodes |
-| `user4`, `user5` | Calibration (ACS) lines along the phase and the partition encodes |
-| `user6` | Readout oversampling |
-| `user7` | Echo spacing, in ms; 0 the shortest |
-| `user8` | Refocusing flip angle, in degrees |
-| `user9` | CAIPIRINHA shift, in partitions per acquired line |
-
-Saturation is set in a plugin's source, by a module constant, rather than at
-the console. `gre2d` and `se2d` play `BANDS`, two, spatial saturation bands
-before every excitation, each placed graphically as a scanner's console places
-an explicit band and always on: `exsat_mask` is a configuration the plugin
-declares, bit `n - 1` set for each band `n` it plays, and `exsat<n>_normal_x`,
-`_y` and `_z`, `exsat<n>_loc` and `exsat<n>_thickness` give each band's normal
-along the physical axes, its centre's distance from the isocentre along that
-normal and its thickness, in mm. The field-of-view offset and rotation leave a
-band where it was placed, and a band not yet placed waits 150 mm from the
-isocentre, outside the head. `BANDS = 0` plays none. `epi2d` saturates fat before
-every shot while `FAT_SATURATION` is `True`, and `epi3d` excites water alone
-with a spectral-spatial pulse while `EXCITATION` is `"spsp"`.
-
-Other choices of a sequence function that a console has no entry for are
-module constants too, set to the function's default unless stated:
-
-| Plugin | Constant | Choice |
-| --- | --- | --- |
-| 3D Cartesian, stack and MPRAGE plugins | `EXCITATION` | `"slab"`, `"spsp"` (water alone) or `"nonselective"`; `epi3d` ships `"spsp"` |
-| `gre3d`, `se3d`, `gre_multiecho3d` | `ELLIPTICAL` | Only the phase encodes inside the ky-kz ellipse |
-| `gre_multiecho2d`, `gre_multiecho3d` | `FLYBACK` | Monopolar echoes; `False` reads even echoes backwards |
-| `fse3d` | `ORDERING` | `"radial"`, or `"shuffling"`: Poisson-disc views in random order |
-| `zte3d` | `SCHEME` | Spokes ordered `"spiral"` or `"meridian"` |
-
-`bssfp3d` takes its number of phase cycles, each a train with its own RF phase
-increment, as user entry 12.
-
-Optional features are switched by a module constant of the plugin, off in
-the shipped files; a copy of the file in a `--plugins` directory with the
-constant set replaces the shipped plugin. A switch adds the entries the
-feature needs, a scanner entry where there is one and a user entry otherwise:
-
-| Plugin | Constant | Feature | Entries added |
-| --- | --- | --- | --- |
-| `epi2d` | `MULTIBAND` | Simultaneous multislice | `multiband` |
-| `fse3d` | `OPTIMIZED` | Refocusing train designed with blochsim, shared by every shot | Flip angle: the refocusing angle at the TE echo |
-| `fse3d` | `DUAL_REGION` | Trains designed with blochsim for the centre and the periphery of k-space, each shot's a cubic step between them; `TR` and `ETL` are the centre's | Flip angle, as `OPTIMIZED`; user entries 0 and 1: TR and ETL at the periphery |
-| `fse3d`, `mprage3d` | `NAVIGATOR` | Three-plane navigators; the design sets `EnablePmc` and `pmc` states each pose to the scan | None |
-| `gre3d`, `gre_multiecho3d`, `mprage3d`, `fse3d` | `WAVE` | Wave-CAIPI at `WAVE_AMPLITUDE` (T/m) and `WAVE_CYCLES`; the calibration region is acquired first without the wave, and `pics` and `pmc` reconstruct the wave-encoded volume | None |
-| `gre_spiral2d`, `se_spiral2d`, `gre_stack_of_spirals3d`, `se_stack_of_spirals3d`, `mprage_stack_of_spirals3d` | `VARIABLE_DENSITY` | Variable-density spirals | User entry 0: periphery undersampling |
-
-A 3D sequence takes its number of partitions from the number of slices. `Ry`
-undersamples the phase encode of the Cartesian sequences, the blades of
-`gre_propeller2d`, `se_propeller2d` and the stacks of blades and the shells of `zte3d`, and `Rz` the
-partition encode of the 3D Cartesian ones. The `ETL` of `se_epi_propeller2d` is
-its blade width, and the MPRAGE sequences take their inversion time as
-`prep_time`.
-
-Each shipped plugin binds the function of its pypulseqpp sequence and evaluates
-a protocol from one repetition of the scan, one line, partition, spoke,
-interleaf, blade line, echo train or inversion shot of one slice without dummy
-repetitions ({ref}`evaluating-a-protocol`). Most call the function with the
-arguments that reduce it to that repetition; `epi3d` and `zte3d` build the
-repetition from the modules their function builds it from. The scan time is the duration of the repetition
-times the number of repetitions the prescription plays, with the slices that
-share a TR counted in the packets the sequence plays them in, and the dummy
-repetitions added: those of `user0`, or, at −1, the count
-{func}`pypulseqpp.sequences.steady_state_dummies` gives for that repetition
-time and flip angle. The values are
-those the main sequence states for the prescription: where the plugin has the
-entry, the echo time and the repetition time in its `TE` and `TR` definitions,
-the receiver bandwidth as the inverse of the dwell time of its first ADC event,
-and the slice thickness in its `SliceThickness` definition; a multi-echo
-sequence lists every echo time, and the `TE` entry holds the first. A
-prescription the design refuses is invalid with the message of its error. The
-RF layout is the first TR of the repetition, its shot repeated once per slice of
-the largest packet, with the TR as its period; for the balanced steady state it
-is the TR after the half-angle pulse ({ref}`stating-the-rf-layout`). The TR of
-a fast spin echo holds an echo train, that of an MPRAGE an inversion shot, and
-that of `epi3d` a volume. The flip angle is the control of every excitation of
-the plugins with a `flip` entry, which an MPRAGE's inversion is not. The
-spin-echo plugins, `fse3d` among them, have none, and the amplitude of their
-excitation and refocusing pulses is that of the design.
-
-## Resolving a protocol
+## Protocol resolution
 
 {meth}`~pulserver.design.SequencePlugin.listing` is the protocol with its
 schema, as the `list` design call replies it:
@@ -254,26 +148,24 @@ fov_rotation_33: float|off|1.0|-1.0|1.0|1e-06|
 ```
 
 The last twelve entries are the prescription, which the interpreter fills from
-the scanner's: the field-of-view offset, which the host applies when it builds
-the IR, and the rotation from the logical to the physical axes, in whose frame
-the host checks the design ({doc}`../explanations/architecture`).
+the scanner's: the field-of-view offset, applied when the IR is built, and the
+rotation from the logical to the physical axes, in whose frame the design is
+checked ({doc}`../explanations/protocol`). A plugin cannot bind them.
 
-`nex` is the number of signal averages, which every plugin lists unless it
-declares its own: the design plays its main sequence that many times, written
-into the block table once the sequence is designed, each repetition past the
-first numbered by `AVG`, and the scan time counts each
-({class}`~pulserver.design.AveragesParam`). A plugin that binds `nex` to an
-argument of its sequence function, as `PulseAcquire` above does, plays its
-averages itself.
+`nex` is the number of signal averages, listed by every plugin that does not
+declare its own ({class}`~pulserver.design.AveragesParam`). The design plays
+its main sequence that many times, written into the block table once the
+sequence is designed, each repetition past the first numbered by `AVG`, and the
+scan time counts each. A plugin that binds `nex` to an argument of its sequence
+function, as `PulseAcquire` above does, plays its averages itself.
 
 {meth}`~pulserver.design.SequencePlugin.validate` evaluates a request under the
 scanner limits and returns the protocol the design plays. Entries the request
-omits keep their initial values. The default evaluation of a sequence function
-accepts the protocol unchanged, so the reply repeats the request, a preset
-included, and states no scan time:
+omits keep their initial values. The default evaluation accepts the protocol
+unchanged, so the reply repeats the request, a preset included, and states no
+scan time:
 
 ```pycon
->>> import pypulseqpp as pp
 >>> system = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
 >>> reply = Gre2D().validate(system, {"TE": TEPreset.MINIMUM, "nx": 96})
 >>> reply.valid, reply.duration, reply.info
@@ -284,10 +176,9 @@ included, and states no scan time:
 ```
 
 An evaluation that designs the sequence states the values the design achieved.
-The `TE` and `TR` definitions of a pypulseqpp sequence record the echo time and
-the repetition time of the design, and
-{func}`pypulseqpp.sequences.duration` sums the durations of the sequences of a
-chain:
+The `TE` and `TR` definitions of a pypulseqpp sequence record its echo time and
+repetition time, and {func}`pypulseqpp.sequences.duration` sums the durations
+of the sequences of a chain:
 
 ```pycon
 >>> from pypulseqpp import sequences
@@ -308,10 +199,9 @@ chain:
 
 The resolved `TE` is the shortest echo time of the design in place of the
 preset. Values are rounded to the precision a scanner parameter stores, so a
-resolved protocol sent back resolves to itself.
-
-A protocol the evaluation rejects is invalid, and the message of the error it
-raised is the reply's `info`:
+resolved protocol sent back resolves to itself. A protocol the evaluation
+rejects is invalid, and the message of the error it raised is the reply's
+`info`:
 
 ```pycon
 >>> reply = Resolved().validate(system, {"TE": 1000})
@@ -320,30 +210,30 @@ raised is the reply's `info`:
 
 ```
 
-`duration` is the scan time in seconds the evaluation states. A duration of
+`duration` is the scan time in seconds. An evaluation that states a duration of
 `0.0` states no estimate: the protocol is valid, `duration` is `None`, and the
 reply reports the scan time as unknown.
 
-{meth}`~pulserver.design.SequencePlugin.design` generates the design, writes it
-as signed binary Pulseq, prescans first, and returns the written paths. The first file
-is `sequence.seq`, and each file names the next as its `NextSequence`
-definition. The `generate` design call converts the design to the IR cache and
-stores it ({doc}`../explanations/architecture`).
+{meth}`~pulserver.design.SequencePlugin.design` generates the design and writes
+it as signed binary Pulseq, prescans first, and returns the written paths. The
+first file is `sequence.seq`, and each file names the next as its
+`NextSequence` definition. The `generate` design call then converts the design
+to the IR cache and stores it ({doc}`../explanations/architecture`).
 
 (evaluating-a-protocol)=
-## Evaluating a protocol
+## Protocol evaluation
 
 A plugin overrides {meth}`~pulserver.design.SequencePlugin.evaluate` to check a
-protocol and to state what the console shows with it. The hook takes the scanner
-limits and the requested {class}`~pulserver.design.Protocol`, in the units of the
-sequence function's arguments, and returns an {class}`~pulserver.design.Evaluation`: the
-protocol holding the values the design achieves, the scan time in seconds, a
-note shown with the valid protocol and, optionally, the RF layout
-({ref}`stating-the-rf-layout`). Returning `None` accepts the protocol
-unchanged. Raising an exception makes the protocol invalid:
+protocol and to state what the console shows with it. The hook takes the
+scanner limits and the requested {class}`~pulserver.design.Protocol`, in the
+units of the sequence function's arguments, and returns an
+{class}`~pulserver.design.Evaluation`: the protocol holding the values the
+design achieves, the scan time in seconds, a note shown with the valid protocol
+and, optionally, the RF layout ({ref}`stating-the-rf-layout`). Returning `None`
+accepts the protocol unchanged. Raising an exception makes the protocol
+invalid:
 
 ```pycon
->>> from pulserver.design import Evaluation
 >>> class Timed(PulseAcquire):
 ...     def evaluate(self, system, protocol):
 ...         if protocol[UIParam.TR] < 12e-3:
@@ -359,42 +249,71 @@ unchanged. Raising an exception makes the protocol invalid:
 
 ```
 
-The default for a sequence function accepts the protocol unchanged, states no scan
-time and does not call the sequence function. A protocol the function cannot realize is then
-found when the sequence is generated, as an error of that call, and not reported
-as invalid while the operator edits it. An `evaluate` that builds or checks the
-design rejects the protocol when it is evaluated.
+The default evaluation does not call the sequence function, so a protocol the
+function cannot realize is found only when the sequence is generated, as an
+error of that call, and not while the operator edits the protocol. An
+`evaluate` that builds or checks the design rejects such a protocol when it is
+evaluated.
 
 `ValueError` and `AssertionError`, which pypulseqpp and PyPulseq raise for an
 event or a timing they cannot realize, reject the protocol with the message of
-the error as `info`, and are logged as a warning with their traceback. Any
-other exception also makes the protocol invalid, but the reply names only its
-type, as in `TypeError in Timed.evaluate`, and the exception is logged as an
-error with its traceback. A request that names an entry the protocol does not
-declare, or an option a choice does not offer, is invalid in the same way.
+the error as `info`, and are logged as a warning. Any other exception also
+makes the protocol invalid, but the reply names only its type, as in
+`TypeError in Timed.evaluate`, and the exception is logged as an error with its
+traceback. A request that names an entry the protocol does not declare, or an
+option a choice does not offer, is invalid in the same way.
 
-{meth}`~pulserver.design.SequencePlugin.generate` is the hook that builds the
-sequence of a requested protocol. The default calls the sequence function with the arguments
-of the protocol. A plugin overrides `generate` to return a sequence, or a list
-of them, built another way. `validate` and `design` are not overridden: they
-are the boundary between a request and the code of a plugin, and `design`
-writes nothing for an invalid request.
+{meth}`~pulserver.design.SequencePlugin.generate` builds the sequence of a
+requested protocol. The default calls the sequence function with the arguments
+of the protocol; a plugin overrides it to return a sequence, or a list of them,
+built another way. `validate` and `design` are not overridden: they are the
+boundary between a request and the code of a plugin, and `design` writes
+nothing for an invalid request.
+
+(exam-cache)=
+## Exam cache
+
+An `evaluate` or `generate` that declares an `exam` argument receives the
+directory of the current exam's cache, which the design calls take as
+`--exam`, and reads what the exam's reconstructions stored there, such as
+`b0_map`, `b1_map` or `coil_sensitivities`, with
+{func}`~pulserver.design.load_exam`. Without an exam the argument is not
+passed:
+
+```python
+from pulserver.design import Evaluation, SequencePlugin, load_exam
+
+
+class Shimmed(SequencePlugin):
+    app = pulse_acquire
+
+    def evaluate(self, system, protocol, exam=None):
+        if exam is None:
+            return Evaluation(protocol, 0.0, "no B0 map")
+        b0_map = load_exam(exam)["b0_map"]
+        return Evaluation(protocol, 0.0, f"B0 map {tuple(b0_map.shape)}")
+```
+
+A key no reconstruction stored raises `KeyError`. The values are those of the
+series that measured them, on their own grid. For such a plugin the files of
+the exam's cache are part of the design's identity, so a new map yields a new
+design.
 
 (stating-the-rf-layout)=
-## Stating the RF layout
+## RF layout
 
 An evaluation may state the RF its protocol plays, from which a scanner
-estimates the RF of a prescription before the design is generated. The layout is
-one TR: the RF instances one TR plays, and the TR as its `period`.
+estimates the RF of a prescription before the design is generated. The layout
+is one TR: the RF instances that TR plays, with the TR as its `period`.
 {meth}`RfLayout.of <pulserver.design.RfLayout.of>` takes the RF instances of a
 sequence that is one TR, as {meth}`pypulseqpp.Sequence.rf_instances` returns
 them, and the control each instance's amplitude follows: the flip angle,
 `UIParam.FLIP`, or a float user entry, `UIParam.user_value(n)`, either declared
 in `protocol`. One control applies to every instance; a list gives one per
 instance in play order, `None` for an instance no entry scales. The scanner
-multiplies the amplitude of an instance by the ratio of the value of its control
-in the protocol it plays to the value in the evaluated protocol. The `period` is
-the TR in seconds, and the duration of the sequence where omitted:
+multiplies the amplitude of an instance by the ratio of the value of its
+control in the protocol it plays to the value in the evaluated protocol. The
+`period` is the TR in seconds, and the duration of the sequence where omitted:
 
 ```pycon
 >>> from pulserver.design import RfLayout
@@ -418,20 +337,140 @@ A sequence shorter than the TR, such as one TR without its closing delay, is
 stated with the TR: `RfLayout.of(seq, UIParam.FLIP, period=tr)`.
 
 The layout is optional. An evaluation that states none is valid and states no
-estimate, and one whose control is not an entry of `protocol`, or has no
-positive value in the evaluated protocol, is invalid. What the scanner checks
-before the scan is the stored design, not the layout. The blocks that carry the
-layout are described in {doc}`../explanations/protocol`.
+estimate; one whose control is not an entry of `protocol`, or has no positive
+value in the evaluated protocol, is invalid. What the scanner checks before the
+scan is the stored design, not the layout. The blocks that carry the layout are
+described in {doc}`../explanations/protocol`.
+
+(shipped-sequences)=
+## Shipped sequences
+
+pulserver ships a plugin for each of these pypulseqpp sequences, searched after
+every `--plugins` directory, so a file of the same name there replaces it:
+
+| Plugin | Paired reconstruction |
+| --- | --- |
+| `gre2d`, `se2d`, `bssfp2d`, `gre_multiecho2d`, `gre3d`, `se3d`, `bssfp3d`, `gre_multiecho3d` | `pics` |
+| `fse3d`, `mprage3d` | `pmc` |
+| `gre_radial2d`, `gre_spiral2d`, `se_radial2d`, `se_spiral2d`, `gre_propeller2d`, `se_propeller2d`, `se_epi_propeller2d`, `zte3d` | `nufft` |
+| `gre_stack_of_stars3d`, `gre_stack_of_spirals3d`, `gre_stack_of_blades3d`, `se_stack_of_stars3d`, `se_stack_of_spirals3d`, `se_stack_of_blades3d` | `nufft` |
+| `mprage_stack_of_stars3d`, `mprage_stack_of_spirals3d` | `nufft_train` |
+| `epi2d`, `epi3d` | `epi` |
+
+The paired reconstruction is the one a console uses for a shipped sequence when
+the scan names none ({doc}`virtual-scanner`); a scan can name another, and a
+scanner's reconstruction client names one in its config
+({doc}`reconstruction-client`).
+
+### Shared user entries
+
+Each shipped plugin offers every one of these controls that its sequence
+function takes, at the same user entry in every plugin, each as a
+`user<n>_name` label and a `user<n>_value`; a plugin's own user entries start at
+`user12`:
+
+| User entry | Control |
+| --- | --- |
+| `user0` | Dummy scans; −1, the default, plays until the steady state, where the sequence chooses it (bSSFP, MPRAGE, ZTE and FSE count their own) |
+| `user1` | Partial echo, the fraction of the echo acquired |
+| `user2`, `user3` | Partial Fourier along the phase and the partition encodes |
+| `user4`, `user5` | Calibration (ACS) lines along the phase and the partition encodes |
+| `user6` | Readout oversampling |
+| `user7` | Echo spacing, in ms; 0 the shortest |
+| `user8` | Refocusing flip angle, in degrees |
+| `user9` | CAIPIRINHA shift, in partitions per acquired line |
+
+`bssfp3d` takes its number of phase cycles, each a train with its own RF phase
+increment, as `user12`.
+
+### Module constants
+
+Choices a console has no entry for are module constants of the plugin, set to
+the sequence function's default unless stated. To change one, copy the plugin
+file into a `--plugins` directory and set the constant there; the copy replaces
+the shipped plugin.
+
+| Plugin | Constant | Choice |
+| --- | --- | --- |
+| `gre2d`, `se2d` | `BANDS` | Spatial saturation bands played before every excitation, 2 by default; 0 plays none |
+| 3D Cartesian, stack and MPRAGE plugins | `EXCITATION` | `"slab"`, `"spsp"` (water only) or `"nonselective"`; `epi3d` ships `"spsp"` |
+| `epi2d` | `FAT_SATURATION` | Fat saturation before every shot; `True` by default |
+| `gre3d`, `se3d`, `gre_multiecho3d` | `ELLIPTICAL` | Only the phase encodes inside the ky-kz ellipse |
+| `gre_multiecho2d`, `gre_multiecho3d` | `FLYBACK` | Monopolar echoes; `False` reads even echoes reversed |
+| `fse3d` | `ORDERING` | `"radial"`, or `"shuffling"`: Poisson-disc views in random order |
+| `zte3d` | `SCHEME` | Spokes ordered `"spiral"` or `"meridian"` |
+| `bssfp2d` | `RETROSPECTIVE` | ECG gating: `False`, prospective, each heartbeat triggered and acquired once per cardiac phase; `True`, retrospective, each segment cycled over a heartbeat and binned into cardiac phases by the reconstruction |
+
+The saturation bands of `gre2d` and `se2d` are placed graphically, as a
+scanner's console places an explicit band, and are always on. `exsat_mask` is a
+configuration the plugin declares, with bit `n - 1` set for each band `n` it
+plays; `exsat<n>_normal_x`, `_y` and `_z`, `exsat<n>_loc` and
+`exsat<n>_thickness` give each band's normal along the physical axes, the
+distance of its centre from the isocentre along that normal, and its thickness,
+in mm. The field-of-view offset and rotation leave a band where it was placed,
+and a band not yet placed sits 150 mm from the isocentre, outside the head.
+
+Optional features are switched by a module constant, off in the shipped files.
+A switch adds the entries the feature needs, a scanner entry where one exists
+and a user entry otherwise:
+
+| Plugin | Constant | Feature | Entries added |
+| --- | --- | --- | --- |
+| `epi2d` | `MULTIBAND` | Simultaneous multislice | `multiband` |
+| `fse3d` | `OPTIMIZED` | Refocusing train designed with blochsim, shared by every shot | Flip angle: the refocusing angle at the TE echo |
+| `fse3d` | `DUAL_REGION` | Trains designed with blochsim for the centre and the periphery of k-space, each shot's train a cubic step between them; `TR` and `ETL` are the centre's | Flip angle, as `OPTIMIZED`; `user12` and `user13`: TR and ETL at the periphery |
+| `fse3d`, `mprage3d` | `NAVIGATOR` | Three-plane navigators; the design sets `EnablePmc`, and `pmc` publishes each pose to the scan | None |
+| `gre3d`, `gre_multiecho3d`, `mprage3d`, `fse3d` | `WAVE` | Wave-CAIPI at `WAVE_AMPLITUDE` (T/m) and `WAVE_CYCLES`; the calibration region is acquired first without the wave, and `pics` and `pmc` reconstruct the wave-encoded volume | None |
+| `gre_spiral2d`, `se_spiral2d`, `gre_stack_of_spirals3d`, `se_stack_of_spirals3d`, `mprage_stack_of_spirals3d` | `VARIABLE_DENSITY` | Variable-density spirals | `user12`: periphery undersampling |
+
+### Protocol conventions
+
+- A 3D sequence takes its number of partitions from the number of slices.
+- `Ry` undersamples the phase encode of the Cartesian sequences, the blades of
+  `gre_propeller2d`, `se_propeller2d` and the stacks of blades, and the shells
+  of `zte3d`; `Rz` undersamples the partition encode of the 3D Cartesian ones.
+- The `ETL` of `se_epi_propeller2d` is its blade width.
+- The MPRAGE sequences take their inversion time as `prep_time`.
+
+### Shipped evaluation
+
+Each shipped plugin evaluates a protocol from one repetition of the scan: one
+line, partition, spoke, interleaf, blade line, echo train or inversion shot of
+one slice, without dummy repetitions. Most call the sequence function with the
+arguments that reduce it to that repetition; `epi3d` and `zte3d` build the
+repetition from the modules their function is built from.
+
+- **Scan time.** The duration of the repetition times the number of
+  repetitions the prescription plays, with the slices that share a TR counted
+  in the packets the sequence plays them in, plus the dummy repetitions: those
+  of `user0`, or, at −1, the count {func}`pypulseqpp.sequences.steady_state_dummies`
+  gives for that TR and flip angle.
+- **Resolved values.** Those the main sequence states for the prescription,
+  where the plugin has the entry: the echo time and repetition time in its `TE`
+  and `TR` definitions, the receiver bandwidth as the inverse of the dwell time
+  of its first ADC event, and the slice thickness in its `SliceThickness`
+  definition. A multi-echo sequence lists every echo time, and the `TE` entry
+  holds the first.
+- **Invalid protocols.** A prescription the design refuses is invalid, with
+  the message of its error.
+- **RF layout.** The first TR of the repetition, its shot repeated once per
+  slice of the largest packet, with the TR as its period; for the balanced
+  steady state, the TR after the half-angle pulse. The TR of a fast spin echo
+  holds an echo train, that of an MPRAGE an inversion shot, and that of `epi3d`
+  a volume. The flip angle is the control of every excitation of the plugins
+  with a `flip` entry, which an MPRAGE's inversion is not. The spin-echo
+  plugins, `fse3d` among them, have none, and the amplitude of their
+  excitation and refocusing pulses is that of the design.
 
 ## Logging
 
 A plugin logs with the standard `logging` module, under a logger of its own
 (`logging.getLogger(__name__)`). Under a warm design server, what a call logs,
-prints or warns, and why it refuses a protocol, are appended to the
-file the request names under `log`, or to the server's standard error
+prints or warns, and why it refuses a protocol, is appended to the file the
+request names under `log`, or else to the server's standard error
 ({doc}`running`).
 
 ## See also
 
-* {doc}`../explanations/protocol` — resolution, presets, units and precision.
-* {doc}`../api/design` — the scanner-sequence interface and its UI entries.
+* {doc}`../explanations/protocol`: resolution, presets, units and precision.
+* {doc}`../api/design`: the scanner-sequence interface and its entries.

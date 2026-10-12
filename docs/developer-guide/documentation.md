@@ -349,7 +349,7 @@ This is the appropriate place for material that would be too pedagogical for API
 
 An explanation page has one obvious purpose and, where appropriate, a strong conceptual anchor: a figure, a table, an equation, or a similarly compact device that carries the concept. A figure is never required for its own sake.
 
-An explanation page opens with a **TL;DR** block directly under its title: at most three one-line bullets, each a conclusion the page supports. Landing pages, API reference pages and gallery examples have none.
+An explanation page with more than one `##` section opens with a **TL;DR** block directly under its title: at most three one-line bullets, each a conclusion the page supports. Landing pages, API reference pages and gallery examples have none.
 
 #### Organization of an explanatory page
 
@@ -790,7 +790,7 @@ A successful documentation build establishes that the documentation can be rende
 * Can the learning objective be stated in one sentence that is more specific than "how to use X"?
 * Does the title name the concept demonstrated rather than the interface exercised?
 * Are parameters not under study held fixed across a comparison?
-* Do the categories and cards appear on the landing page, and is the gallery a single entry in global navigation?
+* Does each category have a landing page with a table of its examples, and does global navigation stop at the categories?
 
 ### Explanation
 

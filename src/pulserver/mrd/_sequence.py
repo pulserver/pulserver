@@ -123,8 +123,9 @@ class SequenceDefinitions:
     def from_sequence(cls, seq: Any) -> SequenceDefinitions:
         """Read the definitions of a ``pypulseqpp.Sequence``, measuring those it lacks.
 
-        Measuring TR or TE runs ``check_timing``, which may record ``TotalDuration`` and
-        needs the sequence on a system, as ``pypulseqpp.io.read`` builds one.
+        Measuring TR or TE runs ``check_timing``, which may record
+        ``TotalDuration`` and needs the sequence on a system, as
+        ``pypulseqpp.io.read`` builds one.
         """
         tr = tuple(_numbers(seq.get_definition("TR")))
         te = tuple(_numbers(seq.get_definition("TE")))
@@ -158,13 +159,12 @@ class ReadoutTable:
     """Every ADC readout of one sequence, in play order.
 
     Tabulating follows k-space through the whole sequence once, to find each
-    readout's echo. Where ``Sequence.adc_echoes`` returns each readout's k as
-    its block's origin plus the sweep of a block of its kind,
-    :meth:`readout_k` adds the two. Otherwise k-space is integrated a run of
-    consecutive readouts at a time, by ``Sequence.adc_kspace(readouts=...)``,
-    from the last pulse before the run that resets it, when the readout's run
-    is not among the last few kept. The table holds the sequence for this,
-    which must not change once tabulated.
+    readout's echo. :meth:`readout_k` adds a readout's origin to the sweep of
+    its kind where ``Sequence.adc_echoes`` returns both. Otherwise it
+    integrates k-space with ``Sequence.adc_kspace(readouts=...)`` over a run of
+    consecutive readouts, from the last pulse before the run that resets it,
+    and keeps the last few runs. The table holds the sequence for this, which
+    must not change once tabulated.
 
     Attributes
     ----------

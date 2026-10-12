@@ -318,7 +318,7 @@ def _split_optional_leading(value: Any | None, length: int) -> tuple[Any | None,
 
 
 def _labels_at(labels: Mapping[str, Any], index: int) -> dict[str, int]:
-    """Counters of acquisition ``index``, with 0 for every stats field not supplied."""
+    """Return the counters of acquisition ``index``, 0 for each one not supplied."""
     counters = dict.fromkeys(AcquisitionBucketStats.__dataclass_fields__, 0)
     counters.update({name: int(value[index]) for name, value in labels.items()})
     return counters

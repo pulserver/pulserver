@@ -31,7 +31,10 @@ def _limit(text: str) -> Any:
 
 
 def parse_limits(block: str) -> dict[str, Any]:
-    """Read a limits block: ``pypulseqpp.Opts`` keyword arguments, one per line."""
+    """Read a limits block: one ``name: value`` line per limit, the keys :func:`~pulserver.host._limits.split_limits` takes.
+
+    A value is an ``int``, else a ``float``, else the text.
+    """
     limits = {}
     for line in block.splitlines():
         if ": " in line and LIMITS_BEGIN not in line:
@@ -41,6 +44,7 @@ def parse_limits(block: str) -> dict[str, Any]:
 
 
 def format_limits(limits: dict[str, Any]) -> str:
+    """Format the limits block :func:`parse_limits` reads."""
     lines = [f"{name}: {value}" for name, value in limits.items()]
     return "\n".join([LIMITS_BEGIN, *lines, LIMITS_END]) + "\n"
 
@@ -99,6 +103,7 @@ def format_import(
     fov_rotation: np.ndarray | None = None,
     averages: int = 1,
 ) -> str:
+    """Format the import block :func:`parse_import` reads; ``nex`` is written for more than one average."""
     prescribed = {}
     if fov_offset_mm is not None:
         prescribed.update(zip(FOV_OFFSET, fov_offset_mm, strict=True))

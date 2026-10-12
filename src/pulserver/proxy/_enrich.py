@@ -307,7 +307,9 @@ class SequenceTable:
 def _shift_phase(
     k: np.ndarray, converted_m: np.ndarray, moved_m: np.ndarray
 ) -> np.ndarray | None:
-    """Return the receive phase a shift leaves to the proxy, in rad, or None when it is zero.
+    """Return the receive phase a field-of-view shift needs applied to the samples, in rad.
+
+    None when the phase is negligible.
 
     ``2 pi c . (k(t) - k(t_c) - k'(t_c) (t - t_c)) + 2 pi m . k(t)``: the
     curvature of the converted shift ``c`` about the line through the window
@@ -332,7 +334,7 @@ def _shift_phase(
 
 
 def enrich_header(header: Any, table: SequenceTable) -> None:
-    """Describe the table's encoding spaces and sequence parameters in an MRD header.
+    """Write the table's encoding spaces and sequence parameters into an MRD header, in place.
 
     For every space, sets ``reconSpace`` from the sequence's matrix and field
     of view when defined, and ``encodedSpace`` from them with the readout of a
@@ -574,10 +576,11 @@ def _map_readouts(
 def _is_slice_stack(
     labels: dict[str, np.ndarray], definitions: SequenceDefinitions
 ) -> bool:
-    """Whether a subsequence excites its readouts' slices one by one, its ``Matrix`` and ``FOV`` along z stating the stack.
+    """Whether a subsequence excites its slices one by one.
 
-    So it is when it writes no ``PAR`` and either defines ``SlicePositions``
-    or writes more than one ``SLC``.
+    True when it writes no ``PAR`` and either defines ``SlicePositions`` or
+    writes more than one ``SLC``; its ``Matrix`` and ``FOV`` along z then state
+    the stack.
     """
     if "PAR" in labels:
         return False
@@ -607,7 +610,9 @@ def _one_slice(
 def _slice_offsets(
     labels: dict[str, np.ndarray], definitions: SequenceDefinitions, count: int
 ) -> np.ndarray:
-    """Return the ``SlicePositions`` entry each readout's ``SLC`` indexes, in m; 0 without ``SlicePositions``.
+    """Return the ``SlicePositions`` entry each readout's ``SLC`` indexes, in m.
+
+    Zeros where the sequence defines no ``SlicePositions``.
 
     Raises
     ------
@@ -654,7 +659,9 @@ def _ramp_sampled(readouts: ReadoutTable, index: int) -> bool:
 def _full_echo(
     samples: np.ndarray, centre: np.ndarray, reverse: np.ndarray
 ) -> int | None:
-    """Return the samples of the largest full echo the readouts are parts of, or ``None`` for no readouts.
+    """Return the samples of the largest full echo the readouts are parts of.
+
+    ``None`` for no readouts.
 
     A readout is a full echo when its ``center_sample`` is ``samples // 2``,
     which is also taken of one whose k does not move (``centre`` -1);
@@ -675,7 +682,11 @@ def _mark_boundaries(
     space: np.ndarray,
     written: set[str],
 ) -> None:
-    """Set the first and last flags of every written counter, keyed by space and the other written image counters."""
+    """Set the first and last flags of every written counter, in place.
+
+    A boundary is keyed by the encoding space and the other written
+    image-selecting counters.
+    """
     sets = []
     for name, first, last, _ in _BOUNDARY_COUNTERS:
         if name not in written:
@@ -691,7 +702,10 @@ def _mark_boundaries(
 
 
 def _limit(values: np.ndarray, centre: int | None = None) -> Any:
-    """Return the ``limitType`` of a counter's values, centred on ``centre`` or, where it is ``None``, on the middle of the range."""
+    """Return the ``limitType`` of a counter's values.
+
+    Centred on ``centre``, or on the middle of the range where it is ``None``.
+    """
     minimum = int(values.min()) if values.size else 0
     maximum = int(values.max()) if values.size else 0
     return xsd.limitType(
@@ -702,7 +716,9 @@ def _limit(values: np.ndarray, centre: int | None = None) -> Any:
 
 
 def _encoding_space(space: TableSpace, current: Any, *, widened: bool = False) -> Any:
-    """Return an ``encodingSpaceType`` from the space's definitions, falling back to ``current`` per field.
+    """Return an ``encodingSpaceType`` from the space's definitions.
+
+    Each field the space leaves undefined is taken from ``current``.
 
     With ``widened``, a defined matrix has as many samples along the readout as
     the space's full echo, and a defined field of view the extent of them.

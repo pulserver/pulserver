@@ -1,12 +1,8 @@
 # IR cache
 
-The implementation of the scanner representation
-({doc}`../../explanations/scanner-representation`): how the prescription is
-applied, the passes that compute it and the statistics they record, how gradients that a
-prepared segment cannot play are carried as waves, how a playout loads the
-cache in two stages, the gradients kept for the scanner's heating model, and
-the layout of the cache file. The C headers an interpreter
-includes are in
+Implementation of the scanner representation
+({doc}`../../explanations/scanner-representation`). The C headers an
+interpreter includes are in
 [`src/c/include/pulseg/`](https://github.com/pulserver/pulserver/tree/main/src/c/include/pulseg).
 
 ## Prescription
@@ -28,8 +24,8 @@ the passes run. No gradient is changed:
   $\mathbf{k}$ the k-space location of the sample in 1/m;
 - blocks labelled `NOPOS` keep the phases they were designed with.
 
-A block that carries a rotation extension plays its drawn gradients turned by
-that rotation, and it is moved by the gradients it plays.
+For a block that carries a rotation extension, the offsets follow the
+gradients it plays, its rotation included.
 
 The cache carries each readout's frequency and phase offsets, taken at the
 middle of its sampling window, and no phase modulation: the scanner
@@ -39,12 +35,13 @@ about the window centre $t_c$, from the readout's k-space and the offset
 $\mathbf{d}$ the design was converted at. Where the MRD header states the
 object at another position (`fov_offset_mm`), such as one a motion correction
 updates, the proxy also applies $2\pi\,\Delta\mathbf{d}\cdot\mathbf{k}(t)$
-for the difference, which needs no new cache. The reconstruction then receives an object at
-the stated position at the centre of its field of view. A chain whose stored
-modulation does not hold one phase per ADC sample is refused. The rotation of the prescription is not applied
-to the cache: the scanner plays it through its rotation matrix, composed after
-each block's own rotation. Two offsets make two caches of one design, and two
-designs ({doc}`../../explanations/architecture`).
+for the difference, which needs no new cache. The reconstruction then
+receives the object at the stated position at the centre of its field of view.
+A chain whose stored modulation does not hold one phase per ADC sample is
+refused. The rotation of the prescription is not applied to the cache: the
+scanner plays it through its rotation matrix, composed after each block's own
+rotation. A cache is converted at one offset, so two offsets give two caches
+and two designs ({doc}`../../explanations/architecture`).
 
 ## Conversion passes
 
@@ -58,21 +55,26 @@ designs ({doc}`../../explanations/architecture`).
 | RF statistics | For each RF definition: its transmit channels, flip angle and energy, as pypulseqpp counts them; its duration from the envelope; and the bandwidth and bands of a multiband pulse from its spectrum |
 | Gradient statistics | For each gradient definition: the range of amplitudes its instances play; and for each shape it plays, the steepest slew rate and the integrals of the squared waveform and of its squared slew rate, pypulseqpp's `Sequence.gradient_statistics` over the amplitude that plays the shape |
 
-The limits and rasters of the scanner (`pypulseqpp.Opts`) are those under which
-the scan is segmented. A segment boundary falls where every gradient is
+### Segmentation rules
+
+The scan is segmented under the limits and rasters of the scanner
+(`pypulseqpp.Opts`). A segment boundary falls where every gradient is
 within the grouping's tolerance of zero, judged by the first and last values
 each arbitrary gradient's library row stores for the event's edges; a
-trapezoid starts and ends at zero. A virtual segment is prepared from the RF and gradient definitions of the blocks of one
-repetition; a block instance sets only their amplitudes, frequency and phase
-offsets and gradient shape, or, where the blocks carry a rotation, the rotated
-wave it plays. Every repetition that plays a virtual segment
-therefore plays the same RF and gradient definitions at each position, and the
-same ADC definition wherever it acquires. A repetition that plays other
+trapezoid starts and ends at zero. A virtual segment is prepared from the RF
+and gradient definitions of the blocks of one repetition; a block instance
+sets only their amplitudes, frequency and phase offsets and gradient shape,
+or, where the blocks carry a rotation, the rotated wave it plays. Every
+repetition that plays a virtual segment therefore plays the same RF and
+gradient definitions at each position, and the same ADC definition wherever it acquires. A repetition that plays other
 definitions, such as a pulse of its own per shot in a repetition pypulseqpp
 finds by block duration and the channels played, or that digitises with other
-ADC events, plays a virtual segment of its own; one with more than 64 such
-variants of either kind is refused. The
-spectral statistics are measured by pypulseqpp's
+ADC events, plays a virtual segment of its own; a virtual segment with more
+than 64 such variants of either kind is refused.
+
+### RF statistics
+
+The spectral statistics are measured by pypulseqpp's
 `calc_rf_bandwidth` when the chain is read, with the Pulseq recipe of the width
 at half the spectral peak; a band is a run of the spectrum above 30 % of its
 peak, and its offset is measured from the carrier. A dynamic pTx pulse holds
@@ -85,6 +87,9 @@ envelope for the power statistics is the root sum of squares of the channels.
 The energy is held as the integral of the squared envelope scaled to unit
 peak, in seconds: pypulseqpp's `calc_rf_power` energy, the integral of
 $|b_1|^2$, over its peak power, both summed over the channels.
+
+### Offsets, labels and rotations
+
 A pulse a file leaves unlabelled takes the use pypulseqpp detects for it when
 the chain is read. RF and ADC frequency and phase offsets are stored absolute:
 the ppm offsets are resolved on the host, at the gamma and B0 of the call's
@@ -167,7 +172,7 @@ while the instance before it plays; with more, from further ahead. A chain
 whose waves fit neither layout, or an instance of which cannot be loaded in
 time, is refused at conversion.
 
-## The two stages of a playout
+## Playout stages
 
 The C library runs both stages of a playout over a backend the playout
 provides (`pulseg_playout_prepare` and `pulseg_playout_scan`, in
@@ -222,12 +227,13 @@ stages into the 32-bit scanner reader, which plays the same instances and
 waves as the host and, built with 16-bit samples, loads the same waves scaled
 to that type.
 
-## The heaviest repetition
+## Heaviest repetition
 
 A scanner evaluates its gradient-heating model on the gradients of a
 repetition, and the host's sound pressure check
-(`pypulseqpp.safety.check_spl`) chooses the same one. For each subsequence the conversion finds the repetition, of
-those the execution stream holds from its first block, over which
+(`pypulseqpp.safety.check_spl`) chooses the same one. For each subsequence,
+the conversion finds the repetition, of those the execution stream holds from
+its first block, over which
 
 $$
 E = \int \lVert \mathbf{g}(t) \rVert^2 \, dt
@@ -235,9 +241,9 @@ $$
 
 is largest, the earliest on a tie, or the whole subsequence where it does not
 repeat, and the cache carries its gradients
-({func}`~pulserver.ir.repetition_gradients`, `pulseg_get_tr_corner_points`). $E$ sums, over the blocks and their gradient
-events, the square of each event's amplitude times the integral of its
-normalised waveform's square, which a rotation leaves unchanged, so the choice
+({func}`~pulserver.ir.repetition_gradients`, `pulseg_get_tr_corner_points`).
+$E$ sums, over the blocks and their gradient events, the square of each
+event's amplitude times the integral of its normalised waveform's square, which a rotation leaves unchanged, so the choice
 does not depend on the blocks' rotations. The repetition is one the scanner
 plays, each block at its own amplitudes and with its own shapes and rotation,
 or through its wave: a waveform that plays, not an envelope of
@@ -249,14 +255,14 @@ raster samples them at the centres of its intervals
 
 ## Cache file
 
-The cache has the name of the first sequence file with its extension replaced:
-`.pseg` by default. It is divided into sections that a
-consumer loads independently. The pulse-generation stage of a playout reads the
+The cache has the name of the first sequence file with its extension replaced,
+`.pseg` by default. It is divided into sections that a consumer loads
+independently. The pulse-generation stage of a playout reads the
 definitions, their waveforms, the waves and their layout, and the gradients of
 each subsequence's heaviest repetition; the scan loop also reads
 the per-block instances, the rotations and the execution stream, whose size
-scales with the scan length. Integer and float fields are 4 bytes. The byte order is recorded
-in the file, and a reader on a machine of the other byte order swaps on load. A
+scales with the scan length. Integer and float fields are 4 bytes. The byte
+order is recorded in the file, and a reader on a machine of the other byte order swaps on load. A
 cache whose format version differs from the reader's is rejected rather than
 read in part.
 
@@ -286,7 +292,7 @@ the segmentation, the waves, their layout in a playout's waveform memory and
 each subsequence's heaviest repetition. The cache reader and writer, the
 accessors a playout uses to walk the loaded collection, and the two stages of a
 playout are compiled into the interpreter, whose vendor toolchains accept ANSI
-C. They are therefore C89, in `src/c/`, and call nothing in `src/cpp/`. The test suite
-compiles `src/c/` as a scanner build does, 32-bit and vendor-tagged, and reads
+C. They are therefore C89, in `src/c/`, and call nothing in `src/cpp/`. The
+test suite compiles `src/c/` as a scanner build does, 32-bit and vendor-tagged, and reads
 back a cache written on the host.
 

@@ -200,6 +200,15 @@ def cache_path(seq_path: Path | str, cache_ext: str = ".pseg") -> Path:
 def chain(seq_path: Path | str) -> list[Path]:
     """Return the files of the ``NextSequence`` chain starting at a sequence file, in play order.
 
+    Parameters
+    ----------
+    seq_path
+        The first file of the chain.
+
+    Returns
+    -------
+    list of Path
+
     Raises
     ------
     FileNotFoundError
@@ -282,9 +291,9 @@ def convert(
         lays the waves out in (:func:`plan_waves`); None holds every wave at
         once on the gradient raster of the chain's first file.
     designed
-        The chain as :func:`pulserver.mrd.designed_chain` returns it,
-        segmented in place of reading and verifying the files, and moved to
-        ``fov_offset`` in place.
+        ``(path, sequence)`` pairs of the chain as ``mrd._sequence.designed_chain``
+        returns them, segmented in place of reading and verifying the files
+        and moved to ``fov_offset`` in place.
 
     Returns
     -------
@@ -296,8 +305,8 @@ def convert(
     ValueError
         If a file of the chain cannot be read, verified or segmented,
         ``sar_ratios`` or ``spl_levels`` does not give one per file, or the
-        waves fit neither
-        layout of ``wave_budget`` or cannot be loaded in time.
+        waves fit neither layout of ``wave_budget`` or cannot be loaded in
+        time.
     OSError
         If no cache was written.
     """
@@ -385,28 +394,42 @@ def summary(
 ) -> dict[str, Any]:
     """Return the segmentation of a sequence: subsequences, segments and readouts.
 
-    Each subsequence lists its unique RF definitions under ``rf``: the flip
-    angle in degrees at the largest amplitude the definition plays, as
-    ``pypulseqpp.Sequence.rf_flip_angles`` gives it; and the bandwidth at half
-    the spectral peak, the number of bands, each band's offset from the
-    carrier and the widest band's bandwidth, all in Hz, as
-    ``pypulseqpp.calc_rf_bandwidth`` measures them; and ``b1sq_integral_s``,
-    the integral of the squared envelope scaled to unit peak, in s:
-    ``pypulseqpp.calc_rf_power``'s energy over its peak power, both summed
-    over a dynamic pTx pulse's channels.
-    ``vop_sar_ratio`` and ``vop_global_sar_ratio`` are those the cache was
-    written with, zero when the chain is read and segmented again;
-    ``spl_peak_db`` and ``spl_average_dba`` likewise, -1 when it is.
-    ``readout_labels`` lists, per readout in play order, the values of the
-    three labels ``label_column_map`` selects, as in force at that readout.
-    ``waves`` lists the subsequence's waves, as :func:`play` indexes
-    them: each one's point count, and its largest magnitude along x, y and z
-    over that of the largest gradient event it combines. ``grad_raster_us``
-    is the raster the file's gradient shapes are sampled on, in µs.
+    Each subsequence reports:
 
-    With ``cache_ext``, the cache beside the file is loaded instead of the
-    chain being read and segmented again; this build loads only vendor-neutral
-    caches, and only when the size recorded in the cache matches the file.
+    - ``rf``: its unique RF definitions, each with the flip angle in degrees at
+      the largest amplitude it plays (``pypulseqpp.Sequence.rf_flip_angles``);
+      the bandwidth at half the spectral peak, the number of bands, each band's
+      offset from the carrier and the widest band's bandwidth, in Hz
+      (``pypulseqpp.calc_rf_bandwidth``); and ``b1sq_integral_s``, the
+      integral of the squared envelope scaled to unit peak, in s, which is
+      ``pypulseqpp.calc_rf_power``'s energy over its peak power. Spectra and
+      integral are summed over the channels of a dynamic pTx pulse.
+    - ``vop_sar_ratio``, ``vop_global_sar_ratio``, ``spl_peak_db``,
+      ``spl_average_dba``: the values the cache was written with; 0, 0, -1 and
+      -1 when the chain is read and segmented again.
+    - ``readout_labels``: per readout in play order, the values of the three
+      labels ``label_column_map`` selects, as in force at that readout.
+    - ``waves``: the subsequence's waves, indexed as :func:`play` indexes them,
+      each with its point count and its largest magnitude along x, y and z over
+      that of the largest gradient event it combines.
+    - ``grad_raster_us``: the raster the file's gradient shapes are sampled on,
+      in µs.
+
+    Parameters
+    ----------
+    seq_path
+        Text or binary Pulseq file, the first of its ``NextSequence`` chain.
+    system
+        Limits and rasters the chain is segmented under; unused with
+        ``cache_ext``.
+    cache_ext
+        Extension of the cache beside the file, dot included. When given, that
+        cache is loaded instead of the chain being read and segmented again;
+        this build loads only vendor-neutral caches, and only when the size
+        recorded in the cache matches the file.
+    label_column_map
+        Label state indices of the three readout label columns, as for
+        :func:`convert`; unused with ``cache_ext``.
 
     Raises
     ------
@@ -481,6 +504,15 @@ def play(
     in play order, across the subsequences of the chain. This build loads only
     vendor-neutral caches, and only when the size recorded in the cache
     matches the file.
+
+    Parameters
+    ----------
+    seq_path
+        The first file of the chain; the cache is the file beside it.
+    cache_ext
+        Extension of the cache, dot included.
+    waveforms
+        Also return the samples and corners each block plays.
 
     Returns
     -------

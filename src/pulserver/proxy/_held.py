@@ -77,8 +77,9 @@ class HeldClient:
 
     Stands in for the client's :class:`Connection` where a reconstruction's
     output is sent. A send that fails, or finds the client's connection reset,
-    leaves the client gone: what follows is written and no longer sent. On exit the file
-    is removed when the client had everything, and kept at ``path`` otherwise.
+    leaves the client gone: what follows is written and no longer sent. On exit
+    the file is removed when the client had everything, and kept at ``path``
+    otherwise.
     """
 
     def __init__(self, client: Connection, path: Path) -> None:

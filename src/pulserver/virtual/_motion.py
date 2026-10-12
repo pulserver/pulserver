@@ -19,12 +19,12 @@ class RigidMotion:
 
     Parameters
     ----------
-    rotation : callable, optional
+    rotation
         ``R(t)``, a ``(3, 3)`` orthonormal matrix; the identity without one.
-    offset : callable, optional
+    offset
         ``offset(t)``, a translation of ``(3,)`` metres; none without one.
-    centre : array_like, default=(0, 0, 0)
-        The point ``rotation`` turns about, in m.
+    centre
+        The point ``rotation`` turns about, in m; the origin by default.
 
     Examples
     --------

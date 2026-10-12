@@ -35,9 +35,9 @@ if TYPE_CHECKING:
 PROTOCOL_BEGIN = "[Protocol]"
 PROTOCOL_END = "[Protocol End]"
 
-#: The block was once delimited by the name of a tool that drove it. A server
-#: and an interpreter are deployed separately and may differ in age, so both
-#: spellings are read; only the one above is written.
+# Delimiters of the alternative spelling of the block. An interpreter and a
+# server are deployed separately, so both spellings are read; only the one
+# above is written.
 _FORMER_BEGIN = "[NimPulseqGUI Protocol]"
 _FORMER_END = "[NimPulseqGUI Protocol End]"
 
@@ -48,8 +48,12 @@ class Validation:
 
     Attributes
     ----------
+    valid
+        Whether the protocol is valid.
     duration
         Scan time in seconds; ``None`` when the plugin reports none.
+    info
+        A note, or the reason the request is invalid.
     values
         The resolved protocol for a valid request, the request itself for an
         invalid one, as wire values by key.

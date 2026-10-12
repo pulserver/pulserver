@@ -24,11 +24,14 @@ _STEPS_OF_SLEW = 3.0
 def gradient_tolerance_mt_per_m(
     max_slew_t_per_m_per_s: float, raster_us: float
 ) -> float:
-    """Return how far two renderings of a gradient may differ and still agree.
+    """Return the gradient tolerance in mT/m: the amplitude slewed through in three raster steps.
 
-    The amplitude a machine can legitimately be away by is what it can slew
-    through in the few raster steps the two renderings may be apart, so the
-    tolerance is the hardware's and not a number chosen here.
+    Parameters
+    ----------
+    max_slew_t_per_m_per_s
+        Maximum slew rate, in T/m/s.
+    raster_us
+        Gradient raster time, in µs.
     """
     # A slew in T/m/s over a raster in us is mT/m once per thousand.
     return _STEPS_OF_SLEW * max_slew_t_per_m_per_s * raster_us * 1e-3
@@ -44,10 +47,13 @@ class ChannelAgreement:
         Which channel: a gradient axis ``gx``, ``gy`` or ``gz``, or a transmit
         channel ``rho`` or ``theta``.
     peak
-        The larger of the two renderings' peak amplitudes, in the channel's
-        unit. The scale the difference is read against.
+        The scale the difference is read against: the larger of the two
+        renderings' peak amplitudes in mT/m for a gradient, the sequence's
+        peak magnitude for ``rho``, and π for ``theta``.
     largest_difference
-        The largest absolute difference between them, in the same unit.
+        The largest absolute difference in mT/m for a gradient, the root mean
+        square difference of ``rho`` as a percentage of its peak, and the
+        largest phase difference of ``theta`` in rad.
     agrees
         Whether the difference stayed within the tolerance asked for.
     """
@@ -75,7 +81,12 @@ class Comparison:
     channels
         One per channel compared.
     shift_us
-        The time the reference was moved by before comparing, in microseconds.
+        Subtracted from the reference's gradient times before comparing, in µs.
+    rf_shift_us
+        The same for the transmit channels, in µs.
+    magnitude_scale
+        Hz per recorded count of the transmit magnitude, which is compared by
+        shape; 1 without a transmit comparison.
     agrees
         Whether every channel agreed.
     """
@@ -123,16 +134,32 @@ def compare_shape(
     channel: str,
     tolerance_percent: float,
 ) -> tuple[ChannelAgreement, float]:
-    """Compare two renderings of a channel whose scale is not known, by shape.
+    """Compare two renderings of a channel whose scale is unknown, by shape.
 
-    The transmit magnitude a machine records is in its converter's own numbers,
-    and what turns them into hertz is the peak transmit field of the scan being
-    played, which the recording does not carry. So the recording is scaled to
-    the peak the sequence asks for and the two are compared as shapes; the
-    scale that took is returned, because it is the quantity a machine's own
-    calibration would have to supply.
+    The recorded transmit magnitude is in the converter's own counts, and the
+    recording does not carry the peak transmit field that converts them to Hz.
+    The recording is scaled to the peak the sequence asks for, and the scale is
+    returned.
 
-    The difference is the root mean square against the peak, as a percentage.
+    Parameters
+    ----------
+    asked_time_us, asked
+        Sample times in µs and amplitudes the sequence asks for.
+    played_time_us, played
+        Sample times in µs and amplitudes of the recording, in counts. The
+        sequence is interpolated at these times, zero outside its extent.
+    channel
+        Name recorded in the result.
+    tolerance_percent
+        Largest root mean square difference, as a percentage of the peak.
+
+    Returns
+    -------
+    tuple of (ChannelAgreement, float)
+        The agreement, whose ``largest_difference`` is the root mean square
+        difference as a percentage of the peak, and the scale applied to the
+        recording. Without samples on either side, an agreement and a scale
+        of 1.
     """
     if not played_time_us.size or not asked_time_us.size:
         return (
@@ -170,17 +197,11 @@ def compare_gradients(
     shift_us: float = 0.0,
     tolerance_mt_per_m: float = 0.05,
 ) -> Comparison:
-    """Compare two renderings of the gradients, sampled where the second has samples.
+    """Compare two renderings of the gradients, at the sample times of the second.
 
-    Both are given as ``(time_us, amplitude_mt_per_m)`` per axis. The first is
-    read at the second's sample times, so a difference is read where the
-    machine actually stepped rather than on a grid of this function's choosing.
-
-    ``shift_us`` moves the second in time before comparing. The transmit and
-    gradient channels of a machine are driven on their own timelines and a
-    recording holds them as each was driven, so a comparison that does not
-    account for the offset between them reads one against the other at times
-    that never coincided.
+    Both are given as ``{axis: (time_us, amplitude_mt_per_m)}`` for ``gx``,
+    ``gy`` and ``gz``. The first is interpolated linearly at the second's
+    sample times, zero outside its extent.
 
     Parameters
     ----------
@@ -191,9 +212,9 @@ def compare_gradients(
     reference
         Names what ``played`` is, for :attr:`Comparison.reference`.
     shift_us
-        Moves ``played`` forward in time by this much before comparing.
+        Subtracted from the times of ``played`` before comparing, in µs.
     tolerance_mt_per_m
-        The largest difference that still counts as agreement.
+        The largest difference that still counts as agreement, in mT/m.
 
     Returns
     -------
@@ -234,11 +255,7 @@ def compare_gradients(
 def gradients_of_sequence(
     sequence: object,
 ) -> dict[str, tuple[NDArray[np.float64], NDArray[np.float64]]]:
-    """Return a sequence's gradient corners per axis, in microseconds and mT/m.
-
-    The corners are what the sequence asks for, before any machine has rounded
-    them to a raster.
-    """
+    """Return a sequence's gradient corners per axis, in µs and mT/m, unrounded to any raster."""
     played = sequence.waveforms()
     out: dict[str, tuple[NDArray[np.float64], NDArray[np.float64]]] = {}
     for axis, corners in zip(("gx", "gy", "gz"), played, strict=False):

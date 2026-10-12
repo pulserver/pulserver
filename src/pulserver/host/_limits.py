@@ -53,15 +53,17 @@ def split_limits(
 
     Keys starting with ``ir_`` are conversion options: ``ir_vendor``,
     ``ir_label_column_map`` (three integers separated by spaces),
-    ``ir_cache_ext``, ``ir_vendor_file`` (the file
-    :func:`pulserver.ir.read_vendor` reads the profile and grouping from), and
-    the playout's waveform memory the cache lays the waves out for, the fields of :class:`pulserver.ir.WaveBudget` prefixed
-    ``ir_wave_``, of which ``ir_wave_max_samples`` and ``ir_wave_raster_us``
-    are required together. Keys starting with ``pns_``, ``forbidden_band_``,
-    ``vop_`` and ``acoustic_`` are the check limits of :func:`check_limits`, and those starting
-    with ``design_`` the design limits of :func:`design_system`. The other keys
-    are ``pypulseqpp.Opts`` keyword arguments, among which ``B0`` is required:
-    the field in T the scan runs at, which ppm offsets are resolved at.
+    ``ir_cache_ext`` and ``ir_vendor_file`` (the file
+    :func:`pulserver.ir.read_vendor` reads the profile and grouping from). The
+    fields of :class:`pulserver.ir.WaveBudget`, the waveform memory of the
+    playout that the cache lays the waves out for, are the keys prefixed
+    ``ir_wave_``; ``ir_wave_max_samples`` and ``ir_wave_raster_us`` are
+    required together. Keys starting with ``pns_``, ``forbidden_band_``,
+    ``vop_`` and ``acoustic_`` are the check limits of :func:`check_limits`,
+    and those starting with ``design_`` the design limits of
+    :func:`design_system`. The other keys are ``pypulseqpp.Opts`` keyword
+    arguments, among which ``B0`` is required: the field in T the scan runs
+    at, which ppm offsets are resolved at.
 
     Raises
     ------
@@ -125,11 +127,11 @@ def design_system(limits: Mapping[str, Any]) -> pp.Opts:
 
     The scanner limits of :func:`split_limits`, with the gradient amplitude and
     slew rate capped by ``design_max_grad`` and ``design_max_slew`` where the
-    limits carry them, in the units of ``max_grad`` and ``max_slew``: the
-    limits per logical axis a scanner derates for the prescription's rotation.
-    A design limit above the scanner's leaves the scanner's. The checks hold
-    the waveforms played in the physical frame to ``max_grad`` and
-    ``max_slew`` themselves.
+    limits carry them, in the units of ``max_grad`` and ``max_slew``. These
+    are the per-logical-axis limits that a prescription rotation derates. A
+    design limit above the scanner's leaves the scanner's. The checks hold the
+    waveforms played in the physical frame to ``max_grad`` and ``max_slew``
+    themselves.
 
     Raises
     ------
@@ -171,7 +173,7 @@ def _design_ceilings(limits: Mapping[str, Any]) -> dict[str, float]:
 
 
 def check_limits(limits: Mapping[str, Any]) -> ir.CheckLimits:
-    """Read the nerve and resonance limits and the VOP entries among a call's limits.
+    """Read the check limits among a call's limits: PNS model, forbidden bands, VOP and acoustic entries.
 
     - ``pns_chronaxie`` (s), ``pns_rheobase`` (T/m/s) and optionally
       ``pns_alpha`` give a chronaxie nerve model. The chronaxie is one value;

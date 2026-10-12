@@ -164,17 +164,15 @@ class _HeldSlot(Slot):
 class HostSlots:
     """The slots series take, counted across every process on the host.
 
-    :class:`Slots` bounds the series one process reconstructs at once. That is
-    not the bound that matters: a reconstruction computer runs one proxy per
-    acquisition, each deriving the same count from the same memory and the same
-    GPUs, so each would admit that many and together they would admit far more
-    than the host has. A slot is held here by a lock on a file all of them
-    share, so the count is the host's.
+    :class:`Slots` bounds the series one process reconstructs at once. Proxies
+    on one host each derive the same count from the same memory and GPUs, so
+    together they would admit more series than the host holds. A slot is held
+    here by a lock on a file all of them share, so the count is the host's.
 
-    A lock is the kernel's, so a proxy that dies frees its slots without anyone
-    noticing it died. Slot ``i`` holds ``devices[i]`` in every process, and
-    :func:`slot_devices` answers the same on one host, so two proxies never
-    take the same GPU for different series.
+    The lock is the kernel's, so the slots of a proxy that dies are freed.
+    Slot ``i`` holds ``devices[i]`` in every process, and :func:`slot_devices`
+    gives the same list on one host, so two proxies never take the same GPU for
+    different series.
     """
 
     def __init__(

@@ -1,4 +1,4 @@
-"""Gadgets applied to each readout on arrival: prewhitening, and the echo of a Cartesian readout brought to the reconstruction matrix's readout."""
+"""Gadgets applied to each readout on arrival: prewhitening, asymmetric-echo filling and readout oversampling removal."""
 
 from __future__ import annotations
 
@@ -214,7 +214,7 @@ class RemoveReadoutOversampling(Gadget):
 
 
 def _oversampling(encoding: Any) -> float:
-    """Return the ratio of an encoding's encoded to reconstructed field of view along the readout, 1 where either is not stated."""
+    """Return the encoded to reconstructed field-of-view ratio along the readout; 1 where either is not stated."""
 
     def readout_fov(space: Any) -> float:
         fov = getattr(space, "fieldOfView_mm", None)

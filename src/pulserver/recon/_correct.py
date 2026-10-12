@@ -7,9 +7,9 @@ __all__ = ["gradient_unwarped", "states_gradient_coefficients"]
 import logging
 from typing import Any
 
-#: User parameters a gradient coil's spherical-harmonic table is stated in. A
-#: GE interpreter writes ``gradient_coefficients``; the others are the names
-#: bartorch also reads, so a stream from another interpreter is corrected too.
+#: User parameters a gradient coil's spherical-harmonic table is stated in:
+#: ``gradient_coefficients`` is the name a scanner-side interpreter writes; the
+#: others are names bartorch also reads.
 COEFFICIENT_PARAMETERS = (
     "gradient_coefficients",
     "gradientcoefficients",
@@ -33,15 +33,14 @@ def states_gradient_coefficients(header: Any) -> bool:
 
 
 def gradient_unwarped(image: Any, context: Any, data: Any) -> Any:
-    """Return an image resampled from where its voxels were acquired to where they belong.
+    """Correct an image for gradient nonlinearity.
 
     The coil's spherical-harmonic field is evaluated at the scanner position of
-    every voxel of the reconstruction matrix, and the image is resampled there.
-    A complex image has its real and imaginary parts resampled separately.
-
-    Geometry comes from the header's reconstruction space and from the unit's
-    reference acquisition, so the correction is in the frame the series was
-    acquired in, oblique prescriptions included.
+    every voxel of the reconstruction matrix, and the image is resampled at the
+    displaced positions; a complex image has its real and imaginary parts
+    resampled separately. Geometry comes from the header's reconstruction space
+    and the unit's reference acquisition, so the correction is in the frame the
+    series was acquired in, oblique prescriptions included.
 
     Parameters
     ----------
@@ -54,10 +53,11 @@ def gradient_unwarped(image: Any, context: Any, data: Any) -> Any:
 
     Returns
     -------
-    The corrected image, of the type and on the device it was given in.
-    ``image`` itself where the header states no table, where the unit has no
-    reference acquisition, or where the correction fails: an uncorrected image
-    reaches the scanner, and the reason is logged.
+    numpy.ndarray or torch.Tensor
+        The corrected image, of the type and on the device of ``image``.
+        ``image`` itself where the header states no table, where the unit has
+        no reference acquisition, or where the correction fails; the reason is
+        logged and an uncorrected image is sent on.
     """
     header = getattr(context, "header", None)
     if header is None or not states_gradient_coefficients(header):
