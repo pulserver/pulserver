@@ -1,0 +1,86 @@
+/* In dark mode the theme paints an opaque white card behind every image in the
+   content area and dims it with a brightness filter, which is what a figure
+   drawn on an opaque light canvas needs. Every figure here is drawn on a
+   transparent canvas, in ink that reads against either background, so both
+   rules are removed. The selectors match the theme's own so that load order
+   decides; `.only-dark` and `.dark-light` keep the exemptions the theme
+   defines for an image supplied in two variants. */
+
+html[data-theme="dark"] .bd-content img:not(.only-dark, .dark-light) {
+  background-color: transparent;
+  border-radius: 0;
+}
+
+html[data-theme="dark"] img:not(.only-dark, .dark-light) {
+  filter: none;
+}
+
+/* The landing page is the repository README, and its heading is what the
+   sidebar entry for the page is named. "Homepage" is the name a reader wants
+   there; on the page itself the wordmark below it already says what the
+   project is called, so the heading is hidden rather than printed twice. */
+
+section#homepage > h1 {
+  display: none;
+}
+
+/* The TL;DR block under an explanation page's title. */
+.admonition.tldr { border-color: var(--pst-color-primary); }
+.admonition.tldr > .admonition-title { background-color: var(--pst-color-primary-bg); }
+.admonition.tldr > .admonition-title::after { color: var(--pst-color-primary); }
+.admonition.tldr ul { margin-bottom: 0; }
+
+/* The Open in Colab badge under an example's title. */
+img.colab-badge {
+  margin: 0.25rem 0 1rem;
+}
+@media print {
+  img.colab-badge {
+    display: none;
+  }
+}
+
+/* A text block is a spec to paste into an agent: its copy button is shown
+   without hovering, which a touch screen cannot do. */
+div.highlight-text .copybtn {
+  opacity: 1;
+}
+
+/* Body text is justified, with hyphenation to keep the word spacing even.
+   Table cells and admonition titles stay left-aligned. */
+.bd-article p,
+.bd-article li {
+  text-align: justify;
+  hyphens: auto;
+}
+.bd-article td p,
+.bd-article th p,
+.bd-article .admonition-title {
+  text-align: left;
+}
+
+/* A capability's code and test, under its statement. */
+.bd-article .capabilities li > p + p {
+  margin-top: -0.6em;
+  font-size: 0.9em;
+  text-align: left;
+  color: var(--pst-color-text-muted);
+}
+
+/* The capability list reads as a checklist until its evidence is asked for. */
+.bd-article .capabilities.collapsed li > p + p {
+  display: none;
+}
+.bd-article .capabilities.collapsed li {
+  margin-bottom: 0.2em;
+}
+.capabilities-toggle {
+  font-size: 0.85em;
+  padding: 0.2em 0.7em;
+  margin-bottom: 0.6em;
+  border: 1px solid var(--pst-color-border);
+  border-radius: 4px;
+  background: var(--pst-color-surface);
+  color: var(--pst-color-text-base);
+  cursor: pointer;
+}

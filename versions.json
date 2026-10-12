@@ -11,6 +11,11 @@
     "url": "https://pulserver.github.io/pulserver/v0.2.0/"
   },
   {
+    "name": "v0.0.2",
+    "version": "v0.0.2",
+    "url": "https://pulserver.github.io/pulserver/v0.0.2/"
+  },
+  {
     "name": "latest",
     "version": "latest",
     "url": "https://pulserver.github.io/pulserver/latest/"
