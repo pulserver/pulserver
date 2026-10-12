@@ -495,6 +495,7 @@
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#shipped-sequences">Shipped sequences</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#shared-user-entries">Shared user entries</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#module-constants">Module constants</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#diffusion-tables">Diffusion tables</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#protocol-conventions">Protocol conventions</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#shipped-evaluation">Shipped evaluation</a></li>
 </ul>
@@ -1035,6 +1036,49 @@ and a user entry otherwise:</p>
 </table>
 </div>
 </section>
+<section id="diffusion-tables">
+<h3>Diffusion tables<a class="headerlink" href="#diffusion-tables" title="Link to this heading">#</a></h3>
+<p>A diffusion sequence plays a table of b-values and directions read from a file,
+as a scanner’s own diffusion sequences do: the console names the table by
+number in the <code class="docutils literal notranslate"><span class="pre">UIParam.DIFFUSION_TABLE</span></code> entry, with the largest b-value in
+<code class="docutils literal notranslate"><span class="pre">UIParam.DIFFUSION_BVALUES</span></code> and the number of directions in
+<code class="docutils literal notranslate"><span class="pre">UIParam.DIFFUSION_DIRECTIONS</span></code>; the sequence function turns the number into the
+file’s path with module constants a site sets, reads the file and records its
+path with <a class="reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.io.set_diffusion_table.html#pypulseqpp.io.set_diffusion_table" title="(in pypulseqpp latest)"><code class="xref py py-func docutils literal notranslate"><span class="pre">pypulseqpp.io.set_diffusion_table()</span></code></a>. The proxy reads the same file
+again, so the table reaches the reconstruction without being copied into the
+sequence (<a class="reference internal" href="reconstruction-plugins.html"><span class="doc">Reconstruction plugins</span></a>).</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">pypulseqpp</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pp</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pulserver.design</span><span class="w"> </span><span class="kn">import</span> <span class="n">FloatParam</span><span class="p">,</span> <span class="n">IntParam</span><span class="p">,</span> <span class="n">SequencePlugin</span><span class="p">,</span> <span class="n">UIParam</span>
+
+<span class="n">TENSOR_DIRECTORY</span> <span class="o">=</span> <span class="s2">"/data/diffusion"</span>
+<span class="n">TENSOR_PREFIX</span> <span class="o">=</span> <span class="s2">"tensor"</span>
+<span class="n">TENSOR_SUFFIX</span> <span class="o">=</span> <span class="s2">".dat"</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">dwi</span><span class="p">(</span><span class="n">system</span><span class="p">,</span> <span class="n">table</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">b_value</span><span class="o">=</span><span class="mf">1000.0</span><span class="p">,</span> <span class="n">directions</span><span class="o">=</span><span class="mi">30</span><span class="p">):</span>
+    <span class="n">seq</span> <span class="o">=</span> <span class="n">pp</span><span class="o">.</span><span class="n">Sequence</span><span class="p">(</span><span class="n">system</span><span class="p">)</span>
+    <span class="n">name</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">TENSOR_PREFIX</span><span class="si">}{</span><span class="n">table</span><span class="si">}{</span><span class="n">TENSOR_SUFFIX</span><span class="si">}</span><span class="s2">"</span>
+    <span class="n">path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">TENSOR_DIRECTORY</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span>
+    <span class="n">b</span><span class="p">,</span> <span class="n">g</span> <span class="o">=</span> <span class="n">pp</span><span class="o">.</span><span class="n">io</span><span class="o">.</span><span class="n">set_diffusion_table</span><span class="p">(</span><span class="n">seq</span><span class="p">,</span> <span class="n">path</span><span class="p">,</span> <span class="n">b_value</span><span class="p">,</span> <span class="n">directions</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">volume</span><span class="p">,</span> <span class="p">(</span><span class="n">b_volume</span><span class="p">,</span> <span class="n">direction</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="nb">zip</span><span class="p">(</span><span class="n">b</span><span class="p">,</span> <span class="n">g</span><span class="p">)):</span>
+        <span class="o">...</span>  <span class="c1"># one volume, its REP label set to `volume`</span>
+    <span class="k">return</span> <span class="n">seq</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">Dwi</span><span class="p">(</span><span class="n">SequencePlugin</span><span class="p">):</span>
+    <span class="n">app</span> <span class="o">=</span> <span class="n">dwi</span>
+    <span class="n">protocol</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="n">UIParam</span><span class="o">.</span><span class="n">DIFFUSION_TABLE</span><span class="p">:</span> <span class="n">IntParam</span><span class="p">(</span><span class="s2">"table"</span><span class="p">,</span> <span class="n">range_min</span><span class="o">=</span><span class="mi">1</span><span class="p">),</span>
+        <span class="n">UIParam</span><span class="o">.</span><span class="n">DIFFUSION_BVALUES</span><span class="p">:</span> <span class="n">FloatParam</span><span class="p">(</span><span class="s2">"b_value"</span><span class="p">,</span> <span class="n">unit</span><span class="o">=</span><span class="s2">"s/mm²"</span><span class="p">),</span>
+        <span class="n">UIParam</span><span class="o">.</span><span class="n">DIFFUSION_DIRECTIONS</span><span class="p">:</span> <span class="n">IntParam</span><span class="p">(</span><span class="s2">"directions"</span><span class="p">,</span> <span class="n">range_min</span><span class="o">=</span><span class="mi">1</span><span class="p">),</span>
+    <span class="p">}</span>
+</pre></div>
+</div>
+<p>The table is in the frame of the gradient channels, so its directions turn with
+the prescription.</p>
+</section>
 <section id="protocol-conventions">
 <h3>Protocol conventions<a class="headerlink" href="#protocol-conventions" title="Link to this heading">#</a></h3>
 <ul class="simple">
@@ -1151,6 +1195,7 @@ request names under <code class="docutils literal notranslate"><span class="pre"
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#shipped-sequences">Shipped sequences</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#shared-user-entries">Shared user entries</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#module-constants">Module constants</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#diffusion-tables">Diffusion tables</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#protocol-conventions">Protocol conventions</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#shipped-evaluation">Shipped evaluation</a></li>
 </ul>

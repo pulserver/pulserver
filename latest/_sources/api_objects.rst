@@ -97,6 +97,8 @@ from.
    LOOP_COUNTERS
    user_parameter
    max_stored_value
+   diffusion_table
+   DIFFUSION_TABLE
    coil_combine
    center_crop
    as_numpy

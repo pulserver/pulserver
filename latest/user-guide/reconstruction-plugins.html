@@ -492,6 +492,7 @@
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#non-cartesian-data">Non-Cartesian data</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#coil-sensitivities-noise-and-compression">Coil sensitivities, noise and compression</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#dicom-pixel-values">DICOM pixel values</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#diffusion-tables">Diffusion tables</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#logging">Logging</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#offline-reconstruction">Offline reconstruction</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#shipped-reconstructions">Shipped reconstructions</a></li>
@@ -865,6 +866,25 @@ mapping.</p></li>
 </ul>
 <p><code class="docutils literal notranslate"><span class="pre">RescaleType</span></code> is <code class="docutils literal notranslate"><span class="pre">US</span></code>, unspecified: the units are those of the reconstruction.</p>
 </section>
+<section id="diffusion-tables">
+<h2>Diffusion tables<a class="headerlink" href="#diffusion-tables" title="Link to this heading">#</a></h2>
+<p>The proxy states the diffusion table a design names in the header’s
+<code class="docutils literal notranslate"><span class="pre">diffusion_table</span></code> user parameter string. <a class="reference internal" href="../generated/pulserver.mrd.diffusion_table.html#pulserver.mrd.diffusion_table" title="pulserver.mrd.diffusion_table"><code class="xref py py-func docutils literal notranslate"><span class="pre">pulserver.mrd.diffusion_table()</span></code></a>
+returns it as the b-value of each volume, in s/mm², and its unit direction
+along the logical readout, phase and slice axes, zero where the b-value is
+zero. Row <code class="docutils literal notranslate"><span class="pre">i</span></code> is the volume whose <code class="docutils literal notranslate"><span class="pre">repetition</span></code> counter is <code class="docutils literal notranslate"><span class="pre">i</span></code>:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pulserver</span><span class="w"> </span><span class="kn">import</span> <span class="n">mrd</span>
+
+<span class="n">b</span><span class="p">,</span> <span class="n">g</span> <span class="o">=</span> <span class="n">mrd</span><span class="o">.</span><span class="n">diffusion_table</span><span class="p">(</span><span class="n">context</span><span class="o">.</span><span class="n">header</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>A DICOM result of a series with a table states the image’s <code class="docutils literal notranslate"><span class="pre">DiffusionBValue</span></code>,
+its <code class="docutils literal notranslate"><span class="pre">DiffusionGradientOrientation</span></code>, the direction turned into the patient frame
+through the image’s <code class="docutils literal notranslate"><span class="pre">read_dir</span></code>, <code class="docutils literal notranslate"><span class="pre">phase_dir</span></code> and <code class="docutils literal notranslate"><span class="pre">slice_dir</span></code>, and its
+<code class="docutils literal notranslate"><span class="pre">DiffusionDirectionality</span></code>. These are the DICOM standard’s own attributes, from
+which dcm2niix writes the <code class="docutils literal notranslate"><span class="pre">.bval</span></code> and <code class="docutils literal notranslate"><span class="pre">.bvec</span></code> files FSL, DIPY and BIDS read, and
+which MRtrix reads directly.</p>
+</section>
 <section id="logging">
 <h2>Logging<a class="headerlink" href="#logging" title="Link to this heading">#</a></h2>
 <p>A plugin logs with the standard <code class="docutils literal notranslate"><span class="pre">logging</span></code> module, under a logger of its own
@@ -1005,6 +1025,7 @@ volume as one image per partition.</p>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#non-cartesian-data">Non-Cartesian data</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#coil-sensitivities-noise-and-compression">Coil sensitivities, noise and compression</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#dicom-pixel-values">DICOM pixel values</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#diffusion-tables">Diffusion tables</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#logging">Logging</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#offline-reconstruction">Offline reconstruction</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#shipped-reconstructions">Shipped reconstructions</a></li>

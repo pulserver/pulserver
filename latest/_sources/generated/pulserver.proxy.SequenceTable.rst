@@ -26,6 +26,7 @@
    :toctree:
    :nosignatures:
 
+   ~SequenceTable.diffusion
    ~SequenceTable.fov_offset_m
    ~SequenceTable.counters
    ~SequenceTable.flags

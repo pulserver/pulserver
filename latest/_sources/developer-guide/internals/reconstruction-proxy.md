@@ -229,6 +229,15 @@ is applied to the stream as follows.
   closest approach to the k-space centre, and TR between the excitations
   around it. The flip angles it does not define are the distinct values of
   `Sequence.rf_flip_angles`.
+- A sequence that names a diffusion table in its definitions
+  (`DiffusionTable`, `DiffusionBValue`, `DiffusionDirections`, written by
+  {func}`pypulseqpp.io.set_diffusion_table`) has the table read from its file
+  with {func}`pypulseqpp.io.get_diffusion_table`, the reader the sequence
+  used, and stated in the header's `diffusion_table` user parameter string, one
+  `x y z b` row per volume ({func}`~pulserver.mrd.diffusion_table`). The rows
+  travel as text rather than as the path, so a reconstruction that does not
+  share the proxy's file system reads them too. A table the proxy cannot read
+  is logged and left out.
 - Each acquisition is matched to a table row by its position in the stream and
   receives the encoding counters, the MRD flags, the dwell time and the
   encoding space reference, and the k-space trajectory when the k-space

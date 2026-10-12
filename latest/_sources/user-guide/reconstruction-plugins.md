@@ -331,6 +331,27 @@ with one mapping per DICOM series, a series being the images that share
 
 `RescaleType` is `US`, unspecified: the units are those of the reconstruction.
 
+## Diffusion tables
+
+The proxy states the diffusion table a design names in the header's
+`diffusion_table` user parameter string. {func}`pulserver.mrd.diffusion_table`
+returns it as the b-value of each volume, in s/mm², and its unit direction
+along the logical readout, phase and slice axes, zero where the b-value is
+zero. Row `i` is the volume whose `repetition` counter is `i`:
+
+```python
+from pulserver import mrd
+
+b, g = mrd.diffusion_table(context.header)
+```
+
+A DICOM result of a series with a table states the image's `DiffusionBValue`,
+its `DiffusionGradientOrientation`, the direction turned into the patient frame
+through the image's `read_dir`, `phase_dir` and `slice_dir`, and its
+`DiffusionDirectionality`. These are the DICOM standard's own attributes, from
+which dcm2niix writes the `.bval` and `.bvec` files FSL, DIPY and BIDS read, and
+which MRtrix reads directly.
+
 ## Logging
 
 A plugin logs with the standard `logging` module, under a logger of its own

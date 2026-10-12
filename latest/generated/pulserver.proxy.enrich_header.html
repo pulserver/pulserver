@@ -512,7 +512,9 @@ the counters of its readouts, with the centre the sequence defines for
 <code class="docutils literal notranslate"><span class="pre">kspace_encoding_step_1</span></code> and <code class="docutils literal notranslate"><span class="pre">_2</span></code> and the middle of the range for the
 others, and <code class="docutils literal notranslate"><span class="pre">trajectory</span></code> is <code class="docutils literal notranslate"><span class="pre">OTHER</span></code> or <code class="docutils literal notranslate"><span class="pre">CARTESIAN</span></code>. Other fields of
 an existing encoding are kept; missing encodings are appended. Sequence
-parameters the table holds replace the header’s.</p>
+parameters the table holds replace the header’s, and its diffusion table
+becomes the <code class="docutils literal notranslate"><span class="pre">diffusion_table</span></code> user parameter string, one <code class="docutils literal notranslate"><span class="pre">x</span> <span class="pre">y</span> <span class="pre">z</span> <span class="pre">b</span></code> row
+per volume (<a class="reference internal" href="pulserver.mrd.diffusion_table.html#pulserver.mrd.diffusion_table" title="pulserver.mrd.diffusion_table"><code class="xref py py-func docutils literal notranslate"><span class="pre">pulserver.mrd.diffusion_table()</span></code></a>).</p>
 </dd></dl>
 
 </section>

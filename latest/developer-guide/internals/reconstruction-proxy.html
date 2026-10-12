@@ -719,6 +719,15 @@ pypulseqpp’s <code class="docutils literal notranslate"><span class="pre">Sequ
 closest approach to the k-space centre, and TR between the excitations
 around it. The flip angles it does not define are the distinct values of
 <code class="docutils literal notranslate"><span class="pre">Sequence.rf_flip_angles</span></code>.</p></li>
+<li><p>A sequence that names a diffusion table in its definitions
+(<code class="docutils literal notranslate"><span class="pre">DiffusionTable</span></code>, <code class="docutils literal notranslate"><span class="pre">DiffusionBValue</span></code>, <code class="docutils literal notranslate"><span class="pre">DiffusionDirections</span></code>, written by
+<a class="reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.io.set_diffusion_table.html#pypulseqpp.io.set_diffusion_table" title="(in pypulseqpp latest)"><code class="xref py py-func docutils literal notranslate"><span class="pre">pypulseqpp.io.set_diffusion_table()</span></code></a>) has the table read from its file
+with <a class="reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.io.get_diffusion_table.html#pypulseqpp.io.get_diffusion_table" title="(in pypulseqpp latest)"><code class="xref py py-func docutils literal notranslate"><span class="pre">pypulseqpp.io.get_diffusion_table()</span></code></a>, the reader the sequence
+used, and stated in the header’s <code class="docutils literal notranslate"><span class="pre">diffusion_table</span></code> user parameter string, one
+<code class="docutils literal notranslate"><span class="pre">x</span> <span class="pre">y</span> <span class="pre">z</span> <span class="pre">b</span></code> row per volume (<a class="reference internal" href="../../generated/pulserver.mrd.diffusion_table.html#pulserver.mrd.diffusion_table" title="pulserver.mrd.diffusion_table"><code class="xref py py-func docutils literal notranslate"><span class="pre">diffusion_table()</span></code></a>). The rows
+travel as text rather than as the path, so a reconstruction that does not
+share the proxy’s file system reads them too. A table the proxy cannot read
+is logged and left out.</p></li>
 <li><p>Each acquisition is matched to a table row by its position in the stream and
 receives the encoding counters, the MRD flags, the dwell time and the
 encoding space reference, and the k-space trajectory when the k-space
