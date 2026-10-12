@@ -274,16 +274,16 @@ class Timeline:
 
     Parameters
     ----------
-    seq_path
+    seq_path : Path | str
         The first file of the sequence's chain, beside its cache.
-    cache_ext
+    cache_ext : str, default='.pseg'
         The extension of the cache beside each file.
-    rotation
+    rotation : np.ndarray, default=None
         ``(3, 3)`` rotation of the prescription from logical to physical axes;
         the identity by default.
-    device
+    device : torch.device | str, default='cpu'
         Where the moments of many samples are integrated.
-    girf
+    girf : Girf, default=None
         The impulse response the gradients play through; the moments are of
         the gradients played, the cache's gradients themselves without one.
 
@@ -390,9 +390,9 @@ class Timeline:
 
         Parameters
         ----------
-        block
+        block : np.ndarray
             ``(n,)`` blocks.
-        since_us
+        since_us : np.ndarray
             ``(n,)`` times from their starts, in µs.
         """
         block = np.asarray(block, dtype=np.int64)

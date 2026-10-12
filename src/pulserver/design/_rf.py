@@ -87,12 +87,12 @@ class RfLayout:
 
         Parameters
         ----------
-        repetition
+        repetition : pypulseqpp.Sequence
             One TR: the sequence whose RF instances are the layout.
-        control
+        control : RfControl | Iterable[RfControl | None] | None
             The control of every instance, or ``None`` for none; or one control
             per instance, in play order. A single key is one control.
-        period
+        period : float, default=None
             The TR in seconds. The duration of ``repetition`` where omitted.
         """
         instances = repetition.rf_instances()

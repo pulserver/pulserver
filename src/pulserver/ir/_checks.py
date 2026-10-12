@@ -176,20 +176,20 @@ def check(
 
     Parameters
     ----------
-    seq_path
+    seq_path : Path | str
         The first file of the chain.
-    system
+    system : pypulseqpp.Opts
         The scanner's gradient limits, dead times and ringdown time.
-    rotation
+    rotation : np.ndarray, default=None
         ``(3, 3)`` prescription rotation from logical to physical axes, a
         reflection included; the identity by default.
-    limits
+    limits : CheckLimits, default=None
         The nerve and resonance limits; none by default.
-    designed
+    designed : list[tuple[Path, pypulseqpp.Sequence]], default=None
         ``(path, sequence)`` pairs of the chain as ``mrd._sequence.designed_chain``
         returns them, checked in place of reading the files and rotated in
         place.
-    spl_levels
+    spl_levels : Sequence[SplLevels], default=None
         One per file of the chain, as :func:`spl_levels` returns them for
         ``rotation``, held to the limits in place of computing them.
 
@@ -369,16 +369,16 @@ def spl_levels(
 
     Parameters
     ----------
-    seq_path
+    seq_path : Path | str
         The first file of the chain.
-    system
+    system : pypulseqpp.Opts
         Source of the gyromagnetic ratio.
-    limits
+    limits : CheckLimits
         The acoustic transfer function.
-    designed
+    designed : list[tuple[Path, pypulseqpp.Sequence]], default=None
         ``(path, sequence)`` pairs of the chain as ``mrd._sequence.designed_chain``
         returns them, used in place of reading the files.
-    rotation
+    rotation : np.ndarray, default=None
         ``(3, 3)`` prescription rotation from logical to physical axes; the
         identity by default.
 
@@ -417,15 +417,15 @@ def sar_ratios(
 
     Parameters
     ----------
-    seq_path
+    seq_path : Path | str
         The first file of the chain.
-    system
+    system : pypulseqpp.Opts
         The rasters and RF dead times the reference pulse is made with.
-    limits
+    limits : CheckLimits
         The VOPs, the head and local SAR limits, the channel drive, the
         default shim and, when given, the transmit configuration the VOP file
         must name.
-    designed
+    designed : list[tuple[Path, pypulseqpp.Sequence]], default=None
         ``(path, sequence)`` pairs of the chain as ``mrd._sequence.designed_chain``
         returns them, used in place of reading the files.
 

@@ -54,30 +54,30 @@ def validate(
 
     Parameters
     ----------
-    seq_path
+    seq_path : Path | str
         The sequence file.
-    vendor
+    vendor : str, default=None
         Which machine ``played`` came from, one of :data:`VENDORS`. ``None``
         compares against the cache and ignores ``played``.
-    played
+    played : Path | str, default=None
         A recording to compare against. Absent, and with a vendor named, one is
         asked for from that vendor's tooling if it is installed here.
-    dead_time_us
+    dead_time_us : float, default=0.0
         What a recording's times run ahead of the sequence's by, on every
         channel, in µs.
-    rf_wait_us
+    rf_wait_us : float, default=0.0
         What the transmit channels run ahead by on top of ``dead_time_us``, in
         µs; a machine drives transmit and gradients on separate timelines and
         records each as driven.
-    tolerance_mt_per_m
+    tolerance_mt_per_m : float, default=None
         The largest gradient difference that still counts as agreement, in
         mT/m. Three raster steps of the slew rate of ``system`` when given
         (:func:`gradient_tolerance_mt_per_m`); 0.05 otherwise.
-    rf_tolerance_percent
+    rf_tolerance_percent : float, default=1.0
         The largest transmit difference, as a percentage of the peak.
-    cache_ext
+    cache_ext : str, default='.pseg'
         Extension of the cache read when comparing against it.
-    system
+    system : pypulseqpp.Opts, default=None
         ``pypulseqpp.Opts`` the cache is converted under when none exists;
         default ``pypulseqpp.Opts()``.
 

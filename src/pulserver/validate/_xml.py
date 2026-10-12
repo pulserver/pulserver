@@ -89,7 +89,7 @@ def read_waveform_xml(path: Path | str) -> PlayedWaveforms:
 
     Parameters
     ----------
-    path
+    path : Path | str
         The XML file.
 
     Raises

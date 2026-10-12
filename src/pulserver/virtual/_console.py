@@ -99,41 +99,41 @@ class Console:
 
     Parameters
     ----------
-    plugins
+    plugins : PluginPath
         Directories of the scanner-sequence plugins, in search order: a name
         is the plugin of the first directory holding ``<name>.py``.
-    limits
+    limits : str
         Text of the ``[Limits]`` block every design is made under; its ``B0``
         is the virtual magnet's field.
-    store
+    store : Path | str
         Design store.
-    recon
+    recon : tuple[str, int], default=None
         ``(host, port)`` of the reconstruction proxy.
-    recon_plugins
+    recon_plugins : PluginPath, default=None
         Directories of reconstruction plugin files, ``<plugin>.py``, in search
         order, which reconstruct each scan in this process
         (:class:`~pulserver.proxy.LocalReconstruction`).
-    push
+    push : str, default=None
         Recon-side intake each design is pushed to.
-    spacing
+    spacing : float, default=0.001
         Spacing at which the exam's phantom is sampled as tissue, in metres.
-    coil
+    coil : str, default='body'
         Name of the coil an exam is started with unless it names another.
-    fields
+    fields : Path | str, default=None
         Directory of the coils' field maps, ``<coil>.npz``, and of the VOPs of
         those that transmit, ``<coil>_vops.npz``, as mariepy writes them for
         BrainWeb's head. Every exam is then on BrainWeb, and every design is
         made under the VOPs of the exam's transmit coil. Without it, the coils
         are :data:`~pulserver.virtual.COILS`.
-    speed
+    speed : float, default=None
         Scan time elapsed per wall-clock second once the scan's simulation is
         far enough ahead of its clock; as fast as it is simulated without it.
-    device
+    device : str, default=None
         Device a scan is simulated on, as
         :class:`~pulserver.virtual.FourierPlayer` takes it.
-    motion
+    motion : RigidMotion, default=None
         How the subject moves during every scan, from each scan's start.
-    girf
+    girf : Girf, default=None
         The impulse response every scan's gradients play through.
     """
 

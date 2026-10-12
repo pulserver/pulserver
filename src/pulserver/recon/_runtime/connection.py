@@ -94,12 +94,12 @@ class DataSaver:
 
     Parameters
     ----------
-    savedataFile
+    savedataFile : str
         File name inside ``savedataFolder``; empty generates
         ``mrd_unknown_<YYYYMMDDTHHMMSS>.h5``.
-    savedataFolder
+    savedataFolder : str
         Directory of the file, created when missing.
-    savedataGroup
+    savedataGroup : str
         HDF5 group of the dataset.
     """
 
@@ -177,13 +177,17 @@ class Connection:
 
     Parameters
     ----------
-    socket
+    socket : socket.socket
         Connected socket; its timeout is cleared.
-    savedata
+    savedata : bool, default=False
         Append every received item to an ISMRMRD HDF5 file.
-    savedataFile, savedataFolder, savedataGroup
-        Target of ``savedata``; see :class:`DataSaver`.
-    auto_read_config_header
+    savedataFile : str, default=''
+        File of ``savedata``; see :class:`DataSaver`.
+    savedataFolder : str, default=''
+        Directory of ``savedata``; see :class:`DataSaver`.
+    savedataGroup : str, default='dataset'
+        HDF5 group of ``savedata``; see :class:`DataSaver`.
+    auto_read_config_header : bool, default=False
         Read the config and header messages on construction into ``config``
         and ``header``, each ``None`` when the stream ends first.
 

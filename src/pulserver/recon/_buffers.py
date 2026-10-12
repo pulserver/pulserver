@@ -121,18 +121,18 @@ class ReconBuffer:
 
     Parameters
     ----------
-    space
+    space : EncodingSpace
         Encoding space to lay out.
-    coils
+    coils : int, default=None
         Channels to allocate; ``space.coils`` when not given. Fewer than the
         header declares is valid, for data compressed before placement.
-    samples
+    samples : int, default=None
         Samples to allocate along the readout; ``space.readout`` when not given.
-    crop
+    crop : Mapping[str, tuple[int, int]], default=None
         ``{axis: (first, stop)}`` for the ``phase_encode`` and ``partition``
         axes: the positions of the space's grid the buffer holds, the whole axis
         where an axis is not named.
-    dtype
+    dtype : numpy.dtype, default=np.complex64
         Complex dtype of :attr:`kspace`.
 
     Attributes
@@ -270,11 +270,11 @@ class ReconBuffer:
 
         Parameters
         ----------
-        acquisition
+        acquisition : ismrmrd.Acquisition
             The acquisition, for its counters, ``center_sample``, discards and
             flags, and its data. An acquisition that states no ``center_sample``
             is a centred full echo.
-        data
+        data : array_like, default=None
             ``(coils, samples)`` to place instead of ``acquisition.data``: a
             readout corrected before placement, whose ``center_sample`` and
             discards the acquisition states.
@@ -571,17 +571,17 @@ class ReconUnit:
 
     Parameters
     ----------
-    key
+    key : tuple[str, int, tuple[tuple[str, int], ...]]
         ``(branch, encoding space, ((counter, value), ...))``, as
         :func:`pulserver.recon._units.unit_key` states it.
-    spaces
+    spaces : Mapping[int, EncodingSpace]
         The header's encoding spaces by index, laid out along the plugin's
         ``axes``. Empty when the header describes none, so nothing is placed.
-    buffered
+    buffered : bool, default=True
         Place readouts. ``False`` only records them in :attr:`ReconData.acquisitions`.
-    dtype
+    dtype : numpy.dtype, default=np.complex64
         Complex dtype of the k-space arrays.
-    merged
+    merged : Mapping[int, int], default=None
         Positions of the plugin's ``merge`` counters by encoding space index:
         the combinations of their values that the closing flag has to arrive
         at, in addition to those along the axes. 1 where a space is absent.
@@ -631,13 +631,13 @@ class ReconUnit:
 
         Parameters
         ----------
-        acquisition
+        acquisition : ismrmrd.Acquisition
             The acquisition as received, for its flags, which select the
             buffers, and for :attr:`ReconData.acquisitions`.
-        readout
+        readout : array_like
             ``(coils, samples)`` to place: the acquisition's data as the
             gadgets left it.
-        placed
+        placed : ismrmrd.Acquisition, default=None
             The acquisition as the gadgets left it, whose ``center_sample`` and
             discards describe ``readout`` and which the buffers keep as their
             header; ``acquisition`` when not given.
