@@ -114,46 +114,6 @@
 
   
     <header id="pst-header" class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
-<div class="bd-header__inner bd-page-width">
-  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
-    <span class="fa-solid fa-bars"></span>
-  </button>
-  
-  
-  <div class="col-lg-9 navbar-header-items">
-    
-    
-    <div class="navbar-header-items__end">
-      
-        <div class="navbar-item navbar-persistent--container">
-          
-
-<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
- <i class="fa-solid fa-magnifying-glass"></i>
- <span class="search-button__default-text">Search</span>
- <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
-</button>
-        </div>
-      
-      
-    </div>
-    
-  </div>
-  
-  
-    <div class="navbar-persistent--mobile">
-
-<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
- <i class="fa-solid fa-magnifying-glass"></i>
- <span class="search-button__default-text">Search</span>
- <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
-</button>
-    </div>
-  
-
-  
-</div>
-
     </header>
   
 
@@ -538,24 +498,27 @@
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
-<span class="sd">    seq_path</span>
+<span class="sd">    seq_path : Path | str</span>
 <span class="sd">        The first file of the sequence's chain, beside its cache.</span>
-<span class="sd">    tissue</span>
+<span class="sd">    tissue : Tissue</span>
 <span class="sd">        The phantom's tissue.</span>
-<span class="sd">    cache_ext</span>
+<span class="sd">    cache_ext : str, default='.pseg'</span>
 <span class="sd">        The extension of the cache beside each file.</span>
-<span class="sd">    rotation</span>
+<span class="sd">    rotation : np.ndarray, default=None</span>
 <span class="sd">        ``(3, 3)`` rotation of the prescription from logical to physical axes,</span>
 <span class="sd">        a reflection included; the identity by default.</span>
-<span class="sd">    centre</span>
+<span class="sd">    centre : np.ndarray, default=None</span>
 <span class="sd">        ``(3,)`` the prescription's centre along the physical axes, in m; the</span>
 <span class="sd">        isocentre by default.</span>
-<span class="sd">    device</span>
+<span class="sd">    device : str, default=None</span>
 <span class="sd">        Where the Fourier engine runs, as</span>
 <span class="sd">        :class:`~pulserver.virtual.FourierPlayer` takes it.</span>
-<span class="sd">    motion, girf</span>
-<span class="sd">        How the subject moves and the gradients' impulse response, as</span>
-<span class="sd">        :class:`~pulserver.virtual.FourierPlayer` takes them.</span>
+<span class="sd">    motion : RigidMotion, default=None</span>
+<span class="sd">        How the subject moves, as :class:`~pulserver.virtual.FourierPlayer`</span>
+<span class="sd">        takes it.</span>
+<span class="sd">    girf : Girf, default=None</span>
+<span class="sd">        The gradients' impulse response, as</span>
+<span class="sd">        :class:`~pulserver.virtual.FourierPlayer` takes it.</span>
 <span class="sd">    """</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
@@ -623,28 +586,28 @@
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
-<span class="sd">        length</span>
+<span class="sd">        length : float, default=0.1</span>
 <span class="sd">            The scan time a span lasts at least, in s, unless it ends the</span>
 <span class="sd">            scan's last stretch.</span>
-<span class="sd">        speed</span>
+<span class="sd">        speed : float, default=None</span>
 <span class="sd">            How many times as fast as a scanner the scan is played. Its clock</span>
 <span class="sd">            starts once the simulation, at the rate it has run, stays ahead of</span>
 <span class="sd">            the clock to the end of the scan, and each span is yielded once the</span>
 <span class="sd">            clock has passed its end. A stretch not yet simulated by its start</span>
 <span class="sd">            holds the clock until it is. As fast as the stretches are</span>
 <span class="sd">            simulated when None.</span>
-<span class="sd">        sound</span>
+<span class="sd">        sound : bool, default=True</span>
 <span class="sd">            Whether the spans carry their sound.</span>
-<span class="sd">        sample_rate</span>
+<span class="sd">        sample_rate : float, default=SAMPLE_RATE</span>
 <span class="sd">            Audio sample rate, in Hz.</span>
-<span class="sd">        channel_weights</span>
+<span class="sd">        channel_weights : Sequence[float], default=(1.0, 1.0, 1.0)</span>
 <span class="sd">            Weights of the x, y and z axes in the sound.</span>
-<span class="sd">        preparing</span>
+<span class="sd">        preparing : Callable[[float], None], default=None</span>
 <span class="sd">            Called about twice a second until the clock starts, at a speed,</span>
 <span class="sd">            with the wall-clock time left before it does, in s, or None before</span>
 <span class="sd">            a stretch that acquires has been simulated. An exception</span>
 <span class="sd">            it raises ends the scan, and is raised where the spans are taken.</span>
-<span class="sd">        heard</span>
+<span class="sd">        heard : Callable[[Chunk], None], default=None</span>
 <span class="sd">            Called with each span as its sound starts to play: at a speed,</span>
 <span class="sd">            once the clock reaches the span's start, a span before the span is</span>
 <span class="sd">            yielded; without one, just before it is yielded.</span>

@@ -114,46 +114,6 @@
 
   
     <header id="pst-header" class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
-<div class="bd-header__inner bd-page-width">
-  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
-    <span class="fa-solid fa-bars"></span>
-  </button>
-  
-  
-  <div class="col-lg-9 navbar-header-items">
-    
-    
-    <div class="navbar-header-items__end">
-      
-        <div class="navbar-item navbar-persistent--container">
-          
-
-<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
- <i class="fa-solid fa-magnifying-glass"></i>
- <span class="search-button__default-text">Search</span>
- <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
-</button>
-        </div>
-      
-      
-    </div>
-    
-  </div>
-  
-  
-    <div class="navbar-persistent--mobile">
-
-<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
- <i class="fa-solid fa-magnifying-glass"></i>
- <span class="search-button__default-text">Search</span>
- <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
-</button>
-    </div>
-  
-
-  
-</div>
-
     </header>
   
 
@@ -588,18 +548,18 @@
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
-<span class="sd">    space</span>
+<span class="sd">    space : EncodingSpace</span>
 <span class="sd">        Encoding space to lay out.</span>
-<span class="sd">    coils</span>
+<span class="sd">    coils : int, default=None</span>
 <span class="sd">        Channels to allocate; ``space.coils`` when not given. Fewer than the</span>
 <span class="sd">        header declares is valid, for data compressed before placement.</span>
-<span class="sd">    samples</span>
+<span class="sd">    samples : int, default=None</span>
 <span class="sd">        Samples to allocate along the readout; ``space.readout`` when not given.</span>
-<span class="sd">    crop</span>
+<span class="sd">    crop : Mapping[str, tuple[int, int]], default=None</span>
 <span class="sd">        ``{axis: (first, stop)}`` for the ``phase_encode`` and ``partition``</span>
 <span class="sd">        axes: the positions of the space's grid the buffer holds, the whole axis</span>
 <span class="sd">        where an axis is not named.</span>
-<span class="sd">    dtype</span>
+<span class="sd">    dtype : numpy.dtype, default=np.complex64</span>
 <span class="sd">        Complex dtype of :attr:`kspace`.</span>
 
 <span class="sd">    Attributes</span>
@@ -742,11 +702,11 @@
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
-<span class="sd">        acquisition</span>
+<span class="sd">        acquisition : ismrmrd.Acquisition</span>
 <span class="sd">            The acquisition, for its counters, ``center_sample``, discards and</span>
 <span class="sd">            flags, and its data. An acquisition that states no ``center_sample``</span>
 <span class="sd">            is a centred full echo.</span>
-<span class="sd">        data</span>
+<span class="sd">        data : array_like, default=None</span>
 <span class="sd">            ``(coils, samples)`` to place instead of ``acquisition.data``: a</span>
 <span class="sd">            readout corrected before placement, whose ``center_sample`` and</span>
 <span class="sd">            discards the acquisition states.</span>
@@ -1057,17 +1017,17 @@
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
-<span class="sd">    key</span>
+<span class="sd">    key : tuple[str, int, tuple[tuple[str, int], ...]]</span>
 <span class="sd">        ``(branch, encoding space, ((counter, value), ...))``, as</span>
 <span class="sd">        :func:`pulserver.recon._units.unit_key` states it.</span>
-<span class="sd">    spaces</span>
+<span class="sd">    spaces : Mapping[int, EncodingSpace]</span>
 <span class="sd">        The header's encoding spaces by index, laid out along the plugin's</span>
 <span class="sd">        ``axes``. Empty when the header describes none, so nothing is placed.</span>
-<span class="sd">    buffered</span>
+<span class="sd">    buffered : bool, default=True</span>
 <span class="sd">        Place readouts. ``False`` only records them in :attr:`ReconData.acquisitions`.</span>
-<span class="sd">    dtype</span>
+<span class="sd">    dtype : numpy.dtype, default=np.complex64</span>
 <span class="sd">        Complex dtype of the k-space arrays.</span>
-<span class="sd">    merged</span>
+<span class="sd">    merged : Mapping[int, int], default=None</span>
 <span class="sd">        Positions of the plugin's ``merge`` counters by encoding space index:</span>
 <span class="sd">        the combinations of their values that the closing flag has to arrive</span>
 <span class="sd">        at, in addition to those along the axes. 1 where a space is absent.</span>
@@ -1117,13 +1077,13 @@
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
-<span class="sd">        acquisition</span>
+<span class="sd">        acquisition : ismrmrd.Acquisition</span>
 <span class="sd">            The acquisition as received, for its flags, which select the</span>
 <span class="sd">            buffers, and for :attr:`ReconData.acquisitions`.</span>
-<span class="sd">        readout</span>
+<span class="sd">        readout : array_like</span>
 <span class="sd">            ``(coils, samples)`` to place: the acquisition's data as the</span>
 <span class="sd">            gadgets left it.</span>
-<span class="sd">        placed</span>
+<span class="sd">        placed : ismrmrd.Acquisition, default=None</span>
 <span class="sd">            The acquisition as the gadgets left it, whose ``center_sample`` and</span>
 <span class="sd">            discards describe ``readout`` and which the buffers keep as their</span>
 <span class="sd">            header; ``acquisition`` when not given.</span>

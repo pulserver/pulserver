@@ -115,50 +115,6 @@
 
   
     <header id="pst-header" class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
-<div class="bd-header__inner bd-page-width">
-  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
-    <span class="fa-solid fa-bars"></span>
-  </button>
-  
-  
-  <div class="col-lg-9 navbar-header-items">
-    
-    
-    <div class="navbar-header-items__end">
-      
-        <div class="navbar-item navbar-persistent--container">
-          
-
-<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
- <i class="fa-solid fa-magnifying-glass"></i>
- <span class="search-button__default-text">Search</span>
- <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
-</button>
-        </div>
-      
-      
-    </div>
-    
-  </div>
-  
-  
-    <div class="navbar-persistent--mobile">
-
-<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
- <i class="fa-solid fa-magnifying-glass"></i>
- <span class="search-button__default-text">Search</span>
- <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
-</button>
-    </div>
-  
-
-  
-    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
-      <span class="fa-solid fa-outdent"></span>
-    </button>
-  
-</div>
-
     </header>
   
 
@@ -562,9 +518,9 @@ the header has no <code class="docutils literal notranslate"><span class="pre">r
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>header</strong> – Parsed MRD header.</p></li>
-<li><p><strong>index</strong> – Position in the header’s encoding list.</p></li>
-<li><p><strong>loops</strong> – Counters to lay out as axes where the header gives them more than one
+<li><p><strong>header</strong> (<em>ismrmrd.xsd.ismrmrdHeader</em>) – Parsed MRD header.</p></li>
+<li><p><strong>index</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em>, </em><em>default=0</em>) – Position in the header’s encoding list.</p></li>
+<li><p><strong>loops</strong> (<em>Iterable</em><em>[</em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a><em>]</em><em>, </em><em>default=None</em>) – Counters to lay out as axes where the header gives them more than one
 value, in the order of <a class="reference internal" href="pulserver.mrd.LOOP_COUNTERS.html#pulserver.mrd.LOOP_COUNTERS" title="pulserver.mrd.LOOP_COUNTERS"><code class="xref py py-data docutils literal notranslate"><span class="pre">LOOP_COUNTERS</span></code></a> followed by <code class="docutils literal notranslate"><span class="pre">segment</span></code>;
 <code class="docutils literal notranslate"><span class="pre">None</span></code> takes every counter of <a class="reference internal" href="pulserver.mrd.LOOP_COUNTERS.html#pulserver.mrd.LOOP_COUNTERS" title="pulserver.mrd.LOOP_COUNTERS"><code class="xref py py-data docutils literal notranslate"><span class="pre">LOOP_COUNTERS</span></code></a>.</p></li>
 </ul>

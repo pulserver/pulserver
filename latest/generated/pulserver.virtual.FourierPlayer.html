@@ -115,50 +115,6 @@
 
   
     <header id="pst-header" class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
-<div class="bd-header__inner bd-page-width">
-  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
-    <span class="fa-solid fa-bars"></span>
-  </button>
-  
-  
-  <div class="col-lg-9 navbar-header-items">
-    
-    
-    <div class="navbar-header-items__end">
-      
-        <div class="navbar-item navbar-persistent--container">
-          
-
-<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
- <i class="fa-solid fa-magnifying-glass"></i>
- <span class="search-button__default-text">Search</span>
- <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
-</button>
-        </div>
-      
-      
-    </div>
-    
-  </div>
-  
-  
-    <div class="navbar-persistent--mobile">
-
-<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
- <i class="fa-solid fa-magnifying-glass"></i>
- <span class="search-button__default-text">Search</span>
- <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
-</button>
-    </div>
-  
-
-  
-    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
-      <span class="fa-solid fa-outdent"></span>
-    </button>
-  
-</div>
-
     </header>
   
 
@@ -574,20 +530,20 @@ transformed to the samples by bartorch’s NUFFT.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>seq_path</strong> – The first file of the sequence’s chain, beside its cache.</p></li>
-<li><p><strong>tissue</strong> – The phantom’s tissue.</p></li>
-<li><p><strong>cache_ext</strong> – The extension of the cache beside each file.</p></li>
-<li><p><strong>rotation</strong> – <code class="docutils literal notranslate"><span class="pre">(3,</span> <span class="pre">3)</span></code> rotation of the prescription from logical to physical axes;
+<li><p><strong>seq_path</strong> (<em>Path</em><em> | </em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a>) – The first file of the sequence’s chain, beside its cache.</p></li>
+<li><p><strong>tissue</strong> (<a class="reference internal" href="pulserver.virtual.Tissue.html#pulserver.virtual.Tissue" title="pulserver.virtual.Tissue"><em>Tissue</em></a>) – The phantom’s tissue.</p></li>
+<li><p><strong>cache_ext</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a><em>, </em><em>default='.pseg'</em>) – The extension of the cache beside each file.</p></li>
+<li><p><strong>rotation</strong> (<em>np.ndarray</em><em>, </em><em>default=None</em>) – <code class="docutils literal notranslate"><span class="pre">(3,</span> <span class="pre">3)</span></code> rotation of the prescription from logical to physical axes;
 the identity by default.</p></li>
-<li><p><strong>centre</strong> – <code class="docutils literal notranslate"><span class="pre">(3,)</span></code> the prescription’s centre along the physical axes, in m; the
+<li><p><strong>centre</strong> (<em>np.ndarray</em><em>, </em><em>default=None</em>) – <code class="docutils literal notranslate"><span class="pre">(3,)</span></code> the prescription’s centre along the physical axes, in m; the
 isocentre by default. Pulse and receiver phases are taken in the frame
 of this centre.</p></li>
-<li><p><strong>device</strong> – Where the simulation runs; a card where there is one by default.</p></li>
-<li><p><strong>tolerance</strong> – Relative residual to which the temporal and readout bases span the
+<li><p><strong>device</strong> (<em>torch.device</em><em> | </em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a><em>, </em><em>default=None</em>) – Where the simulation runs; a card where there is one by default.</p></li>
+<li><p><strong>tolerance</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><em>float</em></a><em>, </em><em>default=TOLERANCE</em>) – Relative residual to which the temporal and readout bases span the
 signals; <code class="xref py py-data docutils literal notranslate"><span class="pre">TOLERANCE</span></code> by default.</p></li>
-<li><p><strong>motion</strong> – How the subject moves, at each readout’s echo; it moves its encoding
+<li><p><strong>motion</strong> (<a class="reference internal" href="pulserver.virtual.RigidMotion.html#pulserver.virtual.RigidMotion" title="pulserver.virtual.RigidMotion"><em>RigidMotion</em></a><em>, </em><em>default=None</em>) – How the subject moves, at each readout’s echo; it moves its encoding
 alone, its excitation, relaxation and coil sensitivities following it.</p></li>
-<li><p><strong>girf</strong> – The impulse response the gradients play through.</p></li>
+<li><p><strong>girf</strong> (<a class="reference internal" href="pulserver.virtual.Girf.html#pulserver.virtual.Girf" title="pulserver.virtual.Girf"><em>Girf</em></a><em>, </em><em>default=None</em>) – The impulse response the gradients play through.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Attributes<span class="colon">:</span></dt>

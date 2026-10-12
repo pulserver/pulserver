@@ -115,50 +115,6 @@
 
   
     <header id="pst-header" class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
-<div class="bd-header__inner bd-page-width">
-  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
-    <span class="fa-solid fa-bars"></span>
-  </button>
-  
-  
-  <div class="col-lg-9 navbar-header-items">
-    
-    
-    <div class="navbar-header-items__end">
-      
-        <div class="navbar-item navbar-persistent--container">
-          
-
-<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
- <i class="fa-solid fa-magnifying-glass"></i>
- <span class="search-button__default-text">Search</span>
- <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
-</button>
-        </div>
-      
-      
-    </div>
-    
-  </div>
-  
-  
-    <div class="navbar-persistent--mobile">
-
-<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
- <i class="fa-solid fa-magnifying-glass"></i>
- <span class="search-button__default-text">Search</span>
- <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
-</button>
-    </div>
-  
-
-  
-    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
-      <span class="fa-solid fa-outdent"></span>
-    </button>
-  
-</div>
-
     </header>
   
 
@@ -550,12 +506,12 @@
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>data</strong> – K-space, <code class="docutils literal notranslate"><span class="pre">(acquisitions,</span> <span class="pre">coils,</span> <span class="pre">samples)</span></code>.</p></li>
-<li><p><strong>trajectory</strong> – Per-acquisition trajectories with the same leading axis as <code class="docutils literal notranslate"><span class="pre">data</span></code>.</p></li>
-<li><p><strong>labels</strong> – Encoding counters by MRD field name, one value per acquisition; absent
+<li><p><strong>data</strong> (<em>array_like</em>) – K-space, <code class="docutils literal notranslate"><span class="pre">(acquisitions,</span> <span class="pre">coils,</span> <span class="pre">samples)</span></code>.</p></li>
+<li><p><strong>trajectory</strong> (<em>array_like</em><em>, </em><em>default=None</em>) – Per-acquisition trajectories with the same leading axis as <code class="docutils literal notranslate"><span class="pre">data</span></code>.</p></li>
+<li><p><strong>labels</strong> (<em>Mapping</em><em>[</em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a><em>, </em><em>Any</em><em>]</em><em>, </em><em>default=None</em>) – Encoding counters by MRD field name, one value per acquisition; absent
 counters are 0.</p></li>
-<li><p><strong>reference</strong> – Calibration k-space, <code class="docutils literal notranslate"><span class="pre">(acquisitions,</span> <span class="pre">coils,</span> <span class="pre">samples)</span></code>.</p></li>
-<li><p><strong>reference_labels</strong> – Encoding counters of the <code class="docutils literal notranslate"><span class="pre">reference</span></code> acquisitions; absent counters
+<li><p><strong>reference</strong> (<em>array_like</em><em>, </em><em>default=None</em>) – Calibration k-space, <code class="docutils literal notranslate"><span class="pre">(acquisitions,</span> <span class="pre">coils,</span> <span class="pre">samples)</span></code>.</p></li>
+<li><p><strong>reference_labels</strong> (<em>Mapping</em><em>[</em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a><em>, </em><em>Any</em><em>]</em><em>, </em><em>default=None</em>) – Encoding counters of the <code class="docutils literal notranslate"><span class="pre">reference</span></code> acquisitions; absent counters
 are 0.</p></li>
 </ul>
 </dd>

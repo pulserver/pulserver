@@ -114,46 +114,6 @@
 
   
     <header id="pst-header" class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
-<div class="bd-header__inner bd-page-width">
-  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
-    <span class="fa-solid fa-bars"></span>
-  </button>
-  
-  
-  <div class="col-lg-9 navbar-header-items">
-    
-    
-    <div class="navbar-header-items__end">
-      
-        <div class="navbar-item navbar-persistent--container">
-          
-
-<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
- <i class="fa-solid fa-magnifying-glass"></i>
- <span class="search-button__default-text">Search</span>
- <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
-</button>
-        </div>
-      
-      
-    </div>
-    
-  </div>
-  
-  
-    <div class="navbar-persistent--mobile">
-
-<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
- <i class="fa-solid fa-magnifying-glass"></i>
- <span class="search-button__default-text">Search</span>
- <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
-</button>
-    </div>
-  
-
-  
-</div>
-
     </header>
   
 
@@ -547,18 +507,18 @@
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
-<span class="sd">    ellipses</span>
+<span class="sd">    ellipses : Sequence[Ellipse]</span>
 <span class="sd">        The object.</span>
-<span class="sd">    coils</span>
+<span class="sd">    coils : int, default=1</span>
 <span class="sd">        Receive channels.</span>
-<span class="sd">    period</span>
+<span class="sd">    period : float, default=0.5</span>
 <span class="sd">        Spatial period of the sensitivities, in metres.</span>
-<span class="sd">    depth</span>
+<span class="sd">    depth : float, default=0.5</span>
 <span class="sd">        Their modulation depth.</span>
-<span class="sd">    rotation</span>
+<span class="sd">    rotation : np.ndarray, default=None</span>
 <span class="sd">        ``(3, 3)`` orthonormal matrix from the phantom's axes to the physical</span>
 <span class="sd">        ones, a reflection included; the identity by default.</span>
-<span class="sd">    position</span>
+<span class="sd">    position : Sequence[float], default=(0.0, 0.0, 0.0)</span>
 <span class="sd">        Physical location of the phantom's origin, in metres.</span>
 <span class="sd">    """</span>
 

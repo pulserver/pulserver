@@ -114,46 +114,6 @@
 
   
     <header id="pst-header" class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
-<div class="bd-header__inner bd-page-width">
-  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
-    <span class="fa-solid fa-bars"></span>
-  </button>
-  
-  
-  <div class="col-lg-9 navbar-header-items">
-    
-    
-    <div class="navbar-header-items__end">
-      
-        <div class="navbar-item navbar-persistent--container">
-          
-
-<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
- <i class="fa-solid fa-magnifying-glass"></i>
- <span class="search-button__default-text">Search</span>
- <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
-</button>
-        </div>
-      
-      
-    </div>
-    
-  </div>
-  
-  
-    <div class="navbar-persistent--mobile">
-
-<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
- <i class="fa-solid fa-magnifying-glass"></i>
- <span class="search-button__default-text">Search</span>
- <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
-</button>
-    </div>
-  
-
-  
-</div>
-
     </header>
   
 
@@ -731,50 +691,50 @@
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
-<span class="sd">    store</span>
+<span class="sd">    store : Path | str</span>
 <span class="sd">        Directory of designs, as the design calls write it; read only.</span>
-<span class="sd">    plugins</span>
+<span class="sd">    plugins : PluginPath, default=None</span>
 <span class="sd">        Directories of reconstruction plugin files, ``&lt;plugin&gt;.py``, in search</span>
 <span class="sd">        order; required unless the proxy forwards.</span>
-<span class="sd">    slots</span>
+<span class="sd">    slots : int, default=None</span>
 <span class="sd">        Series reconstructed at once; derived from memory and the GPUs when</span>
 <span class="sd">        ``None``.</span>
-<span class="sd">    gpu_slots</span>
+<span class="sd">    gpu_slots : int, default=1</span>
 <span class="sd">        Series reconstructed at once on each GPU, when ``slots`` is ``None``.</span>
-<span class="sd">    spares</span>
+<span class="sd">    spares : int, default=1</span>
 <span class="sd">        Warm worker processes waiting for a series.</span>
-<span class="sd">    recon_timeout</span>
+<span class="sd">    recon_timeout : float, default=None</span>
 <span class="sd">        Seconds a reconstruction may take after the stream ends before it is</span>
 <span class="sd">        stopped and the client told so; ``None`` waits for its close. A local</span>
 <span class="sd">        worker is terminated; a forwarded series' connection is closed.</span>
-<span class="sd">    queue</span>
+<span class="sd">    queue : Path | str, default=None</span>
 <span class="sd">        Directory the queued series are written to; a temporary directory,</span>
 <span class="sd">        removed on :meth:`close`, when ``None``.</span>
-<span class="sd">    slot_directory</span>
+<span class="sd">    slot_directory : Path | str, default=None</span>
 <span class="sd">        Directory the slots are held in, shared with every other proxy on this</span>
 <span class="sd">        host so they count against one set;</span>
 <span class="sd">        :data:`~pulserver.recon._runtime.concurrency.DEFAULT_SLOT_DIRECTORY`</span>
 <span class="sd">        when ``None``.</span>
-<span class="sd">    exam_directory</span>
+<span class="sd">    exam_directory : Path | str, default=None</span>
 <span class="sd">        Directory the caches of an exam are held in, shared with every other</span>
 <span class="sd">        proxy on this host so a map one series measures reaches a series on</span>
 <span class="sd">        another;</span>
 <span class="sd">        :data:`~pulserver.recon._runtime.exam.DEFAULT_EXAM_DIRECTORY` when</span>
 <span class="sd">        ``None``. An exam's directory is removed when the last proxy on that</span>
 <span class="sd">        exam lets go of it.</span>
-<span class="sd">    forward</span>
+<span class="sd">    forward : tuple[str, int], default=None</span>
 <span class="sd">        ``(host, port)`` of the MRD server that reconstructs every series;</span>
 <span class="sd">        local workers when ``None``.</span>
-<span class="sd">    forward_config</span>
+<span class="sd">    forward_config : str, default=None</span>
 <span class="sd">        Config name sent to that server instead of the reconstruction plugin.</span>
-<span class="sd">    dicom</span>
+<span class="sd">    dicom : bool, default=False</span>
 <span class="sd">        Convert each image to DICOM, from the enriched header, before it is</span>
 <span class="sd">        relayed, whatever reconstructed it. Needed by a client that reads</span>
 <span class="sd">        DICOM alone, with a plugin that emits images.</span>
-<span class="sd">    save_to</span>
+<span class="sd">    save_to : Path | str, default=None</span>
 <span class="sd">        Directory each series is kept in, as the scanner sent it, so that it</span>
 <span class="sd">        can be reconstructed again offline; not kept when ``None``.</span>
-<span class="sd">    idle_timeout</span>
+<span class="sd">    idle_timeout : float, default=None</span>
 <span class="sd">        Seconds without a client after which :meth:`serve` returns, counted</span>
 <span class="sd">        from the last client to leave; never when ``None``.</span>
 
@@ -890,37 +850,37 @@
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
-<span class="sd">    plugins</span>
+<span class="sd">    plugins : PluginPath</span>
 <span class="sd">        Directories of reconstruction plugin files, ``&lt;plugin&gt;.py``, in search</span>
 <span class="sd">        order.</span>
-<span class="sd">    slots</span>
+<span class="sd">    slots : int, default=None</span>
 <span class="sd">        Series reconstructed at once; derived from memory and the GPUs when</span>
 <span class="sd">        ``None``.</span>
-<span class="sd">    gpu_slots</span>
+<span class="sd">    gpu_slots : int, default=1</span>
 <span class="sd">        Series reconstructed at once on each GPU, when ``slots`` is ``None``.</span>
-<span class="sd">    spares</span>
+<span class="sd">    spares : int, default=1</span>
 <span class="sd">        Warm worker processes waiting for a series.</span>
-<span class="sd">    recon_timeout</span>
+<span class="sd">    recon_timeout : float, default=None</span>
 <span class="sd">        Seconds a worker may take after the stream ends before it is</span>
 <span class="sd">        terminated and the client told so; ``None`` waits for its close.</span>
-<span class="sd">    queue</span>
+<span class="sd">    queue : Path | str, default=None</span>
 <span class="sd">        Directory the queued series are written to; a temporary directory,</span>
 <span class="sd">        removed on :meth:`close`, when ``None``.</span>
-<span class="sd">    slot_directory</span>
+<span class="sd">    slot_directory : Path | str, default=None</span>
 <span class="sd">        Directory the slots are held in, shared with every other proxy on this</span>
 <span class="sd">        host so they count against one set;</span>
 <span class="sd">        :data:`~pulserver.recon._runtime.concurrency.DEFAULT_SLOT_DIRECTORY`</span>
 <span class="sd">        when ``None``.</span>
-<span class="sd">    exam_directory</span>
+<span class="sd">    exam_directory : Path | str, default=None</span>
 <span class="sd">        Directory the caches of an exam are held in, shared with every other</span>
 <span class="sd">        proxy on this host so a map one series measures reaches a series on</span>
 <span class="sd">        another;</span>
 <span class="sd">        :data:`~pulserver.recon._runtime.exam.DEFAULT_EXAM_DIRECTORY` when</span>
 <span class="sd">        ``None``. An exam's directory is removed when the last proxy on that</span>
 <span class="sd">        exam lets go of it.</span>
-<span class="sd">    save_to</span>
+<span class="sd">    save_to : Path | str, default=None</span>
 <span class="sd">        Directory each series is kept in, as received; not kept when ``None``.</span>
-<span class="sd">    idle_timeout</span>
+<span class="sd">    idle_timeout : float, default=None</span>
 <span class="sd">        Seconds without a client after which :meth:`serve` returns; never when</span>
 <span class="sd">        ``None``.</span>
 

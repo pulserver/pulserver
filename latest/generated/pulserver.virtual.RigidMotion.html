@@ -115,50 +115,6 @@
 
   
     <header id="pst-header" class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
-<div class="bd-header__inner bd-page-width">
-  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
-    <span class="fa-solid fa-bars"></span>
-  </button>
-  
-  
-  <div class="col-lg-9 navbar-header-items">
-    
-    
-    <div class="navbar-header-items__end">
-      
-        <div class="navbar-item navbar-persistent--container">
-          
-
-<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
- <i class="fa-solid fa-magnifying-glass"></i>
- <span class="search-button__default-text">Search</span>
- <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
-</button>
-        </div>
-      
-      
-    </div>
-    
-  </div>
-  
-  
-    <div class="navbar-persistent--mobile">
-
-<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
- <i class="fa-solid fa-magnifying-glass"></i>
- <span class="search-button__default-text">Search</span>
- <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
-</button>
-    </div>
-  
-
-  
-    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
-      <span class="fa-solid fa-outdent"></span>
-    </button>
-  
-</div>
-
     </header>
   
 
@@ -553,9 +509,9 @@ vector along the physical axes, in m.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>rotation</strong> – <code class="docutils literal notranslate"><span class="pre">R(t)</span></code>, a <code class="docutils literal notranslate"><span class="pre">(3,</span> <span class="pre">3)</span></code> orthonormal matrix; the identity without one.</p></li>
-<li><p><strong>offset</strong> – <code class="docutils literal notranslate"><span class="pre">offset(t)</span></code>, a translation of <code class="docutils literal notranslate"><span class="pre">(3,)</span></code> metres; none without one.</p></li>
-<li><p><strong>centre</strong> – The point <code class="docutils literal notranslate"><span class="pre">rotation</span></code> turns about, in m; the origin by default.</p></li>
+<li><p><strong>rotation</strong> (<em>Callable</em><em>[</em><em>[</em><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><em>float</em></a><em>]</em><em>, </em><em>np.ndarray</em><em>]</em><em>, </em><em>default=None</em>) – <code class="docutils literal notranslate"><span class="pre">R(t)</span></code>, a <code class="docutils literal notranslate"><span class="pre">(3,</span> <span class="pre">3)</span></code> orthonormal matrix; the identity without one.</p></li>
+<li><p><strong>offset</strong> (<em>Callable</em><em>[</em><em>[</em><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><em>float</em></a><em>]</em><em>, </em><em>Sequence</em><em>[</em><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><em>float</em></a><em>]</em><em>]</em><em>, </em><em>default=None</em>) – <code class="docutils literal notranslate"><span class="pre">offset(t)</span></code>, a translation of <code class="docutils literal notranslate"><span class="pre">(3,)</span></code> metres; none without one.</p></li>
+<li><p><strong>centre</strong> (<em>Sequence</em><em>[</em><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><em>float</em></a><em>]</em><em>, </em><em>default=</em><em>(</em><em>0.0</em><em>, </em><em>0.0</em><em>, </em><em>0.0</em><em>)</em>) – The point <code class="docutils literal notranslate"><span class="pre">rotation</span></code> turns about, in m; the origin by default.</p></li>
 </ul>
 </dd>
 </dl>

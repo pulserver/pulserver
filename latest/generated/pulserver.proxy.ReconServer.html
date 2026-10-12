@@ -115,50 +115,6 @@
 
   
     <header id="pst-header" class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
-<div class="bd-header__inner bd-page-width">
-  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
-    <span class="fa-solid fa-bars"></span>
-  </button>
-  
-  
-  <div class="col-lg-9 navbar-header-items">
-    
-    
-    <div class="navbar-header-items__end">
-      
-        <div class="navbar-item navbar-persistent--container">
-          
-
-<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
- <i class="fa-solid fa-magnifying-glass"></i>
- <span class="search-button__default-text">Search</span>
- <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
-</button>
-        </div>
-      
-      
-    </div>
-    
-  </div>
-  
-  
-    <div class="navbar-persistent--mobile">
-
-<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
- <i class="fa-solid fa-magnifying-glass"></i>
- <span class="search-button__default-text">Search</span>
- <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
-</button>
-    </div>
-  
-
-  
-    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
-      <span class="fa-solid fa-outdent"></span>
-    </button>
-  
-</div>
-
     </header>
   
 
@@ -557,28 +513,28 @@ slots, the queue and the exam directories are those of
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>plugins</strong> – Directories of reconstruction plugin files, <code class="docutils literal notranslate"><span class="pre">&lt;plugin&gt;.py</span></code>, in search
+<li><p><strong>plugins</strong> (<em>PluginPath</em>) – Directories of reconstruction plugin files, <code class="docutils literal notranslate"><span class="pre">&lt;plugin&gt;.py</span></code>, in search
 order.</p></li>
-<li><p><strong>slots</strong> – Series reconstructed at once; derived from memory and the GPUs when
+<li><p><strong>slots</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em>, </em><em>default=None</em>) – Series reconstructed at once; derived from memory and the GPUs when
 <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
-<li><p><strong>gpu_slots</strong> – Series reconstructed at once on each GPU, when <code class="docutils literal notranslate"><span class="pre">slots</span></code> is <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
-<li><p><strong>spares</strong> – Warm worker processes waiting for a series.</p></li>
-<li><p><strong>recon_timeout</strong> – Seconds a worker may take after the stream ends before it is
+<li><p><strong>gpu_slots</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em>, </em><em>default=1</em>) – Series reconstructed at once on each GPU, when <code class="docutils literal notranslate"><span class="pre">slots</span></code> is <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
+<li><p><strong>spares</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em>, </em><em>default=1</em>) – Warm worker processes waiting for a series.</p></li>
+<li><p><strong>recon_timeout</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><em>float</em></a><em>, </em><em>default=None</em>) – Seconds a worker may take after the stream ends before it is
 terminated and the client told so; <code class="docutils literal notranslate"><span class="pre">None</span></code> waits for its close.</p></li>
-<li><p><strong>queue</strong> – Directory the queued series are written to; a temporary directory,
+<li><p><strong>queue</strong> (<em>Path</em><em> | </em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a><em>, </em><em>default=None</em>) – Directory the queued series are written to; a temporary directory,
 removed on <a class="reference internal" href="pulserver.proxy.ReconServer.close.html#pulserver.proxy.ReconServer.close" title="pulserver.proxy.ReconServer.close"><code class="xref py py-meth docutils literal notranslate"><span class="pre">close()</span></code></a>, when <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
-<li><p><strong>slot_directory</strong> – Directory the slots are held in, shared with every other proxy on this
+<li><p><strong>slot_directory</strong> (<em>Path</em><em> | </em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a><em>, </em><em>default=None</em>) – Directory the slots are held in, shared with every other proxy on this
 host so they count against one set;
 <code class="xref py py-data docutils literal notranslate"><span class="pre">DEFAULT_SLOT_DIRECTORY</span></code>
 when <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
-<li><p><strong>exam_directory</strong> – Directory the caches of an exam are held in, shared with every other
+<li><p><strong>exam_directory</strong> (<em>Path</em><em> | </em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a><em>, </em><em>default=None</em>) – Directory the caches of an exam are held in, shared with every other
 proxy on this host so a map one series measures reaches a series on
 another;
 <code class="xref py py-data docutils literal notranslate"><span class="pre">DEFAULT_EXAM_DIRECTORY</span></code> when
 <code class="docutils literal notranslate"><span class="pre">None</span></code>. An exam’s directory is removed when the last proxy on that
 exam lets go of it.</p></li>
-<li><p><strong>save_to</strong> – Directory each series is kept in, as received; not kept when <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
-<li><p><strong>idle_timeout</strong> – Seconds without a client after which <a class="reference internal" href="pulserver.proxy.ReconServer.serve.html#pulserver.proxy.ReconServer.serve" title="pulserver.proxy.ReconServer.serve"><code class="xref py py-meth docutils literal notranslate"><span class="pre">serve()</span></code></a> returns; never when
+<li><p><strong>save_to</strong> (<em>Path</em><em> | </em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a><em>, </em><em>default=None</em>) – Directory each series is kept in, as received; not kept when <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
+<li><p><strong>idle_timeout</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><em>float</em></a><em>, </em><em>default=None</em>) – Seconds without a client after which <a class="reference internal" href="pulserver.proxy.ReconServer.serve.html#pulserver.proxy.ReconServer.serve" title="pulserver.proxy.ReconServer.serve"><code class="xref py py-meth docutils literal notranslate"><span class="pre">serve()</span></code></a> returns; never when
 <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
 </ul>
 </dd>

@@ -115,50 +115,6 @@
 
   
     <header id="pst-header" class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
-<div class="bd-header__inner bd-page-width">
-  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
-    <span class="fa-solid fa-bars"></span>
-  </button>
-  
-  
-  <div class="col-lg-9 navbar-header-items">
-    
-    
-    <div class="navbar-header-items__end">
-      
-        <div class="navbar-item navbar-persistent--container">
-          
-
-<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
- <i class="fa-solid fa-magnifying-glass"></i>
- <span class="search-button__default-text">Search</span>
- <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
-</button>
-        </div>
-      
-      
-    </div>
-    
-  </div>
-  
-  
-    <div class="navbar-persistent--mobile">
-
-<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
- <i class="fa-solid fa-magnifying-glass"></i>
- <span class="search-button__default-text">Search</span>
- <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
-</button>
-    </div>
-  
-
-  
-    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
-      <span class="fa-solid fa-outdent"></span>
-    </button>
-  
-</div>
-
     </header>
   
 
@@ -552,19 +508,19 @@ acquires them.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>seq_path</strong> – The first file of the sequence’s chain, beside its cache.</p></li>
-<li><p><strong>tissue</strong> – The phantom’s tissue.</p></li>
-<li><p><strong>cache_ext</strong> – The extension of the cache beside each file.</p></li>
-<li><p><strong>rotation</strong> – <code class="docutils literal notranslate"><span class="pre">(3,</span> <span class="pre">3)</span></code> rotation of the prescription from logical to physical axes,
+<li><p><strong>seq_path</strong> (<em>Path</em><em> | </em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a>) – The first file of the sequence’s chain, beside its cache.</p></li>
+<li><p><strong>tissue</strong> (<a class="reference internal" href="pulserver.virtual.Tissue.html#pulserver.virtual.Tissue" title="pulserver.virtual.Tissue"><em>Tissue</em></a>) – The phantom’s tissue.</p></li>
+<li><p><strong>cache_ext</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a><em>, </em><em>default='.pseg'</em>) – The extension of the cache beside each file.</p></li>
+<li><p><strong>rotation</strong> (<em>np.ndarray</em><em>, </em><em>default=None</em>) – <code class="docutils literal notranslate"><span class="pre">(3,</span> <span class="pre">3)</span></code> rotation of the prescription from logical to physical axes,
 a reflection included; the identity by default.</p></li>
-<li><p><strong>centre</strong> – <code class="docutils literal notranslate"><span class="pre">(3,)</span></code> the prescription’s centre along the physical axes, in m; the
+<li><p><strong>centre</strong> (<em>np.ndarray</em><em>, </em><em>default=None</em>) – <code class="docutils literal notranslate"><span class="pre">(3,)</span></code> the prescription’s centre along the physical axes, in m; the
 isocentre by default.</p></li>
-<li><p><strong>device</strong> – Where the Fourier engine runs, as
+<li><p><strong>device</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a><em>, </em><em>default=None</em>) – Where the Fourier engine runs, as
 <a class="reference internal" href="pulserver.virtual.FourierPlayer.html#pulserver.virtual.FourierPlayer" title="pulserver.virtual.FourierPlayer"><code class="xref py py-class docutils literal notranslate"><span class="pre">FourierPlayer</span></code></a> takes it.</p></li>
-<li><p><strong>motion</strong> – How the subject moves and the gradients’ impulse response, as
-<a class="reference internal" href="pulserver.virtual.FourierPlayer.html#pulserver.virtual.FourierPlayer" title="pulserver.virtual.FourierPlayer"><code class="xref py py-class docutils literal notranslate"><span class="pre">FourierPlayer</span></code></a> takes them.</p></li>
-<li><p><strong>girf</strong> – How the subject moves and the gradients’ impulse response, as
-<a class="reference internal" href="pulserver.virtual.FourierPlayer.html#pulserver.virtual.FourierPlayer" title="pulserver.virtual.FourierPlayer"><code class="xref py py-class docutils literal notranslate"><span class="pre">FourierPlayer</span></code></a> takes them.</p></li>
+<li><p><strong>motion</strong> (<a class="reference internal" href="pulserver.virtual.RigidMotion.html#pulserver.virtual.RigidMotion" title="pulserver.virtual.RigidMotion"><em>RigidMotion</em></a><em>, </em><em>default=None</em>) – How the subject moves, as <a class="reference internal" href="pulserver.virtual.FourierPlayer.html#pulserver.virtual.FourierPlayer" title="pulserver.virtual.FourierPlayer"><code class="xref py py-class docutils literal notranslate"><span class="pre">FourierPlayer</span></code></a>
+takes it.</p></li>
+<li><p><strong>girf</strong> (<a class="reference internal" href="pulserver.virtual.Girf.html#pulserver.virtual.Girf" title="pulserver.virtual.Girf"><em>Girf</em></a><em>, </em><em>default=None</em>) – The gradients’ impulse response, as
+<a class="reference internal" href="pulserver.virtual.FourierPlayer.html#pulserver.virtual.FourierPlayer" title="pulserver.virtual.FourierPlayer"><code class="xref py py-class docutils literal notranslate"><span class="pre">FourierPlayer</span></code></a> takes it.</p></li>
 </ul>
 </dd>
 </dl>

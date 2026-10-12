@@ -114,46 +114,6 @@
 
   
     <header id="pst-header" class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
-<div class="bd-header__inner bd-page-width">
-  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
-    <span class="fa-solid fa-bars"></span>
-  </button>
-  
-  
-  <div class="col-lg-9 navbar-header-items">
-    
-    
-    <div class="navbar-header-items__end">
-      
-        <div class="navbar-item navbar-persistent--container">
-          
-
-<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
- <i class="fa-solid fa-magnifying-glass"></i>
- <span class="search-button__default-text">Search</span>
- <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
-</button>
-        </div>
-      
-      
-    </div>
-    
-  </div>
-  
-  
-    <div class="navbar-persistent--mobile">
-
-<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
- <i class="fa-solid fa-magnifying-glass"></i>
- <span class="search-button__default-text">Search</span>
- <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
-</button>
-    </div>
-  
-
-  
-</div>
-
     </header>
   
 
@@ -566,41 +526,41 @@
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
-<span class="sd">    plugins</span>
+<span class="sd">    plugins : PluginPath</span>
 <span class="sd">        Directories of the scanner-sequence plugins, in search order: a name</span>
 <span class="sd">        is the plugin of the first directory holding ``&lt;name&gt;.py``.</span>
-<span class="sd">    limits</span>
+<span class="sd">    limits : str</span>
 <span class="sd">        Text of the ``[Limits]`` block every design is made under; its ``B0``</span>
 <span class="sd">        is the virtual magnet's field.</span>
-<span class="sd">    store</span>
+<span class="sd">    store : Path | str</span>
 <span class="sd">        Design store.</span>
-<span class="sd">    recon</span>
+<span class="sd">    recon : tuple[str, int], default=None</span>
 <span class="sd">        ``(host, port)`` of the reconstruction proxy.</span>
-<span class="sd">    recon_plugins</span>
+<span class="sd">    recon_plugins : PluginPath, default=None</span>
 <span class="sd">        Directories of reconstruction plugin files, ``&lt;plugin&gt;.py``, in search</span>
 <span class="sd">        order, which reconstruct each scan in this process</span>
 <span class="sd">        (:class:`~pulserver.proxy.LocalReconstruction`).</span>
-<span class="sd">    push</span>
+<span class="sd">    push : str, default=None</span>
 <span class="sd">        Recon-side intake each design is pushed to.</span>
-<span class="sd">    spacing</span>
+<span class="sd">    spacing : float, default=0.001</span>
 <span class="sd">        Spacing at which the exam's phantom is sampled as tissue, in metres.</span>
-<span class="sd">    coil</span>
+<span class="sd">    coil : str, default='body'</span>
 <span class="sd">        Name of the coil an exam is started with unless it names another.</span>
-<span class="sd">    fields</span>
+<span class="sd">    fields : Path | str, default=None</span>
 <span class="sd">        Directory of the coils' field maps, ``&lt;coil&gt;.npz``, and of the VOPs of</span>
 <span class="sd">        those that transmit, ``&lt;coil&gt;_vops.npz``, as mariepy writes them for</span>
 <span class="sd">        BrainWeb's head. Every exam is then on BrainWeb, and every design is</span>
 <span class="sd">        made under the VOPs of the exam's transmit coil. Without it, the coils</span>
 <span class="sd">        are :data:`~pulserver.virtual.COILS`.</span>
-<span class="sd">    speed</span>
+<span class="sd">    speed : float, default=None</span>
 <span class="sd">        Scan time elapsed per wall-clock second once the scan's simulation is</span>
 <span class="sd">        far enough ahead of its clock; as fast as it is simulated without it.</span>
-<span class="sd">    device</span>
+<span class="sd">    device : str, default=None</span>
 <span class="sd">        Device a scan is simulated on, as</span>
 <span class="sd">        :class:`~pulserver.virtual.FourierPlayer` takes it.</span>
-<span class="sd">    motion</span>
+<span class="sd">    motion : RigidMotion, default=None</span>
 <span class="sd">        How the subject moves during every scan, from each scan's start.</span>
-<span class="sd">    girf</span>
+<span class="sd">    girf : Girf, default=None</span>
 <span class="sd">        The impulse response every scan's gradients play through.</span>
 <span class="sd">    """</span>
 

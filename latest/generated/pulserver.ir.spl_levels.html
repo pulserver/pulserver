@@ -115,50 +115,6 @@
 
   
     <header id="pst-header" class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
-<div class="bd-header__inner bd-page-width">
-  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
-    <span class="fa-solid fa-bars"></span>
-  </button>
-  
-  
-  <div class="col-lg-9 navbar-header-items">
-    
-    
-    <div class="navbar-header-items__end">
-      
-        <div class="navbar-item navbar-persistent--container">
-          
-
-<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
- <i class="fa-solid fa-magnifying-glass"></i>
- <span class="search-button__default-text">Search</span>
- <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
-</button>
-        </div>
-      
-      
-    </div>
-    
-  </div>
-  
-  
-    <div class="navbar-persistent--mobile">
-
-<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
- <i class="fa-solid fa-magnifying-glass"></i>
- <span class="search-button__default-text">Search</span>
- <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
-</button>
-    </div>
-  
-
-  
-    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
-      <span class="fa-solid fa-outdent"></span>
-    </button>
-  
-</div>
-
     </header>
   
 
@@ -553,12 +509,12 @@ not changed.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>seq_path</strong> – The first file of the chain.</p></li>
-<li><p><strong>system</strong> – Source of the gyromagnetic ratio.</p></li>
-<li><p><strong>limits</strong> – The acoustic transfer function.</p></li>
-<li><p><strong>designed</strong> – <code class="docutils literal notranslate"><span class="pre">(path,</span> <span class="pre">sequence)</span></code> pairs of the chain as <code class="docutils literal notranslate"><span class="pre">mrd._sequence.designed_chain</span></code>
+<li><p><strong>seq_path</strong> (<em>Path</em><em> | </em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a>) – The first file of the chain.</p></li>
+<li><p><strong>system</strong> (<a class="reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.Opts.html#pypulseqpp.Opts" title="(in pypulseqpp latest)"><em>pypulseqpp.Opts</em></a>) – Source of the gyromagnetic ratio.</p></li>
+<li><p><strong>limits</strong> (<a class="reference internal" href="pulserver.ir.CheckLimits.html#pulserver.ir.CheckLimits" title="pulserver.ir.CheckLimits"><em>CheckLimits</em></a>) – The acoustic transfer function.</p></li>
+<li><p><strong>designed</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#list" title="(in Python v3.15)"><em>list</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#tuple" title="(in Python v3.15)"><em>tuple</em></a><em>[</em><em>Path</em><em>, </em><a class="reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.Sequence.html#pypulseqpp.Sequence" title="(in pypulseqpp latest)"><em>pypulseqpp.Sequence</em></a><em>]</em><em>]</em><em>, </em><em>default=None</em>) – <code class="docutils literal notranslate"><span class="pre">(path,</span> <span class="pre">sequence)</span></code> pairs of the chain as <code class="docutils literal notranslate"><span class="pre">mrd._sequence.designed_chain</span></code>
 returns them, used in place of reading the files.</p></li>
-<li><p><strong>rotation</strong> – <code class="docutils literal notranslate"><span class="pre">(3,</span> <span class="pre">3)</span></code> prescription rotation from logical to physical axes; the
+<li><p><strong>rotation</strong> (<em>np.ndarray</em><em>, </em><em>default=None</em>) – <code class="docutils literal notranslate"><span class="pre">(3,</span> <span class="pre">3)</span></code> prescription rotation from logical to physical axes; the
 identity by default.</p></li>
 </ul>
 </dd>

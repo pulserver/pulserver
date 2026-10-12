@@ -114,46 +114,6 @@
 
   
     <header id="pst-header" class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
-<div class="bd-header__inner bd-page-width">
-  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
-    <span class="fa-solid fa-bars"></span>
-  </button>
-  
-  
-  <div class="col-lg-9 navbar-header-items">
-    
-    
-    <div class="navbar-header-items__end">
-      
-        <div class="navbar-item navbar-persistent--container">
-          
-
-<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
- <i class="fa-solid fa-magnifying-glass"></i>
- <span class="search-button__default-text">Search</span>
- <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
-</button>
-        </div>
-      
-      
-    </div>
-    
-  </div>
-  
-  
-    <div class="navbar-persistent--mobile">
-
-<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
- <i class="fa-solid fa-magnifying-glass"></i>
- <span class="search-button__default-text">Search</span>
- <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
-</button>
-    </div>
-  
-
-  
-</div>
-
     </header>
   
 
@@ -667,9 +627,9 @@
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
-<span class="sd">    exam_id</span>
+<span class="sd">    exam_id : Hashable</span>
 <span class="sd">        Identifier of the owning exam.</span>
-<span class="sd">    directory</span>
+<span class="sd">    directory : Path | str, default=None</span>
 <span class="sd">        Directory the exam's caches share; ``None`` holds values in memory</span>
 <span class="sd">        only. Its files are unpickled, so only the processes sharing the exam</span>
 <span class="sd">        may write to it: the proxy creates it under a directory only its own</span>
@@ -753,7 +713,7 @@
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
-<span class="sd">        cleanup</span>
+<span class="sd">        cleanup : Callable[[Any], None], default=None</span>
 <span class="sd">            Called with the value when it is disposed, instead of its ``close()``.</span>
 <span class="sd">        """</span>
         <span class="n">previous</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">Any</span><span class="p">],</span> <span class="kc">None</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
@@ -1077,11 +1037,11 @@
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
-<span class="sd">        acquisition</span>
+<span class="sd">        acquisition : ismrmrd.Acquisition</span>
 <span class="sd">            The acquisition, for its flags and counters; its ``center_sample``</span>
 <span class="sd">            and discards describe ``data``, and are to be updated where the</span>
 <span class="sd">            readout returned differs from it.</span>
-<span class="sd">        data</span>
+<span class="sd">        data : array_like</span>
 <span class="sd">            ``(coils, samples)``: the acquisition's data, or the previous step's</span>
 <span class="sd">            output.</span>
 
@@ -1125,22 +1085,22 @@
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
-<span class="sd">    gadgets</span>
+<span class="sd">    gadgets : Sequence[Gadget], default=()</span>
 <span class="sd">        :class:`Gadget` steps applied to every accepted readout on arrival, in</span>
 <span class="sd">        order, before it is placed; each receives a copy of the acquisition,</span>
 <span class="sd">        which it may update to describe the readout it returns.</span>
-<span class="sd">    triggers</span>
+<span class="sd">    triggers : Mapping[str, Any], default=None</span>
 <span class="sd">        ``{branch: flag}``: the :class:`~pulserver.mrd.AcquisitionFlag` that</span>
 <span class="sd">        closes a unit of the branch, combined with ``|`` for either of several.</span>
 <span class="sd">        The first branch declared receives the readouts :meth:`branch_for`</span>
 <span class="sd">        does not route elsewhere. The default is ``{"imaging":</span>
 <span class="sd">        LAST_IN_MEASUREMENT}``.</span>
-<span class="sd">    axes</span>
+<span class="sd">    axes : Sequence[str], default=()</span>
 <span class="sd">        Counters of a unit placed along axes of its k-space and waited for by</span>
 <span class="sd">        the closing flag, instead of separating units: any of ``repetition``,</span>
 <span class="sd">        ``phase``, ``slice``, ``contrast``, ``set``, ``average`` and</span>
 <span class="sd">        ``segment``. Their extents are the header's encoding limits.</span>
-<span class="sd">    merge</span>
+<span class="sd">    merge : Sequence[str], default=()</span>
 <span class="sd">        Counters of a unit waited for by the closing flag and laid out along no</span>
 <span class="sd">        axis, instead of separating units: any of ``repetition``, ``phase``,</span>
 <span class="sd">        ``slice``, ``contrast``, ``set`` and ``average``. A readout is placed</span>
@@ -1149,19 +1109,19 @@
 <span class="sd">        train, which fill phase encodes of their own, do not. A buffer holds</span>
 <span class="sd">        one k-space however many values a merged counter takes. Their extents</span>
 <span class="sd">        are the header's encoding limits.</span>
-<span class="sd">    require_flags</span>
+<span class="sd">    require_flags : tuple[int | str, ...] | AcquisitionFlag, default=()</span>
 <span class="sd">        Flags an acquisition must all carry to be accepted. A combined</span>
 <span class="sd">        :class:`AcquisitionFlag` counts as its members.</span>
-<span class="sd">    reject_flags</span>
+<span class="sd">    reject_flags : tuple[int | str, ...] | AcquisitionFlag, default=()</span>
 <span class="sd">        Flags any one of which excludes an acquisition.</span>
-<span class="sd">    buffered</span>
+<span class="sd">    buffered : bool, default=True</span>
 <span class="sd">        Place readouts in :attr:`ReconData.data` and :attr:`ReconData.ref`.</span>
 <span class="sd">        Disable for streams whose header does not describe their encoding</span>
 <span class="sd">        spaces; the plugin then reads :attr:`ReconData.acquisitions`, and a</span>
 <span class="sd">        unit closes at the first flag, whatever its ``axes``.</span>
-<span class="sd">    chain</span>
+<span class="sd">    chain : Sequence[Gadget], default=None</span>
 <span class="sd">        Deprecated alias of ``gadgets``; warns.</span>
-<span class="sd">    branches</span>
+<span class="sd">    branches : Mapping[Any, str], default=None</span>
 <span class="sd">        Deprecated alias of ``triggers``, mapping ``{flag: branch}``; warns.</span>
 
 <span class="sd">    Attributes</span>
@@ -1401,11 +1361,11 @@
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
-<span class="sd">        context</span>
+<span class="sd">        context : ReconContext</span>
 <span class="sd">            The scan context.</span>
-<span class="sd">        branch</span>
+<span class="sd">        branch : str</span>
 <span class="sd">            The unit's branch, ``data.branch``.</span>
-<span class="sd">        data</span>
+<span class="sd">        data : ReconData</span>
 <span class="sd">            The unit's readouts. Nothing else keeps them, so a plugin that</span>
 <span class="sd">            wants them later keeps the parts it needs.</span>
 
@@ -1451,15 +1411,15 @@
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
-<span class="sd">        path</span>
+<span class="sd">        path : str</span>
 <span class="sd">            ISMRMRD HDF5 file.</span>
-<span class="sd">        group</span>
+<span class="sd">        group : str, default='dataset'</span>
 <span class="sd">            HDF5 group holding the scan.</span>
-<span class="sd">        exam_id</span>
+<span class="sd">        exam_id : Hashable, default=None</span>
 <span class="sd">            Identifier of the exam cache; ``path`` when not given.</span>
-<span class="sd">        config</span>
+<span class="sd">        config : str, default=None</span>
 <span class="sd">            Configuration payload, as a stream would carry it.</span>
-<span class="sd">        store</span>
+<span class="sd">        store : str, default=None</span>
 <span class="sd">            Directory of designs, as the design calls write it.</span>
 
 <span class="sd">        Returns</span>

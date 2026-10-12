@@ -114,46 +114,6 @@
 
   
     <header id="pst-header" class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
-<div class="bd-header__inner bd-page-width">
-  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
-    <span class="fa-solid fa-bars"></span>
-  </button>
-  
-  
-  <div class="col-lg-9 navbar-header-items">
-    
-    
-    <div class="navbar-header-items__end">
-      
-        <div class="navbar-item navbar-persistent--container">
-          
-
-<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
- <i class="fa-solid fa-magnifying-glass"></i>
- <span class="search-button__default-text">Search</span>
- <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
-</button>
-        </div>
-      
-      
-    </div>
-    
-  </div>
-  
-  
-    <div class="navbar-persistent--mobile">
-
-<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
- <i class="fa-solid fa-magnifying-glass"></i>
- <span class="search-button__default-text">Search</span>
- <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
-</button>
-    </div>
-  
-
-  
-</div>
-
     </header>
   
 
@@ -614,28 +574,28 @@
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
-<span class="sd">    seq_path</span>
+<span class="sd">    seq_path : Path | str</span>
 <span class="sd">        The first file of the sequence's chain, beside its cache.</span>
-<span class="sd">    tissue</span>
+<span class="sd">    tissue : Tissue</span>
 <span class="sd">        The phantom's tissue.</span>
-<span class="sd">    cache_ext</span>
+<span class="sd">    cache_ext : str, default='.pseg'</span>
 <span class="sd">        The extension of the cache beside each file.</span>
-<span class="sd">    rotation</span>
+<span class="sd">    rotation : np.ndarray, default=None</span>
 <span class="sd">        ``(3, 3)`` rotation of the prescription from logical to physical axes;</span>
 <span class="sd">        the identity by default.</span>
-<span class="sd">    centre</span>
+<span class="sd">    centre : np.ndarray, default=None</span>
 <span class="sd">        ``(3,)`` the prescription's centre along the physical axes, in m; the</span>
 <span class="sd">        isocentre by default. Pulse and receiver phases are taken in the frame</span>
 <span class="sd">        of this centre.</span>
-<span class="sd">    device</span>
+<span class="sd">    device : torch.device | str, default=None</span>
 <span class="sd">        Where the simulation runs; a card where there is one by default.</span>
-<span class="sd">    tolerance</span>
+<span class="sd">    tolerance : float, default=TOLERANCE</span>
 <span class="sd">        Relative residual to which the temporal and readout bases span the</span>
 <span class="sd">        signals; :data:`TOLERANCE` by default.</span>
-<span class="sd">    motion</span>
+<span class="sd">    motion : RigidMotion, default=None</span>
 <span class="sd">        How the subject moves, at each readout's echo; it moves its encoding</span>
 <span class="sd">        alone, its excitation, relaxation and coil sensitivities following it.</span>
-<span class="sd">    girf</span>
+<span class="sd">    girf : Girf, default=None</span>
 <span class="sd">        The impulse response the gradients play through.</span>
 
 <span class="sd">    Attributes</span>

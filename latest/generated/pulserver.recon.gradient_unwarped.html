@@ -115,50 +115,6 @@
 
   
     <header id="pst-header" class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
-<div class="bd-header__inner bd-page-width">
-  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
-    <span class="fa-solid fa-bars"></span>
-  </button>
-  
-  
-  <div class="col-lg-9 navbar-header-items">
-    
-    
-    <div class="navbar-header-items__end">
-      
-        <div class="navbar-item navbar-persistent--container">
-          
-
-<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
- <i class="fa-solid fa-magnifying-glass"></i>
- <span class="search-button__default-text">Search</span>
- <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
-</button>
-        </div>
-      
-      
-    </div>
-    
-  </div>
-  
-  
-    <div class="navbar-persistent--mobile">
-
-<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
- <i class="fa-solid fa-magnifying-glass"></i>
- <span class="search-button__default-text">Search</span>
- <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
-</button>
-    </div>
-  
-
-  
-    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
-      <span class="fa-solid fa-outdent"></span>
-    </button>
-  
-</div>
-
     </header>
   
 
@@ -555,9 +511,9 @@ series was acquired in, oblique prescriptions included.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>image</strong> – <code class="docutils literal notranslate"><span class="pre">(...,</span> <span class="pre">[partitions,]</span> <span class="pre">lines,</span> <span class="pre">columns)</span></code>, NumPy array or Torch tensor.</p></li>
-<li><p><strong>context</strong> – The plugin’s <a class="reference internal" href="pulserver.recon.ReconContext.html#pulserver.recon.ReconContext" title="pulserver.recon.ReconContext"><code class="xref py py-class docutils literal notranslate"><span class="pre">ReconContext</span></code></a>, whose header states the table.</p></li>
-<li><p><strong>data</strong> – The plugin’s <a class="reference internal" href="pulserver.recon.ReconData.html#pulserver.recon.ReconData" title="pulserver.recon.ReconData"><code class="xref py py-class docutils literal notranslate"><span class="pre">ReconData</span></code></a>, whose buffer states the geometry.</p></li>
+<li><p><strong>image</strong> (<em>array_like</em>) – <code class="docutils literal notranslate"><span class="pre">(...,</span> <span class="pre">[partitions,]</span> <span class="pre">lines,</span> <span class="pre">columns)</span></code>, NumPy array or Torch tensor.</p></li>
+<li><p><strong>context</strong> (<a class="reference internal" href="pulserver.recon.ReconContext.html#pulserver.recon.ReconContext" title="pulserver.recon.ReconContext"><em>ReconContext</em></a>) – The plugin’s <a class="reference internal" href="pulserver.recon.ReconContext.html#pulserver.recon.ReconContext" title="pulserver.recon.ReconContext"><code class="xref py py-class docutils literal notranslate"><span class="pre">ReconContext</span></code></a>, whose header states the table.</p></li>
+<li><p><strong>data</strong> (<a class="reference internal" href="pulserver.recon.ReconData.html#pulserver.recon.ReconData" title="pulserver.recon.ReconData"><em>ReconData</em></a>) – The plugin’s <a class="reference internal" href="pulserver.recon.ReconData.html#pulserver.recon.ReconData" title="pulserver.recon.ReconData"><code class="xref py py-class docutils literal notranslate"><span class="pre">ReconData</span></code></a>, whose buffer states the geometry.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>

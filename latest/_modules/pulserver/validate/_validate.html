@@ -114,46 +114,6 @@
 
   
     <header id="pst-header" class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
-<div class="bd-header__inner bd-page-width">
-  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
-    <span class="fa-solid fa-bars"></span>
-  </button>
-  
-  
-  <div class="col-lg-9 navbar-header-items">
-    
-    
-    <div class="navbar-header-items__end">
-      
-        <div class="navbar-item navbar-persistent--container">
-          
-
-<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
- <i class="fa-solid fa-magnifying-glass"></i>
- <span class="search-button__default-text">Search</span>
- <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
-</button>
-        </div>
-      
-      
-    </div>
-    
-  </div>
-  
-  
-    <div class="navbar-persistent--mobile">
-
-<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
- <i class="fa-solid fa-magnifying-glass"></i>
- <span class="search-button__default-text">Search</span>
- <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
-</button>
-    </div>
-  
-
-  
-</div>
-
     </header>
   
 
@@ -521,30 +481,30 @@
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
-<span class="sd">    seq_path</span>
+<span class="sd">    seq_path : Path | str</span>
 <span class="sd">        The sequence file.</span>
-<span class="sd">    vendor</span>
+<span class="sd">    vendor : str, default=None</span>
 <span class="sd">        Which machine ``played`` came from, one of :data:`VENDORS`. ``None``</span>
 <span class="sd">        compares against the cache and ignores ``played``.</span>
-<span class="sd">    played</span>
+<span class="sd">    played : Path | str, default=None</span>
 <span class="sd">        A recording to compare against. Absent, and with a vendor named, one is</span>
 <span class="sd">        asked for from that vendor's tooling if it is installed here.</span>
-<span class="sd">    dead_time_us</span>
+<span class="sd">    dead_time_us : float, default=0.0</span>
 <span class="sd">        What a recording's times run ahead of the sequence's by, on every</span>
 <span class="sd">        channel, in µs.</span>
-<span class="sd">    rf_wait_us</span>
+<span class="sd">    rf_wait_us : float, default=0.0</span>
 <span class="sd">        What the transmit channels run ahead by on top of ``dead_time_us``, in</span>
 <span class="sd">        µs; a machine drives transmit and gradients on separate timelines and</span>
 <span class="sd">        records each as driven.</span>
-<span class="sd">    tolerance_mt_per_m</span>
+<span class="sd">    tolerance_mt_per_m : float, default=None</span>
 <span class="sd">        The largest gradient difference that still counts as agreement, in</span>
 <span class="sd">        mT/m. Three raster steps of the slew rate of ``system`` when given</span>
 <span class="sd">        (:func:`gradient_tolerance_mt_per_m`); 0.05 otherwise.</span>
-<span class="sd">    rf_tolerance_percent</span>
+<span class="sd">    rf_tolerance_percent : float, default=1.0</span>
 <span class="sd">        The largest transmit difference, as a percentage of the peak.</span>
-<span class="sd">    cache_ext</span>
+<span class="sd">    cache_ext : str, default='.pseg'</span>
 <span class="sd">        Extension of the cache read when comparing against it.</span>
-<span class="sd">    system</span>
+<span class="sd">    system : pypulseqpp.Opts, default=None</span>
 <span class="sd">        ``pypulseqpp.Opts`` the cache is converted under when none exists;</span>
 <span class="sd">        default ``pypulseqpp.Opts()``.</span>
 

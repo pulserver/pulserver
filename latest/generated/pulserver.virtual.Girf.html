@@ -115,50 +115,6 @@
 
   
     <header id="pst-header" class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
-<div class="bd-header__inner bd-page-width">
-  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
-    <span class="fa-solid fa-bars"></span>
-  </button>
-  
-  
-  <div class="col-lg-9 navbar-header-items">
-    
-    
-    <div class="navbar-header-items__end">
-      
-        <div class="navbar-item navbar-persistent--container">
-          
-
-<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
- <i class="fa-solid fa-magnifying-glass"></i>
- <span class="search-button__default-text">Search</span>
- <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
-</button>
-        </div>
-      
-      
-    </div>
-    
-  </div>
-  
-  
-    <div class="navbar-persistent--mobile">
-
-<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
- <i class="fa-solid fa-magnifying-glass"></i>
- <span class="search-button__default-text">Search</span>
- <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
-</button>
-    </div>
-  
-
-  
-    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
-      <span class="fa-solid fa-outdent"></span>
-    </button>
-  
-</div>
-
     </header>
   
 
@@ -552,10 +508,10 @@ convolved with that axis’s impulse response, so the moment is too.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>impulse</strong> – <code class="docutils literal notranslate"><span class="pre">(taps,</span> <span class="pre">3)</span></code> the response along x, y and z at <code class="docutils literal notranslate"><span class="pre">taps</span></code> delays
+<li><p><strong>impulse</strong> (<em>np.ndarray</em>) – <code class="docutils literal notranslate"><span class="pre">(taps,</span> <span class="pre">3)</span></code> the response along x, y and z at <code class="docutils literal notranslate"><span class="pre">taps</span></code> delays
 <code class="docutils literal notranslate"><span class="pre">dt_s</span></code> apart from zero, in 1/s; each column’s sum times <code class="docutils literal notranslate"><span class="pre">dt_s</span></code> is
 the axis’s gain at zero frequency.</p></li>
-<li><p><strong>dt_s</strong> – The spacing of the delays, in s.</p></li>
+<li><p><strong>dt_s</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><em>float</em></a>) – The spacing of the delays, in s.</p></li>
 </ul>
 </dd>
 </dl>

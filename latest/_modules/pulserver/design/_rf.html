@@ -114,46 +114,6 @@
 
   
     <header id="pst-header" class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
-<div class="bd-header__inner bd-page-width">
-  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
-    <span class="fa-solid fa-bars"></span>
-  </button>
-  
-  
-  <div class="col-lg-9 navbar-header-items">
-    
-    
-    <div class="navbar-header-items__end">
-      
-        <div class="navbar-item navbar-persistent--container">
-          
-
-<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
- <i class="fa-solid fa-magnifying-glass"></i>
- <span class="search-button__default-text">Search</span>
- <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
-</button>
-        </div>
-      
-      
-    </div>
-    
-  </div>
-  
-  
-    <div class="navbar-persistent--mobile">
-
-<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
- <i class="fa-solid fa-magnifying-glass"></i>
- <span class="search-button__default-text">Search</span>
- <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
-</button>
-    </div>
-  
-
-  
-</div>
-
     </header>
   
 
@@ -556,12 +516,12 @@
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
-<span class="sd">        repetition</span>
+<span class="sd">        repetition : pypulseqpp.Sequence</span>
 <span class="sd">            One TR: the sequence whose RF instances are the layout.</span>
-<span class="sd">        control</span>
+<span class="sd">        control : RfControl | Iterable[RfControl | None] | None</span>
 <span class="sd">            The control of every instance, or ``None`` for none; or one control</span>
 <span class="sd">            per instance, in play order. A single key is one control.</span>
-<span class="sd">        period</span>
+<span class="sd">        period : float, default=None</span>
 <span class="sd">            The TR in seconds. The duration of ``repetition`` where omitted.</span>
 <span class="sd">        """</span>
         <span class="n">instances</span> <span class="o">=</span> <span class="n">repetition</span><span class="o">.</span><span class="n">rf_instances</span><span class="p">()</span>

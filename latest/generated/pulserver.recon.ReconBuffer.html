@@ -115,50 +115,6 @@
 
   
     <header id="pst-header" class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
-<div class="bd-header__inner bd-page-width">
-  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
-    <span class="fa-solid fa-bars"></span>
-  </button>
-  
-  
-  <div class="col-lg-9 navbar-header-items">
-    
-    
-    <div class="navbar-header-items__end">
-      
-        <div class="navbar-item navbar-persistent--container">
-          
-
-<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
- <i class="fa-solid fa-magnifying-glass"></i>
- <span class="search-button__default-text">Search</span>
- <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
-</button>
-        </div>
-      
-      
-    </div>
-    
-  </div>
-  
-  
-    <div class="navbar-persistent--mobile">
-
-<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
- <i class="fa-solid fa-magnifying-glass"></i>
- <span class="search-button__default-text">Search</span>
- <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
-</button>
-    </div>
-  
-
-  
-    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
-      <span class="fa-solid fa-outdent"></span>
-    </button>
-  
-</div>
-
     </header>
   
 
@@ -560,14 +516,14 @@ axes.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>space</strong> – Encoding space to lay out.</p></li>
-<li><p><strong>coils</strong> – Channels to allocate; <code class="docutils literal notranslate"><span class="pre">space.coils</span></code> when not given. Fewer than the
+<li><p><strong>space</strong> (<a class="reference internal" href="pulserver.mrd.EncodingSpace.html#pulserver.mrd.EncodingSpace" title="pulserver.mrd.EncodingSpace"><em>EncodingSpace</em></a>) – Encoding space to lay out.</p></li>
+<li><p><strong>coils</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em>, </em><em>default=None</em>) – Channels to allocate; <code class="docutils literal notranslate"><span class="pre">space.coils</span></code> when not given. Fewer than the
 header declares is valid, for data compressed before placement.</p></li>
-<li><p><strong>samples</strong> – Samples to allocate along the readout; <code class="docutils literal notranslate"><span class="pre">space.readout</span></code> when not given.</p></li>
-<li><p><strong>crop</strong> – <code class="docutils literal notranslate"><span class="pre">{axis:</span> <span class="pre">(first,</span> <span class="pre">stop)}</span></code> for the <code class="docutils literal notranslate"><span class="pre">phase_encode</span></code> and <code class="docutils literal notranslate"><span class="pre">partition</span></code>
+<li><p><strong>samples</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em>, </em><em>default=None</em>) – Samples to allocate along the readout; <code class="docutils literal notranslate"><span class="pre">space.readout</span></code> when not given.</p></li>
+<li><p><strong>crop</strong> (<em>Mapping</em><em>[</em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#tuple" title="(in Python v3.15)"><em>tuple</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em>]</em><em>]</em><em>, </em><em>default=None</em>) – <code class="docutils literal notranslate"><span class="pre">{axis:</span> <span class="pre">(first,</span> <span class="pre">stop)}</span></code> for the <code class="docutils literal notranslate"><span class="pre">phase_encode</span></code> and <code class="docutils literal notranslate"><span class="pre">partition</span></code>
 axes: the positions of the space’s grid the buffer holds, the whole axis
 where an axis is not named.</p></li>
-<li><p><strong>dtype</strong> – Complex dtype of <code class="xref py py-attr docutils literal notranslate"><span class="pre">kspace</span></code>.</p></li>
+<li><p><strong>dtype</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.dtype.html#numpy.dtype" title="(in NumPy v2.5)"><em>numpy.dtype</em></a><em>, </em><em>default=np.complex64</em>) – Complex dtype of <code class="xref py py-attr docutils literal notranslate"><span class="pre">kspace</span></code>.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Attributes<span class="colon">:</span></dt>

@@ -115,50 +115,6 @@
 
   
     <header id="pst-header" class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
-<div class="bd-header__inner bd-page-width">
-  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
-    <span class="fa-solid fa-bars"></span>
-  </button>
-  
-  
-  <div class="col-lg-9 navbar-header-items">
-    
-    
-    <div class="navbar-header-items__end">
-      
-        <div class="navbar-item navbar-persistent--container">
-          
-
-<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
- <i class="fa-solid fa-magnifying-glass"></i>
- <span class="search-button__default-text">Search</span>
- <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
-</button>
-        </div>
-      
-      
-    </div>
-    
-  </div>
-  
-  
-    <div class="navbar-persistent--mobile">
-
-<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
- <i class="fa-solid fa-magnifying-glass"></i>
- <span class="search-button__default-text">Search</span>
- <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
-</button>
-    </div>
-  
-
-  
-    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
-      <span class="fa-solid fa-outdent"></span>
-    </button>
-  
-</div>
-
     </header>
   
 
@@ -570,14 +526,14 @@ in µs.</p></li>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>seq_path</strong> – Text or binary Pulseq file, the first of its <code class="docutils literal notranslate"><span class="pre">NextSequence</span></code> chain.</p></li>
-<li><p><strong>system</strong> – Limits and rasters the chain is segmented under; unused with
+<li><p><strong>seq_path</strong> (<em>Path</em><em> | </em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a>) – Text or binary Pulseq file, the first of its <code class="docutils literal notranslate"><span class="pre">NextSequence</span></code> chain.</p></li>
+<li><p><strong>system</strong> (<a class="reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.Opts.html#pypulseqpp.Opts" title="(in pypulseqpp latest)"><em>pypulseqpp.Opts</em></a>) – Limits and rasters the chain is segmented under; unused with
 <code class="docutils literal notranslate"><span class="pre">cache_ext</span></code>.</p></li>
-<li><p><strong>cache_ext</strong> – Extension of the cache beside the file, dot included. When given, that
+<li><p><strong>cache_ext</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a><em>, </em><em>default=None</em>) – Extension of the cache beside the file, dot included. When given, that
 cache is loaded instead of the chain being read and segmented again;
 this build loads only vendor-neutral caches, and only when the size
 recorded in the cache matches the file.</p></li>
-<li><p><strong>label_column_map</strong> – Label state indices of the three readout label columns, as for
+<li><p><strong>label_column_map</strong> (<em>Sequence</em><em>[</em><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em>]</em><em>, </em><em>default=</em><em>(</em><em>0</em><em>, </em><em>1</em><em>, </em><em>2</em><em>)</em>) – Label state indices of the three readout label columns, as for
 <a class="reference internal" href="pulserver.ir.convert.html#pulserver.ir.convert" title="pulserver.ir.convert"><code class="xref py py-func docutils literal notranslate"><span class="pre">convert()</span></code></a>; unused with <code class="docutils literal notranslate"><span class="pre">cache_ext</span></code>.</p></li>
 </ul>
 </dd>

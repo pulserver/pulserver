@@ -115,50 +115,6 @@
 
   
     <header id="pst-header" class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
-<div class="bd-header__inner bd-page-width">
-  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
-    <span class="fa-solid fa-bars"></span>
-  </button>
-  
-  
-  <div class="col-lg-9 navbar-header-items">
-    
-    
-    <div class="navbar-header-items__end">
-      
-        <div class="navbar-item navbar-persistent--container">
-          
-
-<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
- <i class="fa-solid fa-magnifying-glass"></i>
- <span class="search-button__default-text">Search</span>
- <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
-</button>
-        </div>
-      
-      
-    </div>
-    
-  </div>
-  
-  
-    <div class="navbar-persistent--mobile">
-
-<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
- <i class="fa-solid fa-magnifying-glass"></i>
- <span class="search-button__default-text">Search</span>
- <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
-</button>
-    </div>
-  
-
-  
-    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
-      <span class="fa-solid fa-outdent"></span>
-    </button>
-  
-</div>
-
     </header>
   
 
@@ -563,15 +519,15 @@ voxel at the field <a class="reference internal" href="pulserver.virtual.BrainWe
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>coils</strong> – Receive channels.</p></li>
-<li><p><strong>period</strong> – Spatial period of the sensitivities, in metres.</p></li>
-<li><p><strong>depth</strong> – Their modulation depth.</p></li>
-<li><p><strong>directory</strong> – brainweb-dl’s cache; <code class="docutils literal notranslate"><span class="pre">BRAINWEB_DIR</span></code>, or <code class="docutils literal notranslate"><span class="pre">~/.cache/brainweb</span></code>,
+<li><p><strong>coils</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em>, </em><em>default=1</em>) – Receive channels.</p></li>
+<li><p><strong>period</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><em>float</em></a><em>, </em><em>default=0.5</em>) – Spatial period of the sensitivities, in metres.</p></li>
+<li><p><strong>depth</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><em>float</em></a><em>, </em><em>default=0.5</em>) – Their modulation depth.</p></li>
+<li><p><strong>directory</strong> (<em>Path</em><em> | </em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a><em>, </em><em>default=None</em>) – brainweb-dl’s cache; <code class="docutils literal notranslate"><span class="pre">BRAINWEB_DIR</span></code>, or <code class="docutils literal notranslate"><span class="pre">~/.cache/brainweb</span></code>,
 without one.</p></li>
-<li><p><strong>susceptibility</strong> – Whether the field the head’s susceptibility adds acts on it.</p></li>
-<li><p><strong>t2_prime</strong> – T2’, in s, by tissue class, in place of the one <a class="reference internal" href="pulserver.virtual.BrainWeb.relaxation.html#pulserver.virtual.BrainWeb.relaxation" title="pulserver.virtual.BrainWeb.relaxation"><code class="xref py py-meth docutils literal notranslate"><span class="pre">relaxation()</span></code></a>
+<li><p><strong>susceptibility</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>default=True</em>) – Whether the field the head’s susceptibility adds acts on it.</p></li>
+<li><p><strong>t2_prime</strong> (<em>Mapping</em><em>[</em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><em>float</em></a><em>]</em><em>, </em><em>default=None</em>) – T2’, in s, by tissue class, in place of the one <a class="reference internal" href="pulserver.virtual.BrainWeb.relaxation.html#pulserver.virtual.BrainWeb.relaxation" title="pulserver.virtual.BrainWeb.relaxation"><code class="xref py py-meth docutils literal notranslate"><span class="pre">relaxation()</span></code></a>
 derives, at any field.</p></li>
-<li><p><strong>diffusion</strong> – Isotropic diffusion coefficient, in m²/s, by tissue class, as
+<li><p><strong>diffusion</strong> (<em>Mapping</em><em>[</em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><em>float</em></a><em>]</em><em>, </em><em>default=None</em>) – Isotropic diffusion coefficient, in m²/s, by tissue class, as
 <a class="reference internal" href="pulserver.virtual.BrainWeb.DIFFUSION.html#pulserver.virtual.BrainWeb.DIFFUSION" title="pulserver.virtual.BrainWeb.DIFFUSION"><code class="xref py py-attr docutils literal notranslate"><span class="pre">DIFFUSION</span></code></a> gives them; a class without one does not diffuse.</p></li>
 </ul>
 </dd>

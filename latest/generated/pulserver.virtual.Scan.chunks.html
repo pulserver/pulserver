@@ -115,50 +115,6 @@
 
   
     <header id="pst-header" class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
-<div class="bd-header__inner bd-page-width">
-  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
-    <span class="fa-solid fa-bars"></span>
-  </button>
-  
-  
-  <div class="col-lg-9 navbar-header-items">
-    
-    
-    <div class="navbar-header-items__end">
-      
-        <div class="navbar-item navbar-persistent--container">
-          
-
-<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
- <i class="fa-solid fa-magnifying-glass"></i>
- <span class="search-button__default-text">Search</span>
- <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
-</button>
-        </div>
-      
-      
-    </div>
-    
-  </div>
-  
-  
-    <div class="navbar-persistent--mobile">
-
-<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
- <i class="fa-solid fa-magnifying-glass"></i>
- <span class="search-button__default-text">Search</span>
- <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
-</button>
-    </div>
-  
-
-  
-    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
-      <span class="fa-solid fa-outdent"></span>
-    </button>
-  
-</div>
-
     </header>
   
 
@@ -559,22 +515,22 @@ loudest is 0.95.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>length</strong> – The scan time a span lasts at least, in s, unless it ends the
+<li><p><strong>length</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><em>float</em></a><em>, </em><em>default=0.1</em>) – The scan time a span lasts at least, in s, unless it ends the
 scan’s last stretch.</p></li>
-<li><p><strong>speed</strong> – How many times as fast as a scanner the scan is played. Its clock
+<li><p><strong>speed</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><em>float</em></a><em>, </em><em>default=None</em>) – How many times as fast as a scanner the scan is played. Its clock
 starts once the simulation, at the rate it has run, stays ahead of
 the clock to the end of the scan, and each span is yielded once the
 clock has passed its end. A stretch not yet simulated by its start
 holds the clock until it is. As fast as the stretches are
 simulated when None.</p></li>
-<li><p><strong>sound</strong> – Whether the spans carry their sound.</p></li>
-<li><p><strong>sample_rate</strong> – Audio sample rate, in Hz.</p></li>
-<li><p><strong>channel_weights</strong> – Weights of the x, y and z axes in the sound.</p></li>
-<li><p><strong>preparing</strong> – Called about twice a second until the clock starts, at a speed,
+<li><p><strong>sound</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>default=True</em>) – Whether the spans carry their sound.</p></li>
+<li><p><strong>sample_rate</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><em>float</em></a><em>, </em><em>default=SAMPLE_RATE</em>) – Audio sample rate, in Hz.</p></li>
+<li><p><strong>channel_weights</strong> (<em>Sequence</em><em>[</em><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><em>float</em></a><em>]</em><em>, </em><em>default=</em><em>(</em><em>1.0</em><em>, </em><em>1.0</em><em>, </em><em>1.0</em><em>)</em>) – Weights of the x, y and z axes in the sound.</p></li>
+<li><p><strong>preparing</strong> (<em>Callable</em><em>[</em><em>[</em><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><em>float</em></a><em>]</em><em>, </em><em>None</em><em>]</em><em>, </em><em>default=None</em>) – Called about twice a second until the clock starts, at a speed,
 with the wall-clock time left before it does, in s, or None before
 a stretch that acquires has been simulated. An exception
 it raises ends the scan, and is raised where the spans are taken.</p></li>
-<li><p><strong>heard</strong> – Called with each span as its sound starts to play: at a speed,
+<li><p><strong>heard</strong> (<em>Callable</em><em>[</em><em>[</em><a class="reference internal" href="pulserver.virtual.Chunk.html#pulserver.virtual.Chunk" title="pulserver.virtual.Chunk"><em>Chunk</em></a><em>]</em><em>, </em><em>None</em><em>]</em><em>, </em><em>default=None</em>) – Called with each span as its sound starts to play: at a speed,
 once the clock reaches the span’s start, a span before the span is
 yielded; without one, just before it is yielded.</p></li>
 </ul>

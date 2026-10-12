@@ -115,50 +115,6 @@
 
   
     <header id="pst-header" class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
-<div class="bd-header__inner bd-page-width">
-  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
-    <span class="fa-solid fa-bars"></span>
-  </button>
-  
-  
-  <div class="col-lg-9 navbar-header-items">
-    
-    
-    <div class="navbar-header-items__end">
-      
-        <div class="navbar-item navbar-persistent--container">
-          
-
-<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
- <i class="fa-solid fa-magnifying-glass"></i>
- <span class="search-button__default-text">Search</span>
- <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
-</button>
-        </div>
-      
-      
-    </div>
-    
-  </div>
-  
-  
-    <div class="navbar-persistent--mobile">
-
-<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
- <i class="fa-solid fa-magnifying-glass"></i>
- <span class="search-button__default-text">Search</span>
- <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
-</button>
-    </div>
-  
-
-  
-    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
-      <span class="fa-solid fa-outdent"></span>
-    </button>
-  
-</div>
-
     </header>
   
 
@@ -560,32 +516,32 @@ applies it to the received samples from the sequence
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>seq_path</strong> – Text or binary Pulseq file.</p></li>
-<li><p><strong>system</strong> – Limits and rasters the scan is segmented under.</p></li>
-<li><p><strong>fov_offset</strong> – Translation of the field-of-view centre along the logical readout,
+<li><p><strong>seq_path</strong> (<em>Path</em><em> | </em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a>) – Text or binary Pulseq file.</p></li>
+<li><p><strong>system</strong> (<a class="reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.Opts.html#pypulseqpp.Opts" title="(in pypulseqpp latest)"><em>pypulseqpp.Opts</em></a>) – Limits and rasters the scan is segmented under.</p></li>
+<li><p><strong>fov_offset</strong> (<em>Sequence</em><em>[</em><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><em>float</em></a><em>]</em><em>, </em><em>default=None</em>) – Translation of the field-of-view centre along the logical readout,
 phase and slice axes, in metres. None or zero leaves the files as
 designed.</p></li>
-<li><p><strong>vendor</strong> – <code class="docutils literal notranslate"><span class="pre">PULSEG_VENDOR_*</span></code> code; 0 is vendor-neutral.</p></li>
-<li><p><strong>label_column_map</strong> – Pulseq label state indices filling the three ADC label columns:
+<li><p><strong>vendor</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em>, </em><em>default=0</em>) – <code class="docutils literal notranslate"><span class="pre">PULSEG_VENDOR_*</span></code> code; 0 is vendor-neutral.</p></li>
+<li><p><strong>label_column_map</strong> (<em>Sequence</em><em>[</em><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em>]</em><em>, </em><em>default=</em><em>(</em><em>0</em><em>, </em><em>1</em><em>, </em><em>2</em><em>)</em>) – Pulseq label state indices filling the three ADC label columns:
 0 SLC, 1 PHS, 2 REP, 3 AVG, 4 SEG, 5 SET, 6 ECO, 7 PAR, 8 LIN, 9 ACQ.</p></li>
-<li><p><strong>cache_ext</strong> – Extension of the cache file, dot included.</p></li>
-<li><p><strong>verify_signature</strong> – Refuse a file whose contents do not match the signature it carries. A
+<li><p><strong>cache_ext</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a><em>, </em><em>default='.pseg'</em>) – Extension of the cache file, dot included.</p></li>
+<li><p><strong>verify_signature</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>default=True</em>) – Refuse a file whose contents do not match the signature it carries. A
 file carrying none is read either way.</p></li>
-<li><p><strong>sar_ratios</strong> – One per file of the chain, as <a class="reference internal" href="pulserver.ir.sar_ratios.html#pulserver.ir.sar_ratios" title="pulserver.ir.sar_ratios"><code class="xref py py-func docutils literal notranslate"><span class="pre">sar_ratios()</span></code></a> returns them, written
+<li><p><strong>sar_ratios</strong> (<em>Sequence</em><em>[</em><a class="reference internal" href="pulserver.ir.SarRatio.html#pulserver.ir.SarRatio" title="pulserver.ir.SarRatio"><em>SarRatio</em></a><em>]</em><em>, </em><em>default=None</em>) – One per file of the chain, as <a class="reference internal" href="pulserver.ir.sar_ratios.html#pulserver.ir.sar_ratios" title="pulserver.ir.sar_ratios"><code class="xref py py-func docutils literal notranslate"><span class="pre">sar_ratios()</span></code></a> returns them, written
 into each subsequence of the cache; zero when None.</p></li>
-<li><p><strong>spl_levels</strong> – One per file of the chain, as <a class="reference internal" href="pulserver.ir.spl_levels.html#pulserver.ir.spl_levels" title="pulserver.ir.spl_levels"><code class="xref py py-func docutils literal notranslate"><span class="pre">spl_levels()</span></code></a> returns them, written
+<li><p><strong>spl_levels</strong> (<em>Sequence</em><em>[</em><a class="reference internal" href="pulserver.ir.SplLevels.html#pulserver.ir.SplLevels" title="pulserver.ir.SplLevels"><em>SplLevels</em></a><em>]</em><em>, </em><em>default=None</em>) – One per file of the chain, as <a class="reference internal" href="pulserver.ir.spl_levels.html#pulserver.ir.spl_levels" title="pulserver.ir.spl_levels"><code class="xref py py-func docutils literal notranslate"><span class="pre">spl_levels()</span></code></a> returns them, written
 into each subsequence of the cache, 0 dB for a file without
 gradients; -1 when None.</p></li>
-<li><p><strong>profile</strong> – What the cache holds its numbers as; every quantity a float in its SI
+<li><p><strong>profile</strong> (<a class="reference internal" href="pulserver.ir.VendorProfile.html#pulserver.ir.VendorProfile" title="pulserver.ir.VendorProfile"><em>VendorProfile</em></a><em>, </em><em>default=None</em>) – What the cache holds its numbers as; every quantity a float in its SI
 unit when left out.</p></li>
-<li><p><strong>grouping</strong> – How the blocks of a repetition are grouped into virtual segments.
+<li><p><strong>grouping</strong> (<a class="reference internal" href="pulserver.ir.Grouping.html#pulserver.ir.Grouping" title="pulserver.ir.Grouping"><em>Grouping</em></a><em>, </em><em>default=None</em>) – How the blocks of a repetition are grouped into virtual segments.
 Left out, <code class="docutils literal notranslate"><span class="pre">Grouping()</span></code>: a boundary falls only where every gradient
 is within 100 Hz/m of zero, and must fall where the <code class="docutils literal notranslate"><span class="pre">NOROT</span></code> or
 <code class="docutils literal notranslate"><span class="pre">PMC</span></code> label changes.</p></li>
-<li><p><strong>wave_budget</strong> – The waveform memory of the playout the cache is for, which the cache
+<li><p><strong>wave_budget</strong> (<a class="reference internal" href="pulserver.ir.WaveBudget.html#pulserver.ir.WaveBudget" title="pulserver.ir.WaveBudget"><em>WaveBudget</em></a><em>, </em><em>default=None</em>) – The waveform memory of the playout the cache is for, which the cache
 lays the waves out in (<a class="reference internal" href="pulserver.ir.plan_waves.html#pulserver.ir.plan_waves" title="pulserver.ir.plan_waves"><code class="xref py py-func docutils literal notranslate"><span class="pre">plan_waves()</span></code></a>); None holds every wave at
 once on the gradient raster of the chain’s first file.</p></li>
-<li><p><strong>designed</strong> – <code class="docutils literal notranslate"><span class="pre">(path,</span> <span class="pre">sequence)</span></code> pairs of the chain as <code class="docutils literal notranslate"><span class="pre">mrd._sequence.designed_chain</span></code>
+<li><p><strong>designed</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#list" title="(in Python v3.15)"><em>list</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#tuple" title="(in Python v3.15)"><em>tuple</em></a><em>[</em><em>Path</em><em>, </em><a class="reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.Sequence.html#pypulseqpp.Sequence" title="(in pypulseqpp latest)"><em>pypulseqpp.Sequence</em></a><em>]</em><em>]</em><em>, </em><em>default=None</em>) – <code class="docutils literal notranslate"><span class="pre">(path,</span> <span class="pre">sequence)</span></code> pairs of the chain as <code class="docutils literal notranslate"><span class="pre">mrd._sequence.designed_chain</span></code>
 returns them, segmented in place of reading and verifying the files
 and moved to <code class="docutils literal notranslate"><span class="pre">fov_offset</span></code> in place.</p></li>
 </ul>
