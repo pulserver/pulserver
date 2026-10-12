@@ -17,6 +17,8 @@ import ismrmrd
 import numpy as np
 import pydicom
 
+from ...mrd import diffusion_table
+
 
 @dataclasses.dataclass
 class DicomWithName:
@@ -141,6 +143,10 @@ class MrdDicomBuilder:
     clipped : collections.Counter
         Pixels clipped to the stored range so far, by ``image_series_index``;
         0 for a series that has clipped none.
+    diffusion : tuple of numpy.ndarray or None
+        The header's diffusion table (:func:`pulserver.mrd.diffusion_table`),
+        from which each image states ``DiffusionBValue``,
+        ``DiffusionGradientOrientation`` and ``DiffusionDirectionality``.
     """
 
     def __init__(self, mrdHead: ismrmrd.xsd.ismrmrdHeader) -> None:
@@ -351,6 +357,7 @@ class MrdDicomBuilder:
 
         self.dicomDset = dicomDset
         self.mrdHead = mrdHead
+        self.diffusion = diffusion_table(mrdHead)
         # Image numbers start at 1: a scanner's image database can reject a
         # C-STORE with image number 0 (A700 OutOfResources).
         self.instanceNumber = 1
@@ -468,40 +475,6 @@ class MrdDicomBuilder:
                 if not (np.isnan(TR)):
                     dicomDset.RepetitionTime = TR
 
-                # Get diffusion
-                if mrdHead.sequenceParameters.diffusionDimension is not None:
-                    diffusionAxis = (
-                        mrdHead.sequenceParameters.diffusionDimension.name.lower()
-                    )
-                    diffusionIdx = getattr(mrdImg, diffusionAxis)
-                    diffusionBValue = mrdHead.sequenceParameters[diffusionIdx].bvalue
-                    diffusionGradientOrientation = mrdHead.sequenceParameters[
-                        diffusionIdx
-                    ].gradientDirection
-
-                    # bValue = 0 -> direcionality None
-                    # bValue != 0, direction None -> directionality ISOTROPIC
-                    # bvalue != 0, direction not None -> directionality DIRECTIONAL
-
-                    if diffusionBValue is None or diffusionBValue == 0.0:
-                        diffusionDirectionality = "NONE"
-                    else:
-                        diffusionDirectionality = (
-                            "ISOTROPIC"
-                            if diffusionGradientOrientation is None
-                            else "DIRECTIONAL"
-                        )
-
-                    # Assign
-                    dicomDset.DiffusionDirectionality = diffusionDirectionality
-                    if diffusionBValue is not None:
-                        dicomDset.DiffusionBValue = diffusionBValue
-                    if diffusionGradientOrientation is not None:
-                        dicomDset.DiffusionGradientOrientation = [
-                            diffusionGradientOrientation.rl,
-                            diffusionGradientOrientation.ap,
-                            diffusionGradientOrientation.fh,
-                        ]
         except Exception:
             logging.warning(
                 "Error setting header information from MRD header's sequenceParameters section"
@@ -577,6 +550,7 @@ class MrdDicomBuilder:
             round(mrdImg.phase_dir[1], 6),
             round(mrdImg.phase_dir[2], 6),
         ]
+        self._set_diffusion(dicomDset, mrdImg)
 
         if vendor != "GE":
             time_sec = mrdImg.acquisition_time_stamp / 1000 / 2.5
@@ -657,6 +631,30 @@ class MrdDicomBuilder:
         self.instanceNumber += 1
 
         return DicomWithName(dset=dicomDset, filename=fileName)
+
+    def _set_diffusion(self, dicomDset: pydicom.Dataset, mrdImg: ismrmrd.Image) -> None:
+        """State the image's b-value and direction, the table row its ``repetition`` indexes.
+
+        The direction is taken from the logical axes into the patient frame
+        through the image's ``read_dir``, ``phase_dir`` and ``slice_dir``.
+        """
+        if self.diffusion is None:
+            return
+        b, g = self.diffusion
+        volume = int(mrdImg.repetition)
+        if volume >= b.size:
+            return
+        dicomDset.DiffusionBValue = float(b[volume])
+        if b[volume] <= 0:
+            dicomDset.DiffusionDirectionality = "NONE"
+            return
+        axes = np.asarray(
+            [mrdImg.read_dir, mrdImg.phase_dir, mrdImg.slice_dir], dtype=float
+        )
+        dicomDset.DiffusionDirectionality = "DIRECTIONAL"
+        dicomDset.DiffusionGradientOrientation = [
+            round(float(value), 6) for value in g[volume] @ axes
+        ]
 
     def _store(
         self, series: int, values: np.ndarray, meta: Any

@@ -4,9 +4,11 @@ from ._acquisitions import AcquisitionBucket, AcquisitionBucketStats, Acquisitio
 from ._header import LOOP_COUNTERS, EncodingSpace
 from ._images import as_numpy, center_crop, coil_combine
 from ._metadata import (
+    DIFFUSION_TABLE,
     MrdMetadata,
     acquisition_label,
     acquisition_labels,
+    diffusion_table,
     has_acquisition_flag,
     max_stored_value,
     user_parameter,
@@ -14,6 +16,7 @@ from ._metadata import (
 from ._sequence import ReadoutTable, SequenceDefinitions, read_chain
 
 __all__ = [
+    "DIFFUSION_TABLE",
     "LOOP_COUNTERS",
     "AcquisitionBucket",
     "AcquisitionBucketStats",
@@ -27,6 +30,7 @@ __all__ = [
     "as_numpy",
     "center_crop",
     "coil_combine",
+    "diffusion_table",
     "has_acquisition_flag",
     "max_stored_value",
     "read_chain",

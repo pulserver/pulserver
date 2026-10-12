@@ -252,7 +252,9 @@ extern "C"
 #define PULSEG_PARAM_EXSAT6_NORMAL_Z 175
 #define PULSEG_PARAM_EXSAT6_LOC 176
 #define PULSEG_PARAM_EXSAT6_THICK 177
-#define PULSEG_PARAM_COUNT 178 /* sentinel */
+/* --- Diffusion table --- */
+#define PULSEG_PARAM_DIFF_TABLE 178
+#define PULSEG_PARAM_COUNT 179 /* sentinel */
 
     /* ================================================================== */
     /*  Parameter types                                                   */

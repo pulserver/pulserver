@@ -423,6 +423,51 @@ and a user entry otherwise:
 | `gre3d`, `gre_multiecho3d`, `mprage3d`, `fse3d` | `WAVE` | Wave-CAIPI at `WAVE_AMPLITUDE` (T/m) and `WAVE_CYCLES`; the calibration region is acquired first without the wave, and `pics` and `pmc` reconstruct the wave-encoded volume | None |
 | `gre_spiral2d`, `se_spiral2d`, `gre_stack_of_spirals3d`, `se_stack_of_spirals3d`, `mprage_stack_of_spirals3d` | `VARIABLE_DENSITY` | Variable-density spirals | `user12`: periphery undersampling |
 
+### Diffusion tables
+
+A diffusion sequence plays a table of b-values and directions read from a file,
+as a scanner's own diffusion sequences do: the console names the table by
+number in the `UIParam.DIFFUSION_TABLE` entry, with the largest b-value in
+`UIParam.DIFFUSION_BVALUES` and the number of directions in
+`UIParam.DIFFUSION_DIRECTIONS`; the sequence function turns the number into the
+file's path with module constants a site sets, reads the file and records its
+path with {func}`pypulseqpp.io.set_diffusion_table`. The proxy reads the same file
+again, so the table reaches the reconstruction without being copied into the
+sequence ({doc}`reconstruction-plugins`).
+
+```python
+import os
+
+import pypulseqpp as pp
+from pulserver.design import FloatParam, IntParam, SequencePlugin, UIParam
+
+TENSOR_DIRECTORY = "/data/diffusion"
+TENSOR_PREFIX = "tensor"
+TENSOR_SUFFIX = ".dat"
+
+
+def dwi(system, table=1, b_value=1000.0, directions=30):
+    seq = pp.Sequence(system)
+    path = os.path.join(TENSOR_DIRECTORY, f"{TENSOR_PREFIX}{table}{TENSOR_SUFFIX}")
+    b, g = pp.io.set_diffusion_table(seq, path, b_value=b_value, directions=directions)
+    for volume, (b_volume, direction) in enumerate(zip(b, g)):
+        ...  # one volume, its REP label set to `volume`
+    return seq
+
+
+class Dwi(SequencePlugin):
+    app = dwi
+    protocol = {
+        UIParam.DIFFUSION_TABLE: IntParam("table", range_min=1, range_max=99999),
+        UIParam.DIFFUSION_BVALUES: FloatParam("b_value", unit="s/mm²",
+                                              range_min=0.0, range_max=10000.0),
+        UIParam.DIFFUSION_DIRECTIONS: IntParam("directions", range_min=1, range_max=512),
+    }
+```
+
+The table is in the frame of the gradient channels, so its directions turn with
+the prescription.
+
 ### Protocol conventions
 
 - A 3D sequence takes its number of partitions from the number of slices.

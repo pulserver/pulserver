@@ -866,3 +866,42 @@ def test_a_ge_measurement_id_that_is_not_a_series_number_is_refused():
     )
     with pytest.raises(ValueError, match="measurementID"):
         MrdDicomBuilder(header)
+
+
+def _diffusion_image(repetition):
+    image = ismrmrd.Image.from_array(
+        np.ones((8, 8), np.float32), transpose=False, repetition=repetition
+    )
+    # The logical axes turned 90 degrees about the patient's z axis: readout
+    # along y, phase along -x.
+    image.read_dir = (0.0, 1.0, 0.0)
+    image.phase_dir = (-1.0, 0.0, 0.0)
+    image.slice_dir = (0.0, 0.0, 1.0)
+    return image
+
+
+def test_a_diffusion_image_states_its_table_row_in_the_patient_frame(
+    parsed_mrd_header,
+):
+    parsed_mrd_header.userParameters = ismrmrd.xsd.userParametersType(
+        userParameterString=[
+            ismrmrd.xsd.userParameterStringType(
+                name="diffusion_table", value="0 0 0 0\n0 1 0 1000\n0 0 1 2000"
+            )
+        ]
+    )
+    builder = MrdDicomBuilder(parsed_mrd_header)
+    phase = builder(_diffusion_image(1)).dset
+    unweighted = builder(_diffusion_image(0)).dset
+
+    assert phase.DiffusionBValue == 1000.0
+    assert list(phase.DiffusionGradientOrientation) == [-1.0, 0.0, 0.0]
+    assert phase.DiffusionDirectionality == "DIRECTIONAL"
+    assert unweighted.DiffusionBValue == 0.0
+    assert unweighted.DiffusionDirectionality == "NONE"
+    assert "DiffusionGradientOrientation" not in unweighted
+
+
+def test_an_image_without_a_diffusion_table_states_no_diffusion(parsed_mrd_header):
+    dicom = MrdDicomBuilder(parsed_mrd_header)(_diffusion_image(1)).dset
+    assert "DiffusionBValue" not in dicom

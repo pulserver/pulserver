@@ -83,6 +83,7 @@ static const pulseg_param_entry g_param_table[] = {
     /* Diffusion */
     {"diffusion_bvalues", PULSEG_PARAM_DIFF_BVALUES, PULSEG_PTYPE_FLOAT},
     {"diffusion_directions", PULSEG_PARAM_DIFF_DIRECTIONS, PULSEG_PTYPE_INT},
+    {"diffusion_table", PULSEG_PARAM_DIFF_TABLE, PULSEG_PTYPE_INT},
     /* Gating */
     {"heart_rate", PULSEG_PARAM_HEART_RATE, PULSEG_PTYPE_INT},
     /* Explicit saturation bands */
