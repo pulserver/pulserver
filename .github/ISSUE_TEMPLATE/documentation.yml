@@ -1,0 +1,24 @@
+name: Documentation
+description: An error, an omission, or an unanswered question in the documentation.
+labels: ["documentation"]
+body:
+  - type: input
+    id: page
+    attributes:
+      label: Page
+      description: URL of the page, or the docstring's object name.
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: >-
+        The passage that is wrong, unclear or missing, and what the implementation,
+        a test, pypulseqpp, the ISMRMRD specification or the literature says instead.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed wording

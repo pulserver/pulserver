@@ -1,0 +1,24 @@
+labels: ["question"]
+body:
+  - type: textarea
+    id: question
+    attributes:
+      label: What you are trying to do
+      description: |
+        The sequence plugin, reconstruction or scanner workflow, and where you got stuck. If a result looks wrong, say what you
+        expected and why.
+    validations:
+      required: true
+
+  - type: textarea
+    id: code
+    attributes:
+      label: What you have so far
+      description: The call you are making, if there is one.
+      render: python
+
+  - type: input
+    id: version
+    attributes:
+      label: pulserver version
+      placeholder: "0.0.x, or the commit you are on"
