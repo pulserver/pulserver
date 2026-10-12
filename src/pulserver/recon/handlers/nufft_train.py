@@ -20,9 +20,9 @@ class NufftTrainRecon(NufftRecon):
 
     Parameters
     ----------
-    wavelet
+    wavelet : float, default=0.005
         ``lambda``, relative to the data scaling ``pics`` estimates.
-    iterations
+    iterations : int, default=30
         Iterations of the solve.
     """
 

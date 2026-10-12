@@ -387,12 +387,12 @@ class Protocol(Mapping[ProtocolKey, Any]):
 
     Parameters
     ----------
-    entries
+    entries : Mapping[ProtocolKey, Entry]
         The declared entries the values belong to, as
         :attr:`SequencePlugin.protocol` holds them.
-    values
+    values : Mapping[ProtocolKey, Any]
         The value of each key, in argument units.
-    presets
+    presets : Mapping[ProtocolKey, TEPreset | TRPreset], default=None
         The preset each time key shows, by the key its entry declares it with.
     """
 
@@ -430,14 +430,14 @@ class Protocol(Mapping[ProtocolKey, Any]):
 
         Parameters
         ----------
-        entries
+        entries : Mapping[ProtocolKey, Entry]
             The declared entries: :attr:`SequencePlugin.protocol`.
-        values
+        values : Mapping[ProtocolKey, Any]
             Wire values by key: integer microseconds or a preset code for a
             time, the entry's unit for a float, an option for a choice. A key
             of a config or description entry, which holds no value, is left
             out.
-        system
+        system : pypulseqpp.Opts
             The scanner limits a callable preset is a function of.
 
         Raises

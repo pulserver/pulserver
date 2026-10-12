@@ -19,11 +19,11 @@ class RigidMotion:
 
     Parameters
     ----------
-    rotation
+    rotation : Callable[[float], np.ndarray], default=None
         ``R(t)``, a ``(3, 3)`` orthonormal matrix; the identity without one.
-    offset
+    offset : Callable[[float], Sequence[float]], default=None
         ``offset(t)``, a translation of ``(3,)`` metres; none without one.
-    centre
+    centre : Sequence[float], default=(0.0, 0.0, 0.0)
         The point ``rotation`` turns about, in m; the origin by default.
 
     Examples

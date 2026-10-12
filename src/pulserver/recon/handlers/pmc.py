@@ -41,9 +41,11 @@ class PmcRecon(PicsTrainRecon):
 
     Parameters
     ----------
-    matrix
+    matrix : int, default=32
         In-plane matrix each plane is reconstructed on.
-    wavelet, iterations
+    wavelet : float, default=0.005
+        As :class:`~pulserver.recon.handlers.pics_train.PicsTrainRecon`.
+    iterations : int, default=30
         As :class:`~pulserver.recon.handlers.pics_train.PicsTrainRecon`.
     """
 

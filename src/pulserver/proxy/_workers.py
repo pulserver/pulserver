@@ -43,7 +43,7 @@ class WorkerPool:
 
     Parameters
     ----------
-    spares
+    spares : int, default=1
         Warm processes waiting for an assignment. :meth:`assign` blocks while
         there is none.
     """
@@ -70,14 +70,14 @@ class WorkerPool:
 
         Parameters
         ----------
-        plugin
+        plugin : Path | str
             Reconstruction plugin file to run.
-        socket_path
+        socket_path : Path | str
             Unix socket the worker reaches the proxy on.
-        exam_directory
+        exam_directory : Path | str, default=None
             Directory the series' :class:`~pulserver.recon.ExamCache` shares
             with the exam's other series; ``None`` keeps it to this series.
-        device
+        device : str, default=None
             The series' ``context.device``.
 
         Returns

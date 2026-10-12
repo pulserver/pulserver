@@ -257,9 +257,9 @@ class SequencePlugin:
 
         Parameters
         ----------
-        system
+        system : pypulseqpp.Opts
             The scanner limits the sequence is designed under.
-        protocol
+        protocol : Protocol
             The requested protocol, in the units of the sequence function's arguments.
 
         Returns
@@ -279,9 +279,9 @@ class SequencePlugin:
 
         Parameters
         ----------
-        system
+        system : pypulseqpp.Opts
             The scanner limits the sequence is designed under.
-        protocol
+        protocol : Protocol
             The requested protocol, in the units of the sequence function's arguments.
 
         Returns

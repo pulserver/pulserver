@@ -38,7 +38,7 @@ def read_vendor(path: Path | str) -> tuple[VendorProfile, Grouping]:
 
     Parameters
     ----------
-    path
+    path : Path | str
         The vendor file.
 
     Returns

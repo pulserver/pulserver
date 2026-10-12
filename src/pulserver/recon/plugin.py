@@ -197,9 +197,9 @@ class ExamCache(MutableMapping[Hashable, Any]):
 
     Parameters
     ----------
-    exam_id
+    exam_id : Hashable
         Identifier of the owning exam.
-    directory
+    directory : Path | str, default=None
         Directory the exam's caches share; ``None`` holds values in memory
         only. Its files are unpickled, so only the processes sharing the exam
         may write to it: the proxy creates it under a directory only its own
@@ -281,7 +281,7 @@ class ExamCache(MutableMapping[Hashable, Any]):
 
         Parameters
         ----------
-        cleanup
+        cleanup : Callable[[Any], None], default=None
             Called with the value when it is disposed, instead of its ``close()``.
         """
         previous: tuple[Any, Callable[[Any], None] | None] | None = None
@@ -580,11 +580,11 @@ class Gadget(ABC):
 
         Parameters
         ----------
-        acquisition
+        acquisition : ismrmrd.Acquisition
             The acquisition, for its flags and counters; its ``center_sample``
             and discards describe ``data``, and are to be updated where the
             readout returned differs from it.
-        data
+        data : array_like
             ``(coils, samples)``: the acquisition's data, or the previous step's
             output.
 
@@ -625,22 +625,22 @@ class ReconPlugin(ABC):
 
     Parameters
     ----------
-    gadgets
+    gadgets : Sequence[Gadget], default=()
         :class:`Gadget` steps applied to every accepted readout on arrival, in
         order, before it is placed; each receives a copy of the acquisition,
         which it may update to describe the readout it returns.
-    triggers
+    triggers : Mapping[str, Any], default=None
         ``{branch: flag}``: the :class:`~pulserver.mrd.AcquisitionFlag` that
         closes a unit of the branch, combined with ``|`` for either of several.
         The first branch declared receives the readouts :meth:`branch_for`
         does not route elsewhere. The default is ``{"imaging":
         LAST_IN_MEASUREMENT}``.
-    axes
+    axes : Sequence[str], default=()
         Counters of a unit placed along axes of its k-space and waited for by
         the closing flag, instead of separating units: any of ``repetition``,
         ``phase``, ``slice``, ``contrast``, ``set``, ``average`` and
         ``segment``. Their extents are the header's encoding limits.
-    merge
+    merge : Sequence[str], default=()
         Counters of a unit waited for by the closing flag and laid out along no
         axis, instead of separating units: any of ``repetition``, ``phase``,
         ``slice``, ``contrast``, ``set`` and ``average``. A readout is placed
@@ -649,19 +649,19 @@ class ReconPlugin(ABC):
         train, which fill phase encodes of their own, do not. A buffer holds
         one k-space however many values a merged counter takes. Their extents
         are the header's encoding limits.
-    require_flags
+    require_flags : tuple[int | str, ...] | AcquisitionFlag, default=()
         Flags an acquisition must all carry to be accepted. A combined
         :class:`AcquisitionFlag` counts as its members.
-    reject_flags
+    reject_flags : tuple[int | str, ...] | AcquisitionFlag, default=()
         Flags any one of which excludes an acquisition.
-    buffered
+    buffered : bool, default=True
         Place readouts in :attr:`ReconData.data` and :attr:`ReconData.ref`.
         Disable for streams whose header does not describe their encoding
         spaces; the plugin then reads :attr:`ReconData.acquisitions`, and a
         unit closes at the first flag, whatever its ``axes``.
-    chain
+    chain : Sequence[Gadget], default=None
         Deprecated alias of ``gadgets``; warns.
-    branches
+    branches : Mapping[Any, str], default=None
         Deprecated alias of ``triggers``, mapping ``{flag: branch}``; warns.
 
     Attributes
@@ -878,11 +878,11 @@ class ReconPlugin(ABC):
 
         Parameters
         ----------
-        context
+        context : ReconContext
             The scan context.
-        branch
+        branch : str
             The unit's branch, ``data.branch``.
-        data
+        data : ReconData
             The unit's readouts. Nothing else keeps them, so a plugin that
             wants them later keeps the parts it needs.
 
@@ -922,15 +922,15 @@ class ReconPlugin(ABC):
 
         Parameters
         ----------
-        path
+        path : str
             ISMRMRD HDF5 file.
-        group
+        group : str, default='dataset'
             HDF5 group holding the scan.
-        exam_id
+        exam_id : Hashable, default=None
             Identifier of the exam cache; ``path`` when not given.
-        config
+        config : str, default=None
             Configuration payload, as a stream would carry it.
-        store
+        store : str, default=None
             Directory of designs, as the design calls write it.
 
         Returns

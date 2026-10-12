@@ -55,11 +55,11 @@ def compute_max_concurrent(
 
     Parameters
     ----------
-    per_recon_gb
+    per_recon_gb : float, default=_DEFAULT_PER_RECON_GB
         Memory budgeted for one reconstruction, in GiB.
-    headroom_fraction
+    headroom_fraction : float, default=_DEFAULT_HEADROOM_FRACTION
         Fraction of available memory given to reconstructions.
-    override
+    override : int, default=None
         Returned as is when positive.
     """
     if override is not None and override > 0:

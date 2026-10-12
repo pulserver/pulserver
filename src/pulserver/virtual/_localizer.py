@@ -48,19 +48,19 @@ def localizer(
 
     Parameters
     ----------
-    phantom
+    phantom : Phantom or BrainWeb
         A :class:`~pulserver.virtual.Phantom` or :class:`~pulserver.virtual.BrainWeb`.
-    field_t
+    field_t : float
         The magnet's field, in T, recorded as the imaging frequency.
-    subject
+    subject : str, default=''
         Patient name of the series.
-    fov
+    fov : float, default=0.256
         Field of view of each image, in metres.
-    matrix
+    matrix : int, default=128
         Pixels along each side.
-    thickness
+    thickness : float, default=0.005
         Slab thickness, in metres.
-    centre
+    centre : Sequence[float], default=(0.0, 0.0, 0.0)
         Physical point the three planes cross at, in metres.
     """
     header = ismrmrd.xsd.ismrmrdHeader(

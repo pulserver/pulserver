@@ -55,15 +55,15 @@ def export(
 
     Parameters
     ----------
-    seq_path
+    seq_path : Path | str
         The first file of a chain, beside its cache.
-    target
+    target : Path | str
         Where to write the file.
-    system
+    system : pypulseqpp.Opts
         The scanner the cache was converted for; its rasters time the file.
-    cache_ext
+    cache_ext : str, default='.pseg'
         The extension of the cache.
-    rotation
+    rotation : np.ndarray, default=None
         The prescription's rotation from logical to physical axes; the
         identity by default.
 

@@ -44,11 +44,11 @@ def gradient_unwarped(image: Any, context: Any, data: Any) -> Any:
 
     Parameters
     ----------
-    image
+    image : array_like
         ``(..., [partitions,] lines, columns)``, NumPy array or Torch tensor.
-    context
+    context : ReconContext
         The plugin's :class:`ReconContext`, whose header states the table.
-    data
+    data : ReconData
         The plugin's :class:`ReconData`, whose buffer states the geometry.
 
     Returns

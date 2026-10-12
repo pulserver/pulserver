@@ -151,9 +151,9 @@ def describe(seq: Any, *, subsequence_index: int = 0) -> SequenceDescription:
 
     Parameters
     ----------
-    seq
+    seq : pypulseqpp.Sequence
         A ``pypulseqpp.Sequence``.
-    subsequence_index
+    subsequence_index : int, default=0
         Which subsequence of a chain this is.
 
     Returns

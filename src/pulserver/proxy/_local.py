@@ -29,9 +29,9 @@ class LocalReconstruction:
 
     Parameters
     ----------
-    store
+    store : Path | str
         Directory of designs, as the design calls write it; read only.
-    plugins
+    plugins : PluginPath
         Directories of reconstruction plugin files, ``<plugin>.py``, in search
         order.
     """

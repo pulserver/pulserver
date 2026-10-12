@@ -220,16 +220,16 @@ class AcquisitionBucket:
 
         Parameters
         ----------
-        data
+        data : array_like
             K-space, ``(acquisitions, coils, samples)``.
-        trajectory
+        trajectory : array_like, default=None
             Per-acquisition trajectories with the same leading axis as ``data``.
-        labels
+        labels : Mapping[str, Any], default=None
             Encoding counters by MRD field name, one value per acquisition; absent
             counters are 0.
-        reference
+        reference : array_like, default=None
             Calibration k-space, ``(acquisitions, coils, samples)``.
-        reference_labels
+        reference_labels : Mapping[str, Any], default=None
             Encoding counters of the ``reference`` acquisitions; absent counters
             are 0.
 
